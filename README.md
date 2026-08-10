@@ -131,15 +131,22 @@ PAST typography consistency.
 - Result: PAST looks like the same work, not a separate reader layer.
 
 
-## v0.3.10
+## v0.3.11
 
-Black-screen-at-end fix, rebuilt from v0.3.6.
+Rapid-transition transient-state cleanup.
 
-- Removes the v0.3.7–v0.3.9 rapid-input experiments.
-- Core `finish()` no longer clears Scene/background before the Public Player
-  ending takes over.
-- The last Scene remains visible as a safe fallback.
-- Public ending visibility no longer depends on nested requestAnimationFrame.
-  It is committed immediately with a forced layout, then fades in.
-- Goal: rapid taps, key presses, or swipes may reach the end quickly, but they
-  must never produce an audio-only black screen.
+Rebuilt from stable v0.3.6. Does not contain the v0.3.7–v0.3.10 experiments.
+
+Root issue addressed:
+- `entering` makes a newly-created Scene transparent until its RAF landing.
+- `sp-layout-leaving` makes a retired Scene transparent until a removal timer.
+- rapid navigation can interrupt those async cleanups and start another render.
+- transient opacity classes could therefore survive into the next render while
+  audio continued independently.
+
+Fix:
+- every render begins by settling unfinished entrance state.
+- cancelled leaving timers now remove already-retired DOM nodes immediately.
+- reused Scene nodes explicitly drop stale `entering` / `sp-layout-leaving`.
+- whitespace inhale/exhale transient classes are normalized before navigation.
+- no navigation-rate throttling; rapid input is allowed.

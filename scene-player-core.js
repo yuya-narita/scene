@@ -1288,16 +1288,8 @@
     finish() {
       if (!this.document || this.ended) return;
       this.stopAuto();
-
-      // Do NOT clear the Scene/background before the outer Public Player has
-      // taken over. Under rapid input the old implementation could leave a
-      // fully blank stage between Core finish and the public ending overlay.
-      // Freeze the current Scene as the visual fallback instead.
-      this._finishVisibleEntranceEffects();
-      this._clearPresentationTimers();
-      this._clearLayoutTimers();
-      this._clearBackgroundTimers();
-
+      this._resetPresentationRuntime();
+      this._resetBackgroundRuntime();
       this.ended = true;
       this.els.ending.hidden = false;
       emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
@@ -1400,6 +1392,16 @@
     _clearLayoutTimers() {
       this.layoutTimers.forEach((timer) => clearTimeout(timer));
       this.layoutTimers.length = 0;
+
+      // A leaving Scene is scheduled for DOM removal by a layout timer.
+      // If a rapid next render cancels that timer, the node used to remain in
+      // the DOM with `sp-layout-leaving { opacity:0!important; }`.
+      // Remove those already-retired nodes immediately when settling a render.
+      if (this.els?.scenes) {
+        this.els.scenes
+          .querySelectorAll('.sp-scene.sp-layout-leaving')
+          .forEach((node) => node.remove());
+      }
     }
 
     _layoutTimeout(fn, delay) {
@@ -1483,6 +1485,8 @@
         let node = oldById.get(scene.id);
         if (node) {
           oldById.delete(scene.id);
+          node.classList.remove('sp-layout-leaving', 'entering');
+          node.classList.add('is-visible');
         } else {
           node = this._sceneNode(scene, index === this.index, this.index - index);
           node.classList.add('entering');
@@ -1535,6 +1539,10 @@
 
     _render() {
       if (!this.document) return;
+
+      // Every render starts from a settled DOM. Never inherit transient
+      // opacity/geometry classes from an interrupted previous transition.
+      this._finishVisibleEntranceEffects();
       this._resetPresentationRuntime();
       this._clearLayoutTimers();
 
@@ -1883,6 +1891,15 @@
 
     _finishVisibleEntranceEffects() {
       if (!this.els?.scenes) return;
+
+      // Rapid input can arrive before the requestAnimationFrame chain that
+      // normally converts `entering` -> `is-visible`.
+      // Settle those nodes synchronously before any next navigation mutates DOM.
+      this.els.scenes.querySelectorAll('.sp-scene.entering').forEach((node) => {
+        node.classList.remove('entering');
+        node.classList.add('is-visible');
+      });
+
       this.els.scenes.querySelectorAll('.sp-scene.sp-fx-play').forEach((node) => {
         node.classList.remove('sp-fx-play');
         const text = node.querySelector('.sp-text');
@@ -1893,6 +1910,9 @@
           text.style.animation = '';
         }
       });
+
+      // Whitespace transition classes are also transient render state.
+      this.host?.classList.remove('sp-whitespace-inhale', 'sp-whitespace-exhale');
     }
 
     _playEntranceEffectOnce(article) {
@@ -1988,7 +2008,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.10';
+  ScenePlayerCore.VERSION = '1.12.14-public.11';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 

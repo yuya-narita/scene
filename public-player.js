@@ -212,12 +212,12 @@
     localStorage.removeItem(storageKey());
 
     // Keep player/audio alive underneath the ending screen.
-    // Make the ending visible deterministically: no two-frame window where
-    // Core has already finished but the public ending is still absent.
+    // This preserves BGM/Ambient as the work's afterglow unless the Scene itself
+    // explicitly issued a stop command.
     ending.hidden = false;
-    ending.classList.remove('is-visible');
-    void ending.offsetWidth;
-    ending.classList.add('is-visible');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => ending.classList.add('is-visible'));
+    });
   }
 
   function removeShellListeners() {
@@ -361,7 +361,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.10',
+    version: '0.3.11',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
