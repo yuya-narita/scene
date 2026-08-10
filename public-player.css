@@ -233,5 +233,3 @@ body{
 .public-opening-image{
   background-color:var(--public-bg);
 }
-
-.scene-debug{position:fixed;right:8px;bottom:46px;z-index:20000;max-width:min(92vw,430px);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.scene-debug button{float:right;padding:4px 8px;background:#111;color:#fff;border:1px solid #666;border-radius:7px}.scene-debug pre{display:none;clear:both;margin-top:4px;padding:8px;max-height:42vh;overflow:auto;background:rgba(0,0,0,.9);color:#7cff9b;white-space:pre-wrap;font-size:10px;line-height:1.35}.scene-debug.is-open pre{display:block}

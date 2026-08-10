@@ -1961,26 +1961,39 @@
       this.typingState = { timer, node, text: scene.text, sceneId: scene.id };
     }
 
-    destroy() {
+    destroy(options = {}) {
       if (this.destroyed) return;
+      const preserveHost = Boolean(options?.preserveHost);
+
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this._stopAllAudio(true);
+
       if (this.audioContext && typeof this.audioContext.close === 'function') {
         try { this.audioContext.close(); } catch (_) {}
       }
+
       this.audioGainNodes.clear();
       this.audioSourceNodes.clear();
-      this._bound.forEach(([el, event, fn, options]) => el.removeEventListener(event, fn, options));
+      this._bound.forEach(([el, event, fn, eventOptions]) => {
+        el.removeEventListener(event, fn, eventOptions);
+      });
       this._bound.length = 0;
-      this.host.innerHTML = '';
-      this.host.classList.remove('sp-core');
+
+      // Public Player may keep an old instance alive briefly only so its audio
+      // can fade out. A newer instance can already be using the SAME host.
+      // Never let delayed cleanup of the old instance erase the new DOM.
+      if (!preserveHost) {
+        this.host.innerHTML = '';
+        this.host.classList.remove('sp-core');
+      }
+
       this.destroyed = true;
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.6-debug';
+  ScenePlayerCore.VERSION = '1.12.14-public.13';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 

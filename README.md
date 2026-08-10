@@ -129,3 +129,21 @@ PAST typography consistency.
 - Otherwise the work-level `appearance.typography.fontFamily` is used.
 - History also carries scene text weight/style/letter-spacing when specified.
 - Result: PAST looks like the same work, not a separate reader layer.
+
+
+## v0.3.13
+
+Black-screen root fix.
+
+Root cause:
+- graceful audio exit keeps the old Player alive for ~1.6 s.
+- after the fade, the old Player called `destroy()`.
+- old and new Player instances share the same `#scenePlayer` host.
+- old `destroy()` cleared `host.innerHTML`, erasing the NEW Player DOM.
+- the new Player object/audio kept running, producing `nodes=0` + audio-only black screen.
+
+Fix:
+- `ScenePlayerCore.destroy({ preserveHost: true })` cleans audio, timers, context,
+  and event listeners without touching the shared host DOM.
+- delayed post-fade cleanup now always uses `preserveHost: true`.
+- immediate/full destroy behavior remains available for genuine teardown.
