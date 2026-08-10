@@ -108,3 +108,13 @@ History tap fix.
 - Closing History with × also clears it.
 - Result: past Scene → return → the very next stage tap advances normally.
   No extra "dead" tap is consumed after returning from History.
+
+
+## v0.3.5
+
+Left header control fix.
+
+- `‹` now opens the PAST / visited Scene history.
+- Tapping it again while History is open closes History.
+- It no longer attempts to close Scene or navigate back to the source site.
+- Source-site navigation remains the browser / OS responsibility.

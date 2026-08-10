@@ -173,11 +173,15 @@
     if (left) {
       left.hidden = false;
       left.textContent = '‹';
-      left.setAttribute('aria-label', 'Sceneを閉じる');
+      left.setAttribute('aria-label', '過去Sceneを開く');
       left.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopImmediatePropagation();
-        closeToSource();
+
+        // Public Player: the left header control is History, not browser/back navigation.
+        // If History is already open, close it; otherwise open the visited Scene list.
+        if (player.historyOpen) player.closeHistory();
+        else player.openHistory();
       }, true);
     }
 
@@ -357,7 +361,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.4',
+    version: '0.3.5',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },

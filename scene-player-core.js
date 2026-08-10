@@ -126,7 +126,7 @@
         <div class="sp-bg-flash" aria-hidden="true"></div>
         <div class="sp-veil" aria-hidden="true"></div>
         <header class="sp-header">
-          <button class="sp-button sp-prev" type="button" aria-label="Previous scene">‹</button>
+          <button class="sp-button sp-prev" type="button" aria-label="Past scenes">‹</button>
           <div class="sp-meta">
             <span class="sp-author"></span>
             <strong class="sp-title"></strong>
@@ -1948,7 +1948,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.4';
+  ScenePlayerCore.VERSION = '1.12.14-public.5';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
