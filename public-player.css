@@ -1,0 +1,58 @@
+:root{
+  color-scheme:light dark;
+  background:#0b1016;
+}
+*{box-sizing:border-box}
+html,body{
+  width:100%;
+  min-height:100%;
+  margin:0;
+  padding:0;
+  overscroll-behavior:none;
+}
+body{
+  min-height:100dvh;
+  overflow:hidden;
+  background:#0b1016;
+}
+.public-player{
+  width:100%;
+  height:100dvh;
+  min-height:100dvh;
+}
+.public-error{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  background:#0b1016;
+  color:#f5f5f2;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+.public-error[hidden]{display:none}
+.public-error-card{
+  width:min(460px,100%);
+  padding:28px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:20px;
+  background:rgba(255,255,255,.04);
+}
+.public-error strong{font-size:1.15rem}
+.public-error p{
+  margin:12px 0 20px;
+  line-height:1.7;
+  color:rgba(255,255,255,.68);
+  overflow-wrap:anywhere;
+}
+.public-error button{
+  min-height:44px;
+  padding:0 18px;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:999px;
+  background:#f5f5f2;
+  color:#111;
+  font:inherit;
+  font-weight:700;
+}
