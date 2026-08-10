@@ -62,3 +62,13 @@ the Player can use browser Back.
 - right header control is audio mute/unmute
 - BGM/Ambient may continue underneath the ending screen
 - fixes first Scene vertical placement by making the Player measurable before `Core.load()`
+
+
+## v0.3.1
+
+- Return button no longer depends on `document.referrer`.
+- If an explicit return URL exists, it is used first.
+- Otherwise, if browser history contains a previous page, the Player shows
+  `元のページへ戻る` and uses `history.back()`.
+- This fixes publisher sites that suppress referrer information while normal
+  browser Back still works.

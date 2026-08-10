@@ -109,7 +109,10 @@
 
     // If an explicit URL exists, always show.
     // If not, browser back is useful only when this page was reached from elsewhere.
-    const canHistoryBack = history.length > 1 && document.referrer;
+    // Some publishing sites intentionally suppress document.referrer.
+    // Browser history can still return to the source page, so do not require
+    // referrer metadata in order to expose the return action.
+    const canHistoryBack = history.length > 1;
     returnButton.hidden = !(ret.url || canHistoryBack);
 
     returnButton.onclick = () => {
@@ -236,7 +239,7 @@
       return;
     }
 
-    if (history.length > 1 && document.referrer) {
+    if (history.length > 1) {
       history.back();
       return;
     }
@@ -313,7 +316,7 @@
   retryButton.addEventListener('click', () => fetchScene().catch(showError));
 
   window.ScenePublicPlayer = {
-    version: '0.3',
+    version: '0.3.1',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
