@@ -129,3 +129,27 @@ PAST typography consistency.
 - Otherwise the work-level `appearance.typography.fontFamily` is used.
 - History also carries scene text weight/style/letter-spacing when specified.
 - Result: PAST looks like the same work, not a separate reader layer.
+
+
+## v0.3.7
+
+Rapid-input render race fix.
+
+- Every render now receives a monotonically increasing render generation.
+- Delayed `requestAnimationFrame` callbacks from an older Scene abort immediately
+  after a newer Scene/render begins.
+- Finishing the work also invalidates unfinished entrance/layout callbacks.
+- Prevents rapid taps, swipes, wheel input, or mixed input from leaving the visual
+  layer empty while persistent BGM continues playing.
+
+
+## v0.3.8
+
+Mixed-input race hardening.
+
+- Adds a short interaction mutex around mutually exclusive navigation actions.
+- Click/tap advance cannot race with upward wheel / History opening.
+- History opening cannot race with click, keyboard, swipe, or another History open.
+- Touch swipe and History-item selection use the same guard.
+- The lock is intentionally short (roughly 220–320 ms) so normal reading still
+  feels immediate while pathological click+wheel / tap+scroll combinations are ignored.
