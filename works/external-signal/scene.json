@@ -4,15 +4,22 @@
   "title": "EXTERNAL SIGNAL",
   "author": "API / Embed Test",
   "language": "mul",
-  "languages": ["ja", "en"],
+  "languages": [
+    "ja",
+    "en"
+  ],
   "direction": "auto",
   "theme": "cinema",
   "appearance": {
     "cinemaTone": "dark",
-    "typography": { "fontFamily": "sans" }
+    "typography": {
+      "fontFamily": "sans"
+    }
   },
   "player": {
-    "navigation": { "allowPrevious": true }
+    "navigation": {
+      "allowPrevious": true
+    }
   },
   "scenes": [
     {
@@ -23,7 +30,9 @@
       "presentation": {
         "display": "stack",
         "effect": "auto",
-        "text": { "size": "auto" },
+        "text": {
+          "size": "auto"
+        },
         "background": {
           "src": "https://yuya-narita.github.io/portfolio/assets/visual-03.jpeg",
           "transition": "fade",
@@ -52,7 +61,9 @@
       "presentation": {
         "display": "stack",
         "effect": "fade",
-        "text": { "size": "auto" }
+        "text": {
+          "size": "auto"
+        }
       }
     },
     {
@@ -63,7 +74,9 @@
       "presentation": {
         "display": "stack",
         "effect": "slow",
-        "text": { "size": "auto" }
+        "text": {
+          "size": "auto"
+        }
       }
     },
     {
@@ -74,11 +87,14 @@
       "presentation": {
         "display": "solo",
         "effect": "loud",
-        "text": { "size": "auto" }
-      },
-      "audio": [
-        { "channel": "bgm", "action": "stop", "fadeOut": 1200 }
-      ]
+        "text": {
+          "size": "auto"
+        }
+      }
     }
-  ]
+  ],
+  "description": "Studioの外から届いたScene Formatを、公開Playerで再生するテスト。",
+  "ending": {
+    "title": "つづく"
+  }
 }

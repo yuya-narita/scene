@@ -92,6 +92,7 @@
       this.backgroundLayerIndex = 0;
       this.backgroundTimers = [];
       this.audioUnlocked = false;
+      this.muted = false;
       // AudioContext unlock and story playback are separate states.
       // A restarted story must wait for the reader's next stage gesture even
       // when the AudioContext itself is already unlocked.
@@ -779,6 +780,8 @@
       const audio = new Audio();
       audio.preload = 'auto';
       audio.playsInline = true;
+      audio.muted = Boolean(this.muted);
+      audio.muted = Boolean(this.muted);
       this._prepareAudioTransport(audio, command.src);
       audio.src = command.src;
       try { audio.load(); } catch (_) {}
@@ -1249,6 +1252,26 @@
       this.ended = true;
       this.els.ending.hidden = false;
       emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
+    }
+
+    setMuted(muted = true) {
+      this.muted = Boolean(muted);
+      Object.values(this.audioEls || {}).forEach((audio) => {
+        try { audio.muted = this.muted; } catch (_) {}
+      });
+      this.oneshots.forEach((audio) => {
+        try { audio.muted = this.muted; } catch (_) {}
+      });
+      emit(this.host, 'sceneplayer:mutechange', { muted: this.muted });
+      return this.muted;
+    }
+
+    toggleMuted() {
+      return this.setMuted(!this.muted);
+    }
+
+    isMuted() {
+      return Boolean(this.muted);
     }
 
     startAuto() {
@@ -1882,7 +1905,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14';
+  ScenePlayerCore.VERSION = '1.12.14-public.2';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
