@@ -131,25 +131,19 @@ PAST typography consistency.
 - Result: PAST looks like the same work, not a separate reader layer.
 
 
-## v0.3.7
+## v0.3.9
 
-Rapid-input render race fix.
+Rapid-input hardening, rebuilt from stable v0.3.6.
 
-- Every render now receives a monotonically increasing render generation.
-- Delayed `requestAnimationFrame` callbacks from an older Scene abort immediately
-  after a newer Scene/render begins.
-- Finishing the work also invalidates unfinished entrance/layout callbacks.
-- Prevents rapid taps, swipes, wheel input, or mixed input from leaving the visual
-  layer empty while persistent BGM continues playing.
+Important: this version intentionally drops the v0.3.7 render-generation
+experiment and the v0.3.8 mixed-input mutex.
 
+- Only one Scene navigation is accepted during a ~720 ms landing window.
+- Extra taps/clicks during that window are discarded rather than queued.
+- Browser keyboard auto-repeat (`KeyboardEvent.repeat`) is ignored.
+- Wheel/swipe History opening is ignored while a Scene landing is active.
+- History selection uses only a short settle lock.
+- Typography/PAST fixes from v0.3.6 are retained.
 
-## v0.3.8
-
-Mixed-input race hardening.
-
-- Adds a short interaction mutex around mutually exclusive navigation actions.
-- Click/tap advance cannot race with upward wheel / History opening.
-- History opening cannot race with click, keyboard, swipe, or another History open.
-- Touch swipe and History-item selection use the same guard.
-- The lock is intentionally short (roughly 220–320 ms) so normal reading still
-  feels immediate while pathological click+wheel / tap+scroll combinations are ignored.
+Design rule: the Player prioritizes deterministic landing over processing every
+rapid input event.

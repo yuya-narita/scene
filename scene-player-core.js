@@ -83,12 +83,10 @@
       this.maxVisitedIndex = -1;
       this.historyOpen = false;
       this.historyScrollRaf = 0;
-      // Monotonic render generation. Every render invalidates unfinished
-      // requestAnimationFrame work from the previous render.
-      this.renderGeneration = 0;
-      // Short input mutex for mutually-exclusive navigation actions.
-      // Prevents click/tap advance and wheel/history-open from racing each other.
-      this.interactionLockedUntil = 0;
+      // Public hardening: rapid repeated navigation is discarded while the
+      // current Scene landing is settling. This keeps one transition in flight
+      // at a time instead of trying to process an arbitrary input queue.
+      this.navigationLockedUntil = 0;
       this.destroyed = false;
       this._bound = [];
       this.presentationTimers = [];
@@ -242,13 +240,15 @@
     }
 
 
-    _interactionLocked() {
-      return performance.now() < this.interactionLockedUntil;
+    _navigationLocked() {
+      return performance.now() < this.navigationLockedUntil;
     }
 
-    _lockInteraction(ms = 260) {
-      const until = performance.now() + Math.max(0, Number(ms) || 0);
-      this.interactionLockedUntil = Math.max(this.interactionLockedUntil, until);
+    _lockNavigation(ms = 720) {
+      this.navigationLockedUntil = Math.max(
+        this.navigationLockedUntil,
+        performance.now() + Math.max(0, Number(ms) || 0)
+      );
     }
 
     _bindControls() {
@@ -296,7 +296,7 @@
         // has served its purpose. Leaving it armed would swallow the first
         // intentional tap after returning to the selected Scene.
         this.suppressNextClick = false;
-        this._lockInteraction(260);
+        this.navigationLockedUntil = performance.now() + 180;
 
         this.closeHistory({ keepVisualState: true });
         this.goToVisited(nextIndex);
@@ -305,12 +305,11 @@
 
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
-        if (this._interactionLocked()) return;
+        if (this._navigationLocked()) return;
         if (this.suppressNextClick) {
           this.suppressNextClick = false;
           return;
         }
-        this._lockInteraction(260);
         this.next();
       });
 
@@ -318,14 +317,12 @@
         this._on(this.els.stage, 'keydown', (e) => {
           if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             e.preventDefault();
-            if (this._interactionLocked()) return;
-            this._lockInteraction(260);
+            if (e.repeat || this._navigationLocked()) return;
             this.unlockAudio(true);
             this.next();
           } else if (this.options.allowPrevious && (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Backspace')) {
             e.preventDefault();
-            if (this._interactionLocked()) return;
-            this._lockInteraction(320);
+            if (e.repeat || this._navigationLocked()) return;
             this.openHistory();
           }
         });
@@ -334,10 +331,9 @@
       // Desktop/trackpad: scrolling upward opens History. Downward scrolling keeps
       // the future discrete, so it never reveals an unread Scene.
       this._on(this.els.stage, 'wheel', (e) => {
-        if (!this.options.allowPrevious || this.historyOpen || this._interactionLocked()) return;
+        if (!this.options.allowPrevious || this.historyOpen || this._navigationLocked()) return;
         if (e.deltaY < -8) {
           e.preventDefault();
-          this._lockInteraction(320);
           this.openHistory({ wheelDelta: e.deltaY });
         }
       }, { passive: false });
@@ -363,28 +359,17 @@
           this.touchStartX = null;
 
           if (Math.max(Math.abs(dx), Math.abs(dy)) < this.options.swipeThreshold) return;
-          if (this._interactionLocked()) return;
+          if (this._navigationLocked()) return;
           this.suppressNextClick = true;
 
           // Pulling down/right enters History Scroll. Pushing up/left still advances
-          // only one unread Scene at a time. Lock the accepted gesture so it cannot
-          // race with the synthetic click/wheel stream around the same frame.
+          // only one unread Scene at a time.
           if (Math.abs(dy) >= Math.abs(dx)) {
-            if (dy > 0 && this.options.allowPrevious) {
-              this._lockInteraction(320);
-              this.openHistory({ dragDistance: dy });
-            } else if (dy < 0) {
-              this._lockInteraction(260);
-              this.next();
-            }
+            if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
+            else if (dy < 0) this.next();
           } else {
-            if (dx > 0 && this.options.allowPrevious) {
-              this._lockInteraction(320);
-              this.openHistory({ dragDistance: dx });
-            } else {
-              this._lockInteraction(260);
-              this.next();
-            }
+            if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
+            else this.next();
           }
         }, { passive: true });
       }
@@ -1071,10 +1056,11 @@
     }
 
     next() {
-      if (!this.document || this.ended) return false;
-      // Keep subsequent navigation sources away while this render is being committed.
-      this._lockInteraction(220);
+      if (!this.document || this.ended || this._navigationLocked()) return false;
+      this._lockNavigation(720);
+
       if (this._stopTyping(true)) {
+        this.navigationLockedUntil = performance.now() + 120;
         emit(this.host, 'sceneplayer:typingend', { index: this.index, scene: this.currentScene, skipped: true });
         this._scheduleAuto();
         return true;
@@ -1109,9 +1095,8 @@
     }
 
     openHistory(options = {}) {
-      if (!this.document || !this.options.allowPrevious || this.maxVisitedIndex <= 0) return false;
-      // Calls may come from Public shell/API in addition to the stage handlers.
-      this._lockInteraction(280);
+      if (!this.document || !this.options.allowPrevious || this.maxVisitedIndex <= 0 || this._navigationLocked()) return false;
+      this._lockNavigation(260);
       this.stopAuto();
       this._clearPresentationTimers();
       this.historyOpen = true;
@@ -1154,6 +1139,7 @@
       if (!this.historyOpen) return false;
       this.historyOpen = false;
       this.suppressNextClick = false;
+      this.navigationLockedUntil = Math.min(this.navigationLockedUntil, performance.now() + 120);
       this.host.classList.remove('sp-history-open');
       this.els.history.hidden = true;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
@@ -1326,7 +1312,6 @@
 
     finish() {
       if (!this.document || this.ended) return;
-      ++this.renderGeneration;
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
@@ -1504,7 +1489,7 @@
     }
 
 
-    _renderStackWithBreathing(visible, active, generation) {
+    _renderStackWithBreathing(visible, active) {
       const oldById = new Map(
         [...this.els.scenes.querySelectorAll('.sp-scene')].map((node) => [node.dataset.sceneId, node])
       );
@@ -1535,7 +1520,6 @@
       // Leave the new Scene in its CSS entering position for one painted frame.
       // Without this frame, the incoming Scene has almost no travel distance.
       requestAnimationFrame(() => {
-        if (generation !== this.renderGeneration) return;
         this.host.classList.remove('sp-whitespace-exhale');
         this.host.classList.add('sp-whitespace-inhale');
 
@@ -1544,9 +1528,7 @@
 
         // Jump/Shino wait two frames before retargeting to the final geometry.
         requestAnimationFrame(() => {
-          if (generation !== this.renderGeneration) return;
           requestAnimationFrame(() => {
-            if (generation !== this.renderGeneration) return;
             this.host.classList.remove('sp-whitespace-inhale');
             this.host.classList.add('sp-whitespace-exhale');
 
@@ -1570,7 +1552,6 @@
 
     _render() {
       if (!this.document) return;
-      const generation = ++this.renderGeneration;
       this._resetPresentationRuntime();
       this._clearLayoutTimers();
 
@@ -1581,7 +1562,7 @@
       const isForwardStack = this._audioRenderMode === 'advance' && display === 'stack';
 
       if (isForwardStack) {
-        this._renderStackWithBreathing(visible, active, generation);
+        this._renderStackWithBreathing(visible, active);
       } else {
         // Restore/load/history jumps should be immediate and deterministic.
         this.els.scenes.innerHTML = '';
@@ -2024,7 +2005,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.8';
+  ScenePlayerCore.VERSION = '1.12.14-public.9';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 

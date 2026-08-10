@@ -361,7 +361,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.8',
+    version: '0.3.9',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
