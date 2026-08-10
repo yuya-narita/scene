@@ -97,3 +97,14 @@ Audio exit polish.
 - `pagehide` performs a best-effort fade when leaving/closing the page.
   Browsers may terminate a closed tab immediately, so a full 1.6-second fade
   cannot be guaranteed for a hard tab/app close.
+
+
+## v0.3.4
+
+History tap fix.
+
+- A swipe that opens History sets an anti-ghost-click flag.
+- Selecting a past Scene now clears that flag immediately.
+- Closing History with × also clears it.
+- Result: past Scene → return → the very next stage tap advances normally.
+  No extra "dead" tap is consumed after returning from History.

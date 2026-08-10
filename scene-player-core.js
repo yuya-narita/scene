@@ -274,6 +274,14 @@
         if (!item) return;
         const nextIndex = Number(item.dataset.index);
         if (!Number.isInteger(nextIndex)) return;
+
+        // A swipe used to open History sets suppressNextClick so the synthetic
+        // click following that gesture cannot advance the story accidentally.
+        // Once the reader deliberately chooses a History item, that protection
+        // has served its purpose. Leaving it armed would swallow the first
+        // intentional tap after returning to the selected Scene.
+        this.suppressNextClick = false;
+
         this.closeHistory({ keepVisualState: true });
         this.goToVisited(nextIndex);
       });
@@ -1106,6 +1114,7 @@
     closeHistory(options = {}) {
       if (!this.historyOpen) return false;
       this.historyOpen = false;
+      this.suppressNextClick = false;
       this.host.classList.remove('sp-history-open');
       this.els.history.hidden = true;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
@@ -1939,7 +1948,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.3';
+  ScenePlayerCore.VERSION = '1.12.14-public.4';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
