@@ -360,8 +360,24 @@
     fadePublicAudio(PUBLIC_EXIT_FADE_MS);
   });
 
+
+  const debugBox=document.getElementById('sceneDebug');
+  const debugToggle=document.getElementById('sceneDebugToggle');
+  const debugText=document.getElementById('sceneDebugText');
+  debugToggle?.addEventListener('click',()=>{debugBox.classList.toggle('is-open');updateSceneDebug('manual');});
+  function sceneStyle(el){if(!el)return 'missing';const c=getComputedStyle(el);return `display=${c.display} vis=${c.visibility} op=${c.opacity} transform=${c.transform}`;}
+  function updateSceneDebug(reason='tick'){
+    if(!debugText)return;
+    const nodes=[...host.querySelectorAll('.sp-scenes .sp-scene')];
+    const visible=nodes.filter(el=>{const c=getComputedStyle(el);return c.display!=='none'&&c.visibility!=='hidden'&&Number(c.opacity)>.01;});
+    const rows=nodes.map((el,i)=>{const c=getComputedStyle(el);const t=(el.textContent||'').replace(/\s+/g,' ').trim().slice(0,36);return `${i}: class="${el.className}" op=${c.opacity} top=${Math.round(el.getBoundingClientRect().top)} "${t}"`;});
+    debugText.textContent=[`reason=${reason}`,`index=${player?.index??'-'} maxVisited=${player?.maxVisitedIndex??'-'}`,`ended=${player?.ended??'-'} history=${player?.historyOpen??'-'}`,`host.hidden=${host.hidden} ${sceneStyle(host)}`,`intro.hidden=${intro.hidden} ending.hidden=${ending.hidden} ending.visible=${ending.classList.contains('is-visible')}`,`nodes=${nodes.length} visible=${visible.length}`,`stage=${sceneStyle(player?.els?.stage)}`,`scenes=${sceneStyle(player?.els?.scenes)}`,`background=${sceneStyle(player?.els?.background)}`,...rows].join('\n');
+  }
+  ['sceneplayer:scenechange','sceneplayer:end','sceneplayer:historyopen','sceneplayer:historyclose'].forEach(type=>host.addEventListener(type,()=>updateSceneDebug(type)));
+  setInterval(()=>updateSceneDebug('interval'),250);
+
   window.ScenePublicPlayer = {
-    version: '0.3.11',
+    version: '0.3.12-debug',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
