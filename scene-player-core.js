@@ -1254,6 +1254,40 @@
       emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
     }
 
+    fadeOutAudio(duration = 1600, { includeOneShots = true } = {}) {
+      const ms = Math.max(0, Number(duration) || 0);
+      this._clearAudioTimers();
+
+      ['bgm', 'ambient'].forEach((channel) => {
+        this._stopPersistentChannel(channel, ms);
+      });
+
+      if (includeOneShots) {
+        this.oneshots.forEach((audio) => {
+          if (!audio || audio.paused) return;
+          const startVolume = Number.isFinite(audio.volume) ? audio.volume : 1;
+          const startedAt = performance.now();
+          const step = (now) => {
+            if (!this.oneshots.has(audio)) return;
+            const t = Math.min(1, (now - startedAt) / Math.max(1, ms));
+            try { audio.volume = Math.max(0, startVolume * (1 - t)); } catch (_) {}
+            if (t < 1) requestAnimationFrame(step);
+            else {
+              try { audio.pause(); } catch (_) {}
+              this.oneshots.delete(audio);
+            }
+          };
+          if (ms > 0) requestAnimationFrame(step);
+          else {
+            try { audio.pause(); } catch (_) {}
+            this.oneshots.delete(audio);
+          }
+        });
+      }
+
+      return ms;
+    }
+
     setMuted(muted = true) {
       this.muted = Boolean(muted);
       Object.values(this.audioEls || {}).forEach((audio) => {
@@ -1905,7 +1939,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.2';
+  ScenePlayerCore.VERSION = '1.12.14-public.3';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 

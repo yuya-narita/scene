@@ -72,3 +72,28 @@ the Player can use browser Back.
   `元のページへ戻る` and uses `history.back()`.
 - This fixes publisher sites that suppress referrer information while normal
   browser Back still works.
+
+
+## v0.3.2
+
+Public Player hand-off cleanup.
+
+- Removed the built-in `元のページへ戻る` ending button.
+  Returning is left to browser / OS navigation.
+- Ending defaults to optional author links plus `もう一度読む`.
+- `Sceneについて` remains an optional Scene/Studio discovery link.
+- Added an opening breath:
+  `はじめる` → intro fade → first background only for about 450 ms →
+  Scene 1 begins with its original author-selected entrance effect.
+- Scene 1's effect is not replaced or softened by the Public Player.
+
+## v0.3.3
+
+Audio exit polish.
+
+- Public Player navigation/restart now asks BGM and Ambient to fade for about
+  1.6 seconds instead of cutting them immediately.
+- Active one-shot audio is also faded on Player-controlled exits.
+- `pagehide` performs a best-effort fade when leaving/closing the page.
+  Browsers may terminate a closed tab immediately, so a full 1.6-second fade
+  cannot be guaranteed for a hard tab/app close.

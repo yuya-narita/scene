@@ -2,6 +2,9 @@
   'use strict';
 
   const host = document.getElementById('scenePlayer');
+  const opening = document.getElementById('publicOpening');
+  const openingImage = document.getElementById('publicOpeningImage');
+  const openingDim = document.getElementById('publicOpeningDim');
   const intro = document.getElementById('publicIntro');
   const introTitle = document.getElementById('publicIntroTitle');
   const introAuthor = document.getElementById('publicIntroAuthor');
@@ -12,7 +15,6 @@
   const ending = document.getElementById('publicEnding');
   const endingLabel = document.getElementById('publicEndingLabel');
   const endingLinks = document.getElementById('publicEndingLinks');
-  const returnButton = document.getElementById('publicReturn');
   const restartButton = document.getElementById('publicRestart');
 
   const errorPanel = document.getElementById('publicError');
@@ -30,9 +32,6 @@
   const source = () => requested || DEFAULT_SCENE;
   const storageKey = () => `scene-public-progress:${source()}`;
 
-  const queryReturn = (params.get('return') || '').trim();
-  const queryReturnLabel = (params.get('returnLabel') || '').trim();
-
   function safeProgress() {
     const n = Number(localStorage.getItem(storageKey()));
     return Number.isInteger(n) && n > 0 && documentData?.scenes?.[n] ? n : 0;
@@ -42,6 +41,7 @@
     console.error(error);
     host.hidden = true;
     intro.hidden = true;
+    opening.hidden = true;
     ending.hidden = true;
     errorPanel.hidden = false;
     errorMessage.textContent = `${error?.message || error}`;
@@ -71,18 +71,6 @@
       .filter(item => item.label && item.url);
   }
 
-  function returnConfig(doc) {
-    const nav = doc.navigation || doc.player?.navigation || {};
-    const endingReturn = doc.ending?.return || {};
-    const url = queryReturn ||
-      String(endingReturn.url || nav.returnUrl || doc.returnUrl || '').trim();
-
-    const label = queryReturnLabel ||
-      String(endingReturn.label || nav.returnLabel || doc.returnLabel || '元のページへ戻る').trim();
-
-    return { url, label };
-  }
-
   function buildEnding(doc) {
     endingLinks.replaceChildren();
 
@@ -104,25 +92,47 @@
       endingLinks.appendChild(a);
     }
 
-    const ret = returnConfig(doc);
-    returnButton.textContent = ret.label || '元のページへ戻る';
+  }
 
-    // If an explicit URL exists, always show.
-    // If not, browser back is useful only when this page was reached from elsewhere.
-    // Some publishing sites intentionally suppress document.referrer.
-    // Browser history can still return to the source page, so do not require
-    // referrer metadata in order to expose the return action.
-    const canHistoryBack = history.length > 1;
-    returnButton.hidden = !(ret.url || canHistoryBack);
+  function firstSceneBackground(doc) {
+    const scene = doc?.scenes?.[0];
+    return scene?.presentation?.background || scene?.background || null;
+  }
 
-    returnButton.onclick = () => {
-      stopForExit();
-      if (ret.url) {
-        location.href = ret.url;
-        return;
-      }
-      history.back();
-    };
+  function prepareOpening(doc) {
+    const bg = firstSceneBackground(doc);
+    const src = String(bg?.src || '').trim();
+
+    openingImage.style.backgroundImage = src ? `url("${src.replace(/"/g, '\\"')}")` : 'none';
+    openingImage.style.backgroundSize =
+      bg?.fit === 'contain' ? 'contain' :
+      bg?.fit === 'fill' ? '100% 100%' :
+      'cover';
+    openingImage.style.backgroundPosition = 'center';
+    openingImage.style.backgroundRepeat = 'no-repeat';
+
+    const dim = Math.max(0, Math.min(1, Number(bg?.dim ?? 0)));
+    openingDim.style.background = `rgba(0,0,0,${dim})`;
+  }
+
+  async function openingBreath() {
+    prepareOpening(documentData);
+
+    // Intro disappears first. The reader gets a short moment with only the
+    // work's first background before Scene 1 begins.
+    intro.classList.add('is-leaving');
+    await new Promise(resolve => setTimeout(resolve, 240));
+
+    intro.hidden = true;
+    intro.classList.remove('is-leaving');
+
+    opening.hidden = false;
+    requestAnimationFrame(() => opening.classList.add('is-visible'));
+
+    await new Promise(resolve => setTimeout(resolve, 450));
+
+    opening.classList.remove('is-visible');
+    opening.hidden = true;
   }
 
   function applyDocumentMeta(doc) {
@@ -211,6 +221,20 @@
     host.removeEventListener('sceneplayer:end', onEnd);
   }
 
+  const PUBLIC_EXIT_FADE_MS = 1600;
+
+  function fadePublicAudio(duration = PUBLIC_EXIT_FADE_MS) {
+    if (!player || typeof player.fadeOutAudio !== 'function') return 0;
+    try { return player.fadeOutAudio(duration); } catch (_) { return 0; }
+  }
+
+  function destroyAfterFade(targetPlayer, duration = PUBLIC_EXIT_FADE_MS) {
+    if (!targetPlayer) return;
+    window.setTimeout(() => {
+      try { targetPlayer.destroy(); } catch (_) {}
+    }, Math.max(0, duration) + 80);
+  }
+
   function destroyPlayer({ stopAudio = true } = {}) {
     if (!player) return;
     removeShellListeners();
@@ -224,9 +248,11 @@
 
   function stopForExit() {
     if (player) {
-      try { player.destroy(); } catch (_) {}
+      const exitingPlayer = player;
+      fadePublicAudio();
       player = null;
       shellBound = false;
+      destroyAfterFade(exitingPlayer);
     }
   }
 
@@ -248,23 +274,28 @@
     showIntro();
   }
 
-  function ensurePlayer(startAt = 0) {
+  async function ensurePlayer(startAt = 0) {
     if (player) {
-      try { player.destroy(); } catch (_) {}
+      const previousPlayer = player;
+      try { previousPlayer.fadeOutAudio(PUBLIC_EXIT_FADE_MS); } catch (_) {}
+      destroyAfterFade(previousPlayer);
+      player = null;
     }
 
     shellBound = false;
     muted = false;
 
-    /*
-      IMPORTANT:
-      Make the host measurable BEFORE Core.load().
-      v0.2 loaded while `display:none`, so the first Scene could calculate its
-      landing position against a zero-sized viewport and appear too high.
-    */
-    intro.hidden = true;
     ending.hidden = true;
     ending.classList.remove('is-visible');
+
+    await openingBreath();
+
+    /*
+      Make the host measurable BEFORE Core.load().
+      The opening overlay is gone only when Scene 1 is ready to begin, so the
+      first Scene keeps its own entrance animation instead of appearing already
+      settled.
+    */
     host.hidden = false;
 
     player = new ScenePlayerCore(host, {
@@ -274,12 +305,11 @@
 
     bindPublicControls();
 
-    // Wait one rendered frame so the public host has its real iPhone/desktop size.
-    requestAnimationFrame(() => {
-      player.load(documentData, { startAt });
-      // START / CONTINUE is the user gesture used to unlock iOS media.
-      player.unlockAudio(true);
-    });
+    await new Promise(resolve => requestAnimationFrame(resolve));
+
+    player.load(documentData, { startAt });
+    // START / CONTINUE is the trusted user gesture used to unlock iOS media.
+    player.unlockAudio(true);
   }
 
   function showIntro() {
@@ -287,11 +317,15 @@
     ending.hidden = true;
 
     if (player) {
-      try { player.destroy(); } catch (_) {}
+      const introPlayer = player;
+      fadePublicAudio();
       player = null;
       shellBound = false;
+      destroyAfterFade(introPlayer);
     }
 
+    opening.hidden = true;
+    opening.classList.remove('is-visible');
     host.hidden = true;
     intro.hidden = false;
     applyDocumentMeta(documentData);
@@ -315,8 +349,15 @@
 
   retryButton.addEventListener('click', () => fetchScene().catch(showError));
 
+  // Best-effort graceful audio exit when the browser/app closes or replaces
+  // the page. A browser may terminate the document immediately, so a full
+  // fade cannot be guaranteed on a hard tab/app close.
+  window.addEventListener('pagehide', () => {
+    fadePublicAudio(PUBLIC_EXIT_FADE_MS);
+  });
+
   window.ScenePublicPlayer = {
-    version: '0.3.1',
+    version: '0.3.3',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
