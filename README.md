@@ -131,19 +131,15 @@ PAST typography consistency.
 - Result: PAST looks like the same work, not a separate reader layer.
 
 
-## v0.3.9
+## v0.3.10
 
-Rapid-input hardening, rebuilt from stable v0.3.6.
+Black-screen-at-end fix, rebuilt from v0.3.6.
 
-Important: this version intentionally drops the v0.3.7 render-generation
-experiment and the v0.3.8 mixed-input mutex.
-
-- Only one Scene navigation is accepted during a ~720 ms landing window.
-- Extra taps/clicks during that window are discarded rather than queued.
-- Browser keyboard auto-repeat (`KeyboardEvent.repeat`) is ignored.
-- Wheel/swipe History opening is ignored while a Scene landing is active.
-- History selection uses only a short settle lock.
-- Typography/PAST fixes from v0.3.6 are retained.
-
-Design rule: the Player prioritizes deterministic landing over processing every
-rapid input event.
+- Removes the v0.3.7–v0.3.9 rapid-input experiments.
+- Core `finish()` no longer clears Scene/background before the Public Player
+  ending takes over.
+- The last Scene remains visible as a safe fallback.
+- Public ending visibility no longer depends on nested requestAnimationFrame.
+  It is committed immediately with a forced layout, then fades in.
+- Goal: rapid taps, key presses, or swipes may reach the end quickly, but they
+  must never produce an audio-only black screen.

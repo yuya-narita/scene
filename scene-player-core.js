@@ -83,10 +83,6 @@
       this.maxVisitedIndex = -1;
       this.historyOpen = false;
       this.historyScrollRaf = 0;
-      // Public hardening: rapid repeated navigation is discarded while the
-      // current Scene landing is settling. This keeps one transition in flight
-      // at a time instead of trying to process an arbitrary input queue.
-      this.navigationLockedUntil = 0;
       this.destroyed = false;
       this._bound = [];
       this.presentationTimers = [];
@@ -240,17 +236,6 @@
     }
 
 
-    _navigationLocked() {
-      return performance.now() < this.navigationLockedUntil;
-    }
-
-    _lockNavigation(ms = 720) {
-      this.navigationLockedUntil = Math.max(
-        this.navigationLockedUntil,
-        performance.now() + Math.max(0, Number(ms) || 0)
-      );
-    }
-
     _bindControls() {
       // iOS/WebKit: the reading gesture unlocks Web Audio and arms playback.
       const pressPaper = () => {
@@ -296,7 +281,6 @@
         // has served its purpose. Leaving it armed would swallow the first
         // intentional tap after returning to the selected Scene.
         this.suppressNextClick = false;
-        this.navigationLockedUntil = performance.now() + 180;
 
         this.closeHistory({ keepVisualState: true });
         this.goToVisited(nextIndex);
@@ -305,7 +289,6 @@
 
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
-        if (this._navigationLocked()) return;
         if (this.suppressNextClick) {
           this.suppressNextClick = false;
           return;
@@ -317,12 +300,10 @@
         this._on(this.els.stage, 'keydown', (e) => {
           if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             e.preventDefault();
-            if (e.repeat || this._navigationLocked()) return;
             this.unlockAudio(true);
             this.next();
           } else if (this.options.allowPrevious && (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Backspace')) {
             e.preventDefault();
-            if (e.repeat || this._navigationLocked()) return;
             this.openHistory();
           }
         });
@@ -331,7 +312,7 @@
       // Desktop/trackpad: scrolling upward opens History. Downward scrolling keeps
       // the future discrete, so it never reveals an unread Scene.
       this._on(this.els.stage, 'wheel', (e) => {
-        if (!this.options.allowPrevious || this.historyOpen || this._navigationLocked()) return;
+        if (!this.options.allowPrevious || this.historyOpen) return;
         if (e.deltaY < -8) {
           e.preventDefault();
           this.openHistory({ wheelDelta: e.deltaY });
@@ -359,7 +340,6 @@
           this.touchStartX = null;
 
           if (Math.max(Math.abs(dx), Math.abs(dy)) < this.options.swipeThreshold) return;
-          if (this._navigationLocked()) return;
           this.suppressNextClick = true;
 
           // Pulling down/right enters History Scroll. Pushing up/left still advances
@@ -1056,11 +1036,8 @@
     }
 
     next() {
-      if (!this.document || this.ended || this._navigationLocked()) return false;
-      this._lockNavigation(720);
-
+      if (!this.document || this.ended) return false;
       if (this._stopTyping(true)) {
-        this.navigationLockedUntil = performance.now() + 120;
         emit(this.host, 'sceneplayer:typingend', { index: this.index, scene: this.currentScene, skipped: true });
         this._scheduleAuto();
         return true;
@@ -1095,8 +1072,7 @@
     }
 
     openHistory(options = {}) {
-      if (!this.document || !this.options.allowPrevious || this.maxVisitedIndex <= 0 || this._navigationLocked()) return false;
-      this._lockNavigation(260);
+      if (!this.document || !this.options.allowPrevious || this.maxVisitedIndex <= 0) return false;
       this.stopAuto();
       this._clearPresentationTimers();
       this.historyOpen = true;
@@ -1139,7 +1115,6 @@
       if (!this.historyOpen) return false;
       this.historyOpen = false;
       this.suppressNextClick = false;
-      this.navigationLockedUntil = Math.min(this.navigationLockedUntil, performance.now() + 120);
       this.host.classList.remove('sp-history-open');
       this.els.history.hidden = true;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
@@ -1313,8 +1288,16 @@
     finish() {
       if (!this.document || this.ended) return;
       this.stopAuto();
-      this._resetPresentationRuntime();
-      this._resetBackgroundRuntime();
+
+      // Do NOT clear the Scene/background before the outer Public Player has
+      // taken over. Under rapid input the old implementation could leave a
+      // fully blank stage between Core finish and the public ending overlay.
+      // Freeze the current Scene as the visual fallback instead.
+      this._finishVisibleEntranceEffects();
+      this._clearPresentationTimers();
+      this._clearLayoutTimers();
+      this._clearBackgroundTimers();
+
       this.ended = true;
       this.els.ending.hidden = false;
       emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
@@ -2005,7 +1988,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.9';
+  ScenePlayerCore.VERSION = '1.12.14-public.10';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
