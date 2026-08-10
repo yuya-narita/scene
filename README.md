@@ -118,3 +118,14 @@ Left header control fix.
 - Tapping it again while History is open closes History.
 - It no longer attempts to close Scene or navigate back to the source site.
 - Source-site navigation remains the browser / OS responsibility.
+
+
+## v0.3.6
+
+PAST typography consistency.
+
+- History/Past Scene text now inherits the same typography source as Player text.
+- Scene-level `presentation.text.fontFamily` takes priority.
+- Otherwise the work-level `appearance.typography.fontFamily` is used.
+- History also carries scene text weight/style/letter-spacing when specified.
+- Result: PAST looks like the same work, not a separate reader layer.

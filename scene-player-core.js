@@ -1125,6 +1125,35 @@
       return true;
     }
 
+    _applyHistoryTypography(node, scene) {
+      if (!node || !scene) return;
+
+      const sceneTextStyle = scene?.presentation?.text || {};
+      const workTypography = this.document?.appearance?.typography || {};
+
+      const family = sceneTextStyle.fontFamily || workTypography.fontFamily || 'serif';
+      const families = {
+        serif: 'var(--sp-font-serif)',
+        sans: 'var(--sp-font-sans)',
+        mono: 'var(--sp-font-mono)'
+      };
+
+      node.style.fontFamily = families[family] || families.serif;
+
+      if (sceneTextStyle.fontWeight != null) {
+        node.style.fontWeight = String(sceneTextStyle.fontWeight);
+      }
+
+      if (sceneTextStyle.fontStyle) {
+        node.style.fontStyle = String(sceneTextStyle.fontStyle);
+      }
+
+      if (sceneTextStyle.letterSpacing != null) {
+        const v = sceneTextStyle.letterSpacing;
+        node.style.letterSpacing = typeof v === 'number' ? `${v}em` : String(v);
+      }
+    }
+
     _renderHistory() {
       if (!this.document) return;
       const fragment = document.createDocumentFragment();
@@ -1150,11 +1179,13 @@
           const mark = document.createElement('span');
           mark.className = 'sp-history-text';
           mark.textContent = '♪';
+          this._applyHistoryTypography(mark, scene);
           body.appendChild(mark);
         } else {
           const text = document.createElement('span');
           text.className = 'sp-history-text';
           text.textContent = scene.text || '';
+          this._applyHistoryTypography(text, scene);
           body.appendChild(text);
         }
 
@@ -1162,6 +1193,7 @@
           const sub = document.createElement('span');
           sub.className = 'sp-history-subtext';
           sub.textContent = scene.subText;
+          this._applyHistoryTypography(sub, scene);
           body.appendChild(sub);
         }
 
@@ -1948,7 +1980,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.5';
+  ScenePlayerCore.VERSION = '1.12.14-public.6';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
