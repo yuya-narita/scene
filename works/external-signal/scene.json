@@ -95,6 +95,11 @@
   ],
   "description": "Studioの外から届いたScene Formatを、公開Playerで再生するテスト。",
   "ending": {
-    "title": "つづく"
+    "links": [
+      {
+        "label": "Sceneについて",
+        "url": "https://yuya-narita.github.io/scene/"
+      }
+    ]
   }
 }

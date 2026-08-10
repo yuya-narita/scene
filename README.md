@@ -1,22 +1,64 @@
-# Scene Public Player v0.2
+# Scene Public Player v0.3
 
-Public shell for Scene Player Core.
+Public Player for Scene Format v1.
 
-## v0.2
-- opening screen: start / continue
-- left header button returns to work entrance
-- right header button is music mute/unmute
-- custom ending shell with Previous / Index / Next / reread
-- BGM is not automatically stopped when the reading ends
-- bundled EXTERNAL SIGNAL test no longer sends an explicit BGM stop on its last Scene
-- progress is stored locally for Continue
+## Design goal
 
-## URL
-Default work:
+Scene is not a publishing platform.
+
+The expected flow is:
+
+external article / novel site
+→ open Scene Player
+→ read with Scene presentation
+→ return to the original page
+
+## Start
+
+Default test work:
+
 `/scene/`
 
-Other Scene Format:
+Any Scene JSON:
+
 `/scene/?src=https://example.com/work.scene.json`
 
-Optional navigation query params:
-`prev=...&index=...&next=...`
+Optional return destination:
+
+`/scene/?src=...&return=https://example.com/article&returnLabel=記事へ戻る`
+
+## Ending metadata
+
+The Player no longer invents `END`, `つづく`, previous/next/index.
+
+Authors may optionally provide:
+
+```json
+"ending": {
+  "label": "読了",
+  "return": {
+    "label": "noteの記事へ戻る",
+    "url": "https://note.com/..."
+  },
+  "links": [
+    { "label": "作品一覧", "url": "https://example.com/works" },
+    { "label": "次の話", "url": "https://example.com/episode-2" }
+  ]
+}
+```
+
+All fields are optional.
+
+If no explicit return URL exists but the reader arrived from another page,
+the Player can use browser Back.
+
+## v0.3 changes
+
+- removed forced `END / つづく`
+- removed forced `前 / 一覧 / 次`
+- arbitrary author links on the ending screen
+- return-to-source behavior
+- left header control means leave Scene / return
+- right header control is audio mute/unmute
+- BGM/Ambient may continue underneath the ending screen
+- fixes first Scene vertical placement by making the Player measurable before `Core.load()`

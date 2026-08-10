@@ -11,7 +11,6 @@
 <body>
   <section id="publicIntro" class="public-intro" hidden>
     <div class="public-intro-frame">
-      <button id="publicIntroBack" class="public-intro-back" type="button" hidden>← 一覧</button>
       <div class="public-intro-copy">
         <span class="public-kicker">SCENE PLAYER</span>
         <p id="publicIntroAuthor" class="public-author"></p>
@@ -29,14 +28,17 @@
 
   <section id="publicEnding" class="public-ending" hidden>
     <div class="public-ending-inner">
-      <span class="public-kicker">END</span>
-      <h2 id="publicEndingTitle" class="public-ending-title">つづく</h2>
-      <div class="public-ending-nav">
-        <a id="publicPrevious" class="public-ending-card" href="#" hidden><small>PREVIOUS</small><strong>前</strong></a>
-        <button id="publicIndex" class="public-ending-card" type="button"><small>INDEX</small><strong>一覧</strong></button>
-        <a id="publicNext" class="public-ending-card" href="#" hidden><small>NEXT</small><strong>次</strong></a>
-      </div>
-      <button id="publicRestart" class="public-reread" type="button">もう一度読む</button>
+      <p id="publicEndingLabel" class="public-ending-label" hidden></p>
+
+      <div id="publicEndingLinks" class="public-ending-links"></div>
+
+      <button id="publicReturn" class="public-return" type="button" hidden>
+        元のページへ戻る
+      </button>
+
+      <button id="publicRestart" class="public-reread" type="button">
+        もう一度読む
+      </button>
     </div>
   </section>
 
