@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.28</title>
+  <title>Scene Studio v0.2.29</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,7 +17,7 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.28</span>
+        <span class="version">v0.2.29</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
@@ -343,7 +343,7 @@
       <div class="scene-delete-dialog-copy">
         <span class="scene-delete-kicker">DELETE SCENE</span>
         <h2>このSceneを削除しますか？</h2>
-        <p id="deleteSceneDialogText">この操作は取り消せません。</p>
+        <p id="deleteSceneDialogText">削除後も「元に戻す」で1回だけ戻せます。</p>
       </div>
       <div class="scene-delete-dialog-actions">
         <button id="deleteSceneCancel" value="cancel" type="submit">キャンセル</button>
@@ -351,6 +351,26 @@
       </div>
     </form>
   </dialog>
+
+
+  <dialog id="sampleReplaceDialog" class="scene-delete-dialog">
+    <form method="dialog" class="scene-delete-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">SAMPLE</span>
+        <h2>入力中の文章を置き換えますか？</h2>
+        <p>現在のタイトルと本文をサンプルに置き換えます。置き換え後も「元に戻す」で1回だけ戻せます。</p>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button value="cancel" type="submit">キャンセル</button>
+        <button value="replace" type="submit" class="danger">サンプルに置き換える</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="undoBar" class="studio-undo-bar" hidden>
+    <span id="undoMessage">変更しました</span>
+    <button id="undoButton" type="button">↶ 元に戻す</button>
+  </div>
 
 </main>
 <script src="./scene-studio-i18n.js"></script>

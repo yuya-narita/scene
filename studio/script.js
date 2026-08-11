@@ -1262,15 +1262,121 @@
     const pos=$('#advancedScenePosition'); if(pos)pos.textContent=`Scene ${selectedSceneIndex+1} / ${workingDocument.scenes.length}`;
     renderSceneList(); loadSceneIntoFields();
   }
-  function moveScene(delta){ syncAdvancedFieldsToScene(); const ni=selectedSceneIndex+delta; if(ni<0||ni>=workingDocument.scenes.length)return; const [s]=workingDocument.scenes.splice(selectedSceneIndex,1); workingDocument.scenes.splice(ni,0,s); selectedSceneIndex=ni; renderAdvanced(); }
-  function mergePrevious(){ if(selectedSceneIndex<=0)return; syncAdvancedFieldsToScene(); const prev=workingDocument.scenes[selectedSceneIndex-1], cur=workingDocument.scenes[selectedSceneIndex]; prev.text=[prev.text,cur.text].filter(Boolean).join('\n\n'); if(cur.subText&&!prev.subText)prev.subText=cur.subText; workingDocument.scenes.splice(selectedSceneIndex,1); selectedSceneIndex-=1; renderAdvanced(); }
-  function splitAtCursor(){
-    const input=$('#sceneTextInput'), pos=input.selectionStart; const text=input.value; if(pos<=0||pos>=text.length)return;
-    syncAdvancedFieldsToScene(); const scene=currentScene(); const left=text.slice(0,pos).trimEnd(), right=text.slice(pos).trimStart(); if(!left||!right)return;
-    scene.text=left; const cloneScene=clone(scene); cloneScene.id=nextUniqueId(); cloneScene.text=right; delete cloneScene.subText; delete cloneScene.audio; if(cloneScene.presentation)delete cloneScene.presentation.background;
-    workingDocument.scenes.splice(selectedSceneIndex+1,0,cloneScene); selectedSceneIndex+=1; renderAdvanced();
+  let undoSnapshot=null;
+
+  function captureUndo(label='変更'){
+    undoSnapshot={
+      label,
+      workingDocument:workingDocument ? clone(workingDocument) : null,
+      selectedSceneIndex,
+      easySourceDirty,
+      easy:{
+        title:titleInput?.value ?? '',
+        author:authorInput?.value ?? '',
+        subtitle:subtitleInput?.value ?? '',
+        series:seriesTitleInput?.value ?? '',
+        episode:episodeInput?.value ?? '',
+        language:languageInput?.value ?? 'ja',
+        body:bodyInput?.value ?? ''
+      }
+    };
   }
-  function addScene(){ syncAdvancedFieldsToScene(); const scene={id:nextUniqueId(),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}}; workingDocument.scenes.splice(selectedSceneIndex+1,0,scene); selectedSceneIndex+=1; renderAdvanced(); $('#sceneTextInput').focus(); }
+
+  function showUndo(label){
+    const bar=$('#undoBar'), msg=$('#undoMessage');
+    if(!bar)return;
+    if(msg)msg.textContent=label;
+    bar.hidden=false;
+  }
+
+  function clearUndo(){
+    undoSnapshot=null;
+    const bar=$('#undoBar');
+    if(bar)bar.hidden=true;
+  }
+
+  function restoreUndo(){
+    if(!undoSnapshot)return;
+    const snap=undoSnapshot;
+    undoSnapshot=null;
+
+    workingDocument=snap.workingDocument ? clone(snap.workingDocument) : null;
+    selectedSceneIndex=snap.selectedSceneIndex;
+    easySourceDirty=snap.easySourceDirty;
+
+    if(titleInput)titleInput.value=snap.easy.title;
+    if(authorInput)authorInput.value=snap.easy.author;
+    if(subtitleInput)subtitleInput.value=snap.easy.subtitle;
+    if(seriesTitleInput)seriesTitleInput.value=snap.easy.series;
+    if(episodeInput)episodeInput.value=snap.easy.episode;
+    if(languageInput)languageInput.value=snap.easy.language;
+    if(bodyInput)bodyInput.value=snap.easy.body;
+
+    updateCount();
+    updateCoverPreview();
+    updateEasyFileActions();
+
+    if(!advancedScreen.hidden && workingDocument?.scenes?.length){
+      renderAdvanced();
+    }
+    const bar=$('#undoBar');
+    if(bar)bar.hidden=true;
+  }
+
+  function moveScene(delta){
+    syncAdvancedFieldsToScene();
+    const ni=selectedSceneIndex+delta;
+    if(ni<0||ni>=workingDocument.scenes.length)return;
+    captureUndo('Sceneの並び替えを元に戻せます');
+    const [s]=workingDocument.scenes.splice(selectedSceneIndex,1);
+    workingDocument.scenes.splice(ni,0,s);
+    selectedSceneIndex=ni;
+    renderAdvanced();
+    showUndo('Sceneを並び替えました');
+  }
+  function mergePrevious(){
+    if(selectedSceneIndex<=0)return;
+    syncAdvancedFieldsToScene();
+    captureUndo('Scene結合を元に戻せます');
+    const prev=workingDocument.scenes[selectedSceneIndex-1], cur=workingDocument.scenes[selectedSceneIndex];
+    prev.text=[prev.text,cur.text].filter(Boolean).join('\n\n');
+    if(cur.subText&&!prev.subText)prev.subText=cur.subText;
+    workingDocument.scenes.splice(selectedSceneIndex,1);
+    selectedSceneIndex-=1;
+    renderAdvanced();
+    showUndo('前のSceneと結合しました');
+  }
+  function splitAtCursor(){
+    const input=$('#sceneTextInput'), pos=input.selectionStart;
+    const text=input.value;
+    if(pos<=0||pos>=text.length)return;
+    syncAdvancedFieldsToScene();
+    const scene=currentScene();
+    const left=text.slice(0,pos).trimEnd(), right=text.slice(pos).trimStart();
+    if(!left||!right)return;
+    captureUndo('Scene分割を元に戻せます');
+    scene.text=left;
+    const cloneScene=clone(scene);
+    cloneScene.id=nextUniqueId();
+    cloneScene.text=right;
+    delete cloneScene.subText;
+    delete cloneScene.audio;
+    if(cloneScene.presentation)delete cloneScene.presentation.background;
+    workingDocument.scenes.splice(selectedSceneIndex+1,0,cloneScene);
+    selectedSceneIndex+=1;
+    renderAdvanced();
+    showUndo('カーソル位置で分割しました');
+  }
+  function addScene(){
+    syncAdvancedFieldsToScene();
+    captureUndo('Scene追加を元に戻せます');
+    const scene={id:nextUniqueId(),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}};
+    workingDocument.scenes.splice(selectedSceneIndex+1,0,scene);
+    selectedSceneIndex+=1;
+    renderAdvanced();
+    $('#sceneTextInput').focus();
+    showUndo('Sceneを追加しました');
+  }
   function requestDeleteScene(){
     const scene=currentScene();
     if(!scene || !workingDocument || workingDocument.scenes.length<=1)return;
@@ -1284,7 +1390,14 @@
     else if(confirm(`Scene ${selectedSceneIndex+1} を削除しますか？`)) deleteSceneNow();
   }
 
-  function deleteSceneNow(){ if(workingDocument.scenes.length<=1)return; workingDocument.scenes.splice(selectedSceneIndex,1); selectedSceneIndex=Math.min(selectedSceneIndex,workingDocument.scenes.length-1); renderAdvanced(); }
+  function deleteSceneNow(){
+    if(workingDocument.scenes.length<=1)return;
+    captureUndo('Scene削除を元に戻せます');
+    workingDocument.scenes.splice(selectedSceneIndex,1);
+    selectedSceneIndex=Math.min(selectedSceneIndex,workingDocument.scenes.length-1);
+    renderAdvanced();
+    showUndo('Sceneを削除しました');
+  }
 
   bodyInput.addEventListener('input',()=>{ updateCount(); easySourceDirty=true; });
   $('#sceneSubTextInput').addEventListener('input',autoGrowSubText);
@@ -1340,6 +1453,14 @@
   $$('[data-auto-nudge]').forEach(btn=>btn.addEventListener('click',()=>nudgeAutoTiming(Number(btn.dataset.autoNudge))));
   $('#sceneAutoTimingReset')?.addEventListener('click',resetAutoTiming);
 
+  $('#sampleReplaceDialog')?.addEventListener('close',()=>{
+    if($('#sampleReplaceDialog').returnValue==='replace') applySample();
+  });
+  $('#sampleReplaceDialog')?.addEventListener('click',(e)=>{
+    if(e.target===e.currentTarget)e.currentTarget.close('cancel');
+  });
+  $('#undoButton')?.addEventListener('click',restoreUndo);
+
   $('#deleteSceneDialog')?.addEventListener('close',()=>{
     if($('#deleteSceneDialog').returnValue==='delete') deleteSceneNow();
   });
@@ -1359,7 +1480,26 @@
   bodyInput.addEventListener('input',updateEasyFileActions);
   updateEasyFileActions();
 
-  $('#sampleButton').addEventListener('click',()=>{titleInput.value='声のそろう通り';bodyInput.value=SAMPLE;easySourceDirty=true;updateCount();updateCoverPreview();updateEasyFileActions();});
+  function applySample(){
+    captureUndo('サンプル置換を元に戻せます');
+    titleInput.value='声のそろう通り';
+    bodyInput.value=SAMPLE;
+    easySourceDirty=true;
+    updateCount();
+    updateCoverPreview();
+    updateEasyFileActions();
+    showUndo('タイトルと本文をサンプルに置き換えました');
+  }
+
+  $('#sampleButton').addEventListener('click',()=>{
+    if(!bodyInput.value.trim()){
+      applySample();
+      return;
+    }
+    const dialog=$('#sampleReplaceDialog');
+    if(typeof dialog?.showModal==='function') dialog.showModal();
+    else if(confirm('入力中のタイトルと本文をサンプルに置き換えますか？')) applySample();
+  });
   $$('.theme-card').forEach(card=>card.addEventListener('click',()=>applyTheme(card.dataset.theme)));
   $$('.work-font-card').forEach(card=>card.addEventListener('click',()=>applyWorkFont(card.dataset.font)));
   $('#makeButton').addEventListener('click',()=>{openPlayer({from:'easy',startAt:0});updateEasyFileActions();});
