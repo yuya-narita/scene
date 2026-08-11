@@ -135,6 +135,7 @@
   // Once a Scene document exists it is the single source of truth.
   // Easy's textarea is only a source draft until the user edits it again.
   let easySourceDirty = true;
+  let protectedResplitPending = false;
 
   const DRAFT_DB_NAME='scene-studio-drafts';
   const DRAFT_DB_VERSION=1;
@@ -212,8 +213,8 @@
     localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     return {
       id:currentDraftId,updatedAt:Date.now(),title:draftTitle(),body:bodyInput.value,
-      easySourceDirty,selectedSceneIndex,
-      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',episode:episodeInput?.value||'',language:languageInput?.value||'auto'},
+      easySourceDirty,protectedResplitPending,selectedSceneIndex,
+      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',episode:episodeInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
       document:workingDocument?clone(workingDocument):null,
       recProgress:clone(autoRecProgress),
       cover:{url:coverImageUrl||'',name:coverImageFileName||''},
@@ -261,14 +262,16 @@
     currentDraftId=row.id;localStorage.setItem(DRAFT_LAST_KEY,row.id);
     selectedSceneIndex=Math.max(0,Number(row.selectedSceneIndex)||0);
     easySourceDirty=Boolean(row.easySourceDirty);
+    protectedResplitPending=false;
     autoRecProgress=row.recProgress||{nextIndex:0,recordedCount:0};
     titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
     if(episodeInput)episodeInput.value=row.easy?.episode||'';
     if(languageInput)languageInput.value=row.easy?.language||'auto';
+    if(densitySelect)densitySelect.value='normal';
     coverImageUrl=map.get(row.cover?.url)||'';coverImageFileName=row.cover?.name||'';
-    updateCount();updateCoverPreview();updateEasyFileActions();
+    updateCount();updateCoverPreview();updateEasyFileActions();updateProtectedResplitPreview();
     if(workingDocument?.scenes?.length){normalizeSceneIds();refreshDocumentLanguages();renderAdvanced();}
     setScreen('easy');scrollScreenToTop(editorScreen);updateAutoRecStartLabel();
   }
@@ -301,9 +304,10 @@
       alert('現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。');
       return false;
     }
-    workingDocument=null;easySourceDirty=true;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    workingDocument=null;easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     titleInput.value='Untitled';authorInput.value='';bodyInput.value='';
+    if(densitySelect)densitySelect.value='normal';
     if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
     coverImageUrl='';coverImageFileName='';updateCount();updateCoverPreview();updateEasyFileActions();updateAutoRecStartLabel();
     setScreen('easy');scrollScreenToTop(editorScreen);
@@ -456,78 +460,342 @@
     return String(value||'').replace(/\r\n?/g,'\n').trim();
   }
 
+  function sceneHasAdvancedMeaning(scene){
+    if(!scene)return false;
+    if(normalizedSceneText(scene.subText))return true;
+    if(Number.isFinite(Number(scene.pause)) && Number(scene.pause)>0)return true;
+    if(Array.isArray(scene.audio) && scene.audio.length)return true;
+    if(scene.type && scene.type!=='text')return true;
+
+    const p=scene.presentation||{};
+    if(p.background && Object.keys(p.background).length)return true;
+    if(p.display && p.display!=='stack')return true;
+    if(p.effect && p.effect!=='auto')return true;
+
+    const tx=p.text||{};
+    const defaultTextKeys=new Set(['size','fontFamily']);
+    for(const [key,value] of Object.entries(tx)){
+      if(key==='size' && (!value || value==='auto'))continue;
+      if(key==='fontFamily' && (!value || value==='inherit'))continue;
+      if(value!==undefined && value!==null && value!=='' && value!==false)return true;
+    }
+
+    // Unknown/custom presentation fields are preserved rather than guessed away.
+    for(const [key,value] of Object.entries(p)){
+      if(['display','effect','text','background'].includes(key))continue;
+      if(value!==undefined && value!==null && value!=='' && value!==false)return true;
+    }
+
+    // Unknown Scene-level fields may belong to future Format features.
+    const ordinary=new Set(['id','type','text','subText','language','pause','audio','presentation']);
+    for(const [key,value] of Object.entries(scene)){
+      if(ordinary.has(key))continue;
+      if(value!==undefined && value!==null && value!=='' && value!==false)return true;
+    }
+    return false;
+  }
+
+  function emptySceneLabel(scene){
+    return sceneHasAdvancedMeaning(scene) ? '（演出のみ）' : '（空のScene）';
+  }
+
+  let lastEasyReconcileDeletedCount=0;
+
+  function lcsScenePairs(oldScenes,newScenes){
+    const a=oldScenes.map(scene=>normalizedSceneText(scene.text));
+    const b=newScenes.map(scene=>normalizedSceneText(scene.text));
+    const dp=Array.from({length:a.length+1},()=>new Uint16Array(b.length+1));
+    for(let i=a.length-1;i>=0;i--){
+      for(let j=b.length-1;j>=0;j--){
+        dp[i][j]=a[i]===b[j] ? dp[i+1][j+1]+1 : Math.max(dp[i+1][j],dp[i][j+1]);
+      }
+    }
+    const pairs=[];
+    let i=0,j=0;
+    while(i<a.length && j<b.length){
+      if(a[i]===b[j]){pairs.push([i,j]);i++;j++;}
+      else if(dp[i+1][j]>=dp[i][j+1])i++;
+      else j++;
+    }
+    return pairs;
+  }
+
+  function applyFreshTextToPriorScene(prior,freshScene){
+    const reused=clone(prior);
+    reused.text=freshScene.text;
+    reused.type=freshScene.type||reused.type||'text';
+    if(freshScene.language)reused.language=freshScene.language;
+    else delete reused.language;
+    if(freshScene.presentation?.background){
+      reused.presentation ||= {};
+      reused.presentation.background=clone(freshScene.presentation.background);
+    }
+    return reused;
+  }
+
+  function sceneStructuralSignature(scene){
+    const s=clone(scene||{});
+    delete s.id;
+    delete s.text;
+    return JSON.stringify(s);
+  }
+
+  function sceneIsProtectedFromResplit(scene){
+    if(!scene)return false;
+
+    // Textless Scenes are Advanced-only by definition.
+    if(!normalizedSceneText(scene.text))return true;
+
+    if(normalizedSceneText(scene.subText))return true;
+    if(Array.isArray(scene.audio) && scene.audio.length)return true;
+    if(Number.isFinite(Number(scene.pause)) && Number(scene.pause)>0)return true;
+    if(scene.type && scene.type!=='text')return true;
+
+    const p=scene.presentation||{};
+    if(p.background && Object.keys(p.background).length)return true;
+    if(p.display && p.display!=='stack')return true;
+    if(p.effect && p.effect!=='auto')return true;
+
+    const tx=p.text||{};
+    if(tx.size && tx.size!=='auto')return true;
+    if(tx.color)return true;
+    if(tx.shadow)return true;
+    if(tx.fontFamily && tx.fontFamily!=='inherit')return true;
+
+    // Unknown/custom Format data is protected instead of guessed away.
+    for(const [key,value] of Object.entries(p)){
+      if(['background','display','effect','text'].includes(key))continue;
+      if(value!==undefined && value!==null && value!=='' && value!==false)return true;
+    }
+    const ordinary=new Set(['id','type','text','subText','language','pause','audio','presentation']);
+    for(const [key,value] of Object.entries(scene)){
+      if(ordinary.has(key))continue;
+      if(value!==undefined && value!==null && value!=='' && value!==false)return true;
+    }
+    return false;
+  }
+
+  function plainSceneFromExistingSplitterChunk(chunk){
+    return {
+      id:nextUniqueId(),
+      type:chunk.type||'text',
+      text:chunk.text||'',
+      ...(chunk.language?{language:chunk.language}:{}),
+      presentation:{display:'stack',effect:'auto',text:{size:'auto'}}
+    };
+  }
+
+  function resplitPlainRunWithExistingSplitter(run){
+    if(!run.length)return [];
+
+    // IMPORTANT:
+    // This is a real newline separator. Splitter itself is untouched.
+    // We only provide the plain run as text input.
+    const sourceText=run.map(scene=>String(scene.text||'')).filter(Boolean).join('\n\n');
+    if(!sourceText.trim())return [];
+
+    return splitBody(sourceText).map(plainSceneFromExistingSplitterChunk);
+  }
+
+  function protectedResplitWorkingDocument(){
+    if(!workingDocument?.scenes?.length)return;
+
+    const source=workingDocument.scenes;
+    const result=[];
+    let plainRun=[];
+
+    const flushPlainRun=()=>{
+      if(!plainRun.length)return;
+      result.push(...resplitPlainRunWithExistingSplitter(plainRun));
+      plainRun=[];
+    };
+
+    for(const scene of source){
+      if(sceneIsProtectedFromResplit(scene)){
+        flushPlainRun();
+        result.push(clone(scene));
+      }else{
+        plainRun.push(scene);
+      }
+    }
+    flushPlainRun();
+
+    if(result.length){
+      workingDocument.scenes=result;
+      normalizeSceneIds();
+      refreshDocumentLanguages();
+    }
+  }
+
+  function protectedResplitStats(){
+    if(!workingDocument?.scenes?.length){
+      let predicted=0;
+      try{predicted=bodyInput.value.trim()?splitBody(bodyInput.value).length:0;}catch(_){}
+      return {current:0,predicted,protectedCount:0,plainCount:predicted};
+    }
+
+    let predicted=0;
+    let protectedCount=0;
+    let plainCount=0;
+    let plainRun=[];
+
+    const flush=()=>{
+      if(!plainRun.length)return;
+      plainCount+=plainRun.length;
+      try{predicted+=resplitPlainRunWithExistingSplitter(plainRun).length;}
+      catch(_){predicted+=plainRun.length;}
+      plainRun=[];
+    };
+
+    for(const scene of workingDocument.scenes){
+      if(sceneIsProtectedFromResplit(scene)){
+        flush();
+        protectedCount++;
+        predicted++;
+      }else{
+        plainRun.push(scene);
+      }
+    }
+    flush();
+
+    return {current:workingDocument.scenes.length,predicted,protectedCount,plainCount};
+  }
+
+  function updateProtectedResplitPreview(){
+    const count=$('#protectedSplitCount');
+    const detail=$('#protectedSplitDetail');
+    if(!count||!detail)return;
+
+    if(!bodyInput.value.trim() && !workingDocument?.scenes?.length){
+      count.textContent='—';
+      detail.textContent='本文を入力すると表示します。';
+      return;
+    }
+
+    const stats=protectedResplitStats();
+    count.textContent=stats.current
+      ? `${stats.current} → 約 ${stats.predicted} Scenes`
+      : `約 ${stats.predicted} Scenes`;
+
+    detail.textContent=stats.current
+      ? `保護 ${stats.protectedCount} / 再分割対象 ${stats.plainCount}。画像・音・AUTO・演出済みSceneはそのまま残します。`
+      : '初回Scene化では本文全体を既存Splitterで分割します。';
+  }
+
   function reconcileEasyBodyWithScenes(){
+    lastEasyReconcileDeletedCount=0;
     const fresh=buildSceneDocument();
     if(!workingDocument)return fresh;
 
     const oldDoc=workingDocument;
     const oldScenes=oldDoc.scenes||[];
-    const freshScenes=fresh.scenes||[];
+    const newTextScenes=fresh.scenes||[];
+    const result=[];
 
-    // Empty-text Scenes are not represented in Easy's textarea.
-    // They may contain images, sound, pauses, or other Advanced-only work.
-    // Anchor them by the number of text-bearing Scenes that preceded them.
-    const preservedBuckets=new Map();
-    let textBefore=0;
-    oldScenes.forEach(scene=>{
-      const hasText=Boolean(normalizedSceneText(scene.text));
-      if(hasText){textBefore+=1;return;}
-      if(!preservedBuckets.has(textBefore))preservedBuckets.set(textBefore,[]);
-      preservedBuckets.get(textBefore).push(clone(scene));
-    });
+    let ni=0;
 
-    // Reuse exactly matching text Scenes so Advanced presentation/audio/AUTO
-    // settings survive an Easy-side edit whenever that text still exists.
-    const oldTextQueues=new Map();
-    oldScenes.forEach(scene=>{
-      const key=normalizedSceneText(scene.text);
-      if(!key)return;
-      if(!oldTextQueues.has(key))oldTextQueues.set(key,[]);
-      oldTextQueues.get(key).push(scene);
-    });
+    for(let oi=0; oi<oldScenes.length; oi++){
+      const old=oldScenes[oi];
+      const oldText=normalizedSceneText(old.text);
 
-    const reconciledText=freshScenes.map(freshScene=>{
-      const key=normalizedSceneText(freshScene.text);
-      const queue=oldTextQueues.get(key);
-      const prior=queue?.length ? queue.shift() : null;
-      if(!prior)return clone(freshScene);
-
-      const reused=clone(prior);
-      reused.text=freshScene.text;
-      reused.type=freshScene.type||reused.type||'text';
-      if(freshScene.language)reused.language=freshScene.language;
-      else delete reused.language;
-
-      // Easy's work-level CINEMA background remains authoritative when it
-      // explicitly supplies one for this Scene.
-      if(freshScene.presentation?.background){
-        reused.presentation ||= {};
-        reused.presentation.background=clone(freshScene.presentation.background);
+      // Advanced-only / image-only / sound-only Scene:
+      // preserve at the exact same order position.
+      if(!oldText){
+        result.push(clone(old));
+        continue;
       }
-      return reused;
-    });
 
-    const scenes=[];
-    for(let i=0;i<=reconciledText.length;i++){
-      const bucket=preservedBuckets.get(i);
-      if(bucket?.length)scenes.push(...bucket);
-      if(i<reconciledText.length)scenes.push(reconciledText[i]);
+      const nextNew = ni < newTextScenes.length ? newTextScenes[ni] : null;
+      const nextNewText = normalizedSceneText(nextNew?.text);
+
+      if(nextNew && nextNewText===oldText){
+        // Unchanged Scene.
+        result.push(applyFreshTextToPriorScene(old,nextNew));
+        ni++;
+        continue;
+      }
+
+      // Look ahead in OLD scenes. If the current Easy text exactly matches a
+      // later old Scene, the current old Scene was deleted in Easy.
+      let laterOldMatch=-1;
+      if(nextNewText){
+        for(let look=oi+1; look<oldScenes.length; look++){
+          const candidate=normalizedSceneText(oldScenes[look].text);
+          if(candidate && candidate===nextNewText){
+            laterOldMatch=look;
+            break;
+          }
+        }
+      }
+
+      if(laterOldMatch>=0){
+        // Current old Scene was removed. Keep its shell only if it still has
+        // Advanced meaning; otherwise delete it.
+        if(sceneHasAdvancedMeaning(old)){
+          const kept=clone(old);
+          kept.text='';
+          result.push(kept);
+        }else{
+          lastEasyReconcileDeletedCount+=1;
+        }
+        continue;
+      }
+
+      // Look ahead in NEW text. If the current old text appears later there,
+      // Easy inserted new text before this Scene.
+      let laterNewMatch=-1;
+      if(oldText){
+        for(let look=ni+1; look<newTextScenes.length; look++){
+          if(normalizedSceneText(newTextScenes[look].text)===oldText){
+            laterNewMatch=look;
+            break;
+          }
+        }
+      }
+
+      if(laterNewMatch>=0){
+        while(ni<laterNewMatch){
+          result.push(clone(newTextScenes[ni++]));
+        }
+        result.push(applyFreshTextToPriorScene(old,newTextScenes[ni]));
+        ni++;
+        continue;
+      }
+
+      // Neither side has a later exact match: treat as an edit of this Scene.
+      if(nextNew){
+        result.push(applyFreshTextToPriorScene(old,nextNew));
+        ni++;
+      }else{
+        // Easy removed this trailing Scene completely.
+        if(sceneHasAdvancedMeaning(old)){
+          const kept=clone(old);
+          kept.text='';
+          result.push(kept);
+        }else{
+          lastEasyReconcileDeletedCount+=1;
+        }
+      }
     }
 
-    // If Easy removed many text Scenes, never throw away Advanced-only Scenes
-    // whose old anchor is now beyond the new body length.
-    [...preservedBuckets.entries()]
-      .filter(([anchor])=>anchor>reconciledText.length)
-      .sort((a,b)=>a[0]-b[0])
-      .forEach(([,bucket])=>scenes.push(...bucket));
+    // Remaining Easy text is genuinely new.
+    while(ni<newTextScenes.length){
+      result.push(clone(newTextScenes[ni++]));
+    }
 
-    const merged={
+    if(!result.length && oldScenes.length){
+      const placeholder=clone(oldScenes[0]);
+      placeholder.text='';
+      result.push(placeholder);
+      lastEasyReconcileDeletedCount=Math.max(0,lastEasyReconcileDeletedCount-1);
+    }
+
+    return {
       ...clone(oldDoc),
       ...fresh,
       player:clone(oldDoc.player||fresh.player),
-      scenes
+      scenes:result
     };
-    return merged;
   }
 
   function ensureWorkingDocumentFromEasy(){
@@ -537,13 +805,50 @@
       easySourceDirty=false;
     }else if(easySourceDirty){
       const previousId=workingDocument.scenes?.[selectedSceneIndex]?.id||'';
+      const priorDocument=clone(workingDocument);
+      const priorIndex=selectedSceneIndex;
+      const priorBody=(workingDocument.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n');
+
       workingDocument=reconcileEasyBodyWithScenes();
       normalizeSceneIds();
       refreshDocumentLanguages();
       const restoredIndex=previousId ? workingDocument.scenes.findIndex(scene=>scene.id===previousId) : -1;
       selectedSceneIndex=restoredIndex>=0 ? restoredIndex : Math.min(selectedSceneIndex,Math.max(0,workingDocument.scenes.length-1));
       easySourceDirty=false;
+
+      if(lastEasyReconcileDeletedCount>0){
+        undoSnapshot={
+          label:'Easy編集によるScene削除',
+          workingDocument:priorDocument,
+          selectedSceneIndex:priorIndex,
+          easySourceDirty:false,
+          easy:{
+            title:titleInput?.value ?? '',
+            author:authorInput?.value ?? '',
+            subtitle:subtitleInput?.value ?? '',
+            series:seriesTitleInput?.value ?? '',
+            episode:episodeInput?.value ?? '',
+            language:languageInput?.value ?? 'ja',
+            body:priorBody
+          }
+        };
+        const n=lastEasyReconcileDeletedCount;
+        showUndo(n===1?'Sceneを削除しました':`${n} Scenesを削除しました`);
+      }
     }
+
+    if(protectedResplitPending && workingDocument?.scenes?.length){
+      const before=clone(workingDocument);
+      const beforeIndex=selectedSceneIndex;
+
+      captureUndo('再分割を元に戻せます');
+      protectedResplitWorkingDocument();
+      selectedSceneIndex=Math.min(beforeIndex,Math.max(0,workingDocument.scenes.length-1));
+      protectedResplitPending=false;
+      showUndo('未編集Sceneだけ再分割しました');
+    }
+
+   
     return workingDocument;
   }
 
@@ -970,6 +1275,8 @@
     if(episodeInput)episodeInput.value=doc.metadata?.episode||'';
     bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n');
     updateCount();
+    protectedResplitPending=false;
+   
     applyTheme(doc.theme||'light');
     applyWorkFont(doc.appearance?.typography?.fontFamily||'serif');
     cinemaTone=doc.appearance?.cinemaTone==='light'?'light':'dark';
@@ -1521,13 +1828,21 @@
     updateAutoTimingFields();
     loadMediaFields(scene);
   }
-  function scenePreviewText(scene){ const t=(scene.text||scene.subText||'(sound)').replace(/\s+/g,' ').trim(); return t.length>42?t.slice(0,42)+'…':t; }
+  function scenePreviewText(scene){
+    const raw=scene.text||scene.subText||'';
+    const preview=String(raw).replace(/\s+/g,' ').trim();
+    if(!preview)return emptySceneLabel(scene);
+    return preview.length>42?preview.slice(0,42)+'…':preview;
+  }
   function renderSceneList(){
     const list=$('#sceneList'); list.innerHTML=''; $('#sceneCountLabel').textContent=t('scene.count',{n:workingDocument.scenes.length});
     workingDocument.scenes.forEach((scene,i)=>{
       const b=document.createElement('button'); b.type='button'; b.className='scene-list-item'+(i===selectedSceneIndex?' is-selected':'');
       const media=[]; if(scene.presentation?.background)media.push('BG'); if((scene.audio||[]).some(c=>c.channel==='bgm'))media.push('BGM'); if((scene.audio||[]).some(c=>c.channel==='ambient'))media.push('AMB'); if((scene.audio||[]).some(c=>c.channel==='oneshot'))media.push('SE');
-      const typeLabel={text:t('scene.type.text'),dialogue:t('scene.type.dialogue'),sound:t('scene.type.sound')}[scene.type]||scene.type;
+      const emptyScene=!normalizedSceneText(scene.text) && !normalizedSceneText(scene.subText);
+      const typeLabel=emptyScene
+        ? (sceneHasAdvancedMeaning(scene)?'演出のみ':'空Scene')
+        : ({text:t('scene.type.text'),dialogue:t('scene.type.dialogue'),sound:t('scene.type.sound')}[scene.type]||scene.type);
       const effectLabel={auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),slow:t('effect.slow'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto');
       const sceneLang=scene.language || (workingDocument.language==='mul'?'':workingDocument.language) || '';
       const timing=Number.isFinite(Number(scene.pause)) && Number(scene.pause)>0 ? ` · AUTO ${(Number(scene.pause)/1000).toFixed(2)}s` : '';
@@ -1790,6 +2105,7 @@
   }
   bodyInput.addEventListener('input',updateEasyFileActions);
   updateEasyFileActions();
+ 
 
   function applySample(){
     captureUndo('サンプル置換を元に戻せます');
@@ -1799,6 +2115,7 @@
     updateCount();
     updateCoverPreview();
     updateEasyFileActions();
+   
     showUndo('タイトルと本文をサンプルに置き換えました');
   }
 
@@ -1955,5 +2272,6 @@
   };
 
   window.SceneStudioDebug={getSceneDocument:()=>clone(workingDocument||buildSceneDocument()),validateSceneFormatV1:(value)=>validateSceneFormatV1(value),exportSceneDocument,exportScenePackage,importScenePackage,getPlayer:()=>player,splitJapanese:(text,options={})=>JapaneseSceneSplitter.splitDetailed(text,options),splitEnglish:(text,options={})=>EnglishSceneSplitter.splitDetailed(text,options),splitAuto:(text,options={})=>SceneTextSplitter.splitDetailed(text,options),splitMultilingual:(text,options={})=>SceneTextSplitter.splitMultilingualDetailed(text,options),summarizeLanguages:(chunks)=>SceneTextSplitter.summarizeLanguages(chunks),detectWorkLanguage:(text)=>SceneTextSplitter.detectLanguage(text),getUILanguage:()=>uiLanguage,setUILanguage};
+  if(densitySelect)densitySelect.value='normal';
   applyStaticUITranslations(); applyTheme('light'); updateCount();
 })();
