@@ -1283,18 +1283,29 @@
     };
   }
 
+  function showCompactUndo(){
+    if(!undoSnapshot)return;
+    const compact=$('#undoCompactButton');
+    if(compact)compact.hidden=false;
+  }
+
   function hideUndoBar(){
     const bar=$('#undoBar');
     if(!bar)return;
     bar.classList.remove('is-visible');
     bar.classList.add('is-hiding');
-    window.setTimeout(()=>{bar.hidden=true;bar.classList.remove('is-hiding');},180);
+    window.setTimeout(()=>{
+      bar.hidden=true;
+      bar.classList.remove('is-hiding');
+      showCompactUndo();
+    },180);
   }
 
   function showUndo(label){
-    const bar=$('#undoBar'), msg=$('#undoMessage');
+    const bar=$('#undoBar'), msg=$('#undoMessage'), compact=$('#undoCompactButton');
     if(!bar)return;
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
+    if(compact)compact.hidden=true;
     if(msg)msg.textContent=label;
     bar.hidden=false;
     bar.classList.remove('is-hiding');
@@ -1306,8 +1317,9 @@
     undoSnapshot=null;
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
     undoBarTimer=null;
-    const bar=$('#undoBar');
+    const bar=$('#undoBar'), compact=$('#undoCompactButton');
     if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
+    if(compact)compact.hidden=true;
   }
 
   function restoreUndo(){
@@ -1336,8 +1348,9 @@
     }
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
     undoBarTimer=null;
-    const bar=$('#undoBar');
+    const bar=$('#undoBar'), compact=$('#undoCompactButton');
     if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
+    if(compact)compact.hidden=true;
   }
 
   function moveScene(delta){
@@ -1477,6 +1490,7 @@
     if(e.target===e.currentTarget)e.currentTarget.close('cancel');
   });
   $('#undoButton')?.addEventListener('click',restoreUndo);
+  $('#undoCompactButton')?.addEventListener('click',restoreUndo);
 
   $('#deleteSceneDialog')?.addEventListener('close',()=>{
     if($('#deleteSceneDialog').returnValue==='delete') deleteSceneNow();
