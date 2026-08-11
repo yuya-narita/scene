@@ -1856,3 +1856,43 @@ body.easy-player-open{position:fixed;inset:0;}
 .draft-toolbar-new small{color:rgba(255,255,255,.58)}
 @media(max-width:560px){.draft-toolbar{margin-top:14px;gap:8px}.draft-toolbar-button{min-height:52px;border-radius:13px}.draft-toolbar-button span{font-size:10.5px}}
 .draft-resume-card{display:none!important}
+
+
+/* =========================================================
+   Draft navigation polish + Easy/Advanced reconciliation v0.2.34
+   ========================================================= */
+
+/* The draft controls belong to the same top navigation cluster. */
+.editor-screen .topbar{
+  margin-bottom:10px!important;
+}
+.draft-toolbar{
+  margin:0 0 28px!important;
+  gap:8px!important;
+}
+
+/* Draft-manager close is a quiet utility, not a circular primary control. */
+.draft-manager-head button{
+  width:32px!important;
+  height:32px!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  padding:0!important;
+  color:#202124!important;
+  font-size:24px!important;
+  line-height:1!important;
+}
+.draft-manager-head button:active{
+  opacity:.55;
+}
+
+@media(max-width:560px){
+  .editor-screen .topbar{
+    margin-bottom:8px!important;
+  }
+  .draft-toolbar{
+    margin:0 0 24px!important;
+  }
+}

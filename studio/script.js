@@ -222,13 +222,15 @@
   }
   async function saveDraftNow(){
     try{
-      const row=await buildDraftRecord(); if(!row)return;
+      clearTimeout(draftSaveTimer);
+      const row=await buildDraftRecord();
+      if(!row)return true;
       if(!await getDraftRecord(row.id)){
         const all=await listDraftRecords();
         if(all.length>=DRAFT_MAX){
-          $('#draftSaveIndicator').textContent='下書きが10件あります';
-          $('#draftSaveIndicator').hidden=false;
-          return;
+          const ind=$('#draftSaveIndicator');
+          if(ind){ind.textContent='下書きが10件あります';ind.hidden=false;}
+          return false;
         }
       }
       await putDraftRecord(row);
@@ -236,7 +238,11 @@
       const ind=$('#draftSaveIndicator');
       if(ind){ind.textContent='自動保存済み';ind.hidden=false;clearTimeout(ind._hideTimer);ind._hideTimer=setTimeout(()=>ind.hidden=true,1800);}
       await refreshDraftUI(false);
-    }catch(err){console.warn('Draft autosave failed',err);}
+      return true;
+    }catch(err){
+      console.warn('Draft autosave failed',err);
+      return false;
+    }
   }
   function scheduleDraftSave(delay=700){
     clearTimeout(draftSaveTimer);
@@ -288,13 +294,20 @@
     }
   }
   async function startNewDraft(){
-    await saveDraftNow();
+    // Never abandon the currently edited work silently.
+    const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
+    const saved=await saveDraftNow();
+    if(hadWork && !saved){
+      alert('現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。');
+      return false;
+    }
     workingDocument=null;easySourceDirty=true;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     titleInput.value='Untitled';authorInput.value='';bodyInput.value='';
     if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
     coverImageUrl='';coverImageFileName='';updateCount();updateCoverPreview();updateEasyFileActions();updateAutoRecStartLabel();
     setScreen('easy');scrollScreenToTop(editorScreen);
+    return true;
   }
 
   // Runtime asset registry.
@@ -439,10 +452,96 @@
   }
 
 
+  function normalizedSceneText(value){
+    return String(value||'').replace(/\r\n?/g,'\n').trim();
+  }
+
+  function reconcileEasyBodyWithScenes(){
+    const fresh=buildSceneDocument();
+    if(!workingDocument)return fresh;
+
+    const oldDoc=workingDocument;
+    const oldScenes=oldDoc.scenes||[];
+    const freshScenes=fresh.scenes||[];
+
+    // Empty-text Scenes are not represented in Easy's textarea.
+    // They may contain images, sound, pauses, or other Advanced-only work.
+    // Anchor them by the number of text-bearing Scenes that preceded them.
+    const preservedBuckets=new Map();
+    let textBefore=0;
+    oldScenes.forEach(scene=>{
+      const hasText=Boolean(normalizedSceneText(scene.text));
+      if(hasText){textBefore+=1;return;}
+      if(!preservedBuckets.has(textBefore))preservedBuckets.set(textBefore,[]);
+      preservedBuckets.get(textBefore).push(clone(scene));
+    });
+
+    // Reuse exactly matching text Scenes so Advanced presentation/audio/AUTO
+    // settings survive an Easy-side edit whenever that text still exists.
+    const oldTextQueues=new Map();
+    oldScenes.forEach(scene=>{
+      const key=normalizedSceneText(scene.text);
+      if(!key)return;
+      if(!oldTextQueues.has(key))oldTextQueues.set(key,[]);
+      oldTextQueues.get(key).push(scene);
+    });
+
+    const reconciledText=freshScenes.map(freshScene=>{
+      const key=normalizedSceneText(freshScene.text);
+      const queue=oldTextQueues.get(key);
+      const prior=queue?.length ? queue.shift() : null;
+      if(!prior)return clone(freshScene);
+
+      const reused=clone(prior);
+      reused.text=freshScene.text;
+      reused.type=freshScene.type||reused.type||'text';
+      if(freshScene.language)reused.language=freshScene.language;
+      else delete reused.language;
+
+      // Easy's work-level CINEMA background remains authoritative when it
+      // explicitly supplies one for this Scene.
+      if(freshScene.presentation?.background){
+        reused.presentation ||= {};
+        reused.presentation.background=clone(freshScene.presentation.background);
+      }
+      return reused;
+    });
+
+    const scenes=[];
+    for(let i=0;i<=reconciledText.length;i++){
+      const bucket=preservedBuckets.get(i);
+      if(bucket?.length)scenes.push(...bucket);
+      if(i<reconciledText.length)scenes.push(reconciledText[i]);
+    }
+
+    // If Easy removed many text Scenes, never throw away Advanced-only Scenes
+    // whose old anchor is now beyond the new body length.
+    [...preservedBuckets.entries()]
+      .filter(([anchor])=>anchor>reconciledText.length)
+      .sort((a,b)=>a[0]-b[0])
+      .forEach(([,bucket])=>scenes.push(...bucket));
+
+    const merged={
+      ...clone(oldDoc),
+      ...fresh,
+      player:clone(oldDoc.player||fresh.player),
+      scenes
+    };
+    return merged;
+  }
+
   function ensureWorkingDocumentFromEasy(){
-    if(!workingDocument || easySourceDirty){
+    if(!workingDocument){
       workingDocument=buildSceneDocument();
       selectedSceneIndex=0;
+      easySourceDirty=false;
+    }else if(easySourceDirty){
+      const previousId=workingDocument.scenes?.[selectedSceneIndex]?.id||'';
+      workingDocument=reconcileEasyBodyWithScenes();
+      normalizeSceneIds();
+      refreshDocumentLanguages();
+      const restoredIndex=previousId ? workingDocument.scenes.findIndex(scene=>scene.id===previousId) : -1;
+      selectedSceneIndex=restoredIndex>=0 ? restoredIndex : Math.min(selectedSceneIndex,Math.max(0,workingDocument.scenes.length-1));
       easySourceDirty=false;
     }
     return workingDocument;
@@ -1715,7 +1814,7 @@
   $('#draftManageButton')?.addEventListener('click',async()=>{await refreshDraftUI(false);$('#draftManagerDialog')?.showModal();});
   $('#newDraftQuickButton')?.addEventListener('click',async()=>{await startNewDraft();});
   $('#draftManagerClose')?.addEventListener('click',()=>$('#draftManagerDialog')?.close());
-  $('#newDraftButton')?.addEventListener('click',async()=>{await startNewDraft();$('#draftManagerDialog')?.close();});
+  $('#newDraftButton')?.addEventListener('click',async()=>{if(await startNewDraft())$('#draftManagerDialog')?.close();});
 
   $('#sampleButton').addEventListener('click',()=>{
     if(!bodyInput.value.trim()){
