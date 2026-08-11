@@ -136,6 +136,176 @@
   // Easy's textarea is only a source draft until the user edits it again.
   let easySourceDirty = true;
 
+  const DRAFT_DB_NAME='scene-studio-drafts';
+  const DRAFT_DB_VERSION=1;
+  const DRAFT_STORE='drafts';
+  const DRAFT_MAX=10;
+  const DRAFT_LAST_KEY='sceneStudio.lastDraftId';
+  let currentDraftId=localStorage.getItem(DRAFT_LAST_KEY)||'';
+  let draftSaveTimer=null;
+  let latestDraftSummary=null;
+  let autoRecProgress={nextIndex:0,recordedCount:0};
+
+  function openDraftDB(){
+    return new Promise((resolve,reject)=>{
+      const req=indexedDB.open(DRAFT_DB_NAME,DRAFT_DB_VERSION);
+      req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(DRAFT_STORE))db.createObjectStore(DRAFT_STORE,{keyPath:'id'});};
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error);
+    });
+  }
+  async function draftStore(mode='readonly'){
+    const db=await openDraftDB();
+    return {db,store:db.transaction(DRAFT_STORE,mode).objectStore(DRAFT_STORE)};
+  }
+  async function listDraftRecords(){
+    const {db,store}=await draftStore();
+    const rows=await new Promise((resolve,reject)=>{const r=store.getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});
+    db.close();
+    return rows.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  }
+  async function getDraftRecord(id){
+    if(!id)return null;
+    const {db,store}=await draftStore();
+    const row=await new Promise((resolve,reject)=>{const r=store.get(id);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error);});
+    db.close();return row;
+  }
+  async function putDraftRecord(row){
+    const {db,store}=await draftStore('readwrite');
+    await new Promise((resolve,reject)=>{const r=store.put(row);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error);});
+    db.close();
+  }
+  async function removeDraftRecord(id){
+    const {db,store}=await draftStore('readwrite');
+    await new Promise((resolve,reject)=>{const r=store.delete(id);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error);});
+    db.close();
+  }
+  function createDraftId(){return globalThis.crypto?.randomUUID?.()||`draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;}
+  function replaceAssetRefs(value,map){
+    if(!value)return value;
+    if(typeof value==='string')return map.get(value)||value;
+    if(Array.isArray(value)){value.forEach((v,i)=>value[i]=replaceAssetRefs(v,map));return value;}
+    if(typeof value==='object'){Object.keys(value).forEach(k=>value[k]=replaceAssetRefs(value[k],map));}
+    return value;
+  }
+  function serializeDraftAssets(){
+    const items=[];
+    assetRegistry.forEach((item,url)=>{if(item?.blob)items.push({url,name:item.name||'asset',blob:item.blob});});
+    return items;
+  }
+  function draftSceneCount(){return workingDocument?.scenes?.length||0;}
+  function draftTitle(){return String(titleInput?.value||workingDocument?.title||'Untitled').trim()||'Untitled';}
+  function draftRecMeta(total=draftSceneCount()){
+    const n=Math.min(Number(autoRecProgress.recordedCount)||0,total||0);
+    return total?`REC ${n}/${total}`:'';
+  }
+  function formatDraftTime(ts){
+    const d=new Date(ts||Date.now()), now=new Date();
+    if(d.toDateString()===now.toDateString())return `今日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+  async function buildDraftRecord(){
+    if(!bodyInput.value.trim() && !workingDocument?.scenes?.length)return null;
+    if(!advancedScreen.hidden && workingDocument?.scenes?.length)syncAdvancedFieldsToScene();
+    if(workingDocument?.scenes?.length)syncEasyShellToWorkingDocument();
+    if(!currentDraftId)currentDraftId=createDraftId();
+    localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
+    return {
+      id:currentDraftId,updatedAt:Date.now(),title:draftTitle(),body:bodyInput.value,
+      easySourceDirty,selectedSceneIndex,
+      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',episode:episodeInput?.value||'',language:languageInput?.value||'auto'},
+      document:workingDocument?clone(workingDocument):null,
+      recProgress:clone(autoRecProgress),
+      cover:{url:coverImageUrl||'',name:coverImageFileName||''},
+      assets:serializeDraftAssets()
+    };
+  }
+  async function saveDraftNow(){
+    try{
+      const row=await buildDraftRecord(); if(!row)return;
+      if(!await getDraftRecord(row.id)){
+        const all=await listDraftRecords();
+        if(all.length>=DRAFT_MAX){
+          $('#draftSaveIndicator').textContent='下書きが10件あります';
+          $('#draftSaveIndicator').hidden=false;
+          return;
+        }
+      }
+      await putDraftRecord(row);
+      latestDraftSummary=row;
+      const ind=$('#draftSaveIndicator');
+      if(ind){ind.textContent='自動保存済み';ind.hidden=false;clearTimeout(ind._hideTimer);ind._hideTimer=setTimeout(()=>ind.hidden=true,1800);}
+      await refreshDraftUI(false);
+    }catch(err){console.warn('Draft autosave failed',err);}
+  }
+  function scheduleDraftSave(delay=700){
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer=setTimeout(saveDraftNow,delay);
+  }
+  async function restoreDraftRecord(row){
+    if(!row)return;
+    assetRegistry.forEach((_,url)=>{if(/^blob:/i.test(url)){try{URL.revokeObjectURL(url);}catch(_){}}});
+    assetRegistry.clear();
+    const map=new Map();
+    for(const item of (row.assets||[])){
+      if(!item?.blob)continue;
+      const url=URL.createObjectURL(item.blob);map.set(item.url,url);registerAsset(url,item.blob,item.name||'asset');
+    }
+    workingDocument=row.document?replaceAssetRefs(clone(row.document),map):null;
+    currentDraftId=row.id;localStorage.setItem(DRAFT_LAST_KEY,row.id);
+    selectedSceneIndex=Math.max(0,Number(row.selectedSceneIndex)||0);
+    easySourceDirty=Boolean(row.easySourceDirty);
+    autoRecProgress=row.recProgress||{nextIndex:0,recordedCount:0};
+    titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';
+    if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
+    if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
+    if(episodeInput)episodeInput.value=row.easy?.episode||'';
+    if(languageInput)languageInput.value=row.easy?.language||'auto';
+    coverImageUrl=map.get(row.cover?.url)||'';coverImageFileName=row.cover?.name||'';
+    updateCount();updateCoverPreview();updateEasyFileActions();
+    if(workingDocument?.scenes?.length){normalizeSceneIds();refreshDocumentLanguages();renderAdvanced();}
+    setScreen('easy');scrollScreenToTop(editorScreen);updateAutoRecStartLabel();
+    $('#draftResumeCard').hidden=true;
+  }
+  async function refreshDraftUI(showResume=true){
+    const rows=await listDraftRecords();
+    latestDraftSummary=rows[0]||null;
+    const card=$('#draftResumeCard');
+    if(card && showResume){
+      if(rows.length){
+        const row=rows[0], total=row.document?.scenes?.length||0, rec=Math.min(row.recProgress?.recordedCount||0,total);
+        $('#draftResumeTitle').textContent=row.title||'Untitled';
+        $('#draftResumeMeta').textContent=[`${total} Scenes`, total?`REC ${rec}/${total}`:'', formatDraftTime(row.updatedAt)].filter(Boolean).join(' · ');
+        card.dataset.draftId=row.id;card.hidden=false;
+      }else card.hidden=true;
+    }
+    const label=$('#draftCountLabel');if(label)label.textContent=`${rows.length} / ${DRAFT_MAX}`;
+    const list=$('#draftList');
+    if(list){
+      list.innerHTML='';
+      if(!rows.length){list.innerHTML='<p class="draft-empty">ローカル下書きはありません。</p>';}
+      rows.forEach(row=>{
+        const total=row.document?.scenes?.length||0, rec=Math.min(row.recProgress?.recordedCount||0,total);
+        const el=document.createElement('article');el.className='draft-row';
+        el.innerHTML=`<div><strong></strong><small></small></div><div class="draft-row-actions"><button data-open>続きから</button><button data-delete>削除</button></div>`;
+        el.querySelector('strong').textContent=row.title||'Untitled';
+        el.querySelector('small').textContent=[`${total} Scenes`,total?`REC ${rec}/${total}`:'',formatDraftTime(row.updatedAt)].filter(Boolean).join(' · ');
+        el.querySelector('[data-open]').onclick=async()=>{await restoreDraftRecord(await getDraftRecord(row.id));$('#draftManagerDialog').close();};
+        el.querySelector('[data-delete]').onclick=async()=>{if(!confirm(`「${row.title||'Untitled'}」のローカル下書きを削除しますか？`))return;await removeDraftRecord(row.id);if(currentDraftId===row.id){currentDraftId='';localStorage.removeItem(DRAFT_LAST_KEY);}await refreshDraftUI(true);};
+        list.appendChild(el);
+      });
+    }
+  }
+  async function startNewDraft(){
+    await saveDraftNow();
+    workingDocument=null;easySourceDirty=true;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
+    titleInput.value='Untitled';authorInput.value='';bodyInput.value='';
+    if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
+    coverImageUrl='';coverImageFileName='';updateCount();updateCoverPreview();updateEasyFileActions();updateAutoRecStartLabel();
+    setScreen('easy');scrollScreenToTop(editorScreen);$('#draftResumeCard').hidden=true;
+  }
+
   // Runtime asset registry.
   // key: object URL used by Scene Format in the current browser session
   // value: Blob/File + original filename. This lets Package Export carry the
@@ -641,6 +811,8 @@
       }
 
       workingDocument=doc;
+      currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
+      autoRecProgress={nextIndex:0,recordedCount:0};
       easySourceDirty=false;
       selectedSceneIndex=0;
       restoreEasyStateFromDocument(doc);
@@ -740,6 +912,8 @@
       const parsed=JSON.parse(raw.replace(/^\uFEFF/,''));
       const doc=validateSceneFormatV1(parsed);
       workingDocument=doc;
+      currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
+      autoRecProgress={nextIndex:0,recordedCount:0};
       easySourceDirty=false;
       selectedSceneIndex=0;
       restoreEasyStateFromDocument(doc);
@@ -788,6 +962,7 @@
   let autoRecSceneStartedAt=0;
   let autoRecDurations=[];
   let autoRecRaf=0;
+  let autoRecCurrentIndex=0;
 
   function formatAutoRecTime(ms){
     const total=Math.max(0,Number(ms)||0)/1000;
@@ -813,16 +988,22 @@
     autoRecRaf=requestAnimationFrame(renderAutoRecUI);
   }
 
+  function updateAutoRecStartLabel(){
+    const btn=$('#autoRecStart');if(!btn)return;
+    const total=workingDocument?.scenes?.length||0;
+    const next=Math.min(autoRecProgress?.nextIndex||0,total);
+    btn.textContent=next>0&&next<total?`● AUTO REC 続き ${next+1}/${total}`:'● AUTO REC';
+  }
+
   function startAutoRec(){
     if(!workingDocument?.scenes?.length)return;
+    const total=workingDocument.scenes.length;
+    let startAt=Math.min(Math.max(0,Number(autoRecProgress?.nextIndex)||0),total-1);
+    if(startAt>=total-1 && (autoRecProgress?.recordedCount||0)>=total){autoRecProgress={nextIndex:0,recordedCount:0};startAt=0;}
     const p=ensurePlayer();
-    p.stopAuto?.();
-    p.load(getDocumentForPlayback(),{startAt:0});
-    p.unlockAudio?.(true);
-    autoRecActive=true;
-    autoRecDurations=[];
-    autoRecStartedAt=performance.now();
-    autoRecSceneStartedAt=autoRecStartedAt;
+    p.stopAuto?.();p.load(getDocumentForPlayback(),{startAt});p.unlockAudio?.(true);
+    autoRecActive=true;autoRecDurations=[];autoRecCurrentIndex=startAt;
+    autoRecStartedAt=performance.now();autoRecSceneStartedAt=autoRecStartedAt;
     const done=$('#autoRecDone'); if(done)done.hidden=true;
     renderAutoRecUI();
   }
@@ -830,8 +1011,13 @@
   function recordAutoRecBoundary(){
     if(!autoRecActive)return;
     const now=performance.now();
-    autoRecDurations.push(Math.max(150,Math.round(now-autoRecSceneStartedAt)));
+    const duration=Math.max(150,Math.round(now-autoRecSceneStartedAt));
+    autoRecDurations.push(duration);
+    if(workingDocument?.scenes?.[autoRecCurrentIndex])workingDocument.scenes[autoRecCurrentIndex].pause=duration;
+    autoRecCurrentIndex=Math.min(autoRecCurrentIndex+1,(workingDocument?.scenes?.length||1)-1);
+    autoRecProgress={nextIndex:autoRecCurrentIndex,recordedCount:Math.max(autoRecProgress?.recordedCount||0,autoRecCurrentIndex)};
     autoRecSceneStartedAt=now;
+    updateAutoRecStartLabel();scheduleDraftSave(80);
   }
 
   function finishAutoRec(save=true){
@@ -844,10 +1030,12 @@
     const start=$('#autoRecStart'),live=$('#autoRecLive'),done=$('#autoRecDone');
     if(live)live.hidden=true;
     if(save){
-      workingDocument.scenes.forEach((scene,i)=>{
-        if(Number.isFinite(autoRecDurations[i]))scene.pause=autoRecDurations[i];
-      });
-      const total=autoRecDurations.reduce((a,b)=>a+b,0);
+      const finalDuration=Math.max(150,Math.round(performance.now()-autoRecSceneStartedAt));
+      if(workingDocument?.scenes?.[autoRecCurrentIndex])workingDocument.scenes[autoRecCurrentIndex].pause=finalDuration;
+      const count=workingDocument?.scenes?.length||0;
+      autoRecProgress={nextIndex:count,recordedCount:count};
+      updateAutoRecStartLabel();scheduleDraftSave(80);
+      const total=autoRecDurations.reduce((a,b)=>a+b,0)+finalDuration;
       const summary=$('#autoRecSummary');
       if(summary)summary.textContent=`${autoRecDurations.length} Scene / ${formatAutoRecTime(total)}`;
       if(done)done.hidden=false;
@@ -855,6 +1043,7 @@
     }else{
       if(done)done.hidden=true;
       if(start)start.hidden=false;
+      updateAutoRecStartLabel();scheduleDraftSave(80);
     }
   }
 
@@ -1302,6 +1491,7 @@
   }
 
   function showUndo(label){
+    scheduleDraftSave(120);
     const bar=$('#undoBar'), msg=$('#undoMessage'), compact=$('#undoCompactButton');
     if(!bar)return;
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
@@ -1522,6 +1712,23 @@
     showUndo('タイトルと本文をサンプルに置き換えました');
   }
 
+  document.addEventListener('input',(event)=>{
+    if(event.target?.closest?.('#editorScreen,#advancedScreen'))scheduleDraftSave();
+  },true);
+  document.addEventListener('change',(event)=>{
+    if(event.target?.closest?.('#editorScreen,#advancedScreen'))scheduleDraftSave(250);
+  },true);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveDraftNow();});
+  window.addEventListener('pagehide',()=>{saveDraftNow();});
+
+  $('#draftContinueButton')?.addEventListener('click',async()=>{
+    const id=$('#draftResumeCard')?.dataset?.draftId;
+    await restoreDraftRecord(await getDraftRecord(id));
+  });
+  $('#draftManageButton')?.addEventListener('click',async()=>{await refreshDraftUI(false);$('#draftManagerDialog')?.showModal();});
+  $('#draftManagerClose')?.addEventListener('click',()=>$('#draftManagerDialog')?.close());
+  $('#newDraftButton')?.addEventListener('click',async()=>{await startNewDraft();$('#draftManagerDialog')?.close();});
+
   $('#sampleButton').addEventListener('click',()=>{
     if(!bodyInput.value.trim()){
       applySample();
@@ -1546,7 +1753,9 @@
   $('#importPackageInput').addEventListener('change',async(event)=>{
     const file=event.target.files?.[0];
     if(file) await importScenePackage(file);
-    updateEasyFileActions();
+    updateAutoRecStartLabel();
+  refreshDraftUI(true).catch(err=>console.warn('Draft UI init failed',err));
+  updateEasyFileActions();
     event.target.value='';
   });
   $('#editReturnButton').addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();closePlayer();});

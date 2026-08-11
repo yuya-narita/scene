@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.31</title>
+  <title>Scene Studio v0.2.32</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,12 +17,26 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.31</span>
+        <span class="version">v0.2.32</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
       </div>
     </header>
+
+    <section id="draftResumeCard" class="draft-resume-card" hidden>
+      <div class="draft-resume-copy">
+        <span class="draft-kicker">ローカル下書き</span>
+        <strong id="draftResumeTitle">前回の続きがあります</strong>
+        <small id="draftResumeMeta"></small>
+      </div>
+      <div class="draft-resume-actions">
+        <button id="draftContinueButton" type="button">続きから</button>
+        <button id="draftManageButton" type="button">下書き一覧</button>
+      </div>
+    </section>
+
+    <div id="draftSaveIndicator" class="draft-save-indicator" hidden>自動保存済み</div>
 
     <section class="intro">
       <h2>文章を貼るだけ。</h2>
@@ -352,6 +366,20 @@
     </form>
   </dialog>
 
+
+  <dialog id="draftManagerDialog" class="draft-manager-dialog">
+    <div class="draft-manager-card">
+      <div class="draft-manager-head">
+        <div><span>LOCAL DRAFTS</span><h2>制作途中の作品</h2><small id="draftCountLabel">0 / 10</small></div>
+        <button id="draftManagerClose" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="draftList" class="draft-list"></div>
+      <div class="draft-manager-foot">
+        <button id="newDraftButton" type="button">＋ 新しく作る</button>
+        <small>端末内の作業データです。大切な作品は .scene に書き出してください。</small>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="sampleReplaceDialog" class="scene-delete-dialog">
     <form method="dialog" class="scene-delete-dialog-card">
