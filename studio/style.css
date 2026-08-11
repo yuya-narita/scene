@@ -1846,3 +1846,13 @@ body.easy-player-open{position:fixed;inset:0;}
 .draft-list{max-height:min(58vh,520px);overflow:auto;padding:8px 12px}.draft-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:13px 8px;border-bottom:1px solid #eee}.draft-row>div:first-child{min-width:0;display:grid;gap:4px}.draft-row strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.draft-row small{color:#8b9099;font-size:9px}.draft-row-actions{display:flex;gap:6px}.draft-row-actions button{min-height:34px;padding:0 9px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:9px;font-weight:800}.draft-row-actions button:first-child{background:#18191b;color:#fff}.draft-row-actions button:last-child{color:#a44}
 .draft-empty{padding:30px;text-align:center;color:#999}.draft-manager-foot{padding:14px 18px 18px;display:grid;gap:8px}.draft-manager-foot button{min-height:44px;border:1px solid #18191b;border-radius:12px;background:#18191b;color:#fff;font-weight:850}.draft-manager-foot small{color:#999;font-size:9px;text-align:center}
 @media(max-width:560px){.draft-resume-card{margin:14px 0 0;padding:13px;align-items:stretch;flex-direction:column}.draft-resume-actions{display:grid;grid-template-columns:1fr 1fr}.draft-resume-actions button{width:100%;min-height:42px}.draft-manager-dialog{width:calc(100vw - 20px)}.draft-row{align-items:flex-start;flex-direction:column}.draft-row-actions{width:100%;display:grid;grid-template-columns:1fr auto}.draft-row-actions button{min-height:38px}.draft-save-indicator{right:10px;bottom:calc(10px + env(safe-area-inset-bottom))}}
+
+/* Persistent Draft Navigation v0.2.33 */
+.draft-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0 4px}
+.draft-toolbar-button{min-height:50px;padding:8px 12px;border:1px solid var(--line);border-radius:14px;background:#fff;color:#17191d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-weight:850}
+.draft-toolbar-button span{font-size:11px;line-height:1.15}
+.draft-toolbar-button small{font-size:8px;color:#8b9099;font-weight:700}
+.draft-toolbar-new{background:#18191b;border-color:#18191b;color:#fff}
+.draft-toolbar-new small{color:rgba(255,255,255,.58)}
+@media(max-width:560px){.draft-toolbar{margin-top:14px;gap:8px}.draft-toolbar-button{min-height:52px;border-radius:13px}.draft-toolbar-button span{font-size:10.5px}}
+.draft-resume-card{display:none!important}

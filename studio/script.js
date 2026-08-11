@@ -265,21 +265,12 @@
     updateCount();updateCoverPreview();updateEasyFileActions();
     if(workingDocument?.scenes?.length){normalizeSceneIds();refreshDocumentLanguages();renderAdvanced();}
     setScreen('easy');scrollScreenToTop(editorScreen);updateAutoRecStartLabel();
-    $('#draftResumeCard').hidden=true;
   }
   async function refreshDraftUI(showResume=true){
     const rows=await listDraftRecords();
     latestDraftSummary=rows[0]||null;
-    const card=$('#draftResumeCard');
-    if(card && showResume){
-      if(rows.length){
-        const row=rows[0], total=row.document?.scenes?.length||0, rec=Math.min(row.recProgress?.recordedCount||0,total);
-        $('#draftResumeTitle').textContent=row.title||'Untitled';
-        $('#draftResumeMeta').textContent=[`${total} Scenes`, total?`REC ${rec}/${total}`:'', formatDraftTime(row.updatedAt)].filter(Boolean).join(' · ');
-        card.dataset.draftId=row.id;card.hidden=false;
-      }else card.hidden=true;
-    }
     const label=$('#draftCountLabel');if(label)label.textContent=`${rows.length} / ${DRAFT_MAX}`;
+    const toolbarCount=$('#draftToolbarCount');if(toolbarCount)toolbarCount.textContent=`${rows.length} / ${DRAFT_MAX}`;
     const list=$('#draftList');
     if(list){
       list.innerHTML='';
@@ -303,7 +294,7 @@
     titleInput.value='Untitled';authorInput.value='';bodyInput.value='';
     if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
     coverImageUrl='';coverImageFileName='';updateCount();updateCoverPreview();updateEasyFileActions();updateAutoRecStartLabel();
-    setScreen('easy');scrollScreenToTop(editorScreen);$('#draftResumeCard').hidden=true;
+    setScreen('easy');scrollScreenToTop(editorScreen);
   }
 
   // Runtime asset registry.
@@ -1721,11 +1712,8 @@
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveDraftNow();});
   window.addEventListener('pagehide',()=>{saveDraftNow();});
 
-  $('#draftContinueButton')?.addEventListener('click',async()=>{
-    const id=$('#draftResumeCard')?.dataset?.draftId;
-    await restoreDraftRecord(await getDraftRecord(id));
-  });
   $('#draftManageButton')?.addEventListener('click',async()=>{await refreshDraftUI(false);$('#draftManagerDialog')?.showModal();});
+  $('#newDraftQuickButton')?.addEventListener('click',async()=>{await startNewDraft();});
   $('#draftManagerClose')?.addEventListener('click',()=>$('#draftManagerDialog')?.close());
   $('#newDraftButton')?.addEventListener('click',async()=>{await startNewDraft();$('#draftManagerDialog')?.close();});
 
