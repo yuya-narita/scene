@@ -1263,6 +1263,7 @@
     renderSceneList(); loadSceneIntoFields();
   }
   let undoSnapshot=null;
+  let undoBarTimer=null;
 
   function captureUndo(label='変更'){
     undoSnapshot={
@@ -1282,17 +1283,31 @@
     };
   }
 
+  function hideUndoBar(){
+    const bar=$('#undoBar');
+    if(!bar)return;
+    bar.classList.remove('is-visible');
+    bar.classList.add('is-hiding');
+    window.setTimeout(()=>{bar.hidden=true;bar.classList.remove('is-hiding');},180);
+  }
+
   function showUndo(label){
     const bar=$('#undoBar'), msg=$('#undoMessage');
     if(!bar)return;
+    if(undoBarTimer)window.clearTimeout(undoBarTimer);
     if(msg)msg.textContent=label;
     bar.hidden=false;
+    bar.classList.remove('is-hiding');
+    requestAnimationFrame(()=>bar.classList.add('is-visible'));
+    undoBarTimer=window.setTimeout(hideUndoBar,3500);
   }
 
   function clearUndo(){
     undoSnapshot=null;
+    if(undoBarTimer)window.clearTimeout(undoBarTimer);
+    undoBarTimer=null;
     const bar=$('#undoBar');
-    if(bar)bar.hidden=true;
+    if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
   }
 
   function restoreUndo(){
@@ -1319,8 +1334,10 @@
     if(!advancedScreen.hidden && workingDocument?.scenes?.length){
       renderAdvanced();
     }
+    if(undoBarTimer)window.clearTimeout(undoBarTimer);
+    undoBarTimer=null;
     const bar=$('#undoBar');
-    if(bar)bar.hidden=true;
+    if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
   }
 
   function moveScene(delta){
