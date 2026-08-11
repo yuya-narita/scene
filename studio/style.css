@@ -1313,3 +1313,54 @@ body.easy-player-open{position:fixed;inset:0;}
 }
 
 .easy-file-action{min-height:34px;padding:0 13px;border:1px solid var(--line);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#17191d;font-size:11px;font-weight:800;white-space:nowrap;cursor:pointer;text-decoration:none}.easy-file-export{border-color:#17191d;background:#17191d;color:#fff}.easy-file-export:disabled{opacity:.34;cursor:default}.easy-file-open:active,.easy-file-export:not(:disabled):active{transform:translateY(1px)}.theme-section + .cinema-background-panel{margin-top:-6px;margin-bottom:0}.work-meta-section{margin-top:2px}.work-meta-section>summary{display:flex;align-items:center;gap:8px}.work-meta-section>summary::before{content:"任意";order:2;padding:2px 7px;border-radius:999px;background:#f0f1f4;color:#858a93;font-size:9px;font-weight:700}.work-meta-section>summary::after{margin-left:auto}@media(max-width:720px){.topbar{align-items:flex-start;gap:12px}.easy-topbar-actions{flex-wrap:wrap;justify-content:flex-end;max-width:250px}.easy-file-action{min-height:32px;padding:0 10px;font-size:10px}}@media(max-width:520px){.editor-screen .topbar{display:block}.editor-screen .topbar>div:first-child{margin-bottom:12px}.easy-topbar-actions{justify-content:flex-start;max-width:none}.easy-topbar-actions .version{display:none}}
+
+
+/* =========================================================
+   Mobile navigation v0.2.25
+   ========================================================= */
+.easy-advanced-return{
+  border-color:#d9dce2;
+  background:#fff;
+  color:#17191d;
+}
+.easy-advanced-return[hidden]{display:none!important}
+
+@media(max-width:720px){
+  /* "確認" is a primary author action on mobile; make it thumb-friendly. */
+  .advanced-preview-button{
+    min-height:48px!important;
+    min-width:64px!important;
+    padding:0 14px!important;
+    border-radius:14px!important;
+    font-size:12px!important;
+    font-weight:850!important;
+  }
+  .advanced-export-button{
+    min-height:48px!important;
+    padding:0 12px!important;
+    border-radius:14px!important;
+    font-size:10px!important;
+  }
+  .advanced-topbar{
+    grid-template-columns:58px minmax(0,1fr) auto!important;
+  }
+}
+
+@media(max-width:520px){
+  /* Keep all Easy return/file actions in the header without forcing a long scroll. */
+  .easy-topbar-actions{
+    display:flex!important;
+    flex-wrap:wrap!important;
+    gap:8px!important;
+    align-items:center!important;
+  }
+  .easy-file-action{
+    min-height:42px!important;
+    padding:0 12px!important;
+    border-radius:13px!important;
+    font-size:10px!important;
+  }
+  .easy-advanced-return{
+    min-width:72px;
+  }
+}

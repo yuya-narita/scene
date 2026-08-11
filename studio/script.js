@@ -909,12 +909,13 @@
     ensureWorkingDocumentFromEasy();
     syncEasyShellToWorkingDocument();
     selectedSceneIndex=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));
-    renderAdvanced(); setScreen('advanced'); scrollScreenToTop(advancedScreen);
+    renderAdvanced(); updateEasyFileActions(); setScreen('advanced'); scrollScreenToTop(advancedScreen);
   }
   function closeAdvanced(){
     syncAdvancedFieldsToScene();
     restoreEasyStateFromDocument(workingDocument);
     easySourceDirty=false;
+    updateEasyFileActions();
     setScreen('easy');
   }
 
@@ -1349,9 +1350,11 @@
 
   function updateEasyFileActions(){
     const exportButton=$('#exportPackageButton');
-    if(!exportButton)return;
-    const hasSource=Boolean((workingDocument?.scenes?.length) || bodyInput.value.trim());
-    exportButton.disabled=!hasSource;
+    const advancedReturn=$('#easyAdvancedReturnButton');
+    const hasDocument=Boolean(workingDocument?.scenes?.length);
+    const hasSource=Boolean(hasDocument || bodyInput.value.trim());
+    if(exportButton) exportButton.disabled=!hasSource;
+    if(advancedReturn) advancedReturn.hidden=!hasDocument;
   }
   bodyInput.addEventListener('input',updateEasyFileActions);
   updateEasyFileActions();
@@ -1359,8 +1362,9 @@
   $('#sampleButton').addEventListener('click',()=>{titleInput.value='声のそろう通り';bodyInput.value=SAMPLE;easySourceDirty=true;updateCount();updateCoverPreview();updateEasyFileActions();});
   $$('.theme-card').forEach(card=>card.addEventListener('click',()=>applyTheme(card.dataset.theme)));
   $$('.work-font-card').forEach(card=>card.addEventListener('click',()=>applyWorkFont(card.dataset.font)));
-  $('#makeButton').addEventListener('click',()=>openPlayer({from:'easy',startAt:0}));
+  $('#makeButton').addEventListener('click',()=>{openPlayer({from:'easy',startAt:0});updateEasyFileActions();});
   $('#advancedButton').addEventListener('click',openAdvanced);
+  $('#easyAdvancedReturnButton')?.addEventListener('click',openAdvanced);
   $('#exportSceneButton').addEventListener('click',exportSceneDocument);
   $('#exportPackageButton').addEventListener('click',exportScenePackage);
   $('#importSceneInput').addEventListener('change',async(event)=>{
