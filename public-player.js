@@ -26,11 +26,10 @@
   let shellBound = false;
   let muted = false;
 
-  // v0.3.14 — R2 direct playback test.
-  // This build intentionally reads one hosted work directly from the a-hako Worker.
-  // No local .scene/JSON is used for the work itself.
-  const R2_DIRECT_WORK_URL = 'https://scene-studio-api.a-hako.workers.dev/work/6330508d9dca';
-  const source = () => R2_DIRECT_WORK_URL;
+  const params = new URLSearchParams(location.search);
+  const requested = (params.get('src') || '').trim();
+  const DEFAULT_SCENE = './works/external-signal/scene.json';
+  const source = () => requested || DEFAULT_SCENE;
   const storageKey = () => `scene-public-progress:${source()}`;
 
   function safeProgress() {
@@ -366,7 +365,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.14',
+    version: '0.3.13',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
