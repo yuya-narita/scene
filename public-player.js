@@ -26,11 +26,11 @@
   let shellBound = false;
   let muted = false;
 
-  // R2 Hosting verification build.
-  // Fixed to one freshly published Scene so opening index.html is enough
-  // to test remote JSON + remote image/audio playback.
-  const R2_HOSTING_TEST_SCENE = 'https://scene-studio-api.a-hako.workers.dev/work/6330508d9dca';
-  const source = () => R2_HOSTING_TEST_SCENE;
+  // v0.3.14 — R2 direct playback test.
+  // This build intentionally reads one hosted work directly from the a-hako Worker.
+  // No local .scene/JSON is used for the work itself.
+  const R2_DIRECT_WORK_URL = 'https://scene-studio-api.a-hako.workers.dev/work/6330508d9dca';
+  const source = () => R2_DIRECT_WORK_URL;
   const storageKey = () => `scene-public-progress:${source()}`;
 
   function safeProgress() {
@@ -366,7 +366,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.13',
+    version: '0.3.14',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },

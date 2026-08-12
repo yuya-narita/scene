@@ -1,14 +1,13 @@
-# Scene Public Player v0.3.13 — R2 Hosting verification build
+# v0.3.14 R2 direct playback check
 
-This build is intentionally fixed to one hosted Scene:
+Open `index.html` through your normal GitHub Pages deployment.
 
-https://scene-studio-api.a-hako.workers.dev/work/6330508d9dca
+Expected result:
+1. Intro shows `声のそろう通り` / `Yuya Narita`.
+2. Press `はじめる`.
+3. Scene 1 starts.
+4. Background loads from `/asset/e834fc2ab8ee4cb8.webp`.
+5. BGM loads from `/asset/2fd0783101ee4841.mp3`.
+6. Scenes 1–7 advance normally.
 
-Purpose:
-- verify remote Scene JSON loading
-- verify R2-hosted background image loading
-- verify R2-hosted BGM playback
-- verify basic Scene progression in Public Player v0.3.13
-
-This is a temporary verification build.
-Studio's newer text colors/effects are not added here.
+If this works, the path Studio -> publish -> R2 -> /work URL -> Player is confirmed end-to-end.
