@@ -266,12 +266,12 @@
 .sp-bg-glitching .sp-bg-layer.is-current{animation:sp-bg-glitch .56s steps(2,end) both}
 .sp-bg-glitching .sp-bg-textures::before{animation:sp-texture-glitch .18s steps(2,end) 3}
 
-.sp-motion-slowZoom{animation:sp-bg-slowzoom var(--sp-bg-duration,12000ms) ease-in-out both}
-.sp-motion-breath{animation:sp-bg-breath var(--sp-bg-duration,8000ms) ease-in-out infinite alternate}
-.sp-motion-panLeft{animation:sp-bg-pan-left var(--sp-bg-duration,12000ms) ease-in-out both}
-.sp-motion-panRight{animation:sp-bg-pan-right var(--sp-bg-duration,12000ms) ease-in-out both}
-.sp-motion-panUp{animation:sp-bg-pan-up var(--sp-bg-duration,12000ms) ease-in-out both}
-.sp-motion-panDown{animation:sp-bg-pan-down var(--sp-bg-duration,12000ms) ease-in-out both}
+.sp-motion-slowZoom{animation:sp-bg-slowzoom var(--sp-bg-duration,6500ms) cubic-bezier(.2,.7,.2,1) both}
+.sp-motion-breath{animation:sp-bg-breath var(--sp-bg-duration,4200ms) ease-in-out infinite alternate}
+.sp-motion-panLeft{animation:sp-bg-pan-left var(--sp-bg-duration,6500ms) cubic-bezier(.2,.7,.2,1) both}
+.sp-motion-panRight{animation:sp-bg-pan-right var(--sp-bg-duration,6500ms) cubic-bezier(.2,.7,.2,1) both}
+.sp-motion-panUp{animation:sp-bg-pan-up var(--sp-bg-duration,6500ms) cubic-bezier(.2,.7,.2,1) both}
+.sp-motion-panDown{animation:sp-bg-pan-down var(--sp-bg-duration,6500ms) cubic-bezier(.2,.7,.2,1) both}
 .sp-motion-parallax{animation:sp-bg-parallax var(--sp-bg-duration,9000ms) ease-in-out infinite alternate}
 
 .sp-reveal-intro{animation:sp-reveal-intro var(--sp-reveal-duration,1000ms) ease-out both!important}
@@ -826,3 +826,6 @@
 .sp-scene[data-auto-transition="true"] .sp-text{
   transition:none!important;
 }
+
+/* Background timing v2 */
+.sp-bg-layer{transition-duration:var(--sp-bg-transition-duration,700ms)!important}
