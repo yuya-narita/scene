@@ -1801,14 +1801,56 @@
   // ---------------------------------------------------------
   const SCENE_STUDIO_API_BASE='https://scene-studio-api.a-hako.workers.dev';
 
+  async function uploadPublishAsset(src){
+    if(!src || !/^blob:/i.test(src))return src;
+    const item=assetRegistry.get(src);
+    if(!item?.blob)throw new Error(`Local asset is unavailable: ${item?.name||'asset'}`);
+
+    const response=await fetch(`${SCENE_STUDIO_API_BASE}/asset`,{
+      method:'POST',
+      headers:{
+        'Content-Type':item.blob.type||'application/octet-stream',
+        'X-File-Name':encodeURIComponent(item.name||'asset')
+      },
+      body:item.blob
+    });
+    let payload=null;
+    try{payload=await response.json();}catch(_){}
+    if(!response.ok || !payload?.ok || !payload?.url){
+      throw new Error(payload?.error || `Asset upload failed (${response.status})`);
+    }
+    return payload.url;
+  }
+
+  async function prepareDocumentForPublish(sceneDocument){
+    const hosted=clone(sceneDocument);
+    const cache=new Map();
+    const refs=[];
+    walkAssetRefs(hosted,ref=>refs.push(ref));
+
+    for(const ref of refs){
+      if(!/^blob:/i.test(ref.src))continue;
+      let hostedUrl=cache.get(ref.src);
+      if(!hostedUrl){
+        hostedUrl=await uploadPublishAsset(ref.src);
+        cache.set(ref.src,hostedUrl);
+      }
+      ref.holder[ref.key]=hostedUrl;
+      delete ref.holder._editorManaged;
+      delete ref.holder._editorFileName;
+    }
+    return hosted;
+  }
+
   const publishAdapter={
     async publish(sceneDocument,{id=''}={}){
-      // Hosting v1: save the complete Scene document through the Cloudflare Worker into R2.
-      // The current Worker always issues a fresh publication id; update-in-place is wired next.
+      // Hosting v2: upload browser-local image/audio assets first, replace blob: URLs
+      // with permanent Worker/R2 URLs, then publish the portable Scene document.
+      const hostedDocument=await prepareDocumentForPublish(sceneDocument);
       const response=await fetch(`${SCENE_STUDIO_API_BASE}/publish`,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(sceneDocument)
+        body:JSON.stringify(hostedDocument)
       });
 
       let payload=null;
