@@ -68,8 +68,8 @@
     ['.audio-card:nth-child(1) .audio-card-title small','audio.bgm.note'],['.audio-card:nth-child(2) .audio-card-title small','audio.ambient.note'],['.audio-card:nth-child(3) .audio-card-title small','audio.se.note'],
     ['.advanced-hint','audio.hint'],['#editReturnButton','preview.return'],
     ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],
-    ['#workMetaDetails > summary','work.info'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.cover-editor-head > span','work.cover'],['.cover-editor-head > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.cover-editor-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
-    ['#advancedPreviewButton','common.preview'],['#advancedExportButton','file.export'],['.auto-timing-head strong','auto.heading'],['#sceneAutoTimingReset','auto.reset'],['.auto-timing-value span','auto.second'],['.auto-timing-card > p','auto.hint'],
+    ['.work-meta-section > summary','work.info'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.easy-cover-simple .section-heading > span','work.cover'],['.easy-cover-simple .section-heading > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.easy-cover-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
+    ['#advancedPreviewButton','common.preview'],['#advancedExportButton','file.export'],['.auto-timing-head strong','auto.heading'],['#sceneAutoTimingReset','auto.reset'],['.auto-timing-controls label span','auto.second'],['.auto-timing-editor > p','auto.hint'],
     ['#sceneColorSelect','text.color','aria-label'],['#sceneShadowSelect','text.shadow','aria-label'],['#sceneColorSelect option[value="auto"]','effect.auto'],['#sceneColorSelect option[value="white"]','color.white'],['#sceneColorSelect option[value="black"]','color.black'],['#sceneColorSelect option[value="custom"]','color.custom'],['#sceneShadowSelect option[value="auto"]','effect.auto'],['#sceneShadowSelect option[value="none"]','shadow.none'],['#sceneShadowSelect option[value="soft"]','shadow.soft'],['#sceneShadowSelect option[value="strong"]','shadow.strong'],
     ['.scene-motion-preview-field > span','background.preview'],['#publishFromPreviewButton','publish.action'],['#publishDialogClose','unpublish.cancel','aria-label'],['#deleteSceneDialog h2','delete.scene.title'],['#deleteSceneDialogText','delete.scene.text'],['#deleteSceneCancel','delete.scene.cancel'],['#deleteSceneConfirm','delete.scene.confirm'],['#unpublishDialog h2','unpublish.title'],['#unpublishDialogText','unpublish.text'],['#unpublishCancel','unpublish.cancel'],['#unpublishConfirm','unpublish.confirm'],['#draftManagerDialog h2','draft.title'],['#draftManagerClose','unpublish.cancel','aria-label'],['#newDraftButton','draft.new']
   ];
@@ -82,7 +82,7 @@
     });
 
     // Easy metadata uses nested labels/smalls, so translate without destroying structure.
-    const metaSummary=$('#workMetaDetails > summary'); if(metaSummary)metaSummary.textContent=t('work.info');
+    const metaSummary=$('.work-meta-section > summary'); if(metaSummary)metaSummary.textContent=t('work.info');
     const metaFields=[
       [subtitleInput,'work.subtitle','common.optional','work.subtitle.ph'],
       [languageInput,'work.language',null,null],
@@ -109,8 +109,9 @@
       if(main){main.textContent=t('work.cover');const opt=document.createElement('small');opt.textContent=' '+t('common.optional');main.appendChild(opt);}
       if(note)note.textContent=t('work.cover.note');
     }
+    const coverSaveNote=$('.easy-cover-actions p'); if(coverSaveNote)coverSaveNote.textContent=t('work.cover.saveNote');
     const draftFoot=$('.draft-manager-foot > small'); if(draftFoot)draftFoot.textContent=t('draft.footer');
-    $$('.adv-section').forEach(section=>section.dataset.closeLabel=t('common.close'));
+    $$('.adv-section').forEach(section=>{section.dataset.openLabel=t('common.open');section.dataset.closeLabel=t('common.close');});
     const bgPreviewOverlay=$('#sceneBackgroundPreview'); if(bgPreviewOverlay)bgPreviewOverlay.dataset.overlayLabel=t('background.changeOverlay');
 
     // Labels that repeat and are safer to bind by semantic parent.
@@ -148,14 +149,25 @@
 
     const tabKeys={all:'draft.all',draft:'draft.inProgress',published:'draft.publishedTab'};
     Object.entries(tabKeys).forEach(([filter,key])=>{const b=$(`.draft-manager-tab[data-draft-filter="${filter}"]`);if(b&&b.firstChild)b.firstChild.textContent=t(key)+' ';});
-    const publishStatic=[['#publishDialog [data-publish-state="publishing"] h2','publish.working'],['#publishDialog [data-publish-state="publishing"] p','publish.workingText'],['#publishDialog [data-publish-state="success"] h2','publish.success'],['#publishShareButton','publish.share'],['#publishCopyButton','publish.copy'],['#publishDialog [data-publish-state="error"] h2','publish.failed'],['#publishDialog [data-publish-state="error"] p','publish.failedText'],['#publishRetryButton','publish.retry']];
+    const publishStatic=[
+      ['#publishStateWorking h2','publish.working'],
+      ['#publishStateWorking p','publish.workingText'],
+      ['#publishStateSuccess h2','publish.success'],
+      ['#publishShareButton','publish.share'],
+      ['#publishCopyButton','publish.copy'],
+      ['#publishStateSuccess .publish-mock-note','publish.mockNote'],
+      ['#publishStateError h2','publish.failed'],
+      ['#publishStateError p','publish.failedText'],
+      ['#publishRetryButton','publish.retry']
+    ];
     publishStatic.forEach(([sel,key])=>{const e=$(sel);if(e)e.textContent=t(key);});
+    syncPublishCopyForStatus?.();
     const semanticLabels={sceneColorSelect:'text.color',sceneShadowSelect:'text.shadow'};
     Object.entries(semanticLabels).forEach(([id,key])=>{const h=$('#'+id)?.closest('.adv-field')?.querySelector(':scope > span');if(h)h.textContent=t(key);});
     const previewHead=$('.scene-motion-preview-field > span'); if(previewHead) previewHead.innerHTML=`${t('background.preview')} <small>${t('background.preview.note')}</small>`;
     const rangeLabels={sceneBackgroundDim:'background.dim',sceneBackgroundTransitionDuration:'background.transitionSpeed',sceneBackgroundMotionDuration:'background.motionSpeed',sceneBackgroundMotionAmount:'background.motionAmount'};
     Object.entries(rangeLabels).forEach(([id,key])=>{const h=$('#'+id)?.closest('.adv-field')?.querySelector(':scope > span');if(h&&h.firstChild)h.firstChild.textContent=t(key)+' ';});
-    const autoState=$('#sceneAutoTimingState'); if(autoState) updateAutoTimingEditor?.();
+    const autoState=$('#sceneAutoTimingState'); if(autoState) updateAutoTimingFields?.();
     const customLangLabel=$('#sceneLanguageCustomField > span');
     if(customLangLabel) customLangLabel.textContent=t('scene.language.tag');
     $$('.ui-language-switch button').forEach(b=>{
@@ -1833,6 +1845,14 @@
       const el=$(`#publishState${key}`);
       if(el)el.hidden=key.toLowerCase()!==name;
     });
+    // State panels are dynamic; re-apply language whenever the visible state changes.
+    const stateMap={
+      Working:[['#publishStateWorking h2','publish.working'],['#publishStateWorking p','publish.workingText']],
+      Success:[['#publishStateSuccess h2','publish.success'],['#publishShareButton','publish.share'],['#publishCopyButton','publish.copy'],['#publishStateSuccess .publish-mock-note','publish.mockNote']],
+      Error:[['#publishStateError h2','publish.failed'],['#publishStateError p','publish.failedText'],['#publishRetryButton','publish.retry']]
+    };
+    const key=name.charAt(0).toUpperCase()+name.slice(1);
+    (stateMap[key]||[]).forEach(([sel,msg])=>{const el=$(sel);if(el)el.textContent=t(msg);});
   }
 
   function syncPublishCopyForStatus(){

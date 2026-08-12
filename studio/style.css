@@ -1167,7 +1167,7 @@ body.easy-player-open{position:fixed;inset:0;}
 .advanced-preview-button{min-height:36px;padding:0 10px;border:1px solid #d8d8d4!important;border-radius:11px!important;background:#fff!important;color:#17191d!important;white-space:nowrap}
 
 .adv-section>summary{position:relative;padding-right:88px}
-.adv-section>summary::after{content:'開く';position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#999;font-size:9px;font-weight:700}
+.adv-section>summary::after{content:attr(data-open-label);position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#999;font-size:9px;font-weight:700}
 .adv-section[open]>summary::after{content:attr(data-close-label)}
 
 @media(min-width:900px){
@@ -2380,4 +2380,29 @@ body.draft-manager-open{
   .unified-work-row.is-published .unified-work-actions [data-delete]{
     grid-column:1/-1;
   }
+}
+
+
+/* =========================================================
+   v0.2.56 — UI language switch: unmistakable active state
+   ========================================================= */
+.ui-language-switch button{
+  opacity:.48;
+  transition:background .15s ease,color .15s ease,opacity .15s ease,transform .15s ease;
+}
+.ui-language-switch button.is-selected{
+  background:#17191d!important;
+  color:#fff!important;
+  opacity:1!important;
+  font-weight:900!important;
+  box-shadow:0 0 0 1px #17191d;
+  transform:scale(1.02);
+}
+.ui-language-switch button.is-selected::before{
+  content:"●";
+  display:inline-block;
+  margin-right:3px;
+  font-size:5px;
+  line-height:1;
+  vertical-align:middle;
 }
