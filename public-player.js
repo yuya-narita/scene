@@ -172,16 +172,17 @@
 
     if (left) {
       left.hidden = false;
+      left.disabled = false;
       left.textContent = '‹';
-      left.setAttribute('aria-label', '過去Sceneを開く');
+      left.setAttribute('aria-label', '表紙に戻る');
       left.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopImmediatePropagation();
 
-        // Public Player: the left header control is History, not browser/back navigation.
-        // If History is already open, close it; otherwise open the visited Scene list.
-        if (player.historyOpen) player.closeHistory();
-        else player.openHistory();
+        // Public Player: the left header control is always an exit to the cover.
+        // Past Scenes remain available only through the author's navigation setting
+        // and the downward swipe gesture.
+        returnToCover();
       }, true);
     }
 
@@ -205,6 +206,13 @@
     const index = Number(e.detail?.index);
     if (Number.isInteger(index) && index > 0) {
       localStorage.setItem(storageKey(), String(index));
+    }
+
+    // Core disables Previous on Scene 1 / when author history is disabled.
+    // In Public Player this control is not Previous: it is the always-available cover exit.
+    if (player?.els?.prev) {
+      player.els.prev.hidden = false;
+      player.els.prev.disabled = false;
     }
   }
 
@@ -262,6 +270,21 @@
       shellBound = false;
       destroyAfterFade(exitingPlayer);
     }
+  }
+
+  function returnToCover() {
+    if (player) {
+      const exitingPlayer = player;
+      fadePublicAudio();
+      removeShellListeners();
+      player = null;
+      shellBound = false;
+      destroyAfterFade(exitingPlayer);
+    }
+
+    ending.classList.remove('is-visible');
+    ending.hidden = true;
+    showIntro();
   }
 
   function closeToSource() {

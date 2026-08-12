@@ -342,14 +342,12 @@
           if (Math.max(Math.abs(dx), Math.abs(dy)) < this.options.swipeThreshold) return;
           this.suppressNextClick = true;
 
-          // Pulling down/right enters History Scroll. Pushing up/left still advances
-          // only one unread Scene at a time.
+          // Navigation is intentionally vertical on mobile:
+          // pull down = Past Scenes (only when the author allows it),
+          // push up = next Scene. Horizontal swipes do nothing.
           if (Math.abs(dy) >= Math.abs(dx)) {
             if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
             else if (dy < 0) this.next();
-          } else {
-            if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
-            else this.next();
           }
         }, { passive: true });
       }
