@@ -2612,9 +2612,37 @@
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveDraftNow();});
   window.addEventListener('pagehide',()=>{saveDraftNow();});
 
-  $('#draftManageButton')?.addEventListener('click',async()=>{await refreshDraftUI(false);$('#draftManagerDialog')?.showModal();});
+  let draftManagerScrollY=0;
+
+  function lockDraftManagerBackground(){
+    if(document.body.classList.contains('draft-manager-open'))return;
+    draftManagerScrollY=window.scrollY||document.documentElement.scrollTop||0;
+    document.body.classList.add('draft-manager-open');
+    document.body.style.top=`-${draftManagerScrollY}px`;
+  }
+
+  function unlockDraftManagerBackground(){
+    if(!document.body.classList.contains('draft-manager-open'))return;
+    document.body.classList.remove('draft-manager-open');
+    document.body.style.top='';
+    window.scrollTo(0,draftManagerScrollY);
+  }
+
+  async function openDraftManager(){
+    await refreshDraftUI(false);
+    const dialog=$('#draftManagerDialog');
+    if(!dialog)return;
+    lockDraftManagerBackground();
+    dialog.showModal();
+    const card=dialog.querySelector('.draft-manager-card');
+    if(card)card.scrollTop=0;
+  }
+
+  $('#draftManageButton')?.addEventListener('click',openDraftManager);
   $('#newDraftQuickButton')?.addEventListener('click',async()=>{await startNewDraft();});
   $('#draftManagerClose')?.addEventListener('click',()=>$('#draftManagerDialog')?.close());
+  $('#draftManagerDialog')?.addEventListener('close',unlockDraftManagerBackground);
+  $('#draftManagerDialog')?.addEventListener('cancel',()=>{requestAnimationFrame(unlockDraftManagerBackground);});
   $('#unpublishDialog')?.addEventListener('close',async()=>{
     const result=$('#unpublishDialog')?.returnValue;
     if(result==='unpublish')await confirmDraftUnpublish();

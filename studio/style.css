@@ -2168,3 +2168,94 @@ body.easy-player-open{position:fixed;inset:0;}
     width:min(100%, 390px);
   }
 }
+
+
+/* =========================================================
+   Draft Manager iPhone scroll fix v0.2.52
+   One scroll surface + locked background
+   ========================================================= */
+
+body.draft-manager-open{
+  position:fixed;
+  left:0;
+  right:0;
+  width:100%;
+  overflow:hidden!important;
+  touch-action:none;
+}
+
+.draft-manager-dialog{
+  overflow:hidden!important;
+  overscroll-behavior:none;
+  -webkit-overflow-scrolling:auto;
+}
+
+.draft-manager-dialog::backdrop{
+  overscroll-behavior:none;
+  touch-action:none;
+}
+
+.draft-manager-card{
+  max-height:min(88dvh,760px)!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  scrollbar-gutter:stable;
+}
+
+/* Lists are content sections, not competing scroll panes. */
+.draft-manager-card .draft-list,
+.draft-manager-card .published-list{
+  max-height:none!important;
+  overflow:visible!important;
+  -webkit-overflow-scrolling:auto!important;
+  overscroll-behavior:auto;
+}
+
+/* Keep the close control reachable while the one long sheet scrolls. */
+.draft-manager-head{
+  position:sticky;
+  top:0;
+  z-index:4;
+  background:#fff;
+}
+
+/* iOS focus/tap highlight must not draw a blue square around X. */
+#draftManagerClose{
+  -webkit-appearance:none;
+  appearance:none;
+  -webkit-tap-highlight-color:transparent!important;
+  outline:none!important;
+  box-shadow:none!important;
+}
+#draftManagerClose:focus,
+#draftManagerClose:focus-visible,
+#draftManagerClose:active{
+  outline:none!important;
+  box-shadow:none!important;
+}
+
+/* Avoid horizontal touch drift inside rows. */
+.draft-row,
+.published-row{
+  min-width:0;
+}
+
+@media(max-width:560px){
+  .draft-manager-dialog{
+    width:calc(100vw - 20px)!important;
+    max-height:calc(100dvh - 20px)!important;
+    overflow:hidden!important;
+  }
+  .draft-manager-card{
+    max-height:calc(100dvh - 20px)!important;
+    overflow-y:auto!important;
+  }
+  .draft-list,
+  .published-list{
+    max-height:none!important;
+    overflow:visible!important;
+  }
+}
