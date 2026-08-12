@@ -536,3 +536,8 @@ Fix:
   when the previous elements carry routing history.
 - AudioContext itself is preserved.
 - BGM/Ambient semantics, fades and Scene state logic are unchanged.
+
+
+## v0.2.49 — iPhone Audio Picker regression fix
+- Restored the v0.2.7.1 iOS-safe behavior by removing `accept=audio/*` from Advanced BGM/Ambient/SE file inputs.
+- Existing post-selection audio validation remains active for MP3/M4A/AAC/WAV/OGG/OPUS/FLAC and audio MIME types.

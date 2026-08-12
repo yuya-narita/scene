@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.48</title>
+  <title>Scene Studio v0.2.49</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,7 +17,7 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.48</span>
+        <span class="version">v0.2.49</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
@@ -284,7 +284,7 @@
               <div class="audio-card-title"><strong>BGM</strong><small>続いていた時間</small></div>
               <label class="adv-field"><span>操作</span><select id="sceneBgmAction"><option value="inherit">継続（指定なし）</option><option value="start">このSceneで開始</option><option value="volume">音量を変更</option><option value="stop">このSceneで停止</option></select></label>
               <div id="sceneBgmStartFields" class="audio-action-fields" hidden>
-                <div class="asset-row"><label class="asset-button" for="sceneBgmInput">BGMを選ぶ</label><input id="sceneBgmInput" type="file" accept="audio/*" hidden><span id="sceneBgmFileLabel" class="asset-name">未選択</span></div>
+                <div class="asset-row"><label class="asset-button" for="sceneBgmInput">BGMを選ぶ</label><input id="sceneBgmInput" type="file" hidden><span id="sceneBgmFileLabel" class="asset-name">未選択</span></div>
                 <div class="asset-url-row"><input id="sceneBgmUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/bgm.mp3"><button id="sceneBgmUrlApply" type="button">URLを反映</button></div>
                 <label class="check-row"><input id="sceneBgmLoop" type="checkbox" checked><span>ループ</span></label>
                 <div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneBgmVolumeOutput">50%</output></span><input id="sceneBgmVolume" type="range" min="0" max="100" value="50"></label><label class="adv-field"><span>fadeIn (ms)</span><input id="sceneBgmFadeIn" type="number" min="0" step="100" value="800"></label><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneBgmFadeOut" type="number" min="0" step="100" value="800"></label></div>
@@ -297,7 +297,7 @@
               <div class="audio-card-title"><strong>Ambient</strong><small>その時そこにあった音</small></div>
               <label class="adv-field"><span>操作</span><select id="sceneAmbientAction"><option value="inherit">継続（指定なし）</option><option value="start">このSceneで開始</option><option value="volume">音量を変更</option><option value="stop">このSceneで停止</option></select></label>
               <div id="sceneAmbientStartFields" class="audio-action-fields" hidden>
-                <div class="asset-row"><label class="asset-button" for="sceneAmbientInput">持続音を選ぶ</label><input id="sceneAmbientInput" type="file" accept="audio/*" hidden><span id="sceneAmbientFileLabel" class="asset-name">未選択</span></div>
+                <div class="asset-row"><label class="asset-button" for="sceneAmbientInput">持続音を選ぶ</label><input id="sceneAmbientInput" type="file" hidden><span id="sceneAmbientFileLabel" class="asset-name">未選択</span></div>
                 <div class="asset-url-row"><input id="sceneAmbientUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/ambient.mp3"><button id="sceneAmbientUrlApply" type="button">URLを反映</button></div>
                 <label class="check-row"><input id="sceneAmbientLoop" type="checkbox" checked><span>ループ</span></label>
                 <div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneAmbientVolumeOutput">35%</output></span><input id="sceneAmbientVolume" type="range" min="0" max="100" value="35"></label><label class="adv-field"><span>fadeIn (ms)</span><input id="sceneAmbientFadeIn" type="number" min="0" step="100" value="600"></label><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneAmbientFadeOut" type="number" min="0" step="100" value="600"></label></div>
@@ -310,7 +310,7 @@
               <div class="audio-card-title"><strong>SE</strong><small>その時起きた音</small></div>
               <label class="check-row"><input id="sceneSeEnabled" type="checkbox"><span>このSceneでSEを鳴らす</span></label>
               <div id="sceneSeFields" class="audio-action-fields" hidden>
-                <div class="asset-row"><label class="asset-button" for="sceneSeInput">SEを選ぶ</label><input id="sceneSeInput" type="file" accept="audio/*" hidden><span id="sceneSeFileLabel" class="asset-name">未選択</span></div>
+                <div class="asset-row"><label class="asset-button" for="sceneSeInput">SEを選ぶ</label><input id="sceneSeInput" type="file" hidden><span id="sceneSeFileLabel" class="asset-name">未選択</span></div>
                 <div class="asset-url-row"><input id="sceneSeUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/se.mp3"><button id="sceneSeUrlApply" type="button">URLを反映</button></div>
                 <div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneSeVolumeOutput">80%</output></span><input id="sceneSeVolume" type="range" min="0" max="100" value="80"></label><label class="adv-field"><span>fadeIn (ms)</span><input id="sceneSeFadeIn" type="number" min="0" step="50" value="0"></label></div>
               </div>
