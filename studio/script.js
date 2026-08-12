@@ -351,9 +351,22 @@
     await copyAnyPublishedUrl(url);
   }
 
-  async function stopDraftPublication(row){
+  let pendingUnpublishDraft=null;
+
+  function stopDraftPublication(row){
     if(!row?.publication?.url)return;
-    if(!confirm(`「${row.title||'Untitled'}」の公開を停止しますか？\n\n公開URLは使えなくなる想定です。制作中のデータは残ります。`))return;
+    pendingUnpublishDraft=row;
+    const text=$('#unpublishDialogText');
+    if(text){
+      text.textContent=`「${row.title||'Untitled'}」の公開URLは使えなくなる想定です。制作中のデータはそのまま残ります。`;
+    }
+    $('#unpublishDialog')?.showModal();
+  }
+
+  async function confirmDraftUnpublish(){
+    const row=pendingUnpublishDraft;
+    pendingUnpublishDraft=null;
+    if(!row?.publication?.url)return;
 
     const fresh=await getDraftRecord(row.id);
     if(!fresh)return;
@@ -2521,6 +2534,12 @@
   $('#draftManageButton')?.addEventListener('click',async()=>{await refreshDraftUI(false);$('#draftManagerDialog')?.showModal();});
   $('#newDraftQuickButton')?.addEventListener('click',async()=>{await startNewDraft();});
   $('#draftManagerClose')?.addEventListener('click',()=>$('#draftManagerDialog')?.close());
+  $('#unpublishDialog')?.addEventListener('close',async()=>{
+    const result=$('#unpublishDialog')?.returnValue;
+    if(result==='unpublish')await confirmDraftUnpublish();
+    else pendingUnpublishDraft=null;
+  });
+
   $('#newDraftButton')?.addEventListener('click',async()=>{if(await startNewDraft())$('#draftManagerDialog')?.close();});
 
   $('#sampleButton').addEventListener('click',()=>{

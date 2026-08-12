@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.47</title>
+  <title>Scene Studio v0.2.48</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,7 +17,7 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.47</span>
+        <span class="version">v0.2.48</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
@@ -399,6 +399,20 @@
     </form>
   </dialog>
 
+
+  <dialog id="unpublishDialog" class="scene-delete-dialog unpublish-dialog">
+    <form method="dialog" class="scene-delete-dialog-card unpublish-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">UNPUBLISH</span>
+        <h2>この作品の公開を停止しますか？</h2>
+        <p id="unpublishDialogText">公開URLは使えなくなる想定です。制作中のデータはそのまま残ります。</p>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button id="unpublishCancel" value="cancel" type="submit">キャンセル</button>
+        <button id="unpublishConfirm" value="unpublish" type="submit" class="danger">公開を停止</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="draftManagerDialog" class="draft-manager-dialog">
     <div class="draft-manager-card">

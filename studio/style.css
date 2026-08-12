@@ -2149,3 +2149,22 @@ body.easy-player-open{position:fixed;inset:0;}
   .published-row-actions{grid-template-columns:1fr 1fr}
   .published-row-actions button:last-child{grid-column:1/-1}
 }
+
+
+/* =========================================================
+   Unpublish confirm dialog v0.2.48
+   ========================================================= */
+.unpublish-dialog-card{
+  max-width:460px;
+}
+.unpublish-dialog .scene-delete-dialog-copy p{
+  max-width:34em;
+}
+@media(max-width:560px){
+  .unpublish-dialog{
+    padding:18px;
+  }
+  .unpublish-dialog-card{
+    width:min(100%, 390px);
+  }
+}
