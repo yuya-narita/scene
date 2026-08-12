@@ -1954,3 +1954,6 @@ body.easy-player-open{position:fixed;inset:0;}
    Scene split density is intentionally hidden from Easy Studio.
    The existing tested Splitter remains active internally at NORMAL density.
 */
+
+/* v0.2.43 — developer-only project I/O is intentionally absent from normal Easy UI. */
+.developer-hidden-io[hidden]{display:none!important;}

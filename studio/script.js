@@ -1455,7 +1455,23 @@
     });
     return player;
   }
-  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); }
+  function syncUndoVisibilityForScreen(name){
+    const inPlayer=name==='player';
+    const bar=$('#undoBar'), compact=$('#undoCompactButton');
+    // Preview / AUTO REC is a reader-facing surface. Keep the undo snapshot,
+    // but never let Studio undo controls overlap the Player.
+    if(inPlayer){
+      if(undoBarTimer)window.clearTimeout(undoBarTimer);
+      undoBarTimer=null;
+      if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
+      if(compact)compact.hidden=true;
+      return;
+    }
+    // Returning to Easy / Advanced restores only the compact affordance.
+    // The undo history itself has remained untouched while previewing.
+    if(undoSnapshot && compact)compact.hidden=false;
+  }
+  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); syncUndoVisibilityForScreen(name); }
   function scrollScreenToTop(screen){
     // iOS Safari/Chrome can preserve the document scroll position when a hidden
     // Studio screen is swapped in. Reset both the page and the screen itself.
@@ -1878,7 +1894,7 @@
   }
 
   function showCompactUndo(){
-    if(!undoSnapshot)return;
+    if(!undoSnapshot || !playerScreen?.hidden)return;
     const compact=$('#undoCompactButton');
     if(compact)compact.hidden=false;
   }
@@ -1897,6 +1913,7 @@
 
   function showUndo(label){
     scheduleDraftSave(120);
+    if(!playerScreen?.hidden)return;
     const bar=$('#undoBar'), msg=$('#undoMessage'), compact=$('#undoCompactButton');
     if(!bar)return;
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
