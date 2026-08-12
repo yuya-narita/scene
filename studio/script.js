@@ -66,7 +66,12 @@
     ['label[for="sceneBgmInput"]','audio.chooseBgm'],['label[for="sceneAmbientInput"]','audio.chooseAmbient'],['label[for="sceneSeInput"]','audio.chooseSe'],['#sceneBgmUrlApply','asset.applyUrl'],['#sceneAmbientUrlApply','asset.applyUrl'],['#sceneSeUrlApply','asset.applyUrl'],
     ['#sceneBgmLoop + span','audio.loop'],['#sceneAmbientLoop + span','audio.loop'],['#sceneSeEnabled + span','audio.seEnable'],
     ['.audio-card:nth-child(1) .audio-card-title small','audio.bgm.note'],['.audio-card:nth-child(2) .audio-card-title small','audio.ambient.note'],['.audio-card:nth-child(3) .audio-card-title small','audio.se.note'],
-    ['.advanced-hint','audio.hint'],['#editReturnButton','preview.return']
+    ['.advanced-hint','audio.hint'],['#editReturnButton','preview.return'],
+    ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],
+    ['#workMetaDetails > summary','work.info'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.cover-editor-head > span','work.cover'],['.cover-editor-head > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.cover-editor-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
+    ['#advancedPreviewButton','common.preview'],['#advancedExportButton','file.export'],['.auto-timing-head strong','auto.heading'],['#sceneAutoTimingReset','auto.reset'],['.auto-timing-value span','auto.second'],['.auto-timing-card > p','auto.hint'],
+    ['#sceneColorSelect','text.color','aria-label'],['#sceneShadowSelect','text.shadow','aria-label'],['#sceneColorSelect option[value="auto"]','effect.auto'],['#sceneColorSelect option[value="white"]','color.white'],['#sceneColorSelect option[value="black"]','color.black'],['#sceneColorSelect option[value="custom"]','color.custom'],['#sceneShadowSelect option[value="auto"]','effect.auto'],['#sceneShadowSelect option[value="none"]','shadow.none'],['#sceneShadowSelect option[value="soft"]','shadow.soft'],['#sceneShadowSelect option[value="strong"]','shadow.strong'],
+    ['.scene-motion-preview-field > span','background.preview'],['#publishFromPreviewButton','publish.action'],['#publishDialogClose','unpublish.cancel','aria-label'],['#deleteSceneDialog h2','delete.scene.title'],['#deleteSceneDialogText','delete.scene.text'],['#deleteSceneCancel','delete.scene.cancel'],['#deleteSceneConfirm','delete.scene.confirm'],['#unpublishDialog h2','unpublish.title'],['#unpublishDialogText','unpublish.text'],['#unpublishCancel','unpublish.cancel'],['#unpublishConfirm','unpublish.confirm'],['#draftManagerDialog h2','draft.title'],['#draftManagerClose','unpublish.cancel','aria-label'],['#newDraftButton','draft.new']
   ];
 
   function applyStaticUITranslations(){
@@ -109,6 +114,16 @@
       if(head && head.firstChild) head.firstChild.textContent=t('audio.volume')+' ';
     });
 
+    const tabKeys={all:'draft.all',draft:'draft.inProgress',published:'draft.publishedTab'};
+    Object.entries(tabKeys).forEach(([filter,key])=>{const b=$(`.draft-manager-tab[data-draft-filter="${filter}"]`);if(b&&b.firstChild)b.firstChild.textContent=t(key)+' ';});
+    const publishStatic=[['#publishDialog [data-publish-state="publishing"] h2','publish.working'],['#publishDialog [data-publish-state="publishing"] p','publish.workingText'],['#publishDialog [data-publish-state="success"] h2','publish.success'],['#publishShareButton','publish.share'],['#publishCopyButton','publish.copy'],['#publishDialog [data-publish-state="error"] h2','publish.failed'],['#publishDialog [data-publish-state="error"] p','publish.failedText'],['#publishRetryButton','publish.retry']];
+    publishStatic.forEach(([sel,key])=>{const e=$(sel);if(e)e.textContent=t(key);});
+    const semanticLabels={sceneColorSelect:'text.color',sceneShadowSelect:'text.shadow'};
+    Object.entries(semanticLabels).forEach(([id,key])=>{const h=$('#'+id)?.closest('.adv-field')?.querySelector(':scope > span');if(h)h.textContent=t(key);});
+    const previewHead=$('.scene-motion-preview-field > span'); if(previewHead) previewHead.innerHTML=`${t('background.preview')} <small>${t('background.preview.note')}</small>`;
+    const rangeLabels={sceneBackgroundDim:'background.dim',sceneBackgroundTransitionDuration:'background.transitionSpeed',sceneBackgroundMotionDuration:'background.motionSpeed',sceneBackgroundMotionAmount:'background.motionAmount'};
+    Object.entries(rangeLabels).forEach(([id,key])=>{const h=$('#'+id)?.closest('.adv-field')?.querySelector(':scope > span');if(h&&h.firstChild)h.firstChild.textContent=t(key)+' ';});
+    const autoState=$('#sceneAutoTimingState'); if(autoState) updateAutoTimingEditor?.();
     const customLangLabel=$('#sceneLanguageCustomField > span');
     if(customLangLabel) customLangLabel.textContent=t('scene.language.tag');
     $$('.ui-language-switch button').forEach(b=>{
@@ -202,7 +217,7 @@
   }
   function formatDraftTime(ts){
     const d=new Date(ts||Date.now()), now=new Date();
-    if(d.toDateString()===now.toDateString())return `今日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    if(d.toDateString()===now.toDateString())return `${t('draft.today')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
   async function buildDraftRecord(){
@@ -236,14 +251,14 @@
         const all=await listDraftRecords();
         if(all.length>=DRAFT_MAX){
           const ind=$('#draftSaveIndicator');
-          if(ind){ind.textContent='下書きが10件あります';ind.hidden=false;}
+          if(ind){ind.textContent=t('draft.full');ind.hidden=false;}
           return false;
         }
       }
       await putDraftRecord(row);
       latestDraftSummary=row;
       const ind=$('#draftSaveIndicator');
-      if(ind){ind.textContent='自動保存済み';ind.hidden=false;clearTimeout(ind._hideTimer);ind._hideTimer=setTimeout(()=>ind.hidden=true,1800);}
+      if(ind){ind.textContent=t('draft.saved');ind.hidden=false;clearTimeout(ind._hideTimer);ind._hideTimer=setTimeout(()=>ind.hidden=true,1800);}
       await refreshDraftUI(false);
       return true;
     }catch(err){
@@ -332,7 +347,7 @@
     }
     if(button){
       const before=button.textContent;
-      button.textContent='コピー済み';
+      button.textContent=t('draft.copied');
       setTimeout(()=>{button.textContent=before;},1200);
     }
   }
@@ -358,7 +373,7 @@
     pendingUnpublishDraft=row;
     const text=$('#unpublishDialogText');
     if(text){
-      text.textContent=`「${row.title||'Untitled'}」の公開URLは使えなくなる想定です。制作中のデータはそのまま残ります。`;
+      text.textContent=t('unpublish.named',{title:row.title||'Untitled'});
     }
     $('#unpublishDialog')?.showModal();
   }
@@ -415,7 +430,7 @@
 
     list.innerHTML='';
     if(!visibleRows.length){
-      const labels={all:'作品はありません。',draft:'制作途中の作品はありません。',published:'公開中の作品はありません。'};
+      const labels={all:t('draft.empty.all'),draft:t('draft.empty.draft'),published:t('draft.empty.published')};
       list.innerHTML=`<p class="draft-empty">${labels[activeFilter]||labels.all}</p>`;
       return;
     }
@@ -438,11 +453,11 @@
           <small class="published-url" ${isPublished?'':'hidden'}></small>
         </div>
         <div class="draft-row-actions unified-work-actions">
-          <button data-open>続きから</button>
-          <button data-share ${isPublished?'':'hidden'}>シェア</button>
-          <button data-copy ${isPublished?'':'hidden'}>リンク</button>
-          <button data-stop ${isPublished?'':'hidden'}>公開停止</button>
-          <button data-delete>削除</button>
+          <button data-open>${t('draft.continue')}</button>
+          <button data-share ${isPublished?'':'hidden'}>${t('publish.share')}</button>
+          <button data-copy ${isPublished?'':'hidden'}>${t('draft.link')}</button>
+          <button data-stop ${isPublished?'':'hidden'}>${t('draft.unpublish')}</button>
+          <button data-delete>${t('draft.delete')}</button>
         </div>`;
 
       el.querySelector('strong').textContent=row.title||'Untitled';
@@ -451,7 +466,7 @@
       if(isPublished){
         const badge=document.createElement('span');
         badge.className=`published-status ${status==='dirty'?'is-dirty':''}`;
-        badge.textContent=status==='dirty'?'変更あり':'公開中';
+        badge.textContent=status==='dirty'?t('draft.status.dirty'):t('draft.status.published');
         badges.appendChild(badge);
       }
 
@@ -1795,18 +1810,18 @@
     const confirm=$('#publishConfirmButton');
 
     if(status==='dirty'){
-      if(readyTitle)readyTitle.textContent='公開中の作品を更新しますか？';
-      if(readyText)readyText.textContent='変更内容を、現在の公開URLへ反映します。';
-      if(confirm)confirm.textContent='変更を公開';
+      if(readyTitle)readyTitle.textContent=t('publish.updateReady');
+      if(readyText)readyText.textContent=t('publish.updateText');
+      if(confirm)confirm.textContent=t('publish.update');
     }else{
-      if(readyTitle)readyTitle.textContent='この作品を公開しますか？';
-      if(readyText)readyText.textContent='公開すると、読者へ渡せるURLを発行します。';
-      if(confirm)confirm.textContent='公開する';
+      if(readyTitle)readyTitle.textContent=t('publish.ready');
+      if(readyText)readyText.textContent=t('publish.readyText');
+      if(confirm)confirm.textContent=t('publish.action');
     }
 
     const endButton=$('#publishFromPreviewButton');
     if(endButton){
-      endButton.textContent=status==='published'?'公開中':status==='dirty'?'変更を公開':'公開する';
+      endButton.textContent=status==='published'?t('publish.published'):status==='dirty'?t('publish.update'):t('publish.action');
       endButton.classList.toggle('is-published',status==='published');
       endButton.classList.toggle('is-dirty',status==='dirty');
     }
@@ -1866,7 +1881,7 @@
       const btn=$('#publishCopyButton');
       if(btn){
         const before=btn.textContent;
-        btn.textContent='コピーしました';
+        btn.textContent=t('draft.copied');
         setTimeout(()=>btn.textContent=before,1400);
       }
     }catch(_){
@@ -2223,7 +2238,7 @@
     const seconds=sceneAutoSeconds(scene);
     if(input)input.value=seconds.toFixed(2);
     if(state){
-      state.textContent=hasRecorded ? `記録済み ${seconds.toFixed(2)}s` : `未記録・標準 ${DEFAULT_AUTO_SECONDS.toFixed(2)}s`;
+      state.textContent=hasRecorded ? t('auto.recorded',{s:seconds.toFixed(2)}) : t('auto.unrecorded',{s:DEFAULT_AUTO_SECONDS.toFixed(2)});
       state.classList.toggle('is-recorded',hasRecorded);
     }
   }
@@ -2736,7 +2751,7 @@
         if(onPick)onPick();updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();if(labelId)updateAssetLabel(labelId,inputId);
       }catch(error){
         console.error('Asset snapshot failed',error);
-        alert('ファイルを読み込めませんでした。もう一度選択してください。');
+        alert(t('common.fileReadFailed'));
         input.value='';
       }
     });
