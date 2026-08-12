@@ -1651,6 +1651,11 @@
       if(autoRecActive){finishAutoRec(true);syncPublishPreviewButton(false);}
       else syncPublishPreviewButton(true);
     });
+    playerHost.addEventListener('sceneplayer:restart',()=>{
+      // 「最初から読む」でEND画面を離れた瞬間に、
+      // 公開状態は保持したまま公開ボタンだけ非表示へ戻す。
+      syncPublishPreviewButton(false);
+    });
     return player;
   }
   function syncUndoVisibilityForScreen(name){
