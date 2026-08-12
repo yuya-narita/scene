@@ -219,7 +219,8 @@
       publication:{
         id:latestPublishedId||'',
         url:latestPublishedUrl||'',
-        fingerprint:latestPublishedFingerprint||''
+        fingerprint:latestPublishedFingerprint||'',
+        publishedAt:latestPublishedAt||0
       },
       recProgress:clone(autoRecProgress),
       cover:{url:coverImageUrl||'',name:coverImageFileName||''},
@@ -272,6 +273,7 @@
     latestPublishedId=row.publication?.id||'';
     latestPublishedUrl=row.publication?.url||'';
     latestPublishedFingerprint=row.publication?.fingerprint||'';
+    latestPublishedAt=Number(row.publication?.publishedAt)||0;
     titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
@@ -283,27 +285,183 @@
     if(workingDocument?.scenes?.length){normalizeSceneIds();refreshDocumentLanguages();renderAdvanced();}
     setScreen('easy');scrollScreenToTop(editorScreen);updateAutoRecStartLabel();
   }
+  function stableDraftPublishValue(value,assetMap){
+    if(value===null || value===undefined)return value;
+    if(typeof value==='string'){
+      if(/^blob:/i.test(value) && assetMap?.has(value))return assetMap.get(value);
+      return value;
+    }
+    if(Array.isArray(value))return value.map(v=>stableDraftPublishValue(v,assetMap));
+    if(typeof value==='object'){
+      const out={};
+      Object.keys(value).sort().forEach(key=>{out[key]=stableDraftPublishValue(value[key],assetMap);});
+      return out;
+    }
+    return value;
+  }
+
+  function draftPublishFingerprint(row){
+    if(!row?.document?.scenes?.length)return '';
+    try{
+      const assetMap=new Map();
+      for(const item of (row.assets||[])){
+        if(!item?.url)continue;
+        const blob=item.blob;
+        assetMap.set(item.url,`asset:${item.name||'asset'}:${blob?.size||0}:${blob?.type||''}`);
+      }
+      return JSON.stringify(stableDraftPublishValue(row.document,assetMap));
+    }catch(_){
+      return '';
+    }
+  }
+
+  function draftPublishStatus(row){
+    if(!row?.publication?.url)return 'unpublished';
+    const current=draftPublishFingerprint(row);
+    return current && current===row.publication?.fingerprint ? 'published' : 'dirty';
+  }
+
+  async function copyAnyPublishedUrl(url,button=null){
+    if(!url)return;
+    try{
+      await navigator.clipboard.writeText(url);
+    }catch(_){
+      const ta=document.createElement('textarea');
+      ta.value=url;ta.style.position='fixed';ta.style.opacity='0';
+      document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+    }
+    if(button){
+      const before=button.textContent;
+      button.textContent='コピー済み';
+      setTimeout(()=>{button.textContent=before;},1200);
+    }
+  }
+
+  async function shareDraftPublication(row){
+    const url=row?.publication?.url;
+    if(!url)return;
+    if(navigator.share){
+      try{
+        await navigator.share({title:row.title||'Scene',text:row.title||'Scene',url});
+        return;
+      }catch(error){
+        if(error?.name==='AbortError')return;
+      }
+    }
+    await copyAnyPublishedUrl(url);
+  }
+
+  async function stopDraftPublication(row){
+    if(!row?.publication?.url)return;
+    if(!confirm(`「${row.title||'Untitled'}」の公開を停止しますか？\n\n公開URLは使えなくなる想定です。制作中のデータは残ります。`))return;
+
+    const fresh=await getDraftRecord(row.id);
+    if(!fresh)return;
+    fresh.publication={id:'',url:'',fingerprint:'',publishedAt:0};
+    fresh.updatedAt=Date.now();
+    await putDraftRecord(fresh);
+
+    if(currentDraftId===row.id){
+      latestPublishedId='';
+      latestPublishedUrl='';
+      latestPublishedFingerprint='';
+      latestPublishedAt=0;
+      syncPublishCopyForStatus();
+    }
+
+    await refreshDraftUI(false);
+  }
+
   async function refreshDraftUI(showResume=true){
     const rows=await listDraftRecords();
     latestDraftSummary=rows[0]||null;
-    const label=$('#draftCountLabel');if(label)label.textContent=`${rows.length} / ${DRAFT_MAX}`;
-    const toolbarCount=$('#draftToolbarCount');if(toolbarCount)toolbarCount.textContent=`${rows.length} / ${DRAFT_MAX}`;
+
+    const label=$('#draftCountLabel');
+    if(label)label.textContent=`${rows.length} / ${DRAFT_MAX}`;
+    const toolbarCount=$('#draftToolbarCount');
+    if(toolbarCount)toolbarCount.textContent=`${rows.length} / ${DRAFT_MAX}`;
+
     const list=$('#draftList');
     if(list){
       list.innerHTML='';
-      if(!rows.length){list.innerHTML='<p class="draft-empty">ローカル下書きはありません。</p>';}
+      if(!rows.length){
+        list.innerHTML='<p class="draft-empty">ローカル下書きはありません。</p>';
+      }
       rows.forEach(row=>{
-        const total=row.document?.scenes?.length||0, rec=Math.min(row.recProgress?.recordedCount||0,total);
-        const el=document.createElement('article');el.className='draft-row';
+        const total=row.document?.scenes?.length||0;
+        const rec=Math.min(row.recProgress?.recordedCount||0,total);
+        const pubStatus=draftPublishStatus(row);
+        const pubLabel=pubStatus==='dirty'?'公開中・変更あり':pubStatus==='published'?'公開中':'';
+
+        const el=document.createElement('article');
+        el.className='draft-row';
         el.innerHTML=`<div><strong></strong><small></small></div><div class="draft-row-actions"><button data-open>続きから</button><button data-delete>削除</button></div>`;
         el.querySelector('strong').textContent=row.title||'Untitled';
-        el.querySelector('small').textContent=[`${total} Scenes`,total?`REC ${rec}/${total}`:'',formatDraftTime(row.updatedAt)].filter(Boolean).join(' · ');
-        el.querySelector('[data-open]').onclick=async()=>{await restoreDraftRecord(await getDraftRecord(row.id));$('#draftManagerDialog').close();};
-        el.querySelector('[data-delete]').onclick=async()=>{if(!confirm(`「${row.title||'Untitled'}」のローカル下書きを削除しますか？`))return;await removeDraftRecord(row.id);if(currentDraftId===row.id){currentDraftId='';localStorage.removeItem(DRAFT_LAST_KEY);}await refreshDraftUI(true);};
+        el.querySelector('small').textContent=[
+          `${total} Scenes`,
+          total?`REC ${rec}/${total}`:'',
+          pubLabel,
+          formatDraftTime(row.updatedAt)
+        ].filter(Boolean).join(' · ');
+
+        el.querySelector('[data-open]').onclick=async()=>{
+          await restoreDraftRecord(await getDraftRecord(row.id));
+          $('#draftManagerDialog').close();
+        };
+        el.querySelector('[data-delete]').onclick=async()=>{
+          if(!confirm(`「${row.title||'Untitled'}」のローカル下書きを削除しますか？`))return;
+          await removeDraftRecord(row.id);
+          if(currentDraftId===row.id){
+            currentDraftId='';
+            localStorage.removeItem(DRAFT_LAST_KEY);
+          }
+          await refreshDraftUI(true);
+        };
         list.appendChild(el);
       });
     }
+
+    const publishedRows=rows.filter(row=>Boolean(row.publication?.url));
+    const publishedCount=$('#publishedCountLabel');
+    if(publishedCount)publishedCount.textContent=String(publishedRows.length);
+
+    const publishedList=$('#publishedList');
+    if(publishedList){
+      publishedList.innerHTML='';
+      if(!publishedRows.length){
+        publishedList.innerHTML='<p class="published-empty">公開中の作品はありません。</p>';
+      }
+
+      publishedRows.forEach(row=>{
+        const status=draftPublishStatus(row);
+        const el=document.createElement('article');
+        el.className=`published-row ${status==='dirty'?'is-dirty':''}`;
+        el.innerHTML=`
+          <div class="published-row-copy">
+            <div class="published-row-title-line"><strong></strong><span class="published-status"></span></div>
+            <small class="published-url"></small>
+          </div>
+          <div class="published-row-actions">
+            <button data-share>シェア</button>
+            <button data-copy>リンク</button>
+            <button data-stop>公開停止</button>
+          </div>`;
+
+        el.querySelector('strong').textContent=row.title||'Untitled';
+        const badge=el.querySelector('.published-status');
+        badge.textContent=status==='dirty'?'変更あり':'公開中';
+        badge.classList.toggle('is-dirty',status==='dirty');
+        el.querySelector('.published-url').textContent=row.publication.url;
+
+        el.querySelector('[data-share]').onclick=()=>shareDraftPublication(row);
+        el.querySelector('[data-copy]').onclick=e=>copyAnyPublishedUrl(row.publication.url,e.currentTarget);
+        el.querySelector('[data-stop]').onclick=()=>stopDraftPublication(row);
+
+        publishedList.appendChild(el);
+      });
+    }
   }
+
   async function startNewDraft(){
     // Never abandon the currently edited work silently.
     const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
@@ -317,6 +475,7 @@
     latestPublishedId='';
     latestPublishedUrl='';
     latestPublishedFingerprint='';
+    latestPublishedAt=0;
     titleInput.value='Untitled';authorInput.value='';bodyInput.value='';
     if(densitySelect)densitySelect.value='normal';
     if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
@@ -1217,7 +1376,7 @@
       }
 
       workingDocument=doc;
-      latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';
+      latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
       currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
       autoRecProgress={nextIndex:0,recordedCount:0};
       easySourceDirty=false;
@@ -1321,7 +1480,7 @@
       const parsed=JSON.parse(raw.replace(/^\uFEFF/,''));
       const doc=validateSceneFormatV1(parsed);
       workingDocument=doc;
-      latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';
+      latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
       currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
       autoRecProgress={nextIndex:0,recordedCount:0};
       easySourceDirty=false;
@@ -1481,6 +1640,7 @@
   let latestPublishedId='';
   let latestPublishedUrl='';
   let latestPublishedFingerprint='';
+  let latestPublishedAt=0;
 
   function stablePublishValue(value){
     if(value===null || value===undefined)return value;
@@ -1581,12 +1741,14 @@
       latestPublishedId=result.id||latestPublishedId;
       latestPublishedUrl=result.url;
       latestPublishedFingerprint=currentPublishFingerprint();
+      latestPublishedAt=Date.now();
 
       const text=$('#publishUrlText');
       if(text)text.textContent=latestPublishedUrl;
       setPublishState('success');
       syncPublishCopyForStatus();
-      scheduleDraftSave(80);
+      await saveDraftNow();
+
     }catch(error){
       console.warn('Publish mock failed',error);
       setPublishState('error');
@@ -2458,7 +2620,7 @@
   function loadSceneFormatFromObject(value,{openPlayer=true,startAt=0}={}){
     const doc=validateSceneFormatV1(clone(value));
     workingDocument=doc;
-    latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';
+    latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
     easySourceDirty=false;
     selectedSceneIndex=0;
     restoreEasyStateFromDocument(doc);

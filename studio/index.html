@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.46</title>
+  <title>Scene Studio v0.2.47</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,7 +17,7 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.46</span>
+        <span class="version">v0.2.47</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
@@ -407,9 +407,18 @@
         <button id="draftManagerClose" type="button" aria-label="閉じる">×</button>
       </div>
       <div id="draftList" class="draft-list"></div>
+
+      <section class="published-manager-section" aria-label="公開中の作品">
+        <div class="published-manager-heading">
+          <div><span>PUBLISHED</span><h3>公開中の作品</h3></div>
+          <small id="publishedCountLabel">0</small>
+        </div>
+        <div id="publishedList" class="published-list"></div>
+      </section>
+
       <div class="draft-manager-foot">
         <button id="newDraftButton" type="button">＋ 新しく作る</button>
-        <small>端末内の作業データです。大切な作品は .scene に書き出してください。</small>
+        <small>制作途中は端末内に自動保存されます。公開中の作品はここから共有・公開停止できます。</small>
       </div>
     </div>
   </dialog>
