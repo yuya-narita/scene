@@ -395,84 +395,96 @@
     if(toolbarCount)toolbarCount.textContent=`${rows.length} / ${DRAFT_MAX}`;
 
     const list=$('#draftList');
-    if(list){
-      list.innerHTML='';
-      if(!rows.length){
-        list.innerHTML='<p class="draft-empty">ローカル下書きはありません。</p>';
-      }
-      rows.forEach(row=>{
-        const total=row.document?.scenes?.length||0;
-        const rec=Math.min(row.recProgress?.recordedCount||0,total);
-        const pubStatus=draftPublishStatus(row);
-        const pubLabel=pubStatus==='dirty'?'公開中・変更あり':pubStatus==='published'?'公開中':'';
-
-        const el=document.createElement('article');
-        el.className='draft-row';
-        el.innerHTML=`<div><strong></strong><small></small></div><div class="draft-row-actions"><button data-open>続きから</button><button data-delete>削除</button></div>`;
-        el.querySelector('strong').textContent=row.title||'Untitled';
-        el.querySelector('small').textContent=[
-          `${total} Scenes`,
-          total?`REC ${rec}/${total}`:'',
-          pubLabel,
-          formatDraftTime(row.updatedAt)
-        ].filter(Boolean).join(' · ');
-
-        el.querySelector('[data-open]').onclick=async()=>{
-          await restoreDraftRecord(await getDraftRecord(row.id));
-          $('#draftManagerDialog').close();
-        };
-        el.querySelector('[data-delete]').onclick=async()=>{
-          if(!confirm(`「${row.title||'Untitled'}」のローカル下書きを削除しますか？`))return;
-          await removeDraftRecord(row.id);
-          if(currentDraftId===row.id){
-            currentDraftId='';
-            localStorage.removeItem(DRAFT_LAST_KEY);
-          }
-          await refreshDraftUI(true);
-        };
-        list.appendChild(el);
-      });
-    }
+    if(!list)return;
 
     const publishedRows=rows.filter(row=>Boolean(row.publication?.url));
+    const draftRows=rows.filter(row=>!row.publication?.url);
+    const allCount=$('#allCountLabel');
+    const draftOnlyCount=$('#draftOnlyCountLabel');
     const publishedCount=$('#publishedCountLabel');
+    if(allCount)allCount.textContent=String(rows.length);
+    if(draftOnlyCount)draftOnlyCount.textContent=String(draftRows.length);
     if(publishedCount)publishedCount.textContent=String(publishedRows.length);
 
-    const publishedList=$('#publishedList');
-    if(publishedList){
-      publishedList.innerHTML='';
-      if(!publishedRows.length){
-        publishedList.innerHTML='<p class="published-empty">公開中の作品はありません。</p>';
+    const activeFilter=document.querySelector('.draft-manager-tab.is-active')?.dataset.draftFilter||'all';
+    const visibleRows=activeFilter==='published'
+      ? publishedRows
+      : activeFilter==='draft'
+        ? draftRows
+        : rows;
+
+    list.innerHTML='';
+    if(!visibleRows.length){
+      const labels={all:'作品はありません。',draft:'制作途中の作品はありません。',published:'公開中の作品はありません。'};
+      list.innerHTML=`<p class="draft-empty">${labels[activeFilter]||labels.all}</p>`;
+      return;
+    }
+
+    visibleRows.forEach(row=>{
+      const total=row.sceneCount||row.document?.scenes?.length||0;
+      const rec=Math.min(total,Number(row.recProgress?.completedCount||row.recCompletedCount||0));
+      const isPublished=Boolean(row.publication?.url);
+      const status=isPublished?draftPublishStatus(row):'draft';
+      const el=document.createElement('article');
+      el.className=`draft-row unified-work-row ${isPublished?'is-published':''} ${status==='dirty'?'is-dirty':''}`;
+
+      el.innerHTML=`
+        <div class="unified-work-copy">
+          <div class="unified-work-title-line">
+            <strong></strong>
+            <span class="unified-work-badges"></span>
+          </div>
+          <small class="unified-work-meta"></small>
+          <small class="published-url" ${isPublished?'':'hidden'}></small>
+        </div>
+        <div class="draft-row-actions unified-work-actions">
+          <button data-open>続きから</button>
+          <button data-share ${isPublished?'':'hidden'}>シェア</button>
+          <button data-copy ${isPublished?'':'hidden'}>リンク</button>
+          <button data-stop ${isPublished?'':'hidden'}>公開停止</button>
+          <button data-delete>削除</button>
+        </div>`;
+
+      el.querySelector('strong').textContent=row.title||'Untitled';
+
+      const badges=el.querySelector('.unified-work-badges');
+      if(isPublished){
+        const badge=document.createElement('span');
+        badge.className=`published-status ${status==='dirty'?'is-dirty':''}`;
+        badge.textContent=status==='dirty'?'変更あり':'公開中';
+        badges.appendChild(badge);
       }
 
-      publishedRows.forEach(row=>{
-        const status=draftPublishStatus(row);
-        const el=document.createElement('article');
-        el.className=`published-row ${status==='dirty'?'is-dirty':''}`;
-        el.innerHTML=`
-          <div class="published-row-copy">
-            <div class="published-row-title-line"><strong></strong><span class="published-status"></span></div>
-            <small class="published-url"></small>
-          </div>
-          <div class="published-row-actions">
-            <button data-share>シェア</button>
-            <button data-copy>リンク</button>
-            <button data-stop>公開停止</button>
-          </div>`;
+      const meta=[
+        `${total} Scenes`,
+        total?`REC ${rec}/${total}`:'',
+        formatDraftTime(row.updatedAt)
+      ].filter(Boolean).join(' · ');
+      el.querySelector('.unified-work-meta').textContent=meta;
 
-        el.querySelector('strong').textContent=row.title||'Untitled';
-        const badge=el.querySelector('.published-status');
-        badge.textContent=status==='dirty'?'変更あり':'公開中';
-        badge.classList.toggle('is-dirty',status==='dirty');
+      if(isPublished){
         el.querySelector('.published-url').textContent=row.publication.url;
-
         el.querySelector('[data-share]').onclick=()=>shareDraftPublication(row);
         el.querySelector('[data-copy]').onclick=e=>copyAnyPublishedUrl(row.publication.url,e.currentTarget);
         el.querySelector('[data-stop]').onclick=()=>stopDraftPublication(row);
+      }
 
-        publishedList.appendChild(el);
-      });
-    }
+      el.querySelector('[data-open]').onclick=async()=>{
+        await restoreDraftRecord(await getDraftRecord(row.id));
+        $('#draftManagerDialog').close();
+      };
+      el.querySelector('[data-delete]').onclick=async()=>{
+        if(!confirm(`「${row.title||'Untitled'}」のローカル下書きを削除しますか？`))return;
+        await removeDraftRecord(row.id);
+        if(currentDraftId===row.id){
+          currentDraftId='';
+          localStorage.removeItem(DRAFT_LAST_KEY);
+        }
+        await refreshDraftUI(true);
+      };
+
+      list.appendChild(el);
+    });
   }
 
   async function startNewDraft(){
@@ -2643,6 +2655,17 @@
   $('#draftManagerClose')?.addEventListener('click',()=>$('#draftManagerDialog')?.close());
   $('#draftManagerDialog')?.addEventListener('close',unlockDraftManagerBackground);
   $('#draftManagerDialog')?.addEventListener('cancel',()=>{requestAnimationFrame(unlockDraftManagerBackground);});
+
+  $$('.draft-manager-tab').forEach(tab=>tab.addEventListener('click',async()=>{
+    $$('.draft-manager-tab').forEach(item=>{
+      const active=item===tab;
+      item.classList.toggle('is-active',active);
+      item.setAttribute('aria-selected',active?'true':'false');
+    });
+    await refreshDraftUI(true);
+    const card=$('#draftManagerDialog')?.querySelector('.draft-manager-card');
+    if(card)card.scrollTop=0;
+  }));
   $('#unpublishDialog')?.addEventListener('close',async()=>{
     const result=$('#unpublishDialog')?.returnValue;
     if(result==='unpublish')await confirmDraftUnpublish();

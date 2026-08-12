@@ -2171,7 +2171,7 @@ body.easy-player-open{position:fixed;inset:0;}
 
 
 /* =========================================================
-   Draft Manager iPhone scroll fix v0.2.52
+   Draft Manager iPhone scroll fix v0.2.53
    One scroll surface + locked background
    ========================================================= */
 
@@ -2257,5 +2257,127 @@ body.draft-manager-open{
   .published-list{
     max-height:none!important;
     overflow:visible!important;
+  }
+}
+
+
+/* =========================================================
+   Draft Manager tabs v0.2.53
+   All / Draft / Published — one work = one row
+   ========================================================= */
+.draft-manager-tabs{
+  position:sticky;
+  top:79px;
+  z-index:3;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:6px;
+  padding:10px 12px;
+  background:rgba(255,255,255,.96);
+  border-bottom:1px solid #ecece8;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.draft-manager-tab{
+  min-height:40px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+  color:#777d86;
+  font-size:11px;
+  font-weight:850;
+  -webkit-tap-highlight-color:transparent;
+}
+.draft-manager-tab span{
+  margin-left:3px;
+  font-size:9px;
+  opacity:.65;
+}
+.draft-manager-tab.is-active{
+  background:#18191b;
+  border-color:#18191b;
+  color:#fff;
+}
+.draft-manager-tab:focus,
+.draft-manager-tab:focus-visible{
+  outline:none;
+  box-shadow:none;
+}
+.draft-manager-unified-list{
+  padding-top:4px;
+}
+.unified-work-row{
+  align-items:flex-start;
+}
+.unified-work-copy{
+  min-width:0;
+  display:grid;
+  gap:5px;
+  width:100%;
+}
+.unified-work-title-line{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.unified-work-title-line strong{
+  min-width:0;
+}
+.unified-work-badges{
+  flex:0 0 auto;
+}
+.unified-work-meta{
+  color:#8b9099;
+  font-size:9px;
+}
+.unified-work-actions{
+  flex-wrap:wrap;
+}
+.unified-work-actions [hidden]{
+  display:none!important;
+}
+.unified-work-row.is-published .unified-work-actions{
+  display:grid;
+  grid-template-columns:1.35fr 1fr 1fr auto auto;
+  width:100%;
+}
+.unified-work-row:not(.is-published) .unified-work-actions{
+  display:grid;
+  grid-template-columns:1fr auto;
+  width:100%;
+}
+.unified-work-actions [data-stop]{
+  color:#a44!important;
+  background:#fffafa!important;
+}
+.unified-work-actions [data-delete]{
+  color:#a44!important;
+  background:#fff!important;
+}
+
+@media(max-width:560px){
+  .draft-manager-tabs{
+    top:78px;
+    padding:9px 10px;
+  }
+  .draft-manager-tab{
+    min-height:42px;
+    font-size:11px;
+  }
+  .unified-work-row{
+    padding:14px 8px;
+  }
+  .unified-work-row.is-published .unified-work-actions{
+    grid-template-columns:1fr 1fr;
+  }
+  .unified-work-row.is-published .unified-work-actions [data-open]{
+    grid-column:1/-1;
+  }
+  .unified-work-row.is-published .unified-work-actions [data-stop]{
+    grid-column:1/-1;
+  }
+  .unified-work-row.is-published .unified-work-actions [data-delete]{
+    grid-column:1/-1;
   }
 }
