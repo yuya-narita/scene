@@ -1998,3 +1998,25 @@ body.easy-player-open{position:fixed;inset:0;}
   .publish-dialog-card{padding:26px 18px 20px;border-radius:20px}
   .publish-success-actions{grid-template-columns:1fr}
 }
+
+
+/* Publish state + iOS close-button polish v0.2.45 */
+.publish-dialog-close{
+  -webkit-tap-highlight-color:transparent;
+  -webkit-appearance:none;
+  appearance:none;
+}
+.publish-dialog-close:focus,
+.publish-dialog-close:focus-visible{
+  outline:none!important;
+  box-shadow:none!important;
+}
+.publish-preview-button.is-published{
+  background:#fff;
+  color:#18191b;
+  border:1px solid rgba(24,25,27,.25);
+}
+.publish-preview-button.is-dirty{
+  background:#18191b;
+  color:#fff;
+}

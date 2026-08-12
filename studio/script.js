@@ -216,6 +216,11 @@
       easySourceDirty,protectedResplitPending,selectedSceneIndex,
       easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',episode:episodeInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
       document:workingDocument?clone(workingDocument):null,
+      publication:{
+        id:latestPublishedId||'',
+        url:latestPublishedUrl||'',
+        fingerprint:latestPublishedFingerprint||''
+      },
       recProgress:clone(autoRecProgress),
       cover:{url:coverImageUrl||'',name:coverImageFileName||''},
       assets:serializeDraftAssets()
@@ -264,6 +269,9 @@
     easySourceDirty=Boolean(row.easySourceDirty);
     protectedResplitPending=false;
     autoRecProgress=row.recProgress||{nextIndex:0,recordedCount:0};
+    latestPublishedId=row.publication?.id||'';
+    latestPublishedUrl=row.publication?.url||'';
+    latestPublishedFingerprint=row.publication?.fingerprint||'';
     titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
@@ -306,7 +314,9 @@
     }
     workingDocument=null;easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
+    latestPublishedId='';
     latestPublishedUrl='';
+    latestPublishedFingerprint='';
     titleInput.value='Untitled';authorInput.value='';bodyInput.value='';
     if(densitySelect)densitySelect.value='normal';
     if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
@@ -1207,6 +1217,7 @@
       }
 
       workingDocument=doc;
+      latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';
       currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
       autoRecProgress={nextIndex:0,recordedCount:0};
       easySourceDirty=false;
@@ -1310,6 +1321,7 @@
       const parsed=JSON.parse(raw.replace(/^\uFEFF/,''));
       const doc=validateSceneFormatV1(parsed);
       workingDocument=doc;
+      latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';
       currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
       autoRecProgress={nextIndex:0,recordedCount:0};
       easySourceDirty=false;
@@ -1446,24 +1458,64 @@
   }
 
   // ---------------------------------------------------------
-  // Publish UI mock v0.2.44
+  // Publish UI mock v0.2.45 — 3 publication states
+  // unpublished / published-clean / published-dirty
   // Replace only publishAdapter.publish() when Hosting API is ready.
-  // Studio UI/state can remain unchanged.
   // ---------------------------------------------------------
   const publishAdapter={
-    async publish(sceneDocument){
+    async publish(sceneDocument,{id=''}={}){
       await new Promise(resolve=>setTimeout(resolve,1100));
       const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-      let id='';
-      const bytes=new Uint8Array(8);
-      if(globalThis.crypto?.getRandomValues)crypto.getRandomValues(bytes);
-      else for(let i=0;i<bytes.length;i++)bytes[i]=Math.floor(Math.random()*256);
-      for(const b of bytes)id+=alphabet[b%alphabet.length];
-      return {id,url:`https://scene.example/s/${id}`};
+      let finalId=id;
+      if(!finalId){
+        const bytes=new Uint8Array(8);
+        if(globalThis.crypto?.getRandomValues)crypto.getRandomValues(bytes);
+        else for(let i=0;i<bytes.length;i++)bytes[i]=Math.floor(Math.random()*256);
+        finalId='';
+        for(const b of bytes)finalId+=alphabet[b%alphabet.length];
+      }
+      return {id:finalId,url:`https://scene.example/s/${finalId}`};
     }
   };
 
+  let latestPublishedId='';
   let latestPublishedUrl='';
+  let latestPublishedFingerprint='';
+
+  function stablePublishValue(value){
+    if(value===null || value===undefined)return value;
+    if(typeof value==='string'){
+      if(/^blob:/i.test(value)){
+        const asset=assetRegistry.get(value);
+        if(asset?.blob){
+          return `asset:${asset.name||'asset'}:${asset.blob.size||0}:${asset.blob.type||''}`;
+        }
+      }
+      return value;
+    }
+    if(Array.isArray(value))return value.map(stablePublishValue);
+    if(typeof value==='object'){
+      const out={};
+      Object.keys(value).sort().forEach(key=>{out[key]=stablePublishValue(value[key]);});
+      return out;
+    }
+    return value;
+  }
+
+  function currentPublishFingerprint(){
+    if(!workingDocument?.scenes?.length)return '';
+    try{
+      return JSON.stringify(stablePublishValue(getDocumentForPlayback()));
+    }catch(_){
+      return '';
+    }
+  }
+
+  function currentPublishStatus(){
+    if(!latestPublishedUrl)return 'unpublished';
+    const now=currentPublishFingerprint();
+    return now && latestPublishedFingerprint===now ? 'published' : 'dirty';
+  }
 
   function setPublishState(name){
     ['Ready','Working','Success','Error'].forEach(key=>{
@@ -1472,11 +1524,41 @@
     });
   }
 
+  function syncPublishCopyForStatus(){
+    const status=currentPublishStatus();
+    const readyTitle=$('#publishReadyTitle');
+    const readyText=$('#publishReadyText');
+    const confirm=$('#publishConfirmButton');
+
+    if(status==='dirty'){
+      if(readyTitle)readyTitle.textContent='公開中の作品を更新しますか？';
+      if(readyText)readyText.textContent='変更内容を、現在の公開URLへ反映します。';
+      if(confirm)confirm.textContent='変更を公開';
+    }else{
+      if(readyTitle)readyTitle.textContent='この作品を公開しますか？';
+      if(readyText)readyText.textContent='公開すると、読者へ渡せるURLを発行します。';
+      if(confirm)confirm.textContent='公開する';
+    }
+
+    const endButton=$('#publishFromPreviewButton');
+    if(endButton){
+      endButton.textContent=status==='published'?'公開中':status==='dirty'?'変更を公開':'公開する';
+      endButton.classList.toggle('is-published',status==='published');
+      endButton.classList.toggle('is-dirty',status==='dirty');
+    }
+  }
+
   function openPublishDialog(){
     if(!workingDocument?.scenes?.length)return;
-    setPublishState(latestPublishedUrl?'success':'ready');
-    if(latestPublishedUrl){
-      const text=$('#publishUrlText');if(text)text.textContent=latestPublishedUrl;
+    const status=currentPublishStatus();
+    syncPublishCopyForStatus();
+
+    if(status==='published'){
+      const text=$('#publishUrlText');
+      if(text)text.textContent=latestPublishedUrl;
+      setPublishState('success');
+    }else{
+      setPublishState('ready');
     }
     $('#publishDialog')?.showModal();
   }
@@ -1487,15 +1569,24 @@
 
   async function runMockPublish(){
     if(!workingDocument?.scenes?.length)return;
+    const wasUpdate=currentPublishStatus()==='dirty';
     setPublishState('working');
     try{
-      // This is the future API boundary. The mock currently passes a clone
-      // of the Scene document; Hosting can later accept a .scene Blob instead.
-      const result=await publishAdapter.publish(getDocumentForPlayback());
+      const result=await publishAdapter.publish(
+        getDocumentForPlayback(),
+        {id:wasUpdate?latestPublishedId:''}
+      );
       if(!result?.url)throw new Error('Publish URL missing');
+
+      latestPublishedId=result.id||latestPublishedId;
       latestPublishedUrl=result.url;
-      const text=$('#publishUrlText');if(text)text.textContent=latestPublishedUrl;
+      latestPublishedFingerprint=currentPublishFingerprint();
+
+      const text=$('#publishUrlText');
+      if(text)text.textContent=latestPublishedUrl;
       setPublishState('success');
+      syncPublishCopyForStatus();
+      scheduleDraftSave(80);
     }catch(error){
       console.warn('Publish mock failed',error);
       setPublishState('error');
@@ -1507,24 +1598,46 @@
     try{
       await navigator.clipboard.writeText(latestPublishedUrl);
       const btn=$('#publishCopyButton');
-      if(btn){const before=btn.textContent;btn.textContent='コピーしました';setTimeout(()=>btn.textContent=before,1400);}
+      if(btn){
+        const before=btn.textContent;
+        btn.textContent='コピーしました';
+        setTimeout(()=>btn.textContent=before,1400);
+      }
     }catch(_){
-      const ta=document.createElement('textarea');ta.value=latestPublishedUrl;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+      const ta=document.createElement('textarea');
+      ta.value=latestPublishedUrl;
+      ta.style.position='fixed';
+      ta.style.opacity='0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
     }
   }
 
   async function sharePublishedUrl(){
     if(!latestPublishedUrl)return;
-    const shareData={title:workingDocument?.title||'Scene',text:workingDocument?.title||'Scene',url:latestPublishedUrl};
+    const shareData={
+      title:workingDocument?.title||'Scene',
+      text:workingDocument?.title||'Scene',
+      url:latestPublishedUrl
+    };
     if(navigator.share){
-      try{await navigator.share(shareData);return;}catch(error){if(error?.name==='AbortError')return;}
+      try{
+        await navigator.share(shareData);
+        return;
+      }catch(error){
+        if(error?.name==='AbortError')return;
+      }
     }
     await copyPublishedUrl();
   }
 
   function syncPublishPreviewButton(show=false){
-    const btn=$('#publishFromPreviewButton');if(!btn)return;
+    const btn=$('#publishFromPreviewButton');
+    if(!btn)return;
     btn.hidden=!(show && !autoRecActive && !playerScreen.hidden);
+    if(!btn.hidden)syncPublishCopyForStatus();
   }
 
   function ensurePlayer(){
@@ -2340,6 +2453,7 @@
   function loadSceneFormatFromObject(value,{openPlayer=true,startAt=0}={}){
     const doc=validateSceneFormatV1(clone(value));
     workingDocument=doc;
+    latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';
     easySourceDirty=false;
     selectedSceneIndex=0;
     restoreEasyStateFromDocument(doc);
