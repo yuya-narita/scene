@@ -44,7 +44,7 @@
     ['.cinema-background-copy strong','cinema.bg'],['.cinema-background-copy span','cinema.bg.note'],
     ['.cinema-tone-button[data-tone="dark"]','cinema.dark'],['.cinema-tone-button[data-tone="light"]','cinema.light'],
     ['.cinema-background-button','cinema.choose'],['#cinemaBackgroundClear','cinema.remove'],
-    ['#makeButton span','make'],['#makeButton small','make.note'],['#advancedButton','advanced.open'],['#projectIoTitle','io.heading'],['#exportSceneButton strong','io.export'],['label[for="importSceneInput"] strong','io.import'],['.footer-note','footer.note'],
+    ['#makeButton span','make'],['#makeButton small','make.note'],['#advancedButton','advanced.open'],['#easyAdvancedReturnButton span','advanced.open'],['#projectIoTitle','io.heading'],['#exportSceneButton strong','io.export'],['label[for="importSceneInput"] strong','io.import'],['.footer-note','footer.note'],
     ['.advanced-topbar h1','advanced.title'],
     ['.advanced-policy strong','nav.previous.policy'],['.advanced-policy small','nav.previous.note'],
     ['#sceneTextInput','scene.text','aria-label'],['.scene-inspector > .adv-field:nth-of-type(1) > span','scene.text'],
@@ -80,6 +80,38 @@
       const el=document.querySelector(selector); if(!el)return;
       if(attr) el.setAttribute(attr,t(key)); else el.textContent=t(key);
     });
+
+    // Easy metadata uses nested labels/smalls, so translate without destroying structure.
+    const metaSummary=$('#workMetaDetails > summary'); if(metaSummary)metaSummary.textContent=t('work.info');
+    const metaFields=[
+      [subtitleInput,'work.subtitle','common.optional','work.subtitle.ph'],
+      [languageInput,'work.language',null,null],
+      [seriesTitleInput,'work.series','common.optional','work.series.ph'],
+      [episodeInput,'work.episode','common.optional.free','work.episode.ph']
+    ];
+    metaFields.forEach(([input,labelKey,smallKey,phKey])=>{
+      const label=input?.closest('.field');
+      const head=label?.querySelector('.field-label');
+      if(head){
+        head.textContent=t(labelKey);
+        if(smallKey){const small=document.createElement('small');small.textContent=' '+t(smallKey);head.appendChild(small);}
+      }
+      if(phKey && input)input.placeholder=t(phKey);
+    });
+    if(languageInput){
+      const langMap={auto:'work.language.auto',ja:'work.language.ja',en:'work.language.en',mul:'work.language.mul'};
+      [...languageInput.options].forEach(o=>{if(langMap[o.value])o.textContent=t(langMap[o.value]);});
+    }
+    const coverHead=$('.easy-cover-simple .section-heading');
+    if(coverHead){
+      const main=coverHead.querySelector(':scope > span');
+      const note=coverHead.querySelector(':scope > small');
+      if(main){main.textContent=t('work.cover');const opt=document.createElement('small');opt.textContent=' '+t('common.optional');main.appendChild(opt);}
+      if(note)note.textContent=t('work.cover.note');
+    }
+    const draftFoot=$('.draft-manager-foot > small'); if(draftFoot)draftFoot.textContent=t('draft.footer');
+    $$('.adv-section').forEach(section=>section.dataset.closeLabel=t('common.close'));
+    const bgPreviewOverlay=$('#sceneBackgroundPreview'); if(bgPreviewOverlay)bgPreviewOverlay.dataset.overlayLabel=t('background.changeOverlay');
 
     // Labels that repeat and are safer to bind by semantic parent.
     document.querySelectorAll('.adv-grid > .adv-field').forEach(label=>{
@@ -712,7 +744,7 @@
   }
 
   function emptySceneLabel(scene){
-    return sceneHasAdvancedMeaning(scene) ? '（演出のみ）' : '（空のScene）';
+    return sceneHasAdvancedMeaning(scene) ? `（${t('scene.effectOnly')}）` : `（${t('scene.empty')}）`;
   }
 
   let lastEasyReconcileDeletedCount=0;
@@ -2101,7 +2133,7 @@
     if(motion!=='none')layer.classList.add(`motion-${motion}`);
     if(veil)veil.style.background=`rgba(0,0,0,${dim/100})`;
 
-    const names={none:'なし',slowZoom:'SLOW ZOOM',breath:'BREATH',panLeft:'PAN LEFT',panRight:'PAN RIGHT',panUp:'PAN UP',panDown:'PAN DOWN'};
+    const names={none:t('motion.none'),slowZoom:'SLOW ZOOM',breath:'BREATH',panLeft:'PAN LEFT',panRight:'PAN RIGHT',panUp:'PAN UP',panDown:'PAN DOWN'};
     const transitionNames={fade:'FADE',cut:'CUT',flash:'FLASH',glitch:'GLITCH'};
     if(label)label.textContent=`${transitionNames[transition]||transition.toUpperCase()} / ${fit.toUpperCase()} / ${names[motion]||motion} / ${dim}%`;
 
@@ -2342,7 +2374,7 @@
       const media=[]; if(scene.presentation?.background)media.push('BG'); if((scene.audio||[]).some(c=>c.channel==='bgm'))media.push('BGM'); if((scene.audio||[]).some(c=>c.channel==='ambient'))media.push('AMB'); if((scene.audio||[]).some(c=>c.channel==='oneshot'))media.push('SE');
       const emptyScene=!normalizedSceneText(scene.text) && !normalizedSceneText(scene.subText);
       const typeLabel=emptyScene
-        ? (sceneHasAdvancedMeaning(scene)?'演出のみ':'空Scene')
+        ? (sceneHasAdvancedMeaning(scene)?t('scene.effectOnly'):t('scene.empty'))
         : ({text:t('scene.type.text'),dialogue:t('scene.type.dialogue'),sound:t('scene.type.sound')}[scene.type]||scene.type);
       const effectLabel={auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),slow:t('effect.slow'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto');
       const sceneLang=scene.language || (workingDocument.language==='mul'?'':workingDocument.language) || '';

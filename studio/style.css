@@ -573,7 +573,7 @@ body.easy-player-open{position:fixed;inset:0;}
 .asset-button{border:0;background:#202124;color:#fff}.asset-clear{border:1px solid #d7d7d2;background:#fff;color:#555}
 .asset-name{min-width:0;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#888;font-size:10px}
 .adv-asset-preview{height:130px;border-radius:13px;background-position:center;background-size:cover;border:1px solid #deded9;margin:8px 0 14px;position:relative;overflow:hidden}
-.adv-asset-preview::after{content:"このSceneから背景変更";position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.32);color:#fff;font-size:10px;font-weight:800}
+.adv-asset-preview::after{content:attr(data-overlay-label);position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.32);color:#fff;font-size:10px;font-weight:800}
 .range-field>span{display:flex;justify-content:space-between;align-items:center}.range-field output{font-weight:700;color:#555}.range-field input[type=range]{width:100%;accent-color:#222}
 .audio-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:12px}
 .audio-card{border:1px solid #e1e1dc;border-radius:14px;padding:12px;background:#fff}.audio-card-se{grid-column:1/-1}
@@ -1168,7 +1168,7 @@ body.easy-player-open{position:fixed;inset:0;}
 
 .adv-section>summary{position:relative;padding-right:88px}
 .adv-section>summary::after{content:'開く';position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#999;font-size:9px;font-weight:700}
-.adv-section[open]>summary::after{content:'閉じる'}
+.adv-section[open]>summary::after{content:attr(data-close-label)}
 
 @media(min-width:900px){
   .advanced-screen{padding-left:24px!important;padding-right:24px!important}
