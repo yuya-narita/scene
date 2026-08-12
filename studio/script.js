@@ -306,6 +306,7 @@
     }
     workingDocument=null;easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
+    latestPublishedUrl='';
     titleInput.value='Untitled';authorInput.value='';bodyInput.value='';
     if(densitySelect)densitySelect.value='normal';
     if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
@@ -1399,7 +1400,7 @@
     if(startAt>=total-1 && (autoRecProgress?.recordedCount||0)>=total){autoRecProgress={nextIndex:0,recordedCount:0};startAt=0;}
     const p=ensurePlayer();
     p.stopAuto?.();p.load(getDocumentForPlayback(),{startAt});p.unlockAudio?.(true);
-    autoRecActive=true;autoRecDurations=[];autoRecCurrentIndex=startAt;
+    autoRecActive=true;syncPublishPreviewButton(false);autoRecDurations=[];autoRecCurrentIndex=startAt;
     autoRecStartedAt=performance.now();autoRecSceneStartedAt=autoRecStartedAt;
     const done=$('#autoRecDone'); if(done)done.hidden=true;
     renderAutoRecUI();
@@ -1444,14 +1445,98 @@
     }
   }
 
+  // ---------------------------------------------------------
+  // Publish UI mock v0.2.44
+  // Replace only publishAdapter.publish() when Hosting API is ready.
+  // Studio UI/state can remain unchanged.
+  // ---------------------------------------------------------
+  const publishAdapter={
+    async publish(sceneDocument){
+      await new Promise(resolve=>setTimeout(resolve,1100));
+      const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+      let id='';
+      const bytes=new Uint8Array(8);
+      if(globalThis.crypto?.getRandomValues)crypto.getRandomValues(bytes);
+      else for(let i=0;i<bytes.length;i++)bytes[i]=Math.floor(Math.random()*256);
+      for(const b of bytes)id+=alphabet[b%alphabet.length];
+      return {id,url:`https://scene.example/s/${id}`};
+    }
+  };
+
+  let latestPublishedUrl='';
+
+  function setPublishState(name){
+    ['Ready','Working','Success','Error'].forEach(key=>{
+      const el=$(`#publishState${key}`);
+      if(el)el.hidden=key.toLowerCase()!==name;
+    });
+  }
+
+  function openPublishDialog(){
+    if(!workingDocument?.scenes?.length)return;
+    setPublishState(latestPublishedUrl?'success':'ready');
+    if(latestPublishedUrl){
+      const text=$('#publishUrlText');if(text)text.textContent=latestPublishedUrl;
+    }
+    $('#publishDialog')?.showModal();
+  }
+
+  function closePublishDialog(){
+    $('#publishDialog')?.close();
+  }
+
+  async function runMockPublish(){
+    if(!workingDocument?.scenes?.length)return;
+    setPublishState('working');
+    try{
+      // This is the future API boundary. The mock currently passes a clone
+      // of the Scene document; Hosting can later accept a .scene Blob instead.
+      const result=await publishAdapter.publish(getDocumentForPlayback());
+      if(!result?.url)throw new Error('Publish URL missing');
+      latestPublishedUrl=result.url;
+      const text=$('#publishUrlText');if(text)text.textContent=latestPublishedUrl;
+      setPublishState('success');
+    }catch(error){
+      console.warn('Publish mock failed',error);
+      setPublishState('error');
+    }
+  }
+
+  async function copyPublishedUrl(){
+    if(!latestPublishedUrl)return;
+    try{
+      await navigator.clipboard.writeText(latestPublishedUrl);
+      const btn=$('#publishCopyButton');
+      if(btn){const before=btn.textContent;btn.textContent='コピーしました';setTimeout(()=>btn.textContent=before,1400);}
+    }catch(_){
+      const ta=document.createElement('textarea');ta.value=latestPublishedUrl;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+    }
+  }
+
+  async function sharePublishedUrl(){
+    if(!latestPublishedUrl)return;
+    const shareData={title:workingDocument?.title||'Scene',text:workingDocument?.title||'Scene',url:latestPublishedUrl};
+    if(navigator.share){
+      try{await navigator.share(shareData);return;}catch(error){if(error?.name==='AbortError')return;}
+    }
+    await copyPublishedUrl();
+  }
+
+  function syncPublishPreviewButton(show=false){
+    const btn=$('#publishFromPreviewButton');if(!btn)return;
+    btn.hidden=!(show && !autoRecActive && !playerScreen.hidden);
+  }
+
   function ensurePlayer(){
     if(player)return player;
     player=new ScenePlayerCore(playerHost,{allowPrevious:true,keyboard:true,swipe:true,endOnNextAction:true,maxStackVisible:4,autoDelay:2600,uiLanguage});
     playerHost.addEventListener('sceneplayer:scenechange',(event)=>{
+      syncPublishPreviewButton(false);
       if(autoRecActive && event.detail?.direction==='next')recordAutoRecBoundary();
     });
     playerHost.addEventListener('sceneplayer:end',()=>{
-      if(autoRecActive)finishAutoRec(true);
+      if(autoRecActive){finishAutoRec(true);syncPublishPreviewButton(false);}
+      else syncPublishPreviewButton(true);
     });
     return player;
   }
@@ -1494,6 +1579,7 @@
     if(!workingDocument?.scenes?.length)return;
     playerReturnTarget=from;
     setScreen('player');
+    syncPublishPreviewButton(false);
     const p=ensurePlayer();
     p.setUILanguage?.(uiLanguage);
     p.load(getDocumentForPlayback(),{startAt});
@@ -1504,7 +1590,7 @@
     // reader's next tap (especially important on iOS/WebKit).
     p.unlockAudio(true);
   }
-  function closePlayer(){ if(autoRecActive)finishAutoRec(false); if(player){player.stopAuto();player._stopAllAudio?.(true);} setScreen(playerReturnTarget==='advanced'?'advanced':'easy'); if(playerReturnTarget==='advanced') renderAdvanced(); else window.scrollTo({top:0,left:0,behavior:'instant'}); }
+  function closePlayer(){ syncPublishPreviewButton(false); if(autoRecActive)finishAutoRec(false); if(player){player.stopAuto();player._stopAllAudio?.(true);} setScreen(playerReturnTarget==='advanced'?'advanced':'easy'); if(playerReturnTarget==='advanced') renderAdvanced(); else window.scrollTo({top:0,left:0,behavior:'instant'}); }
 
   function openAdvanced(){
     if(!bodyInput.value.trim() && !workingDocument){bodyInput.focus();return;}
@@ -2078,7 +2164,7 @@
   });
 
   // Studio overlay controls must never fall through to the Player tap surface.
-  ['editReturnButton','autoRecStart','autoRecCancel','autoRecRetry'].forEach(id=>{
+  ['editReturnButton','publishFromPreviewButton','autoRecStart','autoRecCancel','autoRecRetry'].forEach(id=>{
     const el=$('#'+id); if(!el)return;
     ['pointerdown','pointerup','touchstart','touchend'].forEach(type=>{
       el.addEventListener(type,(event)=>event.stopPropagation(),{passive:true});
@@ -2087,6 +2173,13 @@
   $('#autoRecStart')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();startAutoRec();});
   $('#autoRecCancel')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();finishAutoRec(false);});
   $('#autoRecRetry')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();startAutoRec();});
+  $('#publishFromPreviewButton')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();openPublishDialog();});
+  $('#publishDialogClose')?.addEventListener('click',closePublishDialog);
+  $('#publishConfirmButton')?.addEventListener('click',runMockPublish);
+  $('#publishRetryButton')?.addEventListener('click',runMockPublish);
+  $('#publishCopyButton')?.addEventListener('click',copyPublishedUrl);
+  $('#publishShareButton')?.addEventListener('click',sharePublishedUrl);
+  $('#publishDialog')?.addEventListener('click',(event)=>{if(event.target===event.currentTarget)closePublishDialog();});
 
   $('#sceneAutoTimingInput')?.addEventListener('change',commitAutoTimingFromInput);
   $('#sceneAutoTimingInput')?.addEventListener('keydown',(e)=>{

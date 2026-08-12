@@ -1957,3 +1957,44 @@ body.easy-player-open{position:fixed;inset:0;}
 
 /* v0.2.43 — developer-only project I/O is intentionally absent from normal Easy UI. */
 .developer-hidden-io[hidden]{display:none!important;}
+
+
+/* =========================================================
+   Publish UI mock v0.2.44
+   ========================================================= */
+.publish-preview-button{
+  position:fixed;z-index:10003;left:50%;bottom:calc(74px + env(safe-area-inset-bottom));
+  transform:translateX(-50%);min-width:172px;min-height:48px;padding:0 24px;
+  border:1px solid rgba(255,255,255,.25);border-radius:999px;
+  background:rgba(17,18,20,.92);color:#fff;box-shadow:0 12px 36px rgba(0,0,0,.24);
+  backdrop-filter:blur(14px);font-size:13px;font-weight:850;letter-spacing:.04em;
+  pointer-events:auto!important;touch-action:manipulation!important;
+}
+.publish-preview-button[hidden]{display:none!important}
+.publish-dialog{width:min(92vw,520px);padding:0;border:0;background:transparent;overflow:visible}
+.publish-dialog::backdrop{background:rgba(15,16,18,.38);backdrop-filter:blur(5px)}
+.publish-dialog-card{position:relative;background:#fff;color:#17191d;border:1px solid #e4e5e8;border-radius:22px;padding:28px 24px 24px;box-shadow:0 28px 80px rgba(0,0,0,.22)}
+.publish-dialog-close{position:absolute;right:14px;top:12px;width:34px;height:34px;border:0;background:transparent;color:#222;font-size:25px;line-height:1}
+.publish-state{display:grid;gap:14px;text-align:center;justify-items:center;padding:12px 4px 2px}
+.publish-state[hidden]{display:none!important}
+.publish-kicker{font-size:9px;font-weight:850;letter-spacing:.18em;color:#92959c}
+.publish-state h2{margin:0;font-size:23px;line-height:1.35}
+.publish-state p{margin:0;color:#7d8189;font-size:12px;line-height:1.7}
+.publish-primary,.publish-secondary{width:100%;min-height:50px;border-radius:14px;font-weight:850;font-size:12px}
+.publish-primary{border:1px solid #18191b;background:#18191b;color:#fff}
+.publish-secondary{border:1px solid #dfe1e5;background:#fff;color:#18191b}
+.publish-success-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.publish-url-box{width:100%;padding:13px 14px;border:1px solid #dfe1e5;border-radius:13px;background:#f7f8fa;box-sizing:border-box;overflow:hidden}
+.publish-url-box span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:#4d525a}
+.publish-success-mark,.publish-error-mark{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;font-size:24px;font-weight:900}
+.publish-success-mark{background:#18191b;color:#fff}
+.publish-error-mark{background:#fff2f2;color:#b94040;border:1px solid #f0d2d2}
+.publish-spinner{width:36px;height:36px;border-radius:50%;border:3px solid #e4e5e8;border-top-color:#18191b;animation:publishSpin .75s linear infinite}
+.publish-mock-note{color:#a0a3a9;font-size:9px;line-height:1.5}
+@keyframes publishSpin{to{transform:rotate(360deg)}}
+@media(max-width:560px){
+  .publish-preview-button{bottom:calc(72px + env(safe-area-inset-bottom));min-width:160px;min-height:46px}
+  .publish-dialog{width:calc(100vw - 24px)}
+  .publish-dialog-card{padding:26px 18px 20px;border-radius:20px}
+  .publish-success-actions{grid-template-columns:1fr}
+}
