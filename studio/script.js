@@ -71,7 +71,10 @@
     ['.work-meta-section > summary','work.info'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.easy-cover-simple .section-heading > span','work.cover'],['.easy-cover-simple .section-heading > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.easy-cover-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
     ['#advancedPreviewButton','common.preview'],['#advancedExportButton','file.export'],['.auto-timing-head strong','auto.heading'],['#sceneAutoTimingReset','auto.reset'],['.auto-timing-controls label span','auto.second'],['.auto-timing-editor > p','auto.hint'],
     ['#sceneColorSelect','text.color','aria-label'],['#sceneShadowSelect','text.shadow','aria-label'],['#sceneColorSelect option[value="auto"]','effect.auto'],['#sceneColorSelect option[value="white"]','color.white'],['#sceneColorSelect option[value="black"]','color.black'],['#sceneColorSelect option[value="custom"]','color.custom'],['#sceneShadowSelect option[value="auto"]','effect.auto'],['#sceneShadowSelect option[value="none"]','shadow.none'],['#sceneShadowSelect option[value="soft"]','shadow.soft'],['#sceneShadowSelect option[value="strong"]','shadow.strong'],
-    ['.scene-motion-preview-field > span','background.preview'],['#publishFromPreviewButton','publish.action'],['#publishDialogClose','unpublish.cancel','aria-label'],['#deleteSceneDialog h2','delete.scene.title'],['#deleteSceneDialogText','delete.scene.text'],['#deleteSceneCancel','delete.scene.cancel'],['#deleteSceneConfirm','delete.scene.confirm'],['#unpublishDialog h2','unpublish.title'],['#unpublishDialogText','unpublish.text'],['#unpublishCancel','unpublish.cancel'],['#unpublishConfirm','unpublish.confirm'],['#draftManagerDialog h2','draft.title'],['#draftManagerClose','unpublish.cancel','aria-label'],['#newDraftButton','draft.new']
+    ['.scene-motion-preview-field > span','background.preview'],['#publishFromPreviewButton','publish.action'],['#publishDialogClose','unpublish.cancel','aria-label'],['#deleteSceneDialog h2','delete.scene.title'],['#deleteSceneDialogText','delete.scene.text'],['#deleteSceneCancel','delete.scene.cancel'],['#deleteSceneConfirm','delete.scene.confirm'],['#unpublishDialog h2','unpublish.title'],['#unpublishDialogText','unpublish.text'],['#unpublishCancel','unpublish.cancel'],['#unpublishConfirm','unpublish.confirm'],['#draftManagerDialog h2','draft.title'],['#draftManagerClose','unpublish.cancel','aria-label'],['#newDraftButton','draft.new'],
+    ['#autoRecCancel','rec.cancel'],['#autoRecDone strong','rec.done'],['#autoRecRetry','rec.retry'],
+    ['#undoButton','undo.action'],['#undoCompactButton','undo.action','aria-label'],
+    ['#sceneColorCustomField > span','color.custom']
   ];
 
   function applyStaticUITranslations(){
@@ -82,7 +85,11 @@
     });
 
     // Easy metadata uses nested labels/smalls, so translate without destroying structure.
-    const metaSummary=$('.work-meta-section > summary'); if(metaSummary)metaSummary.textContent=t('work.info');
+    const metaSummary=$('.work-meta-section > summary');
+    if(metaSummary){
+      metaSummary.textContent=t('work.info');
+      metaSummary.dataset.optionalLabel=t('common.optional');
+    }
     const metaFields=[
       [subtitleInput,'work.subtitle','common.optional','work.subtitle.ph'],
       [languageInput,'work.language',null,null],
@@ -168,8 +175,14 @@
     const rangeLabels={sceneBackgroundDim:'background.dim',sceneBackgroundTransitionDuration:'background.transitionSpeed',sceneBackgroundMotionDuration:'background.motionSpeed',sceneBackgroundMotionAmount:'background.motionAmount'};
     Object.entries(rangeLabels).forEach(([id,key])=>{const h=$('#'+id)?.closest('.adv-field')?.querySelector(':scope > span');if(h&&h.firstChild)h.firstChild.textContent=t(key)+' ';});
     const autoState=$('#sceneAutoTimingState'); if(autoState) updateAutoTimingFields?.();
+    const customColorLabel=$('#sceneColorCustomField > span');
+    if(customColorLabel)customColorLabel.textContent=t('color.custom');
     const customLangLabel=$('#sceneLanguageCustomField > span');
     if(customLangLabel) customLangLabel.textContent=t('scene.language.tag');
+    const undoButton=$('#undoButton');if(undoButton)undoButton.textContent=t('undo.action');
+    const undoCompact=$('#undoCompactButton');if(undoCompact)undoCompact.setAttribute('aria-label',t('undo.action'));
+    const undoMsg=$('#undoMessage');
+    if(undoMsg && !$('#undoBar')?.hidden)undoMsg.textContent=translateUndoLabel(undoMsg.dataset.rawLabel||undoMsg.textContent);
     $$('.ui-language-switch button').forEach(b=>{
       const on=b.dataset.uiLang===uiLanguage;
       b.classList.toggle('is-selected',on); b.setAttribute('aria-pressed',on?'true':'false');
@@ -1724,7 +1737,9 @@
     const btn=$('#autoRecStart');if(!btn)return;
     const total=workingDocument?.scenes?.length||0;
     const next=Math.min(autoRecProgress?.nextIndex||0,total);
-    btn.textContent=next>0&&next<total?`● AUTO REC 続き ${next+1}/${total}`:'● AUTO REC';
+    btn.textContent=next>0&&next<total
+      ? `● AUTO REC ${t('rec.continue')} ${next+1}/${total}`
+      : '● AUTO REC';
   }
 
   function startAutoRec(){
@@ -2448,6 +2463,32 @@
     },180);
   }
 
+  function translatedSceneTypeLabel(label){
+    const raw=String(label||'');
+    if(raw==='演出のみ' || raw==='Effects only')return t('scene.effectOnly');
+    if(raw==='空Scene' || raw==='Empty Scene')return t('scene.empty');
+    if(raw==='テキスト' || raw==='Text')return t('scene.type.text');
+    return raw;
+  }
+
+  function translateUndoLabel(label){
+    const exact={
+      'Sceneを並び替えました':'undo.sceneMoved',
+      '前のSceneと結合しました':'undo.sceneMerged',
+      'Sceneを分割しました':'undo.sceneSplit',
+      'Sceneを削除しました':'undo.sceneDeleted',
+      '未編集Sceneだけ再分割しました':'undo.resplit',
+      'サンプルを入れました':'undo.sampleReplaced',
+      'カーソル位置で分割しました':'undo.splitAtCursor'
+    };
+    if(exact[label])return t(exact[label]);
+
+    const deleted=String(label||'').match(/^(\d+) Scenesを削除しました$/);
+    if(deleted)return t('undo.scenesDeleted',{n:deleted[1]});
+
+    return label;
+  }
+
   function showUndo(label){
     scheduleDraftSave(120);
     if(!playerScreen?.hidden)return;
@@ -2455,7 +2496,7 @@
     if(!bar)return;
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
     if(compact)compact.hidden=true;
-    if(msg)msg.textContent=label;
+    if(msg){msg.dataset.rawLabel=label;msg.textContent=translateUndoLabel(label);}
     bar.hidden=false;
     bar.classList.remove('is-hiding');
     requestAnimationFrame(()=>bar.classList.add('is-visible'));
@@ -2563,10 +2604,10 @@
     const text=$('#deleteSceneDialogText');
     if(text){
       const preview=scenePreviewText(scene);
-      text.textContent=`Scene ${selectedSceneIndex+1}「${preview}」を削除します。`;
+      text.textContent=t('delete.scene.current',{n:selectedSceneIndex+1,label:translatedSceneTypeLabel(preview)});
     }
     if(typeof dialog?.showModal==='function') dialog.showModal();
-    else if(confirm(`Scene ${selectedSceneIndex+1} を削除しますか？`)) deleteSceneNow();
+    else if(confirm(t('delete.scene.current',{n:selectedSceneIndex+1,label:translatedSceneTypeLabel(scenePreviewText(scene))}))) deleteSceneNow();
   }
 
   function deleteSceneNow(){
