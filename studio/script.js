@@ -507,6 +507,12 @@
     if(!url || !blob)return;
     assetRegistry.set(url,{blob,name:String(name||'asset')});
   }
+
+  async function snapshotPickedFile(file){
+    if(!file)return null;
+    const bytes=await file.arrayBuffer();
+    return {blob:new Blob([bytes],{type:file.type||'application/octet-stream'}),name:file.name||'asset'};
+  }
   function unregisterAsset(url){
     if(!url)return;
     const item=assetRegistry.get(url);
@@ -1101,8 +1107,14 @@
     return (crc^0xFFFFFFFF)>>>0;
   }
 
-  async function blobBytes(blob){
-    return new Uint8Array(await blob.arrayBuffer());
+  async function blobBytes(blob,fallbackUrl=''){
+    try{return new Uint8Array(await blob.arrayBuffer());}
+    catch(firstError){
+      if(fallbackUrl && /^blob:/i.test(fallbackUrl)){
+        try{const response=await fetch(fallbackUrl);if(response.ok)return new Uint8Array(await response.arrayBuffer());}catch(_){}
+      }
+      throw firstError;
+    }
   }
 
   // Minimal standards-compliant ZIP writer using STORE (method 0).
@@ -1277,6 +1289,59 @@
     });
   }
 
+  function studioStateForPackage(doc){
+    const total=doc?.scenes?.length||0;
+    const rawNext=Math.max(0,Number(autoRecProgress?.nextIndex)||0);
+    const nextIndex=Math.min(rawNext,total);
+    const rawRecorded=Math.max(0,Number(autoRecProgress?.recordedCount)||0);
+    const recordedCount=Math.min(rawRecorded,total);
+    const selected=Math.max(0,Math.min(Number(selectedSceneIndex)||0,Math.max(0,total-1)));
+
+    return {
+      format:'scene-studio-state',
+      version:'1.0',
+      rec:{
+        nextIndex,
+        recordedCount,
+        ...(nextIndex<total && doc.scenes?.[nextIndex]?.id ? {nextSceneId:doc.scenes[nextIndex].id} : {})
+      },
+      editor:{
+        selectedSceneIndex:selected,
+        ...(doc.scenes?.[selected]?.id ? {selectedSceneId:doc.scenes[selected].id} : {})
+      }
+    };
+  }
+
+  function restoreStudioStateFromPackage(state,doc){
+    const total=doc?.scenes?.length||0;
+    if(!state || state.format!=='scene-studio-state' || String(state.version||'')!=='1.0'){
+      autoRecProgress={nextIndex:0,recordedCount:0};
+      selectedSceneIndex=0;
+      return;
+    }
+
+    let nextIndex=Math.max(0,Number(state.rec?.nextIndex)||0);
+    const nextSceneId=String(state.rec?.nextSceneId||'');
+    if(nextSceneId){
+      const byId=doc.scenes.findIndex(scene=>scene?.id===nextSceneId);
+      if(byId>=0)nextIndex=byId;
+    }
+    nextIndex=Math.min(nextIndex,total);
+
+    let recordedCount=Math.max(0,Number(state.rec?.recordedCount)||0);
+    recordedCount=Math.min(recordedCount,total);
+
+    autoRecProgress={nextIndex,recordedCount};
+
+    let selected=Math.max(0,Number(state.editor?.selectedSceneIndex)||0);
+    const selectedSceneId=String(state.editor?.selectedSceneId||'');
+    if(selectedSceneId){
+      const byId=doc.scenes.findIndex(scene=>scene?.id===selectedSceneId);
+      if(byId>=0)selected=byId;
+    }
+    selectedSceneIndex=Math.max(0,Math.min(selected,Math.max(0,total-1)));
+  }
+
   async function buildScenePackage(){
     const doc=sceneDocumentForExport();
     const packaged=clone(doc);
@@ -1298,7 +1363,7 @@
         const base=safeAssetBase(ref.fileName||item.name||`${ref.kind}_${assetCounter}`);
         assetPath=`assets/${String(assetCounter).padStart(3,'0')}_${ref.kind}_${base}${ext}`;
         bySource.set(ref.src,assetPath);
-        entries.push({name:assetPath,bytes:await blobBytes(item.blob)});
+        entries.push({name:assetPath,bytes:await blobBytes(item.blob,ref.src)});
       }
       ref.holder[ref.key]=assetPath;
       ref.holder._editorFileName=ref.fileName || assetRegistry.get(ref.src)?.name || assetPath.split('/').pop();
@@ -1310,11 +1375,14 @@
       if(item?.blob){
         const ext=assetExtension(item.name||coverImageFileName,item.blob.type);
         coverPath=`assets/images/cover${ext || '.jpg'}`;
-        entries.push({name:coverPath,bytes:await blobBytes(item.blob)});
+        entries.push({name:coverPath,bytes:await blobBytes(item.blob,coverImageUrl)});
       }
     }
 
-    packaged.package={format:'scene-package',version:'1.0',assetCount:entries.length};
+    const packageAssetCount=entries.length;
+    packaged.package={format:'scene-package',version:'1.0',assetCount:packageAssetCount};
+
+    const studioState=studioStateForPackage(packaged);
 
     let manifest;
     try{
@@ -1331,11 +1399,12 @@
 
     entries.unshift(
       {name:'scene.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(packaged,null,2))},
-      {name:'manifest.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(manifest,null,2))}
+      {name:'manifest.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(manifest,null,2))},
+      {name:'studio-state.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(studioState,null,2))}
     );
 
     const blob=await makeStoreZip(entries);
-    return {doc:packaged,manifest,blob,assetCount:entries.length-2};
+    return {doc:packaged,manifest,studioState,blob,assetCount:packageAssetCount};
   }
 
   async function exportScenePackage(){
@@ -1362,6 +1431,15 @@
       const parsed=JSON.parse(ZIP_TEXT_DECODER.decode(sceneBytes).replace(/^\uFEFF/,''));
       const manifestBytes=entries.get('manifest.json');
       const manifest=manifestBytes ? JSON.parse(ZIP_TEXT_DECODER.decode(manifestBytes).replace(/^\uFEFF/,'')) : null;
+      const studioStateBytes=entries.get('studio-state.json');
+      let studioState=null;
+      if(studioStateBytes){
+        try{
+          studioState=JSON.parse(ZIP_TEXT_DECODER.decode(studioStateBytes).replace(/^\uFEFF/,''));
+        }catch(error){
+          console.warn('Studio state could not be restored',error);
+        }
+      }
       const doc=validateSceneFormatV1(parsed);
       if(manifest){
         doc.metadata ||= {};
@@ -1391,13 +1469,13 @@
       workingDocument=doc;
       latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
       currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
-      autoRecProgress={nextIndex:0,recordedCount:0};
+      restoreStudioStateFromPackage(studioState,doc);
       easySourceDirty=false;
-      selectedSceneIndex=0;
       restoreEasyStateFromDocument(doc);
       normalizeSceneIds();
       refreshDocumentLanguages();
       renderAdvanced();
+      updateAutoRecStartLabel();
       setScreen('advanced');
       scrollScreenToTop(advancedScreen);
       if(manifest?.cover?.image && entries.get(manifest.cover.image)){
@@ -1410,6 +1488,7 @@
       } else {
         coverImageUrl=''; coverImageFileName=''; updateCoverPreview();
       }
+      await saveDraftNow();
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
     }catch(error){
       console.error(error);
@@ -2422,14 +2501,16 @@
 
   bodyInput.addEventListener('input',()=>{ updateCount(); easySourceDirty=true; });
   $('#sceneSubTextInput').addEventListener('input',autoGrowSubText);
-  coverImageInput?.addEventListener('change',()=>{
-    const file=coverImageInput.files?.[0];
-    if(!file)return;
-    if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
-    coverImageUrl=URL.createObjectURL(file);
-    coverImageFileName=file.name||'cover';
-    assetRegistry.set(coverImageUrl,{blob:file,name:coverImageFileName});
-    updateCoverPreview();
+  coverImageInput?.addEventListener('change',async()=>{
+    const file=coverImageInput.files?.[0]; if(!file)return;
+    try{
+      const snap=await snapshotPickedFile(file);
+      if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
+      coverImageUrl=URL.createObjectURL(snap.blob);
+      coverImageFileName=snap.name||'cover';
+      assetRegistry.set(coverImageUrl,{blob:snap.blob,name:coverImageFileName});
+      updateCoverPreview();
+    }catch(error){console.error(error);alert('画像を読み込めませんでした。もう一度選択してください。');coverImageInput.value='';}
   });
   coverImageClear?.addEventListener('click',()=>{
     if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
@@ -2584,7 +2665,7 @@
     const el=$('#'+id); if(!el)return; const evt=el.type==='range'?'input':'change'; el.addEventListener(evt,()=>{updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
   });
   function bindAssetInput(inputId,labelId,onPick){
-    const input=$('#'+inputId); input.addEventListener('change',()=>{
+    const input=$('#'+inputId); input.addEventListener('change',async()=>{
       const file=input.files?.[0];if(!file)return;
       const isAudio=/^(sceneBgmInput|sceneAmbientInput|sceneSeInput)$/.test(inputId);
       if(isAudio){
@@ -2592,14 +2673,21 @@
         const audioLike=(file.type||'').startsWith('audio/') || /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(name);
         if(!audioLike){ alert(t('alert.audio')); input.value=''; return; }
       }
-      const oldUrl=assetFrom(inputId).src;
-      if(oldUrl && assetRegistry.has(oldUrl)) unregisterAsset(oldUrl);
-      const url=URL.createObjectURL(file);
-      registerAsset(url,file,file.name);
-      setAssetField(inputId,url,file.name);
-      const urlFieldId=inputId.replace(/Input$/,'UrlInput');
-      const urlField=$('#'+urlFieldId); if(urlField)urlField.value='';
-      if(onPick)onPick();updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList(); if(labelId)updateAssetLabel(labelId,inputId);
+      try{
+        const snap=await snapshotPickedFile(file);
+        const oldUrl=assetFrom(inputId).src;
+        if(oldUrl && assetRegistry.has(oldUrl)) unregisterAsset(oldUrl);
+        const url=URL.createObjectURL(snap.blob);
+        registerAsset(url,snap.blob,snap.name);
+        setAssetField(inputId,url,snap.name);
+        const urlFieldId=inputId.replace(/Input$/,'UrlInput');
+        const urlField=$('#'+urlFieldId); if(urlField)urlField.value='';
+        if(onPick)onPick();updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();if(labelId)updateAssetLabel(labelId,inputId);
+      }catch(error){
+        console.error('Asset snapshot failed',error);
+        alert('ファイルを読み込めませんでした。もう一度選択してください。');
+        input.value='';
+      }
     });
   }
   bindAssetInput('sceneBackgroundInput',null,()=>{$('#sceneBackgroundMode').value='image';});
@@ -2614,7 +2702,7 @@
   $('#sceneBackgroundRemoveFile').addEventListener('click',()=>{const oldUrl=assetFrom('sceneBackgroundInput').src;if(oldUrl&&assetRegistry.has(oldUrl))unregisterAsset(oldUrl);setAssetField('sceneBackgroundInput','','');$('#sceneBackgroundInput').value='';$('#sceneBackgroundUrlInput').value='';updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
 
   const cinemaInput=$('#cinemaBackgroundInput'), cinemaPreview=$('#cinemaBackgroundPreview'), cinemaClear=$('#cinemaBackgroundClear');
-  cinemaInput.addEventListener('change',()=>{const file=cinemaInput.files?.[0];if(!file)return;if(cinemaBackgroundUrl&&assetRegistry.has(cinemaBackgroundUrl))unregisterAsset(cinemaBackgroundUrl);cinemaBackgroundUrl=URL.createObjectURL(file);registerAsset(cinemaBackgroundUrl,file,file.name);cinemaPreview.style.backgroundImage=`url("${cinemaBackgroundUrl}")`;cinemaPreview.hidden=false;cinemaClear.hidden=false;if(workingDocument?.scenes?.[0]){const p=ensurePresentation(workingDocument.scenes[0]);p.background={src:cinemaBackgroundUrl,transition:'fade',dim:cinemaTone==='dark'?0.48:0.72,fit:'cover',position:'center center',_editorFileName:file.name,_editorManaged:true};}});
+  cinemaInput.addEventListener('change',async()=>{const file=cinemaInput.files?.[0];if(!file)return;try{const snap=await snapshotPickedFile(file);if(cinemaBackgroundUrl&&assetRegistry.has(cinemaBackgroundUrl))unregisterAsset(cinemaBackgroundUrl);cinemaBackgroundUrl=URL.createObjectURL(snap.blob);registerAsset(cinemaBackgroundUrl,snap.blob,snap.name);cinemaPreview.style.backgroundImage=`url("${cinemaBackgroundUrl}")`;cinemaPreview.hidden=false;cinemaClear.hidden=false;if(workingDocument?.scenes?.[0]){const p=ensurePresentation(workingDocument.scenes[0]);p.background={src:cinemaBackgroundUrl,transition:'fade',dim:cinemaTone==='dark'?0.48:0.72,fit:'cover',position:'center center',_editorFileName:snap.name,_editorManaged:true};}}catch(error){console.error(error);alert('画像を読み込めませんでした。もう一度選択してください。');cinemaInput.value='';}});
   cinemaClear.addEventListener('click',()=>{if(cinemaBackgroundUrl&&assetRegistry.has(cinemaBackgroundUrl))unregisterAsset(cinemaBackgroundUrl);cinemaBackgroundUrl='';cinemaInput.value='';cinemaPreview.style.backgroundImage='';cinemaPreview.hidden=true;cinemaClear.hidden=true;if(workingDocument?.scenes?.[0]){const p=ensurePresentation(workingDocument.scenes[0]);delete p.background;}});
   $$('.cinema-tone-button').forEach(button=>button.addEventListener('click',()=>{cinemaTone=button.dataset.tone||'dark';$$('.cinema-tone-button').forEach(b=>{const on=b.dataset.tone===cinemaTone;b.classList.toggle('is-selected',on);b.setAttribute('aria-pressed',on?'true':'false');});if(workingDocument){workingDocument.appearance ||= {};workingDocument.appearance.cinemaTone=cinemaTone;}}));
 
