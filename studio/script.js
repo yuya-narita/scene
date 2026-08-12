@@ -1799,19 +1799,30 @@
   // unpublished / published-clean / published-dirty
   // Replace only publishAdapter.publish() when Hosting API is ready.
   // ---------------------------------------------------------
+  const SCENE_STUDIO_API_BASE='https://scene-studio-api.you-natalie66.workers.dev';
+
   const publishAdapter={
     async publish(sceneDocument,{id=''}={}){
-      await new Promise(resolve=>setTimeout(resolve,1100));
-      const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-      let finalId=id;
-      if(!finalId){
-        const bytes=new Uint8Array(8);
-        if(globalThis.crypto?.getRandomValues)crypto.getRandomValues(bytes);
-        else for(let i=0;i<bytes.length;i++)bytes[i]=Math.floor(Math.random()*256);
-        finalId='';
-        for(const b of bytes)finalId+=alphabet[b%alphabet.length];
+      // Hosting v1: save the complete Scene document through the Cloudflare Worker into R2.
+      // The current Worker always issues a fresh publication id; update-in-place is wired next.
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/publish`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(sceneDocument)
+      });
+
+      let payload=null;
+      try{ payload=await response.json(); }catch(_){ /* handled below */ }
+      if(!response.ok || !payload?.ok || !payload?.id){
+        throw new Error(payload?.error || `Publish failed (${response.status})`);
       }
-      return {id:finalId,url:`https://scene.example/s/${finalId}`};
+
+      const finalId=payload.id;
+      return {
+        id:finalId,
+        // Until the public Player route is connected, this is the real hosted document endpoint.
+        url:`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(finalId)}`
+      };
     }
   };
 
@@ -1913,7 +1924,7 @@
     $('#publishDialog')?.close();
   }
 
-  async function runMockPublish(){
+  async function runPublish(){
     if(!workingDocument?.scenes?.length)return;
     const wasUpdate=currentPublishStatus()==='dirty';
     setPublishState('working');
@@ -1936,7 +1947,7 @@
       await saveDraftNow();
 
     }catch(error){
-      console.warn('Publish mock failed',error);
+      console.warn('Publish failed',error);
       setPublishState('error');
     }
   }
@@ -2669,8 +2680,8 @@
   $('#autoRecRetry')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();startAutoRec();});
   $('#publishFromPreviewButton')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();openPublishDialog();});
   $('#publishDialogClose')?.addEventListener('click',closePublishDialog);
-  $('#publishConfirmButton')?.addEventListener('click',runMockPublish);
-  $('#publishRetryButton')?.addEventListener('click',runMockPublish);
+  $('#publishConfirmButton')?.addEventListener('click',runPublish);
+  $('#publishRetryButton')?.addEventListener('click',runPublish);
   $('#publishCopyButton')?.addEventListener('click',copyPublishedUrl);
   $('#publishShareButton')?.addEventListener('click',sharePublishedUrl);
   $('#publishDialog')?.addEventListener('click',(event)=>{if(event.target===event.currentTarget)closePublishDialog();});
