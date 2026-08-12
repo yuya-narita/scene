@@ -1799,7 +1799,7 @@
   // unpublished / published-clean / published-dirty
   // Replace only publishAdapter.publish() when Hosting API is ready.
   // ---------------------------------------------------------
-  const SCENE_STUDIO_API_BASE='https://scene-studio-api.you-natalie66.workers.dev';
+  const SCENE_STUDIO_API_BASE='https://scene-studio-api.a-hako.workers.dev';
 
   const publishAdapter={
     async publish(sceneDocument,{id=''}={}){
