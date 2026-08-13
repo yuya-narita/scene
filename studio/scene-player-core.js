@@ -173,7 +173,6 @@
             <button class="sp-ending-slot sp-ending-cover" type="button"><small>COVER</small><strong>表紙に戻る</strong></button>
             <button class="sp-ending-slot sp-ending-right" type="button" hidden><small></small><strong></strong></button>
           </div>
-          <button class="sp-ending-restart" type="button">もう一度読む</button>
         </section>
       `;
 
@@ -209,7 +208,6 @@
         bar: q('.sp-progress-bar'),
         ending: q('.sp-ending'),
         endingTitle: q('.sp-ending-title'),
-        endingRestart: q('.sp-ending-restart'),
         endingCover: q('.sp-ending-cover'),
         endingLeft: q('.sp-ending-left'),
         endingRight: q('.sp-ending-right'),
@@ -249,8 +247,10 @@
       this.els.historyHelp.textContent = this._uiText('player.history');
       this.els.historyClose.setAttribute('aria-label', this._uiText('player.history.close'));
       this.els.endingText.textContent = this._uiText('player.ending.text');
-      this.els.endingRestart.textContent = this._uiText('player.ending.restart');
-      if(this.els.endingCover)this.els.endingCover.textContent = this.uiLanguage==='en' ? 'Back to cover' : '表紙に戻る';
+      if(this.els.endingCover){
+        const coverLabel = this.uiLanguage==='en' ? 'Back to cover' : '表紙に戻る';
+        this.els.endingCover.innerHTML = `<small>COVER</small><strong>${coverLabel}</strong>`;
+      }
       if(this.els.coverStart)this.els.coverStart.textContent = this.uiLanguage==='en' ? 'Start' : 'はじめる';
       if (!this.document) this.els.endingTitle.textContent = this._uiText('player.ending.title');
       return this.uiLanguage;
@@ -284,7 +284,6 @@
         this.showCover({restart:true});
       });
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
-      this._on(this.els.endingRestart, 'click', () => this.restart());
       if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover();});
       if(this.els.endingCover)this._on(this.els.endingCover,'click',()=>this.showCover({restart:true}));
       this._on(this.els.auto, 'click', (e) => {

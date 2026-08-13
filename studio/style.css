@@ -2561,4 +2561,115 @@ body.draft-manager-open{
 .ending-preview-three button{
   box-sizing:border-box;
 }
-\n\n/* v0.2.67 — Easy ending preview typography mirrors Public Player */\n.ending-preview-center strong{\n  font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif!important;\n  font-weight:400!important;letter-spacing:.08em!important;color:var(--muted)!important;\n}\n.ending-preview-three button small{\n  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;\n  font-size:10px!important;font-weight:400!important;letter-spacing:.2em!important;color:var(--muted)!important;\n}\n.ending-preview-three button strong{\n  font-family:Georgia,"Times New Roman",serif!important;\n  font-size:18px!important;font-weight:500!important;line-height:1.25!important;\n}\n.ending-preview-reread{\n  font-family:Georgia,"Times New Roman",serif!important;\n  font-size:13px!important;font-weight:400!important;letter-spacing:.04em!important;color:var(--muted)!important;\n}\n
+
+
+/* v0.2.67 — Easy ending preview typography mirrors Public Player */
+.ending-preview-center strong{
+  font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif!important;
+  font-weight:400!important;letter-spacing:.08em!important;color:var(--muted)!important;
+}
+.ending-preview-three button small{
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:10px!important;font-weight:400!important;letter-spacing:.2em!important;color:var(--muted)!important;
+}
+.ending-preview-three button strong{
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:18px!important;font-weight:500!important;line-height:1.25!important;
+}
+.ending-preview-reread{
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:13px!important;font-weight:400!important;letter-spacing:.04em!important;color:var(--muted)!important;
+}
+
+
+/* v0.2.68 — publish label exact centering */
+.easy-publish-bottom{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  line-height:1.15!important;
+  padding-left:16px!important;
+  padding-right:16px!important;
+}
+.easy-publish-bottom>span,.easy-publish-bottom>small{display:block!important;width:100%!important;text-align:center!important;margin-left:0!important;margin-right:0!important}
+
+
+/* v0.2.69 — publish action cleanup */
+.easy-publish-bottom{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  gap:3px!important;
+  min-height:62px!important;
+  padding:10px 18px!important;
+  background:#17191d!important;
+  border:1px solid #17191d!important;
+  color:#fff!important;
+}
+.easy-publish-bottom span,
+.easy-publish-bottom small{
+  display:block!important;
+  width:100%!important;
+  margin:0!important;
+  padding:0!important;
+  text-align:center!important;
+  line-height:1.15!important;
+}
+.easy-publish-bottom span{
+  font-weight:800!important;
+}
+.easy-publish-bottom small{
+  opacity:.62!important;
+}
+.easy-publish-bottom:disabled{
+  background:#b9bcc2!important;
+  border-color:#b9bcc2!important;
+  color:#fff!important;
+  opacity:1!important;
+}
+.easy-publish-bottom.is-published{
+  background:#fff!important;
+  border-color:#d7d9df!important;
+  color:#17191d!important;
+}
+.easy-publish-bottom.is-dirty{
+  background:#17191d!important;
+  border-color:#17191d!important;
+  color:#fff!important;
+}
+
+
+/* v0.2.70 — Easy ending preview: all 3 boxes use the same typography */
+.ending-preview-three button{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  text-align:center!important;
+}
+.ending-preview-three button small{
+  display:block!important;
+  visibility:visible!important;
+  margin:0!important;
+  padding:0!important;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:9px!important;
+  font-weight:500!important;
+  line-height:1!important;
+  letter-spacing:.2em!important;
+}
+.ending-preview-three button strong{
+  display:block!important;
+  margin:0!important;
+  padding:0!important;
+  font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif!important;
+  font-size:18px!important;
+  font-weight:400!important;
+  line-height:1.3!important;
+  letter-spacing:.025em!important;
+}

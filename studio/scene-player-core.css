@@ -987,4 +987,157 @@
     min-height:86px!important;
   }
 }
-\n\n/* v0.2.67 — ending typography/behavior parity with Public Player */\n.sp-ending-kicker{display:none!important}\n.sp-ending{\n  background:var(--sp-bg)!important;\n  backdrop-filter:none!important;\n  -webkit-backdrop-filter:none!important;\n}\n.sp-ending-copy{\n  min-height:52vh!important;\n  padding-top:5vh!important;\n  gap:0!important;\n}\n.sp-ending-title{\n  max-width:720px!important;\n  font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif!important;\n  font-size:clamp(24px,7vw,38px)!important;\n  font-weight:400!important;\n  line-height:1.45!important;\n  letter-spacing:.08em!important;\n  color:var(--sp-sub)!important;\n}\n.sp-ending-three{\n  width:min(720px,100%)!important;\n  max-width:100%!important;\n  margin:0 auto!important;\n  gap:10px!important;\n}\n.sp-ending-slot,.sp-ending-cover{\n  width:100%!important;\n  min-width:0!important;\n  min-height:96px!important;\n  padding:12px 8px!important;\n  border:1px solid var(--sp-line)!important;\n  border-radius:2px!important;\n  background:transparent!important;\n  color:var(--sp-text)!important;\n  box-shadow:none!important;\n}\n.sp-ending-slot small,.sp-ending-cover small{\n  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;\n  font-size:10px!important;\n  font-weight:400!important;\n  letter-spacing:.2em!important;\n  color:var(--sp-sub)!important;\n}\n.sp-ending-slot strong,.sp-ending-cover strong{\n  font-family:Georgia,"Times New Roman",serif!important;\n  font-size:clamp(17px,3.8vw,24px)!important;\n  font-weight:500!important;\n  line-height:1.25!important;\n}\n.sp-ending-restart{\n  width:auto!important;min-width:0!important;height:auto!important;\n  margin-top:28px!important;margin-bottom:0!important;\n  padding:8px 10px!important;\n  border:0!important;border-radius:0!important;\n  background:transparent!important;box-shadow:none!important;\n  color:var(--sp-sub)!important;\n  font-family:Georgia,"Times New Roman",serif!important;\n  font-size:14px!important;font-weight:400!important;letter-spacing:.04em!important;\n}\n@media(max-width:520px){\n  .sp-ending-copy{min-height:52vh!important;padding-top:5vh!important}\n  .sp-ending-three{width:100%!important}\n  .sp-ending-slot,.sp-ending-cover{min-height:96px!important}\n  .sp-ending-restart{font-size:13px!important}\n}\n
+
+
+/* v0.2.67 — ending typography/behavior parity with Public Player */
+.sp-ending-kicker{display:none!important}
+.sp-ending{
+  background:var(--sp-bg)!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+.sp-ending-copy{
+  min-height:52vh!important;
+  padding-top:5vh!important;
+  gap:0!important;
+}
+.sp-ending-title{
+  max-width:720px!important;
+  font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif!important;
+  font-size:clamp(24px,7vw,38px)!important;
+  font-weight:400!important;
+  line-height:1.45!important;
+  letter-spacing:.08em!important;
+  color:var(--sp-sub)!important;
+}
+.sp-ending-three{
+  width:min(720px,100%)!important;
+  max-width:100%!important;
+  margin:0 auto!important;
+  gap:10px!important;
+}
+.sp-ending-slot,.sp-ending-cover{
+  width:100%!important;
+  min-width:0!important;
+  min-height:96px!important;
+  padding:12px 8px!important;
+  border:1px solid var(--sp-line)!important;
+  border-radius:2px!important;
+  background:transparent!important;
+  color:var(--sp-text)!important;
+  box-shadow:none!important;
+}
+.sp-ending-slot small,.sp-ending-cover small{
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:10px!important;
+  font-weight:400!important;
+  letter-spacing:.2em!important;
+  color:var(--sp-sub)!important;
+}
+.sp-ending-slot strong,.sp-ending-cover strong{
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:clamp(17px,3.8vw,24px)!important;
+  font-weight:500!important;
+  line-height:1.25!important;
+}
+.sp-ending-restart{
+  width:auto!important;min-width:0!important;height:auto!important;
+  margin-top:28px!important;margin-bottom:0!important;
+  padding:8px 10px!important;
+  border:0!important;border-radius:0!important;
+  background:transparent!important;box-shadow:none!important;
+  color:var(--sp-sub)!important;
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:14px!important;font-weight:400!important;letter-spacing:.04em!important;
+}
+@media(max-width:520px){
+  .sp-ending-copy{min-height:52vh!important;padding-top:5vh!important}
+  .sp-ending-three{width:100%!important}
+  .sp-ending-slot,.sp-ending-cover{min-height:96px!important}
+  .sp-ending-restart{font-size:13px!important}
+}
+
+
+/* v0.2.68 — ending parity with Public Player */
+.sp-ending-kicker{display:none!important}
+.sp-ending-title{
+  opacity:0!important;
+  transform:translateY(5px)!important;
+  transition:opacity 1200ms ease 280ms,transform 1200ms ease 280ms!important;
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:clamp(24px,7vw,38px)!important;
+  font-weight:400!important;
+  letter-spacing:.08em!important;
+  color:var(--sp-sub)!important;
+}
+.sp-ending.is-visible .sp-ending-title{opacity:1!important;transform:translateY(0)!important}
+.sp-ending-slot,.sp-ending-cover{
+  opacity:0!important;transform:translateY(10px)!important;
+  transition:opacity .85s ease 3000ms,transform .85s ease 3000ms!important;
+}
+.sp-ending.is-visible .sp-ending-slot,.sp-ending.is-visible .sp-ending-cover{opacity:1!important;transform:translateY(0)!important}
+.sp-ending-slot small,.sp-ending-cover small{
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:10px!important;font-weight:400!important;letter-spacing:.2em!important;color:var(--sp-sub)!important;
+}
+.sp-ending-slot strong,.sp-ending-cover strong{
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:clamp(17px,3.8vw,24px)!important;font-weight:500!important;
+}
+.sp-ending-restart{
+  opacity:0!important;transform:translateY(8px)!important;
+  transition:opacity .75s ease 3400ms,transform .75s ease 3400ms!important;
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:14px!important;font-weight:400!important;letter-spacing:.04em!important;color:var(--sp-sub)!important;
+}
+.sp-ending.is-visible .sp-ending-restart{opacity:1!important;transform:translateY(0)!important}
+
+
+/* v0.2.69 — Studio ending cleanup */
+.sp-ending-three{
+  margin-bottom:0!important;
+}
+.sp-ending-copy{
+  margin-bottom:0!important;
+}
+.sp-ending-restart{
+  display:none!important;
+}
+
+
+/* v0.2.70 — center COVER button must visually match left/right */
+.sp-ending-three .sp-ending-slot,
+.sp-ending-three .sp-ending-cover{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:8px!important;
+  text-align:center!important;
+}
+.sp-ending-three .sp-ending-slot small,
+.sp-ending-three .sp-ending-cover small{
+  display:block!important;
+  visibility:visible!important;
+  margin:0!important;
+  padding:0!important;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:9px!important;
+  font-weight:500!important;
+  line-height:1!important;
+  letter-spacing:.2em!important;
+  color:var(--sp-sub)!important;
+  opacity:1!important;
+}
+.sp-ending-three .sp-ending-slot strong,
+.sp-ending-three .sp-ending-cover strong{
+  display:block!important;
+  margin:0!important;
+  padding:0!important;
+  font-family:var(--sp-font-serif)!important;
+  font-size:clamp(16px,3.5vw,22px)!important;
+  font-weight:400!important;
+  line-height:1.3!important;
+  letter-spacing:.025em!important;
+  color:var(--sp-text)!important;
+}
