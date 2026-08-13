@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.74</title>
+  <title>Scene Studio v0.2.75</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,7 +17,7 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.74</span>
+        <span class="version">v0.2.75</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
@@ -134,7 +134,8 @@
               <small>Easyでは画像だけ指定します。細かな表紙編集はAdvancedへ。</small>
             </div>
             <div class="easy-cover-row">
-              <div id="coverPreview" class="cover-preview">
+              <div id="coverPreview" class="cover-preview cover-preview-editable" role="button" tabindex="0" aria-label="表紙を直接編集">
+                <div class="cover-preview-hint">タップして直接編集</div>
                 <div class="cover-preview-empty"><span>COVER</span><small>画像なしでもOK</small></div>
                 <div class="cover-preview-live" aria-label="表紙テキスト。タップして編集">
                   <small id="coverPreviewAuthor"></small>
@@ -143,10 +144,15 @@
                 </div>
               </div>
               <div class="easy-cover-actions">
-                <label class="cinema-background-button" for="coverImageInput">表紙画像を選ぶ</label>
                 <input id="coverImageInput" type="file" accept="image/*" hidden>
-                <button id="coverImageClear" class="cinema-background-clear" type="button" hidden>表紙画像を外す</button>
-                <p>画像は中央・coverで保存します。タイトル等は作品情報として別に保持されます。</p>
+                <details class="cover-legacy-actions">
+                  <summary>画像だけ変更</summary>
+                  <div class="cover-legacy-actions-inner">
+                    <label class="cinema-background-button" for="coverImageInput">表紙画像を選ぶ</label>
+                    <button id="coverImageClear" class="cinema-background-clear" type="button" hidden>表紙画像を外す</button>
+                    <p>画像は中央・coverで保存します。</p>
+                  </div>
+                </details>
               </div>
             </div>
           </div>
@@ -509,12 +515,27 @@
   <button id="undoCompactButton" class="studio-undo-compact" type="button" hidden aria-label="元に戻す">↶</button>
 
 </main>
-<script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js"></script>
-<script src="./japanese-splitter.js"></script>
-<script src="./english-splitter.js"></script>
-<script src="./scene-text-splitter.js"></script>
-<script src="./script.js"></script>
+
+  <div id="coverQuickDialog" class="ending-quick-dialog cover-quick-dialog" hidden>
+    <div class="ending-quick-card cover-quick-card" role="dialog" aria-modal="true" aria-labelledby="coverQuickTitle">
+      <div class="ending-quick-head">
+        <div><small>COVER QUICK EDIT</small><strong id="coverQuickTitle">表紙を編集</strong></div>
+        <button id="coverQuickClose" class="ending-quick-close" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div class="ending-quick-fields cover-quick-fields">
+        <label><span>作品タイトル</span><input id="coverQuickWorkTitle" type="text" placeholder="Untitled"></label>
+        <label><span>作者名</span><input id="coverQuickAuthor" type="text" placeholder="作者名"></label>
+        <label><span>サブタイトル</span><input id="coverQuickSubtitle" type="text" placeholder="サブタイトル"></label>
+        <label><span>話数</span><input id="coverQuickEpisode" type="text" placeholder="例：第1話"></label>
+      </div>
+      <div class="cover-quick-image-actions">
+        <button id="coverQuickImage" class="ending-quick-clear" type="button">表紙画像を選ぶ / 変更</button>
+        <button id="coverQuickImageClear" class="ending-quick-clear" type="button">表紙画像を外す</button>
+      </div>
+      <small class="cover-quick-note">入力は表紙プレビューへ即時反映されます。</small>
+      <button id="coverQuickDone" class="ending-quick-done" type="button">完了</button>
+    </div>
+  </div>
 
   <div id="endingQuickDialog" class="ending-quick-dialog" hidden>
     <div class="ending-quick-card" role="dialog" aria-modal="true">
@@ -538,6 +559,15 @@
       <button id="endingQuickDone" class="ending-quick-done" type="button">完了</button>
     </div>
   </div>
+
+<script src="./scene-studio-i18n.js"></script>
+<script src="./scene-player-core.js"></script>
+<script src="./japanese-splitter.js"></script>
+<script src="./english-splitter.js"></script>
+<script src="./scene-text-splitter.js"></script>
+<script src="./script.js"></script>
+
+
 
 </body>
 </html>

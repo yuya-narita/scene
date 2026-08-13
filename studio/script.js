@@ -21,6 +21,16 @@
   const coverPreviewAuthor = $('#coverPreviewAuthor');
   const coverPreviewSubtitle = $('#coverPreviewSubtitle');
   const workMetaSection = $('.work-meta-section');
+  const coverQuickDialog=$('#coverQuickDialog');
+  const coverQuickClose=$('#coverQuickClose');
+  const coverQuickDone=$('#coverQuickDone');
+  const coverQuickWorkTitle=$('#coverQuickWorkTitle');
+  const coverQuickAuthor=$('#coverQuickAuthor');
+  const coverQuickSubtitle=$('#coverQuickSubtitle');
+  const coverQuickEpisode=$('#coverQuickEpisode');
+  const coverQuickImage=$('#coverQuickImage');
+  const coverQuickImageClear=$('#coverQuickImageClear');
+
   const authorHistoryList = $('#authorHistoryList');
   const endingLabelInput = $('#endingLabelInput');
   const endingLinkInputs = [1,2].map(n=>({kicker:$(`#endingLink${n}Kicker`),label:$(`#endingLink${n}Label`),url:$(`#endingLink${n}Url`)}));
@@ -2901,7 +2911,7 @@
       updateCoverPreview();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
     }catch(error){console.error(error);alert('画像を読み込めませんでした。もう一度選択してください。');coverImageInput.value='';}
   });
-  coverImageClear?.addEventListener('click',()=>{
+  coverImageClear?.addEventListener('click',()=>{if(coverQuickImageClear)coverQuickImageClear.hidden=true;
     if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
     coverImageUrl=''; coverImageFileName='';
     if(coverImageInput)coverImageInput.value='';
@@ -2938,15 +2948,53 @@
       scheduleDraftSave(250);
     });
   });
-  // v0.2.74: direct-preview editing stays isolated from the rest of Easy Studio.
+  // v0.2.75: the cover itself is the primary Easy Studio editor.
+  function syncCoverQuickToMain(){
+    if(titleInput)titleInput.value=coverQuickWorkTitle?.value||'';
+    if(authorInput)authorInput.value=coverQuickAuthor?.value||'';
+    if(subtitleInput)subtitleInput.value=coverQuickSubtitle?.value||'';
+    if(episodeInput)episodeInput.value=coverQuickEpisode?.value||'';
+    updateCoverPreview();
+    syncEasyShellToWorkingDocument();
+    syncEasyPublishButton();
+    scheduleDraftSave(250);
+  }
+  function openCoverQuickEditor(focusTarget='title'){
+    if(!coverQuickDialog)return;
+    coverQuickWorkTitle.value=titleInput?.value||'';
+    coverQuickAuthor.value=authorInput?.value||'';
+    coverQuickSubtitle.value=subtitleInput?.value||'';
+    coverQuickEpisode.value=episodeInput?.value||'';
+    coverQuickImageClear.hidden=!coverImageUrl;
+    coverQuickDialog.hidden=false;
+    document.documentElement.classList.add('ending-quick-open');
+    const target={title:coverQuickWorkTitle,author:coverQuickAuthor,subtitle:coverQuickSubtitle,episode:coverQuickEpisode}[focusTarget]||coverQuickWorkTitle;
+    requestAnimationFrame(()=>target?.focus());
+  }
+  function closeCoverQuickEditor(){
+    if(!coverQuickDialog)return;
+    coverQuickDialog.hidden=true;
+    document.documentElement.classList.remove('ending-quick-open');
+    authorInput?.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+
+  // v0.2.75: direct-preview editing stays isolated from the rest of Easy Studio.
   function revealWorkField(field){
     if(!field)return;
     if(workMetaSection)workMetaSection.open=true;
     requestAnimationFrame(()=>{field.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>field.focus(),220);});
   }
-  coverPreviewTitle?.addEventListener('click',(event)=>{event.stopPropagation();revealWorkField(titleInput);});
-  coverPreviewAuthor?.addEventListener('click',(event)=>{event.stopPropagation();revealWorkField(authorInput);});
-  coverPreviewSubtitle?.addEventListener('click',(event)=>{event.stopPropagation();revealWorkField(subtitleInput);});
+  coverPreview?.addEventListener('click',()=>openCoverQuickEditor('title'));
+  coverPreview?.addEventListener('keydown',(event)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openCoverQuickEditor('title');}});
+  coverPreviewTitle?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('title');});
+  coverPreviewAuthor?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('author');});
+  coverPreviewSubtitle?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('subtitle');});
+  [coverQuickWorkTitle,coverQuickAuthor,coverQuickSubtitle,coverQuickEpisode].forEach(el=>el?.addEventListener('input',syncCoverQuickToMain));
+  coverQuickImage?.addEventListener('click',()=>coverImageInput?.click());
+  coverQuickImageClear?.addEventListener('click',()=>{coverImageClear?.click();coverQuickImageClear.hidden=true;});
+  coverQuickDone?.addEventListener('click',closeCoverQuickEditor);
+  coverQuickClose?.addEventListener('click',closeCoverQuickEditor);
+  coverQuickDialog?.addEventListener('click',(event)=>{if(event.target===coverQuickDialog)closeCoverQuickEditor();});
   endingPreviewCenterEdit?.addEventListener('click',()=>openEndingQuickEditor('center'));
   endingPreviewLinks[0]?.addEventListener('click',()=>openEndingQuickEditor('left'));
   endingPreviewLinks[1]?.addEventListener('click',()=>openEndingQuickEditor('right'));
