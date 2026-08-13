@@ -292,7 +292,8 @@
         id:latestPublishedId||'',
         url:latestPublishedUrl||'',
         fingerprint:latestPublishedFingerprint||'',
-        publishedAt:latestPublishedAt||0
+        publishedAt:latestPublishedAt||0,
+        stoppedAt:latestPublicationStoppedAt||0
       },
       recProgress:clone(autoRecProgress),
       cover:{url:coverImageUrl||'',name:coverImageFileName||''},
@@ -346,6 +347,7 @@
     latestPublishedUrl=row.publication?.url||'';
     latestPublishedFingerprint=row.publication?.fingerprint||'';
     latestPublishedAt=Number(row.publication?.publishedAt)||0;
+    latestPublicationStoppedAt=Number(row.publication?.stoppedAt)||0;
     titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
@@ -435,26 +437,49 @@
     $('#unpublishDialog')?.showModal();
   }
 
+  async function setHostedPublicationState(workId,action){
+    const response=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}/${action}`,{method:'POST'});
+    let payload=null; try{payload=await response.json();}catch(_){}
+    if(!response.ok || !payload?.ok)throw new Error(payload?.error||`${action} failed (${response.status})`);
+    return payload;
+  }
+
   async function confirmDraftUnpublish(){
-    const row=pendingUnpublishDraft;
-    pendingUnpublishDraft=null;
-    if(!row?.publication?.url)return;
+    const row=pendingUnpublishDraft; pendingUnpublishDraft=null;
+    if(!row?.publication?.url || !row?.publication?.id)return;
+    try{
+      await setHostedPublicationState(row.publication.id,'unpublish');
+      const fresh=await getDraftRecord(row.id); if(!fresh)return;
+      fresh.publication={...(fresh.publication||{}),id:row.publication.id,url:'',stoppedAt:Date.now()};
+      fresh.updatedAt=Date.now(); await putDraftRecord(fresh);
+      if(currentDraftId===row.id){
+        latestPublishedId=row.publication.id; latestPublishedUrl='';
+        latestPublicationStoppedAt=fresh.publication.stoppedAt; syncPublishCopyForStatus();
+      }
+      await refreshDraftUI(false);
+    }catch(error){ console.warn('Unpublish failed',error); alert(t('unpublish.failed')); }
+  }
 
-    const fresh=await getDraftRecord(row.id);
-    if(!fresh)return;
-    fresh.publication={id:'',url:'',fingerprint:'',publishedAt:0};
-    fresh.updatedAt=Date.now();
-    await putDraftRecord(fresh);
+  async function republishDraftPublication(row){
+    const workId=row?.publication?.id; if(!workId)return;
+    try{
+      await setHostedPublicationState(workId,'republish');
+      const fresh=await getDraftRecord(row.id); if(!fresh)return;
+      fresh.publication={...(fresh.publication||{}),id:workId,url:`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}`,stoppedAt:0};
+      fresh.updatedAt=Date.now(); await putDraftRecord(fresh);
+      if(currentDraftId===row.id){
+        latestPublishedId=workId; latestPublishedUrl=fresh.publication.url;
+        latestPublicationStoppedAt=0; syncPublishCopyForStatus();
+      }
+      await refreshDraftUI(false);
+    }catch(error){ console.warn('Republish failed',error); alert(t('republish.failed')); }
+  }
 
-    if(currentDraftId===row.id){
-      latestPublishedId='';
-      latestPublishedUrl='';
-      latestPublishedFingerprint='';
-      latestPublishedAt=0;
-      syncPublishCopyForStatus();
-    }
-
-    await refreshDraftUI(false);
+  async function deleteHostedPublication(workId){
+    if(!workId)return;
+    const response=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}`,{method:'DELETE'});
+    let payload=null; try{payload=await response.json();}catch(_){}
+    if(!response.ok || !payload?.ok)throw new Error(payload?.error||`Delete failed (${response.status})`);
   }
 
   async function refreshDraftUI(showResume=true){
@@ -496,9 +521,10 @@
       const total=row.sceneCount||row.document?.scenes?.length||0;
       const rec=Math.min(total,Number(row.recProgress?.completedCount||row.recCompletedCount||0));
       const isPublished=Boolean(row.publication?.url);
-      const status=isPublished?draftPublishStatus(row):'draft';
+      const isStopped=!isPublished && Boolean(row.publication?.id);
+      const status=isPublished?draftPublishStatus(row):(isStopped?'stopped':'draft');
       const el=document.createElement('article');
-      el.className=`draft-row unified-work-row ${isPublished?'is-published':''} ${status==='dirty'?'is-dirty':''}`;
+      el.className=`draft-row unified-work-row ${isPublished?'is-published':''} ${isStopped?'is-stopped':''} ${status==='dirty'?'is-dirty':''}`;
 
       el.innerHTML=`
         <div class="unified-work-copy">
@@ -514,16 +540,17 @@
           <button data-share ${isPublished?'':'hidden'}>${t('publish.share')}</button>
           <button data-copy ${isPublished?'':'hidden'}>${t('draft.link')}</button>
           <button data-stop ${isPublished?'':'hidden'}>${t('draft.unpublish')}</button>
+          <button data-republish ${isStopped?'':'hidden'}>${t('draft.republish')}</button>
           <button data-delete>${t('draft.delete')}</button>
         </div>`;
 
       el.querySelector('strong').textContent=row.title||'Untitled';
 
       const badges=el.querySelector('.unified-work-badges');
-      if(isPublished){
+      if(isPublished || isStopped){
         const badge=document.createElement('span');
-        badge.className=`published-status ${status==='dirty'?'is-dirty':''}`;
-        badge.textContent=status==='dirty'?t('draft.status.dirty'):t('draft.status.published');
+        badge.className=`published-status ${status==='dirty'?'is-dirty':''} ${isStopped?'is-stopped':''}`;
+        badge.textContent=isStopped?t('draft.status.stopped'):(status==='dirty'?t('draft.status.dirty'):t('draft.status.published'));
         badges.appendChild(badge);
       }
 
@@ -540,19 +567,24 @@
         el.querySelector('[data-copy]').onclick=e=>copyAnyPublishedUrl(row.publication.url,e.currentTarget);
         el.querySelector('[data-stop]').onclick=()=>stopDraftPublication(row);
       }
+      if(isStopped)el.querySelector('[data-republish]').onclick=()=>republishDraftPublication(row);
 
       el.querySelector('[data-open]').onclick=async()=>{
         await restoreDraftRecord(await getDraftRecord(row.id));
         $('#draftManagerDialog').close();
       };
       el.querySelector('[data-delete]').onclick=async()=>{
-        if(!confirm(`「${row.title||'Untitled'}」のローカル下書きを削除しますか？`))return;
-        await removeDraftRecord(row.id);
-        if(currentDraftId===row.id){
-          currentDraftId='';
-          localStorage.removeItem(DRAFT_LAST_KEY);
-        }
-        await refreshDraftUI(true);
+        const hasHosted=Boolean(row.publication?.id);
+        if(!confirm(hasHosted?t('draft.deleteHostedConfirm',{title:row.title||'Untitled'}):t('draft.deleteLocalConfirm',{title:row.title||'Untitled'})))return;
+        try{
+          if(hasHosted)await deleteHostedPublication(row.publication.id);
+          await removeDraftRecord(row.id);
+          if(currentDraftId===row.id){
+            currentDraftId=''; latestPublishedId=''; latestPublishedUrl=''; latestPublishedFingerprint='';
+            latestPublishedAt=0; latestPublicationStoppedAt=0; localStorage.removeItem(DRAFT_LAST_KEY);
+          }
+          await refreshDraftUI(true);
+        }catch(error){console.warn('Delete failed',error);alert(t('draft.deleteFailed'));}
       };
 
       list.appendChild(el);
@@ -1847,7 +1879,8 @@
       // Hosting v2: upload browser-local image/audio assets first, replace blob: URLs
       // with permanent Worker/R2 URLs, then publish the portable Scene document.
       const hostedDocument=await prepareDocumentForPublish(sceneDocument);
-      const response=await fetch(`${SCENE_STUDIO_API_BASE}/publish`,{
+      const publishEndpoint=id?`${SCENE_STUDIO_API_BASE}/publish?id=${encodeURIComponent(id)}`:`${SCENE_STUDIO_API_BASE}/publish`;
+      const response=await fetch(publishEndpoint,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(hostedDocument)
@@ -1872,6 +1905,7 @@
   let latestPublishedUrl='';
   let latestPublishedFingerprint='';
   let latestPublishedAt=0;
+  let latestPublicationStoppedAt=0;
 
   function stablePublishValue(value){
     if(value===null || value===undefined)return value;
@@ -1973,7 +2007,7 @@
     try{
       const result=await publishAdapter.publish(
         getDocumentForPlayback(),
-        {id:wasUpdate?latestPublishedId:''}
+        {id:latestPublishedId||''}
       );
       if(!result?.url)throw new Error('Publish URL missing');
 
@@ -1981,6 +2015,7 @@
       latestPublishedUrl=result.url;
       latestPublishedFingerprint=currentPublishFingerprint();
       latestPublishedAt=Date.now();
+      latestPublicationStoppedAt=0;
 
       const text=$('#publishUrlText');
       if(text)text.textContent=latestPublishedUrl;
