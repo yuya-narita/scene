@@ -8,6 +8,7 @@
   const intro = document.getElementById('publicIntro');
   const introTitle = document.getElementById('publicIntroTitle');
   const introAuthor = document.getElementById('publicIntroAuthor');
+  const introEpisode = document.getElementById('publicIntroEpisode');
   const introDescription = document.getElementById('publicIntroDescription');
   const introCover = document.getElementById('publicIntroCover');
   const introCoverDim = document.getElementById('publicIntroCoverDim');
@@ -163,6 +164,7 @@
     document.title = doc.title || 'Scene';
     introTitle.textContent = doc.title || 'Scene';
     introAuthor.textContent = doc.author || '';
+    if(introEpisode){const ep=doc.metadata?.episode||doc.episode||'';introEpisode.textContent=ep;introEpisode.hidden=!ep;}
     introDescription.textContent = doc.description || doc.metadata?.subtitle || doc.subtitle || '';
     setTheme(doc);
     applyCover(doc);

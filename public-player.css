@@ -341,3 +341,7 @@ body{
   font-weight:400!important;
   letter-spacing:.035em!important;
 }
+
+/* v0.3.24 — episode on public cover */
+.public-episode{margin:6px 0 0;font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif;font-size:clamp(13px,3.2vw,17px);letter-spacing:.06em;opacity:.82}
+.public-episode[hidden]{display:none!important}
