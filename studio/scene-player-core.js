@@ -124,6 +124,17 @@
         <div class="sp-bg-textures" aria-hidden="true"></div>
         <div class="sp-bg-flash" aria-hidden="true"></div>
         <div class="sp-veil" aria-hidden="true"></div>
+        <section class="sp-cover" hidden>
+          <div class="sp-cover-bg" aria-hidden="true"></div>
+          <div class="sp-cover-dim" aria-hidden="true"></div>
+          <div class="sp-cover-copy">
+            <span class="sp-cover-kicker">SCENE PLAYER</span>
+            <small class="sp-cover-author"></small>
+            <strong class="sp-cover-title"></strong>
+            <span class="sp-cover-subtitle"></span>
+          </div>
+          <button class="sp-cover-start" type="button">はじめる</button>
+        </section>
         <header class="sp-header">
           <button class="sp-button sp-prev" type="button" aria-label="Previous scene">‹</button>
           <div class="sp-meta">
@@ -155,16 +166,25 @@
           <div class="sp-ending-copy">
             <span class="sp-ending-kicker">END</span>
             <strong class="sp-ending-title">読了</strong>
-            <p class="sp-ending-text">最後まで読みました。</p>
+            <p class="sp-ending-text"></p>
           </div>
-          <div class="sp-ending-links"></div>
-          <button class="sp-ending-cover" type="button">表紙に戻る</button>
-          <button class="sp-ending-restart" type="button">最初から読む</button>
+          <div class="sp-ending-three">
+            <button class="sp-ending-slot sp-ending-left" type="button" hidden><small></small><strong></strong></button>
+            <button class="sp-ending-slot sp-ending-cover" type="button"><small>COVER</small><strong>表紙に戻る</strong></button>
+            <button class="sp-ending-slot sp-ending-right" type="button" hidden><small></small><strong></strong></button>
+          </div>
+          <button class="sp-ending-restart" type="button">もう一度読む</button>
         </section>
       `;
 
       const q = (s) => this.host.querySelector(s);
       this.els = {
+        cover: q('.sp-cover'),
+        coverBg: q('.sp-cover-bg'),
+        coverAuthor: q('.sp-cover-author'),
+        coverTitle: q('.sp-cover-title'),
+        coverSubtitle: q('.sp-cover-subtitle'),
+        coverStart: q('.sp-cover-start'),
         background: q('.sp-background'),
         bgA: q('.sp-bg-a'),
         bgB: q('.sp-bg-b'),
@@ -191,7 +211,8 @@
         endingTitle: q('.sp-ending-title'),
         endingRestart: q('.sp-ending-restart'),
         endingCover: q('.sp-ending-cover'),
-        endingLinks: q('.sp-ending-links'),
+        endingLeft: q('.sp-ending-left'),
+        endingRight: q('.sp-ending-right'),
         endingText: q('.sp-ending-text'),
         historyHelp: q('.sp-history-help'),
         historyClose: q('.sp-history-close'),
@@ -229,7 +250,8 @@
       this.els.historyClose.setAttribute('aria-label', this._uiText('player.history.close'));
       this.els.endingText.textContent = this._uiText('player.ending.text');
       this.els.endingRestart.textContent = this._uiText('player.ending.restart');
-      if(this.els.endingCover)this.els.endingCover.textContent = this._uiText('player.ending.cover');
+      if(this.els.endingCover)this.els.endingCover.textContent = this.uiLanguage==='en' ? 'Back to cover' : '表紙に戻る';
+      if(this.els.coverStart)this.els.coverStart.textContent = this.uiLanguage==='en' ? 'Start' : 'はじめる';
       if (!this.document) this.els.endingTitle.textContent = this._uiText('player.ending.title');
       return this.uiLanguage;
     }
@@ -263,7 +285,8 @@
       });
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
       this._on(this.els.endingRestart, 'click', () => this.restart());
-      if(this.els.endingCover)this._on(this.els.endingCover,'click',()=>this.restart());
+      if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover();});
+      if(this.els.endingCover)this._on(this.els.endingCover,'click',()=>this.showCover({restart:true}));
       this._on(this.els.auto, 'click', (e) => {
         e.stopPropagation();
         this.unlockAudio(true);
@@ -1012,22 +1035,11 @@
       const authoredEndingLabel=String(doc.ending?.label || doc.ending?.title || '').trim();
       this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
       this.els.endingText.textContent = '';
-      if(this.els.endingLinks){
-        this.els.endingLinks.replaceChildren();
-        const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
-        links.slice(0,3).forEach(item=>{
-          const label=String(item?.label||item?.title||'').trim();
-          const url=String(item?.url||item?.href||'').trim();
-          if(!label)return;
-          const button=document.createElement('button');
-          button.type='button';
-          button.className='sp-ending-link';
-          button.textContent=label;
-          button.disabled=true;
-          button.dataset.previewUrl=url;
-          this.els.endingLinks.appendChild(button);
-        });
-      }
+      const endingLinks=Array.isArray(doc.ending?.links)?doc.ending.links:[];
+      const left=endingLinks.find(x=>x?.position==='left')||endingLinks[0]||null;
+      const right=endingLinks.find(x=>x?.position==='right')||(endingLinks.length>1?endingLinks[1]:null);
+      const applyEndingSlot=(button,item)=>{if(!button)return;const label=String(item?.label||item?.title||'').trim();const kicker=String(item?.kicker||'').trim();button.hidden=!label;const s=button.querySelector('small'),b=button.querySelector('strong');if(s){s.textContent=kicker;s.hidden=!kicker;}if(b)b.textContent=label;button.dataset.previewUrl=String(item?.url||item?.href||'').trim();};
+      applyEndingSlot(this.els.endingLeft,left); applyEndingSlot(this.els.endingRight,right);
       this.els.ending.hidden = true;
       this.backgroundState = null;
       this.backgroundLayerIndex = 0;
@@ -1035,6 +1047,7 @@
       this._audioRenderMode = 'load';
 
       this._render();
+      this.showCover();
       emit(this.host, 'sceneplayer:load', { document: doc, index: this.index });
       return this;
     }
@@ -1242,6 +1255,49 @@
       return true;
     }
 
+    showCover(options = {}) {
+      if (!this.document || !this.els?.cover) return false;
+      if (options.restart) {
+        this._finishVisibleEntranceEffects();
+        this._clearAutoTimer();
+        this._resetPresentationRuntime();
+        this._resetBackgroundRuntime();
+        this._stopAllAudio(true);
+        this.audioPlaybackArmed = false;
+        this.index = 0;
+        this.maxVisitedIndex = 0;
+        this.closeHistory({ keepVisualState: true });
+        this.ended = false;
+        this.els.ending.hidden = true;
+        this._audioRenderMode = 'restore';
+        this._render();
+      }
+      const cover=this.document.cover||{};
+      const src=String(cover.src||cover.url||cover.image||'').trim();
+      if(this.els.coverBg){
+        this.els.coverBg.style.backgroundImage=src?`url("${src.replace(/"/g,'\\"')}")`:'none';
+        this.els.coverBg.style.backgroundSize=cover.fit==='contain'?'contain':'cover';
+        this.els.coverBg.style.backgroundPosition=cover.position||'center center';
+      }
+      if(this.els.coverAuthor)this.els.coverAuthor.textContent=this.document.author||'';
+      if(this.els.coverTitle)this.els.coverTitle.textContent=this.document.title||'Untitled';
+      if(this.els.coverSubtitle)this.els.coverSubtitle.textContent=this.document.metadata?.subtitle||this.document.subtitle||'';
+      this.els.cover.hidden=false;
+      this.host.classList.add('sp-cover-open');
+      return true;
+    }
+
+    _beginFromCover() {
+      if(!this.document || !this.els?.cover)return false;
+      this.unlockAudio(true);
+      this.els.cover.hidden=true;
+      this.host.classList.remove('sp-cover-open');
+      this._audioRenderMode='restore';
+      this._render();
+      emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index});
+      return true;
+    }
+
     restart() {
       if (!this.document) return;
       this._finishVisibleEntranceEffects();
@@ -1262,6 +1318,7 @@
       this.els.ending.hidden = true;
       this._audioRenderMode = 'restore';
       this._render();
+      this.showCover();
       emit(this.host, 'sceneplayer:restart', { scene: this.currentScene });
     }
 
@@ -1271,7 +1328,9 @@
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this.ended = true;
+      this.els.ending.classList.remove('is-visible');
       this.els.ending.hidden = false;
+      this._presentationTimeout(()=>this.els.ending?.classList.add('is-visible'),3000);
       emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
     }
 

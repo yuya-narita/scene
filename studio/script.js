@@ -22,7 +22,7 @@
   const coverPreviewSubtitle = $('#coverPreviewSubtitle');
   const authorHistoryList = $('#authorHistoryList');
   const endingLabelInput = $('#endingLabelInput');
-  const endingLinkInputs = [1,2,3].map(n=>({label:$(`#endingLink${n}Label`),url:$(`#endingLink${n}Url`)}));
+  const endingLinkInputs = [1,2].map(n=>({kicker:$(`#endingLink${n}Kicker`),label:$(`#endingLink${n}Label`),url:$(`#endingLink${n}Url`)}));
   const endingPreviewLabel = $('#endingPreviewLabel');
   const endingPreviewLinks = $$('[data-preview-link]');
   let coverImageUrl = '';
@@ -363,7 +363,7 @@
     if(densitySelect)densitySelect.value='normal';
     coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';
     if(endingLabelInput)endingLabelInput.value=row.ending?.label||workingDocument?.ending?.label||'';
-    endingLinkInputs.forEach((pair,index)=>{const item=row.ending?.links?.[index]||workingDocument?.ending?.links?.[index]||{};if(pair.label)pair.label.value=item.label||'';if(pair.url)pair.url.value=item.url||'';});
+    endingLinkInputs.forEach((pair,index)=>{const pos=index===0?'left':'right';const links=row.ending?.links||workingDocument?.ending?.links||[];const item=links.find(x=>x?.position===pos)||links[index]||{};if(pair.kicker)pair.kicker.value=item.kicker||'';if(pair.label)pair.label.value=item.label||'';if(pair.url)pair.url.value=item.url||'';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateProtectedResplitPreview();
     if(workingDocument?.scenes?.length){normalizeSceneIds();refreshDocumentLanguages();renderAdvanced();}
     setScreen('easy');scrollScreenToTop(editorScreen);updateAutoRecStartLabel();
@@ -628,7 +628,7 @@
     if(densitySelect)densitySelect.value='normal';
     if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
     coverImageUrl='';coverImageFileName='';
-    if(endingLabelInput)endingLabelInput.value='';endingLinkInputs.forEach(pair=>{if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
+    if(endingLabelInput)endingLabelInput.value='';endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateAutoRecStartLabel();
     setScreen('easy');scrollScreenToTop(editorScreen);
     return true;
@@ -724,17 +724,19 @@
   function endingFromEasy(){
     return {
       label:String(endingLabelInput?.value||'').trim(),
-      links:endingLinkInputs.map(row=>({label:String(row.label?.value||'').trim(),url:String(row.url?.value||'').trim()})).filter(x=>x.label&&x.url)
+      coverButton:{kicker:'COVER',label:t('ending.cover')},
+      links:endingLinkInputs.map((row,index)=>({position:index===0?'left':'right',kicker:String(row.kicker?.value||'').trim(),label:String(row.label?.value||'').trim(),url:String(row.url?.value||'').trim()})).filter(x=>x.label&&x.url)
     };
   }
   function updateEndingPreview(){
-    if(endingPreviewLabel){
-      endingPreviewLabel.textContent=String(endingLabelInput?.value||'').trim()||t('ending.preview.default');
-    }
+    if(endingPreviewLabel)endingPreviewLabel.textContent=String(endingLabelInput?.value||'').trim()||t('ending.preview.default');
     endingPreviewLinks.forEach((button,index)=>{
-      const label=String(endingLinkInputs[index]?.label?.value||'').trim();
+      const row=endingLinkInputs[index];
+      const kicker=String(row?.kicker?.value||'').trim();
+      const label=String(row?.label?.value||'').trim();
       button.hidden=!label;
-      button.textContent=label;
+      const small=button.querySelector('small'); const strong=button.querySelector('strong');
+      if(small){small.textContent=kicker;small.hidden=!kicker;} if(strong)strong.textContent=label;
     });
   }
 
@@ -2851,6 +2853,7 @@
     scheduleDraftSave(250);
   });
   endingLinkInputs.forEach(pair=>{
+    pair.kicker?.addEventListener('input',()=>{updateEndingPreview();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(250);});
     pair.label?.addEventListener('input',()=>{
       updateEndingPreview();
       syncEasyShellToWorkingDocument();
