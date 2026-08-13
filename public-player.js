@@ -112,7 +112,7 @@
   function buildEnding(doc) {
     const label=String(doc.ending?.label ?? doc.ending?.title ?? '').trim(); endingLabel.textContent=label; endingLabel.hidden=!label;
     const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
-    const left=links.find(x=>x?.position==='left')||links[0]||null; const right=links.find(x=>x?.position==='right')||(links.length>1?links[1]:null);
+    const hasPositions=links.some(x=>x?.position==='left'||x?.position==='right'); const left=hasPositions?(links.find(x=>x?.position==='left')||null):(links[0]||null); const right=hasPositions?(links.find(x=>x?.position==='right')||null):(links.length>1?links[1]:null);
     const applyBox=(node,item,delay)=>{if(!node)return;const text=String(item?.label||item?.title||'').trim(),kicker=String(item?.kicker||'').trim(),url=String(item?.url||item?.href||'').trim();node.hidden=!(text&&url);if(node.hidden)return;const s=node.querySelector('small'),b=node.querySelector('strong');if(s){s.textContent=kicker;s.hidden=!kicker;}if(b)b.textContent=text;node.href=url;node.style.setProperty('--ending-delay',`${delay}ms`);};
     applyBox(endingLeft,left,3000); applyBox(endingRight,right,3200);
     const cs=endingCoverButton?.querySelector('small'),cb=endingCoverButton?.querySelector('strong'); if(cs)cs.textContent=doc.ending?.coverButton?.kicker||'COVER'; if(cb)cb.textContent=doc.ending?.coverButton?.label||'表紙に戻る'; endingCoverButton?.style.setProperty('--ending-delay','3100ms');

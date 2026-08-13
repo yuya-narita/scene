@@ -315,3 +315,29 @@ body{
     width:100%!important;
   }
 }
+
+
+/* v0.3.21 — authored ending sentence fades in before the 3 action boxes */
+.public-ending-label{
+  opacity:0;
+  transform:translateY(5px);
+  transition:opacity 1200ms ease 280ms,transform 1200ms ease 280ms;
+}
+.public-ending.is-visible .public-ending-label{opacity:1;transform:translateY(0)}
+
+
+/* v0.3.22 — public ending cleanup */
+.public-reread{
+  display:block!important;
+  margin:30px auto 0!important;
+  padding:8px 10px!important;
+  min-height:auto!important;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:var(--public-sub)!important;
+  font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif!important;
+  font-size:13px!important;
+  font-weight:400!important;
+  letter-spacing:.035em!important;
+}
