@@ -2523,3 +2523,41 @@ body.draft-manager-open{
 
 /* v0.2.65 ending 3-box editor */
 .ending-three-editor{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.ending-three-editor .ending-link-head{grid-column:1/-1}.ending-slot-editor{padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}.ending-slot-title{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}.ending-slot-title span{font-weight:800}.ending-slot-title small{color:var(--muted)}.ending-link-row-stacked{grid-template-columns:1fr!important}.ending-fixed-card{min-height:164px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:12px;gap:8px}.ending-fixed-card span,.ending-preview-three button small{font-size:10px;letter-spacing:.18em;color:var(--muted)}.ending-fixed-card strong,.ending-preview-three button strong{font-family:Georgia,"Times New Roman",serif;font-size:18px;font-weight:500}.ending-preview-three{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important}.ending-preview-three button{min-height:92px!important;padding:12px 8px!important;border-radius:2px!important;display:flex!important;flex-direction:column;justify-content:center;align-items:center;gap:7px}.ending-preview-three button[hidden]{visibility:hidden!important;display:flex!important}.ending-preview-reread{margin-top:26px!important}@media(max-width:720px){.ending-three-editor{grid-template-columns:1fr}}
+
+
+/* v0.2.66 — mobile Publish stays in document flow */
+@media(max-width:520px){
+  .easy-publish-action,
+  .easy-publish-bottom{
+    order:initial!important;
+    position:static!important;
+    inset:auto!important;
+    float:none!important;
+  }
+}
+.easy-publish-bottom{
+  display:flex!important;
+  position:static!important;
+  width:100%!important;
+  margin:18px 0 10px!important;
+  transform:none!important;
+}
+
+/* Studio-side ending editor preview: exact 3-slot centering */
+.ending-preview{
+  box-sizing:border-box;
+}
+.ending-preview-center{
+  min-height:46%;
+  padding-top:7%;
+}
+.ending-preview-three{
+  width:100%!important;
+  max-width:760px;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  box-sizing:border-box;
+}
+.ending-preview-three button{
+  box-sizing:border-box;
+}
