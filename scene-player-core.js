@@ -92,7 +92,6 @@
       this.backgroundLayerIndex = 0;
       this.backgroundTimers = [];
       this.audioUnlocked = false;
-      this.muted = false;
       // AudioContext unlock and story playback are separate states.
       // A restarted story must wait for the reader's next stage gesture even
       // when the AudioContext itself is already unlocked.
@@ -126,7 +125,7 @@
         <div class="sp-bg-flash" aria-hidden="true"></div>
         <div class="sp-veil" aria-hidden="true"></div>
         <header class="sp-header">
-          <button class="sp-button sp-prev" type="button" aria-label="Past scenes">‹</button>
+          <button class="sp-button sp-prev" type="button" aria-label="Previous scene">‹</button>
           <div class="sp-meta">
             <span class="sp-author"></span>
             <strong class="sp-title"></strong>
@@ -274,14 +273,6 @@
         if (!item) return;
         const nextIndex = Number(item.dataset.index);
         if (!Number.isInteger(nextIndex)) return;
-
-        // A swipe used to open History sets suppressNextClick so the synthetic
-        // click following that gesture cannot advance the story accidentally.
-        // Once the reader deliberately chooses a History item, that protection
-        // has served its purpose. Leaving it armed would swallow the first
-        // intentional tap after returning to the selected Scene.
-        this.suppressNextClick = false;
-
         this.closeHistory({ keepVisualState: true });
         this.goToVisited(nextIndex);
       });
@@ -342,12 +333,14 @@
           if (Math.max(Math.abs(dx), Math.abs(dy)) < this.options.swipeThreshold) return;
           this.suppressNextClick = true;
 
-          // Navigation is intentionally vertical on mobile:
-          // pull down = Past Scenes (only when the author allows it),
-          // push up = next Scene. Horizontal swipes do nothing.
+          // Pulling down/right enters History Scroll. Pushing up/left still advances
+          // only one unread Scene at a time.
           if (Math.abs(dy) >= Math.abs(dx)) {
             if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
             else if (dy < 0) this.next();
+          } else {
+            if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
+            else this.next();
           }
         }, { passive: true });
       }
@@ -786,8 +779,6 @@
       const audio = new Audio();
       audio.preload = 'auto';
       audio.playsInline = true;
-      audio.muted = Boolean(this.muted);
-      audio.muted = Boolean(this.muted);
       this._prepareAudioTransport(audio, command.src);
       audio.src = command.src;
       try { audio.load(); } catch (_) {}
@@ -1112,7 +1103,6 @@
     closeHistory(options = {}) {
       if (!this.historyOpen) return false;
       this.historyOpen = false;
-      this.suppressNextClick = false;
       this.host.classList.remove('sp-history-open');
       this.els.history.hidden = true;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
@@ -1121,35 +1111,6 @@
         maxVisitedIndex: this.maxVisitedIndex
       });
       return true;
-    }
-
-    _applyHistoryTypography(node, scene) {
-      if (!node || !scene) return;
-
-      const sceneTextStyle = scene?.presentation?.text || {};
-      const workTypography = this.document?.appearance?.typography || {};
-
-      const family = sceneTextStyle.fontFamily || workTypography.fontFamily || 'serif';
-      const families = {
-        serif: 'var(--sp-font-serif)',
-        sans: 'var(--sp-font-sans)',
-        mono: 'var(--sp-font-mono)'
-      };
-
-      node.style.fontFamily = families[family] || families.serif;
-
-      if (sceneTextStyle.fontWeight != null) {
-        node.style.fontWeight = String(sceneTextStyle.fontWeight);
-      }
-
-      if (sceneTextStyle.fontStyle) {
-        node.style.fontStyle = String(sceneTextStyle.fontStyle);
-      }
-
-      if (sceneTextStyle.letterSpacing != null) {
-        const v = sceneTextStyle.letterSpacing;
-        node.style.letterSpacing = typeof v === 'number' ? `${v}em` : String(v);
-      }
     }
 
     _renderHistory() {
@@ -1177,13 +1138,11 @@
           const mark = document.createElement('span');
           mark.className = 'sp-history-text';
           mark.textContent = '♪';
-          this._applyHistoryTypography(mark, scene);
           body.appendChild(mark);
         } else {
           const text = document.createElement('span');
           text.className = 'sp-history-text';
           text.textContent = scene.text || '';
-          this._applyHistoryTypography(text, scene);
           body.appendChild(text);
         }
 
@@ -1191,7 +1150,6 @@
           const sub = document.createElement('span');
           sub.className = 'sp-history-subtext';
           sub.textContent = scene.subText;
-          this._applyHistoryTypography(sub, scene);
           body.appendChild(sub);
         }
 
@@ -1291,60 +1249,6 @@
       this.ended = true;
       this.els.ending.hidden = false;
       emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
-    }
-
-    fadeOutAudio(duration = 1600, { includeOneShots = true } = {}) {
-      const ms = Math.max(0, Number(duration) || 0);
-      this._clearAudioTimers();
-
-      ['bgm', 'ambient'].forEach((channel) => {
-        this._stopPersistentChannel(channel, ms);
-      });
-
-      if (includeOneShots) {
-        this.oneshots.forEach((audio) => {
-          if (!audio || audio.paused) return;
-          const startVolume = Number.isFinite(audio.volume) ? audio.volume : 1;
-          const startedAt = performance.now();
-          const step = (now) => {
-            if (!this.oneshots.has(audio)) return;
-            const t = Math.min(1, (now - startedAt) / Math.max(1, ms));
-            try { audio.volume = Math.max(0, startVolume * (1 - t)); } catch (_) {}
-            if (t < 1) requestAnimationFrame(step);
-            else {
-              try { audio.pause(); } catch (_) {}
-              this.oneshots.delete(audio);
-            }
-          };
-          if (ms > 0) requestAnimationFrame(step);
-          else {
-            try { audio.pause(); } catch (_) {}
-            this.oneshots.delete(audio);
-          }
-        });
-      }
-
-      return ms;
-    }
-
-    setMuted(muted = true) {
-      this.muted = Boolean(muted);
-      Object.values(this.audioEls || {}).forEach((audio) => {
-        try { audio.muted = this.muted; } catch (_) {}
-      });
-      this.oneshots.forEach((audio) => {
-        try { audio.muted = this.muted; } catch (_) {}
-      });
-      emit(this.host, 'sceneplayer:mutechange', { muted: this.muted });
-      return this.muted;
-    }
-
-    toggleMuted() {
-      return this.setMuted(!this.muted);
-    }
-
-    isMuted() {
-      return Boolean(this.muted);
     }
 
     startAuto() {
@@ -1661,6 +1565,9 @@
     _swapBackground(state, transition) {
       const current = this._currentBackgroundLayer();
       const incoming = this._nextBackgroundLayer();
+      const transitionDuration=Math.max(0,asNumber(state.transitionDuration,700));
+      incoming.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
+      current.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
       this._prepareBackgroundLayer(incoming, state);
 
       const mode = ['fade','cut','flash','glitch'].includes(transition) ? transition : 'fade';
@@ -1717,10 +1624,13 @@
       const type = ['parallax','breath','slowZoom','panLeft','panRight','panUp','panDown'].includes(motion.type) ? motion.type : null;
       if (!type) return;
       layer.classList.add(`sp-motion-${type}`);
-      layer.style.setProperty('--sp-bg-duration', `${Math.max(250, asNumber(motion.duration, 12000))}ms`);
-      layer.style.setProperty('--sp-bg-scale-from', String(asNumber(motion.scaleFrom, 1)));
-      layer.style.setProperty('--sp-bg-scale-to', String(asNumber(motion.scaleTo, type === 'slowZoom' ? 1.08 : 1.04)));
-      layer.style.setProperty('--sp-bg-pan', `${asNumber(motion.pan, 4)}%`);
+      const defaultDuration = type === 'breath' ? 4200 : 6500;
+      const defaultFrom = type === 'slowZoom' ? 1.0 : 1.06;
+      const defaultTo = type === 'slowZoom' ? 1.14 : (type === 'breath' ? 1.11 : 1.08);
+      layer.style.setProperty('--sp-bg-duration', `${Math.max(250, asNumber(motion.duration, defaultDuration))}ms`);
+      layer.style.setProperty('--sp-bg-scale-from', String(asNumber(motion.scaleFrom, defaultFrom)));
+      layer.style.setProperty('--sp-bg-scale-to', String(asNumber(motion.scaleTo, defaultTo)));
+      layer.style.setProperty('--sp-bg-pan', `${asNumber(motion.pan, 9)}%`);
     }
 
     _applyBackgroundOverlays(state) {
@@ -1844,6 +1754,12 @@
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
       if (style.color) node.style.color = String(style.color);
+      const shadows={
+        none:'none',
+        soft:'0 1px 4px rgba(0,0,0,.48)',
+        strong:'0 2px 4px rgba(0,0,0,.86), 0 0 12px rgba(0,0,0,.48)'
+      };
+      if (style.shadow && shadows[style.shadow]) node.style.textShadow=shadows[style.shadow];
 
       const family = style.fontFamily || this.document?.appearance?.typography?.fontFamily || 'serif';
       const families = {
@@ -1959,39 +1875,26 @@
       this.typingState = { timer, node, text: scene.text, sceneId: scene.id };
     }
 
-    destroy(options = {}) {
+    destroy() {
       if (this.destroyed) return;
-      const preserveHost = Boolean(options?.preserveHost);
-
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this._stopAllAudio(true);
-
       if (this.audioContext && typeof this.audioContext.close === 'function') {
         try { this.audioContext.close(); } catch (_) {}
       }
-
       this.audioGainNodes.clear();
       this.audioSourceNodes.clear();
-      this._bound.forEach(([el, event, fn, eventOptions]) => {
-        el.removeEventListener(event, fn, eventOptions);
-      });
+      this._bound.forEach(([el, event, fn, options]) => el.removeEventListener(event, fn, options));
       this._bound.length = 0;
-
-      // Public Player may keep an old instance alive briefly only so its audio
-      // can fade out. A newer instance can already be using the SAME host.
-      // Never let delayed cleanup of the old instance erase the new DOM.
-      if (!preserveHost) {
-        this.host.innerHTML = '';
-        this.host.classList.remove('sp-core');
-      }
-
+      this.host.innerHTML = '';
+      this.host.classList.remove('sp-core');
       this.destroyed = true;
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.13';
+  ScenePlayerCore.VERSION = '1.4.1';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
