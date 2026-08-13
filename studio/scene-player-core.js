@@ -157,6 +157,8 @@
             <strong class="sp-ending-title">読了</strong>
             <p class="sp-ending-text">最後まで読みました。</p>
           </div>
+          <div class="sp-ending-links"></div>
+          <button class="sp-ending-cover" type="button">表紙に戻る</button>
           <button class="sp-ending-restart" type="button">最初から読む</button>
         </section>
       `;
@@ -188,6 +190,8 @@
         ending: q('.sp-ending'),
         endingTitle: q('.sp-ending-title'),
         endingRestart: q('.sp-ending-restart'),
+        endingCover: q('.sp-ending-cover'),
+        endingLinks: q('.sp-ending-links'),
         endingText: q('.sp-ending-text'),
         historyHelp: q('.sp-history-help'),
         historyClose: q('.sp-history-close'),
@@ -206,11 +210,11 @@
       const fallback = {
         ja:{
           'player.previous':'過去Scene','player.restart':'最初から','player.history':'過去Sceneをスクロール','player.history.close':'履歴を閉じる',
-          'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'最初から読む'
+          'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'最初から読む','player.ending.cover':'表紙に戻る'
         },
         en:{
           'player.previous':'Past Scenes','player.restart':'Restart','player.history':'Scroll past Scenes','player.history.close':'Close history',
-          'player.ending.title':'Finished','player.ending.text':'You reached the end.','player.ending.restart':'Read from start'
+          'player.ending.title':'Finished','player.ending.text':'You reached the end.','player.ending.restart':'Read from start','player.ending.cover':'Back to cover'
         }
       };
       return fallback[this.uiLanguage]?.[key] || fallback.ja[key] || key;
@@ -225,6 +229,7 @@
       this.els.historyClose.setAttribute('aria-label', this._uiText('player.history.close'));
       this.els.endingText.textContent = this._uiText('player.ending.text');
       this.els.endingRestart.textContent = this._uiText('player.ending.restart');
+      if(this.els.endingCover)this.els.endingCover.textContent = this._uiText('player.ending.cover');
       if (!this.document) this.els.endingTitle.textContent = this._uiText('player.ending.title');
       return this.uiLanguage;
     }
@@ -258,6 +263,7 @@
       });
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
       this._on(this.els.endingRestart, 'click', () => this.restart());
+      if(this.els.endingCover)this._on(this.els.endingCover,'click',()=>this.restart());
       this._on(this.els.auto, 'click', (e) => {
         e.stopPropagation();
         this.unlockAudio(true);
@@ -1003,7 +1009,25 @@
       this.els.title.textContent = doc.title || '';
       this.els.author.textContent = doc.author || '';
       this.els.total.textContent = String(doc.scenes.length);
-      this.els.endingTitle.textContent = doc.title || this._uiText('player.ending.title');
+      const authoredEndingLabel=String(doc.ending?.label || doc.ending?.title || '').trim();
+      this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
+      this.els.endingText.textContent = '';
+      if(this.els.endingLinks){
+        this.els.endingLinks.replaceChildren();
+        const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
+        links.slice(0,3).forEach(item=>{
+          const label=String(item?.label||item?.title||'').trim();
+          const url=String(item?.url||item?.href||'').trim();
+          if(!label)return;
+          const button=document.createElement('button');
+          button.type='button';
+          button.className='sp-ending-link';
+          button.textContent=label;
+          button.disabled=true;
+          button.dataset.previewUrl=url;
+          this.els.endingLinks.appendChild(button);
+        });
+      }
       this.els.ending.hidden = true;
       this.backgroundState = null;
       this.backgroundLayerIndex = 0;

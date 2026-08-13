@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.62</title>
+  <title>Scene Studio v0.2.63</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,11 +17,10 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.62</span>
+        <span class="version">v0.2.63</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
-        <button id="easyPublishButton" class="easy-file-action easy-publish-action" type="button" disabled><span>公開する</span><small>Publish</small></button>
       </div>
     </header>
 
@@ -88,7 +87,10 @@
       </select>
 
 
-      <button id="makeButton" class="primary-button" type="button"><span>プレイヤーにする</span><small>Scene Format v1へ変換します</small></button>
+      <div class="easy-primary-actions">
+        <button id="makeButton" class="primary-button" type="button"><span>プレイヤーにする</span><small>Scene Format v1へ変換します</small></button>
+        <button id="easyPublishButton" class="primary-button easy-publish-action" type="button" disabled><span>公開する</span><small>Publish</small></button>
+      </div>
 
       <details class="work-meta-section">
         <summary>作品情報・表紙</summary>
@@ -168,8 +170,10 @@
             <div id="endingPreview" class="ending-preview" aria-label="読了ページ プレビュー">
               <div class="ending-preview-center"><strong id="endingPreviewLabel">読了</strong></div>
               <div class="ending-preview-tabs">
-                <button type="button" disabled>表紙に戻る</button>
-                <button id="endingPreviewCustom" type="button" disabled hidden></button>
+                <button type="button" disabled data-preview-cover>表紙に戻る</button>
+                <button type="button" disabled data-preview-link="0" hidden></button>
+                <button type="button" disabled data-preview-link="1" hidden></button>
+                <button type="button" disabled data-preview-link="2" hidden></button>
               </div>
               <small>もう一度読む</small>
             </div>

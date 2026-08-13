@@ -24,7 +24,7 @@
   const endingLabelInput = $('#endingLabelInput');
   const endingLinkInputs = [1,2,3].map(n=>({label:$(`#endingLink${n}Label`),url:$(`#endingLink${n}Url`)}));
   const endingPreviewLabel = $('#endingPreviewLabel');
-  const endingPreviewCustom = $('#endingPreviewCustom');
+  const endingPreviewLinks = $$('[data-preview-link]');
   let coverImageUrl = '';
   let coverImageFileName = '';
   const bodyInput = $('#bodyInput');
@@ -728,11 +728,14 @@
     };
   }
   function updateEndingPreview(){
-    if(endingPreviewLabel)endingPreviewLabel.textContent=String(endingLabelInput?.value||'').trim()||t('ending.preview.default');
-    if(endingPreviewCustom){
-      const first=endingLinkInputs.map(row=>String(row.label?.value||'').trim()).find(Boolean)||'';
-      endingPreviewCustom.hidden=!first; endingPreviewCustom.textContent=first;
+    if(endingPreviewLabel){
+      endingPreviewLabel.textContent=String(endingLabelInput?.value||'').trim()||t('ending.preview.default');
     }
+    endingPreviewLinks.forEach((button,index)=>{
+      const label=String(endingLinkInputs[index]?.label?.value||'').trim();
+      button.hidden=!label;
+      button.textContent=label;
+    });
   }
 
   function workMetadataFromEasy(){
@@ -755,9 +758,26 @@
     const empty=coverPreview.querySelector('.cover-preview-empty');
     if(empty)empty.hidden=Boolean(coverImageUrl);
     if(coverImageClear)coverImageClear.hidden=!coverImageUrl;
-    if(coverPreviewTitle)coverPreviewTitle.textContent=titleInput?.value.trim()||t('cover.preview.untitled');
-    if(coverPreviewAuthor)coverPreviewAuthor.textContent=authorInput?.value.trim()||'';
-    if(coverPreviewSubtitle)coverPreviewSubtitle.textContent=subtitleInput?.value.trim()||'';
+
+    const title=String(titleInput?.value||'').trim();
+    const author=String(authorInput?.value||'').trim();
+    const subtitle=String(subtitleInput?.value||'').trim();
+
+    if(coverPreviewTitle){
+      coverPreviewTitle.textContent=title||t('cover.preview.untitled');
+      coverPreviewTitle.hidden=!title && Boolean(coverImageUrl);
+    }
+    if(coverPreviewAuthor){
+      coverPreviewAuthor.textContent=author;
+      coverPreviewAuthor.hidden=!author;
+    }
+    if(coverPreviewSubtitle){
+      coverPreviewSubtitle.textContent=subtitle;
+      coverPreviewSubtitle.hidden=!subtitle;
+    }
+    coverPreview.dataset.liveTitle=title;
+    coverPreview.dataset.liveAuthor=author;
+    coverPreview.dataset.liveSubtitle=subtitle;
   }
 
   function packageManifestFor(doc, coverPath=''){
@@ -2816,13 +2836,33 @@
   });
   // Work metadata is shell data, not Scene source. Never rebuild the Scene array here.
   [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput]
-    .forEach(el=>el?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();updateCoverPreview();scheduleDraftSave(250);}));
+    .forEach(el=>el?.addEventListener('input',()=>{
+      updateCoverPreview();
+      syncEasyShellToWorkingDocument();
+      syncEasyPublishButton();
+      scheduleDraftSave(250);
+    }));
   authorInput?.addEventListener('change',()=>rememberAuthorName(authorInput.value));
   authorInput?.addEventListener('blur',()=>rememberAuthorName(authorInput.value));
-  endingLabelInput?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();updateEndingPreview();scheduleDraftSave(250);});
+  endingLabelInput?.addEventListener('input',()=>{
+    updateEndingPreview();
+    syncEasyShellToWorkingDocument();
+    syncEasyPublishButton();
+    scheduleDraftSave(250);
+  });
   endingLinkInputs.forEach(pair=>{
-    pair.label?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();updateEndingPreview();scheduleDraftSave(250);});
-    pair.url?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(250);});
+    pair.label?.addEventListener('input',()=>{
+      updateEndingPreview();
+      syncEasyShellToWorkingDocument();
+      syncEasyPublishButton();
+      scheduleDraftSave(250);
+    });
+    pair.url?.addEventListener('input',()=>{
+      updateEndingPreview();
+      syncEasyShellToWorkingDocument();
+      syncEasyPublishButton();
+      scheduleDraftSave(250);
+    });
   });
   languageInput?.addEventListener('change',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();});
   renderAuthorHistory();
