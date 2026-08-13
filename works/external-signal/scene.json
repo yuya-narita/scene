@@ -1,0 +1,105 @@
+{
+  "format": "scene-format",
+  "version": "1.0",
+  "title": "EXTERNAL SIGNAL",
+  "author": "API / Embed Test",
+  "language": "mul",
+  "languages": [
+    "ja",
+    "en"
+  ],
+  "direction": "auto",
+  "theme": "cinema",
+  "appearance": {
+    "cinemaTone": "dark",
+    "typography": {
+      "fontFamily": "sans"
+    }
+  },
+  "player": {
+    "navigation": {
+      "allowPrevious": true
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene-001",
+      "type": "text",
+      "language": "ja",
+      "text": "これはStudioで作られていない。",
+      "presentation": {
+        "display": "stack",
+        "effect": "auto",
+        "text": {
+          "size": "auto"
+        },
+        "background": {
+          "src": "https://yuya-narita.github.io/portfolio/assets/visual-03.jpeg",
+          "transition": "fade",
+          "fit": "cover",
+          "dim": 0.55
+        }
+      },
+      "audio": [
+        {
+          "channel": "bgm",
+          "action": "start",
+          "src": "https://yuya-narita.github.io/megane_dictionary/music/Conference/Syntax_Conference_ED.mp3",
+          "volume": 0.22,
+          "fadeIn": 900,
+          "fadeOut": 700,
+          "loop": true,
+          "restart": true
+        }
+      ]
+    },
+    {
+      "id": "scene-002",
+      "type": "text",
+      "language": "en",
+      "text": "This document came from outside the Studio.",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto"
+        }
+      }
+    },
+    {
+      "id": "scene-003",
+      "type": "dialogue",
+      "language": "ja",
+      "text": "「外からでも、作品になる。」",
+      "presentation": {
+        "display": "stack",
+        "effect": "slow",
+        "text": {
+          "size": "auto"
+        }
+      }
+    },
+    {
+      "id": "scene-004",
+      "type": "text",
+      "language": "en",
+      "text": "PUBLIC PLAYER READY.",
+      "presentation": {
+        "display": "solo",
+        "effect": "loud",
+        "text": {
+          "size": "auto"
+        }
+      }
+    }
+  ],
+  "description": "Studioの外から届いたScene Formatを、公開Playerで再生するテスト。",
+  "ending": {
+    "links": [
+      {
+        "label": "Sceneについて",
+        "url": "https://yuya-narita.github.io/scene/"
+      }
+    ]
+  }
+}
