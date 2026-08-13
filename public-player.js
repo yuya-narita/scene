@@ -18,6 +18,7 @@
   const restartButton = document.getElementById('publicRestart');
 
   const errorPanel = document.getElementById('publicError');
+  const errorTitle = document.getElementById('publicErrorTitle');
   const errorMessage = document.getElementById('publicErrorMessage');
   const retryButton = document.getElementById('publicRetry');
 
@@ -44,7 +45,26 @@
     opening.hidden = true;
     ending.hidden = true;
     errorPanel.hidden = false;
+
+    const status = Number(error?.status) || 0;
+
+    if (status === 410) {
+      errorTitle.textContent = '公開を停止しています';
+      errorMessage.textContent = 'この作品は現在公開されていません。';
+      retryButton.hidden = true;
+      return;
+    }
+
+    if (status === 404) {
+      errorTitle.textContent = '作品が見つかりません';
+      errorMessage.textContent = 'この作品は削除されたか、URLが無効です。';
+      retryButton.hidden = true;
+      return;
+    }
+
+    errorTitle.textContent = 'Sceneを開けませんでした';
     errorMessage.textContent = `${error?.message || error}`;
+    retryButton.hidden = false;
   }
 
   function setTheme(doc) {
@@ -150,7 +170,10 @@
     const src = source();
     const response = await fetch(src, { cache: 'no-store' });
     if (!response.ok) {
-      throw new Error(`Scene JSONを取得できませんでした (${response.status})\n${src}`);
+      const error = new Error(`Scene JSONを取得できませんでした (${response.status})\n${src}`);
+      error.status = response.status;
+      error.source = src;
+      throw error;
     }
 
     const doc = await response.json();
@@ -388,7 +411,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.13',
+    version: '0.3.16',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },

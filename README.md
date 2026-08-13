@@ -1,3 +1,15 @@
+# Scene Public Player v0.3.16 — HTTP status screens
+
+Adds publication-state-aware error screens:
+
+- HTTP 410: 「公開を停止しています」 / retry button hidden
+- HTTP 404: 「作品が見つかりません」 / retry button hidden
+- Other network/server errors: existing generic error + retry button
+
+v0.3.15 mobile-clean Player behavior is otherwise preserved.
+
+---
+
 # Scene Public Player v0.3.14 — R2 routed public build
 
 This build keeps the generic `?src=` loader and is intended to be the public
