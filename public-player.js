@@ -421,7 +421,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.19',
+    version: '0.3.20',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },

@@ -267,3 +267,51 @@ body{
 
 /* v0.3.19 fixed ending row */
 .public-ending-three{width:min(760px,92vw);display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.public-ending-box{min-height:96px;padding:12px 8px;border:1px solid var(--public-line);border-radius:2px!important;background:transparent!important;color:var(--public-text);text-decoration:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;opacity:0;transform:translateY(10px);transition:opacity .85s ease var(--ending-delay,3000ms),transform .85s ease var(--ending-delay,3000ms)}.public-ending-box[hidden]{visibility:hidden;display:flex!important}.public-ending-box small{font-size:10px;letter-spacing:.2em;color:var(--public-sub)}.public-ending-box strong{font-family:Georgia,"Times New Roman",serif;font-size:clamp(17px,3.8vw,24px);font-weight:500}.public-ending.is-visible .public-ending-box{opacity:1;transform:translateY(0)}.public-ending-cover{width:auto!important;min-height:96px!important;margin:0!important;border-radius:2px!important}.public-reread{margin-top:26px!important;opacity:0;transform:translateY(8px);transition:opacity .75s ease 3400ms,transform .75s ease 3400ms}.public-ending.is-visible .public-reread{opacity:1;transform:translateY(0)}
+
+
+/* v0.3.20 — ending vertical balance + exact centering */
+.public-ending-inner{
+  box-sizing:border-box;
+  width:100%;
+  min-height:100%;
+  padding:
+    max(72px,calc(env(safe-area-inset-top) + 48px))
+    20px
+    max(24px,env(safe-area-inset-bottom))!important;
+}
+.public-ending-label{
+  width:100%;
+  min-height:50vh!important;
+  margin:0!important;
+  padding-top:7vh;
+  box-sizing:border-box;
+  display:grid;
+  place-items:center;
+}
+.public-ending-actions.public-ending-three{
+  width:min(720px,100%)!important;
+  max-width:100%!important;
+  margin:0 auto!important;
+  padding:0!important;
+  box-sizing:border-box;
+  align-self:center;
+}
+.public-ending-box,
+.public-ending-cover{
+  width:100%!important;
+  min-width:0!important;
+  box-sizing:border-box!important;
+}
+.public-reread{
+  margin-top:28px!important;
+  margin-bottom:0!important;
+}
+@media(max-width:520px){
+  .public-ending-label{
+    min-height:52vh!important;
+    padding-top:5vh;
+  }
+  .public-ending-actions.public-ending-three{
+    width:100%!important;
+  }
+}
