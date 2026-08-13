@@ -1141,3 +1141,7 @@
   letter-spacing:.025em!important;
   color:var(--sp-text)!important;
 }
+
+/* v0.2.76 — episode on Player cover */
+.sp-cover-episode{display:block;font-family:var(--sp-font-serif);font-size:clamp(12px,2.8vw,16px);line-height:1.3;letter-spacing:.06em;color:var(--sp-sub);margin-top:2px}
+.sp-cover-episode[hidden]{display:none!important}

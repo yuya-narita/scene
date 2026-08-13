@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.75</title>
+  <title>Scene Studio v0.2.76</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,7 +17,7 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.75</span>
+        <span class="version">v0.2.76</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
@@ -131,17 +131,22 @@
           <div class="cover-editor easy-cover-simple">
             <div class="section-heading">
               <span>表紙画像 <small>任意</small></span>
-              <small>Easyでは画像だけ指定します。細かな表紙編集はAdvancedへ。</small>
+              <small>表紙をタップして、タイトル・作者・話数・画像を直接編集します。</small>
             </div>
             <div class="easy-cover-row">
-              <div id="coverPreview" class="cover-preview cover-preview-editable" role="button" tabindex="0" aria-label="表紙を直接編集">
+              <div id="coverPreview" class="cover-preview cover-preview-editable player-like-cover-preview" role="button" tabindex="0" aria-label="表紙を直接編集">
+                <div class="cover-preview-bg" aria-hidden="true"></div>
+                <div class="cover-preview-dim" aria-hidden="true"></div>
                 <div class="cover-preview-hint">タップして直接編集</div>
                 <div class="cover-preview-empty"><span>COVER</span><small>画像なしでもOK</small></div>
-                <div class="cover-preview-live" aria-label="表紙テキスト。タップして編集">
+                <div class="cover-preview-player-copy" aria-label="表紙テキスト。タップして編集">
+                  <span class="cover-preview-kicker">SCENE PLAYER</span>
                   <small id="coverPreviewAuthor"></small>
+                  <span id="coverPreviewEpisode" class="cover-preview-episode"></span>
                   <strong id="coverPreviewTitle">Untitled</strong>
                   <span id="coverPreviewSubtitle"></span>
                 </div>
+                <div class="cover-preview-start">はじめる</div>
               </div>
               <div class="easy-cover-actions">
                 <input id="coverImageInput" type="file" accept="image/*" hidden>
@@ -171,36 +176,7 @@
                 <button type="button" data-preview-link="1" hidden><small></small><strong></strong></button>
               </div>
             </div>
-            <details id="endingLegacyEditor" class="ending-legacy-editor">
-              <summary>フォームで細かく編集</summary>
-            <label class="field" for="endingLabelInput">
-              <span class="field-label">中央の文 <small>任意</small></span>
-              <input id="endingLabelInput" type="text" placeholder="例：つづく">
-            </label>
-            <div class="ending-link-editor ending-three-editor">
-              <div class="ending-link-head"><strong>読了後の3ボックス</strong><small>中央は固定・左右は任意</small></div>
-              <div class="ending-slot-editor">
-                <div class="ending-slot-title"><span>左ボタン</span><small>任意</small></div>
-                <div class="ending-link-row ending-link-row-stacked">
-                  <input id="endingLink1Kicker" type="text" placeholder="例：PREVIOUS">
-                  <input id="endingLink1Label" type="text" placeholder="例：前の話">
-                  <input id="endingLink1Url" type="url" placeholder="https://...">
-                </div>
-              </div>
-              <div class="ending-slot-editor is-fixed">
-                <div class="ending-slot-title"><span>中央ボタン</span><small>デフォルト固定</small></div>
-                <div class="ending-fixed-card"><span>COVER</span><strong>表紙に戻る</strong></div>
-              </div>
-              <div class="ending-slot-editor">
-                <div class="ending-slot-title"><span>右ボタン</span><small>任意</small></div>
-                <div class="ending-link-row ending-link-row-stacked">
-                  <input id="endingLink2Kicker" type="text" placeholder="例：NEXT">
-                  <input id="endingLink2Label" type="text" placeholder="例：続き">
-                  <input id="endingLink2Url" type="url" placeholder="https://...">
-                </div>
-              </div>
-            </div>
-            </details>
+
           </div>
         </div>
       </details>
@@ -241,6 +217,43 @@
       <div><strong>読者が過去Sceneへ戻れる</strong><small>戻るボタン・スワイプ・キーボードをまとめて制御します。</small></div>
       <label class="switch"><input id="allowPreviousInput" type="checkbox" checked><span></span></label>
     </section>
+
+    <details id="advancedEndingEditor" class="adv-section advanced-work-ending" data-close-label="閉じる">
+      <summary>作品・読了ページ</summary>
+      <div class="adv-section-body">
+        <p class="advanced-hint">Easyではプレビューを直接タップ。ここでは読了ページをフォームで細かく編集できます。</p>
+            <details id="endingLegacyEditor" class="ending-legacy-editor">
+              <summary>フォームで細かく編集</summary>
+            <label class="field" for="endingLabelInput">
+              <span class="field-label">中央の文 <small>任意</small></span>
+              <input id="endingLabelInput" type="text" placeholder="例：つづく">
+            </label>
+            <div class="ending-link-editor ending-three-editor">
+              <div class="ending-link-head"><strong>読了後の3ボックス</strong><small>中央は固定・左右は任意</small></div>
+              <div class="ending-slot-editor">
+                <div class="ending-slot-title"><span>左ボタン</span><small>任意</small></div>
+                <div class="ending-link-row ending-link-row-stacked">
+                  <input id="endingLink1Kicker" type="text" placeholder="例：PREVIOUS">
+                  <input id="endingLink1Label" type="text" placeholder="例：前の話">
+                  <input id="endingLink1Url" type="url" placeholder="https://...">
+                </div>
+              </div>
+              <div class="ending-slot-editor is-fixed">
+                <div class="ending-slot-title"><span>中央ボタン</span><small>デフォルト固定</small></div>
+                <div class="ending-fixed-card"><span>COVER</span><strong>表紙に戻る</strong></div>
+              </div>
+              <div class="ending-slot-editor">
+                <div class="ending-slot-title"><span>右ボタン</span><small>任意</small></div>
+                <div class="ending-link-row ending-link-row-stacked">
+                  <input id="endingLink2Kicker" type="text" placeholder="例：NEXT">
+                  <input id="endingLink2Label" type="text" placeholder="例：続き">
+                  <input id="endingLink2Url" type="url" placeholder="https://...">
+                </div>
+              </div>
+            </div>
+            </details>
+      </div>
+    </details>
 
     <div class="advanced-layout">
       <aside class="scene-rail">

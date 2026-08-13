@@ -130,6 +130,7 @@
           <div class="sp-cover-copy">
             <span class="sp-cover-kicker">SCENE PLAYER</span>
             <small class="sp-cover-author"></small>
+            <span class="sp-cover-episode"></span>
             <strong class="sp-cover-title"></strong>
             <span class="sp-cover-subtitle"></span>
           </div>
@@ -181,6 +182,7 @@
         cover: q('.sp-cover'),
         coverBg: q('.sp-cover-bg'),
         coverAuthor: q('.sp-cover-author'),
+        coverEpisode: q('.sp-cover-episode'),
         coverTitle: q('.sp-cover-title'),
         coverSubtitle: q('.sp-cover-subtitle'),
         coverStart: q('.sp-cover-start'),
@@ -1280,6 +1282,7 @@
         this.els.coverBg.style.backgroundPosition=cover.position||'center center';
       }
       if(this.els.coverAuthor)this.els.coverAuthor.textContent=this.document.author||'';
+      if(this.els.coverEpisode){const ep=this.document.metadata?.episode||this.document.episode||'';this.els.coverEpisode.textContent=ep;this.els.coverEpisode.hidden=!ep;}
       if(this.els.coverTitle)this.els.coverTitle.textContent=this.document.title||'Untitled';
       if(this.els.coverSubtitle)this.els.coverSubtitle.textContent=this.document.metadata?.subtitle||this.document.subtitle||'';
       this.els.cover.hidden=false;

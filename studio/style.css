@@ -2852,3 +2852,22 @@ body.draft-manager-open{
   .cover-preview-hint{top:10px;right:10px}
   .cover-quick-image-actions{grid-template-columns:1fr}
 }
+
+/* v0.2.76 — Easy cover preview uses the Player visual hierarchy */
+.player-like-cover-preview{position:relative!important;overflow:hidden!important;background:#111!important;aspect-ratio:3/4!important;color:#fff!important;isolation:isolate}
+.player-like-cover-preview .cover-preview-bg,.player-like-cover-preview .cover-preview-dim{position:absolute;inset:0}
+.player-like-cover-preview .cover-preview-bg{z-index:0;background-position:center;background-size:cover;background-repeat:no-repeat}
+.player-like-cover-preview .cover-preview-dim{z-index:1;background:linear-gradient(to bottom,rgba(0,0,0,.14),rgba(0,0,0,.24) 50%,rgba(0,0,0,.4))}
+.player-like-cover-preview .cover-preview-empty{z-index:2}
+.cover-preview-player-copy{position:absolute;z-index:3;inset:15% 10% 28%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;text-align:center;text-shadow:0 2px 18px rgba(0,0,0,.42);pointer-events:none}
+.cover-preview-kicker{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:9px;font-weight:700;letter-spacing:.24em;opacity:.92}
+.cover-preview-player-copy small,.cover-preview-episode{font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif;font-size:11px;font-weight:400;letter-spacing:.05em;opacity:.86}
+.cover-preview-player-copy strong{font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif;font-size:clamp(24px,7vw,40px);font-weight:400;line-height:1.25;letter-spacing:.025em}
+.cover-preview-player-copy>span:last-child{font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif;font-size:13px;opacity:.9}
+.cover-preview-start{position:absolute;z-index:3;left:8%;right:8%;bottom:10%;min-height:52px;border-radius:999px;background:rgba(255,255,255,.94);color:#111;display:flex;align-items:center;justify-content:center;font-weight:800;pointer-events:none}
+.player-like-cover-preview:not(.has-image) .cover-preview-dim{background:rgba(0,0,0,.58)}
+.advanced-work-ending{margin:0 16px 18px}
+.advanced-work-ending .ending-legacy-editor{margin:12px 0 0!important;border:0!important}
+.advanced-work-ending .ending-legacy-editor>summary{display:none!important}
+.advanced-work-ending .ending-three-editor{margin-left:0!important;margin-right:0!important}
+@media(max-width:520px){.player-like-cover-preview{aspect-ratio:9/16!important}.cover-preview-player-copy{inset:18% 9% 27%}.cover-preview-start{bottom:9%}}

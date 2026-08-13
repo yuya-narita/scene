@@ -20,6 +20,7 @@
   const coverPreviewTitle = $('#coverPreviewTitle');
   const coverPreviewAuthor = $('#coverPreviewAuthor');
   const coverPreviewSubtitle = $('#coverPreviewSubtitle');
+  const coverPreviewEpisode = $('#coverPreviewEpisode');
   const workMetaSection = $('.work-meta-section');
   const coverQuickDialog=$('#coverQuickDialog');
   const coverQuickClose=$('#coverQuickClose');
@@ -834,9 +835,12 @@
 
   function updateCoverPreview(){
     if(!coverPreview)return;
-    coverPreview.style.backgroundImage=coverImageUrl ? `url("${coverImageUrl}")` : '';
-    coverPreview.style.backgroundSize='cover';
-    coverPreview.style.backgroundPosition='center center';
+    const bg=coverPreview.querySelector('.cover-preview-bg');
+    if(bg){
+      bg.style.backgroundImage=coverImageUrl ? `url("${coverImageUrl}")` : 'none';
+      bg.style.backgroundSize='cover';
+      bg.style.backgroundPosition='center center';
+    }
     coverPreview.classList.toggle('has-image',Boolean(coverImageUrl));
     const empty=coverPreview.querySelector('.cover-preview-empty');
     if(empty)empty.hidden=Boolean(coverImageUrl);
@@ -845,22 +849,17 @@
     const title=String(titleInput?.value||'').trim();
     const author=String(authorInput?.value||'').trim();
     const subtitle=String(subtitleInput?.value||'').trim();
+    const episode=String(episodeInput?.value||'').trim();
 
-    if(coverPreviewTitle){
-      coverPreviewTitle.textContent=title||t('cover.preview.untitled');
-      coverPreviewTitle.hidden=!title && Boolean(coverImageUrl);
-    }
-    if(coverPreviewAuthor){
-      coverPreviewAuthor.textContent=author;
-      coverPreviewAuthor.hidden=!author;
-    }
-    if(coverPreviewSubtitle){
-      coverPreviewSubtitle.textContent=subtitle;
-      coverPreviewSubtitle.hidden=!subtitle;
-    }
+    if(coverPreviewTitle){coverPreviewTitle.textContent=title||t('cover.preview.untitled');coverPreviewTitle.hidden=false;}
+    if(coverPreviewAuthor){coverPreviewAuthor.textContent=author;coverPreviewAuthor.hidden=!author;}
+    if(coverPreviewEpisode){coverPreviewEpisode.textContent=episode;coverPreviewEpisode.hidden=!episode;}
+    if(coverPreviewSubtitle){coverPreviewSubtitle.textContent=subtitle;coverPreviewSubtitle.hidden=!subtitle;}
+
     coverPreview.dataset.liveTitle=title;
     coverPreview.dataset.liveAuthor=author;
     coverPreview.dataset.liveSubtitle=subtitle;
+    coverPreview.dataset.liveEpisode=episode;
   }
 
   function packageManifestFor(doc, coverPath=''){
