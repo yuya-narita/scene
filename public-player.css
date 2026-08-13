@@ -233,3 +233,5 @@ body{
 .public-opening-image{
   background-color:var(--public-bg);
 }
+
+.public-intro{overflow:hidden}.public-intro-cover,.public-intro-cover-dim{position:absolute;inset:0;pointer-events:none}.public-intro-cover{z-index:0;background:center/cover no-repeat}.public-intro-cover-dim{z-index:1;background:linear-gradient(#0002,#0009);opacity:0}.public-intro-frame{position:relative;z-index:2}.public-intro.has-cover{--public-text:#fff;--public-sub:#ffffffb8;--public-line:#ffffff55}.public-ending-actions{margin-top:auto;display:grid;gap:12px}.public-ending-cover,.public-ending-link{opacity:0;transform:translateY(10px);transition:opacity .7s ease .32s,transform .7s ease .32s}.public-ending.is-visible .public-ending-cover,.public-ending.is-visible .public-ending-link{opacity:1;transform:none}.public-ending-cover{width:100%;min-height:62px;border:1px solid var(--public-line);border-radius:999px;background:transparent;color:var(--public-text);font:inherit}.public-reread{margin-top:28px;align-self:center}

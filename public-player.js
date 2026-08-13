@@ -9,12 +9,14 @@
   const introTitle = document.getElementById('publicIntroTitle');
   const introAuthor = document.getElementById('publicIntroAuthor');
   const introDescription = document.getElementById('publicIntroDescription');
+  const introCover=document.getElementById('publicIntroCover'), introCoverDim=document.getElementById('publicIntroCoverDim');
   const startButton = document.getElementById('publicStart');
   const continueButton = document.getElementById('publicContinue');
 
   const ending = document.getElementById('publicEnding');
   const endingLabel = document.getElementById('publicEndingLabel');
   const endingLinks = document.getElementById('publicEndingLinks');
+  const endingCoverButton=document.getElementById('publicEndingCover');
   const restartButton = document.getElementById('publicRestart');
 
   const errorPanel = document.getElementById('publicError');
@@ -77,6 +79,7 @@
     document.documentElement.style.setProperty('--public-line', light ? 'rgba(33,29,24,.18)' : 'rgba(245,245,242,.16)');
   }
 
+  function applyCover(doc){const src=String(doc?.cover?.src||doc?.cover?.url||'').trim();if(introCover)introCover.style.backgroundImage=src?`url("${src}")`:'none';if(introCoverDim)introCoverDim.style.opacity=src?'1':'0';intro.classList.toggle('has-cover',!!src)}
   function normalizedExternalLinks(doc) {
     const raw = doc.ending?.links || doc.navigation?.links || doc.player?.navigation?.links || [];
     if (!Array.isArray(raw)) return [];
@@ -161,6 +164,7 @@
     introAuthor.textContent = doc.author || '';
     introDescription.textContent = doc.description || doc.subtitle || '';
     setTheme(doc);
+    applyCover(doc);
     buildEnding(doc);
     continueButton.hidden = safeProgress() <= 0;
   }
@@ -394,6 +398,8 @@
     ensurePlayer(safeProgress());
   });
 
+  endingCoverButton?.addEventListener('click',()=>{localStorage.removeItem(storageKey());returnToCover()});
+
   restartButton.addEventListener('click', () => {
     localStorage.removeItem(storageKey());
     ending.classList.remove('is-visible');
@@ -411,7 +417,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.16',
+    version: '0.3.17',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
