@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.61</title>
+  <title>Scene Studio v0.2.62</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,7 +17,7 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.61</span>
+        <span class="version">v0.2.62</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
@@ -42,14 +42,8 @@
     </section>
 
     <div class="form-stack">
-      <label class="field">
-        <span class="field-label">作品タイトル</span>
-        <input id="titleInput" type="text" placeholder="例：声のそろう通り">
-      </label>
-      <label class="field">
-        <span class="field-label">作者名 <small>任意</small></span>
-        <input id="authorInput" type="text" placeholder="例：Yuya Narita">
-      </label>
+      
+      
 
 
       <label class="field body-field">
@@ -104,6 +98,9 @@
         <summary>作品情報・表紙</summary>
         <div class="work-meta-panel">
           <div class="work-meta-grid">
+            <label class="field"><span class="field-label">作品タイトル</span><input id="titleInput" type="text" placeholder="例：声のそろう通り"></label>
+            <label class="field"><span class="field-label">作者名 <small>任意</small></span><input id="authorInput" type="text" list="authorHistoryList" placeholder="例：Yuya Narita"><datalist id="authorHistoryList"></datalist><small class="author-history-help">この端末で以前使った作者名を候補に表示します。</small></label>
+
             <label class="field">
               <span class="field-label">サブタイトル <small>任意</small></span>
               <input id="subtitleInput" type="text" placeholder="例：冷やせれば勝ちやろ">
@@ -134,7 +131,9 @@
             </div>
             <div class="easy-cover-row">
               <div id="coverPreview" class="cover-preview">
-                <div class="cover-preview-empty"><span>COVER</span><small>画像なしでもOK</small></div>
+                <div class="cover-preview-empty"><span>COVER</span><small>画像なしでもOK</small>
+                <div class="cover-preview-live"><small id="coverPreviewAuthor"></small><strong id="coverPreviewTitle">Untitled</strong><span id="coverPreviewSubtitle"></span></div>
+</div>
               </div>
               <div class="easy-cover-actions">
                 <label class="cinema-background-button" for="coverImageInput">表紙画像を選ぶ</label>
@@ -145,7 +144,17 @@
             </div>
           </div>
         </div>
-      </details>
+      
+          <div class="ending-editor">
+            <div class="section-heading"><span>読了ページ</span><small>最後の余韻と、その後の導線を設定します。</small></div>
+            <label class="field"><span class="field-label">中央の文 <small>任意</small></span><input id="endingLabelInput" type="text" placeholder="例：つづく"></label>
+            <div class="ending-link-head"><strong>リンクボタン</strong><small>任意・最大3個</small></div>
+            <div class="ending-link-row"><input id="endingLink1Label" type="text" placeholder="例：続き"><input id="endingLink1Url" type="url" placeholder="https://..."></div>
+            <div class="ending-link-row"><input id="endingLink2Label" type="text" placeholder="例：話数一覧"><input id="endingLink2Url" type="url" placeholder="https://..."></div>
+            <div class="ending-link-row"><input id="endingLink3Label" type="text" placeholder="例：作者ページ"><input id="endingLink3Url" type="url" placeholder="https://..."></div>
+            <div class="ending-preview"><div class="ending-preview-center"><strong id="endingPreviewLabel">読了</strong></div><div class="ending-preview-actions"><button type="button" disabled>表紙に戻る</button><button id="endingPreviewCustom" type="button" disabled hidden></button></div><small>もう一度読む</small></div>
+          </div>
+</details>
       <button id="advancedButton" class="secondary-button advanced-open-button" type="button">シーンを調整</button>
 
       <section class="project-io-section project-io-clean developer-hidden-io" aria-labelledby="projectIoTitle" hidden>

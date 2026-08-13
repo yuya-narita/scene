@@ -14,6 +14,9 @@
   const episodeInput = $('#episodeInput');
   const coverImageInput = $('#coverImageInput');
   const coverPreview = $('#coverPreview');
+  const coverPreviewTitle=$('#coverPreviewTitle'), coverPreviewAuthor=$('#coverPreviewAuthor'), coverPreviewSubtitle=$('#coverPreviewSubtitle');
+  const authorHistoryList=$('#authorHistoryList'), endingLabelInput=$('#endingLabelInput'), endingPreviewLabel=$('#endingPreviewLabel'), endingPreviewCustom=$('#endingPreviewCustom');
+  const endingLinkInputs=[1,2,3].map(n=>({label:$(`#endingLink${n}Label`),url:$(`#endingLink${n}Url`)}));
   const coverImageClear = $('#coverImageClear');
   const coverFitInput = $('#coverFitInput');
   const coverPositionInput = $('#coverPositionInput');
@@ -297,6 +300,7 @@
       },
       recProgress:clone(autoRecProgress),
       cover:{url:coverImageUrl||'',name:coverImageFileName||''},
+      ending:endingFromEasy(),
       assets:serializeDraftAssets()
     };
   }
@@ -355,6 +359,7 @@
     if(languageInput)languageInput.value=row.easy?.language||'auto';
     if(densitySelect)densitySelect.value='normal';
     coverImageUrl=map.get(row.cover?.url)||'';coverImageFileName=row.cover?.name||'';
+    if(endingLabelInput)endingLabelInput.value=row.ending?.label||'';endingLinkInputs.forEach((r,i)=>{const x=row.ending?.links?.[i]||{};if(r.label)r.label.value=x.label||'';if(r.url)r.url.value=x.url||''});updateEndingPreview();
     updateCount();updateCoverPreview();updateEasyFileActions();updateProtectedResplitPreview();
     if(workingDocument?.scenes?.length){normalizeSceneIds();refreshDocumentLanguages();renderAdvanced();}
     setScreen('easy');scrollScreenToTop(editorScreen);updateAutoRecStartLabel();
@@ -692,6 +697,12 @@
     }
   }
 
+  const AUTHOR_HISTORY_KEY='scene-studio-author-history-v1';
+  function authorHistory(){try{const a=JSON.parse(localStorage.getItem(AUTHOR_HISTORY_KEY)||'[]');return Array.isArray(a)?a:[]}catch(_){return[]}}
+  function renderAuthorHistory(){if(!authorHistoryList)return;authorHistoryList.replaceChildren();authorHistory().slice(0,12).forEach(v=>{const o=document.createElement('option');o.value=v;authorHistoryList.appendChild(o)})}
+  function rememberAuthor(){const v=authorInput?.value.trim();if(!v)return;localStorage.setItem(AUTHOR_HISTORY_KEY,JSON.stringify([v,...authorHistory().filter(x=>x!==v)].slice(0,12)));renderAuthorHistory()}
+  function endingFromEasy(){return {label:endingLabelInput?.value.trim()||'',links:endingLinkInputs.map(r=>({label:r.label?.value.trim()||'',url:r.url?.value.trim()||''})).filter(x=>x.label&&x.url)}}
+  function updateEndingPreview(){if(endingPreviewLabel)endingPreviewLabel.textContent=endingLabelInput?.value.trim()||'読了';if(endingPreviewCustom){const v=endingLinkInputs.map(r=>r.label?.value.trim()).find(Boolean);endingPreviewCustom.hidden=!v;endingPreviewCustom.textContent=v||''}}
   function workMetadataFromEasy(){
     const detected = detectWorkLanguage();
     const selectedLanguage = languageInput?.value || 'auto';
@@ -712,6 +723,10 @@
     const empty=coverPreview.querySelector('.cover-preview-empty');
     if(empty)empty.hidden=Boolean(coverImageUrl);
     if(coverImageClear)coverImageClear.hidden=!coverImageUrl;
+  
+    if(coverPreviewTitle)coverPreviewTitle.textContent=titleInput?.value.trim()||'Untitled';
+    if(coverPreviewAuthor)coverPreviewAuthor.textContent=authorInput?.value.trim()||'';
+    if(coverPreviewSubtitle)coverPreviewSubtitle.textContent=subtitleInput?.value.trim()||'';
   }
 
   function packageManifestFor(doc, coverPath=''){
@@ -766,7 +781,7 @@
         cinemaTone: selectedTheme==='cinema' ? cinemaTone : 'dark',
         typography:{ fontFamily:selectedFont }
       },
-      player:{ navigation:{ allowPrevious:true } }, scenes
+      player:{ navigation:{ allowPrevious:true } }, ...(coverImageUrl?{cover:{src:coverImageUrl,fit:'cover',position:'center center'}}:{}), ending:endingFromEasy(), scenes
     };
   }
 
@@ -1395,6 +1410,7 @@
   }
 
   function walkAssetRefs(doc,callback){
+    if(doc?.cover?.src)callback({kind:'cover',sceneIndex:-1,holder:doc.cover,key:'src',src:doc.cover.src,fileName:coverImageFileName||''});
     (doc.scenes||[]).forEach((scene,sceneIndex)=>{
       const bg=scene?.presentation?.background;
       if(bg?.src)callback({
@@ -2842,7 +2858,14 @@
     bodyInput.value=SAMPLE;
     easySourceDirty=true;
     updateCount();
-    updateCoverPreview();
+    
+  renderAuthorHistory();
+  authorInput?.addEventListener('blur',rememberAuthor);
+  [titleInput,authorInput,subtitleInput].forEach(el=>el?.addEventListener('input',updateCoverPreview));
+  endingLabelInput?.addEventListener('input',()=>{updateEndingPreview();scheduleDraftSave(120)});
+  endingLinkInputs.forEach(r=>[r.label,r.url].forEach(el=>el?.addEventListener('input',()=>{updateEndingPreview();scheduleDraftSave(120)})));
+  updateEndingPreview();
+updateCoverPreview();
     updateEasyFileActions();
    
     showUndo('タイトルと本文をサンプルに置き換えました');
