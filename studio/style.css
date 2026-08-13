@@ -2789,3 +2789,15 @@ body.draft-manager-open{
     padding:max(8px,env(safe-area-inset-top)) 8px max(8px,env(safe-area-inset-bottom))!important;
   }
 }
+
+
+/* v0.2.74 — safe direct edit affordances */
+.cover-preview-live small,
+.cover-preview-live strong,
+.cover-preview-live span{pointer-events:auto;cursor:text;}
+.ending-preview-center-button,
+.ending-preview-three button:not([data-preview-cover]){touch-action:manipulation;}
+@media(max-width:520px){
+  .ending-preview-hint{font-size:12px;}
+  .ending-legacy-editor:not([open]){background:transparent;}
+}

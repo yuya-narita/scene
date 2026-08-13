@@ -20,6 +20,7 @@
   const coverPreviewTitle = $('#coverPreviewTitle');
   const coverPreviewAuthor = $('#coverPreviewAuthor');
   const coverPreviewSubtitle = $('#coverPreviewSubtitle');
+  const workMetaSection = $('.work-meta-section');
   const authorHistoryList = $('#authorHistoryList');
   const endingLabelInput = $('#endingLabelInput');
   const endingLinkInputs = [1,2].map(n=>({kicker:$(`#endingLink${n}Kicker`),label:$(`#endingLink${n}Label`),url:$(`#endingLink${n}Url`)}));
@@ -37,6 +38,7 @@
   const endingQuickUrl=$('#endingQuickUrl');
   const endingQuickClear=$('#endingQuickClear');
   const endingQuickClose=$('#endingQuickClose');
+  const endingQuickDone=$('#endingQuickDone');
   const endingLegacyEditor=$('#endingLegacyEditor');
   const endingQuickRecentList=$('#endingQuickRecentList');
   let endingQuickTarget='center';
@@ -2936,6 +2938,15 @@
       scheduleDraftSave(250);
     });
   });
+  // v0.2.74: direct-preview editing stays isolated from the rest of Easy Studio.
+  function revealWorkField(field){
+    if(!field)return;
+    if(workMetaSection)workMetaSection.open=true;
+    requestAnimationFrame(()=>{field.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>field.focus(),220);});
+  }
+  coverPreviewTitle?.addEventListener('click',(event)=>{event.stopPropagation();revealWorkField(titleInput);});
+  coverPreviewAuthor?.addEventListener('click',(event)=>{event.stopPropagation();revealWorkField(authorInput);});
+  coverPreviewSubtitle?.addEventListener('click',(event)=>{event.stopPropagation();revealWorkField(subtitleInput);});
   endingPreviewCenterEdit?.addEventListener('click',()=>openEndingQuickEditor('center'));
   endingPreviewLinks[0]?.addEventListener('click',()=>openEndingQuickEditor('left'));
   endingPreviewLinks[1]?.addEventListener('click',()=>openEndingQuickEditor('right'));
