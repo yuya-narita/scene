@@ -231,11 +231,11 @@
       const fallback = {
         ja:{
           'player.previous':'過去Scene','player.restart':'最初から','player.history':'過去Sceneをスクロール','player.history.close':'履歴を閉じる',
-          'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'最初から読む','player.ending.cover':'表紙に戻る'
+          'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'もう一度読む','player.ending.cover':'表紙に戻る'
         },
         en:{
           'player.previous':'Past Scenes','player.restart':'Restart','player.history':'Scroll past Scenes','player.history.close':'Close history',
-          'player.ending.title':'Finished','player.ending.text':'You reached the end.','player.ending.restart':'Read from start','player.ending.cover':'Back to cover'
+          'player.ending.title':'Finished','player.ending.text':'You reached the end.','player.ending.restart':'Read again','player.ending.cover':'Back to cover'
         }
       };
       return fallback[this.uiLanguage]?.[key] || fallback.ja[key] || key;
@@ -278,10 +278,10 @@
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
 
-      // Previous is no longer a one-scene step. It opens the continuous History Scroll.
+      // Header back arrow returns to the cover. History remains available by downward gesture.
       this._on(this.els.prev, 'click', (e) => {
         e.stopPropagation();
-        this.openHistory();
+        this.showCover({restart:true});
       });
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
       this._on(this.els.endingRestart, 'click', () => this.restart());
