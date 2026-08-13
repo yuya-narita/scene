@@ -67,7 +67,7 @@
     ['#sceneBgmLoop + span','audio.loop'],['#sceneAmbientLoop + span','audio.loop'],['#sceneSeEnabled + span','audio.seEnable'],
     ['.audio-card:nth-child(1) .audio-card-title small','audio.bgm.note'],['.audio-card:nth-child(2) .audio-card-title small','audio.ambient.note'],['.audio-card:nth-child(3) .audio-card-title small','audio.se.note'],
     ['.advanced-hint','audio.hint'],['#editReturnButton','preview.return'],
-    ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],
+    ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#easyPublishButton span','publish.action'],['#easyPublishButton small','publish.short'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],
     ['.work-meta-section > summary','work.info'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.easy-cover-simple .section-heading > span','work.cover'],['.easy-cover-simple .section-heading > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.easy-cover-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
     ['#advancedPreviewButton','common.preview'],['#advancedExportButton','file.export'],['.auto-timing-head strong','auto.heading'],['#sceneAutoTimingReset','auto.reset'],['.auto-timing-controls label span','auto.second'],['.auto-timing-editor > p','auto.hint'],
     ['#sceneColorSelect','text.color','aria-label'],['#sceneShadowSelect','text.shadow','aria-label'],['#sceneColorSelect option[value="auto"]','effect.auto'],['#sceneColorSelect option[value="white"]','color.white'],['#sceneColorSelect option[value="black"]','color.black'],['#sceneColorSelect option[value="custom"]','color.custom'],['#sceneShadowSelect option[value="auto"]','effect.auto'],['#sceneShadowSelect option[value="none"]','shadow.none'],['#sceneShadowSelect option[value="soft"]','shadow.soft'],['#sceneShadowSelect option[value="strong"]','shadow.strong'],
@@ -537,6 +537,7 @@
         </div>
         <div class="draft-row-actions unified-work-actions">
           <button data-open>${t('draft.continue')}</button>
+          <button data-publish ${(!isPublished && !isStopped) || status==='dirty'?'':'hidden'}>${status==='dirty'?t('publish.update'):t('publish.action')}</button>
           <button data-share ${isPublished?'':'hidden'}>${t('publish.share')}</button>
           <button data-copy ${isPublished?'':'hidden'}>${t('draft.link')}</button>
           <button data-stop ${isPublished?'':'hidden'}>${t('draft.unpublish')}</button>
@@ -568,6 +569,15 @@
         el.querySelector('[data-stop]').onclick=()=>stopDraftPublication(row);
       }
       if(isStopped)el.querySelector('[data-republish]').onclick=()=>republishDraftPublication(row);
+      const publishButton=el.querySelector('[data-publish]');
+      if(publishButton && !publishButton.hidden){
+        publishButton.onclick=async()=>{
+          const fresh=await getDraftRecord(row.id); if(!fresh)return;
+          await restoreDraftRecord(fresh);
+          $('#draftManagerDialog')?.close();
+          requestAnimationFrame(()=>openPublishDialogFromEasy());
+        };
+      }
 
       el.querySelector('[data-open]').onclick=async()=>{
         await restoreDraftRecord(await getDraftRecord(row.id));
@@ -1957,6 +1967,18 @@
     (stateMap[key]||[]).forEach(([sel,msg])=>{const el=$(sel);if(el)el.textContent=t(msg);});
   }
 
+  function syncEasyPublishButton(){
+    const btn=$('#easyPublishButton');
+    if(!btn)return;
+    const hasSource=Boolean(bodyInput?.value.trim() || workingDocument?.scenes?.length);
+    const status=currentPublishStatus();
+    btn.disabled=!hasSource;
+    const label=btn.querySelector('span');
+    if(label)label.textContent=status==='published'?t('publish.published'):status==='dirty'?t('publish.update'):t('publish.action');
+    btn.classList.toggle('is-published',status==='published');
+    btn.classList.toggle('is-dirty',status==='dirty');
+  }
+
   function syncPublishCopyForStatus(){
     const status=currentPublishStatus();
     const readyTitle=$('#publishReadyTitle');
@@ -1979,6 +2001,19 @@
       endButton.classList.toggle('is-published',status==='published');
       endButton.classList.toggle('is-dirty',status==='dirty');
     }
+    syncEasyPublishButton();
+  }
+
+  function preparePublishFromEasy(){
+    if(!bodyInput?.value.trim() && !workingDocument?.scenes?.length){bodyInput?.focus();return false;}
+    ensureWorkingDocumentFromEasy();
+    syncEasyShellToWorkingDocument();
+    return Boolean(workingDocument?.scenes?.length);
+  }
+
+  function openPublishDialogFromEasy(){
+    if(!preparePublishFromEasy())return;
+    openPublishDialog();
   }
 
   function openPublishDialog(){
@@ -2707,7 +2742,7 @@
     showUndo('Sceneを削除しました');
   }
 
-  bodyInput.addEventListener('input',()=>{ updateCount(); easySourceDirty=true; });
+  bodyInput.addEventListener('input',()=>{ updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
   $('#sceneSubTextInput').addEventListener('input',autoGrowSubText);
   coverImageInput?.addEventListener('change',async()=>{
     const file=coverImageInput.files?.[0]; if(!file)return;
@@ -2728,8 +2763,8 @@
   });
   // Work metadata is shell data, not Scene source. Never rebuild the Scene array here.
   [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput]
-    .forEach(el=>el?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();}));
-  languageInput?.addEventListener('change',()=>{syncEasyShellToWorkingDocument();});
+    .forEach(el=>el?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();}));
+  languageInput?.addEventListener('change',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();});
   updateCoverPreview();
 
   $('#sceneColorSelect')?.addEventListener('change',()=>{
@@ -2756,6 +2791,7 @@
   $('#autoRecCancel')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();finishAutoRec(false);});
   $('#autoRecRetry')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();startAutoRec();});
   $('#publishFromPreviewButton')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();openPublishDialog();});
+  $('#easyPublishButton')?.addEventListener('click',(event)=>{event.preventDefault();openPublishDialogFromEasy();});
   $('#publishDialogClose')?.addEventListener('click',closePublishDialog);
   $('#publishConfirmButton')?.addEventListener('click',runPublish);
   $('#publishRetryButton')?.addEventListener('click',runPublish);
@@ -2794,6 +2830,7 @@
     const hasSource=Boolean(hasDocument || bodyInput.value.trim());
     if(exportButton) exportButton.disabled=!hasSource;
     if(advancedReturn) advancedReturn.hidden=!hasDocument;
+    syncEasyPublishButton();
   }
   bodyInput.addEventListener('input',updateEasyFileActions);
   updateEasyFileActions();

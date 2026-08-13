@@ -2406,3 +2406,6 @@ body.draft-manager-open{
   line-height:1;
   vertical-align:middle;
 }
+
+/* v0.2.61 persistent Publish */
+.easy-publish-action{border-color:#17191d;background:#17191d;color:#fff}.easy-publish-action>small{opacity:.62}.easy-publish-action:disabled{opacity:.34;cursor:default}.easy-publish-action.is-published{background:#fff;color:#17191d;border-color:#d7d9df}.easy-publish-action.is-dirty{background:#17191d;color:#fff}.unified-work-actions [data-publish]{background:#17191d;border-color:#17191d;color:#fff}@media(max-width:520px){.easy-publish-action{order:-1}}
