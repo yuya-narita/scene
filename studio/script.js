@@ -36,6 +36,8 @@
   const endingQuickLabel=$('#endingQuickLabel');
   const endingQuickUrl=$('#endingQuickUrl');
   const endingQuickClear=$('#endingQuickClear');
+  const endingQuickClose=$('#endingQuickClose');
+  const endingLegacyEditor=$('#endingLegacyEditor');
   const endingQuickRecentList=$('#endingQuickRecentList');
   let endingQuickTarget='center';
   let coverImageUrl = '';
@@ -742,14 +744,17 @@
     };
   }
   function updateEndingPreview(){
-    if(endingPreviewLabel)endingPreviewLabel.textContent=String(endingLabelInput?.value||'').trim()||t('ending.preview.default');
+    if(endingPreviewLabel)endingPreviewLabel.textContent=String(endingLabelInput?.value||'').trim()||'つづく';
     endingPreviewLinks.forEach((button,index)=>{
       const row=endingLinkInputs[index];
       const kicker=String(row?.kicker?.value||'').trim();
       const label=String(row?.label?.value||'').trim();
-      button.hidden=!label;
+      const empty=!label;
+      button.hidden=false;
+      button.classList.toggle('is-placeholder',empty);
       const small=button.querySelector('small'); const strong=button.querySelector('strong');
-      if(small){small.textContent=kicker;small.hidden=!kicker;} if(strong)strong.textContent=label;
+      if(small){small.textContent=kicker || (index===0?'PREVIOUS':'NEXT');small.hidden=false;}
+      if(strong)strong.textContent=label || (index===0?'前の話':'続き');
     });
   }
 
@@ -774,11 +779,29 @@
     updateEndingPreview();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(100);
   }
   function openEndingQuickEditor(target){
-    if(!endingQuickDialog)return;endingQuickTarget=target;const center=target==='center';
-    endingQuickCenterFields.hidden=!center;endingQuickSlotFields.hidden=center;endingQuickTitle.textContent=center?'中央の文':target==='left'?'左ボタン':'右ボタン';
-    if(center){endingQuickCenterText.value=endingLabelInput?.value||'';renderEndingRecents('center');}
-    else{const row=endingLinkInputs[target==='left'?0:1];endingQuickKicker.value=row?.kicker?.value||'';endingQuickLabel.value=row?.label?.value||'';endingQuickUrl.value=row?.url?.value||'';renderEndingRecents('slot');}
-    endingQuickDialog.showModal?.();
+    if(!endingQuickDialog)return;
+    endingQuickTarget=target;const center=target==='center';
+    endingQuickCenterFields.hidden=!center;endingQuickSlotFields.hidden=center;
+    endingQuickTitle.textContent=center?'中央の文':target==='left'?'左ボタン':'右ボタン';
+    if(center){
+      endingQuickCenterText.value=endingLabelInput?.value||'';
+      renderEndingRecents('center');
+    }else{
+      const row=endingLinkInputs[target==='left'?0:1];
+      endingQuickKicker.value=row?.kicker?.value||'';
+      endingQuickLabel.value=row?.label?.value||'';
+      endingQuickUrl.value=row?.url?.value||'';
+      renderEndingRecents('slot');
+    }
+    endingQuickDialog.hidden=false;
+    document.documentElement.classList.add('ending-quick-open');
+    requestAnimationFrame(()=>{(center?endingQuickCenterText:endingQuickLabel)?.focus();});
+  }
+  function closeEndingQuickEditor(save=true){
+    if(!endingQuickDialog)return;
+    if(save)commitEndingQuickRecent();
+    endingQuickDialog.hidden=true;
+    document.documentElement.classList.remove('ending-quick-open');
   }
   function commitEndingQuickRecent(){
     syncQuickEndingToMain();
@@ -2920,11 +2943,16 @@
   endingQuickCenterText?.addEventListener('input',syncQuickEndingToMain);
   [endingQuickKicker,endingQuickLabel,endingQuickUrl].forEach(el=>el?.addEventListener('input',syncQuickEndingToMain));
   endingQuickClear?.addEventListener('click',()=>{endingQuickKicker.value='';endingQuickLabel.value='';endingQuickUrl.value='';syncQuickEndingToMain();});
-  endingQuickDialog?.addEventListener('close',commitEndingQuickRecent);
+  endingQuickDone?.addEventListener('click',()=>closeEndingQuickEditor(true));
+  endingQuickClose?.addEventListener('click',()=>closeEndingQuickEditor(true));
+  endingQuickDialog?.addEventListener('click',(event)=>{if(event.target===endingQuickDialog)closeEndingQuickEditor(true);});
   endingLabelInput?.addEventListener('change',()=>saveEndingRecent({type:'center',text:endingLabelInput.value}));
   endingLinkInputs.forEach(pair=>[pair.kicker,pair.label,pair.url].forEach(el=>el?.addEventListener('change',()=>saveEndingRecent({type:'slot',kicker:pair.kicker?.value,label:pair.label?.value,url:pair.url?.value}))));
 
   languageInput?.addEventListener('change',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();});
+  if(endingLegacyEditor){
+    endingLegacyEditor.open = window.matchMedia('(min-width:721px)').matches;
+  }
   renderAuthorHistory();
   updateCoverPreview();
   updateEndingPreview();

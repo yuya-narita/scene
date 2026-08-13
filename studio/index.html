@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.72</title>
+  <title>Scene Studio v0.2.73</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -17,7 +17,7 @@
     <header class="topbar">
       <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
       <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.72</span>
+        <span class="version">v0.2.73</span>
         <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
         <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
         <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
@@ -156,6 +156,17 @@
               <span>読了ページ</span>
               <small>最後の余韻と、その後の導線を設定します。</small>
             </div>
+            <div id="endingPreview" class="ending-preview ending-preview-editable" aria-label="読了ページ プレビュー">
+              <div class="ending-preview-hint">タップして直接編集</div>
+              <button id="endingPreviewCenterEdit" class="ending-preview-center ending-preview-center-button" type="button"><strong id="endingPreviewLabel">読了</strong></button>
+              <div class="ending-preview-tabs ending-preview-three">
+                <button type="button" data-preview-link="0" hidden><small></small><strong></strong></button>
+                <button type="button" data-preview-cover><small>COVER</small><strong>表紙に戻る</strong></button>
+                <button type="button" data-preview-link="1" hidden><small></small><strong></strong></button>
+              </div>
+            </div>
+            <details id="endingLegacyEditor" class="ending-legacy-editor">
+              <summary>フォームで細かく編集</summary>
             <label class="field" for="endingLabelInput">
               <span class="field-label">中央の文 <small>任意</small></span>
               <input id="endingLabelInput" type="text" placeholder="例：つづく">
@@ -183,15 +194,7 @@
                 </div>
               </div>
             </div>
-            <div id="endingPreview" class="ending-preview ending-preview-editable" aria-label="読了ページ プレビュー">
-              <div class="ending-preview-hint">タップして直接編集</div>
-              <button id="endingPreviewCenterEdit" class="ending-preview-center ending-preview-center-button" type="button"><strong id="endingPreviewLabel">読了</strong></button>
-              <div class="ending-preview-tabs ending-preview-three">
-                <button type="button" data-preview-link="0" hidden><small></small><strong></strong></button>
-                <button type="button" data-preview-cover><small>COVER</small><strong>表紙に戻る</strong></button>
-                <button type="button" data-preview-link="1" hidden><small></small><strong></strong></button>
-              </div>
-            </div>
+            </details>
           </div>
         </div>
       </details>
@@ -513,11 +516,11 @@
 <script src="./scene-text-splitter.js"></script>
 <script src="./script.js"></script>
 
-  <dialog id="endingQuickDialog" class="ending-quick-dialog">
-    <form method="dialog" class="ending-quick-card">
+  <div id="endingQuickDialog" class="ending-quick-dialog" hidden>
+    <div class="ending-quick-card" role="dialog" aria-modal="true">
       <div class="ending-quick-head">
         <div><small>ENDING QUICK EDIT</small><strong id="endingQuickTitle">読了ページ</strong></div>
-        <button class="ending-quick-close" value="cancel" aria-label="閉じる">×</button>
+        <button id="endingQuickClose" class="ending-quick-close" type="button" aria-label="閉じる">×</button>
       </div>
       <div id="endingQuickCenterFields" class="ending-quick-fields" hidden>
         <label><span>中央の文</span><input id="endingQuickCenterText" type="text" placeholder="例：つづく"></label>
@@ -532,9 +535,9 @@
         <div class="ending-quick-recent-head"><strong>最近使ったもの</strong><small>この端末に保存</small></div>
         <div id="endingQuickRecentList" class="ending-quick-recent-list"></div>
       </div>
-      <button id="endingQuickDone" class="ending-quick-done" value="default">完了</button>
-    </form>
-  </dialog>
+      <button id="endingQuickDone" class="ending-quick-done" type="button">完了</button>
+    </div>
+  </div>
 
 </body>
 </html>
