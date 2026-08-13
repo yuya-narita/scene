@@ -1035,8 +1035,9 @@
       this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
       this.els.endingText.textContent = '';
       const endingLinks=Array.isArray(doc.ending?.links)?doc.ending.links:[];
-      const left=endingLinks.find(x=>x?.position==='left')||endingLinks[0]||null;
-      const right=endingLinks.find(x=>x?.position==='right')||(endingLinks.length>1?endingLinks[1]:null);
+      const endingHasPositions=endingLinks.some(x=>x?.position==='left'||x?.position==='right');
+      const left=endingHasPositions?(endingLinks.find(x=>x?.position==='left')||null):(endingLinks[0]||null);
+      const right=endingHasPositions?(endingLinks.find(x=>x?.position==='right')||null):(endingLinks.length>1?endingLinks[1]:null);
       const applyEndingSlot=(button,item)=>{if(!button)return;const label=String(item?.label||item?.title||'').trim();const kicker=String(item?.kicker||'').trim();button.hidden=!label;const s=button.querySelector('small'),b=button.querySelector('strong');if(s){s.textContent=kicker;s.hidden=!kicker;}if(b)b.textContent=label;button.dataset.previewUrl=String(item?.url||item?.href||'').trim();};
       applyEndingSlot(this.els.endingLeft,left); applyEndingSlot(this.els.endingRight,right);
       this.els.ending.hidden = true;
