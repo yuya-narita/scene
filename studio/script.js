@@ -14,12 +14,17 @@
   const episodeInput = $('#episodeInput');
   const coverImageInput = $('#coverImageInput');
   const coverPreview = $('#coverPreview');
-  const coverPreviewTitle=$('#coverPreviewTitle'), coverPreviewAuthor=$('#coverPreviewAuthor'), coverPreviewSubtitle=$('#coverPreviewSubtitle');
-  const authorHistoryList=$('#authorHistoryList'), endingLabelInput=$('#endingLabelInput'), endingPreviewLabel=$('#endingPreviewLabel'), endingPreviewCustom=$('#endingPreviewCustom');
-  const endingLinkInputs=[1,2,3].map(n=>({label:$(`#endingLink${n}Label`),url:$(`#endingLink${n}Url`)}));
   const coverImageClear = $('#coverImageClear');
   const coverFitInput = $('#coverFitInput');
   const coverPositionInput = $('#coverPositionInput');
+  const coverPreviewTitle = $('#coverPreviewTitle');
+  const coverPreviewAuthor = $('#coverPreviewAuthor');
+  const coverPreviewSubtitle = $('#coverPreviewSubtitle');
+  const authorHistoryList = $('#authorHistoryList');
+  const endingLabelInput = $('#endingLabelInput');
+  const endingLinkInputs = [1,2,3].map(n=>({label:$(`#endingLink${n}Label`),url:$(`#endingLink${n}Url`)}));
+  const endingPreviewLabel = $('#endingPreviewLabel');
+  const endingPreviewCustom = $('#endingPreviewCustom');
   let coverImageUrl = '';
   let coverImageFileName = '';
   const bodyInput = $('#bodyInput');
@@ -33,8 +38,7 @@
 
   const UI_BINDINGS = [
     ['.intro h2','intro.title'],['.intro p','intro.body'],
-    ['label.field:nth-of-type(1) .field-label','field.title'],['#titleInput','field.title.ph','placeholder'],
-    ['label.field:nth-of-type(2) .field-label','field.author'],['#authorInput','field.author.ph','placeholder'],
+    ['#titleInput','field.title.ph','placeholder'],['#authorInput','field.author.ph','placeholder'],
     ['.body-field .field-label','field.body'],['#bodyInput','field.body.ph','placeholder'],['#sampleButton','body.sample'],
     ['.theme-section .section-heading span','theme.heading'],['.theme-section .section-heading small','theme.note'],
     ['.theme-card[data-theme="light"] small','theme.light'],['.theme-card[data-theme="dark"] small','theme.dark'],['.theme-card[data-theme="cinema"] small','theme.cinema'],
@@ -71,7 +75,7 @@
     ['.audio-card:nth-child(1) .audio-card-title small','audio.bgm.note'],['.audio-card:nth-child(2) .audio-card-title small','audio.ambient.note'],['.audio-card:nth-child(3) .audio-card-title small','audio.se.note'],
     ['.advanced-hint','audio.hint'],['#editReturnButton','preview.return'],
     ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#easyPublishButton span','publish.action'],['#easyPublishButton small','publish.short'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],
-    ['.work-meta-section > summary','work.info'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.easy-cover-simple .section-heading > span','work.cover'],['.easy-cover-simple .section-heading > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.easy-cover-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
+    ['.work-meta-section > summary','work.info'],['.author-history-help','work.authorHistory'],['.ending-editor .section-heading > span','ending.heading'],['.ending-editor .section-heading > small','ending.note'],['#endingLabelInput','ending.label.ph','placeholder'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.easy-cover-simple .section-heading > span','work.cover'],['.easy-cover-simple .section-heading > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.easy-cover-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
     ['#advancedPreviewButton','common.preview'],['#advancedExportButton','file.export'],['.auto-timing-head strong','auto.heading'],['#sceneAutoTimingReset','auto.reset'],['.auto-timing-controls label span','auto.second'],['.auto-timing-editor > p','auto.hint'],
     ['#sceneColorSelect','text.color','aria-label'],['#sceneShadowSelect','text.shadow','aria-label'],['#sceneColorSelect option[value="auto"]','effect.auto'],['#sceneColorSelect option[value="white"]','color.white'],['#sceneColorSelect option[value="black"]','color.black'],['#sceneColorSelect option[value="custom"]','color.custom'],['#sceneShadowSelect option[value="auto"]','effect.auto'],['#sceneShadowSelect option[value="none"]','shadow.none'],['#sceneShadowSelect option[value="soft"]','shadow.soft'],['#sceneShadowSelect option[value="strong"]','shadow.strong'],
     ['.scene-motion-preview-field > span','background.preview'],['#publishFromPreviewButton','publish.action'],['#publishDialogClose','unpublish.cancel','aria-label'],['#deleteSceneDialog h2','delete.scene.title'],['#deleteSceneDialogText','delete.scene.text'],['#deleteSceneCancel','delete.scene.cancel'],['#deleteSceneConfirm','delete.scene.confirm'],['#unpublishDialog h2','unpublish.title'],['#unpublishDialogText','unpublish.text'],['#unpublishCancel','unpublish.cancel'],['#unpublishConfirm','unpublish.confirm'],['#draftManagerDialog h2','draft.title'],['#draftManagerClose','unpublish.cancel','aria-label'],['#newDraftButton','draft.new'],
@@ -300,7 +304,6 @@
       },
       recProgress:clone(autoRecProgress),
       cover:{url:coverImageUrl||'',name:coverImageFileName||''},
-      ending:endingFromEasy(),
       assets:serializeDraftAssets()
     };
   }
@@ -358,9 +361,10 @@
     if(episodeInput)episodeInput.value=row.easy?.episode||'';
     if(languageInput)languageInput.value=row.easy?.language||'auto';
     if(densitySelect)densitySelect.value='normal';
-    coverImageUrl=map.get(row.cover?.url)||'';coverImageFileName=row.cover?.name||'';
-    if(endingLabelInput)endingLabelInput.value=row.ending?.label||'';endingLinkInputs.forEach((r,i)=>{const x=row.ending?.links?.[i]||{};if(r.label)r.label.value=x.label||'';if(r.url)r.url.value=x.url||''});updateEndingPreview();
-    updateCount();updateCoverPreview();updateEasyFileActions();updateProtectedResplitPreview();
+    coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';
+    if(endingLabelInput)endingLabelInput.value=row.ending?.label||workingDocument?.ending?.label||'';
+    endingLinkInputs.forEach((pair,index)=>{const item=row.ending?.links?.[index]||workingDocument?.ending?.links?.[index]||{};if(pair.label)pair.label.value=item.label||'';if(pair.url)pair.url.value=item.url||'';});
+    updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateProtectedResplitPreview();
     if(workingDocument?.scenes?.length){normalizeSceneIds();refreshDocumentLanguages();renderAdvanced();}
     setScreen('easy');scrollScreenToTop(editorScreen);updateAutoRecStartLabel();
   }
@@ -620,10 +624,12 @@
     latestPublishedUrl='';
     latestPublishedFingerprint='';
     latestPublishedAt=0;
-    titleInput.value='Untitled';authorInput.value='';bodyInput.value='';
+    titleInput.value='';authorInput.value='';bodyInput.value='';
     if(densitySelect)densitySelect.value='normal';
     if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
-    coverImageUrl='';coverImageFileName='';updateCount();updateCoverPreview();updateEasyFileActions();updateAutoRecStartLabel();
+    coverImageUrl='';coverImageFileName='';
+    if(endingLabelInput)endingLabelInput.value='';endingLinkInputs.forEach(pair=>{if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
+    updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateAutoRecStartLabel();
     setScreen('easy');scrollScreenToTop(editorScreen);
     return true;
   }
@@ -698,11 +704,37 @@
   }
 
   const AUTHOR_HISTORY_KEY='scene-studio-author-history-v1';
-  function authorHistory(){try{const a=JSON.parse(localStorage.getItem(AUTHOR_HISTORY_KEY)||'[]');return Array.isArray(a)?a:[]}catch(_){return[]}}
-  function renderAuthorHistory(){if(!authorHistoryList)return;authorHistoryList.replaceChildren();authorHistory().slice(0,12).forEach(v=>{const o=document.createElement('option');o.value=v;authorHistoryList.appendChild(o)})}
-  function rememberAuthor(){const v=authorInput?.value.trim();if(!v)return;localStorage.setItem(AUTHOR_HISTORY_KEY,JSON.stringify([v,...authorHistory().filter(x=>x!==v)].slice(0,12)));renderAuthorHistory()}
-  function endingFromEasy(){return {label:endingLabelInput?.value.trim()||'',links:endingLinkInputs.map(r=>({label:r.label?.value.trim()||'',url:r.url?.value.trim()||''})).filter(x=>x.label&&x.url)}}
-  function updateEndingPreview(){if(endingPreviewLabel)endingPreviewLabel.textContent=endingLabelInput?.value.trim()||'読了';if(endingPreviewCustom){const v=endingLinkInputs.map(r=>r.label?.value.trim()).find(Boolean);endingPreviewCustom.hidden=!v;endingPreviewCustom.textContent=v||''}}
+
+  function readAuthorHistory(){
+    try{
+      const raw=JSON.parse(localStorage.getItem(AUTHOR_HISTORY_KEY)||'[]');
+      return Array.isArray(raw)?raw.filter(v=>typeof v==='string'&&v.trim()).slice(0,12):[];
+    }catch(_){return [];}
+  }
+  function renderAuthorHistory(){
+    if(!authorHistoryList)return;
+    authorHistoryList.replaceChildren();
+    readAuthorHistory().forEach(name=>{const option=document.createElement('option');option.value=name;authorHistoryList.appendChild(option);});
+  }
+  function rememberAuthorName(value){
+    const name=String(value||'').trim(); if(!name)return;
+    const next=[name,...readAuthorHistory().filter(v=>v!==name)].slice(0,12);
+    localStorage.setItem(AUTHOR_HISTORY_KEY,JSON.stringify(next)); renderAuthorHistory();
+  }
+  function endingFromEasy(){
+    return {
+      label:String(endingLabelInput?.value||'').trim(),
+      links:endingLinkInputs.map(row=>({label:String(row.label?.value||'').trim(),url:String(row.url?.value||'').trim()})).filter(x=>x.label&&x.url)
+    };
+  }
+  function updateEndingPreview(){
+    if(endingPreviewLabel)endingPreviewLabel.textContent=String(endingLabelInput?.value||'').trim()||t('ending.preview.default');
+    if(endingPreviewCustom){
+      const first=endingLinkInputs.map(row=>String(row.label?.value||'').trim()).find(Boolean)||'';
+      endingPreviewCustom.hidden=!first; endingPreviewCustom.textContent=first;
+    }
+  }
+
   function workMetadataFromEasy(){
     const detected = detectWorkLanguage();
     const selectedLanguage = languageInput?.value || 'auto';
@@ -723,8 +755,7 @@
     const empty=coverPreview.querySelector('.cover-preview-empty');
     if(empty)empty.hidden=Boolean(coverImageUrl);
     if(coverImageClear)coverImageClear.hidden=!coverImageUrl;
-  
-    if(coverPreviewTitle)coverPreviewTitle.textContent=titleInput?.value.trim()||'Untitled';
+    if(coverPreviewTitle)coverPreviewTitle.textContent=titleInput?.value.trim()||t('cover.preview.untitled');
     if(coverPreviewAuthor)coverPreviewAuthor.textContent=authorInput?.value.trim()||'';
     if(coverPreviewSubtitle)coverPreviewSubtitle.textContent=subtitleInput?.value.trim()||'';
   }
@@ -781,7 +812,10 @@
         cinemaTone: selectedTheme==='cinema' ? cinemaTone : 'dark',
         typography:{ fontFamily:selectedFont }
       },
-      player:{ navigation:{ allowPrevious:true } }, ...(coverImageUrl?{cover:{src:coverImageUrl,fit:'cover',position:'center center'}}:{}), ending:endingFromEasy(), scenes
+      player:{ navigation:{ allowPrevious:true } },
+      ...(coverImageUrl ? {cover:{src:coverImageUrl,fit:'cover',position:'center center'}} : {}),
+      ending:endingFromEasy(),
+      scenes
     };
   }
 
@@ -1196,6 +1230,8 @@
     workingDocument.appearance.typography ||= {};
     workingDocument.appearance.typography.fontFamily=selectedFont;
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
+    if(coverImageUrl)workingDocument.cover={src:coverImageUrl,fit:'cover',position:'center center'}; else delete workingDocument.cover;
+    workingDocument.ending=endingFromEasy();
   }
 
   function sceneDocumentForExport(){
@@ -1410,7 +1446,8 @@
   }
 
   function walkAssetRefs(doc,callback){
-    if(doc?.cover?.src)callback({kind:'cover',sceneIndex:-1,holder:doc.cover,key:'src',src:doc.cover.src,fileName:coverImageFileName||''});
+    const cover=doc?.cover;
+    if(cover?.src)callback({kind:'cover',sceneIndex:-1,holder:cover,key:'src',src:cover.src,fileName:cover._editorFileName||coverImageFileName||''});
     (doc.scenes||[]).forEach((scene,sceneIndex)=>{
       const bg=scene?.presentation?.background;
       if(bg?.src)callback({
@@ -1511,15 +1548,7 @@
       ref.holder._editorFileName=ref.fileName || assetRegistry.get(ref.src)?.name || assetPath.split('/').pop();
     }
 
-    let coverPath='';
-    if(coverImageUrl && /^blob:/i.test(coverImageUrl)){
-      const item=await resolveAssetBlob(coverImageUrl);
-      if(item?.blob){
-        const ext=assetExtension(item.name||coverImageFileName,item.blob.type);
-        coverPath=`assets/images/cover${ext || '.jpg'}`;
-        entries.push({name:coverPath,bytes:await blobBytes(item.blob,coverImageUrl)});
-      }
-    }
+    const coverPath=String(packaged.cover?.src||'').startsWith('assets/') ? String(packaged.cover.src) : '';
 
     const packageAssetCount=entries.length;
     packaged.package={format:'scene-package',version:'1.0',assetCount:packageAssetCount};
@@ -1620,12 +1649,17 @@
       updateAutoRecStartLabel();
       setScreen('advanced');
       scrollScreenToTop(advancedScreen);
-      if(manifest?.cover?.image && entries.get(manifest.cover.image)){
+      if(doc.cover?.src){
+        coverImageUrl=doc.cover.src;
+        coverImageFileName=doc.cover._editorFileName||'cover';
+        updateCoverPreview();
+      } else if(manifest?.cover?.image && entries.get(manifest.cover.image)){
         const bytes=entries.get(manifest.cover.image);
         const blob=new Blob([bytes],{type:guessMime(manifest.cover.image)});
         coverImageUrl=URL.createObjectURL(blob);
         coverImageFileName=manifest.cover.image.split('/').pop()||'cover';
         assetRegistry.set(coverImageUrl,{blob,name:coverImageFileName});
+        doc.cover={src:coverImageUrl,fit:'cover',position:'center center'};
         updateCoverPreview();
       } else {
         coverImageUrl=''; coverImageFileName=''; updateCoverPreview();
@@ -1678,8 +1712,11 @@
     if(subtitleInput)subtitleInput.value=doc.metadata?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=doc.metadata?.seriesTitle||'';
     if(episodeInput)episodeInput.value=doc.metadata?.episode||'';
+    coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';
+    if(endingLabelInput)endingLabelInput.value=doc.ending?.label||doc.ending?.title||'';
+    endingLinkInputs.forEach((pair,index)=>{const item=doc.ending?.links?.[index]||{};if(pair.label)pair.label.value=item.label||item.title||'';if(pair.url)pair.url.value=item.url||item.href||'';});
     bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n');
-    updateCount();
+    updateCount();updateCoverPreview();updateEndingPreview();
     protectedResplitPending=false;
    
     applyTheme(doc.theme||'light');
@@ -2768,20 +2805,29 @@
       coverImageUrl=URL.createObjectURL(snap.blob);
       coverImageFileName=snap.name||'cover';
       assetRegistry.set(coverImageUrl,{blob:snap.blob,name:coverImageFileName});
-      updateCoverPreview();
+      updateCoverPreview();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
     }catch(error){console.error(error);alert('画像を読み込めませんでした。もう一度選択してください。');coverImageInput.value='';}
   });
   coverImageClear?.addEventListener('click',()=>{
     if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
     coverImageUrl=''; coverImageFileName='';
     if(coverImageInput)coverImageInput.value='';
-    updateCoverPreview();
+    updateCoverPreview();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
   });
   // Work metadata is shell data, not Scene source. Never rebuild the Scene array here.
   [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput]
-    .forEach(el=>el?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();}));
+    .forEach(el=>el?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();updateCoverPreview();scheduleDraftSave(250);}));
+  authorInput?.addEventListener('change',()=>rememberAuthorName(authorInput.value));
+  authorInput?.addEventListener('blur',()=>rememberAuthorName(authorInput.value));
+  endingLabelInput?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();updateEndingPreview();scheduleDraftSave(250);});
+  endingLinkInputs.forEach(pair=>{
+    pair.label?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();updateEndingPreview();scheduleDraftSave(250);});
+    pair.url?.addEventListener('input',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(250);});
+  });
   languageInput?.addEventListener('change',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();});
+  renderAuthorHistory();
   updateCoverPreview();
+  updateEndingPreview();
 
   $('#sceneColorSelect')?.addEventListener('change',()=>{
     $('#sceneColorCustomField').hidden=$('#sceneColorSelect').value!=='custom';
@@ -2858,14 +2904,7 @@
     bodyInput.value=SAMPLE;
     easySourceDirty=true;
     updateCount();
-    
-  renderAuthorHistory();
-  authorInput?.addEventListener('blur',rememberAuthor);
-  [titleInput,authorInput,subtitleInput].forEach(el=>el?.addEventListener('input',updateCoverPreview));
-  endingLabelInput?.addEventListener('input',()=>{updateEndingPreview();scheduleDraftSave(120)});
-  endingLinkInputs.forEach(r=>[r.label,r.url].forEach(el=>el?.addEventListener('input',()=>{updateEndingPreview();scheduleDraftSave(120)})));
-  updateEndingPreview();
-updateCoverPreview();
+    updateCoverPreview();
     updateEasyFileActions();
    
     showUndo('タイトルと本文をサンプルに置き換えました');

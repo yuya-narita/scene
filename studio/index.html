@@ -42,10 +42,6 @@
     </section>
 
     <div class="form-stack">
-      
-      
-
-
       <label class="field body-field">
         <span class="field-label">本文</span>
         <textarea id="bodyInput" placeholder="ここに文章を貼り付けてください。"></textarea>
@@ -98,9 +94,16 @@
         <summary>作品情報・表紙</summary>
         <div class="work-meta-panel">
           <div class="work-meta-grid">
-            <label class="field"><span class="field-label">作品タイトル</span><input id="titleInput" type="text" placeholder="例：声のそろう通り"></label>
-            <label class="field"><span class="field-label">作者名 <small>任意</small></span><input id="authorInput" type="text" list="authorHistoryList" placeholder="例：Yuya Narita"><datalist id="authorHistoryList"></datalist><small class="author-history-help">この端末で以前使った作者名を候補に表示します。</small></label>
-
+            <label class="field" for="titleInput">
+              <span class="field-label">作品タイトル</span>
+              <input id="titleInput" type="text" placeholder="例：声のそろう通り">
+            </label>
+            <label class="field" for="authorInput">
+              <span class="field-label">作者名 <small>任意</small></span>
+              <input id="authorInput" type="text" list="authorHistoryList" placeholder="例：Yuya Narita">
+              <datalist id="authorHistoryList"></datalist>
+              <small class="field-help author-history-help">この端末で以前使った作者名を候補に表示します。</small>
+            </label>
             <label class="field">
               <span class="field-label">サブタイトル <small>任意</small></span>
               <input id="subtitleInput" type="text" placeholder="例：冷やせれば勝ちやろ">
@@ -131,9 +134,12 @@
             </div>
             <div class="easy-cover-row">
               <div id="coverPreview" class="cover-preview">
-                <div class="cover-preview-empty"><span>COVER</span><small>画像なしでもOK</small>
-                <div class="cover-preview-live"><small id="coverPreviewAuthor"></small><strong id="coverPreviewTitle">Untitled</strong><span id="coverPreviewSubtitle"></span></div>
-</div>
+                <div class="cover-preview-empty"><span>COVER</span><small>画像なしでもOK</small></div>
+                <div class="cover-preview-live" aria-hidden="true">
+                  <small id="coverPreviewAuthor"></small>
+                  <strong id="coverPreviewTitle">Untitled</strong>
+                  <span id="coverPreviewSubtitle"></span>
+                </div>
               </div>
               <div class="easy-cover-actions">
                 <label class="cinema-background-button" for="coverImageInput">表紙画像を選ぶ</label>
@@ -143,18 +149,33 @@
               </div>
             </div>
           </div>
-        </div>
-      
+
           <div class="ending-editor">
-            <div class="section-heading"><span>読了ページ</span><small>最後の余韻と、その後の導線を設定します。</small></div>
-            <label class="field"><span class="field-label">中央の文 <small>任意</small></span><input id="endingLabelInput" type="text" placeholder="例：つづく"></label>
-            <div class="ending-link-head"><strong>リンクボタン</strong><small>任意・最大3個</small></div>
-            <div class="ending-link-row"><input id="endingLink1Label" type="text" placeholder="例：続き"><input id="endingLink1Url" type="url" placeholder="https://..."></div>
-            <div class="ending-link-row"><input id="endingLink2Label" type="text" placeholder="例：話数一覧"><input id="endingLink2Url" type="url" placeholder="https://..."></div>
-            <div class="ending-link-row"><input id="endingLink3Label" type="text" placeholder="例：作者ページ"><input id="endingLink3Url" type="url" placeholder="https://..."></div>
-            <div class="ending-preview"><div class="ending-preview-center"><strong id="endingPreviewLabel">読了</strong></div><div class="ending-preview-actions"><button type="button" disabled>表紙に戻る</button><button id="endingPreviewCustom" type="button" disabled hidden></button></div><small>もう一度読む</small></div>
+            <div class="section-heading">
+              <span>読了ページ</span>
+              <small>最後の余韻と、その後の導線を設定します。</small>
+            </div>
+            <label class="field" for="endingLabelInput">
+              <span class="field-label">中央の文 <small>任意</small></span>
+              <input id="endingLabelInput" type="text" placeholder="例：つづく">
+            </label>
+            <div class="ending-link-editor">
+              <div class="ending-link-head"><strong>リンクボタン</strong><small>任意・最大3個</small></div>
+              <div class="ending-link-row"><input id="endingLink1Label" type="text" placeholder="例：続き"><input id="endingLink1Url" type="url" placeholder="https://..."></div>
+              <div class="ending-link-row"><input id="endingLink2Label" type="text" placeholder="例：話数一覧"><input id="endingLink2Url" type="url" placeholder="https://..."></div>
+              <div class="ending-link-row"><input id="endingLink3Label" type="text" placeholder="例：作者ページ"><input id="endingLink3Url" type="url" placeholder="https://..."></div>
+            </div>
+            <div id="endingPreview" class="ending-preview" aria-label="読了ページ プレビュー">
+              <div class="ending-preview-center"><strong id="endingPreviewLabel">読了</strong></div>
+              <div class="ending-preview-tabs">
+                <button type="button" disabled>表紙に戻る</button>
+                <button id="endingPreviewCustom" type="button" disabled hidden></button>
+              </div>
+              <small>もう一度読む</small>
+            </div>
           </div>
-</details>
+        </div>
+      </details>
       <button id="advancedButton" class="secondary-button advanced-open-button" type="button">シーンを調整</button>
 
       <section class="project-io-section project-io-clean developer-hidden-io" aria-labelledby="projectIoTitle" hidden>

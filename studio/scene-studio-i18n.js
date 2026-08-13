@@ -6,6 +6,7 @@
 
   const M = {
     ja: {
+      'work.authorHistory':'この端末で以前使った作者名を候補に表示します。','ending.heading':'読了ページ','ending.note':'最後の余韻と、その後の導線を設定します。','ending.label.ph':'例：つづく','ending.preview.default':'読了','cover.preview.untitled':'Untitled',
       'intro.title':'文章を貼るだけ。',
       'intro.body':'次の文章を、まだ見せない体験にします。',
       'field.title':'作品タイトル','field.title.ph':'例：声のそろう通り',
@@ -63,6 +64,7 @@
       'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'最初から読む'
     },
     en: {
+      'work.authorHistory':'Previously used author names on this device appear as suggestions.','ending.heading':'Ending page','ending.note':'Set the final afterglow and what readers can do next.','ending.label.ph':'e.g. To be continued','ending.preview.default':'Finished','cover.preview.untitled':'Untitled',
       'intro.title':'Paste your text.',
       'intro.body':'Turn it into an experience where the next passage stays hidden.',
       'field.title':'Title','field.title.ph':'e.g. The Street of Matching Voices',
