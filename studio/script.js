@@ -3296,42 +3296,7 @@
   easyMenuPanel?.addEventListener('click',(e)=>e.stopPropagation());
   easyMenuBackdrop?.addEventListener('click',closeEasyMenu);
 
-  // Mobile bottom-sheet gesture: the grabber is a real affordance now.
-  // Drag/swipe it down to dismiss; short drags spring back into place.
-  const easyMenuGrabber=easyMenuPanel?.querySelector('.easy-menu-grabber');
-  let easyMenuDragStartY=0;
-  let easyMenuDragY=0;
-  let easyMenuDragging=false;
-  const resetEasyMenuDrag=()=>{
-    if(!easyMenuPanel)return;
-    easyMenuPanel.classList.remove('is-dragging');
-    easyMenuPanel.style.transform='';
-    easyMenuPanel.style.opacity='';
-  };
-  easyMenuGrabber?.addEventListener('touchstart',(e)=>{
-    if(window.innerWidth>760 || easyMenuPanel?.hidden)return;
-    const touch=e.touches?.[0]; if(!touch)return;
-    easyMenuDragging=true; easyMenuDragStartY=touch.clientY; easyMenuDragY=0;
-    easyMenuPanel.classList.add('is-dragging');
-  },{passive:true});
-  easyMenuGrabber?.addEventListener('touchmove',(e)=>{
-    if(!easyMenuDragging)return;
-    const touch=e.touches?.[0]; if(!touch)return;
-    easyMenuDragY=Math.max(0,touch.clientY-easyMenuDragStartY);
-    easyMenuPanel.style.transform=`translateY(${easyMenuDragY}px)`;
-    easyMenuPanel.style.opacity=String(Math.max(.62,1-easyMenuDragY/360));
-    if(easyMenuDragY>4)e.preventDefault();
-  },{passive:false});
-  const finishEasyMenuDrag=()=>{
-    if(!easyMenuDragging)return;
-    easyMenuDragging=false;
-    if(easyMenuDragY>=64){resetEasyMenuDrag();closeEasyMenu();}
-    else resetEasyMenuDrag();
-    easyMenuDragY=0;
-  };
-  easyMenuGrabber?.addEventListener('touchend',finishEasyMenuDrag,{passive:true});
-  easyMenuGrabber?.addEventListener('touchcancel',finishEasyMenuDrag,{passive:true});
-
+  // v0.2.94: menu is a top-right popover; no drag-to-dismiss gesture.
   document.addEventListener('click',closeEasyMenu);
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
   $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#exportPackageButton')?.click();});

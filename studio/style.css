@@ -3899,3 +3899,106 @@ body.easy-menu-open{overflow:hidden}
 .easy-player-open .studio-floating-advanced,
 .easy-player-open .studio-floating-preview,
 .easy-player-open .studio-undo-compact{display:none!important}
+
+
+/* =========================================================
+   v0.2.94 — top-right slide menu + centered stable FAB rail
+   ========================================================= */
+/* Menu: no bottom sheet. It grows softly from the ≡ trigger. */
+.easy-menu-backdrop{
+  background:rgba(18,20,24,.16)!important;
+  -webkit-backdrop-filter:blur(1.5px)!important;
+  backdrop-filter:blur(1.5px)!important;
+  animation:easyMenuFadeIn .16s ease both!important;
+}
+.easy-menu-panel{
+  position:fixed!important;
+  z-index:2147483107!important;
+  left:auto!important;
+  right:calc(14px + env(safe-area-inset-right))!important;
+  top:calc(72px + env(safe-area-inset-top))!important;
+  bottom:auto!important;
+  width:min(360px,calc(100vw - 28px))!important;
+  max-width:none!important;
+  max-height:min(72vh,620px)!important;
+  margin:0!important;
+  overflow:auto!important;
+  overscroll-behavior:contain!important;
+  padding:12px 12px 14px!important;
+  border-radius:22px!important;
+  transform-origin:top right!important;
+  animation:easyMenuTopRightIn .26s cubic-bezier(.2,.82,.2,1.08) both!important;
+  touch-action:pan-y!important;
+}
+.easy-menu-grabber{display:none!important}
+@keyframes easyMenuTopRightIn{
+  from{opacity:0;transform:translate(14px,-12px) scale(.90)}
+  to{opacity:1;transform:translate(0,0) scale(1)}
+}
+@media(max-width:560px){
+  .easy-menu-panel{
+    right:calc(12px + env(safe-area-inset-right))!important;
+    top:calc(66px + env(safe-area-inset-top))!important;
+    width:min(344px,calc(100vw - 24px))!important;
+    max-height:calc(100dvh - 94px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important;
+  }
+}
+
+/* True geometric centering for ↶ (raw text baseline was visually off-center). */
+.studio-undo-compact{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  padding:0!important;
+}
+.studio-undo-compact > span{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+  height:100%!important;
+  margin:0!important;
+  padding:0!important;
+  line-height:1!important;
+  transform:translateY(-1px)!important;
+}
+
+/* One rail geometry for portrait/landscape; no width breakpoint may re-space it. */
+#floatingAdvancedButton.studio-floating-advanced,
+#floatingPreviewButton.studio-floating-preview,
+#undoCompactButton.studio-undo-compact{
+  right:calc(10px + env(safe-area-inset-right))!important;
+  left:auto!important;
+  top:auto!important;
+  width:42px!important;
+  height:42px!important;
+  min-width:42px!important;
+  min-height:42px!important;
+  margin:0!important;
+}
+#undoCompactButton.studio-undo-compact{
+  bottom:calc(10px + env(safe-area-inset-bottom))!important;
+}
+#floatingPreviewButton.studio-floating-preview{
+  bottom:calc(94px + env(safe-area-inset-bottom))!important;
+}
+#floatingAdvancedButton.studio-floating-advanced{
+  bottom:calc(178px + env(safe-area-inset-bottom))!important;
+}
+
+/* Desktop can be 44px, while preserving exactly one-button gaps. */
+@media (min-width:900px) and (pointer:fine){
+  #floatingAdvancedButton.studio-floating-advanced,
+  #floatingPreviewButton.studio-floating-preview,
+  #undoCompactButton.studio-undo-compact{
+    right:12px!important;
+    width:44px!important;
+    height:44px!important;
+    min-width:44px!important;
+    min-height:44px!important;
+  }
+  #undoCompactButton.studio-undo-compact{bottom:14px!important}
+  #floatingPreviewButton.studio-floating-preview{bottom:102px!important}
+  #floatingAdvancedButton.studio-floating-advanced{bottom:190px!important}
+}
