@@ -40,6 +40,8 @@
   const endingPreviewCenterEdit=$('#endingPreviewCenterEdit');
   const endingPreviewCover=$('[data-preview-cover]');
   const easyToast=$('#easyToast');
+  const fixedActionNotice=$('#fixedActionNotice');
+  const fixedActionNoticeText=$('#fixedActionNoticeText');
   const endingQuickDialog=$('#endingQuickDialog');
   const endingQuickTitle=$('#endingQuickTitle');
   const endingQuickCenterFields=$('#endingQuickCenterFields');
@@ -785,6 +787,26 @@
       easyToast.classList.remove('is-showing');
       setTimeout(()=>{easyToast.hidden=true;},180);
     },1500);
+  }
+
+  let fixedActionNoticeTimer=null;
+  function showFixedActionNotice(message){
+    if(!fixedActionNotice)return;
+    if(fixedActionNoticeTimer)window.clearTimeout(fixedActionNoticeTimer);
+    if(fixedActionNoticeText)fixedActionNoticeText.textContent=message;
+    fixedActionNotice.hidden=false;
+    fixedActionNotice.classList.remove('is-visible','is-hiding');
+    // Force layout so Safari and desktop both animate from a real rendered state.
+    void fixedActionNotice.offsetWidth;
+    fixedActionNotice.classList.add('is-visible');
+    fixedActionNoticeTimer=window.setTimeout(()=>{
+      fixedActionNotice.classList.remove('is-visible');
+      fixedActionNotice.classList.add('is-hiding');
+      window.setTimeout(()=>{
+        fixedActionNotice.hidden=true;
+        fixedActionNotice.classList.remove('is-hiding');
+      },180);
+    },1800);
   }
 
   const ENDING_RECENTS_KEY='scene-studio-ending-recents-v1';
@@ -3027,7 +3049,22 @@
   endingPreviewCenterEdit?.addEventListener('click',()=>openEndingQuickEditor('center'));
   endingPreviewLinks[0]?.addEventListener('click',()=>openEndingQuickEditor('left'));
   endingPreviewLinks[1]?.addEventListener('click',()=>openEndingQuickEditor('right'));
-  endingPreviewCover?.addEventListener('click',()=>showEasyToast('「表紙に戻る」は固定です'));
+  if(endingPreviewCover){
+    const notifyFixedCover=(event)=>{
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      showFixedActionNotice('「表紙に戻る」は固定です');
+    };
+    endingPreviewCover.addEventListener('pointerup',notifyFixedCover);
+    endingPreviewCover.addEventListener('click',(event)=>{
+      // Keyboard-generated click still works; pointer clicks were already handled.
+      if(event.detail===0)notifyFixedCover(event);
+      else { event.preventDefault(); event.stopPropagation(); }
+    });
+    endingPreviewCover.addEventListener('keydown',(event)=>{
+      if(event.key==='Enter'||event.key===' '){ notifyFixedCover(event); }
+    });
+  }
   endingQuickCenterText?.addEventListener('input',syncQuickEndingToMain);
   [endingQuickKicker,endingQuickLabel,endingQuickUrl].forEach(el=>el?.addEventListener('input',syncQuickEndingToMain));
   endingQuickClear?.addEventListener('click',()=>{endingQuickKicker.value='';endingQuickLabel.value='';endingQuickUrl.value='';syncQuickEndingToMain();});
