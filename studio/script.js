@@ -3234,6 +3234,15 @@
   $$('.theme-card').forEach(card=>card.addEventListener('click',()=>applyTheme(card.dataset.theme)));
   $$('.work-font-card').forEach(card=>card.addEventListener('click',()=>applyWorkFont(card.dataset.font)));
   $('#makeButton').addEventListener('click',()=>{openPlayer({from:'easy',startAt:0});updateEasyFileActions();});
+  $('#floatingPreviewButton')?.addEventListener('click',()=>{
+    if(!advancedScreen.hidden){
+      syncAdvancedFieldsToScene();
+      openPlayer({from:'advanced',startAt:selectedSceneIndex});
+    }else{
+      openPlayer({from:'easy',startAt:0});
+      updateEasyFileActions();
+    }
+  });
   $('#advancedButton').addEventListener('click',openAdvanced);
   $('#easyAdvancedReturnButton')?.addEventListener('click',openAdvanced);
   $('#exportSceneButton').addEventListener('click',exportSceneDocument);
