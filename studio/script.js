@@ -784,7 +784,7 @@
     easyToastTimer=setTimeout(()=>{
       easyToast.classList.remove('is-showing');
       setTimeout(()=>{easyToast.hidden=true;},180);
-    },950);
+    },1500);
   }
 
   const ENDING_RECENTS_KEY='scene-studio-ending-recents-v1';
