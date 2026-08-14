@@ -2337,18 +2337,15 @@
   function syncUndoVisibilityForScreen(name){
     const inPlayer=name==='player';
     const bar=$('#undoBar'), compact=$('#undoCompactButton');
-    // Preview / AUTO REC is a reader-facing surface. Keep the undo snapshot,
-    // but never let Studio undo controls overlap the Player.
+    // Preview / AUTO REC is reader-facing. Keep the snapshot, hide Studio chrome.
     if(inPlayer){
       if(undoBarTimer)window.clearTimeout(undoBarTimer);
       undoBarTimer=null;
       if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
-      if(compact)compact.hidden=true;
       return;
     }
-    // Returning to Easy / Advanced restores only the compact affordance.
-    // The undo history itself has remained untouched while previewing.
-    if(undoSnapshot && compact)compact.hidden=false;
+    // In authoring screens the slot is always present; availability is shown by tone.
+    if(compact){compact.hidden=false;compact.disabled=!undoSnapshot;}
   }
   function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); syncUndoVisibilityForScreen(name); }
   function scrollScreenToTop(screen){
@@ -2414,7 +2411,7 @@
     selectedSceneIndex=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));
     renderAdvanced(); updateEasyFileActions(); setScreen('advanced');
     const modeFab=$('#floatingAdvancedButton');
-    if(modeFab){modeFab.hidden=false;modeFab.querySelector('span').textContent='✎';modeFab.setAttribute('aria-label','Easy編集に戻る');modeFab.title='Easy';}
+    if(modeFab){modeFab.hidden=false;modeFab.disabled=false;modeFab.querySelector('span').textContent='✎';modeFab.setAttribute('aria-label','Easy編集に戻る');modeFab.title='Easy';}
     scrollScreenToTop(advancedScreen);
   }
   function closeAdvanced(){
@@ -2802,7 +2799,7 @@
   function showCompactUndo(){
     if(!undoSnapshot || !playerScreen?.hidden)return;
     const compact=$('#undoCompactButton');
-    if(compact)compact.hidden=false;
+    if(compact){compact.hidden=false;compact.disabled=!undoSnapshot;}
   }
 
   function hideUndoBar(){
@@ -2849,7 +2846,7 @@
     const bar=$('#undoBar'), msg=$('#undoMessage'), compact=$('#undoCompactButton');
     if(!bar)return;
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
-    if(compact)compact.hidden=true;
+    if(compact){compact.hidden=false;compact.disabled=false;}
     if(msg){msg.dataset.rawLabel=label;msg.textContent=translateUndoLabel(label);}
     bar.hidden=false;
     bar.classList.remove('is-hiding');
@@ -2863,7 +2860,7 @@
     undoBarTimer=null;
     const bar=$('#undoBar'), compact=$('#undoCompactButton');
     if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
-    if(compact)compact.hidden=true;
+    if(compact){compact.hidden=false;compact.disabled=true;}
   }
 
   function restoreUndo(){
@@ -2894,7 +2891,7 @@
     undoBarTimer=null;
     const bar=$('#undoBar'), compact=$('#undoCompactButton');
     if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
-    if(compact)compact.hidden=true;
+    if(compact){compact.hidden=false;compact.disabled=true;}
   }
 
   function moveScene(delta){
@@ -3174,7 +3171,18 @@
     const menuExport=$('#menuExportPackageButton');
     if(menuExport) menuExport.disabled=!hasSource;
     const floatingAdvanced=$('#floatingAdvancedButton');
-    if(floatingAdvanced) floatingAdvanced.hidden=!hasDocument;
+    if(floatingAdvanced){
+      floatingAdvanced.hidden=false;
+      const inAdvanced=!advancedScreen.hidden;
+      floatingAdvanced.disabled=inAdvanced ? false : !hasDocument;
+      floatingAdvanced.querySelector('span').textContent=inAdvanced?'✎':'⚙︎';
+      floatingAdvanced.setAttribute('aria-label',inAdvanced?'Easy編集に戻る':'細かく調整');
+      floatingAdvanced.title=inAdvanced?'Easy':'Advanced';
+    }
+    const floatingPreview=$('#floatingPreviewButton');
+    if(floatingPreview)floatingPreview.disabled=!hasSource;
+    const compactUndo=$('#undoCompactButton');
+    if(compactUndo){compactUndo.hidden=false;compactUndo.disabled=!undoSnapshot;}
     const menuDraftCount=$('#menuDraftCount');
     const toolbarDraftCount=$('#draftToolbarCount');
     if(menuDraftCount && toolbarDraftCount) menuDraftCount.textContent=toolbarDraftCount.textContent;
@@ -3287,6 +3295,43 @@
   });
   easyMenuPanel?.addEventListener('click',(e)=>e.stopPropagation());
   easyMenuBackdrop?.addEventListener('click',closeEasyMenu);
+
+  // Mobile bottom-sheet gesture: the grabber is a real affordance now.
+  // Drag/swipe it down to dismiss; short drags spring back into place.
+  const easyMenuGrabber=easyMenuPanel?.querySelector('.easy-menu-grabber');
+  let easyMenuDragStartY=0;
+  let easyMenuDragY=0;
+  let easyMenuDragging=false;
+  const resetEasyMenuDrag=()=>{
+    if(!easyMenuPanel)return;
+    easyMenuPanel.classList.remove('is-dragging');
+    easyMenuPanel.style.transform='';
+    easyMenuPanel.style.opacity='';
+  };
+  easyMenuGrabber?.addEventListener('touchstart',(e)=>{
+    if(window.innerWidth>760 || easyMenuPanel?.hidden)return;
+    const touch=e.touches?.[0]; if(!touch)return;
+    easyMenuDragging=true; easyMenuDragStartY=touch.clientY; easyMenuDragY=0;
+    easyMenuPanel.classList.add('is-dragging');
+  },{passive:true});
+  easyMenuGrabber?.addEventListener('touchmove',(e)=>{
+    if(!easyMenuDragging)return;
+    const touch=e.touches?.[0]; if(!touch)return;
+    easyMenuDragY=Math.max(0,touch.clientY-easyMenuDragStartY);
+    easyMenuPanel.style.transform=`translateY(${easyMenuDragY}px)`;
+    easyMenuPanel.style.opacity=String(Math.max(.62,1-easyMenuDragY/360));
+    if(easyMenuDragY>4)e.preventDefault();
+  },{passive:false});
+  const finishEasyMenuDrag=()=>{
+    if(!easyMenuDragging)return;
+    easyMenuDragging=false;
+    if(easyMenuDragY>=64){resetEasyMenuDrag();closeEasyMenu();}
+    else resetEasyMenuDrag();
+    easyMenuDragY=0;
+  };
+  easyMenuGrabber?.addEventListener('touchend',finishEasyMenuDrag,{passive:true});
+  easyMenuGrabber?.addEventListener('touchcancel',finishEasyMenuDrag,{passive:true});
+
   document.addEventListener('click',closeEasyMenu);
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
   $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#exportPackageButton')?.click();});

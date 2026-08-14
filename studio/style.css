@@ -3850,3 +3850,52 @@ body.easy-menu-open{overflow:hidden}
   .easy-menu-backdrop{background:rgba(18,20,24,.12)}
   @keyframes easyMenuDesktopIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
 }
+
+
+/* =========================================================
+   v0.2.93 — calmer menu trigger + raised sheet + stable FAB rail
+   ========================================================= */
+/* ≡ keeps a generous touch target, but loses the visible circular chrome. */
+.easy-menu-button{
+  width:46px!important;height:46px!important;min-width:46px!important;
+  border:0!important;border-radius:0!important;background:transparent!important;
+  box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+}
+.easy-menu-button:active{transform:translateY(1px) scale(.96)}
+
+/* On phones, lift the sheet toward the thumb instead of pinning it to the home indicator. */
+@media(max-width:760px){
+  .easy-menu-panel{
+    bottom:max(calc(82px + env(safe-area-inset-bottom)),16vh)!important;
+    max-height:min(72vh,620px);overflow:auto;overscroll-behavior:contain;
+    touch-action:pan-y;
+  }
+  .easy-menu-grabber{height:5px;width:44px;margin-top:4px;margin-bottom:10px;cursor:grab;touch-action:none}
+  .easy-menu-panel.is-dragging{transition:none!important;animation:none!important}
+}
+
+/* The right-side rail is structural: all three slots stay visible from launch. */
+.studio-floating-advanced,
+.studio-floating-preview,
+.studio-undo-compact{
+  transition:opacity .18s ease,filter .18s ease,transform .12s ease!important;
+}
+.studio-floating-advanced:disabled,
+.studio-floating-preview:disabled,
+.studio-undo-compact:disabled{
+  opacity:.24!important;filter:saturate(.35)!important;cursor:default!important;pointer-events:none!important;
+}
+.studio-floating-advanced:not(:disabled),
+.studio-floating-preview:not(:disabled),
+.studio-undo-compact:not(:disabled){opacity:1!important}
+
+/* Never let old [hidden] rules collapse the authoring rail; Player still hides it as a surface. */
+.editor-screen:not([hidden]) ~ .studio-floating-advanced,
+.editor-screen:not([hidden]) ~ .studio-floating-preview,
+.editor-screen:not([hidden]) ~ .studio-undo-compact,
+.advanced-screen:not([hidden]) ~ .studio-floating-advanced,
+.advanced-screen:not([hidden]) ~ .studio-floating-preview,
+.advanced-screen:not([hidden]) ~ .studio-undo-compact{display:flex!important}
+.easy-player-open .studio-floating-advanced,
+.easy-player-open .studio-floating-preview,
+.easy-player-open .studio-undo-compact{display:none!important}
