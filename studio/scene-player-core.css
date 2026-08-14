@@ -1145,3 +1145,20 @@
 /* v0.2.76 — episode on Player cover */
 .sp-cover-episode{display:block;font-family:var(--sp-font-serif);font-size:clamp(12px,2.8vw,16px);line-height:1.3;letter-spacing:.06em;color:var(--sp-sub);margin-top:2px}
 .sp-cover-episode[hidden]{display:none!important}
+
+/* v0.2.77 — cover start button defaults to Mincho, matching the cover typography */
+.sp-cover-start{
+  font-family:var(--sp-font-serif);
+  font-weight:500;
+}
+
+
+/* v0.2.78 — cover text parity */
+.sp-cover-episode{
+  color:#fff!important;
+  opacity:.78!important;
+}
+.sp-cover-start{
+  font-family:var(--sp-font-serif)!important;
+  font-weight:500!important;
+}

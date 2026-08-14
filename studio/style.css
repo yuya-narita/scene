@@ -2871,3 +2871,116 @@ body.draft-manager-open{
 .advanced-work-ending .ending-legacy-editor>summary{display:none!important}
 .advanced-work-ending .ending-three-editor{margin-left:0!important;margin-right:0!important}
 @media(max-width:520px){.player-like-cover-preview{aspect-ratio:9/16!important}.cover-preview-player-copy{inset:18% 9% 27%}.cover-preview-start{bottom:9%}}
+
+/* v0.2.77 — Studio cover/start previews default to Mincho like Player */
+.cover-preview-start,
+.cover-stage-start{
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro","Times New Roman",serif;
+  font-weight:500;
+}
+
+
+/* v0.2.78 — Easy cover preview / Player cover parity
+   Use the same visual hierarchy without viewport-relative font sizes.
+   Container units keep desktop mini-previews from collapsing/wrapping. */
+.easy-cover-row{
+  grid-template-columns:minmax(280px,340px) minmax(0,1fr)!important;
+  gap:18px!important;
+}
+.easy-cover-simple .cover-preview,
+.player-like-cover-preview{
+  width:min(320px,100%)!important;
+  max-width:320px!important;
+  aspect-ratio:9/16!important;
+  margin:0!important;
+  container-type:inline-size;
+  container-name:easy-cover;
+}
+.player-like-cover-preview .cover-preview-dim{
+  background:linear-gradient(180deg,rgba(0,0,0,.14),rgba(0,0,0,.5))!important;
+}
+
+/* Match Scene Player Core typography. */
+.cover-preview-player-copy{
+  inset:18% 8% 42%!important;
+  gap:clamp(8px,3cqw,14px)!important;
+  justify-content:center!important;
+  max-width:84%!important;
+  margin:auto!important;
+  text-shadow:0 2px 20px rgba(0,0,0,.38)!important;
+}
+.cover-preview-kicker{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic UI","Yu Gothic",sans-serif!important;
+  font-size:clamp(8px,3.1cqw,10px)!important;
+  font-weight:800!important;
+  letter-spacing:.28em!important;
+  opacity:.72!important;
+}
+.cover-preview-player-copy small{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic UI","Yu Gothic",sans-serif!important;
+  font-size:clamp(9px,3.4cqw,11px)!important;
+  font-weight:400!important;
+  letter-spacing:.05em!important;
+  opacity:.78!important;
+  color:#fff!important;
+}
+.cover-preview-episode{
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro",serif!important;
+  font-size:clamp(11px,4cqw,16px)!important;
+  line-height:1.3!important;
+  letter-spacing:.06em!important;
+  opacity:.78!important;
+  color:#fff!important;
+  margin:0!important;
+}
+.cover-preview-player-copy strong{
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro",serif!important;
+  font-size:clamp(28px,12cqw,54px)!important;
+  line-height:1.2!important;
+  font-weight:500!important;
+  letter-spacing:0!important;
+  color:#fff!important;
+  max-width:100%!important;
+  overflow-wrap:break-word!important;
+  word-break:normal!important;
+}
+.cover-preview-player-copy > span:last-child{
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro",serif!important;
+  font-size:clamp(13px,4.6cqw,20px)!important;
+  line-height:1.4!important;
+  font-weight:400!important;
+  opacity:.88!important;
+  color:#fff!important;
+}
+.cover-preview-start{
+  left:8%!important;
+  right:8%!important;
+  bottom:24%!important;
+  min-height:58px!important;
+  border:1px solid rgba(255,255,255,.52)!important;
+  border-radius:14px!important;
+  background:rgba(255,255,255,.94)!important;
+  color:#111!important;
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro",serif!important;
+  font-size:clamp(16px,5.2cqw,20px)!important;
+  font-weight:500!important;
+  letter-spacing:.04em!important;
+  box-shadow:0 10px 36px rgba(0,0,0,.12)!important;
+}
+@media(max-width:760px){
+  .easy-cover-row{
+    grid-template-columns:1fr!important;
+  }
+  .easy-cover-simple .cover-preview,
+  .player-like-cover-preview{
+    width:min(360px,84vw)!important;
+    max-width:360px!important;
+    margin:0 auto!important;
+  }
+  .easy-cover-actions{margin-top:12px!important}
+}
+@media(min-width:761px){
+  .easy-cover-simple{
+    overflow:visible!important;
+  }
+}
