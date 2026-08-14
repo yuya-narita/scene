@@ -846,3 +846,14 @@
 .sp-tap-hint{
   bottom:calc(var(--sp-footer-h) + 8px + env(safe-area-inset-bottom));
 }
+
+
+/* v0.3.25 — default cover typography parity */
+.sp-cover-episode{
+  color:#fff!important;
+  opacity:.78!important;
+}
+.sp-cover-start{
+  font-family:var(--sp-font-serif)!important;
+  font-weight:500!important;
+}
