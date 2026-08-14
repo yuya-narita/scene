@@ -1,1 +1,0 @@
-Public intro cover renders metadata.episode when present.

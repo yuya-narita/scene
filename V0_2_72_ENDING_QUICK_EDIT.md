@@ -1,1 +1,0 @@
-v0.2.72: right-only slot fix, mobile heading fix, tap-to-edit ending preview, local recent presets.
