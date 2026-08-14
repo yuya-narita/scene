@@ -2360,6 +2360,9 @@
     requestAnimationFrame(()=>{ reset(); requestAnimationFrame(reset); });
   }
 
+  let playerReturnScrollY=0;
+  let playerReturnScreenScrollTop=0;
+
   function getDocumentForPlayback(){ return clone(workingDocument || buildSceneDocument()); }
   function openPlayer({from='easy', startAt=0}={}){
     if(from==='easy'){
@@ -2372,6 +2375,9 @@
     }
     if(!workingDocument?.scenes?.length)return;
     playerReturnTarget=from;
+    playerReturnScrollY=Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
+    const returnScreen=(from==='advanced' ? advancedScreen : editorScreen);
+    playerReturnScreenScrollTop=Math.max(0, returnScreen?.scrollTop || 0);
     setScreen('player');
     syncPublishPreviewButton(false);
     const p=ensurePlayer();
@@ -2384,7 +2390,22 @@
     // reader's next tap (especially important on iOS/WebKit).
     p.unlockAudio(true);
   }
-  function closePlayer(){ syncPublishPreviewButton(false); if(autoRecActive)finishAutoRec(false); if(player){player.stopAuto();player._stopAllAudio?.(true);} setScreen(playerReturnTarget==='advanced'?'advanced':'easy'); if(playerReturnTarget==='advanced') renderAdvanced(); else window.scrollTo({top:0,left:0,behavior:'instant'}); }
+  function closePlayer(){
+    syncPublishPreviewButton(false);
+    if(autoRecActive)finishAutoRec(false);
+    if(player){player.stopAuto();player._stopAllAudio?.(true);}
+    const target=playerReturnTarget==='advanced'?'advanced':'easy';
+    setScreen(target);
+    if(target==='advanced')renderAdvanced();
+
+    const restore=()=>{
+      const returnScreen=(target==='advanced'?advancedScreen:editorScreen);
+      if(returnScreen)returnScreen.scrollTop=playerReturnScreenScrollTop;
+      window.scrollTo({top:playerReturnScrollY,left:0,behavior:'instant'});
+    };
+    restore();
+    requestAnimationFrame(()=>{restore();requestAnimationFrame(restore);});
+  }
 
   function openAdvanced(){
     if(!bodyInput.value.trim() && !workingDocument){bodyInput.focus();return;}
