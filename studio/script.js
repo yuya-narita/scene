@@ -39,6 +39,7 @@
   const endingPreviewLinks = $$('[data-preview-link]');
   const endingPreviewCenterEdit=$('#endingPreviewCenterEdit');
   const endingPreviewCover=$('[data-preview-cover]');
+  const easyToast=$('#easyToast');
   const endingQuickDialog=$('#endingQuickDialog');
   const endingQuickTitle=$('#endingQuickTitle');
   const endingQuickCenterFields=$('#endingQuickCenterFields');
@@ -772,6 +773,20 @@
   }
 
 
+  let easyToastTimer=null;
+  function showEasyToast(message){
+    if(!easyToast)return;
+    clearTimeout(easyToastTimer);
+    easyToast.textContent=message;
+    easyToast.hidden=false;
+    easyToast.classList.remove('is-showing');
+    requestAnimationFrame(()=>requestAnimationFrame(()=>easyToast.classList.add('is-showing')));
+    easyToastTimer=setTimeout(()=>{
+      easyToast.classList.remove('is-showing');
+      setTimeout(()=>{easyToast.hidden=true;},180);
+    },950);
+  }
+
   const ENDING_RECENTS_KEY='scene-studio-ending-recents-v1';
   function readEndingRecents(){try{const v=JSON.parse(localStorage.getItem(ENDING_RECENTS_KEY)||'[]');return Array.isArray(v)?v.slice(0,12):[];}catch(_){return [];}}
   function saveEndingRecent(item){
@@ -831,6 +846,19 @@
       seriesTitle: seriesTitleInput?.value.trim() || '',
       episode: episodeInput?.value.trim() || ''
     };
+  }
+
+  function refreshCoverPreviewLayout(){
+    updateCoverPreview();
+    if(!coverPreview)return;
+    coverPreview.classList.remove('cover-layout-refresh');
+    requestAnimationFrame(()=>{
+      coverPreview.classList.add('cover-layout-refresh');
+      requestAnimationFrame(()=>{
+        coverPreview.classList.remove('cover-layout-refresh');
+        updateCoverPreview();
+      });
+    });
   }
 
   function updateCoverPreview(){
@@ -2907,19 +2935,19 @@
       coverImageUrl=URL.createObjectURL(snap.blob);
       coverImageFileName=snap.name||'cover';
       assetRegistry.set(coverImageUrl,{blob:snap.blob,name:coverImageFileName});
-      updateCoverPreview();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
+      refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
     }catch(error){console.error(error);alert('画像を読み込めませんでした。もう一度選択してください。');coverImageInput.value='';}
   });
   coverImageClear?.addEventListener('click',()=>{if(coverQuickImageClear)coverQuickImageClear.hidden=true;
     if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
     coverImageUrl=''; coverImageFileName='';
     if(coverImageInput)coverImageInput.value='';
-    updateCoverPreview();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
+    refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
   });
   // Work metadata is shell data, not Scene source. Never rebuild the Scene array here.
   [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput]
     .forEach(el=>el?.addEventListener('input',()=>{
-      updateCoverPreview();
+      refreshCoverPreviewLayout();
       syncEasyShellToWorkingDocument();
       syncEasyPublishButton();
       scheduleDraftSave(250);
@@ -2953,7 +2981,7 @@
     if(authorInput)authorInput.value=coverQuickAuthor?.value||'';
     if(subtitleInput)subtitleInput.value=coverQuickSubtitle?.value||'';
     if(episodeInput)episodeInput.value=coverQuickEpisode?.value||'';
-    updateCoverPreview();
+    refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
     syncEasyPublishButton();
     scheduleDraftSave(250);
@@ -2975,6 +3003,8 @@
     coverQuickDialog.hidden=true;
     document.documentElement.classList.remove('ending-quick-open');
     authorInput?.dispatchEvent(new Event('change',{bubbles:true}));
+    refreshCoverPreviewLayout();
+    setTimeout(refreshCoverPreviewLayout,160);
   }
 
   // v0.2.75: direct-preview editing stays isolated from the rest of Easy Studio.
@@ -2997,7 +3027,7 @@
   endingPreviewCenterEdit?.addEventListener('click',()=>openEndingQuickEditor('center'));
   endingPreviewLinks[0]?.addEventListener('click',()=>openEndingQuickEditor('left'));
   endingPreviewLinks[1]?.addEventListener('click',()=>openEndingQuickEditor('right'));
-  endingPreviewCover?.addEventListener('click',()=>{});
+  endingPreviewCover?.addEventListener('click',()=>showEasyToast('「表紙に戻る」は固定です'));
   endingQuickCenterText?.addEventListener('input',syncQuickEndingToMain);
   [endingQuickKicker,endingQuickLabel,endingQuickUrl].forEach(el=>el?.addEventListener('input',syncQuickEndingToMain));
   endingQuickClear?.addEventListener('click',()=>{endingQuickKicker.value='';endingQuickLabel.value='';endingQuickUrl.value='';syncQuickEndingToMain();});
