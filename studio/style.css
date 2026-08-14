@@ -3706,7 +3706,7 @@ body.draft-manager-open{
   right:calc(10px + env(safe-area-inset-right))!important;
   left:auto!important;
   top:auto!important;
-  bottom:calc(64px + env(safe-area-inset-bottom))!important;
+  bottom:calc(94px + env(safe-area-inset-bottom))!important;
   z-index:2147483098!important;
   width:42px!important;
   height:42px!important;
@@ -3741,7 +3741,7 @@ body.easy-player-open #floatingPreviewButton{
 @media(min-width:761px){
   #floatingPreviewButton.studio-floating-preview{
     right:12px!important;
-    bottom:66px!important;
+    bottom:102px!important;
     width:44px!important;
     height:44px!important;
     min-width:44px!important;
