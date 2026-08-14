@@ -92,7 +92,6 @@
       this.backgroundLayerIndex = 0;
       this.backgroundTimers = [];
       this.audioUnlocked = false;
-      this.muted = false;
       // AudioContext unlock and story playback are separate states.
       // A restarted story must wait for the reader's next stage gesture even
       // when the AudioContext itself is already unlocked.
@@ -125,8 +124,20 @@
         <div class="sp-bg-textures" aria-hidden="true"></div>
         <div class="sp-bg-flash" aria-hidden="true"></div>
         <div class="sp-veil" aria-hidden="true"></div>
+        <section class="sp-cover" hidden>
+          <div class="sp-cover-bg" aria-hidden="true"></div>
+          <div class="sp-cover-dim" aria-hidden="true"></div>
+          <div class="sp-cover-copy">
+            <span class="sp-cover-kicker">SCENE PLAYER</span>
+            <small class="sp-cover-author"></small>
+            <span class="sp-cover-episode"></span>
+            <strong class="sp-cover-title"></strong>
+            <span class="sp-cover-subtitle"></span>
+          </div>
+          <button class="sp-cover-start" type="button">はじめる</button>
+        </section>
         <header class="sp-header">
-          <button class="sp-button sp-prev" type="button" aria-label="Past scenes">‹</button>
+          <button class="sp-button sp-prev" type="button" aria-label="Previous scene">‹</button>
           <div class="sp-meta">
             <span class="sp-author"></span>
             <strong class="sp-title"></strong>
@@ -156,14 +167,25 @@
           <div class="sp-ending-copy">
             <span class="sp-ending-kicker">END</span>
             <strong class="sp-ending-title">読了</strong>
-            <p class="sp-ending-text">最後まで読みました。</p>
+            <p class="sp-ending-text"></p>
           </div>
-          <button class="sp-ending-restart" type="button">最初から読む</button>
+          <div class="sp-ending-three">
+            <button class="sp-ending-slot sp-ending-left" type="button" hidden><small></small><strong></strong></button>
+            <button class="sp-ending-slot sp-ending-cover" type="button"><small>COVER</small><strong>表紙に戻る</strong></button>
+            <button class="sp-ending-slot sp-ending-right" type="button" hidden><small></small><strong></strong></button>
+          </div>
         </section>
       `;
 
       const q = (s) => this.host.querySelector(s);
       this.els = {
+        cover: q('.sp-cover'),
+        coverBg: q('.sp-cover-bg'),
+        coverAuthor: q('.sp-cover-author'),
+        coverEpisode: q('.sp-cover-episode'),
+        coverTitle: q('.sp-cover-title'),
+        coverSubtitle: q('.sp-cover-subtitle'),
+        coverStart: q('.sp-cover-start'),
         background: q('.sp-background'),
         bgA: q('.sp-bg-a'),
         bgB: q('.sp-bg-b'),
@@ -188,7 +210,9 @@
         bar: q('.sp-progress-bar'),
         ending: q('.sp-ending'),
         endingTitle: q('.sp-ending-title'),
-        endingRestart: q('.sp-ending-restart'),
+        endingCover: q('.sp-ending-cover'),
+        endingLeft: q('.sp-ending-left'),
+        endingRight: q('.sp-ending-right'),
         endingText: q('.sp-ending-text'),
         historyHelp: q('.sp-history-help'),
         historyClose: q('.sp-history-close'),
@@ -207,11 +231,11 @@
       const fallback = {
         ja:{
           'player.previous':'過去Scene','player.restart':'最初から','player.history':'過去Sceneをスクロール','player.history.close':'履歴を閉じる',
-          'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'最初から読む'
+          'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'もう一度読む','player.ending.cover':'表紙に戻る'
         },
         en:{
           'player.previous':'Past Scenes','player.restart':'Restart','player.history':'Scroll past Scenes','player.history.close':'Close history',
-          'player.ending.title':'Finished','player.ending.text':'You reached the end.','player.ending.restart':'Read from start'
+          'player.ending.title':'Finished','player.ending.text':'You reached the end.','player.ending.restart':'Read again','player.ending.cover':'Back to cover'
         }
       };
       return fallback[this.uiLanguage]?.[key] || fallback.ja[key] || key;
@@ -225,7 +249,11 @@
       this.els.historyHelp.textContent = this._uiText('player.history');
       this.els.historyClose.setAttribute('aria-label', this._uiText('player.history.close'));
       this.els.endingText.textContent = this._uiText('player.ending.text');
-      this.els.endingRestart.textContent = this._uiText('player.ending.restart');
+      if(this.els.endingCover){
+        const coverLabel = this.uiLanguage==='en' ? 'Back to cover' : '表紙に戻る';
+        this.els.endingCover.innerHTML = `<small>COVER</small><strong>${coverLabel}</strong>`;
+      }
+      if(this.els.coverStart)this.els.coverStart.textContent = this.uiLanguage==='en' ? 'Start' : 'はじめる';
       if (!this.document) this.els.endingTitle.textContent = this._uiText('player.ending.title');
       return this.uiLanguage;
     }
@@ -252,13 +280,14 @@
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
 
-      // Previous is no longer a one-scene step. It opens the continuous History Scroll.
+      // Header back arrow returns to the cover. History remains available by downward gesture.
       this._on(this.els.prev, 'click', (e) => {
         e.stopPropagation();
-        this.openHistory();
+        this.showCover({restart:true});
       });
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
-      this._on(this.els.endingRestart, 'click', () => this.restart());
+      if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover();});
+      if(this.els.endingCover)this._on(this.els.endingCover,'click',()=>this.showCover({restart:true}));
       this._on(this.els.auto, 'click', (e) => {
         e.stopPropagation();
         this.unlockAudio(true);
@@ -274,14 +303,6 @@
         if (!item) return;
         const nextIndex = Number(item.dataset.index);
         if (!Number.isInteger(nextIndex)) return;
-
-        // A swipe used to open History sets suppressNextClick so the synthetic
-        // click following that gesture cannot advance the story accidentally.
-        // Once the reader deliberately chooses a History item, that protection
-        // has served its purpose. Leaving it armed would swallow the first
-        // intentional tap after returning to the selected Scene.
-        this.suppressNextClick = false;
-
         this.closeHistory({ keepVisualState: true });
         this.goToVisited(nextIndex);
       });
@@ -342,12 +363,14 @@
           if (Math.max(Math.abs(dx), Math.abs(dy)) < this.options.swipeThreshold) return;
           this.suppressNextClick = true;
 
-          // Navigation is intentionally vertical on mobile:
-          // pull down = Past Scenes (only when the author allows it),
-          // push up = next Scene. Horizontal swipes do nothing.
+          // Pulling down/right enters History Scroll. Pushing up/left still advances
+          // only one unread Scene at a time.
           if (Math.abs(dy) >= Math.abs(dx)) {
             if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
             else if (dy < 0) this.next();
+          } else {
+            if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
+            else this.next();
           }
         }, { passive: true });
       }
@@ -786,8 +809,6 @@
       const audio = new Audio();
       audio.preload = 'auto';
       audio.playsInline = true;
-      audio.muted = Boolean(this.muted);
-      audio.muted = Boolean(this.muted);
       this._prepareAudioTransport(audio, command.src);
       audio.src = command.src;
       try { audio.load(); } catch (_) {}
@@ -1012,7 +1033,15 @@
       this.els.title.textContent = doc.title || '';
       this.els.author.textContent = doc.author || '';
       this.els.total.textContent = String(doc.scenes.length);
-      this.els.endingTitle.textContent = doc.title || this._uiText('player.ending.title');
+      const authoredEndingLabel=String(doc.ending?.label || doc.ending?.title || '').trim();
+      this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
+      this.els.endingText.textContent = '';
+      const endingLinks=Array.isArray(doc.ending?.links)?doc.ending.links:[];
+      const endingHasPositions=endingLinks.some(x=>x?.position==='left'||x?.position==='right');
+      const left=endingHasPositions?(endingLinks.find(x=>x?.position==='left')||null):(endingLinks[0]||null);
+      const right=endingHasPositions?(endingLinks.find(x=>x?.position==='right')||null):(endingLinks.length>1?endingLinks[1]:null);
+      const applyEndingSlot=(button,item)=>{if(!button)return;const label=String(item?.label||item?.title||'').trim();const kicker=String(item?.kicker||'').trim();button.hidden=!label;const s=button.querySelector('small'),b=button.querySelector('strong');if(s){s.textContent=kicker;s.hidden=!kicker;}if(b)b.textContent=label;button.dataset.previewUrl=String(item?.url||item?.href||'').trim();};
+      applyEndingSlot(this.els.endingLeft,left); applyEndingSlot(this.els.endingRight,right);
       this.els.ending.hidden = true;
       this.backgroundState = null;
       this.backgroundLayerIndex = 0;
@@ -1020,6 +1049,7 @@
       this._audioRenderMode = 'load';
 
       this._render();
+      this.showCover();
       emit(this.host, 'sceneplayer:load', { document: doc, index: this.index });
       return this;
     }
@@ -1112,7 +1142,6 @@
     closeHistory(options = {}) {
       if (!this.historyOpen) return false;
       this.historyOpen = false;
-      this.suppressNextClick = false;
       this.host.classList.remove('sp-history-open');
       this.els.history.hidden = true;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
@@ -1121,35 +1150,6 @@
         maxVisitedIndex: this.maxVisitedIndex
       });
       return true;
-    }
-
-    _applyHistoryTypography(node, scene) {
-      if (!node || !scene) return;
-
-      const sceneTextStyle = scene?.presentation?.text || {};
-      const workTypography = this.document?.appearance?.typography || {};
-
-      const family = sceneTextStyle.fontFamily || workTypography.fontFamily || 'serif';
-      const families = {
-        serif: 'var(--sp-font-serif)',
-        sans: 'var(--sp-font-sans)',
-        mono: 'var(--sp-font-mono)'
-      };
-
-      node.style.fontFamily = families[family] || families.serif;
-
-      if (sceneTextStyle.fontWeight != null) {
-        node.style.fontWeight = String(sceneTextStyle.fontWeight);
-      }
-
-      if (sceneTextStyle.fontStyle) {
-        node.style.fontStyle = String(sceneTextStyle.fontStyle);
-      }
-
-      if (sceneTextStyle.letterSpacing != null) {
-        const v = sceneTextStyle.letterSpacing;
-        node.style.letterSpacing = typeof v === 'number' ? `${v}em` : String(v);
-      }
     }
 
     _renderHistory() {
@@ -1177,13 +1177,11 @@
           const mark = document.createElement('span');
           mark.className = 'sp-history-text';
           mark.textContent = '♪';
-          this._applyHistoryTypography(mark, scene);
           body.appendChild(mark);
         } else {
           const text = document.createElement('span');
           text.className = 'sp-history-text';
           text.textContent = scene.text || '';
-          this._applyHistoryTypography(text, scene);
           body.appendChild(text);
         }
 
@@ -1191,7 +1189,6 @@
           const sub = document.createElement('span');
           sub.className = 'sp-history-subtext';
           sub.textContent = scene.subText;
-          this._applyHistoryTypography(sub, scene);
           body.appendChild(sub);
         }
 
@@ -1260,6 +1257,50 @@
       return true;
     }
 
+    showCover(options = {}) {
+      if (!this.document || !this.els?.cover) return false;
+      if (options.restart) {
+        this._finishVisibleEntranceEffects();
+        this._clearAutoTimer();
+        this._resetPresentationRuntime();
+        this._resetBackgroundRuntime();
+        this._stopAllAudio(true);
+        this.audioPlaybackArmed = false;
+        this.index = 0;
+        this.maxVisitedIndex = 0;
+        this.closeHistory({ keepVisualState: true });
+        this.ended = false;
+        this.els.ending.hidden = true;
+        this._audioRenderMode = 'restore';
+        this._render();
+      }
+      const cover=this.document.cover||{};
+      const src=String(cover.src||cover.url||cover.image||'').trim();
+      if(this.els.coverBg){
+        this.els.coverBg.style.backgroundImage=src?`url("${src.replace(/"/g,'\\"')}")`:'none';
+        this.els.coverBg.style.backgroundSize=cover.fit==='contain'?'contain':'cover';
+        this.els.coverBg.style.backgroundPosition=cover.position||'center center';
+      }
+      if(this.els.coverAuthor)this.els.coverAuthor.textContent=this.document.author||'';
+      if(this.els.coverEpisode){const ep=this.document.metadata?.episode||this.document.episode||'';this.els.coverEpisode.textContent=ep;this.els.coverEpisode.hidden=!ep;}
+      if(this.els.coverTitle)this.els.coverTitle.textContent=this.document.title||'Untitled';
+      if(this.els.coverSubtitle)this.els.coverSubtitle.textContent=this.document.metadata?.subtitle||this.document.subtitle||'';
+      this.els.cover.hidden=false;
+      this.host.classList.add('sp-cover-open');
+      return true;
+    }
+
+    _beginFromCover() {
+      if(!this.document || !this.els?.cover)return false;
+      this.unlockAudio(true);
+      this.els.cover.hidden=true;
+      this.host.classList.remove('sp-cover-open');
+      this._audioRenderMode='restore';
+      this._render();
+      emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index});
+      return true;
+    }
+
     restart() {
       if (!this.document) return;
       this._finishVisibleEntranceEffects();
@@ -1280,6 +1321,7 @@
       this.els.ending.hidden = true;
       this._audioRenderMode = 'restore';
       this._render();
+      this.showCover();
       emit(this.host, 'sceneplayer:restart', { scene: this.currentScene });
     }
 
@@ -1289,62 +1331,10 @@
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this.ended = true;
+      this.els.ending.classList.remove('is-visible');
       this.els.ending.hidden = false;
+      this._presentationTimeout(()=>this.els.ending?.classList.add('is-visible'),3000);
       emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
-    }
-
-    fadeOutAudio(duration = 1600, { includeOneShots = true } = {}) {
-      const ms = Math.max(0, Number(duration) || 0);
-      this._clearAudioTimers();
-
-      ['bgm', 'ambient'].forEach((channel) => {
-        this._stopPersistentChannel(channel, ms);
-      });
-
-      if (includeOneShots) {
-        this.oneshots.forEach((audio) => {
-          if (!audio || audio.paused) return;
-          const startVolume = Number.isFinite(audio.volume) ? audio.volume : 1;
-          const startedAt = performance.now();
-          const step = (now) => {
-            if (!this.oneshots.has(audio)) return;
-            const t = Math.min(1, (now - startedAt) / Math.max(1, ms));
-            try { audio.volume = Math.max(0, startVolume * (1 - t)); } catch (_) {}
-            if (t < 1) requestAnimationFrame(step);
-            else {
-              try { audio.pause(); } catch (_) {}
-              this.oneshots.delete(audio);
-            }
-          };
-          if (ms > 0) requestAnimationFrame(step);
-          else {
-            try { audio.pause(); } catch (_) {}
-            this.oneshots.delete(audio);
-          }
-        });
-      }
-
-      return ms;
-    }
-
-    setMuted(muted = true) {
-      this.muted = Boolean(muted);
-      Object.values(this.audioEls || {}).forEach((audio) => {
-        try { audio.muted = this.muted; } catch (_) {}
-      });
-      this.oneshots.forEach((audio) => {
-        try { audio.muted = this.muted; } catch (_) {}
-      });
-      emit(this.host, 'sceneplayer:mutechange', { muted: this.muted });
-      return this.muted;
-    }
-
-    toggleMuted() {
-      return this.setMuted(!this.muted);
-    }
-
-    isMuted() {
-      return Boolean(this.muted);
     }
 
     startAuto() {
@@ -1661,6 +1651,9 @@
     _swapBackground(state, transition) {
       const current = this._currentBackgroundLayer();
       const incoming = this._nextBackgroundLayer();
+      const transitionDuration=Math.max(0,asNumber(state.transitionDuration,700));
+      incoming.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
+      current.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
       this._prepareBackgroundLayer(incoming, state);
 
       const mode = ['fade','cut','flash','glitch'].includes(transition) ? transition : 'fade';
@@ -1717,10 +1710,13 @@
       const type = ['parallax','breath','slowZoom','panLeft','panRight','panUp','panDown'].includes(motion.type) ? motion.type : null;
       if (!type) return;
       layer.classList.add(`sp-motion-${type}`);
-      layer.style.setProperty('--sp-bg-duration', `${Math.max(250, asNumber(motion.duration, 12000))}ms`);
-      layer.style.setProperty('--sp-bg-scale-from', String(asNumber(motion.scaleFrom, 1)));
-      layer.style.setProperty('--sp-bg-scale-to', String(asNumber(motion.scaleTo, type === 'slowZoom' ? 1.08 : 1.04)));
-      layer.style.setProperty('--sp-bg-pan', `${asNumber(motion.pan, 4)}%`);
+      const defaultDuration = type === 'breath' ? 4200 : 6500;
+      const defaultFrom = type === 'slowZoom' ? 1.0 : 1.06;
+      const defaultTo = type === 'slowZoom' ? 1.14 : (type === 'breath' ? 1.11 : 1.08);
+      layer.style.setProperty('--sp-bg-duration', `${Math.max(250, asNumber(motion.duration, defaultDuration))}ms`);
+      layer.style.setProperty('--sp-bg-scale-from', String(asNumber(motion.scaleFrom, defaultFrom)));
+      layer.style.setProperty('--sp-bg-scale-to', String(asNumber(motion.scaleTo, defaultTo)));
+      layer.style.setProperty('--sp-bg-pan', `${asNumber(motion.pan, 9)}%`);
     }
 
     _applyBackgroundOverlays(state) {
@@ -1844,6 +1840,12 @@
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
       if (style.color) node.style.color = String(style.color);
+      const shadows={
+        none:'none',
+        soft:'0 1px 4px rgba(0,0,0,.48)',
+        strong:'0 2px 4px rgba(0,0,0,.86), 0 0 12px rgba(0,0,0,.48)'
+      };
+      if (style.shadow && shadows[style.shadow]) node.style.textShadow=shadows[style.shadow];
 
       const family = style.fontFamily || this.document?.appearance?.typography?.fontFamily || 'serif';
       const families = {
@@ -1959,39 +1961,26 @@
       this.typingState = { timer, node, text: scene.text, sceneId: scene.id };
     }
 
-    destroy(options = {}) {
+    destroy() {
       if (this.destroyed) return;
-      const preserveHost = Boolean(options?.preserveHost);
-
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this._stopAllAudio(true);
-
       if (this.audioContext && typeof this.audioContext.close === 'function') {
         try { this.audioContext.close(); } catch (_) {}
       }
-
       this.audioGainNodes.clear();
       this.audioSourceNodes.clear();
-      this._bound.forEach(([el, event, fn, eventOptions]) => {
-        el.removeEventListener(event, fn, eventOptions);
-      });
+      this._bound.forEach(([el, event, fn, options]) => el.removeEventListener(event, fn, options));
       this._bound.length = 0;
-
-      // Public Player may keep an old instance alive briefly only so its audio
-      // can fade out. A newer instance can already be using the SAME host.
-      // Never let delayed cleanup of the old instance erase the new DOM.
-      if (!preserveHost) {
-        this.host.innerHTML = '';
-        this.host.classList.remove('sp-core');
-      }
-
+      this.host.innerHTML = '';
+      this.host.classList.remove('sp-core');
       this.destroyed = true;
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.13';
+  ScenePlayerCore.VERSION = '1.4.1';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 

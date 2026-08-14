@@ -3,61 +3,580 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0b1016">
-  <title>Scene Player</title>
+  <meta name="theme-color" content="#f7f8fb">
+  <title>Scene Studio v0.2.76</title>
   <link rel="stylesheet" href="./scene-player-core.css">
-  <link rel="stylesheet" href="./public-player.css">
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <section id="publicIntro" class="public-intro" hidden>
-    <div id="publicIntroCover" class="public-intro-cover"></div>
-    <div id="publicIntroCoverDim" class="public-intro-cover-dim"></div>
-    <div class="public-intro-frame">
-      <div class="public-intro-copy">
-        <span class="public-kicker">SCENE PLAYER</span>
-        <p id="publicIntroAuthor" class="public-author"></p>
-        <p id="publicIntroEpisode" class="public-episode" hidden></p>
-        <h1 id="publicIntroTitle" class="public-title">Scene</h1>
-        <p id="publicIntroDescription" class="public-description"></p>
+<main id="app">
+  <section id="editorScreen" class="screen editor-screen">
+    <div class="easy-language-corner ui-language-switch" role="group" aria-label="UI language">
+      <button type="button" data-ui-lang="ja">JA</button><button type="button" data-ui-lang="en">EN</button>
+    </div>
+    <header class="topbar">
+      <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
+      <div class="topbar-actions easy-topbar-actions">
+        <span class="version">v0.2.76</span>
+        <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
+        <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
+        <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
       </div>
-      <div class="public-intro-actions">
-        <button id="publicStart" class="public-primary" type="button">はじめる</button>
-        <button id="publicContinue" class="public-secondary" type="button" hidden>途中から</button>
+    </header>
+
+    <section class="draft-toolbar" aria-label="制作中の作品">
+      <button id="draftManageButton" class="draft-toolbar-button draft-toolbar-list" type="button">
+        <span>制作中一覧</span><small id="draftToolbarCount">0 / 10</small>
+      </button>
+      <button id="newDraftQuickButton" class="draft-toolbar-button draft-toolbar-new" type="button">
+        <span>＋ 新しく作る</span><small>新しい下書き</small>
+      </button>
+    </section>
+
+    <div id="draftSaveIndicator" class="draft-save-indicator" hidden>自動保存済み</div>
+
+    <section class="intro">
+      <h2>文章を貼るだけ。</h2>
+      <p>次の文章を、まだ見せない体験にします。</p>
+    </section>
+
+    <div class="form-stack">
+      <label class="field body-field">
+        <span class="field-label">本文</span>
+        <textarea id="bodyInput" placeholder="ここに文章を貼り付けてください。"></textarea>
+        <div class="body-meta">
+          <span id="charCount">0文字</span>
+          <button id="sampleButton" class="text-button" type="button">サンプルを入れる</button>
+        </div>
+      </label>
+
+      <section class="theme-section">
+        <div class="section-heading"><span>雰囲気</span><small>あとから変えられます</small></div>
+        <div class="theme-grid">
+          <button class="theme-card is-selected" data-theme="light" type="button"><span class="theme-preview theme-preview-light">あ</span><strong>LIGHT</strong><small>文章・エッセイ</small></button>
+          <button class="theme-card" data-theme="dark" type="button"><span class="theme-preview theme-preview-dark">あ</span><strong>DARK</strong><small>SF・ホラー</small></button>
+          <button class="theme-card" data-theme="cinema" type="button"><span class="theme-preview theme-preview-cinema">あ</span><strong>CINEMA</strong><small>余白・映画的</small></button>
+        </div>
+      </section>
+
+      <div id="cinemaBackgroundPanel" class="cinema-background-panel" hidden>
+        <div class="cinema-background-copy"><strong>背景画像</strong><span>Scene Formatの背景としてPlayerへ渡します。</span></div>
+        <div class="cinema-tone" role="radiogroup" aria-label="CINEMAの明るさ">
+          <button class="cinema-tone-button is-selected" type="button" data-tone="dark" aria-pressed="true">暗く</button>
+          <button class="cinema-tone-button" type="button" data-tone="light" aria-pressed="false">明るく</button>
+        </div>
+        <label class="cinema-background-button" for="cinemaBackgroundInput">画像を選ぶ</label>
+        <input id="cinemaBackgroundInput" type="file" accept="image/*" hidden>
+        <button id="cinemaBackgroundClear" class="cinema-background-clear" type="button" hidden>画像を外す</button>
+        <div id="cinemaBackgroundPreview" class="cinema-background-preview" hidden></div>
+      </div>
+
+      <section class="work-font-section">
+        <div class="section-heading"><span>作品の書体</span><small>全Sceneの基本になります</small></div>
+        <div class="work-font-grid" role="radiogroup" aria-label="作品の書体">
+          <button class="work-font-card is-selected" type="button" data-font="serif" aria-pressed="true"><strong>明朝</strong><small>物語・文章向け</small></button>
+          <button class="work-font-card" type="button" data-font="sans" aria-pressed="false"><strong>ゴシック</strong><small>説明・現代的</small></button>
+          <button class="work-font-card" type="button" data-font="mono" aria-pressed="false"><strong>等幅</strong><small>端末・ログ向け</small></button>
+        </div>
+      </section>
+
+      <!-- Splitter remains active internally.
+           Easy Studio intentionally uses the tested NORMAL density only. -->
+      <select id="densitySelect" hidden aria-hidden="true" tabindex="-1">
+        <option value="normal" selected>標準</option>
+      </select>
+
+
+      <div class="easy-primary-actions">
+        <button id="makeButton" class="primary-button" type="button"><span>プレイヤーにする</span><small>Scene Format v1へ変換します</small></button>
+      </div>
+
+      <details class="work-meta-section" open>
+        <summary>作品の入口と出口</summary>
+        <div class="work-meta-panel easy-direct-preview-panel">
+          <div class="easy-preview-pair">
+            <section class="easy-preview-card">
+              <div class="easy-preview-card-head"><strong>表紙</strong><small>タップして編集</small></div>
+              <div id="coverPreview" class="cover-preview cover-preview-editable player-like-cover-preview" role="button" tabindex="0" aria-label="表紙を直接編集">
+                <div class="cover-preview-bg" aria-hidden="true"></div>
+                <div class="cover-preview-dim" aria-hidden="true"></div>
+                <div class="cover-preview-hint">タップして直接編集</div>
+                <div class="cover-preview-empty"><span>COVER</span><small>画像なしでもOK</small></div>
+                <div class="cover-preview-player-copy" aria-label="表紙テキスト。タップして編集">
+                  <span class="cover-preview-kicker">SCENE PLAYER</span>
+                  <small id="coverPreviewAuthor"></small>
+                  <span id="coverPreviewEpisode" class="cover-preview-episode"></span>
+                  <strong id="coverPreviewTitle">Untitled</strong>
+                  <span id="coverPreviewSubtitle"></span>
+                </div>
+                <div class="cover-preview-start">はじめる</div>
+              </div>
+            </section>
+            <section class="easy-preview-card">
+              <div class="easy-preview-card-head"><strong>読了ページ</strong><small>タップして編集</small></div>
+              <div id="endingPreview" class="ending-preview ending-preview-editable" aria-label="読了ページ プレビュー">
+              <div class="ending-preview-hint">タップして直接編集</div>
+              <button id="endingPreviewCenterEdit" class="ending-preview-center ending-preview-center-button" type="button"><strong id="endingPreviewLabel">読了</strong></button>
+              <div class="ending-preview-tabs ending-preview-three">
+                <button type="button" data-preview-link="0" hidden><small></small><strong></strong></button>
+                <button type="button" data-preview-cover><small>COVER</small><strong>表紙に戻る</strong></button>
+                <button type="button" data-preview-link="1" hidden><small></small><strong></strong></button>
+              </div>
+            </div>
+            </section>
+          </div>
+        </div>
+      </details>
+      <button id="easyPublishButton" class="primary-button easy-publish-action easy-publish-bottom" type="button" disabled><span>公開する</span><small>Publish</small></button>
+      <button id="advancedButton" class="secondary-button advanced-open-button" type="button">シーンを調整</button>
+
+      <section class="project-io-section project-io-clean developer-hidden-io" aria-labelledby="projectIoTitle" hidden>
+        <div class="section-heading"><span id="projectIoTitle">作品ファイル</span><small>Scene Format v1</small></div>
+        <input id="importPackageInput" type="file" accept=".scene,.scene.zip,.zip,application/zip,application/octet-stream" hidden>
+        <details class="developer-io">
+          <summary>開発者向け</summary>
+          <div class="project-io-grid developer-io-grid">
+            <button id="exportSceneButton" class="project-io-button" type="button"><strong>設計図を書き出す</strong><small>.scene.json</small></button>
+            <label class="project-io-button project-io-import" for="importSceneInput"><strong>設計図を読み込む</strong><small>.scene.json / .json</small></label>
+            <input id="importSceneInput" type="file" accept=".scene.json,.json,application/json" hidden>
+          </div>
+        </details>
+        <p id="projectIoStatus" class="project-io-status" aria-live="polite"></p>
+      </section>
+
+      <p class="footer-note">Easy Studioは本文を作るだけ。再生は共通Scene Player Coreが担当します。</p>
+    </div>
+  </section>
+
+
+  <section id="advancedScreen" class="screen advanced-screen" hidden>
+    <header class="advanced-topbar">
+      <button id="advancedBackButton" class="advanced-nav-button" type="button">‹ Easy</button>
+      <div class="advanced-title-block"><p class="brand-kicker">SCENE STUDIO</p><h1>シーンを調整</h1><small id="advancedScenePosition">Scene 1 / 1</small></div>
+      <div class="advanced-right-actions">
+        <div class="ui-language-switch ui-language-switch-advanced" role="group" aria-label="UI language"><button type="button" data-ui-lang="ja">JA</button><button type="button" data-ui-lang="en">EN</button></div>
+        <button id="advancedPreviewButton" class="advanced-preview-button" type="button">プレビュー</button>
+        <button id="advancedExportButton" class="advanced-export-button" type="button">作品を書き出す</button>
+      </div>
+    </header>
+
+    <section class="advanced-policy">
+      <div><strong>読者が過去Sceneへ戻れる</strong><small>戻るボタン・スワイプ・キーボードをまとめて制御します。</small></div>
+      <label class="switch"><input id="allowPreviousInput" type="checkbox" checked><span></span></label>
+    </section>
+
+    <details id="advancedEndingEditor" class="adv-section advanced-work-ending" data-close-label="閉じる">
+      <summary>作品・読了ページ</summary>
+      <div class="adv-section-body">
+        <p class="advanced-hint">Easyではプレビューを直接タップ。ここでは読了ページをフォームで細かく編集できます。</p>
+            <details id="endingLegacyEditor" class="ending-legacy-editor">
+              <summary>フォームで細かく編集</summary>
+            <label class="field" for="endingLabelInput">
+              <span class="field-label">中央の文 <small>任意</small></span>
+              <input id="endingLabelInput" type="text" placeholder="例：つづく">
+            </label>
+            <div class="ending-link-editor ending-three-editor">
+              <div class="ending-link-head"><strong>読了後の3ボックス</strong><small>中央は固定・左右は任意</small></div>
+              <div class="ending-slot-editor">
+                <div class="ending-slot-title"><span>左ボタン</span><small>任意</small></div>
+                <div class="ending-link-row ending-link-row-stacked">
+                  <input id="endingLink1Kicker" type="text" placeholder="例：PREVIOUS">
+                  <input id="endingLink1Label" type="text" placeholder="例：前の話">
+                  <input id="endingLink1Url" type="url" placeholder="https://...">
+                </div>
+              </div>
+              <div class="ending-slot-editor is-fixed">
+                <div class="ending-slot-title"><span>中央ボタン</span><small>デフォルト固定</small></div>
+                <div class="ending-fixed-card"><span>COVER</span><strong>表紙に戻る</strong></div>
+              </div>
+              <div class="ending-slot-editor">
+                <div class="ending-slot-title"><span>右ボタン</span><small>任意</small></div>
+                <div class="ending-link-row ending-link-row-stacked">
+                  <input id="endingLink2Kicker" type="text" placeholder="例：NEXT">
+                  <input id="endingLink2Label" type="text" placeholder="例：続き">
+                  <input id="endingLink2Url" type="url" placeholder="https://...">
+                </div>
+              </div>
+            </div>
+            </details>
+      </div>
+    </details>
+
+    <details class="adv-section advanced-work-meta" data-close-label="閉じる">
+      <summary>作品情報・表紙</summary>
+      <div class="adv-section-body">
+        <p class="advanced-hint">Easyでは表紙プレビューをタップして編集できます。ここでは作品情報をフォームで細かく調整します。</p>
+        <div class="work-meta-grid">
+            <label class="field" for="titleInput">
+              <span class="field-label">作品タイトル</span>
+              <input id="titleInput" type="text" placeholder="例：声のそろう通り">
+            </label>
+            <label class="field" for="authorInput">
+              <span class="field-label">作者名 <small>任意</small></span>
+              <input id="authorInput" type="text" list="authorHistoryList" placeholder="例：Yuya Narita">
+              <datalist id="authorHistoryList"></datalist>
+              <small class="field-help author-history-help">この端末で以前使った作者名を候補に表示します。</small>
+            </label>
+            <label class="field">
+              <span class="field-label">サブタイトル <small>任意</small></span>
+              <input id="subtitleInput" type="text" placeholder="例：冷やせれば勝ちやろ">
+            </label>
+            <label class="field">
+              <span class="field-label">言語</span>
+              <select id="languageInput">
+                <option value="auto" selected>自動判定</option>
+                <option value="ja">日本語</option>
+                <option value="en">English</option>
+                <option value="mul">複数言語</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">シリーズ名 <small>任意</small></span>
+              <input id="seriesTitleInput" type="text" placeholder="例：貧乏メガネのシノ">
+            </label>
+            <label class="field">
+              <span class="field-label">話数表記 <small>任意・自由入力</small></span>
+              <input id="episodeInput" type="text" placeholder="例：第1話 / EPISODE 01 / PROLOGUE">
+            </label>
+          </div>
+        <div class="advanced-cover-assets">
+          <input id="coverImageInput" type="file" accept="image/*" hidden>
+          <button id="coverImageClear" class="cinema-background-clear" type="button" hidden>表紙画像を外す</button>
+        </div>
+      </div>
+    </details>
+
+    <div class="advanced-layout">
+      <aside class="scene-rail">
+        <div class="scene-rail-head"><strong id="sceneCountLabel">0 Scenes</strong><button id="addSceneButton" type="button">＋</button></div>
+        <div id="sceneList" class="scene-list"></div>
+      </aside>
+
+      <section class="scene-inspector">
+        <div class="scene-inspector-head">
+          <div><span id="selectedSceneNumber" class="scene-number">Scene 1</span><code id="selectedSceneId">s001</code></div>
+          <div class="scene-move-actions"><button id="moveUpButton" type="button">↑</button><button id="moveDownButton" type="button">↓</button></div>
+        </div>
+
+        <label class="adv-field"><span>本文</span><textarea id="sceneTextInput" rows="7"></textarea></label>
+        <label class="adv-field subtext-field"><span>サブテキスト <small>任意</small></span><textarea id="sceneSubTextInput" rows="2" placeholder="補足が必要なSceneだけ"></textarea></label>
+
+        <section class="auto-timing-editor">
+          <div class="auto-timing-head">
+            <div>
+              <strong>AUTOタイミング</strong>
+              <small id="sceneAutoTimingState">未記録</small>
+            </div>
+            <button id="sceneAutoTimingReset" type="button">標準に戻す</button>
+          </div>
+          <div class="auto-timing-controls">
+            <button type="button" data-auto-nudge="-0.5">−0.5</button>
+            <button type="button" data-auto-nudge="-0.1">−0.1</button>
+            <label>
+              <input id="sceneAutoTimingInput" type="number" min="0.15" max="60" step="0.05" value="2.60">
+              <span>秒</span>
+            </label>
+            <button type="button" data-auto-nudge="0.1">＋0.1</button>
+            <button type="button" data-auto-nudge="0.5">＋0.5</button>
+          </div>
+          <p>REC後にミスしたSceneだけ微調整できます。AUTOはこの秒数だけ表示して次へ進みます。</p>
+        </section>
+
+        <div class="adv-grid">
+          <label class="adv-field"><span>種類</span><select id="sceneTypeSelect"><option value="text">テキスト</option><option value="dialogue">セリフ</option><option value="sound">音だけ</option></select></label>
+          <label class="adv-field"><span>表示</span><select id="sceneDisplaySelect"><option value="stack">前の文章を残す</option><option value="solo">この文章だけ</option></select></label>
+          <label class="adv-field"><span>出かた</span><select id="sceneEffectSelect"><option value="auto">おまかせ</option><option value="fade">フェード</option><option value="pop">ポンと出る</option><option value="blur">ぼやけて現れる</option><option value="whisper">そっと現れる</option><option value="loud">強く出る</option><option value="pulse">脈打つ</option><option value="shake">揺れる</option><option value="tilt">傾く</option><option value="slow">ゆっくり</option><option value="none">演出なし</option></select></label>
+          <label class="adv-field"><span>文字サイズ</span><select id="sceneSizeSelect"><option value="auto">おまかせ</option><option value="small">小</option><option value="normal">標準</option><option value="large">大</option><option value="xl">特大</option></select></label><label class="adv-field"><span>文字色</span><select id="sceneColorSelect"><option value="auto">おまかせ</option><option value="white">白</option><option value="black">黒</option><option value="custom">任意色</option></select></label>
+          <label id="sceneColorCustomField" class="adv-field" hidden><span>任意色</span><input id="sceneColorCustomInput" type="color" value="#ffffff"></label>
+          <label class="adv-field"><span>文字影</span><select id="sceneShadowSelect"><option value="auto">おまかせ</option><option value="none">なし</option><option value="soft">弱</option><option value="strong">強</option></select></label>
+          <label class="adv-field"><span>このSceneの書体</span><select id="sceneFontSelect"><option value="inherit">作品設定を使う</option><option value="serif">明朝</option><option value="sans">ゴシック</option><option value="mono">等幅</option></select></label>
+          <label class="adv-field"><span>このSceneの言語</span><select id="sceneLanguageSelect"><option value="auto">自動判定</option><option value="ja">日本語</option><option value="en">English</option><option value="custom">その他</option></select></label>
+          <label id="sceneLanguageCustomField" class="adv-field scene-language-custom" hidden><span>言語タグ</span><input id="sceneLanguageCustomInput" type="text" inputmode="text" autocomplete="off" placeholder="例: ko / zh-Hans / ar"></label>
+        </div>
+
+        <div class="scene-edit-actions">
+          <button id="mergePreviousButton" type="button">前と結合</button>
+          <button id="splitSceneButton" type="button">カーソル位置で分割</button>
+          <button id="deleteSceneButton" class="danger" type="button">削除</button>
+        </div>
+
+        <details class="adv-section" data-close-label="閉じる">
+          <summary>背景</summary>
+          <div class="adv-section-body">
+            <label class="adv-field"><span>このSceneの背景</span>
+              <select id="sceneBackgroundMode">
+                <option value="inherit">前Sceneから継続</option>
+                <option value="image">このSceneで画像を変更</option>
+                <option value="clear">このSceneで背景を解除</option>
+              </select>
+            </label>
+            <div id="sceneBackgroundControls" hidden>
+              <div class="asset-row">
+                <label class="asset-button" for="sceneBackgroundInput">画像を選ぶ</label>
+                <input id="sceneBackgroundInput" type="file" accept="image/*" hidden>
+                <button id="sceneBackgroundRemoveFile" type="button" class="asset-clear">選択解除</button>
+              </div>
+              <div class="asset-url-row">
+                <input id="sceneBackgroundUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/background.jpg">
+                <button id="sceneBackgroundUrlApply" type="button">URLを反映</button>
+              </div>
+              <div id="sceneBackgroundPreview" class="adv-asset-preview" data-overlay-label="このSceneから背景変更" hidden></div>
+              <div class="adv-grid">
+                <label class="adv-field"><span>切替</span><select id="sceneBackgroundTransition"><option value="fade">fade</option><option value="cut">cut</option><option value="flash">flash</option><option value="glitch">glitch</option></select></label>
+                <label class="adv-field"><span>表示</span><select id="sceneBackgroundFit"><option value="cover">cover</option><option value="contain">contain</option></select></label>
+                <label class="adv-field"><span>動き</span><select id="sceneBackgroundMotion"><option value="none">なし</option><option value="slowZoom">SLOW ZOOM（ゆっくり寄る）</option><option value="breath">BREATH（ゆるく拡大縮小）</option><option value="panLeft">PAN LEFT（左へ移動）</option><option value="panRight">PAN RIGHT（右へ移動）</option><option value="panUp">PAN UP（上へ移動）</option><option value="panDown">PAN DOWN（下へ移動）</option></select></label>
+                <label class="adv-field range-field"><span>暗さ <output id="sceneBackgroundDimOutput">34%</output></span><input id="sceneBackgroundDim" type="range" min="0" max="85" step="1" value="34"></label><div class="adv-field scene-motion-preview-field">
+                  <span>背景プレビュー <small>切替・表示・動き・暗さ</small></span>
+                  <div id="sceneMotionPreview" class="scene-motion-preview">
+                    <div id="sceneMotionPreviewImage" class="scene-motion-preview-image"></div>
+                    <div id="sceneMotionPreviewVeil" class="scene-motion-preview-veil"></div>
+                    <span id="sceneMotionPreviewLabel">CUT / COVER / なし / 34%</span>
+                  </div>
+                </div>
+                <label class="adv-field range-field"><span>切替の速さ <output id="sceneBackgroundTransitionDurationOutput">700ms</output></span><input id="sceneBackgroundTransitionDuration" type="range" min="0" max="3000" step="50" value="700"></label>
+                <label class="adv-field range-field"><span>動きの速さ <output id="sceneBackgroundMotionDurationOutput">6500ms</output></span><input id="sceneBackgroundMotionDuration" type="range" min="1500" max="20000" step="250" value="6500"></label>
+                <label class="adv-field range-field"><span>動きの強さ <output id="sceneBackgroundMotionAmountOutput">9%</output></span><input id="sceneBackgroundMotionAmount" type="range" min="1" max="20" step="1" value="9"></label>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="adv-section" data-close-label="閉じる">
+          <summary>音</summary>
+          <div class="adv-section-body audio-editor-grid">
+            <section class="audio-card">
+              <div class="audio-card-title"><strong>BGM</strong><small>続いていた時間</small></div>
+              <label class="adv-field"><span>操作</span><select id="sceneBgmAction"><option value="inherit">継続（指定なし）</option><option value="start">このSceneで開始</option><option value="volume">音量を変更</option><option value="stop">このSceneで停止</option></select></label>
+              <div id="sceneBgmStartFields" class="audio-action-fields" hidden>
+                <div class="asset-row"><label class="asset-button" for="sceneBgmInput">BGMを選ぶ</label><input id="sceneBgmInput" type="file" hidden><span id="sceneBgmFileLabel" class="asset-name">未選択</span></div>
+                <div class="asset-url-row"><input id="sceneBgmUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/bgm.mp3"><button id="sceneBgmUrlApply" type="button">URLを反映</button></div>
+                <label class="check-row"><input id="sceneBgmLoop" type="checkbox" checked><span>ループ</span></label>
+                <div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneBgmVolumeOutput">50%</output></span><input id="sceneBgmVolume" type="range" min="0" max="100" value="50"></label><label class="adv-field"><span>fadeIn (ms)</span><input id="sceneBgmFadeIn" type="number" min="0" step="100" value="800"></label><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneBgmFadeOut" type="number" min="0" step="100" value="800"></label></div>
+              </div>
+              <div id="sceneBgmVolumeFields" class="audio-action-fields" hidden><div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneBgmVolumeChangeOutput">30%</output></span><input id="sceneBgmVolumeChange" type="range" min="0" max="100" value="30"></label><label class="adv-field"><span>fade (ms)</span><input id="sceneBgmVolumeFade" type="number" min="0" step="100" value="500"></label></div></div>
+              <div id="sceneBgmStopFields" class="audio-action-fields" hidden><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneBgmStopFade" type="number" min="0" step="100" value="800"></label></div>
+            </section>
+
+            <section class="audio-card">
+              <div class="audio-card-title"><strong>Ambient</strong><small>その時そこにあった音</small></div>
+              <label class="adv-field"><span>操作</span><select id="sceneAmbientAction"><option value="inherit">継続（指定なし）</option><option value="start">このSceneで開始</option><option value="volume">音量を変更</option><option value="stop">このSceneで停止</option></select></label>
+              <div id="sceneAmbientStartFields" class="audio-action-fields" hidden>
+                <div class="asset-row"><label class="asset-button" for="sceneAmbientInput">持続音を選ぶ</label><input id="sceneAmbientInput" type="file" hidden><span id="sceneAmbientFileLabel" class="asset-name">未選択</span></div>
+                <div class="asset-url-row"><input id="sceneAmbientUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/ambient.mp3"><button id="sceneAmbientUrlApply" type="button">URLを反映</button></div>
+                <label class="check-row"><input id="sceneAmbientLoop" type="checkbox" checked><span>ループ</span></label>
+                <div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneAmbientVolumeOutput">35%</output></span><input id="sceneAmbientVolume" type="range" min="0" max="100" value="35"></label><label class="adv-field"><span>fadeIn (ms)</span><input id="sceneAmbientFadeIn" type="number" min="0" step="100" value="600"></label><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneAmbientFadeOut" type="number" min="0" step="100" value="600"></label></div>
+              </div>
+              <div id="sceneAmbientVolumeFields" class="audio-action-fields" hidden><div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneAmbientVolumeChangeOutput">25%</output></span><input id="sceneAmbientVolumeChange" type="range" min="0" max="100" value="25"></label><label class="adv-field"><span>fade (ms)</span><input id="sceneAmbientVolumeFade" type="number" min="0" step="100" value="500"></label></div></div>
+              <div id="sceneAmbientStopFields" class="audio-action-fields" hidden><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneAmbientStopFade" type="number" min="0" step="100" value="600"></label></div>
+            </section>
+
+            <section class="audio-card audio-card-se">
+              <div class="audio-card-title"><strong>SE</strong><small>その時起きた音</small></div>
+              <label class="check-row"><input id="sceneSeEnabled" type="checkbox"><span>このSceneでSEを鳴らす</span></label>
+              <div id="sceneSeFields" class="audio-action-fields" hidden>
+                <div class="asset-row"><label class="asset-button" for="sceneSeInput">SEを選ぶ</label><input id="sceneSeInput" type="file" hidden><span id="sceneSeFileLabel" class="asset-name">未選択</span></div>
+                <div class="asset-url-row"><input id="sceneSeUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/se.mp3"><button id="sceneSeUrlApply" type="button">URLを反映</button></div>
+                <div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneSeVolumeOutput">80%</output></span><input id="sceneSeVolume" type="range" min="0" max="100" value="80"></label><label class="adv-field"><span>fadeIn (ms)</span><input id="sceneSeFadeIn" type="number" min="0" step="50" value="0"></label></div>
+              </div>
+            </section>
+          </div>
+        </details>
+
+        <p class="advanced-hint">BGMは「続いていた時間」、Ambientは「その時そこにあった音」、SEは「その時起きた音」として扱います。何も指定しなければ前Sceneの状態を継続します。</p>
+      </section>
+    </div>
+  </section>
+
+  <section id="playerScreen" class="easy-core-screen" hidden>
+    <div id="scenePlayer"></div>
+    <button id="editReturnButton" class="easy-edit-return" type="button">編集に戻る</button>
+
+    <button id="publishFromPreviewButton" class="publish-preview-button" type="button" hidden>公開する</button>
+
+    <div id="autoRecPanel" class="auto-rec-panel">
+      <button id="autoRecStart" class="auto-rec-start" type="button">● AUTO REC</button>
+      <div id="autoRecLive" class="auto-rec-live" hidden>
+        <span class="auto-rec-dot"></span>
+        <strong>REC</strong>
+        <span id="autoRecClock">00:00.0</span>
+        <span id="autoRecCount">1 / 1</span>
+        <button id="autoRecCancel" type="button">中止</button>
+      </div>
+      <div id="autoRecDone" class="auto-rec-done" hidden>
+        <strong>REC保存完了</strong>
+        <span id="autoRecSummary"></span>
+        <button id="autoRecRetry" type="button">やり直す</button>
       </div>
     </div>
   </section>
 
-  <div id="publicOpening" class="public-opening" hidden>
-    <div id="publicOpeningImage" class="public-opening-image"></div>
-    <div id="publicOpeningDim" class="public-opening-dim"></div>
+  <dialog id="publishDialog" class="publish-dialog">
+    <div class="publish-dialog-card">
+      <button id="publishDialogClose" class="publish-dialog-close" type="button" aria-label="閉じる">×</button>
+
+      <div id="publishStateReady" class="publish-state">
+        <span class="publish-kicker">PUBLISH</span>
+        <h2 id="publishReadyTitle">この作品を公開しますか？</h2>
+        <p id="publishReadyText">公開すると、読者へ渡せるURLを発行します。</p>
+        <button id="publishConfirmButton" class="publish-primary" type="button">公開する</button>
+      </div>
+
+      <div id="publishStateWorking" class="publish-state" hidden>
+        <span class="publish-spinner" aria-hidden="true"></span>
+        <h2>公開しています…</h2>
+        <p>作品を公開できる状態にしています。</p>
+      </div>
+
+      <div id="publishStateSuccess" class="publish-state" hidden>
+        <span class="publish-success-mark" aria-hidden="true">✓</span>
+        <h2>公開しました</h2>
+        <div class="publish-url-box">
+          <span id="publishUrlText"></span>
+        </div>
+        <div class="publish-success-actions">
+          <button id="publishShareButton" class="publish-primary" type="button">シェア</button>
+          <button id="publishCopyButton" class="publish-secondary" type="button">リンクをコピー</button>
+        </div>
+        <small class="publish-mock-note">Hosting接続済みです。現在のURLは公開データ確認用で、読者用Playerは次の接続段階です。</small>
+      </div>
+
+      <div id="publishStateError" class="publish-state" hidden>
+        <span class="publish-error-mark" aria-hidden="true">!</span>
+        <h2>公開できませんでした</h2>
+        <p>時間をおいて、もう一度試してください。</p>
+        <button id="publishRetryButton" class="publish-primary" type="button">もう一度試す</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="deleteSceneDialog" class="scene-delete-dialog">
+    <form method="dialog" class="scene-delete-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">DELETE SCENE</span>
+        <h2>このSceneを削除しますか？</h2>
+        <p id="deleteSceneDialogText">削除後も「元に戻す」で1回だけ戻せます。</p>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button id="deleteSceneCancel" value="cancel" type="submit">キャンセル</button>
+        <button id="deleteSceneConfirm" value="delete" type="submit" class="danger">このSceneを削除</button>
+      </div>
+    </form>
+  </dialog>
+
+
+  <dialog id="unpublishDialog" class="scene-delete-dialog unpublish-dialog">
+    <form method="dialog" class="scene-delete-dialog-card unpublish-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">UNPUBLISH</span>
+        <h2>この作品の公開を停止しますか？</h2>
+        <p id="unpublishDialogText">公開URLは使えなくなる想定です。制作中のデータはそのまま残ります。</p>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button id="unpublishCancel" value="cancel" type="submit">キャンセル</button>
+        <button id="unpublishConfirm" value="unpublish" type="submit" class="danger">公開を停止</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="draftManagerDialog" class="draft-manager-dialog">
+    <div class="draft-manager-card">
+      <div class="draft-manager-head">
+        <div><span>LOCAL DRAFTS</span><h2>制作途中の作品</h2><small id="draftCountLabel">0 / 10</small></div>
+        <button id="draftManagerClose" type="button" aria-label="閉じる">×</button>
+      </div>
+      <nav class="draft-manager-tabs" aria-label="作品の表示切替">
+        <button type="button" class="draft-manager-tab is-active" data-draft-filter="all" aria-selected="true">全て <span id="allCountLabel">0</span></button>
+        <button type="button" class="draft-manager-tab" data-draft-filter="draft" aria-selected="false">途中 <span id="draftOnlyCountLabel">0</span></button>
+        <button type="button" class="draft-manager-tab" data-draft-filter="published" aria-selected="false">公開 <span id="publishedCountLabel">0</span></button>
+      </nav>
+      <div id="draftList" class="draft-list draft-manager-unified-list"></div>
+
+      <div class="draft-manager-foot">
+        <button id="newDraftButton" type="button">＋ 新しく作る</button>
+        <small>制作途中は端末内に自動保存されます。公開中の作品はここから共有・公開停止できます。</small>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="sampleReplaceDialog" class="scene-delete-dialog">
+    <form method="dialog" class="scene-delete-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">SAMPLE</span>
+        <h2>入力中の文章を置き換えますか？</h2>
+        <p>現在のタイトルと本文をサンプルに置き換えます。置き換え後も「元に戻す」で1回だけ戻せます。</p>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button value="cancel" type="submit">キャンセル</button>
+        <button value="replace" type="submit" class="danger">サンプルに置き換える</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="fixedActionNotice" class="fixed-action-notice" hidden role="status" aria-live="polite">
+    <span id="fixedActionNoticeText">「表紙に戻る」は固定です</span>
+  </div>
+  <div id="undoBar" class="studio-undo-bar" hidden>
+    <span id="undoMessage">変更しました</span>
+    <button id="undoButton" type="button">↶ 元に戻す</button>
+  </div>
+  <button id="undoCompactButton" class="studio-undo-compact" type="button" hidden aria-label="元に戻す">↶</button>
+
+</main>
+
+  <div id="coverQuickDialog" class="ending-quick-dialog cover-quick-dialog" hidden>
+    <div class="ending-quick-card cover-quick-card" role="dialog" aria-modal="true" aria-labelledby="coverQuickTitle">
+      <div class="ending-quick-head">
+        <div><small>COVER QUICK EDIT</small><strong id="coverQuickTitle">表紙を編集</strong></div>
+        <button id="coverQuickClose" class="ending-quick-close" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div class="ending-quick-fields cover-quick-fields">
+        <label><span>作品タイトル</span><input id="coverQuickWorkTitle" type="text" placeholder="Untitled"></label>
+        <label><span>作者名</span><input id="coverQuickAuthor" type="text" placeholder="作者名"></label>
+        <label><span>サブタイトル</span><input id="coverQuickSubtitle" type="text" placeholder="サブタイトル"></label>
+        <label><span>話数</span><input id="coverQuickEpisode" type="text" placeholder="例：第1話"></label>
+      </div>
+      <div class="cover-quick-image-actions">
+        <button id="coverQuickImage" class="ending-quick-clear" type="button">表紙画像を選ぶ / 変更</button>
+        <button id="coverQuickImageClear" class="ending-quick-clear" type="button">表紙画像を外す</button>
+      </div>
+      <small class="cover-quick-note">入力は表紙プレビューへ即時反映されます。</small>
+      <button id="coverQuickDone" class="ending-quick-done" type="button">完了</button>
+    </div>
   </div>
 
-  <div id="scenePlayer" class="public-player" hidden></div>
-
-  <section id="publicEnding" class="public-ending" hidden>
-    <div class="public-ending-inner">
-      <p id="publicEndingLabel" class="public-ending-label" hidden></p>
-
-      <div id="publicEndingActions" class="public-ending-actions public-ending-three">
-        <a id="publicEndingLeft" class="public-ending-box" hidden><small></small><strong></strong></a>
-        <button id="publicEndingCover" class="public-ending-box public-ending-cover" type="button"><small>COVER</small><strong>表紙に戻る</strong></button>
-        <a id="publicEndingRight" class="public-ending-box" hidden><small></small><strong></strong></a>
+  <div id="endingQuickDialog" class="ending-quick-dialog" hidden>
+    <div class="ending-quick-card" role="dialog" aria-modal="true">
+      <div class="ending-quick-head">
+        <div><small>ENDING QUICK EDIT</small><strong id="endingQuickTitle">読了ページ</strong></div>
+        <button id="endingQuickClose" class="ending-quick-close" type="button" aria-label="閉じる">×</button>
       </div>
-<button id="publicRestart" class="public-reread" type="button">
-        もう一度読む
-      </button>
+      <div id="endingQuickCenterFields" class="ending-quick-fields" hidden>
+        <label><span>中央の文</span><input id="endingQuickCenterText" type="text" placeholder="例：つづく"></label>
+      </div>
+      <div id="endingQuickSlotFields" class="ending-quick-fields" hidden>
+        <label><span>小さい文字</span><input id="endingQuickKicker" type="text" placeholder="例：NEXT"></label>
+        <label><span>ボタン名</span><input id="endingQuickLabel" type="text" placeholder="例：続き"></label>
+        <label><span>リンク</span><input id="endingQuickUrl" type="url" placeholder="https://..."></label>
+        <button id="endingQuickClear" class="ending-quick-clear" type="button">このボタンを空にする</button>
+      </div>
+      <div class="ending-quick-recent">
+        <div class="ending-quick-recent-head"><strong>最近使ったもの</strong><small>この端末に保存</small></div>
+        <div id="endingQuickRecentList" class="ending-quick-recent-list"></div>
+      </div>
+      <button id="endingQuickDone" class="ending-quick-done" type="button">完了</button>
     </div>
-  </section>
+  </div>
 
-  <section id="publicError" class="public-error" hidden>
-    <div class="public-error-card">
-      <strong id="publicErrorTitle">Sceneを開けませんでした</strong>
-      <p id="publicErrorMessage"></p>
-      <button id="publicRetry" type="button">もう一度読み込む</button>
-    </div>
-  </section>
+  <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
-  <script src="./scene-player-core.js"></script>
-  <script src="./public-player.js"></script>
+<script src="./scene-studio-i18n.js"></script>
+<script src="./scene-player-core.js"></script>
+<script src="./japanese-splitter.js"></script>
+<script src="./english-splitter.js"></script>
+<script src="./scene-text-splitter.js"></script>
+<script src="./script.js"></script>
+
+
+
 </body>
 </html>

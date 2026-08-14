@@ -1,0 +1,1 @@
+Easy cover preview now mirrors the Player hierarchy and shows episode immediately. Ending long-form editor moved to Advanced. Internal Player cover also renders episode.
