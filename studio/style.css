@@ -2984,3 +2984,343 @@ body.draft-manager-open{
     overflow:visible!important;
   }
 }
+
+
+/* v0.2.79 — Easy = two direct-edit 9:16 previews.
+   Cover and End are peers; detailed form editing lives in Advanced. */
+.easy-cover-row{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,320px))!important;
+  align-items:start!important;
+  justify-content:start!important;
+  gap:20px!important;
+  margin-top:12px!important;
+}
+.easy-cover-simple{
+  display:contents!important;
+}
+.easy-cover-actions{
+  display:none!important;
+}
+
+/* Move the End preview beside Cover visually without changing JS/DOM ownership. */
+.easy-end-preview-shell{
+  width:320px!important;
+  max-width:100%!important;
+  aspect-ratio:9/16!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  overflow:visible!important;
+}
+.easy-end-preview{
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  aspect-ratio:9/16!important;
+  border:1px solid var(--line,#dfe3e8)!important;
+  border-radius:18px!important;
+  background:#fff!important;
+  overflow:hidden!important;
+  position:relative!important;
+  container-type:inline-size;
+}
+
+/* End preview typography/spacing scales from its own card, not viewport. */
+.easy-end-preview .easy-end-message,
+.easy-end-preview [data-end-message]{
+  font-size:clamp(18px,8cqw,32px)!important;
+  line-height:1.45!important;
+}
+.easy-end-preview .easy-end-actions,
+.easy-end-preview [data-end-actions]{
+  left:7%!important;
+  right:7%!important;
+  bottom:10%!important;
+  gap:3cqw!important;
+}
+.easy-end-preview .easy-end-box,
+.easy-end-preview [data-end-box]{
+  min-width:0!important;
+  min-height:clamp(68px,24cqw,94px)!important;
+}
+.easy-end-preview .easy-end-box small,
+.easy-end-preview [data-end-box] small{
+  font-size:clamp(7px,2.7cqw,10px)!important;
+}
+.easy-end-preview .easy-end-box strong,
+.easy-end-preview [data-end-box] strong{
+  font-size:clamp(12px,4.6cqw,17px)!important;
+}
+
+/* On desktop, pull the existing End preview up into the empty second column
+   created beside the Cover preview. */
+@media(min-width:761px){
+  .easy-end-preview-shell{
+    margin-top:calc(-1 * (320px * 16 / 9) - 20px)!important;
+    margin-left:340px!important;
+  }
+}
+
+/* Phone: still keep both previews compact and side-by-side when possible;
+   fall back to one column on narrow devices. */
+@media(max-width:760px){
+  .easy-cover-row{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+  .easy-cover-simple .cover-preview,
+  .player-like-cover-preview,
+  .easy-end-preview-shell{
+    width:100%!important;
+    max-width:none!important;
+  }
+  .easy-end-preview-shell{
+    margin:0!important;
+  }
+}
+@media(max-width:430px){
+  .easy-cover-row{
+    grid-template-columns:1fr 1fr!important;
+  }
+}
+
+
+/* v0.2.80 — REAL dual 9:16 Easy previews */
+.easy-direct-preview-panel{
+  padding:16px!important;
+}
+.easy-preview-pair{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,320px))!important;
+  gap:20px!important;
+  align-items:start!important;
+  justify-content:start!important;
+}
+.easy-preview-card{
+  width:100%!important;
+  min-width:0!important;
+}
+.easy-preview-card-head{
+  display:flex!important;
+  justify-content:space-between!important;
+  align-items:baseline!important;
+  gap:8px!important;
+  margin:0 0 8px!important;
+}
+.easy-preview-card-head strong{
+  font-size:14px!important;
+}
+.easy-preview-card-head small{
+  font-size:10px!important;
+  color:var(--muted)!important;
+}
+
+/* Cover + ending are now actual siblings in the same grid. */
+.easy-preview-card .cover-preview,
+.easy-preview-card .ending-preview{
+  display:block!important;
+  width:100%!important;
+  max-width:none!important;
+  aspect-ratio:9/16!important;
+  min-height:0!important;
+  margin:0!important;
+  border-radius:18px!important;
+  overflow:hidden!important;
+  position:relative!important;
+  box-sizing:border-box!important;
+  container-type:inline-size;
+}
+.easy-preview-card .ending-preview{
+  height:auto!important;
+  background:var(--panel,#fff)!important;
+  border:1px solid var(--line,#dfe3e8)!important;
+}
+
+/* Stop old v0.2.79 fake positioning. */
+.easy-end-preview-shell,
+.ending-editor,
+.easy-cover-row,
+.easy-cover-simple{
+  margin:0!important;
+  margin-left:0!important;
+  margin-top:0!important;
+  width:auto!important;
+  max-width:none!important;
+}
+.easy-cover-row{display:block!important}
+
+/* Ending preview scales like a phone screen. */
+.easy-preview-card .ending-preview-center{
+  position:absolute!important;
+  inset:0 8% 42%!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:auto!important;
+  min-height:0!important;
+  border:0!important;
+  background:transparent!important;
+}
+.easy-preview-card .ending-preview-center strong{
+  font-size:clamp(20px,8cqw,34px)!important;
+  line-height:1.45!important;
+  font-weight:400!important;
+}
+.easy-preview-card .ending-preview-tabs{
+  position:absolute!important;
+  left:6%!important;
+  right:6%!important;
+  bottom:10%!important;
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:2.4cqw!important;
+  margin:0!important;
+}
+.easy-preview-card .ending-preview-tabs button{
+  min-width:0!important;
+  min-height:clamp(64px,23cqw,92px)!important;
+  padding:8px 4px!important;
+}
+.easy-preview-card .ending-preview-tabs small{
+  font-size:clamp(6px,2.5cqw,9px)!important;
+}
+.easy-preview-card .ending-preview-tabs strong{
+  font-size:clamp(10px,4.1cqw,16px)!important;
+  overflow-wrap:anywhere!important;
+}
+
+/* Easy no longer shows metadata form. It lives in Advanced. */
+.advanced-work-meta .work-meta-grid{
+  display:grid!important;
+}
+.advanced-cover-assets{display:none!important}
+
+@media(max-width:760px){
+  .easy-preview-pair{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+  .easy-direct-preview-panel{padding:10px!important}
+}
+@media(max-width:430px){
+  .easy-preview-card-head{
+    display:block!important;
+  }
+  .easy-preview-card-head small{
+    display:block!important;
+    margin-top:3px!important;
+  }
+}
+
+
+/* v0.2.81 — centered dual 9:16 previews */
+.easy-preview-pair{
+  width:min(100%, 760px)!important;
+  margin-inline:auto!important;
+  grid-template-columns:repeat(2,minmax(0,320px))!important;
+  justify-content:center!important;
+  column-gap:56px!important;
+  row-gap:20px!important;
+}
+.easy-preview-card{
+  width:100%!important;
+  max-width:320px!important;
+  justify-self:center!important;
+}
+.easy-preview-card .cover-preview,
+.easy-preview-card .ending-preview{
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  aspect-ratio:9/16!important;
+  overflow:hidden!important;
+  box-sizing:border-box!important;
+  container-type:inline-size;
+}
+
+/* Keep the cover content inside its miniature frame. */
+.easy-preview-card .cover-preview{
+  position:relative!important;
+}
+.easy-preview-card .cover-preview .cover-title{
+  max-width:88%!important;
+  margin-inline:auto!important;
+  font-size:clamp(25px,11cqw,44px)!important;
+  line-height:1.1!important;
+  overflow-wrap:anywhere!important;
+}
+.easy-preview-card .cover-preview .cover-author,
+.easy-preview-card .cover-preview .cover-episode,
+.easy-preview-card .cover-preview .cover-subtitle{
+  max-width:88%!important;
+  margin-inline:auto!important;
+  font-size:clamp(9px,4cqw,15px)!important;
+  line-height:1.35!important;
+  overflow-wrap:anywhere!important;
+}
+.easy-preview-card .cover-preview .cover-start,
+.easy-preview-card .cover-preview .cover-start-button,
+.easy-preview-card .cover-preview .start-button{
+  width:84%!important;
+  max-width:none!important;
+  min-width:0!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  font-size:clamp(13px,5cqw,18px)!important;
+}
+
+/* Ending text and navigation get separate safe areas. */
+.easy-preview-card .ending-preview-center{
+  inset:0 8% 36%!important;
+}
+.easy-preview-card .ending-preview-center strong{
+  max-width:100%!important;
+  font-size:clamp(20px,8cqw,32px)!important;
+  line-height:1.4!important;
+  overflow-wrap:anywhere!important;
+}
+.easy-preview-card .ending-preview-tabs{
+  left:6%!important;
+  right:6%!important;
+  bottom:8%!important;
+  gap:8px!important;
+}
+.easy-preview-card .ending-preview-tabs button{
+  width:100%!important;
+  min-width:0!important;
+  min-height:0!important;
+  height:clamp(66px,22cqw,86px)!important;
+  padding:6px 3px!important;
+  overflow:hidden!important;
+}
+.easy-preview-card .ending-preview-tabs small,
+.easy-preview-card .ending-preview-tabs strong{
+  display:block!important;
+  max-width:100%!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  text-align:center!important;
+}
+.easy-preview-card .ending-preview-tabs small{
+  font-size:clamp(6px,2.4cqw,8px)!important;
+  letter-spacing:.12em!important;
+}
+.easy-preview-card .ending-preview-tabs strong{
+  margin-top:4px!important;
+  font-size:clamp(9px,3.7cqw,14px)!important;
+  line-height:1.25!important;
+}
+
+@media(max-width:760px){
+  .easy-preview-pair{
+    width:100%!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    column-gap:14px!important;
+  }
+  .easy-preview-card{max-width:none!important}
+}

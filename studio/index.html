@@ -91,49 +91,12 @@
         <button id="makeButton" class="primary-button" type="button"><span>プレイヤーにする</span><small>Scene Format v1へ変換します</small></button>
       </div>
 
-      <details class="work-meta-section">
-        <summary>作品情報・表紙</summary>
-        <div class="work-meta-panel">
-          <div class="work-meta-grid">
-            <label class="field" for="titleInput">
-              <span class="field-label">作品タイトル</span>
-              <input id="titleInput" type="text" placeholder="例：声のそろう通り">
-            </label>
-            <label class="field" for="authorInput">
-              <span class="field-label">作者名 <small>任意</small></span>
-              <input id="authorInput" type="text" list="authorHistoryList" placeholder="例：Yuya Narita">
-              <datalist id="authorHistoryList"></datalist>
-              <small class="field-help author-history-help">この端末で以前使った作者名を候補に表示します。</small>
-            </label>
-            <label class="field">
-              <span class="field-label">サブタイトル <small>任意</small></span>
-              <input id="subtitleInput" type="text" placeholder="例：冷やせれば勝ちやろ">
-            </label>
-            <label class="field">
-              <span class="field-label">言語</span>
-              <select id="languageInput">
-                <option value="auto" selected>自動判定</option>
-                <option value="ja">日本語</option>
-                <option value="en">English</option>
-                <option value="mul">複数言語</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="field-label">シリーズ名 <small>任意</small></span>
-              <input id="seriesTitleInput" type="text" placeholder="例：貧乏メガネのシノ">
-            </label>
-            <label class="field">
-              <span class="field-label">話数表記 <small>任意・自由入力</small></span>
-              <input id="episodeInput" type="text" placeholder="例：第1話 / EPISODE 01 / PROLOGUE">
-            </label>
-          </div>
-
-          <div class="cover-editor easy-cover-simple">
-            <div class="section-heading">
-              <span>表紙画像 <small>任意</small></span>
-              <small>表紙をタップして、タイトル・作者・話数・画像を直接編集します。</small>
-            </div>
-            <div class="easy-cover-row">
+      <details class="work-meta-section" open>
+        <summary>作品の入口と出口</summary>
+        <div class="work-meta-panel easy-direct-preview-panel">
+          <div class="easy-preview-pair">
+            <section class="easy-preview-card">
+              <div class="easy-preview-card-head"><strong>表紙</strong><small>タップして編集</small></div>
               <div id="coverPreview" class="cover-preview cover-preview-editable player-like-cover-preview" role="button" tabindex="0" aria-label="表紙を直接編集">
                 <div class="cover-preview-bg" aria-hidden="true"></div>
                 <div class="cover-preview-dim" aria-hidden="true"></div>
@@ -148,26 +111,10 @@
                 </div>
                 <div class="cover-preview-start">はじめる</div>
               </div>
-              <div class="easy-cover-actions">
-                <input id="coverImageInput" type="file" accept="image/*" hidden>
-                <details class="cover-legacy-actions">
-                  <summary>画像だけ変更</summary>
-                  <div class="cover-legacy-actions-inner">
-                    <label class="cinema-background-button" for="coverImageInput">表紙画像を選ぶ</label>
-                    <button id="coverImageClear" class="cinema-background-clear" type="button" hidden>表紙画像を外す</button>
-                    <p>画像は中央・coverで保存します。</p>
-                  </div>
-                </details>
-              </div>
-            </div>
-          </div>
-
-          <div class="ending-editor">
-            <div class="section-heading">
-              <span>読了ページ</span>
-              <small>最後の余韻と、その後の導線を設定します。</small>
-            </div>
-            <div id="endingPreview" class="ending-preview ending-preview-editable" aria-label="読了ページ プレビュー">
+            </section>
+            <section class="easy-preview-card">
+              <div class="easy-preview-card-head"><strong>読了ページ</strong><small>タップして編集</small></div>
+              <div id="endingPreview" class="ending-preview ending-preview-editable" aria-label="読了ページ プレビュー">
               <div class="ending-preview-hint">タップして直接編集</div>
               <button id="endingPreviewCenterEdit" class="ending-preview-center ending-preview-center-button" type="button"><strong id="endingPreviewLabel">読了</strong></button>
               <div class="ending-preview-tabs ending-preview-three">
@@ -176,7 +123,7 @@
                 <button type="button" data-preview-link="1" hidden><small></small><strong></strong></button>
               </div>
             </div>
-
+            </section>
           </div>
         </div>
       </details>
@@ -252,6 +199,50 @@
               </div>
             </div>
             </details>
+      </div>
+    </details>
+
+    <details class="adv-section advanced-work-meta" data-close-label="閉じる">
+      <summary>作品情報・表紙</summary>
+      <div class="adv-section-body">
+        <p class="advanced-hint">Easyでは表紙プレビューをタップして編集できます。ここでは作品情報をフォームで細かく調整します。</p>
+        <div class="work-meta-grid">
+            <label class="field" for="titleInput">
+              <span class="field-label">作品タイトル</span>
+              <input id="titleInput" type="text" placeholder="例：声のそろう通り">
+            </label>
+            <label class="field" for="authorInput">
+              <span class="field-label">作者名 <small>任意</small></span>
+              <input id="authorInput" type="text" list="authorHistoryList" placeholder="例：Yuya Narita">
+              <datalist id="authorHistoryList"></datalist>
+              <small class="field-help author-history-help">この端末で以前使った作者名を候補に表示します。</small>
+            </label>
+            <label class="field">
+              <span class="field-label">サブタイトル <small>任意</small></span>
+              <input id="subtitleInput" type="text" placeholder="例：冷やせれば勝ちやろ">
+            </label>
+            <label class="field">
+              <span class="field-label">言語</span>
+              <select id="languageInput">
+                <option value="auto" selected>自動判定</option>
+                <option value="ja">日本語</option>
+                <option value="en">English</option>
+                <option value="mul">複数言語</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">シリーズ名 <small>任意</small></span>
+              <input id="seriesTitleInput" type="text" placeholder="例：貧乏メガネのシノ">
+            </label>
+            <label class="field">
+              <span class="field-label">話数表記 <small>任意・自由入力</small></span>
+              <input id="episodeInput" type="text" placeholder="例：第1話 / EPISODE 01 / PROLOGUE">
+            </label>
+          </div>
+        <div class="advanced-cover-assets">
+          <input id="coverImageInput" type="file" accept="image/*" hidden>
+          <button id="coverImageClear" class="cinema-background-clear" type="button" hidden>表紙画像を外す</button>
+        </div>
       </div>
     </details>
 
