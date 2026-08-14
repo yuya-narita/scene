@@ -2412,7 +2412,10 @@
     ensureWorkingDocumentFromEasy();
     syncEasyShellToWorkingDocument();
     selectedSceneIndex=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));
-    renderAdvanced(); updateEasyFileActions(); setScreen('advanced'); scrollScreenToTop(advancedScreen);
+    renderAdvanced(); updateEasyFileActions(); setScreen('advanced');
+    const modeFab=$('#floatingAdvancedButton');
+    if(modeFab){modeFab.hidden=false;modeFab.querySelector('span').textContent='✎';modeFab.setAttribute('aria-label','Easy編集に戻る');modeFab.title='Easy';}
+    scrollScreenToTop(advancedScreen);
   }
   function closeAdvanced(){
     syncAdvancedFieldsToScene();
@@ -2420,6 +2423,8 @@
     easySourceDirty=false;
     updateEasyFileActions();
     setScreen('easy');
+    const modeFab=$('#floatingAdvancedButton');
+    if(modeFab){modeFab.querySelector('span').textContent='⚙︎';modeFab.setAttribute('aria-label','細かく調整');modeFab.title='Advanced';updateEasyFileActions();}
   }
 
   function currentScene(){ return workingDocument?.scenes?.[selectedSceneIndex] || null; }
@@ -3264,24 +3269,33 @@
   $('#makeButton').addEventListener('click',()=>{openPlayer({from:'easy',startAt:0});updateEasyFileActions();});
   const easyMenuButton=$('#easyMenuButton');
   const easyMenuPanel=$('#easyMenuPanel');
+  const easyMenuBackdrop=$('#easyMenuBackdrop');
   function closeEasyMenu(){
     if(!easyMenuPanel)return;
     easyMenuPanel.hidden=true;
+    if(easyMenuBackdrop)easyMenuBackdrop.hidden=true;
+    document.body.classList.remove('easy-menu-open');
     easyMenuButton?.setAttribute('aria-expanded','false');
   }
   easyMenuButton?.addEventListener('click',(e)=>{
     e.stopPropagation();
     const willOpen=easyMenuPanel?.hidden;
     if(easyMenuPanel)easyMenuPanel.hidden=!willOpen;
+    if(easyMenuBackdrop)easyMenuBackdrop.hidden=!willOpen;
+    document.body.classList.toggle('easy-menu-open',Boolean(willOpen));
     easyMenuButton.setAttribute('aria-expanded',willOpen?'true':'false');
   });
   easyMenuPanel?.addEventListener('click',(e)=>e.stopPropagation());
+  easyMenuBackdrop?.addEventListener('click',closeEasyMenu);
   document.addEventListener('click',closeEasyMenu);
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
   $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#exportPackageButton')?.click();});
   $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
   $('#menuNewDraftButton')?.addEventListener('click',()=>{closeEasyMenu();$('#newDraftQuickButton')?.click();});
-  $('#floatingAdvancedButton')?.addEventListener('click',()=>openAdvanced());
+  $('#floatingAdvancedButton')?.addEventListener('click',()=>{
+    if(!advancedScreen.hidden) closeAdvanced();
+    else openAdvanced();
+  });
 
   $('#floatingPreviewButton')?.addEventListener('click',()=>{
     if(!advancedScreen.hidden){

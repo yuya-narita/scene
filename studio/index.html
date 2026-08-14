@@ -11,12 +11,11 @@
 <body>
 <main id="app">
   <section id="editorScreen" class="screen editor-screen">
-    <div class="easy-language-corner ui-language-switch" role="group" aria-label="UI language">
-      <button type="button" data-ui-lang="ja">JA</button><button type="button" data-ui-lang="en">EN</button>
-    </div>
     <div class="easy-menu-corner">
       <button id="easyMenuButton" class="easy-menu-button" type="button" aria-label="メニュー" aria-expanded="false">≡</button>
+      <div id="easyMenuBackdrop" class="easy-menu-backdrop" hidden></div>
       <div id="easyMenuPanel" class="easy-menu-panel" hidden>
+        <div class="easy-menu-grabber" aria-hidden="true"></div>
         <label class="easy-menu-item" for="importPackageInput">
           <span>作品を開く</span><small>.scene</small>
         </label>
@@ -29,6 +28,13 @@
         <button id="menuNewDraftButton" class="easy-menu-item" type="button">
           <span>＋ 新しく作る</span><small>新しい下書き</small>
         </button>
+        <div class="easy-menu-divider"></div>
+        <div class="easy-menu-item easy-menu-language">
+          <span>言語</span>
+          <div class="ui-language-switch" role="group" aria-label="UI language">
+            <button type="button" data-ui-lang="ja">JA</button><button type="button" data-ui-lang="en">EN</button>
+          </div>
+        </div>
       </div>
     </div>
     <header class="topbar">
