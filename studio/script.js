@@ -3166,6 +3166,13 @@
     const hasSource=Boolean(hasDocument || bodyInput.value.trim());
     if(exportButton) exportButton.disabled=!hasSource;
     if(advancedReturn) advancedReturn.hidden=!hasDocument;
+    const menuExport=$('#menuExportPackageButton');
+    if(menuExport) menuExport.disabled=!hasSource;
+    const floatingAdvanced=$('#floatingAdvancedButton');
+    if(floatingAdvanced) floatingAdvanced.hidden=!hasDocument;
+    const menuDraftCount=$('#menuDraftCount');
+    const toolbarDraftCount=$('#draftToolbarCount');
+    if(menuDraftCount && toolbarDraftCount) menuDraftCount.textContent=toolbarDraftCount.textContent;
     syncEasyPublishButton();
   }
   bodyInput.addEventListener('input',updateEasyFileActions);
@@ -3255,6 +3262,27 @@
   $$('.theme-card').forEach(card=>card.addEventListener('click',()=>applyTheme(card.dataset.theme)));
   $$('.work-font-card').forEach(card=>card.addEventListener('click',()=>applyWorkFont(card.dataset.font)));
   $('#makeButton').addEventListener('click',()=>{openPlayer({from:'easy',startAt:0});updateEasyFileActions();});
+  const easyMenuButton=$('#easyMenuButton');
+  const easyMenuPanel=$('#easyMenuPanel');
+  function closeEasyMenu(){
+    if(!easyMenuPanel)return;
+    easyMenuPanel.hidden=true;
+    easyMenuButton?.setAttribute('aria-expanded','false');
+  }
+  easyMenuButton?.addEventListener('click',(e)=>{
+    e.stopPropagation();
+    const willOpen=easyMenuPanel?.hidden;
+    if(easyMenuPanel)easyMenuPanel.hidden=!willOpen;
+    easyMenuButton.setAttribute('aria-expanded',willOpen?'true':'false');
+  });
+  easyMenuPanel?.addEventListener('click',(e)=>e.stopPropagation());
+  document.addEventListener('click',closeEasyMenu);
+  document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
+  $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#exportPackageButton')?.click();});
+  $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
+  $('#menuNewDraftButton')?.addEventListener('click',()=>{closeEasyMenu();$('#newDraftQuickButton')?.click();});
+  $('#floatingAdvancedButton')?.addEventListener('click',()=>openAdvanced());
+
   $('#floatingPreviewButton')?.addEventListener('click',()=>{
     if(!advancedScreen.hidden){
       syncAdvancedFieldsToScene();
