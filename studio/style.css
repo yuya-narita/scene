@@ -4162,3 +4162,87 @@ body.easy-menu-open{overflow:hidden}
   .editor-screen,.advanced-screen{padding-top:calc(57px + env(safe-area-inset-top))!important}
   .easy-menu-panel{top:calc(42px + env(safe-area-inset-top))!important}
 }
+
+
+/* =========================================================
+   v0.2.99 — Preview return isolated from Player
+   ========================================================= */
+#editReturnButton.easy-edit-return{
+  position:fixed!important;
+  z-index:2147483647!important;
+  left:12px!important;
+  top:calc(68px + env(safe-area-inset-top))!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+}
+#editReturnButton.easy-edit-return[hidden]{display:none!important;}
+
+/* =========================================================
+   v0.3.00 — Preview as a true overlay
+   Keep Easy/Advanced mounted underneath the Player so iOS never has to
+   reconstruct the authoring surface when 「編集に戻る」 is tapped.
+   ========================================================= */
+html.easy-player-open{
+  overflow:hidden!important;
+  overscroll-behavior:none!important;
+}
+body.easy-player-open{
+  position:static!important;
+  inset:auto!important;
+  width:auto!important;
+  height:auto!important;
+  overflow:visible!important;
+}
+#playerScreen.easy-core-screen{
+  position:fixed!important;
+  inset:0!important;
+  z-index:2147483000!important;
+}
+#editReturnButton.easy-edit-return{
+  z-index:2147483647!important;
+}
+
+
+/* =========================================================
+   v0.3.02 — Preview hard return / chrome isolation
+   ========================================================= */
+html.easy-player-open #floatingAdvancedButton,
+body.easy-player-open #floatingAdvancedButton,
+html.easy-player-open #floatingPreviewButton,
+body.easy-player-open #floatingPreviewButton,
+html.easy-player-open #undoCompactButton,
+body.easy-player-open #undoCompactButton,
+#playerScreen:not([hidden]) ~ #floatingAdvancedButton,
+#playerScreen:not([hidden]) ~ #floatingPreviewButton,
+#playerScreen:not([hidden]) ~ #undoCompactButton{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+#editReturnButton.easy-edit-return{
+  display:block;
+  position:fixed!important;
+  z-index:2147483647!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  -webkit-tap-highlight-color:transparent!important;
+}
+#editReturnButton.easy-edit-return[hidden]{display:none!important;}
+#playerScreen.easy-core-screen[hidden]{display:none!important;}
+
+
+/* =========================================================
+   v0.3.03 — restore proven in-player Preview return control
+   ========================================================= */
+#playerScreen #editReturnButton.easy-edit-return{
+  display:block!important;
+  position:fixed!important;
+  z-index:2147483647!important;
+  left:12px!important;
+  top:calc(68px + env(safe-area-inset-top))!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+}
+#playerScreen[hidden] #editReturnButton.easy-edit-return{display:none!important;}

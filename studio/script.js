@@ -2347,7 +2347,7 @@
     // In authoring screens the slot is always present; availability is shown by tone.
     if(compact){compact.hidden=false;compact.disabled=!undoSnapshot;}
   }
-  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); const modeLabel=$('#studioModeLabel'); if(modeLabel) modeLabel.textContent=name==='advanced'?'Advanced Studio':'Easy Studio'; syncUndoVisibilityForScreen(name); }
+  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; const returnButton=$('#editReturnButton'); if(returnButton)returnButton.hidden=!open; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); const modeLabel=$('#studioModeLabel'); if(modeLabel) modeLabel.textContent=name==='advanced'?'Advanced Studio':'Easy Studio'; syncUndoVisibilityForScreen(name); }
   // v0.2.97: the shared authoring header stays the same size while scrolling.
   const sharedHeader=$('#studioSharedHeader');
   sharedHeader?.classList.remove('is-compact');
@@ -2363,6 +2363,21 @@
   let playerReturnScrollY=0;
   let playerReturnScreenScrollTop=0;
 
+  function setPreviewChromeHidden(hidden){
+    const controls=[$('#floatingAdvancedButton'),$('#floatingPreviewButton'),$('#undoCompactButton')];
+    for(const el of controls){
+      if(!el)continue;
+      if(hidden){
+        el.style.setProperty('display','none','important');
+        el.style.setProperty('visibility','hidden','important');
+        el.style.setProperty('pointer-events','none','important');
+      }else{
+        el.style.removeProperty('display');
+        el.style.removeProperty('visibility');
+        el.style.removeProperty('pointer-events');
+      }
+    }
+  }
   function getDocumentForPlayback(){ return clone(workingDocument || buildSceneDocument()); }
   function openPlayer({from='easy', startAt=0}={}){
     if(from==='easy'){
@@ -2370,69 +2385,51 @@
       ensureWorkingDocumentFromEasy();
       syncEasyShellToWorkingDocument();
     } else {
-      // Advanced edits write directly into the authoritative Scene document.
       syncAdvancedFieldsToScene();
     }
     if(!workingDocument?.scenes?.length)return;
+
+    // v0.3.03: return to the last known-good Preview architecture.
+    // The return button lives inside #playerScreen, exactly as it did when
+    // iPhone return worked reliably. Keep only the newer scroll restore.
     playerReturnTarget=from;
     playerReturnScrollY=Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
     const returnScreen=(from==='advanced' ? advancedScreen : editorScreen);
     playerReturnScreenScrollTop=Math.max(0, returnScreen?.scrollTop || 0);
+
     playerScreen.style.removeProperty('display');
     setScreen('player');
+    setPreviewChromeHidden(true);
     syncPublishPreviewButton(false);
+
     const p=ensurePlayer();
     p.setUILanguage?.(uiLanguage);
     p.load(getDocumentForPlayback(),{startAt});
-
-    // openPlayer itself is called from the author's Play/Confirm click.
-    // Use that trusted gesture to unlock/arm audio AFTER load(), so Scene 1
-    // BGM/Ambient/SE can begin on the first Scene instead of waiting for the
-    // reader's next tap (especially important on iOS/WebKit).
     p.unlockAudio(true);
   }
   function closePlayer(){
-    // v0.2.98: return UI first, cleanup second.
-    // On iOS/WebKit an audio/player cleanup exception must never be able to trap
-    // the author inside Preview. Tear down the full-screen surface synchronously.
-    const target=playerReturnTarget==='advanced'?'advanced':'easy';
-
+    // Proven v0.2.89 path: clean up, switch screen, then restore position.
+    // No pointer/touch capture tricks and no detached return control.
     syncPublishPreviewButton(false);
-    playerScreen.hidden=true;
-    playerScreen.style.display='none';
-    editorScreen.hidden=target!=='easy';
-    advancedScreen.hidden=target!=='advanced';
-    editorScreen.style.removeProperty('display');
-    advancedScreen.style.removeProperty('display');
+    try{if(autoRecActive)finishAutoRec(false);}catch(error){console.warn('AUTO REC cleanup failed',error);}
+    try{player?.stopAuto?.();}catch(error){console.warn('Player auto cleanup failed',error);}
+    try{player?._stopAllAudio?.(true);}catch(error){console.warn('Player audio cleanup failed',error);}
 
-    document.documentElement.classList.remove('easy-player-open');
-    document.body.classList.remove('easy-player-open');
-    document.body.style.removeProperty('position');
-    document.body.style.removeProperty('inset');
-    document.body.style.removeProperty('overflow');
-    document.documentElement.style.removeProperty('overflow');
-
-    const modeLabel=$('#studioModeLabel');
-    if(modeLabel)modeLabel.textContent=target==='advanced'?'Advanced Studio':'Easy Studio';
-    if(target==='advanced'){
-      try{renderAdvanced();}catch(error){console.warn('Advanced restore render failed',error);}
-    }
-    syncUndoVisibilityForScreen(target);
+    const target=playerReturnTarget==='advanced'?'advanced':'easy';
+    playerScreen.style.removeProperty('display');
+    setScreen(target);
+    setPreviewChromeHidden(false);
+    if(target==='advanced')renderAdvanced();
 
     const restore=()=>{
       const returnScreen=(target==='advanced'?advancedScreen:editorScreen);
       if(returnScreen)returnScreen.scrollTop=playerReturnScreenScrollTop;
-      try{window.scrollTo(0,playerReturnScrollY);}catch(_){document.documentElement.scrollTop=playerReturnScrollY;}
+      try{window.scrollTo({top:playerReturnScrollY,left:0,behavior:'instant'});}
+      catch(_){window.scrollTo(0,playerReturnScrollY);}
+      syncUndoVisibilityForScreen(target);
     };
     restore();
     requestAnimationFrame(()=>{restore();requestAnimationFrame(restore);});
-
-    // Player/audio teardown is intentionally deferred until after Studio is visible.
-    setTimeout(()=>{
-      try{if(autoRecActive)finishAutoRec(false);}catch(error){console.warn('AUTO REC cleanup failed',error);}
-      try{player?.stopAuto?.();}catch(error){console.warn('Player auto cleanup failed',error);}
-      try{player?._stopAllAudio?.(true);}catch(error){console.warn('Player audio cleanup failed',error);}
-    },0);
   }
 
   function openAdvanced(){
@@ -3150,7 +3147,7 @@
   });
 
   // Studio overlay controls must never fall through to the Player tap surface.
-  ['editReturnButton','publishFromPreviewButton','autoRecStart','autoRecCancel','autoRecRetry'].forEach(id=>{
+  ['publishFromPreviewButton','autoRecStart','autoRecCancel','autoRecRetry'].forEach(id=>{
     const el=$('#'+id); if(!el)return;
     ['pointerdown','pointerup','touchstart','touchend'].forEach(type=>{
       el.addEventListener(type,(event)=>event.stopPropagation(),{passive:true});
@@ -3330,7 +3327,7 @@
   // v0.2.94: menu is a top-right popover; no drag-to-dismiss gesture.
   document.addEventListener('click',closeEasyMenu);
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
-  $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#exportPackageButton')?.click();});
+  $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();exportScenePackage();});
   $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
   $('#menuNewDraftButton')?.addEventListener('click',()=>{closeEasyMenu();$('#newDraftQuickButton')?.click();});
   $('#floatingAdvancedButton')?.addEventListener('click',()=>{
@@ -3350,7 +3347,10 @@
   $('#advancedButton').addEventListener('click',openAdvanced);
   $('#easyAdvancedReturnButton')?.addEventListener('click',openAdvanced);
   $('#exportSceneButton').addEventListener('click',exportSceneDocument);
-  $('#exportPackageButton').addEventListener('click',exportScenePackage);
+  // v0.3.04: this legacy button is no longer present in the compact header UI.
+  // Guard it so initialization continues and later controls (including Preview return)
+  // always receive their event listeners.
+  $('#exportPackageButton')?.addEventListener('click',exportScenePackage);
   $('#importSceneInput').addEventListener('change',async(event)=>{
     const file=event.target.files?.[0];
     if(file) await importSceneDocument(file);
@@ -3364,30 +3364,12 @@
   updateEasyFileActions();
     event.target.value='';
   });
-  // v0.2.98: finish the tap on the Preview surface, then return.
-  // Closing on pointerdown can leave the same finger gesture alive after Studio is
-  // exposed underneath. Use pointerup/click plus a document-capture fallback instead.
-  const editReturnButton=$('#editReturnButton');
-  let editReturnClosing=false;
-  let editReturnLastAt=0;
-  const handleEditReturn=(event)=>{
-    const target=event?.target?.closest?.('#editReturnButton');
-    if(event && !target && event.currentTarget===document)return;
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    event?.stopImmediatePropagation?.();
-    const now=Date.now();
-    if(editReturnClosing || playerScreen.hidden || now-editReturnLastAt<450)return;
-    editReturnLastAt=now;
-    editReturnClosing=true;
+  // v0.3.03: use the original proven return interaction.
+  $('#editReturnButton')?.addEventListener('click',(event)=>{
+    event.preventDefault();
+    event.stopPropagation();
     closePlayer();
-    setTimeout(()=>{editReturnClosing=false;},500);
-  };
-  editReturnButton?.addEventListener('pointerup',handleEditReturn,{capture:true,passive:false});
-  editReturnButton?.addEventListener('click',handleEditReturn,{capture:true,passive:false});
-  // Safari fallback: catch the completed gesture before ScenePlayerCore can consume it.
-  document.addEventListener('pointerup',handleEditReturn,true);
-  document.addEventListener('click',handleEditReturn,true);
+  });
   $('#advancedBackButton')?.addEventListener('click',closeAdvanced);
   $('#advancedPreviewButton')?.addEventListener('click',()=>{syncAdvancedFieldsToScene();openPlayer({from:'advanced',startAt:selectedSceneIndex});});
   $('#advancedExportButton')?.addEventListener('click',()=>{syncAdvancedFieldsToScene();exportScenePackage();});
