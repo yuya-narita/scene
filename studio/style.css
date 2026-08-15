@@ -4690,3 +4690,37 @@ body.easy-player-open #undoCompactButton,
   position:relative;
   z-index:1;
 }
+
+/* v0.3.16 — open Work info / Cover keeps the same mosaic tab and softly fades into the panel */
+.editor-screen .work-meta-section[open]{
+  background-image:var(--easy-work-meta-art);
+  background-size:cover;
+  background-position:center 46%;
+}
+.editor-screen .work-meta-section[open]>summary{
+  color:#17191d;
+  background:linear-gradient(90deg,rgba(255,255,255,.96) 0%,rgba(255,255,255,.86) 45%,rgba(255,255,255,.58) 72%,rgba(255,255,255,.76) 100%);
+  backdrop-filter:saturate(.9);
+  -webkit-backdrop-filter:saturate(.9);
+}
+.editor-screen .work-meta-section[open] .work-meta-panel{
+  padding-top:58px;
+  background:var(--bg,#f7f8fb);
+}
+.editor-screen .work-meta-section[open] .work-meta-panel::before{
+  content:"";
+  position:absolute;
+  z-index:0;
+  top:0;
+  left:0;
+  right:0;
+  height:58px;
+  background-image:var(--easy-work-meta-art);
+  background-size:cover;
+  background-position:center 46%;
+  background-repeat:no-repeat;
+  opacity:.72;
+  -webkit-mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.78) 24%,rgba(0,0,0,.28) 68%,transparent 100%);
+  mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.78) 24%,rgba(0,0,0,.28) 68%,transparent 100%);
+  pointer-events:none;
+}
