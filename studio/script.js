@@ -2187,17 +2187,40 @@
     return hosted;
   }
 
+  async function fetchWithTimeout(url,options={},timeoutMs=20000){
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),timeoutMs);
+    try{
+      return await fetch(url,{...options,signal:controller.signal,cache:'no-store'});
+    }finally{
+      clearTimeout(timer);
+    }
+  }
+
   const publishAdapter={
     async publish(sceneDocument,{id=''}={}){
       // Hosting v2: upload browser-local image/audio assets first, replace blob: URLs
       // with permanent Worker/R2 URLs, then publish the portable Scene document.
       const hostedDocument=await prepareDocumentForPublish(sceneDocument);
-      const publishEndpoint=id?`${SCENE_STUDIO_API_BASE}/publish?id=${encodeURIComponent(id)}`:`${SCENE_STUDIO_API_BASE}/publish`;
-      const response=await fetch(publishEndpoint,{
+      const baseEndpoint=id?`${SCENE_STUDIO_API_BASE}/publish?id=${encodeURIComponent(id)}`:`${SCENE_STUDIO_API_BASE}/publish`;
+      const request={
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(hostedDocument)
-      });
+      };
+
+      let response;
+      try{
+        response=await fetchWithTimeout(baseEndpoint,request,20000);
+      }catch(error){
+        // Updating an existing publication is idempotent for the same work id.
+        // Safari can occasionally leave the first update request pending forever,
+        // so retry that path once with a cache-busting query. Never retry a new
+        // publication because that could create a second work id.
+        if(!id || error?.name!=='AbortError')throw error;
+        const retryEndpoint=`${baseEndpoint}&_=${Date.now()}`;
+        response=await fetchWithTimeout(retryEndpoint,request,15000);
+      }
 
       let payload=null;
       try{ payload=await response.json(); }catch(_){ /* handled below */ }
@@ -2208,7 +2231,9 @@
       const finalId=payload.id;
       return {
         id:finalId,
-        // Until the public Player route is connected, this is the real hosted document endpoint.
+        // Keep the exact hosted document that was accepted for publication so
+        // the editor can adopt permanent asset URLs after a successful publish.
+        document:hostedDocument,
         url:`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(finalId)}`
       };
     }
@@ -2351,6 +2376,24 @@
 
       latestPublishedId=result.id||latestPublishedId;
       latestPublishedUrl=result.url;
+
+      // Once R2 has accepted the assets, stop depending on session-only blob:
+      // URLs. This is especially important on iPhone when a published work is
+      // reopened for editing: blob URLs from a previous page lifetime are no
+      // longer valid, while the hosted URLs remain stable.
+      if(result.document){
+        workingDocument=clone(result.document);
+        coverImageUrl=workingDocument.cover?.src||'';
+        coverLogoUrl=workingDocument.cover?.logo?.src||'';
+        refreshCoverPreviewLayout();
+        updateEndingPreview();
+        if(!advancedScreen.hidden){
+          normalizeSceneIds();
+          refreshDocumentLanguages();
+          renderAdvanced();
+        }
+      }
+
       latestPublishedFingerprint=currentPublishFingerprint();
       latestPublishedAt=Date.now();
       latestPublicationStoppedAt=0;
@@ -2364,6 +2407,12 @@
     }catch(error){
       console.warn('Publish failed',error);
       setPublishState('error');
+      const message=$('#publishStateError p');
+      if(message && error?.name==='AbortError'){
+        message.textContent=uiLanguage==='ja'
+          ? '更新の応答がタイムアウトしました。通信状態を確認して、もう一度お試しください。'
+          : 'The update timed out. Check your connection and try again.';
+      }
     }
   }
 
