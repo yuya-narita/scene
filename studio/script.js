@@ -93,7 +93,7 @@
     ['.cinema-background-copy strong','cinema.bg'],['.cinema-background-copy span','cinema.bg.note'],
     ['.cinema-tone-button[data-tone="dark"]','cinema.dark'],['.cinema-tone-button[data-tone="light"]','cinema.light'],
     ['.cinema-background-button','cinema.choose'],['#cinemaBackgroundClear','cinema.remove'],
-    ['#makeButton span','make'],['#makeButton small','make.note'],['#advancedButton','advanced.open'],['#easyAdvancedReturnButton span','advanced.open'],['#projectIoTitle','io.heading'],['#exportSceneButton strong','io.export'],['label[for="importSceneInput"] strong','io.import'],['.footer-note','footer.note'],
+    ['#makeButton span','make'],['#makeButton small','make.note'],['#easyAdvancedReturnButton span','advanced.open'],['#projectIoTitle','io.heading'],['#exportSceneButton strong','io.export'],['label[for="importSceneInput"] strong','io.import'],['.footer-note','footer.note'],
     ['.advanced-topbar h1','advanced.title'],
     ['.advanced-policy strong','nav.previous.policy'],['.advanced-policy small','nav.previous.note'],
     ['#sceneTextInput','scene.text','aria-label'],['.scene-inspector > .adv-field:nth-of-type(1) > span','scene.text'],
@@ -3523,7 +3523,6 @@
       updateEasyFileActions();
     }
   });
-  $('#advancedButton').addEventListener('click',openAdvanced);
   $('#easyAdvancedReturnButton')?.addEventListener('click',openAdvanced);
   $('#exportSceneButton').addEventListener('click',exportSceneDocument);
   // v0.3.04: this legacy button is no longer present in the compact header UI.
