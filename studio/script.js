@@ -75,33 +75,39 @@
   const densitySelect = $('#densitySelect');
   const playerHost = $('#scenePlayer');
 
-  // v0.3.24: transplant the Player Scene enter/advance feel into Easy's opening copy.
-  // It arrives like a Scene, then leaves upward when the author taps it or starts writing.
+  // v0.3.25: Player-like intro without fighting iOS focus scrolling.
+  // CSS owns the first Scene-style entrance from the very first paint.
+  // Tapping the copy fully dismisses + reclaims its space.
+  // Focusing the body visually advances the copy first, but preserves its layout height
+  // while the iOS keyboard is positioning the textarea; the space is reclaimed on blur.
   if(easyIntro){
     let introDismissed=false;
+    let introFocusHeld=false;
 
-    // Match Player Core's painted-frame entrance: start 13px low + soft blur,
-    // then settle on the following painted frames.
-    easyIntro.classList.add('sp-intro-entering');
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{
-        if(introDismissed)return;
-        easyIntro.classList.remove('sp-intro-entering');
-        easyIntro.classList.add('sp-intro-visible');
-      });
-    });
-
-    const dismissEasyIntro=()=>{
-      if(introDismissed)return;
+    const fullyDismissEasyIntro=()=>{
+      if(introDismissed && !introFocusHeld)return;
       introDismissed=true;
-      easyIntro.classList.remove('sp-intro-entering','sp-intro-visible');
+      introFocusHeld=false;
+      easyIntro.classList.remove('is-focus-dismissed');
       easyIntro.classList.add('is-dismissed');
       easyIntro.setAttribute('aria-hidden','true');
     };
 
-    easyIntro.addEventListener('click',dismissEasyIntro);
-    // Entering the body field is the natural first "advance" gesture in Studio.
-    bodyInput?.addEventListener('focus',dismissEasyIntro);
+    const focusDismissEasyIntro=()=>{
+      if(introDismissed)return;
+      introDismissed=true;
+      introFocusHeld=true;
+      easyIntro.classList.add('is-focus-dismissed');
+      easyIntro.setAttribute('aria-hidden','true');
+    };
+
+    easyIntro.addEventListener('click',fullyDismissEasyIntro);
+    bodyInput?.addEventListener('focus',focusDismissEasyIntro);
+    bodyInput?.addEventListener('blur',()=>{
+      if(!introFocusHeld)return;
+      // Let iOS finish its keyboard/focus viewport transition before reclaiming layout space.
+      requestAnimationFrame(()=>requestAnimationFrame(fullyDismissEasyIntro));
+    });
   }
 
   const I18N = window.SceneStudioI18n;
