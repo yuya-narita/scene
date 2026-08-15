@@ -75,17 +75,33 @@
   const densitySelect = $('#densitySelect');
   const playerHost = $('#scenePlayer');
 
-  // v0.3.22: Easy intro behaves like a one-step Scene.
-  // A tap dismisses it upward once; no scroll threshold and no re-show in this view.
+  // v0.3.24: transplant the Player Scene enter/advance feel into Easy's opening copy.
+  // It arrives like a Scene, then leaves upward when the author taps it or starts writing.
   if(easyIntro){
     let introDismissed=false;
+
+    // Match Player Core's painted-frame entrance: start 13px low + soft blur,
+    // then settle on the following painted frames.
+    easyIntro.classList.add('sp-intro-entering');
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        if(introDismissed)return;
+        easyIntro.classList.remove('sp-intro-entering');
+        easyIntro.classList.add('sp-intro-visible');
+      });
+    });
+
     const dismissEasyIntro=()=>{
       if(introDismissed)return;
       introDismissed=true;
+      easyIntro.classList.remove('sp-intro-entering','sp-intro-visible');
       easyIntro.classList.add('is-dismissed');
       easyIntro.setAttribute('aria-hidden','true');
     };
+
     easyIntro.addEventListener('click',dismissEasyIntro);
+    // Entering the body field is the natural first "advance" gesture in Studio.
+    bodyInput?.addEventListener('focus',dismissEasyIntro);
   }
 
   const I18N = window.SceneStudioI18n;
