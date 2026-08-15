@@ -4,6 +4,7 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
 
   const editorScreen = $('#editorScreen');
+  const easyIntro = $('.intro');
   const advancedScreen = $('#advancedScreen');
   const playerScreen = $('#playerScreen');
   const titleInput = $('#titleInput');
@@ -73,6 +74,19 @@
   const charCount = $('#charCount');
   const densitySelect = $('#densitySelect');
   const playerHost = $('#scenePlayer');
+
+  // v0.3.22: Easy intro behaves like a one-step Scene.
+  // A tap dismisses it upward once; no scroll threshold and no re-show in this view.
+  if(easyIntro){
+    let introDismissed=false;
+    const dismissEasyIntro=()=>{
+      if(introDismissed)return;
+      introDismissed=true;
+      easyIntro.classList.add('is-dismissed');
+      easyIntro.setAttribute('aria-hidden','true');
+    };
+    easyIntro.addEventListener('click',dismissEasyIntro);
+  }
 
   const I18N = window.SceneStudioI18n;
   const t = (key, vars={}) => I18N?.t(key, vars) ?? key;
