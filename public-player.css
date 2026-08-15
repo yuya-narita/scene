@@ -556,3 +556,44 @@ body{
 .public-intro .public-primary:disabled{
   opacity:.52!important;
 }
+
+/* v0.3.31 — stable ending slots + no awkward Japanese wrapping */
+/* Keep the authored ending-copy slot even when no copy was entered, so the
+   action row never jumps upward between an empty and authored ending. */
+.public-ending-label,
+.public-ending-label[hidden]{
+  display:grid!important;
+  place-items:center!important;
+  width:100%!important;
+  min-height:52vh!important;
+  margin:0!important;
+  padding-top:5vh!important;
+  box-sizing:border-box!important;
+}
+.public-ending-label[hidden]{
+  visibility:hidden!important;
+  opacity:0!important;
+}
+
+/* Keep the lower controls at one stable vertical position. */
+.public-ending-actions.public-ending-three{
+  flex:0 0 auto!important;
+}
+
+/* Japanese action labels should stay on one line. */
+.public-ending-box strong{
+  white-space:nowrap!important;
+  word-break:keep-all!important;
+  overflow-wrap:normal!important;
+  line-break:strict!important;
+}
+
+@media(max-width:520px){
+  .public-ending-box strong{
+    font-size:14px!important;
+    letter-spacing:0!important;
+  }
+  .public-ending-box small{
+    font-size:9px!important;
+  }
+}
