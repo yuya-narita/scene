@@ -4797,3 +4797,69 @@ body.easy-player-open #undoCompactButton,
   display:none!important;
   background:none!important;
 }
+
+/* v0.3.20 — Work info / Cover: restore the original full mosaic tab.
+   Closed/open use the exact same mosaic scale. On open, only the lower edge
+   of that same tab softly fades into the editor; no extra mosaic band. */
+.editor-screen .work-meta-section,
+.editor-screen .work-meta-section[open]{
+  position:relative!important;
+  min-height:68px!important;
+  background:none!important;
+  overflow:hidden!important;
+}
+.editor-screen .work-meta-section>summary,
+.editor-screen .work-meta-section[open]>summary{
+  position:relative!important;
+  z-index:2!important;
+  min-height:68px!important;
+  height:68px!important;
+  margin:0!important;
+  padding:0 18px!important;
+  display:flex!important;
+  align-items:center!important;
+  background-image:
+    linear-gradient(90deg,
+      rgba(255,255,255,.96) 0%,
+      rgba(255,255,255,.84) 38%,
+      rgba(255,255,255,.54) 66%,
+      rgba(255,255,255,.74) 100%),
+    var(--easy-work-meta-art)!important;
+  background-size:100% 100%,cover!important;
+  background-position:center,center 46%!important;
+  background-repeat:no-repeat!important;
+  -webkit-mask-image:none!important;
+  mask-image:none!important;
+  overflow:hidden!important;
+}
+/* Same tab when opened; add only a downward wash at its bottom edge. */
+.editor-screen .work-meta-section[open]>summary{
+  background-image:
+    linear-gradient(to bottom,
+      rgba(247,248,251,0) 0%,
+      rgba(247,248,251,0) 56%,
+      rgba(247,248,251,.40) 76%,
+      rgba(247,248,251,.82) 92%,
+      rgba(247,248,251,1) 100%),
+    linear-gradient(90deg,
+      rgba(255,255,255,.96) 0%,
+      rgba(255,255,255,.84) 38%,
+      rgba(255,255,255,.54) 66%,
+      rgba(255,255,255,.74) 100%),
+    var(--easy-work-meta-art)!important;
+  background-size:100% 100%,100% 100%,cover!important;
+  background-position:center,center,center 46%!important;
+  background-repeat:no-repeat!important;
+}
+.editor-screen .work-meta-section[open] .work-meta-panel{
+  position:relative!important;
+  z-index:1!important;
+  padding-top:0!important;
+  background:var(--bg,#f7f8fb)!important;
+  overflow:visible!important;
+}
+.editor-screen .work-meta-section[open] .work-meta-panel::before{
+  content:none!important;
+  display:none!important;
+  background:none!important;
+}
