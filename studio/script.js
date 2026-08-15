@@ -2347,7 +2347,12 @@
     // In authoring screens the slot is always present; availability is shown by tone.
     if(compact){compact.hidden=false;compact.disabled=!undoSnapshot;}
   }
-  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); syncUndoVisibilityForScreen(name); }
+  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); const modeLabel=$('#studioModeLabel'); if(modeLabel) modeLabel.textContent=name==='advanced'?'Advanced Studio':'Easy Studio'; syncUndoVisibilityForScreen(name); }
+  // v0.2.96: compact the shared authoring header after a small scroll.
+  const sharedHeader=$('#studioSharedHeader');
+  const syncSharedHeaderCompact=()=>{ if(sharedHeader) sharedHeader.classList.toggle('is-compact',(window.scrollY||document.documentElement.scrollTop||0)>18); };
+  window.addEventListener('scroll',syncSharedHeaderCompact,{passive:true});
+  syncSharedHeaderCompact();
   function scrollScreenToTop(screen){
     // iOS Safari/Chrome can preserve the document scroll position when a hidden
     // Studio screen is swapped in. Reset both the page and the screen itself.
@@ -2393,7 +2398,16 @@
     if(player){player.stopAuto();player._stopAllAudio?.(true);}
     const target=playerReturnTarget==='advanced'?'advanced':'easy';
     setScreen(target);
-    if(target==='advanced')renderAdvanced();
+    // v0.2.96: iOS/WebKit return hardening. Explicitly restore the authoring surface
+    // in addition to setScreen(), so the fixed preview can never remain above Studio.
+    playerScreen.hidden=true;
+    if(target==='advanced'){advancedScreen.hidden=false;renderAdvanced();}
+    else editorScreen.hidden=false;
+    document.documentElement.classList.remove('easy-player-open');
+    document.body.classList.remove('easy-player-open');
+    document.body.style.position='';
+    document.body.style.inset='';
+    document.body.style.overflow='';
 
     const restore=()=>{
       const returnScreen=(target==='advanced'?advancedScreen:editorScreen);
@@ -3334,8 +3348,8 @@
     event.target.value='';
   });
   $('#editReturnButton').addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();closePlayer();});
-  $('#advancedBackButton').addEventListener('click',closeAdvanced);
-  $('#advancedPreviewButton').addEventListener('click',()=>{syncAdvancedFieldsToScene();openPlayer({from:'advanced',startAt:selectedSceneIndex});});
+  $('#advancedBackButton')?.addEventListener('click',closeAdvanced);
+  $('#advancedPreviewButton')?.addEventListener('click',()=>{syncAdvancedFieldsToScene();openPlayer({from:'advanced',startAt:selectedSceneIndex});});
   $('#advancedExportButton')?.addEventListener('click',()=>{syncAdvancedFieldsToScene();exportScenePackage();});
   $('#allowPreviousInput').addEventListener('change',()=>{if(workingDocument){workingDocument.player ||= {};workingDocument.player.navigation ||= {};workingDocument.player.navigation.allowPrevious=$('#allowPreviousInput').checked;}});
   $('#moveUpButton').addEventListener('click',()=>moveScene(-1)); $('#moveDownButton').addEventListener('click',()=>moveScene(1));

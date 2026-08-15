@@ -4,13 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
-  <title>Scene Studio v0.2.76</title>
+  <title>あ箱 — Scene Studio</title>
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
 <main id="app">
-  <section id="editorScreen" class="screen editor-screen">
+  <header id="studioSharedHeader" class="studio-shared-header">
+    <div class="studio-shared-center">
+      <strong class="ahako-brand"><span class="ahako-a">あ</span><span class="ahako-hako">箱</span></strong>
+      <small id="studioModeLabel">Easy Studio</small>
+    </div>
     <div class="easy-menu-corner">
       <button id="easyMenuButton" class="easy-menu-button" type="button" aria-label="メニュー" aria-expanded="false">≡</button>
       <div id="easyMenuBackdrop" class="easy-menu-backdrop" hidden></div>
@@ -37,16 +41,9 @@
         </div>
       </div>
     </div>
-    <header class="topbar">
-      <div><p class="brand-kicker">SCENE STUDIO</p><h1>Easy Studio</h1></div>
-      <div class="topbar-actions easy-topbar-actions">
-        <span class="version">v0.2.76</span>
-        <label class="easy-file-action easy-file-open" for="importPackageInput"><span>作品を開く</span><small>.scene</small></label>
-        <button id="exportPackageButton" class="easy-file-action easy-file-export" type="button" disabled><span>作品を書き出す</span><small>.scene</small></button>
-        <button id="easyAdvancedReturnButton" class="easy-file-action easy-advanced-return" type="button" hidden><span>細かく調整</span><small>Advanced</small></button>
-      </div>
-    </header>
+  </header>
 
+  <section id="editorScreen" class="screen editor-screen">
     <section class="draft-toolbar" aria-label="制作中の作品">
       <button id="draftManageButton" class="draft-toolbar-button draft-toolbar-list" type="button">
         <span>制作中一覧</span><small id="draftToolbarCount">0 / 10</small>
@@ -173,15 +170,6 @@
 
 
   <section id="advancedScreen" class="screen advanced-screen" hidden>
-    <header class="advanced-topbar">
-      <button id="advancedBackButton" class="advanced-nav-button" type="button">‹ Easy</button>
-      <div class="advanced-title-block"><p class="brand-kicker">SCENE STUDIO</p><h1>シーンを調整</h1><small id="advancedScenePosition">Scene 1 / 1</small></div>
-      <div class="advanced-right-actions">
-        <div class="ui-language-switch ui-language-switch-advanced" role="group" aria-label="UI language"><button type="button" data-ui-lang="ja">JA</button><button type="button" data-ui-lang="en">EN</button></div>
-        <button id="advancedPreviewButton" class="advanced-preview-button" type="button">プレビュー</button>
-        <button id="advancedExportButton" class="advanced-export-button" type="button">作品を書き出す</button>
-      </div>
-    </header>
 
     <section class="advanced-policy">
       <div><strong>読者が過去Sceneへ戻れる</strong><small>戻るボタン・スワイプ・キーボードをまとめて制御します。</small></div>
