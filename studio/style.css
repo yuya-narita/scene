@@ -4724,3 +4724,40 @@ body.easy-player-open #undoCompactButton,
   mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.78) 24%,rgba(0,0,0,.28) 68%,transparent 100%);
   pointer-events:none;
 }
+
+/* v0.3.17 — Work info / Cover: same mosaic header in both states, seamless downward fade */
+.editor-screen .work-meta-section,
+.editor-screen .work-meta-section[open]{
+  background:none!important;
+}
+.editor-screen .work-meta-section>summary,
+.editor-screen .work-meta-section[open]>summary{
+  background-image:
+    linear-gradient(90deg,rgba(255,255,255,.96) 0%,rgba(255,255,255,.86) 45%,rgba(255,255,255,.58) 72%,rgba(255,255,255,.76) 100%),
+    var(--easy-work-meta-art)!important;
+  background-size:100% 100%,100% auto!important;
+  background-position:center,center top!important;
+  background-repeat:no-repeat!important;
+}
+.editor-screen .work-meta-section[open] .work-meta-panel{
+  padding-top:52px!important;
+  background:var(--bg,#f7f8fb)!important;
+  overflow:hidden;
+}
+.editor-screen .work-meta-section[open] .work-meta-panel::before{
+  content:"";
+  position:absolute;
+  z-index:0;
+  top:0;
+  left:0;
+  right:0;
+  height:54px;
+  background-image:var(--easy-work-meta-art)!important;
+  background-size:100% auto!important;
+  background-position:center -68px!important;
+  background-repeat:no-repeat!important;
+  opacity:.72!important;
+  -webkit-mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.72) 28%,rgba(0,0,0,.28) 66%,transparent 100%)!important;
+  mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.72) 28%,rgba(0,0,0,.28) 66%,transparent 100%)!important;
+  pointer-events:none;
+}
