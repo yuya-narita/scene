@@ -4863,3 +4863,15 @@ body.easy-player-open #undoCompactButton,
   display:none!important;
   background:none!important;
 }
+
+
+/* v0.3.21 — Easy intro statement */
+.intro h2{
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro","Noto Serif JP",serif;
+  font-weight:500;
+  letter-spacing:.025em;
+  white-space:nowrap;
+}
+@media(max-width:520px){
+  .intro h2{font-size:clamp(24px,7.2vw,29px);}
+}
