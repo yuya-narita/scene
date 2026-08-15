@@ -4761,3 +4761,39 @@ body.easy-player-open #undoCompactButton,
   mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.72) 28%,rgba(0,0,0,.28) 66%,transparent 100%)!important;
   pointer-events:none;
 }
+
+/* v0.3.18 — Work info / Cover: keep the wide mosaic at its natural tab height; fade the tab itself into the open panel. */
+.editor-screen .work-meta-section,
+.editor-screen .work-meta-section[open]{
+  background:none!important;
+  overflow:visible!important;
+}
+.editor-screen .work-meta-section>summary,
+.editor-screen .work-meta-section[open]>summary{
+  min-height:68px!important;
+  height:68px!important;
+  background-image:
+    linear-gradient(90deg,rgba(255,255,255,.96) 0%,rgba(255,255,255,.86) 45%,rgba(255,255,255,.58) 72%,rgba(255,255,255,.76) 100%),
+    var(--easy-work-meta-art)!important;
+  background-size:100% 100%,auto 100%!important;
+  background-position:center,center!important;
+  background-repeat:no-repeat!important;
+  overflow:hidden!important;
+}
+/* When opened, the mosaic stays exactly the same size; only its lower edge fades to the panel color. */
+.editor-screen .work-meta-section[open]>summary{
+  -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 72%,rgba(0,0,0,.72) 84%,rgba(0,0,0,.28) 94%,transparent 100%)!important;
+  mask-image:linear-gradient(to bottom,#000 0%,#000 72%,rgba(0,0,0,.72) 84%,rgba(0,0,0,.28) 94%,transparent 100%)!important;
+  margin-bottom:-1px!important;
+}
+.editor-screen .work-meta-section[open] .work-meta-panel{
+  padding-top:0!important;
+  background:var(--bg,#f7f8fb)!important;
+  overflow:visible!important;
+}
+/* Remove every earlier band/continuation image. */
+.editor-screen .work-meta-section[open] .work-meta-panel::before{
+  content:none!important;
+  display:none!important;
+  background:none!important;
+}
