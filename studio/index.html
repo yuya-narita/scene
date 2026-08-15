@@ -111,7 +111,7 @@
         <button id="makeButton" class="primary-button" type="button"><span>プレイヤーにする</span><small>Scene Format v1へ変換します</small></button>
       </div>
 
-      <details class="work-meta-section" open>
+      <details class="work-meta-section">
         <summary>作品の入口と出口</summary>
         <div class="work-meta-panel easy-direct-preview-panel">
           <div class="easy-preview-pair">
@@ -120,14 +120,18 @@
               <div id="coverPreview" class="cover-preview cover-preview-editable player-like-cover-preview" role="button" tabindex="0" aria-label="表紙を直接編集">
                 <div class="cover-preview-bg" aria-hidden="true"></div>
                 <div class="cover-preview-dim" aria-hidden="true"></div>
-                <div class="cover-preview-hint">タップして直接編集</div>
                 <div class="cover-preview-empty"><span>COVER</span><small>画像なしでもOK</small></div>
                 <div class="cover-preview-player-copy" aria-label="表紙テキスト。タップして編集">
-                  <span class="cover-preview-kicker">SCENE PLAYER</span>
-                  <small id="coverPreviewAuthor"></small>
-                  <span id="coverPreviewEpisode" class="cover-preview-episode"></span>
-                  <strong id="coverPreviewTitle">Untitled</strong>
-                  <span id="coverPreviewSubtitle"></span>
+                  <div class="cover-preview-work-block">
+                    <img id="coverPreviewLogo" class="cover-preview-logo" alt="" hidden>
+                    <strong id="coverPreviewTitle">Untitled</strong>
+                    <span id="coverPreviewSubtitle"></span>
+                    <small id="coverPreviewAuthor"></small>
+                  </div>
+                  <div class="cover-preview-episode-block">
+                    <span id="coverPreviewEpisode" class="cover-preview-episode"></span>
+                    <strong id="coverPreviewEpisodeTitle" class="cover-preview-episode-title"></strong>
+                  </div>
                 </div>
                 <div class="cover-preview-start">はじめる</div>
               </div>
@@ -135,7 +139,6 @@
             <section class="easy-preview-card">
               <div class="easy-preview-card-head"><strong>読了ページ</strong><small>タップして編集</small></div>
               <div id="endingPreview" class="ending-preview ending-preview-editable" aria-label="読了ページ プレビュー">
-              <div class="ending-preview-hint">タップして直接編集</div>
               <button id="endingPreviewCenterEdit" class="ending-preview-center ending-preview-center-button" type="button"><strong id="endingPreviewLabel">読了</strong></button>
               <div class="ending-preview-tabs ending-preview-three">
                 <button type="button" data-preview-link="0" hidden><small></small><strong></strong></button>
@@ -222,15 +225,15 @@
               <span class="field-label">作品タイトル</span>
               <input id="titleInput" type="text" placeholder="例：声のそろう通り">
             </label>
+            <label class="field">
+              <span class="field-label">サブタイトル <small>任意</small></span>
+              <input id="subtitleInput" type="text" placeholder="例：冷やせれば勝ちやろ">
+            </label>
             <label class="field" for="authorInput">
               <span class="field-label">作者名 <small>任意</small></span>
               <input id="authorInput" type="text" list="authorHistoryList" placeholder="例：Yuya Narita">
               <datalist id="authorHistoryList"></datalist>
               <small class="field-help author-history-help">この端末で以前使った作者名を候補に表示します。</small>
-            </label>
-            <label class="field">
-              <span class="field-label">サブタイトル <small>任意</small></span>
-              <input id="subtitleInput" type="text" placeholder="例：冷やせれば勝ちやろ">
             </label>
             <label class="field">
               <span class="field-label">言語</span>
@@ -249,8 +252,15 @@
               <span class="field-label">話数表記 <small>任意・自由入力</small></span>
               <input id="episodeInput" type="text" placeholder="例：第1話 / EPISODE 01 / PROLOGUE">
             </label>
+            <label class="field">
+              <span class="field-label">今回のタイトル <small>任意</small></span>
+              <input id="episodeTitleInput" type="text" placeholder="例：窯の前で">
+            </label>
           </div>
         <div class="advanced-cover-assets">
+          <input id="coverLogoInput" type="file" accept="image/png" hidden>
+          <button id="coverLogoChoose" class="cinema-background-clear" type="button">作品ロゴ（透過PNG）を選ぶ / 変更</button>
+          <button id="coverLogoClear" class="cinema-background-clear" type="button" hidden>作品ロゴを外す</button>
           <input id="coverImageInput" type="file" accept="image/*" hidden>
           <button id="coverImageClear" class="cinema-background-clear" type="button" hidden>表紙画像を外す</button>
         </div>
@@ -545,11 +555,15 @@
       </div>
       <div class="ending-quick-fields cover-quick-fields">
         <label><span>作品タイトル</span><input id="coverQuickWorkTitle" type="text" placeholder="Untitled"></label>
-        <label><span>作者名</span><input id="coverQuickAuthor" type="text" placeholder="作者名"></label>
         <label><span>サブタイトル</span><input id="coverQuickSubtitle" type="text" placeholder="サブタイトル"></label>
+        <label><span>作者名</span><input id="coverQuickAuthor" type="text" placeholder="作者名"></label>
+        <div class="cover-quick-divider" aria-hidden="true"></div>
         <label><span>話数</span><input id="coverQuickEpisode" type="text" placeholder="例：第1話"></label>
+        <label><span>今回のタイトル</span><input id="coverQuickEpisodeTitle" type="text" placeholder="例：窯の前で"></label>
       </div>
       <div class="cover-quick-image-actions">
+        <button id="coverQuickLogo" class="ending-quick-clear" type="button">作品ロゴ（透過PNG）を選ぶ / 変更</button>
+        <button id="coverQuickLogoClear" class="ending-quick-clear" type="button">作品ロゴを外す</button>
         <button id="coverQuickImage" class="ending-quick-clear" type="button">表紙画像を選ぶ / 変更</button>
         <button id="coverQuickImageClear" class="ending-quick-clear" type="button">表紙画像を外す</button>
       </div>

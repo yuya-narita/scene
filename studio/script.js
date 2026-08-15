@@ -12,15 +12,21 @@
   const languageInput = $('#languageInput');
   const seriesTitleInput = $('#seriesTitleInput');
   const episodeInput = $('#episodeInput');
+  const episodeTitleInput = $('#episodeTitleInput');
+  const coverLogoInput = $('#coverLogoInput');
+  const coverLogoChoose = $('#coverLogoChoose');
+  const coverLogoClear = $('#coverLogoClear');
   const coverImageInput = $('#coverImageInput');
   const coverPreview = $('#coverPreview');
   const coverImageClear = $('#coverImageClear');
   const coverFitInput = $('#coverFitInput');
   const coverPositionInput = $('#coverPositionInput');
+  const coverPreviewLogo = $('#coverPreviewLogo');
   const coverPreviewTitle = $('#coverPreviewTitle');
   const coverPreviewAuthor = $('#coverPreviewAuthor');
   const coverPreviewSubtitle = $('#coverPreviewSubtitle');
   const coverPreviewEpisode = $('#coverPreviewEpisode');
+  const coverPreviewEpisodeTitle = $('#coverPreviewEpisodeTitle');
   const workMetaSection = $('.work-meta-section');
   const coverQuickDialog=$('#coverQuickDialog');
   const coverQuickClose=$('#coverQuickClose');
@@ -29,6 +35,9 @@
   const coverQuickAuthor=$('#coverQuickAuthor');
   const coverQuickSubtitle=$('#coverQuickSubtitle');
   const coverQuickEpisode=$('#coverQuickEpisode');
+  const coverQuickEpisodeTitle=$('#coverQuickEpisodeTitle');
+  const coverQuickLogo=$('#coverQuickLogo');
+  const coverQuickLogoClear=$('#coverQuickLogoClear');
   const coverQuickImage=$('#coverQuickImage');
   const coverQuickImageClear=$('#coverQuickImageClear');
 
@@ -58,6 +67,8 @@
   let endingQuickTarget='center';
   let coverImageUrl = '';
   let coverImageFileName = '';
+  let coverLogoUrl = '';
+  let coverLogoFileName = '';
   const bodyInput = $('#bodyInput');
   const charCount = $('#charCount');
   const densitySelect = $('#densitySelect');
@@ -324,7 +335,7 @@
     return {
       id:currentDraftId,updatedAt:Date.now(),title:draftTitle(),body:bodyInput.value,
       easySourceDirty,protectedResplitPending,selectedSceneIndex,
-      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',episode:episodeInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
+      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',episode:episodeInput?.value||'',episodeTitle:episodeTitleInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
       document:workingDocument?clone(workingDocument):null,
       publication:{
         id:latestPublishedId||'',
@@ -334,7 +345,7 @@
         stoppedAt:latestPublicationStoppedAt||0
       },
       recProgress:clone(autoRecProgress),
-      cover:{url:coverImageUrl||'',name:coverImageFileName||''},
+      cover:{url:coverImageUrl||'',name:coverImageFileName||'',logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||''},
       assets:serializeDraftAssets()
     };
   }
@@ -390,9 +401,11 @@
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
     if(episodeInput)episodeInput.value=row.easy?.episode||'';
+    if(episodeTitleInput)episodeTitleInput.value=row.easy?.episodeTitle||row.document?.metadata?.episodeTitle||'';
     if(languageInput)languageInput.value=row.easy?.language||'auto';
     if(densitySelect)densitySelect.value='normal';
     coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';
+    coverLogoUrl=map.get(row.cover?.logoUrl)||row.cover?.logoUrl||row.document?.cover?.logo?.src||'';coverLogoFileName=row.cover?.logoName||row.document?.cover?.logo?._editorFileName||'';
     if(endingLabelInput)endingLabelInput.value=row.ending?.label||workingDocument?.ending?.label||'';
     endingLinkInputs.forEach((pair,index)=>{const pos=index===0?'left':'right';const links=row.ending?.links||workingDocument?.ending?.links||[];const hasPositions=links.some(x=>x?.position==='left'||x?.position==='right');const item=hasPositions?(links.find(x=>x?.position===pos)||{}):(links[index]||{});if(pair.kicker)pair.kicker.value=item.kicker||'';if(pair.label)pair.label.value=item.label||'';if(pair.url)pair.url.value=item.url||'';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateProtectedResplitPreview();
@@ -657,8 +670,8 @@
     latestPublishedAt=0;
     titleInput.value='';authorInput.value='';bodyInput.value='';
     if(densitySelect)densitySelect.value='normal';
-    if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';
-    coverImageUrl='';coverImageFileName='';
+    if(subtitleInput)subtitleInput.value='';applyRememberedWorkIdentity();if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';if(episodeTitleInput)episodeTitleInput.value='';
+    coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';
     if(endingLabelInput)endingLabelInput.value='';endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateAutoRecStartLabel();
     setScreen('easy');scrollScreenToTop(editorScreen);
@@ -680,6 +693,56 @@
     if(!file)return null;
     const bytes=await file.arrayBuffer();
     return {blob:new Blob([bytes],{type:file.type||'application/octet-stream'}),name:file.name||'asset'};
+  }
+
+  // v0.3.08 — Transparent PNG logos are often exported with a large empty canvas.
+  // Trim only fully transparent outer pixels so the visible mark occupies the
+  // same visual slot as a text work title. A small transparent breathing margin
+  // is restored after trimming.
+  async function trimTransparentPng(blob){
+    if(!blob || !/^image\/png$/i.test(blob.type||''))return blob;
+    const src=URL.createObjectURL(blob);
+    try{
+      const img=await new Promise((resolve,reject)=>{
+        const node=new Image();
+        node.onload=()=>resolve(node);
+        node.onerror=reject;
+        node.src=src;
+      });
+      const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+      if(!w || !h)return blob;
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext('2d',{willReadFrequently:true});
+      if(!ctx)return blob;
+      ctx.drawImage(img,0,0,w,h);
+      const data=ctx.getImageData(0,0,w,h).data;
+      let minX=w,minY=h,maxX=-1,maxY=-1;
+      for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+          if(data[(y*w+x)*4+3]>8){
+            if(x<minX)minX=x;if(x>maxX)maxX=x;
+            if(y<minY)minY=y;if(y>maxY)maxY=y;
+          }
+        }
+      }
+      if(maxX<minX || maxY<minY)return blob;
+      const bw=maxX-minX+1,bh=maxY-minY+1;
+      // Avoid rewriting already-tight artwork.
+      if(bw/w>.92 && bh/h>.92)return blob;
+      const pad=Math.max(4,Math.round(Math.max(bw,bh)*.035));
+      const out=document.createElement('canvas');
+      out.width=bw+pad*2;out.height=bh+pad*2;
+      const octx=out.getContext('2d');
+      octx.drawImage(canvas,minX,minY,bw,bh,pad,pad,bw,bh);
+      const outBlob=await new Promise(resolve=>out.toBlob(resolve,'image/png'));
+      return outBlob||blob;
+    }catch(error){
+      console.warn('Logo trim skipped',error);
+      return blob;
+    }finally{
+      URL.revokeObjectURL(src);
+    }
   }
   function unregisterAsset(url){
     if(!url)return;
@@ -735,6 +798,7 @@
   }
 
   const AUTHOR_HISTORY_KEY='scene-studio-author-history-v1';
+  const WORK_IDENTITY_KEY='scene-studio-work-identity-v1';
 
   function readAuthorHistory(){
     try{
@@ -751,6 +815,27 @@
     const name=String(value||'').trim(); if(!name)return;
     const next=[name,...readAuthorHistory().filter(v=>v!==name)].slice(0,12);
     localStorage.setItem(AUTHOR_HISTORY_KEY,JSON.stringify(next)); renderAuthorHistory();
+  }
+  function readRememberedWorkIdentity(){
+    try{
+      const value=JSON.parse(localStorage.getItem(WORK_IDENTITY_KEY)||'{}');
+      return value && typeof value==='object' ? value : {};
+    }catch(_){ return {}; }
+  }
+  function rememberWorkIdentity(){
+    const value={
+      title:String(titleInput?.value||'').trim(),
+      subtitle:String(subtitleInput?.value||'').trim(),
+      author:String(authorInput?.value||'').trim()
+    };
+    localStorage.setItem(WORK_IDENTITY_KEY,JSON.stringify(value));
+    if(value.author)rememberAuthorName(value.author);
+  }
+  function applyRememberedWorkIdentity(){
+    const value=readRememberedWorkIdentity();
+    if(titleInput && !titleInput.value)value.title && (titleInput.value=value.title);
+    if(subtitleInput && !subtitleInput.value)value.subtitle && (subtitleInput.value=value.subtitle);
+    if(authorInput && !authorInput.value)value.author && (authorInput.value=value.author);
   }
   function endingFromEasy(){
     return {
@@ -866,7 +951,8 @@
       subtitle: subtitleInput?.value.trim() || '',
       language: selectedLanguage === 'auto' ? detected : selectedLanguage,
       seriesTitle: seriesTitleInput?.value.trim() || '',
-      episode: episodeInput?.value.trim() || ''
+      episode: episodeInput?.value.trim() || '',
+      episodeTitle: episodeTitleInput?.value.trim() || ''
     };
   }
 
@@ -900,16 +986,20 @@
     const author=String(authorInput?.value||'').trim();
     const subtitle=String(subtitleInput?.value||'').trim();
     const episode=String(episodeInput?.value||'').trim();
+    const episodeTitle=String(episodeTitleInput?.value||'').trim();
 
-    if(coverPreviewTitle){coverPreviewTitle.textContent=title||t('cover.preview.untitled');coverPreviewTitle.hidden=false;}
+    if(coverPreviewLogo){coverPreviewLogo.src=coverLogoUrl||'';coverPreviewLogo.hidden=!coverLogoUrl;}
+    if(coverPreviewTitle){coverPreviewTitle.textContent=title||t('cover.preview.untitled');coverPreviewTitle.hidden=Boolean(coverLogoUrl);}
     if(coverPreviewAuthor){coverPreviewAuthor.textContent=author;coverPreviewAuthor.hidden=!author;}
     if(coverPreviewEpisode){coverPreviewEpisode.textContent=episode;coverPreviewEpisode.hidden=!episode;}
     if(coverPreviewSubtitle){coverPreviewSubtitle.textContent=subtitle;coverPreviewSubtitle.hidden=!subtitle;}
+    if(coverPreviewEpisodeTitle){coverPreviewEpisodeTitle.textContent=episodeTitle;coverPreviewEpisodeTitle.hidden=!episodeTitle;}
 
     coverPreview.dataset.liveTitle=title;
     coverPreview.dataset.liveAuthor=author;
     coverPreview.dataset.liveSubtitle=subtitle;
     coverPreview.dataset.liveEpisode=episode;
+    coverPreview.dataset.liveEpisodeTitle=episodeTitle;
   }
 
   function packageManifestFor(doc, coverPath=''){
@@ -924,6 +1014,7 @@
       entry:'scene.json'
     };
     if(meta.subtitle)manifest.subtitle=meta.subtitle;
+    if(meta.episodeTitle)manifest.episodeTitle=meta.episodeTitle;
     if(meta.seriesTitle || meta.episode){
       manifest.series={};
       if(meta.seriesTitle)manifest.series.title=meta.seriesTitle;
@@ -957,7 +1048,8 @@
       metadata:{
         subtitle:subtitleInput?.value.trim() || '',
         seriesTitle:seriesTitleInput?.value.trim() || '',
-        episode:episodeInput?.value.trim() || ''
+        episode:episodeInput?.value.trim() || '',
+        episodeTitle:episodeTitleInput?.value.trim() || ''
       },
       theme:selectedTheme,
       appearance:{
@@ -965,7 +1057,7 @@
         typography:{ fontFamily:selectedFont }
       },
       player:{ navigation:{ allowPrevious:true } },
-      ...(coverImageUrl ? {cover:{src:coverImageUrl,fit:'cover',position:'center center'}} : {}),
+      ...((coverImageUrl||coverLogoUrl) ? {cover:{...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{})}} : {}),
       ending:endingFromEasy(),
       scenes
     };
@@ -1377,12 +1469,15 @@
     workingDocument.metadata.subtitle=subtitleInput?.value.trim() || '';
     workingDocument.metadata.seriesTitle=seriesTitleInput?.value.trim() || '';
     workingDocument.metadata.episode=episodeInput?.value.trim() || '';
+    workingDocument.metadata.episodeTitle=episodeTitleInput?.value.trim() || '';
     workingDocument.theme=selectedTheme;
     workingDocument.appearance ||= {};
     workingDocument.appearance.typography ||= {};
     workingDocument.appearance.typography.fontFamily=selectedFont;
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
-    if(coverImageUrl)workingDocument.cover={src:coverImageUrl,fit:'cover',position:'center center'}; else delete workingDocument.cover;
+    if(coverImageUrl||coverLogoUrl){
+      workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{})};
+    } else delete workingDocument.cover;
     workingDocument.ending=endingFromEasy();
   }
 
@@ -1600,6 +1695,7 @@
   function walkAssetRefs(doc,callback){
     const cover=doc?.cover;
     if(cover?.src)callback({kind:'cover',sceneIndex:-1,holder:cover,key:'src',src:cover.src,fileName:cover._editorFileName||coverImageFileName||''});
+    if(cover?.logo?.src)callback({kind:'logo',sceneIndex:-1,holder:cover.logo,key:'src',src:cover.logo.src,fileName:cover.logo._editorFileName||coverLogoFileName||''});
     (doc.scenes||[]).forEach((scene,sceneIndex)=>{
       const bg=scene?.presentation?.background;
       if(bg?.src)callback({
@@ -1864,7 +1960,9 @@
     if(subtitleInput)subtitleInput.value=doc.metadata?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=doc.metadata?.seriesTitle||'';
     if(episodeInput)episodeInput.value=doc.metadata?.episode||'';
+    if(episodeTitleInput)episodeTitleInput.value=doc.metadata?.episodeTitle||'';
     coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';
+    coverLogoUrl=doc.cover?.logo?.src||'';coverLogoFileName=doc.cover?.logo?._editorFileName||'';
     if(endingLabelInput)endingLabelInput.value=doc.ending?.label||doc.ending?.title||'';
     endingLinkInputs.forEach((pair,index)=>{const item=doc.ending?.links?.[index]||{};if(pair.label)pair.label.value=item.label||item.title||'';if(pair.url)pair.url.value=item.url||item.href||'';});
     bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n');
@@ -2404,7 +2502,12 @@
 
     const p=ensurePlayer();
     p.setUILanguage?.(uiLanguage);
-    p.load(getDocumentForPlayback(),{startAt});
+    const playbackDoc=getDocumentForPlayback();
+    p.load(playbackDoc,{startAt});
+    const ep=String(playbackDoc.metadata?.episode||'').trim();
+    const epTitle=String(playbackDoc.metadata?.episodeTitle||'').trim();
+    if(p.els?.title)p.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || playbackDoc.title || '';
+    if(p.els?.author)p.els.author.textContent=playbackDoc.author||'';
     p.unlockAudio(true);
   }
   function closePlayer(){
@@ -3000,6 +3103,26 @@
 
   bodyInput.addEventListener('input',()=>{ updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
   $('#sceneSubTextInput').addEventListener('input',autoGrowSubText);
+  coverLogoChoose?.addEventListener('click',()=>coverLogoInput?.click());
+  coverLogoInput?.addEventListener('change',async()=>{
+    const file=coverLogoInput.files?.[0]; if(!file)return;
+    if(file.type && file.type!=='image/png'){alert('作品ロゴは透過PNGを選んでください。');coverLogoInput.value='';return;}
+    try{
+      const snap=await snapshotPickedFile(file);
+      const logoBlob=await trimTransparentPng(snap.blob);
+      if(coverLogoUrl && /^blob:/i.test(coverLogoUrl))URL.revokeObjectURL(coverLogoUrl);
+      coverLogoUrl=URL.createObjectURL(logoBlob);
+      coverLogoFileName=snap.name||'logo.png';
+      assetRegistry.set(coverLogoUrl,{blob:logoBlob,name:coverLogoFileName});
+      refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
+    }catch(error){console.error(error);alert('作品ロゴを読み込めませんでした。');coverLogoInput.value='';}
+  });
+  coverLogoClear?.addEventListener('click',()=>{
+    if(coverLogoUrl && /^blob:/i.test(coverLogoUrl))URL.revokeObjectURL(coverLogoUrl);
+    coverLogoUrl='';coverLogoFileName='';if(coverLogoInput)coverLogoInput.value='';
+    if(coverQuickLogoClear)coverQuickLogoClear.hidden=true;
+    refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
+  });
   coverImageInput?.addEventListener('change',async()=>{
     const file=coverImageInput.files?.[0]; if(!file)return;
     try{
@@ -3018,11 +3141,12 @@
     refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
   });
   // Work metadata is shell data, not Scene source. Never rebuild the Scene array here.
-  [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput]
+  [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput,episodeTitleInput]
     .forEach(el=>el?.addEventListener('input',()=>{
       refreshCoverPreviewLayout();
       syncEasyShellToWorkingDocument();
       syncEasyPublishButton();
+      rememberWorkIdentity();
       scheduleDraftSave(250);
     }));
   authorInput?.addEventListener('change',()=>rememberAuthorName(authorInput.value));
@@ -3054,9 +3178,11 @@
     if(authorInput)authorInput.value=coverQuickAuthor?.value||'';
     if(subtitleInput)subtitleInput.value=coverQuickSubtitle?.value||'';
     if(episodeInput)episodeInput.value=coverQuickEpisode?.value||'';
+    if(episodeTitleInput)episodeTitleInput.value=coverQuickEpisodeTitle?.value||'';
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
     syncEasyPublishButton();
+    rememberWorkIdentity();
     scheduleDraftSave(250);
   }
   function openCoverQuickEditor(focusTarget='title'){
@@ -3065,10 +3191,12 @@
     coverQuickAuthor.value=authorInput?.value||'';
     coverQuickSubtitle.value=subtitleInput?.value||'';
     coverQuickEpisode.value=episodeInput?.value||'';
+    coverQuickEpisodeTitle.value=episodeTitleInput?.value||'';
     coverQuickImageClear.hidden=!coverImageUrl;
+    coverQuickLogoClear.hidden=!coverLogoUrl;
     coverQuickDialog.hidden=false;
     document.documentElement.classList.add('ending-quick-open');
-    const target={title:coverQuickWorkTitle,author:coverQuickAuthor,subtitle:coverQuickSubtitle,episode:coverQuickEpisode}[focusTarget]||coverQuickWorkTitle;
+    const target={title:coverQuickWorkTitle,author:coverQuickAuthor,subtitle:coverQuickSubtitle,episode:coverQuickEpisode,episodeTitle:coverQuickEpisodeTitle}[focusTarget]||coverQuickWorkTitle;
     requestAnimationFrame(()=>target?.focus());
   }
   function closeCoverQuickEditor(){
@@ -3091,7 +3219,9 @@
   coverPreviewTitle?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('title');});
   coverPreviewAuthor?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('author');});
   coverPreviewSubtitle?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('subtitle');});
-  [coverQuickWorkTitle,coverQuickAuthor,coverQuickSubtitle,coverQuickEpisode].forEach(el=>el?.addEventListener('input',syncCoverQuickToMain));
+  [coverQuickWorkTitle,coverQuickAuthor,coverQuickSubtitle,coverQuickEpisode,coverQuickEpisodeTitle].forEach(el=>el?.addEventListener('input',syncCoverQuickToMain));
+  coverQuickLogo?.addEventListener('click',()=>coverLogoInput?.click());
+  coverQuickLogoClear?.addEventListener('click',()=>coverLogoClear?.click());
   coverQuickImage?.addEventListener('click',()=>coverImageInput?.click());
   coverQuickImageClear?.addEventListener('click',()=>{coverImageClear?.click();coverQuickImageClear.hidden=true;});
   coverQuickDone?.addEventListener('click',closeCoverQuickEditor);

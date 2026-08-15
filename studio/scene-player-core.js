@@ -128,11 +128,16 @@
           <div class="sp-cover-bg" aria-hidden="true"></div>
           <div class="sp-cover-dim" aria-hidden="true"></div>
           <div class="sp-cover-copy">
-            <span class="sp-cover-kicker">SCENE PLAYER</span>
-            <small class="sp-cover-author"></small>
-            <span class="sp-cover-episode"></span>
-            <strong class="sp-cover-title"></strong>
-            <span class="sp-cover-subtitle"></span>
+            <div class="sp-cover-work-block">
+              <img class="sp-cover-logo" alt="" hidden>
+              <strong class="sp-cover-title"></strong>
+              <span class="sp-cover-subtitle"></span>
+              <small class="sp-cover-author"></small>
+            </div>
+            <div class="sp-cover-episode-block">
+              <span class="sp-cover-episode"></span>
+              <strong class="sp-cover-episode-title"></strong>
+            </div>
           </div>
           <button class="sp-cover-start" type="button">はじめる</button>
         </section>
@@ -182,7 +187,9 @@
         cover: q('.sp-cover'),
         coverBg: q('.sp-cover-bg'),
         coverAuthor: q('.sp-cover-author'),
+        coverLogo: q('.sp-cover-logo'),
         coverEpisode: q('.sp-cover-episode'),
+        coverEpisodeTitle: q('.sp-cover-episode-title'),
         coverTitle: q('.sp-cover-title'),
         coverSubtitle: q('.sp-cover-subtitle'),
         coverStart: q('.sp-cover-start'),
@@ -1282,9 +1289,12 @@
         this.els.coverBg.style.backgroundPosition=cover.position||'center center';
       }
       if(this.els.coverAuthor)this.els.coverAuthor.textContent=this.document.author||'';
+      const logoSrc=String(this.document.cover?.logo?.src||'').trim();
+      if(this.els.coverLogo){this.els.coverLogo.src=logoSrc;this.els.coverLogo.hidden=!logoSrc;}
       if(this.els.coverEpisode){const ep=this.document.metadata?.episode||this.document.episode||'';this.els.coverEpisode.textContent=ep;this.els.coverEpisode.hidden=!ep;}
-      if(this.els.coverTitle)this.els.coverTitle.textContent=this.document.title||'Untitled';
-      if(this.els.coverSubtitle)this.els.coverSubtitle.textContent=this.document.metadata?.subtitle||this.document.subtitle||'';
+      if(this.els.coverEpisodeTitle){const epTitle=this.document.metadata?.episodeTitle||this.document.episodeTitle||'';this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!epTitle;}
+      if(this.els.coverTitle){this.els.coverTitle.textContent=this.document.title||'Untitled';this.els.coverTitle.hidden=Boolean(logoSrc);}
+      if(this.els.coverSubtitle){const sub=this.document.metadata?.subtitle||this.document.subtitle||'';this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!sub;}
       this.els.cover.hidden=false;
       this.host.classList.add('sp-cover-open');
       return true;
