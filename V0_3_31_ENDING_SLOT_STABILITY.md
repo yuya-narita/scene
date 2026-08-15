@@ -1,4 +1,4 @@
-# v0.3.31 — Ending slot stability
+# v0.3.32 — Ending slot stability
 
 - The ending-copy area now keeps the same vertical slot even when no ending sentence is set.
 - COVER / navigation buttons therefore stay in the same position with or without ending copy.
