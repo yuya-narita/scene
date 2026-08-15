@@ -4618,3 +4618,49 @@ body.easy-player-open #undoCompactButton,
   font-weight:700!important;
   letter-spacing:.02em!important;
 }
+
+/* v0.3.14 — Easy Studio work-meta mosaic + quiet brand footer */
+:root{
+  --easy-work-meta-art:url("./assets/easy-work-meta-mosaic.jpeg");
+}
+.editor-screen .work-meta-section{
+  position:relative;
+  min-height:68px;
+  border-radius:20px;
+  background-image:var(--easy-work-meta-art);
+  background-size:cover;
+  background-position:center 46%;
+  isolation:isolate;
+}
+.editor-screen .work-meta-section>summary{
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:center;
+  min-height:68px;
+  padding:0 18px;
+  color:#17191d;
+  background:linear-gradient(90deg,rgba(255,255,255,.96) 0%,rgba(255,255,255,.86) 45%,rgba(255,255,255,.58) 72%,rgba(255,255,255,.76) 100%);
+  backdrop-filter:saturate(.9);
+  -webkit-backdrop-filter:saturate(.9);
+}
+.editor-screen .work-meta-section[open]{
+  background-image:none;
+}
+.editor-screen .work-meta-section[open]>summary{
+  background:#fff;
+}
+.editor-screen .work-meta-section>summary::after{margin-left:auto}
+.editor-screen .work-meta-section .work-meta-panel{
+  position:relative;
+  z-index:1;
+  background:var(--bg,#f7f8fb);
+}
+.footer-note{
+  margin:24px 0 0!important;
+  color:rgba(67,70,76,.52)!important;
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro",serif!important;
+  font-size:12px!important;
+  font-weight:400!important;
+  letter-spacing:.035em!important;
+}
