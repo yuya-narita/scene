@@ -6,9 +6,11 @@
   const openingImage = document.getElementById('publicOpeningImage');
   const openingDim = document.getElementById('publicOpeningDim');
   const intro = document.getElementById('publicIntro');
+  const introLogo = document.getElementById('publicIntroLogo');
   const introTitle = document.getElementById('publicIntroTitle');
   const introAuthor = document.getElementById('publicIntroAuthor');
   const introEpisode = document.getElementById('publicIntroEpisode');
+  const introEpisodeTitle = document.getElementById('publicIntroEpisodeTitle');
   const introDescription = document.getElementById('publicIntroDescription');
   const introCover = document.getElementById('publicIntroCover');
   const introCoverDim = document.getElementById('publicIntroCoverDim');
@@ -162,9 +164,13 @@
 
   function applyDocumentMeta(doc) {
     document.title = doc.title || 'Scene';
+    const logoSrc=String(doc.cover?.logo?.src||'').trim();
+    if(introLogo){introLogo.src=logoSrc;introLogo.hidden=!logoSrc;}
     introTitle.textContent = doc.title || 'Scene';
+    introTitle.hidden=Boolean(logoSrc);
     introAuthor.textContent = doc.author || '';
     if(introEpisode){const ep=doc.metadata?.episode||doc.episode||'';introEpisode.textContent=ep;introEpisode.hidden=!ep;}
+    if(introEpisodeTitle){const et=doc.metadata?.episodeTitle||doc.episodeTitle||'';introEpisodeTitle.textContent=et;introEpisodeTitle.hidden=!et;}
     introDescription.textContent = doc.description || doc.metadata?.subtitle || doc.subtitle || '';
     setTheme(doc);
     applyCover(doc);
@@ -370,6 +376,10 @@
     await new Promise(resolve => requestAnimationFrame(resolve));
 
     player.load(documentData, { startAt });
+    const ep=String(documentData?.metadata?.episode||documentData?.episode||'').trim();
+    const epTitle=String(documentData?.metadata?.episodeTitle||documentData?.episodeTitle||'').trim();
+    if(player.els?.title)player.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || documentData.title || '';
+    if(player.els?.author)player.els.author.textContent=documentData.author||'';
     // START / CONTINUE is the trusted user gesture used to unlock iOS media.
     player.unlockAudio(true);
   }
