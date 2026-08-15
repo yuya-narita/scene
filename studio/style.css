@@ -4091,3 +4091,74 @@ body.easy-menu-open{overflow:hidden}
   .editor-screen,.advanced-screen{padding-top:calc(57px + env(safe-area-inset-top))!important}
   .easy-menu-panel{top:calc(42px + env(safe-area-inset-top))!important}
 }
+
+
+/* =========================================================
+   v0.2.97 — あ□ fixed header + Preview return hardening
+   ========================================================= */
+/* Fixed means fixed: no scroll-dependent compact state. */
+.studio-shared-header,
+.studio-shared-header.is-compact{
+  height:calc(56px + env(safe-area-inset-top))!important;
+  transition:none!important;
+  box-shadow:none!important;
+}
+.studio-shared-header .studio-shared-center,
+.studio-shared-header.is-compact .studio-shared-center{
+  top:calc(env(safe-area-inset-top) + 5px)!important;
+  transform:translateX(-50%)!important;
+}
+.ahako-brand,
+.studio-shared-header.is-compact .ahako-brand{
+  display:flex!important;
+  align-items:baseline!important;
+  justify-content:center!important;
+  gap:2px!important;
+  font-size:18px!important;
+  line-height:1.05!important;
+  letter-spacing:0!important;
+}
+.ahako-a{
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro",serif!important;
+  font-weight:500!important;
+}
+.ahako-box{
+  font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Noto Sans JP",sans-serif!important;
+  font-weight:700!important;
+  font-size:.96em!important;
+  line-height:1!important;
+}
+.studio-shared-center small,
+.studio-shared-header.is-compact .studio-shared-center small{
+  margin-top:2px!important;
+  font-size:8px!important;
+  line-height:1!important;
+  letter-spacing:.045em!important;
+}
+.studio-shared-header .easy-menu-corner,
+.studio-shared-header.is-compact .easy-menu-corner{
+  top:calc(env(safe-area-inset-top) + 5px)!important;
+}
+.editor-screen,.advanced-screen{
+  padding-top:calc(70px + env(safe-area-inset-top))!important;
+}
+.easy-menu-panel{top:calc(50px + env(safe-area-inset-top))!important}
+
+/* Return control must stay above every Player layer and receive the gesture itself. */
+#editReturnButton.easy-edit-return{
+  z-index:2147483646!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+  -webkit-tap-highlight-color:transparent!important;
+}
+@media (orientation:landscape) and (max-height:520px){
+  .studio-shared-header,
+  .studio-shared-header.is-compact{height:calc(45px + env(safe-area-inset-top))!important}
+  .studio-shared-header .studio-shared-center,
+  .studio-shared-header.is-compact .studio-shared-center{top:calc(env(safe-area-inset-top) + 3px)!important}
+  .ahako-brand,.studio-shared-header.is-compact .ahako-brand{font-size:15px!important}
+  .studio-shared-center small,.studio-shared-header.is-compact .studio-shared-center small{margin-top:1px!important;font-size:7px!important}
+  .studio-shared-header .easy-menu-corner,.studio-shared-header.is-compact .easy-menu-corner{top:calc(env(safe-area-inset-top) + 0px)!important}
+  .editor-screen,.advanced-screen{padding-top:calc(57px + env(safe-area-inset-top))!important}
+  .easy-menu-panel{top:calc(42px + env(safe-area-inset-top))!important}
+}

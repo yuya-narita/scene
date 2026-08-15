@@ -2348,11 +2348,9 @@
     if(compact){compact.hidden=false;compact.disabled=!undoSnapshot;}
   }
   function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); const modeLabel=$('#studioModeLabel'); if(modeLabel) modeLabel.textContent=name==='advanced'?'Advanced Studio':'Easy Studio'; syncUndoVisibilityForScreen(name); }
-  // v0.2.96: compact the shared authoring header after a small scroll.
+  // v0.2.97: the shared authoring header stays the same size while scrolling.
   const sharedHeader=$('#studioSharedHeader');
-  const syncSharedHeaderCompact=()=>{ if(sharedHeader) sharedHeader.classList.toggle('is-compact',(window.scrollY||document.documentElement.scrollTop||0)>18); };
-  window.addEventListener('scroll',syncSharedHeaderCompact,{passive:true});
-  syncSharedHeaderCompact();
+  sharedHeader?.classList.remove('is-compact');
   function scrollScreenToTop(screen){
     // iOS Safari/Chrome can preserve the document scroll position when a hidden
     // Studio screen is swapped in. Reset both the page and the screen itself.
@@ -2380,6 +2378,7 @@
     playerReturnScrollY=Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
     const returnScreen=(from==='advanced' ? advancedScreen : editorScreen);
     playerReturnScreenScrollTop=Math.max(0, returnScreen?.scrollTop || 0);
+    playerScreen.style.removeProperty('display');
     setScreen('player');
     syncPublishPreviewButton(false);
     const p=ensurePlayer();
@@ -2393,29 +2392,47 @@
     p.unlockAudio(true);
   }
   function closePlayer(){
-    syncPublishPreviewButton(false);
-    if(autoRecActive)finishAutoRec(false);
-    if(player){player.stopAuto();player._stopAllAudio?.(true);}
+    // v0.2.98: return UI first, cleanup second.
+    // On iOS/WebKit an audio/player cleanup exception must never be able to trap
+    // the author inside Preview. Tear down the full-screen surface synchronously.
     const target=playerReturnTarget==='advanced'?'advanced':'easy';
-    setScreen(target);
-    // v0.2.96: iOS/WebKit return hardening. Explicitly restore the authoring surface
-    // in addition to setScreen(), so the fixed preview can never remain above Studio.
+
+    syncPublishPreviewButton(false);
     playerScreen.hidden=true;
-    if(target==='advanced'){advancedScreen.hidden=false;renderAdvanced();}
-    else editorScreen.hidden=false;
+    playerScreen.style.display='none';
+    editorScreen.hidden=target!=='easy';
+    advancedScreen.hidden=target!=='advanced';
+    editorScreen.style.removeProperty('display');
+    advancedScreen.style.removeProperty('display');
+
     document.documentElement.classList.remove('easy-player-open');
     document.body.classList.remove('easy-player-open');
-    document.body.style.position='';
-    document.body.style.inset='';
-    document.body.style.overflow='';
+    document.body.style.removeProperty('position');
+    document.body.style.removeProperty('inset');
+    document.body.style.removeProperty('overflow');
+    document.documentElement.style.removeProperty('overflow');
+
+    const modeLabel=$('#studioModeLabel');
+    if(modeLabel)modeLabel.textContent=target==='advanced'?'Advanced Studio':'Easy Studio';
+    if(target==='advanced'){
+      try{renderAdvanced();}catch(error){console.warn('Advanced restore render failed',error);}
+    }
+    syncUndoVisibilityForScreen(target);
 
     const restore=()=>{
       const returnScreen=(target==='advanced'?advancedScreen:editorScreen);
       if(returnScreen)returnScreen.scrollTop=playerReturnScreenScrollTop;
-      window.scrollTo({top:playerReturnScrollY,left:0,behavior:'instant'});
+      try{window.scrollTo(0,playerReturnScrollY);}catch(_){document.documentElement.scrollTop=playerReturnScrollY;}
     };
     restore();
     requestAnimationFrame(()=>{restore();requestAnimationFrame(restore);});
+
+    // Player/audio teardown is intentionally deferred until after Studio is visible.
+    setTimeout(()=>{
+      try{if(autoRecActive)finishAutoRec(false);}catch(error){console.warn('AUTO REC cleanup failed',error);}
+      try{player?.stopAuto?.();}catch(error){console.warn('Player auto cleanup failed',error);}
+      try{player?._stopAllAudio?.(true);}catch(error){console.warn('Player audio cleanup failed',error);}
+    },0);
   }
 
   function openAdvanced(){
@@ -3347,7 +3364,30 @@
   updateEasyFileActions();
     event.target.value='';
   });
-  $('#editReturnButton').addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();closePlayer();});
+  // v0.2.98: finish the tap on the Preview surface, then return.
+  // Closing on pointerdown can leave the same finger gesture alive after Studio is
+  // exposed underneath. Use pointerup/click plus a document-capture fallback instead.
+  const editReturnButton=$('#editReturnButton');
+  let editReturnClosing=false;
+  let editReturnLastAt=0;
+  const handleEditReturn=(event)=>{
+    const target=event?.target?.closest?.('#editReturnButton');
+    if(event && !target && event.currentTarget===document)return;
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
+    const now=Date.now();
+    if(editReturnClosing || playerScreen.hidden || now-editReturnLastAt<450)return;
+    editReturnLastAt=now;
+    editReturnClosing=true;
+    closePlayer();
+    setTimeout(()=>{editReturnClosing=false;},500);
+  };
+  editReturnButton?.addEventListener('pointerup',handleEditReturn,{capture:true,passive:false});
+  editReturnButton?.addEventListener('click',handleEditReturn,{capture:true,passive:false});
+  // Safari fallback: catch the completed gesture before ScenePlayerCore can consume it.
+  document.addEventListener('pointerup',handleEditReturn,true);
+  document.addEventListener('click',handleEditReturn,true);
   $('#advancedBackButton')?.addEventListener('click',closeAdvanced);
   $('#advancedPreviewButton')?.addEventListener('click',()=>{syncAdvancedFieldsToScene();openPlayer({from:'advanced',startAt:selectedSceneIndex});});
   $('#advancedExportButton')?.addEventListener('click',()=>{syncAdvancedFieldsToScene();exportScenePackage();});
