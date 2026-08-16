@@ -4,6 +4,7 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
 
   const editorScreen = $('#editorScreen');
+  const easyIntro = $('.intro');
   const advancedScreen = $('#advancedScreen');
   const playerScreen = $('#playerScreen');
   const titleInput = $('#titleInput');
@@ -75,6 +76,49 @@
   const charCount = $('#charCount');
   const densitySelect = $('#densitySelect');
   const playerHost = $('#scenePlayer');
+
+  // v0.3.25: Player-like intro without fighting iOS focus scrolling.
+  // CSS owns the first Scene-style entrance from the very first paint.
+  // Tapping the copy fully dismisses + reclaims its space.
+  // Focusing the body visually advances the copy first, but preserves its layout height
+  // while the iOS keyboard is positioning the textarea; the space is reclaimed on blur.
+  if(easyIntro){
+    let introDismissed=false;
+    let introFocusHeld=false;
+
+    const fullyDismissEasyIntro=()=>{
+      if(introDismissed && !introFocusHeld)return;
+      introDismissed=true;
+      introFocusHeld=false;
+      easyIntro.classList.remove('is-focus-dismissed');
+      easyIntro.classList.add('is-dismissed');
+      easyIntro.setAttribute('aria-hidden','true');
+    };
+
+    const focusDismissEasyIntro=()=>{
+      if(introDismissed)return;
+      introDismissed=true;
+      introFocusHeld=true;
+      easyIntro.classList.add('is-focus-dismissed');
+      easyIntro.setAttribute('aria-hidden','true');
+    };
+
+    const isIOSLike = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    easyIntro.addEventListener('click',fullyDismissEasyIntro);
+    bodyInput?.addEventListener('focus',()=>{
+      // iOS needs the intro's layout height while Safari positions the textarea/keyboard.
+      // Desktop browsers do not, so reclaim the space immediately just like a direct intro tap.
+      if(isIOSLike) focusDismissEasyIntro();
+      else fullyDismissEasyIntro();
+    });
+    bodyInput?.addEventListener('blur',()=>{
+      if(!introFocusHeld)return;
+      // Let iOS finish its keyboard/focus viewport transition before reclaiming layout space.
+      requestAnimationFrame(()=>requestAnimationFrame(fullyDismissEasyIntro));
+    });
+  }
 
   const I18N = window.SceneStudioI18n;
   const t = (key, vars={}) => I18N?.t(key, vars) ?? key;
@@ -1442,7 +1486,6 @@
             subtitle:subtitleInput?.value ?? '',
             series:seriesTitleInput?.value ?? '',
             episode:episodeInput?.value ?? '',
-            description:descriptionInput?.value ?? '',
             language:languageInput?.value ?? 'ja',
             body:priorBody
           }
