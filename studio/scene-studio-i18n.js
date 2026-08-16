@@ -6,6 +6,14 @@
 
   const M = {
     ja: {
+
+      'menu.label':'メニュー','menu.language':'言語','draft.toolbarAria':'制作中の作品',
+      'preview.cover':'表紙','preview.edit':'タップして編集','preview.coverEdit':'表紙を編集','preview.coverText':'表紙テキスト。タップして編集','preview.ending':'読了ページ','preview.endingAria':'読了ページ プレビュー','cover.start':'はじめる',
+      'sample.replaceTitle':'入力中の文章を置き換えますか？','sample.replaceText':'現在のタイトルと本文をサンプルに置き換えます。置き換え後も「元に戻す」で1回だけ戻せます。','sample.replaceAction':'サンプルに置き換える',
+      'cover.quick.title':'表紙を編集','cover.quick.subtitle':'サブタイトル','cover.quick.episode':'話数','cover.quick.episodeTitle':'今回のタイトル','cover.quick.logoChoose':'作品ロゴ（透過PNG）を選ぶ / 変更','cover.quick.logoRemove':'作品ロゴを外す','cover.quick.imageChoose':'表紙画像を選ぶ / 変更','cover.quick.imageRemove':'表紙画像を外す','cover.quick.note':'入力は表紙プレビューへ即時反映されます。','common.done':'完了',
+      'ending.quick.center':'中央の文','ending.quick.small':'小さい文字','ending.quick.button':'ボタン名','ending.quick.link':'リンク','ending.quick.clear':'このボタンを空にする','ending.quick.recent':'最近使ったもの','ending.quick.saved':'この端末に保存','ending.quick.left':'左ボタン','ending.quick.right':'右ボタン','ending.quick.empty':'まだありません','ending.quick.previous':'前の話','ending.quick.next':'続き','ending.quick.fixed':'「表紙に戻る」は固定です',
+      'advanced.backToEasy':'Easy編集に戻る','advanced.fineTune':'細かく調整','preview.workAria':'作品をプレビュー',
+      'alert.logoPng':'作品ロゴは透過PNGを選んでください。','alert.logoRead':'作品ロゴを読み込めませんでした。','alert.imageRead':'画像を読み込めませんでした。もう一度選択してください。',
       'work.authorHistory':'この端末で以前使った作者名を候補に表示します。','work.description':'ひとこと','work.description.ph':'例：声が重なる街で、ひとりだけ違う声を聞いた。','work.description.help':'リンクカードなどで作品を短く紹介するための文章です。','ending.heading':'読了ページ','ending.note':'最後の余韻と、その後の導線を設定します。入力内容は下のプレビューへ即時反映されます。読了後、約3秒の余韻を置いてボタンを表示します。','ending.label.ph':'例：つづく','ending.preview.default':'読了','ending.cover':'表紙に戻る','cover.preview.untitled':'Untitled',
       'intro.title':'「間」まで、書きたい。',
       'intro.body':'次の文章を、まだ見せない体験にします。',
@@ -50,7 +58,7 @@
       'scene.count':'{n} Scenes',
       'player.previous':'過去Scene','player.restart':'最初から','player.history':'過去Sceneをスクロール','player.history.close':'履歴を閉じる',
 
-      'file.open':'作品を開く','file.export':'作品を書き出す','draft.manager':'制作中一覧','draft.new':'＋ 新しく作る','draft.new.note':'新しい下書き','draft.saved':'自動保存済み','draft.full':'下書きが10件あります',
+      'file.open':'作品を開く','file.export':'作品を書き出す','draft.manager':'制作中一覧','draft.new':'＋ 新しく作る','draft.new.note':'新しい下書き','draft.saved':'自動保存済み','draft.full':'下書きが10件あります','draft.saveFailedNew':'現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。',
       'work.info':'作品情報・表紙','work.subtitle':'サブタイトル','work.language':'言語','work.series':'シリーズ名','work.episode':'話数表記','work.cover':'表紙画像','work.cover.choose':'表紙画像を選ぶ','work.cover.remove':'表紙画像を外す','work.cover.empty':'画像なしでもOK','work.cover.note':'Easyでは画像だけ指定します。細かな表紙編集はAdvancedへ。','work.cover.saveNote':'画像は中央・coverで保存します。タイトル等は作品情報として別に保持されます。','work.developer':'開発者向け','work.subtitle.ph':'例：冷やせれば勝ちやろ','work.series.ph':'例：貧乏メガネのシノ','work.episode.ph':'例：第1話 / EPISODE 01 / PROLOGUE','work.language.auto':'自動判定','work.language.ja':'日本語','work.language.en':'English','work.language.mul':'複数言語','common.optional.free':'任意・自由入力','common.open':'開く','draft.footer':'制作途中は端末内に自動保存されます。ここから公開・共有・公開停止・再公開・削除できます。','common.close':'閉じる','scene.effectOnly':'演出のみ','scene.empty':'空Scene','background.changeOverlay':'このSceneから背景変更',
       'auto.heading':'AUTOタイミング','auto.reset':'標準に戻す','auto.second':'秒','auto.unrecorded':'未記録・標準 {s}s','auto.recorded':'記録済み {s}s','auto.hint':'REC後にミスしたSceneだけ微調整できます。AUTOはこの秒数だけ表示して次へ進みます。',
       'text.color':'文字色','text.shadow':'文字影','color.white':'白','color.black':'黒','color.custom':'任意色','shadow.none':'なし','shadow.soft':'弱','shadow.strong':'強',
@@ -64,6 +72,14 @@
       'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'最初から読む'
     },
     en: {
+
+      'menu.label':'Menu','menu.language':'Language','draft.toolbarAria':'Works in progress',
+      'preview.cover':'Cover','preview.edit':'Tap to edit','preview.coverEdit':'Edit cover','preview.coverText':'Cover text. Tap to edit','preview.ending':'Ending page','preview.endingAria':'Ending page preview','cover.start':'Start',
+      'sample.replaceTitle':'Replace your current text?','sample.replaceText':'This replaces the current title and text with the sample. You can undo it once afterward.','sample.replaceAction':'Replace with sample',
+      'cover.quick.title':'Edit cover','cover.quick.subtitle':'Subtitle','cover.quick.episode':'Episode','cover.quick.episodeTitle':'Episode title','cover.quick.logoChoose':'Choose / change work logo (transparent PNG)','cover.quick.logoRemove':'Remove work logo','cover.quick.imageChoose':'Choose / change cover image','cover.quick.imageRemove':'Remove cover image','cover.quick.note':'Changes appear in the cover preview immediately.','common.done':'Done',
+      'ending.quick.center':'Center text','ending.quick.small':'Small text','ending.quick.button':'Button label','ending.quick.link':'Link','ending.quick.clear':'Clear this button','ending.quick.recent':'Recently used','ending.quick.saved':'Saved on this device','ending.quick.left':'Left button','ending.quick.right':'Right button','ending.quick.empty':'Nothing yet','ending.quick.previous':'Previous','ending.quick.next':'Next','ending.quick.fixed':'“Back to cover” is fixed',
+      'advanced.backToEasy':'Back to Easy','advanced.fineTune':'Fine Tune','preview.workAria':'Preview work',
+      'alert.logoPng':'Please choose a transparent PNG for the work logo.','alert.logoRead':'Could not load the work logo.','alert.imageRead':'Could not load the image. Please choose it again.',
       'work.authorHistory':'Previously used author names on this device appear as suggestions.','work.description':'One-line intro','work.description.ph':'e.g. In a town of overlapping voices, one person hears something different.','work.description.help':'A short description used for link cards and work previews.','ending.heading':'Ending page','ending.note':'Set the final afterglow and what readers can do next. Changes appear in the preview immediately. Ending actions appear after about a 3-second pause.','ending.label.ph':'e.g. To be continued','ending.preview.default':'Finished','ending.cover':'Back to cover','cover.preview.untitled':'Untitled',
       'intro.title':'Write the pauses, too.',
       'intro.body':'Turn it into an experience where the next passage stays hidden.',
@@ -108,7 +124,7 @@
       'scene.count':'{n} Scenes',
       'player.previous':'Past Scenes','player.restart':'Restart','player.history':'Scroll past Scenes','player.history.close':'Close history',
 
-      'file.open':'Open Work','file.export':'Export Work','draft.manager':'Works','draft.new':'+ New Work','draft.new.note':'New draft','draft.saved':'Autosaved','draft.full':'You already have 10 drafts',
+      'file.open':'Open Work','file.export':'Export Work','draft.manager':'Works','draft.new':'+ New Work','draft.new.note':'New draft','draft.saved':'Autosaved','draft.full':'You already have 10 drafts','draft.saveFailedNew':'The current work could not be autosaved, so a new work was not opened.',
       'work.info':'Work Info & Cover','work.subtitle':'Subtitle','work.language':'Language','work.series':'Series','work.episode':'Episode label','work.cover':'Cover image','work.cover.choose':'Choose cover image','work.cover.remove':'Remove cover image','work.cover.empty':'No image is fine','work.cover.note':'Easy only sets the image. Use Advanced for detailed cover editing.','work.cover.saveNote':'The image is saved centered with cover fit. Titles and other metadata are stored separately.','work.developer':'Developer','work.subtitle.ph':'e.g. If Cooling Wins','work.series.ph':'e.g. Shino with the Poor Glasses','work.episode.ph':'e.g. Episode 01 / PROLOGUE','work.language.auto':'Automatic','work.language.ja':'Japanese','work.language.en':'English','work.language.mul':'Multiple languages','common.optional.free':'Optional · free text','common.open':'Open','draft.footer':'Drafts are autosaved on this device. Publish, share, unpublish, republish, and delete from Works.','common.close':'Close','scene.effectOnly':'Effects only','scene.empty':'Empty Scene','background.changeOverlay':'Change background from this Scene',
       'auto.heading':'AUTO Timing','auto.reset':'Reset to default','auto.second':'sec','auto.unrecorded':'Not recorded · default {s}s','auto.recorded':'Recorded {s}s','auto.hint':'Fine-tune only the Scenes you missed after REC. AUTO advances after this duration.',
       'text.color':'Text color','text.shadow':'Text shadow','color.white':'White','color.black':'Black','color.custom':'Custom color','shadow.none':'None','shadow.soft':'Soft','shadow.strong':'Strong',
