@@ -101,8 +101,16 @@
       easyIntro.setAttribute('aria-hidden','true');
     };
 
+    const isIOSLike = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
     easyIntro.addEventListener('click',fullyDismissEasyIntro);
-    bodyInput?.addEventListener('focus',focusDismissEasyIntro);
+    bodyInput?.addEventListener('focus',()=>{
+      // iOS needs the intro's layout height while Safari positions the textarea/keyboard.
+      // Desktop browsers do not, so reclaim the space immediately just like a direct intro tap.
+      if(isIOSLike) focusDismissEasyIntro();
+      else fullyDismissEasyIntro();
+    });
     bodyInput?.addEventListener('blur',()=>{
       if(!introFocusHeld)return;
       // Let iOS finish its keyboard/focus viewport transition before reclaiming layout space.
