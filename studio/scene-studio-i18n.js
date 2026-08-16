@@ -68,7 +68,7 @@
       'unpublish.title':'この作品の公開を停止しますか？','unpublish.text':'公開URLは使えなくなる想定です。制作中のデータはそのまま残ります。','unpublish.named':'「{title}」の公開URLは使えなくなる想定です。制作中のデータはそのまま残ります。','unpublish.cancel':'キャンセル','unpublish.confirm':'公開を停止','unpublish.failed':'公開停止に失敗しました。','republish.failed':'再公開に失敗しました。','draft.deleteHostedConfirm':'「{title}」を完全削除します。公開URLも使えなくなります。よろしいですか？','draft.deleteLocalConfirm':'「{title}」のローカル下書きを削除しますか？','draft.deleteFailed':'削除に失敗しました。',
       'delete.scene.title':'このSceneを削除しますか？','delete.scene.current':'Scene {n}「{label}」を削除します。','delete.scene.text':'削除後も「元に戻す」で1回だけ戻せます。','delete.scene.cancel':'キャンセル','delete.scene.confirm':'このSceneを削除','common.fileReadFailed':'ファイルを読み込めませんでした。もう一度選択してください。',
       'rec.continue':'続き','rec.cancel':'中止','rec.done':'REC保存完了','rec.retry':'やり直す',
-      'undo.action':'↶ 元に戻す','undo.sceneMoved':'Sceneを並び替えました','undo.sceneMerged':'前のSceneと結合しました','undo.sceneSplit':'Sceneを分割しました','undo.sceneDeleted':'Sceneを削除しました','undo.scenesDeleted':'{n} Scenesを削除しました','undo.resplit':'未編集Sceneだけ再分割しました','undo.sampleReplaced':'サンプルを入れました','undo.splitAtCursor':'カーソル位置で分割しました',
+      'undo.action':'↶ 元に戻す','undo.sampleUndoAvailable':'サンプル置換を元に戻せます','undo.sceneMoved':'Sceneを並び替えました','undo.sceneMerged':'前のSceneと結合しました','undo.sceneSplit':'Sceneを分割しました','undo.sceneDeleted':'Sceneを削除しました','undo.scenesDeleted':'{n} Scenesを削除しました','undo.resplit':'未編集Sceneだけ再分割しました','undo.sampleReplaced':'サンプルを入れました','undo.splitAtCursor':'カーソル位置で分割しました',
       'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'最初から読む'
     },
     en: {
@@ -134,7 +134,7 @@
       'unpublish.title':'Unpublish this work?','unpublish.text':'The public URL will no longer be available. Your draft will remain saved.','unpublish.named':'The public URL for “{title}” will no longer be available. Your draft will remain saved.','unpublish.cancel':'Cancel','unpublish.confirm':'Unpublish','unpublish.failed':'Could not unpublish.','republish.failed':'Could not republish.','draft.deleteHostedConfirm':'Permanently delete “{title}”? Its public URL will stop working.','draft.deleteLocalConfirm':'Delete the local draft “{title}”?','draft.deleteFailed':'Delete failed.',
       'delete.scene.title':'Delete this Scene?','delete.scene.current':'Delete Scene {n} “{label}”.','delete.scene.text':'You can undo this deletion once.','delete.scene.cancel':'Cancel','delete.scene.confirm':'Delete Scene','common.fileReadFailed':'Could not read the file. Please choose it again.',
       'rec.continue':'Continue','rec.cancel':'Stop','rec.done':'REC Saved','rec.retry':'Record Again',
-      'undo.action':'↶ Undo','undo.sceneMoved':'Scene reordered','undo.sceneMerged':'Merged with previous Scene','undo.sceneSplit':'Scene split','undo.sceneDeleted':'Scene deleted','undo.scenesDeleted':'Deleted {n} Scenes','undo.resplit':'Re-split unedited Scenes','undo.sampleReplaced':'Sample inserted','undo.splitAtCursor':'Split at cursor',
+      'undo.action':'↶ Undo','undo.sampleUndoAvailable':'You can undo the sample replacement','undo.sceneMoved':'Scene reordered','undo.sceneMerged':'Merged with previous Scene','undo.sceneSplit':'Scene split','undo.sceneDeleted':'Scene deleted','undo.scenesDeleted':'Deleted {n} Scenes','undo.resplit':'Re-split unedited Scenes','undo.sampleReplaced':'Sample inserted','undo.splitAtCursor':'Split at cursor',
       'player.ending.title':'Finished','player.ending.text':'You reached the end.','player.ending.restart':'Read from start'
     }
   };

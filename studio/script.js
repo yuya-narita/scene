@@ -307,6 +307,10 @@
       const on=b.dataset.uiLang===uiLanguage;
       b.classList.toggle('is-selected',on); b.setAttribute('aria-pressed',on?'true':'false');
     });
+
+    // Ending preview contains dynamic placeholder text, so refresh it here too.
+    // This makes EN correct on first render instead of only after opening/closing the editor.
+    updateEndingPreview?.();
   }
 
   function setUILanguage(language){
@@ -3482,7 +3486,7 @@
  
 
   function applySample(){
-    captureUndo('サンプル置換を元に戻せます');
+    captureUndo(t('undo.sampleUndoAvailable'));
     titleInput.value='声のそろう通り';
     bodyInput.value=SAMPLE;
     easySourceDirty=true;
@@ -3490,7 +3494,7 @@
     updateCoverPreview();
     updateEasyFileActions();
    
-    showUndo('タイトルと本文をサンプルに置き換えました');
+    showUndo(t('undo.sampleReplaced'));
   }
 
   document.addEventListener('input',(event)=>{
