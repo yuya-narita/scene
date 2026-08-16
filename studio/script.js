@@ -4,7 +4,6 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
 
   const editorScreen = $('#editorScreen');
-  const easyIntro = $('.intro');
   const advancedScreen = $('#advancedScreen');
   const playerScreen = $('#playerScreen');
   const titleInput = $('#titleInput');
@@ -14,6 +13,7 @@
   const seriesTitleInput = $('#seriesTitleInput');
   const episodeInput = $('#episodeInput');
   const episodeTitleInput = $('#episodeTitleInput');
+  const descriptionInput = $('#descriptionInput');
   const coverLogoInput = $('#coverLogoInput');
   const coverLogoChoose = $('#coverLogoChoose');
   const coverLogoClear = $('#coverLogoClear');
@@ -37,6 +37,7 @@
   const coverQuickSubtitle=$('#coverQuickSubtitle');
   const coverQuickEpisode=$('#coverQuickEpisode');
   const coverQuickEpisodeTitle=$('#coverQuickEpisodeTitle');
+  const coverQuickDescription=$('#coverQuickDescription');
   const coverQuickLogo=$('#coverQuickLogo');
   const coverQuickLogoClear=$('#coverQuickLogoClear');
   const coverQuickImage=$('#coverQuickImage');
@@ -74,49 +75,6 @@
   const charCount = $('#charCount');
   const densitySelect = $('#densitySelect');
   const playerHost = $('#scenePlayer');
-
-  // v0.3.25: Player-like intro without fighting iOS focus scrolling.
-  // CSS owns the first Scene-style entrance from the very first paint.
-  // Tapping the copy fully dismisses + reclaims its space.
-  // Focusing the body visually advances the copy first, but preserves its layout height
-  // while the iOS keyboard is positioning the textarea; the space is reclaimed on blur.
-  if(easyIntro){
-    let introDismissed=false;
-    let introFocusHeld=false;
-
-    const fullyDismissEasyIntro=()=>{
-      if(introDismissed && !introFocusHeld)return;
-      introDismissed=true;
-      introFocusHeld=false;
-      easyIntro.classList.remove('is-focus-dismissed');
-      easyIntro.classList.add('is-dismissed');
-      easyIntro.setAttribute('aria-hidden','true');
-    };
-
-    const focusDismissEasyIntro=()=>{
-      if(introDismissed)return;
-      introDismissed=true;
-      introFocusHeld=true;
-      easyIntro.classList.add('is-focus-dismissed');
-      easyIntro.setAttribute('aria-hidden','true');
-    };
-
-    const isIOSLike = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-    easyIntro.addEventListener('click',fullyDismissEasyIntro);
-    bodyInput?.addEventListener('focus',()=>{
-      // iOS needs the intro's layout height while Safari positions the textarea/keyboard.
-      // Desktop browsers do not, so reclaim the space immediately just like a direct intro tap.
-      if(isIOSLike) focusDismissEasyIntro();
-      else fullyDismissEasyIntro();
-    });
-    bodyInput?.addEventListener('blur',()=>{
-      if(!introFocusHeld)return;
-      // Let iOS finish its keyboard/focus viewport transition before reclaiming layout space.
-      requestAnimationFrame(()=>requestAnimationFrame(fullyDismissEasyIntro));
-    });
-  }
 
   const I18N = window.SceneStudioI18n;
   const t = (key, vars={}) => I18N?.t(key, vars) ?? key;
@@ -161,7 +119,7 @@
     ['.audio-card:nth-child(1) .audio-card-title small','audio.bgm.note'],['.audio-card:nth-child(2) .audio-card-title small','audio.ambient.note'],['.audio-card:nth-child(3) .audio-card-title small','audio.se.note'],
     ['.advanced-hint','audio.hint'],['#editReturnButton','preview.return'],
     ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#easyPublishButton span','publish.action'],['#easyPublishButton small','publish.short'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],
-    ['.work-meta-section > summary','work.info'],['.author-history-help','work.authorHistory'],['.ending-editor .section-heading > span','ending.heading'],['.ending-editor .section-heading > small','ending.note'],['#endingLabelInput','ending.label.ph','placeholder'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.easy-cover-simple .section-heading > span','work.cover'],['.easy-cover-simple .section-heading > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.easy-cover-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
+    ['.work-meta-section > summary','work.info'],['.author-history-help','work.authorHistory'],['label[for="descriptionInput"] .field-label','work.description'],['#descriptionInput','work.description.ph','placeholder'],['.work-description-help','work.description.help'],['.ending-editor .section-heading > span','ending.heading'],['.ending-editor .section-heading > small','ending.note'],['#endingLabelInput','ending.label.ph','placeholder'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.easy-cover-simple .section-heading > span','work.cover'],['.easy-cover-simple .section-heading > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.easy-cover-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
     ['#advancedPreviewButton','common.preview'],['#advancedExportButton','file.export'],['.auto-timing-head strong','auto.heading'],['#sceneAutoTimingReset','auto.reset'],['.auto-timing-controls label span','auto.second'],['.auto-timing-editor > p','auto.hint'],
     ['#sceneColorSelect','text.color','aria-label'],['#sceneShadowSelect','text.shadow','aria-label'],['#sceneColorSelect option[value="auto"]','effect.auto'],['#sceneColorSelect option[value="white"]','color.white'],['#sceneColorSelect option[value="black"]','color.black'],['#sceneColorSelect option[value="custom"]','color.custom'],['#sceneShadowSelect option[value="auto"]','effect.auto'],['#sceneShadowSelect option[value="none"]','shadow.none'],['#sceneShadowSelect option[value="soft"]','shadow.soft'],['#sceneShadowSelect option[value="strong"]','shadow.strong'],
     ['.scene-motion-preview-field > span','background.preview'],['#publishFromPreviewButton','publish.action'],['#publishDialogClose','unpublish.cancel','aria-label'],['#deleteSceneDialog h2','delete.scene.title'],['#deleteSceneDialogText','delete.scene.text'],['#deleteSceneCancel','delete.scene.cancel'],['#deleteSceneConfirm','delete.scene.confirm'],['#unpublishDialog h2','unpublish.title'],['#unpublishDialogText','unpublish.text'],['#unpublishCancel','unpublish.cancel'],['#unpublishConfirm','unpublish.confirm'],['#draftManagerDialog h2','draft.title'],['#draftManagerClose','unpublish.cancel','aria-label'],['#newDraftButton','draft.new'],
@@ -379,7 +337,7 @@
     return {
       id:currentDraftId,updatedAt:Date.now(),title:draftTitle(),body:bodyInput.value,
       easySourceDirty,protectedResplitPending,selectedSceneIndex,
-      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',episode:episodeInput?.value||'',episodeTitle:episodeTitleInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
+      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',episode:episodeInput?.value||'',episodeTitle:episodeTitleInput?.value||'',description:descriptionInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
       document:workingDocument?clone(workingDocument):null,
       publication:{
         id:latestPublishedId||'',
@@ -446,6 +404,7 @@
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
     if(episodeInput)episodeInput.value=row.easy?.episode||'';
     if(episodeTitleInput)episodeTitleInput.value=row.easy?.episodeTitle||row.document?.metadata?.episodeTitle||'';
+    if(descriptionInput)descriptionInput.value=row.easy?.description||row.document?.metadata?.description||'';
     if(languageInput)languageInput.value=row.easy?.language||'auto';
     if(densitySelect)densitySelect.value='normal';
     coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';
@@ -714,7 +673,7 @@
     latestPublishedAt=0;
     titleInput.value='';authorInput.value='';bodyInput.value='';
     if(densitySelect)densitySelect.value='normal';
-    if(subtitleInput)subtitleInput.value='';applyRememberedWorkIdentity();if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';if(episodeTitleInput)episodeTitleInput.value='';
+    if(subtitleInput)subtitleInput.value='';applyRememberedWorkIdentity();if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';
     coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';
     if(endingLabelInput)endingLabelInput.value='';endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateAutoRecStartLabel();
@@ -996,7 +955,8 @@
       language: selectedLanguage === 'auto' ? detected : selectedLanguage,
       seriesTitle: seriesTitleInput?.value.trim() || '',
       episode: episodeInput?.value.trim() || '',
-      episodeTitle: episodeTitleInput?.value.trim() || ''
+      episodeTitle: episodeTitleInput?.value.trim() || '',
+      description: descriptionInput?.value.trim() || ''
     };
   }
 
@@ -1059,6 +1019,7 @@
     };
     if(meta.subtitle)manifest.subtitle=meta.subtitle;
     if(meta.episodeTitle)manifest.episodeTitle=meta.episodeTitle;
+    if(meta.description)manifest.description=meta.description;
     if(meta.seriesTitle || meta.episode){
       manifest.series={};
       if(meta.seriesTitle)manifest.series.title=meta.seriesTitle;
@@ -1093,7 +1054,8 @@
         subtitle:subtitleInput?.value.trim() || '',
         seriesTitle:seriesTitleInput?.value.trim() || '',
         episode:episodeInput?.value.trim() || '',
-        episodeTitle:episodeTitleInput?.value.trim() || ''
+        episodeTitle:episodeTitleInput?.value.trim() || '',
+        description:descriptionInput?.value.trim() || ''
       },
       theme:selectedTheme,
       appearance:{
@@ -1480,6 +1442,7 @@
             subtitle:subtitleInput?.value ?? '',
             series:seriesTitleInput?.value ?? '',
             episode:episodeInput?.value ?? '',
+            description:descriptionInput?.value ?? '',
             language:languageInput?.value ?? 'ja',
             body:priorBody
           }
@@ -1514,6 +1477,7 @@
     workingDocument.metadata.seriesTitle=seriesTitleInput?.value.trim() || '';
     workingDocument.metadata.episode=episodeInput?.value.trim() || '';
     workingDocument.metadata.episodeTitle=episodeTitleInput?.value.trim() || '';
+    workingDocument.metadata.description=descriptionInput?.value.trim() || '';
     workingDocument.theme=selectedTheme;
     workingDocument.appearance ||= {};
     workingDocument.appearance.typography ||= {};
@@ -1909,6 +1873,7 @@
         doc.metadata.subtitle=manifest.subtitle||doc.metadata.subtitle||'';
         doc.metadata.seriesTitle=manifest.series?.title||doc.metadata.seriesTitle||'';
         doc.metadata.episode=manifest.series?.episode||doc.metadata.episode||'';
+        doc.metadata.description=manifest.description||doc.metadata.description||'';
         if(languageInput)languageInput.value=['ja','en','mul'].includes(manifest.language)?manifest.language:'auto';
       }
       let restored=0;
@@ -2005,6 +1970,7 @@
     if(seriesTitleInput)seriesTitleInput.value=doc.metadata?.seriesTitle||'';
     if(episodeInput)episodeInput.value=doc.metadata?.episode||'';
     if(episodeTitleInput)episodeTitleInput.value=doc.metadata?.episodeTitle||'';
+    if(descriptionInput)descriptionInput.value=doc.metadata?.description||'';
     coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';
     coverLogoUrl=doc.cover?.logo?.src||'';coverLogoFileName=doc.cover?.logo?._editorFileName||'';
     if(endingLabelInput)endingLabelInput.value=doc.ending?.label||doc.ending?.title||'';
@@ -3014,6 +2980,7 @@
         subtitle:subtitleInput?.value ?? '',
         series:seriesTitleInput?.value ?? '',
         episode:episodeInput?.value ?? '',
+        description:descriptionInput?.value ?? '',
         language:languageInput?.value ?? 'ja',
         body:bodyInput?.value ?? ''
       }
@@ -3101,6 +3068,7 @@
     if(subtitleInput)subtitleInput.value=snap.easy.subtitle;
     if(seriesTitleInput)seriesTitleInput.value=snap.easy.series;
     if(episodeInput)episodeInput.value=snap.easy.episode;
+    if(descriptionInput)descriptionInput.value=snap.easy.description||'';
     if(languageInput)languageInput.value=snap.easy.language;
     if(bodyInput)bodyInput.value=snap.easy.body;
 
@@ -3234,7 +3202,7 @@
     refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
   });
   // Work metadata is shell data, not Scene source. Never rebuild the Scene array here.
-  [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput,episodeTitleInput]
+  [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput,episodeTitleInput,descriptionInput]
     .forEach(el=>el?.addEventListener('input',()=>{
       refreshCoverPreviewLayout();
       syncEasyShellToWorkingDocument();
@@ -3272,6 +3240,7 @@
     if(subtitleInput)subtitleInput.value=coverQuickSubtitle?.value||'';
     if(episodeInput)episodeInput.value=coverQuickEpisode?.value||'';
     if(episodeTitleInput)episodeTitleInput.value=coverQuickEpisodeTitle?.value||'';
+    if(descriptionInput)descriptionInput.value=coverQuickDescription?.value||'';
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
     syncEasyPublishButton();
@@ -3285,11 +3254,12 @@
     coverQuickSubtitle.value=subtitleInput?.value||'';
     coverQuickEpisode.value=episodeInput?.value||'';
     coverQuickEpisodeTitle.value=episodeTitleInput?.value||'';
+    if(coverQuickDescription)coverQuickDescription.value=descriptionInput?.value||'';
     coverQuickImageClear.hidden=!coverImageUrl;
     coverQuickLogoClear.hidden=!coverLogoUrl;
     coverQuickDialog.hidden=false;
     document.documentElement.classList.add('ending-quick-open');
-    const target={title:coverQuickWorkTitle,author:coverQuickAuthor,subtitle:coverQuickSubtitle,episode:coverQuickEpisode,episodeTitle:coverQuickEpisodeTitle}[focusTarget]||coverQuickWorkTitle;
+    const target={title:coverQuickWorkTitle,author:coverQuickAuthor,subtitle:coverQuickSubtitle,episode:coverQuickEpisode,episodeTitle:coverQuickEpisodeTitle,description:coverQuickDescription}[focusTarget]||coverQuickWorkTitle;
     requestAnimationFrame(()=>target?.focus());
   }
   function closeCoverQuickEditor(){
@@ -3312,7 +3282,7 @@
   coverPreviewTitle?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('title');});
   coverPreviewAuthor?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('author');});
   coverPreviewSubtitle?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('subtitle');});
-  [coverQuickWorkTitle,coverQuickAuthor,coverQuickSubtitle,coverQuickEpisode,coverQuickEpisodeTitle].forEach(el=>el?.addEventListener('input',syncCoverQuickToMain));
+  [coverQuickWorkTitle,coverQuickAuthor,coverQuickSubtitle,coverQuickEpisode,coverQuickEpisodeTitle,coverQuickDescription].forEach(el=>el?.addEventListener('input',syncCoverQuickToMain));
   coverQuickLogo?.addEventListener('click',()=>coverLogoInput?.click());
   coverQuickLogoClear?.addEventListener('click',()=>coverLogoClear?.click());
   coverQuickImage?.addEventListener('click',()=>coverImageInput?.click());

@@ -6,8 +6,8 @@
 
   const M = {
     ja: {
-      'work.authorHistory':'この端末で以前使った作者名を候補に表示します。','ending.heading':'読了ページ','ending.note':'最後の余韻と、その後の導線を設定します。入力内容は下のプレビューへ即時反映されます。読了後、約3秒の余韻を置いてボタンを表示します。','ending.label.ph':'例：つづく','ending.preview.default':'読了','ending.cover':'表紙に戻る','cover.preview.untitled':'Untitled',
-      'intro.title':'「間」まで、書きたい。',
+      'work.authorHistory':'この端末で以前使った作者名を候補に表示します。','work.description':'ひとこと','work.description.ph':'例：声が重なる街で、ひとりだけ違う声を聞いた。','work.description.help':'リンクカードなどで作品を短く紹介するための文章です。','ending.heading':'読了ページ','ending.note':'最後の余韻と、その後の導線を設定します。入力内容は下のプレビューへ即時反映されます。読了後、約3秒の余韻を置いてボタンを表示します。','ending.label.ph':'例：つづく','ending.preview.default':'読了','ending.cover':'表紙に戻る','cover.preview.untitled':'Untitled',
+      'intro.title':'文章を貼るだけ。',
       'intro.body':'次の文章を、まだ見せない体験にします。',
       'field.title':'作品タイトル','field.title.ph':'例：声のそろう通り',
       'field.author':'作者名','common.optional':'任意','field.author.ph':'例：Yuya Narita',
@@ -64,8 +64,8 @@
       'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'最初から読む'
     },
     en: {
-      'work.authorHistory':'Previously used author names on this device appear as suggestions.','ending.heading':'Ending page','ending.note':'Set the final afterglow and what readers can do next. Changes appear in the preview immediately. Ending actions appear after about a 3-second pause.','ending.label.ph':'e.g. To be continued','ending.preview.default':'Finished','ending.cover':'Back to cover','cover.preview.untitled':'Untitled',
-      'intro.title':'Write the pauses, too.',
+      'work.authorHistory':'Previously used author names on this device appear as suggestions.','work.description':'One-line intro','work.description.ph':'e.g. In a town of overlapping voices, one person hears something different.','work.description.help':'A short description used for link cards and work previews.','ending.heading':'Ending page','ending.note':'Set the final afterglow and what readers can do next. Changes appear in the preview immediately. Ending actions appear after about a 3-second pause.','ending.label.ph':'e.g. To be continued','ending.preview.default':'Finished','ending.cover':'Back to cover','cover.preview.untitled':'Untitled',
+      'intro.title':'Paste your text.',
       'intro.body':'Turn it into an experience where the next passage stays hidden.',
       'field.title':'Title','field.title.ph':'e.g. The Street of Matching Voices',
       'field.author':'Author','common.optional':'Optional','field.author.ph':'e.g. Yuya Narita',
