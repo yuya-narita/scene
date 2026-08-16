@@ -2172,6 +2172,7 @@
       autoRecDurations.push(Math.max(150,Math.round(performance.now()-autoRecSceneStartedAt)));
     }
     autoRecActive=false;
+    if(liveEditEnabled&&liveEditToolbar)liveEditToolbar.hidden=false;
     const start=$('#autoRecStart'),live=$('#autoRecLive'),done=$('#autoRecDone');
     if(live)live.hidden=true;
     if(save){
@@ -2603,6 +2604,8 @@
     syncPublishPreviewButton(false);
 
     const p=ensurePlayer();
+    p.options.historyAllScenes=true;
+    enableLiveEdit();
     p.setUILanguage?.(uiLanguage);
     const playbackDoc=getDocumentForPlayback();
     p.load(playbackDoc,{startAt});
@@ -2613,6 +2616,7 @@
     p.unlockAudio(true);
   }
   function closePlayer(){
+    disableLiveEdit();
     // Proven v0.2.89 path: clean up, switch screen, then restore position.
     // No pointer/touch capture tricks and no detached return control.
     syncPublishPreviewButton(false);
@@ -3694,6 +3698,139 @@
     }
     return clone(doc);
   }
+
+
+  // ---------------------------------------------------------
+  // Live Edit v0.1 — preview-first authoring prototype.
+  // Preview is the navigation surface; Advanced remains the detail surface.
+  // ---------------------------------------------------------
+  const liveEditToolbar=$('#liveEditToolbar');
+  const liveEditSheet=$('#liveEditSheet');
+  const liveEditSheetBody=$('#liveEditSheetBody');
+  const liveEditSheetTitle=$('#liveEditSheetTitle');
+  const liveEditSceneNumber=$('#liveEditSceneNumber');
+  let liveEditEnabled=false;
+
+  function liveEditScene(){
+    const i=Math.max(0,Math.min(player?.index ?? selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
+    return {scene:workingDocument?.scenes?.[i]||null,index:i};
+  }
+  function closeLiveEditSheet(){ if(liveEditSheet)liveEditSheet.hidden=true; document.body.classList.remove('live-edit-sheet-open'); }
+  function refreshLivePlayer({preserveSheet=true}={}){
+    if(!player||!workingDocument?.scenes?.length)return;
+    const index=Math.max(0,Math.min(player.index,workingDocument.scenes.length-1));
+    const wasOpen=liveEditSheet&&!liveEditSheet.hidden;
+    player.options.historyAllScenes=true;
+    player.load(getDocumentForPlayback(),{startAt:index});
+    player.maxVisitedIndex=Math.max(player.maxVisitedIndex,index);
+    if(!preserveSheet||!wasOpen)closeLiveEditSheet();
+  }
+  function liveEditAdvanced(section){
+    const {index}=liveEditScene();
+    selectedSceneIndex=index;
+    playerReturnTarget='advanced';
+    closeLiveEditSheet();
+    closePlayer();
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      renderAdvanced();
+      let target=$('.scene-inspector');
+      if(section==='background') target=$('#sceneBackgroundMode')?.closest('details')||target;
+      if(section==='audio') target=$('#sceneBgmAction')?.closest('details')||target;
+      target?.scrollIntoView?.({behavior:'smooth',block:'start'});
+    }));
+  }
+  function renderLiveEditSheet(kind){
+    const {scene,index}=liveEditScene(); if(!scene||!liveEditSheetBody)return;
+    liveEditSceneNumber.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
+    liveEditSheet.hidden=false;
+    document.body.classList.add('live-edit-sheet-open');
+    liveEditSheetBody.innerHTML='';
+
+    if(kind==='text'){
+      liveEditSheetTitle.textContent='文字';
+      const ta=document.createElement('textarea');
+      ta.value=scene.text||''; ta.placeholder='このSceneの本文';
+      ta.addEventListener('input',()=>{
+        scene.text=ta.value;
+        const current=playerHost.querySelector('.sp-scene.is-active .sp-text');
+        if(current)current.textContent=ta.value;
+        scheduleDraftSave(120);
+      });
+      const detail=document.createElement('button'); detail.type='button';detail.className='live-edit-detail';detail.textContent='文字の詳細設定';
+      detail.addEventListener('click',()=>liveEditAdvanced('text'));
+      liveEditSheetBody.append(ta,detail);
+      requestAnimationFrame(()=>ta.focus({preventScroll:true}));
+      return;
+    }
+
+    if(kind==='effect'){
+      liveEditSheetTitle.textContent='演出';
+      const grid=document.createElement('div');grid.className='live-edit-grid';
+      const makeSelect=(label,values,current,onchange)=>{
+        const wrap=document.createElement('label');wrap.className='live-edit-field';wrap.append(label);
+        const select=document.createElement('select');
+        values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
+        select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
+      };
+      const p=ensurePresentation(scene);p.text ||= {};
+      grid.append(
+        makeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['slow','ゆっくり'],['none','なし']],p.effect||'auto',v=>{p.effect=v;scheduleDraftSave(80);refreshLivePlayer();}),
+        makeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
+        makeSelect('文字サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],p.text.size||'auto',v=>{p.text.size=v;scheduleDraftSave(80);refreshLivePlayer();}),
+        makeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;scheduleDraftSave(80);refreshLivePlayer();})
+      );
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='演出の詳細設定';detail.addEventListener('click',()=>liveEditAdvanced('text'));
+      liveEditSheetBody.append(grid,detail);return;
+    }
+
+    if(kind==='background'){
+      liveEditSheetTitle.textContent='背景';
+      const bg=scene.presentation?.background;
+      const status=document.createElement('div');status.className='live-edit-status';
+      status.textContent=bg?.src?'このSceneから背景指定あり':(bg?.clear?'このSceneで背景を解除':'前Sceneの背景を継続');
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='背景を編集';detail.addEventListener('click',()=>liveEditAdvanced('background'));
+      const note=document.createElement('p');note.className='live-edit-note';note.textContent='v0.1では画像選択・動き・暗さなどは詳細設定で編集します。';
+      liveEditSheetBody.append(status,detail,note);return;
+    }
+
+    liveEditSheetTitle.textContent='音';
+    const audio=scene.audio||scene.ambience||{};
+    const status=document.createElement('div');status.className='live-edit-status';
+    const hasAudio=Boolean(scene.audio||scene.ambience||scene.se||scene.presentation?.audio);
+    status.textContent=hasAudio?'このSceneに音の指定があります':'このSceneは前の音状態を引き継ぎます';
+    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='音を編集';detail.addEventListener('click',()=>liveEditAdvanced('audio'));
+    const note=document.createElement('p');note.className='live-edit-note';note.textContent='BGM / Ambient / SE の細かな操作は詳細設定で編集します。';
+    liveEditSheetBody.append(status,detail,note);
+  }
+
+  function enableLiveEdit(){
+    liveEditEnabled=true;
+    if(player)player.options.historyAllScenes=true;
+    if(liveEditToolbar)liveEditToolbar.hidden=false;
+    playerHost.classList.add('live-edit-enabled');
+    const historyHelp=playerHost.querySelector('.sp-history-help');if(historyHelp)historyHelp.textContent='Sceneをスクロール';
+    const historyKicker=playerHost.querySelector('.sp-history-kicker');if(historyKicker)historyKicker.textContent='SCENES';
+  }
+  function disableLiveEdit(){
+    liveEditEnabled=false;closeLiveEditSheet();
+    if(liveEditToolbar)liveEditToolbar.hidden=true;
+    playerHost.classList.remove('live-edit-enabled');
+    if(player)player.options.historyAllScenes=false;
+  }
+
+  liveEditToolbar?.addEventListener('click',(e)=>{const b=e.target.closest('[data-live-edit]');if(b)renderLiveEditSheet(b.dataset.liveEdit);});
+  $('#liveEditSheetClose')?.addEventListener('click',closeLiveEditSheet);
+  playerHost.addEventListener('click',(e)=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
+    if(e.target.closest('.sp-scene.is-active .sp-text,.sp-scene.is-active .sp-subtext')){
+      e.preventDefault();e.stopPropagation();renderLiveEditSheet('text');
+    }
+  },true);
+  playerHost.addEventListener('sceneplayer:scenechange',()=>{closeLiveEditSheet();});
+  playerHost.addEventListener('sceneplayer:historyopen',()=>{closeLiveEditSheet();});
+  $('#autoRecStart')?.addEventListener('click',()=>{closeLiveEditSheet();if(liveEditToolbar)liveEditToolbar.hidden=true;});
+  $('#autoRecCancel')?.addEventListener('click',()=>{if(liveEditEnabled&&liveEditToolbar)liveEditToolbar.hidden=false;});
+  $('#autoRecRetry')?.addEventListener('click',()=>{if(liveEditEnabled&&liveEditToolbar)liveEditToolbar.hidden=false;});
 
   function openPlayerScreenFromApi(startAt=0){
     playerReturnTarget='advanced';

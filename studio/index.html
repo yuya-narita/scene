@@ -420,6 +420,21 @@
     <button id="editReturnButton" class="easy-edit-return" type="button">編集に戻る</button>
     <button id="publishFromPreviewButton" class="publish-preview-button" type="button" hidden>公開する</button>
 
+    <nav id="liveEditToolbar" class="live-edit-toolbar" aria-label="Live Edit" hidden>
+      <button type="button" data-live-edit="text"><span>Aa</span><small>文字</small></button>
+      <button type="button" data-live-edit="effect"><span>✦</span><small>演出</small></button>
+      <button type="button" data-live-edit="background"><span>▣</span><small>背景</small></button>
+      <button type="button" data-live-edit="audio"><span>♪</span><small>音</small></button>
+    </nav>
+
+    <section id="liveEditSheet" class="live-edit-sheet" hidden aria-label="Live Edit panel">
+      <div class="live-edit-sheet-head">
+        <div><small id="liveEditSceneNumber">Scene 1</small><strong id="liveEditSheetTitle">文字</strong></div>
+        <button id="liveEditSheetClose" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="liveEditSheetBody" class="live-edit-sheet-body"></div>
+    </section>
+
     <div id="autoRecPanel" class="auto-rec-panel">
       <button id="autoRecStart" class="auto-rec-start" type="button">● AUTO REC</button>
       <div id="autoRecLive" class="auto-rec-live" hidden>

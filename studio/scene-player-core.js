@@ -25,7 +25,8 @@
     swipe: true,
     swipeThreshold: 44,
     endOnNextAction: true,
-    uiLanguage: 'ja'
+    uiLanguage: 'ja',
+    historyAllScenes: false
   });
 
   const THEMES = new Set(['light', 'dark', 'cinema']);
@@ -1107,7 +1108,7 @@
     }
 
     openHistory(options = {}) {
-      if (!this.document || !this.options.allowPrevious || this.maxVisitedIndex <= 0) return false;
+      if (!this.document || !this.options.allowPrevious || (!this.options.historyAllScenes && this.maxVisitedIndex <= 0)) return false;
       this.stopAuto();
       this._clearPresentationTimers();
       this.historyOpen = true;
@@ -1164,7 +1165,8 @@
       const fragment = document.createDocumentFragment();
       this.els.historyList.innerHTML = '';
 
-      for (let i = 0; i <= this.maxVisitedIndex; i += 1) {
+      const historyLastIndex = this.options.historyAllScenes ? this.document.scenes.length - 1 : this.maxVisitedIndex;
+      for (let i = 0; i <= historyLastIndex; i += 1) {
         const scene = this.document.scenes[i];
         const item = document.createElement('button');
         item.type = 'button';
@@ -1241,7 +1243,7 @@
       let nextIndex = -1;
       if (typeof sceneOrIndex === 'number') nextIndex = sceneOrIndex;
       else if (typeof sceneOrIndex === 'string') nextIndex = this.document.scenes.findIndex((s) => s.id === sceneOrIndex);
-      if (nextIndex < 0 || nextIndex > this.maxVisitedIndex) return false;
+      if (nextIndex < 0 || nextIndex > (this.options.historyAllScenes ? this.document.scenes.length - 1 : this.maxVisitedIndex)) return false;
       return this.goTo(nextIndex, { audioMode: 'history' });
     }
 
