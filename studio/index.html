@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f7f8fb">
   <title>あ□ — Scene Studio</title>
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="./apple-touch-icon.png">
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -56,7 +58,7 @@
     <div id="draftSaveIndicator" class="draft-save-indicator" hidden>自動保存済み</div>
 
     <section class="intro">
-      <h2>「間」まで、書きたい。</h2>
+      <h2>文章を貼るだけ。</h2>
       <p>次の文章を、まだ見せない体験にします。</p>
     </section>
 
@@ -254,11 +256,6 @@
             <label class="field">
               <span class="field-label">今回のタイトル <small>任意</small></span>
               <input id="episodeTitleInput" type="text" placeholder="例：窯の前で">
-            </label>
-            <label class="field" for="descriptionInput">
-              <span class="field-label">ひとこと <small>任意</small></span>
-              <textarea id="descriptionInput" class="work-description-input" rows="2" maxlength="80" placeholder="例：声が重なる街で、ひとりだけ違う声を聞いた。"></textarea>
-              <small class="field-help work-description-help">リンクカードなどで作品を短く紹介するための文章です。</small>
             </label>
           </div>
         <div class="advanced-cover-assets">
@@ -564,7 +561,6 @@
         <div class="cover-quick-divider" aria-hidden="true"></div>
         <label><span>話数</span><input id="coverQuickEpisode" type="text" placeholder="例：第1話"></label>
         <label><span>今回のタイトル</span><input id="coverQuickEpisodeTitle" type="text" placeholder="例：窯の前で"></label>
-        <label><span>ひとこと <small>任意</small></span><textarea id="coverQuickDescription" rows="2" maxlength="80" placeholder="例：声が重なる街で、ひとりだけ違う声を聞いた。"></textarea></label>
       </div>
       <div class="cover-quick-image-actions">
         <button id="coverQuickLogo" class="ending-quick-clear" type="button">作品ロゴ（透過PNG）を選ぶ / 変更</button>
