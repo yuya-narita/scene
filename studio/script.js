@@ -3714,6 +3714,7 @@
   let liveEditToolbarVisible=false;
   let liveInlineEditEl=null;
   let liveInlineKeyboardShift=0;
+  let liveInlineIntroTimer=0;
 
   function liveEditScene(){
     const i=Math.max(0,Math.min(player?.index ?? selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
@@ -3741,7 +3742,8 @@
     liveInlineEditEl=null;
     playerHost.classList.remove('live-inline-text-edit');
     resetInlineKeyboardShift();
-    if(liveInlineToolbar)liveInlineToolbar.hidden=true;
+    if(liveInlineToolbar){liveInlineToolbar.hidden=true;liveInlineToolbar.classList.remove('is-intro');}
+    clearTimeout(liveInlineIntroTimer);
     document.documentElement.style.removeProperty('--live-keyboard-inset');
     if(liveEditEnabled&&!autoRecActive&&!player?.historyOpen)setLiveToolbarVisible(true);
   }
@@ -3813,6 +3815,55 @@
     before.setEnd(range.startContainer,range.startOffset);
     return before.toString().length;
   }
+  function setInlineCaretOffset(offset){
+    const el=liveInlineEditEl;if(!el)return false;
+    const target=Math.max(0,Math.min(Number(offset)||0,el.innerText.replace(/\n$/,'').length));
+    const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+    let left=target,node=null;
+    while((node=walker.nextNode())){
+      const len=node.nodeValue?.length||0;
+      if(left<=len){
+        const range=document.createRange(),sel=getSelection();
+        range.setStart(node,left);range.collapse(true);
+        sel.removeAllRanges();sel.addRange(range);
+        el.focus({preventScroll:true});
+        requestAnimationFrame(keepInlineCaretVisible);
+        return true;
+      }
+      left-=len;
+    }
+    const range=document.createRange(),sel=getSelection();
+    range.selectNodeContents(el);range.collapse(false);sel.removeAllRanges();sel.addRange(range);
+    el.focus({preventScroll:true});requestAnimationFrame(keepInlineCaretVisible);return true;
+  }
+  function moveInlineCaret(delta){
+    const pos=inlineCaretOffset();if(pos<0)return;
+    setInlineCaretOffset(pos+delta);
+  }
+  function jumpInlineCaretToPunctuation(direction){
+    const el=liveInlineEditEl;if(!el)return;
+    const text=el.innerText.replace(/\n$/,'');
+    const pos=inlineCaretOffset();if(pos<0)return;
+    // Scene editing usually splits at sentence / clause boundaries. Land AFTER punctuation/newline.
+    const boundary=/[。、！？!?\n]/;
+    if(direction<0){
+      let i=Math.min(pos-2,text.length-1);
+      for(;i>=0;i--){if(boundary.test(text[i])){setInlineCaretOffset(i+1);return;}}
+      setInlineCaretOffset(0);
+    }else{
+      let i=Math.max(pos,text.length>0?0:-1);
+      for(;i<text.length;i++){if(boundary.test(text[i])){setInlineCaretOffset(i+1);return;}}
+      setInlineCaretOffset(text.length);
+    }
+  }
+  function showInlineAuthoringIntro(){
+    if(!liveInlineToolbar)return;
+    clearTimeout(liveInlineIntroTimer);
+    liveInlineToolbar.classList.add('is-intro');
+    liveInlineIntroTimer=setTimeout(()=>{
+      liveInlineToolbar?.classList.remove('is-intro');
+    },2800);
+  }
   function liveEditSplitInlineAtCaret(){
     const {scene,index}=liveEditScene();if(!scene||!liveInlineEditEl)return;
     const text=syncInlineTextToScene();
@@ -3839,7 +3890,7 @@
 
     liveInlineEditEl=el;
     if(liveEditToolbar)liveEditToolbar.hidden=true;
-    if(liveInlineToolbar)liveInlineToolbar.hidden=false;
+    if(liveInlineToolbar){liveInlineToolbar.hidden=false;showInlineAuthoringIntro();}
     updateLiveKeyboardInset();
     // contenteditable=true is the most reliable option on iPhone Safari.
     // The element itself stays in the Player; no duplicate textarea/modal is created.
@@ -4100,7 +4151,12 @@
   liveInlineToolbar?.addEventListener('click',(e)=>{
     const b=e.target.closest('[data-live-inline]');if(!b)return;
     e.preventDefault();e.stopPropagation();
-    if(b.dataset.liveInline==='split')liveEditSplitInlineAtCaret();
+    const kind=b.dataset.liveInline;
+    if(kind==='split'){liveEditSplitInlineAtCaret();return;}
+    if(kind==='caret-prev'){moveInlineCaret(-1);return;}
+    if(kind==='caret-next'){moveInlineCaret(1);return;}
+    if(kind==='punct-prev'){jumpInlineCaretToPunctuation(-1);return;}
+    if(kind==='punct-next'){jumpInlineCaretToPunctuation(1);return;}
   });
 
   liveEditToolbar?.addEventListener('click',(e)=>{

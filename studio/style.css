@@ -4997,19 +4997,35 @@ body.easy-player-open #undoCompactButton,
 .live-edit-scene-actions button:disabled{opacity:.32}
 .live-edit-scene-actions button.is-danger{color:#b3262e;background:#fff8f7;border-color:#ead3d3}
 
-/* Live Edit v0.2.8 — keyboard authoring strip + Scene controls */
+/* Live Edit v0.2.9 — compact keyboard cursor tools */
 .live-inline-toolbar{
-  position:fixed;z-index:10070;left:12px;right:12px;
+  position:fixed;z-index:10070;right:12px;left:auto;
   bottom:calc(var(--live-keyboard-inset,0px) + 8px);
-  min-height:46px;display:flex;align-items:center;justify-content:center;
-  border:1px solid rgba(120,124,132,.22);border-radius:16px;
-  background:rgba(248,249,250,.94);color:#17181b;
-  box-shadow:0 8px 26px rgba(0,0,0,.14);
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(120,124,132,.22);border-radius:15px;
+  background:rgba(248,249,250,.95);color:#17181b;
+  box-shadow:0 8px 24px rgba(0,0,0,.13);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  overflow:hidden;transition:width .22s ease,left .22s ease,right .22s ease,border-radius .22s ease
 }
 .live-inline-toolbar[hidden]{display:none!important}
-.live-inline-toolbar button{width:100%;min-height:46px;border:0;background:transparent;color:inherit;font:inherit;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}
-.live-inline-toolbar button span{font-size:18px}.live-inline-toolbar button strong{font-size:13px}
+.live-inline-intro{display:none}
+.live-inline-compact{display:flex;align-items:center;gap:1px;padding:3px}
+.live-inline-compact button{
+  width:42px;height:42px;border:0;border-radius:11px;background:transparent;color:inherit;
+  font:inherit;font-size:17px;font-weight:850;line-height:1;display:grid;place-items:center
+}
+.live-inline-compact button:active{background:rgba(0,0,0,.07);transform:translateY(1px)}
+.live-inline-toolbar.is-intro{left:22px;right:22px;border-radius:16px}
+.live-inline-toolbar.is-intro .live-inline-compact{display:none}
+.live-inline-toolbar.is-intro .live-inline-intro{
+  width:100%;min-height:50px;border:0;background:transparent;color:inherit;font:inherit;font-weight:800;
+  display:flex;align-items:center;justify-content:center;gap:10px;padding:0 16px
+}
+.live-inline-toolbar.is-intro .live-inline-intro span{font-size:18px}
+.live-inline-toolbar.is-intro .live-inline-intro strong{font-size:13px}
+@media(min-width:900px){.live-inline-toolbar{right:24px;left:auto}.live-inline-toolbar.is-intro{left:24px;right:auto;width:360px}}
+
 .live-edit-nav-toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;border:1px solid #d4d6da;border-radius:14px;background:#fff}
 .live-edit-nav-toggle>div{display:grid;gap:3px}.live-edit-nav-toggle strong{font-size:14px}.live-edit-nav-toggle small{font-size:11px;color:#7a7e86}
 .live-edit-toggle{flex:0 0 auto;min-width:62px;height:38px;border:0;border-radius:999px;background:#d7d9dd;color:#555;font:inherit;font-weight:900}
