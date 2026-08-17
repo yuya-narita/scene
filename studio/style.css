@@ -5437,3 +5437,34 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
     font:700 13px/1 system-ui,-apple-system,"Segoe UI",sans-serif!important;
   }
 }
+
+
+/* Desktop Text Detail v3 — native slider + editable numeric value */
+@media (min-width:900px){
+  .desktop-text-detail-value{
+    display:inline-flex!important;
+    align-items:center!important;
+    gap:5px!important;
+  }
+  .desktop-text-detail-number{
+    width:76px!important;
+    height:34px!important;
+    box-sizing:border-box!important;
+    border:1px solid #d6dae0!important;
+    border-radius:8px!important;
+    background:#fff!important;
+    padding:0 8px!important;
+    text-align:right!important;
+    color:#24272c!important;
+    font:750 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace!important;
+  }
+  .desktop-text-detail-unit{
+    min-width:18px;
+    color:#6c727b;
+    font:700 11px/1 system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  .desktop-text-detail-number:focus{
+    outline:2px solid rgba(0,122,255,.18)!important;
+    border-color:#8cbcff!important;
+  }
+}

@@ -4170,10 +4170,60 @@ function startInlineTextEdit(){
     const field=document.createElement('label');field.className='desktop-text-detail-range';
     const head=document.createElement('span');head.className='desktop-text-detail-range-head';
     const name=document.createElement('strong');name.textContent=label;
-    const out=document.createElement('output');
-    const slider=document.createElement('input');slider.type='range';slider.min=min;slider.max=max;slider.step=step;slider.value=value;
-    const sync=()=>{const v=Number(slider.value);out.textContent=`${format(v)}${unit}`;oninput(v);};
-    head.append(name,out);field.append(head,slider);slider.addEventListener('input',sync);return field;
+
+    // Build the numeric editor as part of the control itself instead of
+    // trying to attach one after the modal has rendered.
+    const valueWrap=document.createElement('span');valueWrap.className='desktop-text-detail-value';
+    const numeric=document.createElement('input');numeric.type='number';numeric.className='desktop-text-detail-number';
+
+    // Percent controls whose internal value is 0..1 are shown as 0..100.
+    const displayScale=(String(unit).trim()==='%' && Number(max)<=1)?100:1;
+    const displayMin=Number(min)*displayScale;
+    const displayMax=Number(max)*displayScale;
+    const displayStep=Number(step)*displayScale;
+    numeric.min=String(displayMin);
+    numeric.max=String(displayMax);
+    numeric.step=String(displayStep);
+    numeric.value=String(Number(value)*displayScale);
+
+    const suffix=document.createElement('span');suffix.className='desktop-text-detail-unit';suffix.textContent=unit.trim();
+
+    const slider=document.createElement('input');
+    slider.type='range';
+    slider.dataset.numberLinked='1';
+    slider.min=min;slider.max=max;slider.step=step;slider.value=value;
+
+    const clamp=(n,lo,hi)=>Math.min(hi,Math.max(lo,n));
+    const sliderToNumber=()=>{
+      const raw=Number(slider.value);
+      numeric.value=String(Number((raw*displayScale).toFixed(6)));
+    };
+    const applySlider=()=>{
+      sliderToNumber();
+      oninput(Number(slider.value));
+    };
+    const applyNumber=()=>{
+      let shown=Number(numeric.value);
+      if(!Number.isFinite(shown))shown=Number(slider.value)*displayScale;
+      shown=clamp(shown,displayMin,displayMax);
+      numeric.value=String(shown);
+      slider.value=String(shown/displayScale);
+      oninput(Number(slider.value));
+    };
+
+    slider.addEventListener('input',applySlider);
+    numeric.addEventListener('input',applyNumber);
+    numeric.addEventListener('change',applyNumber);
+    numeric.addEventListener('blur',applyNumber);
+
+    valueWrap.append(numeric);
+    if(unit.trim())valueWrap.append(suffix);
+    head.append(name,valueWrap);
+    field.append(head,slider);
+
+    // Initial value is visible immediately when the modal opens.
+    sliderToNumber();
+    return field;
   }
   function desktopDetailSelect(label,values,current,onchange){
     const wrap=document.createElement('label');wrap.className='desktop-text-detail-field';
