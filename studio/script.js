@@ -3715,6 +3715,7 @@
   let liveInlineEditEl=null;
   let liveInlineKeyboardShift=0;
   let liveInlineIntroTimer=0;
+  const LIVE_INLINE_HINT_KEY='sceneStudio.liveEdit.cursorHintSeen.v1';
 
   function liveEditScene(){
     const i=Math.max(0,Math.min(player?.index ?? selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
@@ -3801,6 +3802,8 @@
     const value=el.innerText.replace(/\n$/,'');
     scene.text=value;
     if(player?.currentScene)player.currentScene.text=value;
+    el.classList.toggle('live-edit-empty-target',value.length===0);
+    el.closest('.sp-scene')?.classList.toggle('live-edit-empty-scene',value.length===0);
     updateInlineAutoFit(scene,el);
     scheduleDraftSave(100);
     return value;
@@ -3859,10 +3862,33 @@
   function showInlineAuthoringIntro(){
     if(!liveInlineToolbar)return;
     clearTimeout(liveInlineIntroTimer);
-    liveInlineToolbar.classList.add('is-intro');
+    let seen=false;
+    try{seen=localStorage.getItem(LIVE_INLINE_HINT_KEY)==='1';}catch(_){seen=true;}
+    liveInlineToolbar.classList.toggle('is-intro',!seen);
+    if(seen)return;
+    try{localStorage.setItem(LIVE_INLINE_HINT_KEY,'1');}catch(_){}
     liveInlineIntroTimer=setTimeout(()=>{
       liveInlineToolbar?.classList.remove('is-intro');
     },2800);
+  }
+
+  function ensureLiveEditEmptyTarget(){
+    if(!liveEditEnabled||!playerHost)return;
+    const {scene}=liveEditScene();
+    const article=playerHost.querySelector('.sp-scene.is-active');
+    if(!scene||!article)return;
+    let text=article.querySelector('.sp-text');
+    const empty=typeof scene.text!=='string'||scene.text.length===0;
+    article.classList.toggle('live-edit-empty-scene',empty);
+    if(empty&&!text){
+      text=document.createElement('div');
+      text.className='sp-text live-edit-empty-target';
+      text.textContent='';
+      try{player?._applyTextStyle?.(text,scene.presentation?.text||{},false);}catch(_){}
+      article.appendChild(text);
+    }else if(text){
+      text.classList.toggle('live-edit-empty-target',empty);
+    }
   }
   function liveEditSplitInlineAtCaret(){
     const {scene,index}=liveEditScene();if(!scene||!liveInlineEditEl)return;
@@ -3954,6 +3980,7 @@
     if(player.els?.total)player.els.total.textContent=String(doc.scenes.length);
     player._audioRenderMode='restore';
     player._render?.();
+    ensureLiveEditEmptyTarget();
     if(player.els?.cover)player.els.cover.hidden=true;
     player.host?.classList.remove('sp-cover-open');
     selectedSceneIndex=target;
@@ -4133,6 +4160,7 @@
     if(player)player.options.historyAllScenes=true;
     setLiveToolbarVisible(false);
     playerHost.classList.add('live-edit-enabled');
+    requestAnimationFrame(ensureLiveEditEmptyTarget);
     const historyHelp=playerHost.querySelector('.sp-history-help');if(historyHelp)historyHelp.textContent='Sceneをスクロール';
     const historyKicker=playerHost.querySelector('.sp-history-kicker');if(historyKicker)historyKicker.textContent='SCENES';
   }
@@ -4202,7 +4230,7 @@
     startInlineTextEdit();
   },true);
   playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
-  playerHost.addEventListener('sceneplayer:scenechange',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
+  playerHost.addEventListener('sceneplayer:scenechange',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(ensureLiveEditEmptyTarget);});
   playerHost.addEventListener('sceneplayer:historyopen',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
   $('#autoRecStart')?.addEventListener('click',()=>{closeLiveEditSheet();if(liveEditToolbar)liveEditToolbar.hidden=true;});
   $('#autoRecCancel')?.addEventListener('click',()=>{if(liveEditEnabled)setLiveToolbarVisible(true);});
