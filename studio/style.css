@@ -4984,3 +4984,15 @@ body.easy-player-open #undoCompactButton,
   caret-color:currentColor;
   outline:none;
 }
+
+/* Live Edit v0.2.7 — six-key command strip + Scene operations */
+@media (max-width:899px){
+  .live-edit-toolbar{justify-content:space-evenly;padding-left:4px;padding-right:4px}
+  .live-edit-toolbar button{flex:1 1 0;min-width:0;padding-left:2px;padding-right:2px}
+  .live-edit-toolbar span{font-size:18px}
+  .live-edit-toolbar small{font-size:9px;white-space:nowrap}
+}
+.live-edit-scene-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.live-edit-scene-actions button{min-height:52px;border:1px solid #d4d6da;border-radius:14px;background:#fff;color:#17181b;font:inherit;font-weight:800}
+.live-edit-scene-actions button:disabled{opacity:.32}
+.live-edit-scene-actions button.is-danger{color:#b3262e;background:#fff8f7;border-color:#ead3d3}

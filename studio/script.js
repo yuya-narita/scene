@@ -3860,7 +3860,28 @@
     document.body.classList.add('live-edit-sheet-open');
     liveEditSheetBody.innerHTML='';
 
-    if(kind==='text'){ startInlineTextEdit(); return; }
+    if(kind==='text'){
+      finishInlineTextEdit();
+      liveEditSheetTitle.textContent='文字';
+      const grid=document.createElement('div');grid.className='live-edit-grid';
+      const makeSelect=(label,values,current,onchange)=>{
+        const wrap=document.createElement('label');wrap.className='live-edit-field';wrap.append(label);
+        const select=document.createElement('select');
+        values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
+        select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
+      };
+      const p=ensurePresentation(scene);p.text ||= {};
+      const rerender=()=>{scheduleDraftSave(80);refreshLivePlayer();};
+      const colorValue=!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom'));
+      grid.append(
+        makeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
+        makeSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
+        makeSelect('色',[['auto','おまかせ'],['white','白'],['black','黒']],colorValue==='custom'?'auto':colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else delete p.text.color;rerender();}),
+        makeSelect('影',[['auto','おまかせ'],['none','なし'],['soft','やわらか'],['strong','強く']],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;rerender();})
+      );
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='文字の詳細設定';detail.addEventListener('click',()=>liveEditAdvanced('text'));
+      liveEditSheetBody.append(grid,detail);return;
+    }
 
     if(kind==='effect'){
       liveEditSheetTitle.textContent='演出';
@@ -3902,6 +3923,64 @@
     liveEditSheetBody.append(status,detail,note);
   }
 
+  function liveEditReloadAt(index){
+    finishInlineTextEdit();closeLiveEditSheet();
+    normalizeSceneIds();refreshDocumentLanguages();
+    selectedSceneIndex=Math.max(0,Math.min(index,workingDocument.scenes.length-1));
+    scheduleDraftSave(60);
+    if(player){
+      player.options.historyAllScenes=true;
+      player.load(getDocumentForPlayback(),{startAt:selectedSceneIndex});
+      player.maxVisitedIndex=Math.max(player.maxVisitedIndex,selectedSceneIndex);
+    }
+    setLiveToolbarVisible(true);
+  }
+  function liveEditAddScene(){
+    const {index}=liveEditScene();
+    captureUndo('Scene追加を元に戻せます');
+    const scene={id:nextUniqueId(),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}};
+    workingDocument.scenes.splice(index+1,0,scene);
+    liveEditReloadAt(index+1);
+    showUndo('Sceneを追加しました');
+  }
+  function liveEditMoveScene(delta){
+    const {index}=liveEditScene(),ni=index+delta;
+    if(ni<0||ni>=workingDocument.scenes.length)return;
+    captureUndo('Sceneの並び替えを元に戻せます');
+    const [scene]=workingDocument.scenes.splice(index,1);workingDocument.scenes.splice(ni,0,scene);
+    liveEditReloadAt(ni);showUndo('Sceneを並び替えました');
+  }
+  function liveEditDuplicateScene(){
+    const {scene,index}=liveEditScene();if(!scene)return;
+    captureUndo('Scene複製を元に戻せます');
+    const copy=clone(scene);copy.id=nextUniqueId();
+    workingDocument.scenes.splice(index+1,0,copy);
+    liveEditReloadAt(index+1);showUndo('Sceneを複製しました');
+  }
+  function liveEditDeleteScene(){
+    const {index}=liveEditScene();if(workingDocument.scenes.length<=1)return;
+    if(!confirm(`Scene ${index+1} を削除しますか？`))return;
+    captureUndo('Scene削除を元に戻せます');
+    workingDocument.scenes.splice(index,1);
+    liveEditReloadAt(Math.min(index,workingDocument.scenes.length-1));showUndo('Sceneを削除しました');
+  }
+  function renderLiveEditSceneMenu(){
+    const {index}=liveEditScene();
+    finishInlineTextEdit();
+    liveEditSceneNumber.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
+    liveEditSheet.hidden=false;document.body.classList.add('live-edit-sheet-open');
+    liveEditSheetTitle.textContent='Scene操作';liveEditSheetBody.innerHTML='';
+    const grid=document.createElement('div');grid.className='live-edit-scene-actions';
+    const action=(label,fn,disabled=false,danger=false)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.disabled=disabled;if(danger)b.classList.add('is-danger');b.addEventListener('click',fn);return b;};
+    grid.append(
+      action('← 前へ移動',()=>liveEditMoveScene(-1),index===0),
+      action('次へ移動 →',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1),
+      action('複製',liveEditDuplicateScene),
+      action('削除',liveEditDeleteScene,workingDocument.scenes.length<=1,true)
+    );
+    liveEditSheetBody.append(grid);
+  }
+
   function enableLiveEdit(){
     liveEditEnabled=true;
     if(player)player.options.historyAllScenes=true;
@@ -3920,9 +3999,10 @@
   liveEditToolbar?.addEventListener('click',(e)=>{
     const b=e.target.closest('[data-live-edit]');if(!b)return;
     e.preventDefault();e.stopPropagation();
-    // Aa edits the text that is already visible in the Player. No sheet/modal.
-    if(b.dataset.liveEdit==='text'){ startInlineTextEdit(); return; }
-    renderLiveEditSheet(b.dataset.liveEdit);
+    const kind=b.dataset.liveEdit;
+    if(kind==='add'){liveEditAddScene();return;}
+    if(kind==='scene'){renderLiveEditSceneMenu();return;}
+    renderLiveEditSheet(kind);
   });
   $('#liveEditSheetClose')?.addEventListener('click',closeLiveEditSheet);
   // Live Edit v0.2.3: while the visible Scene text is being edited,
@@ -3951,11 +4031,12 @@
     const activeText=e.target.closest('.sp-scene.is-active .sp-text');
     if(!activeText)return;
 
-    // Current text tap opens/closes the keyboard-like Live Edit toolbar
-    // without advancing to the next Scene.
+    // The text itself is the edit entry point: one tap opens the keyboard
+    // and edits the visible Scene in place. The command strip stays available.
     e.preventDefault();
     e.stopPropagation();
-    setLiveToolbarVisible(!liveEditToolbarVisible);
+    setLiveToolbarVisible(true);
+    startInlineTextEdit();
   },true);
   playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
   playerHost.addEventListener('sceneplayer:scenechange',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
