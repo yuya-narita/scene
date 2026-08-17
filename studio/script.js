@@ -3918,7 +3918,33 @@
     startInlineTextEdit();
   }
 
-  function startInlineTextEdit(){
+  
+function updateLiveKeyboardInset(){
+  const vv=window.visualViewport;
+  if(!vv){
+    document.documentElement.style.setProperty('--live-keyboard-inset','0px');
+    return;
+  }
+  const inset=Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+  document.documentElement.style.setProperty('--live-keyboard-inset', `${inset}px`);
+}
+function bindLiveKeyboardViewport(){
+  const vv=window.visualViewport;
+  if(!vv || vv.__liveEditBound)return;
+  vv.__liveEditBound=true;
+  const refresh=()=>{
+    if(document.body.classList.contains('live-inline-text-edit')){
+      updateLiveKeyboardInset();
+      requestAnimationFrame(updateLiveKeyboardInset);
+    }
+  };
+  vv.addEventListener('resize',refresh);
+  vv.addEventListener('scroll',refresh);
+  window.addEventListener('orientationchange',refresh);
+}
+bindLiveKeyboardViewport();
+
+function startInlineTextEdit(){
     const {scene}=liveEditScene(); if(!scene)return;
     finishInlineTextEdit(); closeLiveEditSheet(); setLiveToolbarVisible(true);
     const el=playerHost.querySelector('.sp-scene.is-active .sp-text'); if(!el)return;
@@ -3927,6 +3953,10 @@
     // Keep the six-key Live Edit strip available while the iOS keyboard is open.
     // This lets the author move directly from writing to typography/effects/etc.
     setLiveToolbarVisible(true);
+    updateLiveKeyboardInset();
+    requestAnimationFrame(updateLiveKeyboardInset);
+    setTimeout(updateLiveKeyboardInset,80);
+    setTimeout(updateLiveKeyboardInset,220);
     if(liveInlineToolbar){liveInlineToolbar.hidden=false;showInlineAuthoringIntro();}
     updateLiveKeyboardInset();
     // contenteditable=true is the most reliable option on iPhone Safari.

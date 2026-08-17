@@ -5161,3 +5161,31 @@ body.easy-player-open #undoCompactButton,
   .live-inline-text-edit .live-edit-toolbar span{font-size:17px!important}
   .live-inline-text-edit .live-edit-toolbar small{font-size:8.5px!important}
 }
+
+
+/* Live Edit v0.3.5 — pin six-key strip above iOS software keyboard */
+@media (max-width:899px){
+  body.live-inline-text-edit .live-edit-toolbar{
+    position:fixed!important;
+    left:0!important;
+    right:0!important;
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    bottom:var(--live-keyboard-inset,0px)!important;
+    border-radius:0!important;
+    transform:none!important;
+    z-index:2147483000!important;
+    display:grid!important;
+    grid-template-columns:repeat(6,1fr)!important;
+    visibility:visible!important;
+    opacity:1!important;
+    pointer-events:auto!important;
+  }
+  body.live-inline-text-edit .live-inline-toolbar{
+    position:fixed!important;
+    right:8px!important;
+    bottom:calc(var(--live-keyboard-inset,0px) + 56px)!important;
+    z-index:2147483001!important;
+  }
+}
