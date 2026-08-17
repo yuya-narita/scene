@@ -4130,6 +4130,7 @@ function startInlineTextEdit(){
       if(section==='text'){openDesktopTextDetail();return;}
       if(section==='effect'){openDesktopEffectDetail();return;}
       if(section==='background'){openDesktopBackgroundDetail();return;}
+      if(section==='audio'){openDesktopAudioDetail();return;}
     }
     const {index}=liveEditScene();
     selectedSceneIndex=index;
@@ -4169,6 +4170,7 @@ function startInlineTextEdit(){
       if(desktopLiveActive() && section==='text'){openDesktopTextDetail();return;}
       if(desktopLiveActive() && section==='effect'){openDesktopEffectDetail();return;}
       if(desktopLiveActive() && section==='background'){openDesktopBackgroundDetail();return;}
+      if(desktopLiveActive() && section==='audio'){openDesktopAudioDetail();return;}
       liveEditAdvanced(section);
     },'desktop-live-detail');
     return b;
@@ -4251,8 +4253,13 @@ function startInlineTextEdit(){
     desktopLivePanel?.querySelector('.desktop-background-detail-overlay')?.remove();
   }
 
+  function closeDesktopAudioDetail(){
+    desktopLivePanel?.querySelector('.desktop-audio-detail-overlay')?.remove();
+  }
+
   function currentDesktopDetailKind(){
     if(!desktopLivePanel)return '';
+    if(desktopLivePanel.querySelector('.desktop-audio-detail-overlay'))return 'audio';
     if(desktopLivePanel.querySelector('.desktop-background-detail-overlay'))return 'background';
     if(desktopLivePanel.querySelector('.desktop-effect-detail-overlay'))return 'effect';
     if(desktopLivePanel.querySelector('.desktop-text-detail-overlay'))return 'text';
@@ -4263,10 +4270,12 @@ function startInlineTextEdit(){
     if(!kind||!desktopLiveActive())return;
     // Scene navigation is not "cancel": keep edits already made to the
     // previous Scene and simply retarget the open inspector to the new Scene.
+    closeDesktopAudioDetail();
     closeDesktopBackgroundDetail();
     closeDesktopEffectDetail();
     closeDesktopTextDetail();
-    if(kind==='background')openDesktopBackgroundDetail();
+    if(kind==='audio')openDesktopAudioDetail();
+    else if(kind==='background')openDesktopBackgroundDetail();
     else if(kind==='effect')openDesktopEffectDetail();
     else if(kind==='text')openDesktopTextDetail();
   }
@@ -4485,6 +4494,255 @@ function enhanceDesktopTextDetailRanges(root){
   });
 }
 
+
+
+function openDesktopAudioDetail(){
+    if(!desktopLiveActive()||!desktopLivePanel)return;
+    closeDesktopAudioDetail();
+
+    const {scene,index}=liveEditScene();
+    if(!scene)return;
+    const p=ensurePresentation(scene);
+    p.audio ||= {};
+
+    const apply=()=>{
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:false});
+      renderDesktopLivePanel();
+    };
+
+    const getTrack=(kind)=>{
+      if(kind==='bgm'){
+        p.audio.bgm ||= {action:'continue'};
+        return p.audio.bgm;
+      }
+      if(kind==='ambient'){
+        p.audio.ambient ||= {action:'continue'};
+        return p.audio.ambient;
+      }
+      p.audio.se ||= {action:'none'};
+      return p.audio.se;
+    };
+
+    const normalizeAction=(kind,track)=>{
+      const a=String(track?.action||'').toLowerCase();
+      if(kind==='se'){
+        if(a==='play'||a==='start')return 'play';
+        return 'none';
+      }
+      if(a==='start'||a==='play')return 'start';
+      if(a==='stop')return 'stop';
+      return 'continue';
+    };
+
+    const ensureDefaults=(kind,track)=>{
+      if(!Number.isFinite(Number(track.volume)))track.volume=1;
+      if(!Number.isFinite(Number(track.fadeIn)))track.fadeIn=0;
+      if(!Number.isFinite(Number(track.fadeOut)))track.fadeOut=0;
+      if(kind!=='se' && typeof track.loop!=='boolean')track.loop=true;
+      if(kind==='se'){
+        if(!Number.isFinite(Number(track.delay)))track.delay=0;
+        if(!Number.isFinite(Number(track.repeat))||Number(track.repeat)<1)track.repeat=1;
+      }
+    };
+
+    const overlay=document.createElement('div');
+    overlay.className='desktop-text-detail-overlay desktop-audio-detail-overlay';
+    const modal=document.createElement('section');
+    modal.className='desktop-text-detail-modal desktop-audio-detail-modal';
+
+    const head=document.createElement('header');
+    head.className='desktop-text-detail-head';
+    const titleWrap=document.createElement('div');
+    const kicker=document.createElement('small');kicker.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
+    const title=document.createElement('h2');title.textContent='音の詳細設定';
+    titleWrap.append(kicker,title);
+    const x=document.createElement('button');x.type='button';x.className='desktop-text-detail-close';x.textContent='×';
+    head.append(titleWrap,x);
+
+    const body=document.createElement('div');
+    body.className='desktop-text-detail-body desktop-audio-detail-body';
+
+    const tabs=document.createElement('div');
+    tabs.className='desktop-audio-detail-tabs';
+    const content=document.createElement('div');
+    content.className='desktop-audio-detail-content';
+    let activeKind='bgm';
+
+    const tabDefs=[
+      ['bgm','BGM','続いていた時間'],
+      ['ambient','Ambient','その時そこにあった音'],
+      ['se','SE','その時起きた音']
+    ];
+
+    const renderTrack=()=>{
+      content.replaceChildren();
+      tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('is-active',b.dataset.kind===activeKind));
+
+      const track=getTrack(activeKind);
+      ensureDefaults(activeKind,track);
+      const kind=activeKind;
+
+      const intro=document.createElement('section');
+      intro.className='desktop-text-detail-section desktop-audio-intro';
+      const h=document.createElement('h3');
+      const def=tabDefs.find(v=>v[0]===kind);
+      h.textContent=def[1];
+      const note=document.createElement('p');
+      note.className='desktop-text-detail-note';
+      note.textContent=def[2];
+      intro.append(h,note);
+      content.appendChild(intro);
+
+      const controlSec=document.createElement('section');
+      controlSec.className='desktop-text-detail-section';
+      const ch=document.createElement('h3');ch.textContent='再生';
+      controlSec.appendChild(ch);
+      const controlGrid=document.createElement('div');controlGrid.className='desktop-text-detail-two';
+      controlSec.appendChild(controlGrid);
+
+      const actionValues = kind==='se'
+        ? [['none','なし'],['play','このSceneで鳴らす']]
+        : [['continue','前Sceneを継続'],['start','このSceneで開始'],['stop','このSceneで停止']];
+
+      controlGrid.append(
+        desktopDetailSelect('動作',actionValues,normalizeAction(kind,track),v=>{
+          track.action=v;
+          if(kind==='se' && v==='play' && !track.src) track.action='play';
+          apply();
+          renderTrack();
+        })
+      );
+
+      const asset=document.createElement('div');
+      asset.className='desktop-audio-detail-asset';
+      const assetText=document.createElement('div');
+      assetText.className='desktop-audio-detail-file';
+      assetText.innerHTML=`<strong>${track.src?'選択中':'音源未選択'}</strong><span>${track._editorFileName||track.src||'ファイルを選択してください'}</span>`;
+      const assetBtns=document.createElement('div');
+      assetBtns.className='desktop-audio-detail-file-actions';
+      assetBtns.append(
+        desktopAction(track.src?'音源を変更':'ファイルを選択',()=>{
+          desktopPickFile('audio/*',(url,name)=>{
+            track.src=url;
+            track._editorFileName=name;
+            track._editorManaged=true;
+            if(kind==='se')track.action='play';
+            else if(normalizeAction(kind,track)!=='stop')track.action='start';
+            ensureDefaults(kind,track);
+            apply();
+            renderTrack();
+          });
+        },'is-primary'),
+        desktopAction('音源を外す',()=>{
+          delete track.src;delete track._editorFileName;
+          if(kind==='se')track.action='none';
+          apply();renderTrack();
+        })
+      );
+      asset.append(assetText,assetBtns);
+      controlSec.appendChild(asset);
+      content.appendChild(controlSec);
+
+      const levelSec=document.createElement('section');
+      levelSec.className='desktop-text-detail-section';
+      const lh=document.createElement('h3');lh.textContent='音量・フェード';
+      levelSec.appendChild(lh);
+      const levelGrid=document.createElement('div');levelGrid.className='desktop-text-detail-two';
+      levelSec.appendChild(levelGrid);
+
+      levelGrid.append(
+        desktopDetailRange('音量',{
+          min:0,max:1,step:.01,value:Number(track.volume)||0,
+          unit:' %',format:v=>Math.round(v*100),
+          oninput:v=>{track.volume=v;apply();}
+        }),
+        desktopDetailRange('フェードイン',{
+          min:0,max:10,step:.1,value:(Number(track.fadeIn)||0)/1000,
+          unit:' 秒',format:v=>v.toFixed(1),
+          oninput:v=>{track.fadeIn=Math.round(v*1000);apply();}
+        }),
+        desktopDetailRange('フェードアウト',{
+          min:0,max:10,step:.1,value:(Number(track.fadeOut)||0)/1000,
+          unit:' 秒',format:v=>v.toFixed(1),
+          oninput:v=>{track.fadeOut=Math.round(v*1000);apply();}
+        })
+      );
+
+      if(kind!=='se'){
+        levelGrid.append(
+          desktopDetailSelect('ループ',[['on','ON'],['off','OFF']],track.loop===false?'off':'on',v=>{
+            track.loop=v!=='off';apply();
+          })
+        );
+      }else{
+        levelGrid.append(
+          desktopDetailRange('再生遅延',{
+            min:0,max:10,step:.1,value:(Number(track.delay)||0)/1000,
+            unit:' 秒',format:v=>v.toFixed(1),
+            oninput:v=>{track.delay=Math.round(v*1000);apply();}
+          }),
+          desktopDetailRange('再生回数',{
+            min:1,max:10,step:1,value:Number(track.repeat)||1,
+            unit:' 回',format:v=>Math.round(v),
+            oninput:v=>{track.repeat=Math.round(v);apply();}
+          })
+        );
+      }
+      content.appendChild(levelSec);
+
+      const previewSec=document.createElement('section');
+      previewSec.className='desktop-text-detail-section';
+      const ph=document.createElement('h3');ph.textContent='プレビュー';
+      const pn=document.createElement('p');pn.className='desktop-text-detail-note';
+      pn.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの音設定を保持します。';
+      previewSec.append(ph,pn);
+
+      const audition=document.createElement('button');
+      audition.type='button';
+      audition.className='desktop-effect-replay';
+      audition.textContent='♪ このSceneの音を確認';
+      audition.addEventListener('click',()=>refreshLivePlayer({preserveSheet:false}));
+      previewSec.appendChild(audition);
+      content.appendChild(previewSec);
+    };
+
+    tabDefs.forEach(([kind,label])=>{
+      const b=document.createElement('button');
+      b.type='button';b.dataset.kind=kind;b.textContent=label;
+      b.addEventListener('click',()=>{activeKind=kind;renderTrack();});
+      tabs.appendChild(b);
+    });
+
+    body.append(tabs,content);
+
+    const foot=document.createElement('footer');
+    foot.className='desktop-text-detail-foot';
+    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
+    const spacer=document.createElement('span');
+    const close=document.createElement('button');close.type='button';close.textContent='閉じる';
+    const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';
+    foot.append(reset,spacer,close,save);
+
+    modal.append(head,body,foot);
+    overlay.appendChild(modal);
+    desktopLivePanel.appendChild(overlay);
+
+    const closeOnly=()=>closeDesktopAudioDetail();
+    x.addEventListener('click',closeOnly);
+    close.addEventListener('click',closeOnly);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
+    save.addEventListener('click',async()=>{await saveDraftNow();closeDesktopAudioDetail();renderDesktopLivePanel();});
+    reset.addEventListener('click',()=>{
+      p.audio={};
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:false});
+      renderDesktopLivePanel();
+      renderTrack();
+    });
+
+    renderTrack();
+  }
 
 function openDesktopBackgroundDetail(){
     if(!desktopLiveActive()||!desktopLivePanel)return;
