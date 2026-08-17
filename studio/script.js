@@ -4150,35 +4150,68 @@ function startInlineTextEdit(){
         values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
         select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
       };
-      const p=ensurePresentation(scene);p.text ||= {};
+      const p=ensurePresentation(scene);
       grid.append(
         makeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['slow','ゆっくり'],['none','なし']],p.effect||'auto',v=>{p.effect=v;scheduleDraftSave(80);refreshLivePlayer();}),
-        makeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
-        makeSelect('文字サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],p.text.size||'auto',v=>{p.text.size=v;scheduleDraftSave(80);refreshLivePlayer();}),
-        makeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;scheduleDraftSave(80);refreshLivePlayer();})
+        makeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();})
       );
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='演出の詳細設定';detail.addEventListener('click',()=>liveEditAdvanced('text'));
       liveEditSheetBody.append(grid,detail);return;
     }
 
+    const makeActionButton=(label,cls='')=>{const b=document.createElement('button');b.type='button';b.className=`live-edit-action ${cls}`.trim();b.textContent=label;return b;};
+    const pickLiveFile=async(accept,onPicked)=>{
+      const input=document.createElement('input');input.type='file';input.accept=accept;input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
+      input.addEventListener('change',async()=>{
+        const file=input.files?.[0];
+        if(file){
+          const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);onPicked(url,snap.name,file);
+          scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet(kind);
+        }
+        input.remove();
+      },{once:true});
+      input.click();
+    };
+
     if(kind==='background'){
       liveEditSheetTitle.textContent='背景';
-      const bg=scene.presentation?.background;
-      const status=document.createElement('div');status.className='live-edit-status';
-      status.textContent=bg?.src?'このSceneから背景指定あり':(bg?.clear?'このSceneで背景を解除':'前Sceneの背景を継続');
-      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='背景を編集';detail.addEventListener('click',()=>liveEditAdvanced('background'));
-      const note=document.createElement('p');note.className='live-edit-note';note.textContent='v0.1では画像選択・動き・暗さなどは詳細設定で編集します。';
-      liveEditSheetBody.append(status,detail,note);return;
+      const p=ensurePresentation(scene),bg=p.background;
+      const actions=document.createElement('div');actions.className='live-edit-choice-row';
+      const inherit=makeActionButton('前Sceneを継続',!bg?'is-selected':'');
+      const clear=makeActionButton('背景なし',bg?.src===''?'is-selected':'');
+      inherit.onclick=()=>{delete p.background;scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
+      clear.onclick=()=>{p.background={src:'',transition:'fade',_editorManaged:true};scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
+      actions.append(inherit,clear);
+      const pick=makeActionButton(bg?.src?'画像を変更':'画像を選択','is-primary');
+      pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',dim:p.background?.dim??.34};});
+      const status=document.createElement('div');status.className='live-edit-status';status.textContent=bg?.src?`選択中：${bg._editorFileName||'背景画像'}`:(bg?.src===''?'このSceneから背景なし':'前Sceneの背景を継続');
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='暗さ・動き・切替を細かく調整';detail.addEventListener('click',()=>liveEditAdvanced('background'));
+      liveEditSheetBody.append(actions,pick,status,detail);return;
     }
 
     liveEditSheetTitle.textContent='音';
-    const audio=scene.audio||scene.ambience||{};
-    const status=document.createElement('div');status.className='live-edit-status';
-    const hasAudio=Boolean(scene.audio||scene.ambience||scene.se||scene.presentation?.audio);
-    status.textContent=hasAudio?'このSceneに音の指定があります':'このSceneは前の音状態を引き継ぎます';
-    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='音を編集';detail.addEventListener('click',()=>liveEditAdvanced('audio'));
-    const note=document.createElement('p');note.className='live-edit-note';note.textContent='BGM / Ambient / SE の細かな操作は詳細設定で編集します。';
-    liveEditSheetBody.append(status,detail,note);
+    const audioWrap=document.createElement('div');audioWrap.className='live-edit-audio-list';
+    const channelRow=(title,channel,accept='audio/*')=>{
+      const cmd=managedAudio(scene,channel);const row=document.createElement('section');row.className='live-edit-audio-row';
+      const head=document.createElement('div');head.className='live-edit-audio-head';const name=document.createElement('strong');name.textContent=title;const state=document.createElement('small');
+      state.textContent=cmd?.action==='start'?(cmd._editorFileName||'音源あり'):cmd?.action==='stop'?'停止':'継続';head.append(name,state);
+      const buttons=document.createElement('div');buttons.className='live-edit-audio-actions';
+      const inherit=makeActionButton('継続',!cmd?'is-selected':'');const stop=makeActionButton('停止',cmd?.action==='stop'?'is-selected':'');const pick=makeActionButton(cmd?.action==='start'?'変更':'選択','is-primary');
+      inherit.onclick=()=>{setManagedAudio(scene,channel,null);scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
+      stop.onclick=()=>{setManagedAudio(scene,channel,{channel,action:'stop',fadeOut:600});scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
+      pick.onclick=()=>pickLiveFile(accept,(url,fileName)=>setManagedAudio(scene,channel,{channel,action:'start',src:url,volume:channel==='ambient'?.35:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:fileName}));
+      buttons.append(inherit,stop,pick);row.append(head,buttons);return row;
+    };
+    audioWrap.append(channelRow('BGM','bgm'),channelRow('Ambient','ambient'));
+    const se=managedAudio(scene,'oneshot');const seRow=document.createElement('section');seRow.className='live-edit-audio-row';
+    const seHead=document.createElement('div');seHead.className='live-edit-audio-head';seHead.innerHTML='<strong>SE</strong>';const seState=document.createElement('small');seState.textContent=se?.src?(se._editorFileName||'音源あり'):'なし';seHead.appendChild(seState);
+    const seButtons=document.createElement('div');seButtons.className='live-edit-audio-actions';const seNone=makeActionButton('なし',!se?'is-selected':'');const sePick=makeActionButton(se?'変更':'選択','is-primary');
+    seNone.onclick=()=>{setManagedAudio(scene,'oneshot',null);scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
+    sePick.onclick=()=>pickLiveFile('audio/*',(url,fileName)=>setManagedAudio(scene,'oneshot',{channel:'oneshot',role:'se',action:'play',src:url,volume:.8,fadeIn:0,_editorFileName:fileName}));
+    seButtons.append(seNone,sePick);seRow.append(seHead,seButtons);audioWrap.append(seRow);
+    const presetNote=document.createElement('p');presetNote.className='live-edit-note';presetNote.textContent='Ambient / SE のプリセットは後から追加できます。今はファイル選択と状態変更だけをLive Editで行います。';
+    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='音量・フェード・ループを細かく調整';detail.addEventListener('click',()=>liveEditAdvanced('audio'));
+    liveEditSheetBody.append(audioWrap,presetNote,detail);
   }
 
   function liveEditReloadAt(index){
