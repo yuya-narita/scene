@@ -4502,49 +4502,163 @@ function openDesktopAudioDetail(){
 
     const {scene,index}=liveEditScene();
     if(!scene)return;
-    const p=ensurePresentation(scene);
-    p.audio ||= {};
 
-    const apply=()=>{
+    const p=ensurePresentation(scene);
+
+    // v1 accidentally stored the PC audio inspector model in presentation.audio.
+    // Migrate that temporary model into the actual Scene Format audio commands.
+    const legacyModel=p.audio && typeof p.audio==='object' ? clone(p.audio) : null;
+
+    const commandFor=(kind)=>{
+      if(kind==='bgm')return managedAudio(scene,'bgm');
+      if(kind==='ambient')return managedAudio(scene,'ambient');
+      return managedAudio(scene,'oneshot');
+    };
+
+    const makeTrack=(kind)=>{
+      const channel=kind==='se'?'oneshot':kind;
+      const cmd=commandFor(kind);
+      const legacy=legacyModel?.[kind]||null;
+
+      if(cmd){
+        return {
+          action: kind==='se'
+            ? ((cmd.action==='play'||cmd.action==='start')?'play':'none')
+            : (cmd.action||'continue'),
+          src:cmd.src||'',
+          volume:Number.isFinite(Number(cmd.volume))?Number(cmd.volume):1,
+          fadeIn:Number(cmd.fadeIn)||0,
+          fadeOut:Number(cmd.fadeOut)||0,
+          loop:cmd.loop!==false,
+          delay:Number(cmd.delay)||0,
+          repeat:Number(cmd.repeat)||1,
+          _editorFileName:cmd._editorFileName||''
+        };
+      }
+
+      if(legacy){
+        return {
+          action:legacy.action||(kind==='se'?'none':'continue'),
+          src:legacy.src||'',
+          volume:Number.isFinite(Number(legacy.volume))?Number(legacy.volume):1,
+          fadeIn:Number(legacy.fadeIn)||0,
+          fadeOut:Number(legacy.fadeOut)||0,
+          loop:legacy.loop!==false,
+          delay:Number(legacy.delay)||0,
+          repeat:Number(legacy.repeat)||1,
+          _editorFileName:legacy._editorFileName||''
+        };
+      }
+
+      return {
+        action:kind==='se'?'none':'continue',
+        src:'',
+        volume:1,
+        fadeIn:0,
+        fadeOut:0,
+        loop:true,
+        delay:0,
+        repeat:1,
+        _editorFileName:''
+      };
+    };
+
+    const audioModel={
+      bgm:makeTrack('bgm'),
+      ambient:makeTrack('ambient'),
+      se:makeTrack('se')
+    };
+
+    const commitTrack=(kind)=>{
+      const track=audioModel[kind];
+
+      if(kind==='se'){
+        if(track.action!=='play' || !track.src){
+          setManagedAudio(scene,'oneshot',null);
+          return;
+        }
+        setManagedAudio(scene,'oneshot',{
+          channel:'oneshot',
+          role:'se',
+          action:'play',
+          src:track.src,
+          volume:Math.max(0,Math.min(1,Number(track.volume)||0)),
+          fadeIn:Math.max(0,Number(track.fadeIn)||0),
+          delay:Math.max(0,Number(track.delay)||0),
+          repeat:Math.max(1,Math.round(Number(track.repeat)||1)),
+          _editorFileName:track._editorFileName||''
+        });
+        return;
+      }
+
+      const channel=kind;
+      if(track.action==='continue'){
+        setManagedAudio(scene,channel,null);
+        return;
+      }
+      if(track.action==='stop'){
+        setManagedAudio(scene,channel,{
+          channel,
+          action:'stop',
+          fadeOut:Math.max(0,Number(track.fadeOut)||0)
+        });
+        return;
+      }
+
+      if(track.action==='start' && track.src){
+        setManagedAudio(scene,channel,{
+          channel,
+          action:'start',
+          src:track.src,
+          volume:Math.max(0,Math.min(1,Number(track.volume)||0)),
+          fadeIn:Math.max(0,Number(track.fadeIn)||0),
+          fadeOut:Math.max(0,Number(track.fadeOut)||0),
+          loop:track.loop!==false,
+          restart:true,
+          _editorFileName:track._editorFileName||''
+        });
+      }else{
+        setManagedAudio(scene,channel,null);
+      }
+    };
+
+    const commitAll=()=>{
+      commitTrack('bgm');
+      commitTrack('ambient');
+      commitTrack('se');
+      // presentation.audio was only a broken v1 editor cache.
+      delete p.audio;
+    };
+
+    const refreshAudioPreview=(kind,{playOneShot=false}={})=>{
+      commitAll();
       scheduleDraftSave(40);
+
+      // The author is actively operating an audio control. Arm the Preview
+      // transport so desktop Live Edit can actually produce sound.
+      try{player?.unlockAudio?.(true);}catch(_){}
+
       refreshLivePlayer({preserveSheet:false});
       renderDesktopLivePanel();
+
+      // Restore-mode rendering deliberately never fires SE events. For the
+      // editor's explicit audition path, play the current one-shot directly.
+      if((kind==='se' || playOneShot) && audioModel.se.action==='play' && audioModel.se.src){
+        requestAnimationFrame(()=>{
+          try{
+            player?.unlockAudio?.(true);
+            const cmd=managedAudio(scene,'oneshot');
+            if(cmd)player?._applyAudioCommand?.(cmd,false);
+          }catch(_){}
+        });
+      }
     };
 
-    const getTrack=(kind)=>{
-      if(kind==='bgm'){
-        p.audio.bgm ||= {action:'continue'};
-        return p.audio.bgm;
-      }
-      if(kind==='ambient'){
-        p.audio.ambient ||= {action:'continue'};
-        return p.audio.ambient;
-      }
-      p.audio.se ||= {action:'none'};
-      return p.audio.se;
-    };
-
-    const normalizeAction=(kind,track)=>{
-      const a=String(track?.action||'').toLowerCase();
-      if(kind==='se'){
-        if(a==='play'||a==='start')return 'play';
-        return 'none';
-      }
-      if(a==='start'||a==='play')return 'start';
-      if(a==='stop')return 'stop';
-      return 'continue';
-    };
-
-    const ensureDefaults=(kind,track)=>{
-      if(!Number.isFinite(Number(track.volume)))track.volume=1;
-      if(!Number.isFinite(Number(track.fadeIn)))track.fadeIn=0;
-      if(!Number.isFinite(Number(track.fadeOut)))track.fadeOut=0;
-      if(kind!=='se' && typeof track.loop!=='boolean')track.loop=true;
-      if(kind==='se'){
-        if(!Number.isFinite(Number(track.delay)))track.delay=0;
-        if(!Number.isFinite(Number(track.repeat))||Number(track.repeat)<1)track.repeat=1;
-      }
-    };
+    // If the broken v1 model existed, migrate it immediately.
+    if(legacyModel){
+      commitAll();
+      scheduleDraftSave(40);
+    }
 
     const overlay=document.createElement('div');
     overlay.className='desktop-text-detail-overlay desktop-audio-detail-overlay';
@@ -4579,8 +4693,7 @@ function openDesktopAudioDetail(){
       content.replaceChildren();
       tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('is-active',b.dataset.kind===activeKind));
 
-      const track=getTrack(activeKind);
-      ensureDefaults(activeKind,track);
+      const track=audioModel[activeKind];
       const kind=activeKind;
 
       const intro=document.createElement('section');
@@ -4606,10 +4719,9 @@ function openDesktopAudioDetail(){
         : [['continue','前Sceneを継続'],['start','このSceneで開始'],['stop','このSceneで停止']];
 
       controlGrid.append(
-        desktopDetailSelect('動作',actionValues,normalizeAction(kind,track),v=>{
+        desktopDetailSelect('動作',actionValues,track.action,v=>{
           track.action=v;
-          if(kind==='se' && v==='play' && !track.src) track.action='play';
-          apply();
+          refreshAudioPreview(kind,{playOneShot:kind==='se'&&v==='play'});
           renderTrack();
         })
       );
@@ -4619,6 +4731,7 @@ function openDesktopAudioDetail(){
       const assetText=document.createElement('div');
       assetText.className='desktop-audio-detail-file';
       assetText.innerHTML=`<strong>${track.src?'選択中':'音源未選択'}</strong><span>${track._editorFileName||track.src||'ファイルを選択してください'}</span>`;
+
       const assetBtns=document.createElement('div');
       assetBtns.className='desktop-audio-detail-file-actions';
       assetBtns.append(
@@ -4626,18 +4739,18 @@ function openDesktopAudioDetail(){
           desktopPickFile('audio/*',(url,name)=>{
             track.src=url;
             track._editorFileName=name;
-            track._editorManaged=true;
             if(kind==='se')track.action='play';
-            else if(normalizeAction(kind,track)!=='stop')track.action='start';
-            ensureDefaults(kind,track);
-            apply();
+            else track.action='start';
+            refreshAudioPreview(kind,{playOneShot:kind==='se'});
             renderTrack();
           });
         },'is-primary'),
         desktopAction('音源を外す',()=>{
-          delete track.src;delete track._editorFileName;
-          if(kind==='se')track.action='none';
-          apply();renderTrack();
+          track.src='';
+          track._editorFileName='';
+          track.action=kind==='se'?'none':'continue';
+          refreshAudioPreview(kind);
+          renderTrack();
         })
       );
       asset.append(assetText,assetBtns);
@@ -4653,26 +4766,27 @@ function openDesktopAudioDetail(){
 
       levelGrid.append(
         desktopDetailRange('音量',{
-          min:0,max:1,step:.01,value:Number(track.volume)||0,
+          min:0,max:1,step:.01,value:Number(track.volume),
           unit:' %',format:v=>Math.round(v*100),
-          oninput:v=>{track.volume=v;apply();}
+          oninput:v=>{track.volume=v;refreshAudioPreview(kind);}
         }),
         desktopDetailRange('フェードイン',{
           min:0,max:10,step:.1,value:(Number(track.fadeIn)||0)/1000,
           unit:' 秒',format:v=>v.toFixed(1),
-          oninput:v=>{track.fadeIn=Math.round(v*1000);apply();}
+          oninput:v=>{track.fadeIn=Math.round(v*1000);refreshAudioPreview(kind);}
         }),
         desktopDetailRange('フェードアウト',{
           min:0,max:10,step:.1,value:(Number(track.fadeOut)||0)/1000,
           unit:' 秒',format:v=>v.toFixed(1),
-          oninput:v=>{track.fadeOut=Math.round(v*1000);apply();}
+          oninput:v=>{track.fadeOut=Math.round(v*1000);refreshAudioPreview(kind);}
         })
       );
 
       if(kind!=='se'){
         levelGrid.append(
           desktopDetailSelect('ループ',[['on','ON'],['off','OFF']],track.loop===false?'off':'on',v=>{
-            track.loop=v!=='off';apply();
+            track.loop=v!=='off';
+            refreshAudioPreview(kind);
           })
         );
       }else{
@@ -4680,12 +4794,12 @@ function openDesktopAudioDetail(){
           desktopDetailRange('再生遅延',{
             min:0,max:10,step:.1,value:(Number(track.delay)||0)/1000,
             unit:' 秒',format:v=>v.toFixed(1),
-            oninput:v=>{track.delay=Math.round(v*1000);apply();}
+            oninput:v=>{track.delay=Math.round(v*1000);commitAll();scheduleDraftSave(40);}
           }),
           desktopDetailRange('再生回数',{
             min:1,max:10,step:1,value:Number(track.repeat)||1,
             unit:' 回',format:v=>Math.round(v),
-            oninput:v=>{track.repeat=Math.round(v);apply();}
+            oninput:v=>{track.repeat=Math.round(v);commitAll();scheduleDraftSave(40);}
           })
         );
       }
@@ -4702,7 +4816,11 @@ function openDesktopAudioDetail(){
       audition.type='button';
       audition.className='desktop-effect-replay';
       audition.textContent='♪ このSceneの音を確認';
-      audition.addEventListener('click',()=>refreshLivePlayer({preserveSheet:false}));
+      audition.addEventListener('click',()=>{
+        // This click is a trusted user gesture, so explicitly arm audio before rendering.
+        try{player?.unlockAudio?.(true);}catch(_){}
+        refreshAudioPreview(kind,{playOneShot:kind==='se'});
+      });
       previewSec.appendChild(audition);
       content.appendChild(previewSec);
     };
@@ -4728,14 +4846,29 @@ function openDesktopAudioDetail(){
     overlay.appendChild(modal);
     desktopLivePanel.appendChild(overlay);
 
-    const closeOnly=()=>closeDesktopAudioDetail();
+    const closeOnly=()=>{
+      commitAll();
+      closeDesktopAudioDetail();
+    };
     x.addEventListener('click',closeOnly);
     close.addEventListener('click',closeOnly);
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
-    save.addEventListener('click',async()=>{await saveDraftNow();closeDesktopAudioDetail();renderDesktopLivePanel();});
+    save.addEventListener('click',async()=>{
+      commitAll();
+      await saveDraftNow();
+      closeDesktopAudioDetail();
+      renderDesktopLivePanel();
+    });
     reset.addEventListener('click',()=>{
-      p.audio={};
+      setManagedAudio(scene,'bgm',null);
+      setManagedAudio(scene,'ambient',null);
+      setManagedAudio(scene,'oneshot',null);
+      delete p.audio;
+      audioModel.bgm=makeTrack('bgm');
+      audioModel.ambient=makeTrack('ambient');
+      audioModel.se=makeTrack('se');
       scheduleDraftSave(40);
+      try{player?._stopAllAudio?.(true);}catch(_){}
       refreshLivePlayer({preserveSheet:false});
       renderDesktopLivePanel();
       renderTrack();
