@@ -4256,7 +4256,39 @@ function startInlineTextEdit(){
     if(kind==='effect')openDesktopEffectDetail();
     else if(kind==='text')openDesktopTextDetail();
   }
-  function openDesktopEffectDetail(){
+  
+  function replayCurrentDesktopEffect(){
+    if(!player||!workingDocument?.scenes?.length)return;
+    const scene=workingDocument.scenes[player.index];
+    if(!scene)return;
+
+    // Re-render the authoring preview at the same Scene first so all current
+    // presentation values are reflected.
+    refreshLivePlayer({preserveSheet:false});
+
+    requestAnimationFrame(()=>{
+      const id=String(scene.id||'');
+      const nodes=[...playerHost.querySelectorAll('.sp-scene')];
+      const article=nodes.find(node=>String(node.dataset.sceneId||'')===id)
+        || nodes.find(node=>node.classList.contains('is-active'))
+        || nodes[nodes.length-1];
+      if(!article)return;
+
+      // Entrance effects are intentionally one-shot in the Player. In Studio,
+      // changing an effect means the author explicitly wants to preview it again.
+      article.classList.remove('sp-fx-play');
+      delete article.dataset.fxPlayed;
+      void article.offsetWidth;
+
+      if(scene.presentation?.typing?.enabled){
+        // A fresh render already restarted the typing engine.
+        return;
+      }
+      player._playEntranceEffectOnce?.(article);
+    });
+  }
+
+function openDesktopEffectDetail(){
     if(!desktopLiveActive()||!desktopLivePanel)return;
     closeDesktopEffectDetail();
     const {scene,index}=liveEditScene();if(!scene)return;
@@ -4269,7 +4301,7 @@ function startInlineTextEdit(){
       disappear:clone(p.disappear||null)
     };
     let committed=false;
-    const apply=()=>{scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});};
+    const apply=()=>{scheduleDraftSave(40);replayCurrentDesktopEffect();};
     const restore=()=>{
       if(before.effect===undefined)delete p.effect;else p.effect=before.effect;
       if(before.display===undefined)delete p.display;else p.display=before.display;
@@ -4339,7 +4371,7 @@ function startInlineTextEdit(){
 
     const preview=section('プレビュー');
     const note=document.createElement('p');note.className='desktop-text-detail-note';note.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。';preview.appendChild(note);
-    const replay=document.createElement('button');replay.type='button';replay.className='desktop-effect-replay';replay.textContent='▶ 演出をもう一度見る';replay.addEventListener('click',()=>refreshLivePlayer({preserveSheet:false}));preview.appendChild(replay);
+    const replay=document.createElement('button');replay.type='button';replay.className='desktop-effect-replay';replay.textContent='▶ 演出をもう一度見る';replay.addEventListener('click',replayCurrentDesktopEffect);preview.appendChild(replay);
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
     const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
@@ -4496,7 +4528,7 @@ function openDesktopTextDetail(){
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
-      desktopMakeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']],effectValue,v=>{if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}refresh();}),
+      desktopMakeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']],effectValue,v=>{if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}scheduleDraftSave(40);replayCurrentDesktopEffect();renderDesktopLivePanel();}),
       desktopMakeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;refresh();})
     );
     effectCard.append(effectGrid,desktopDetail('演出の詳細設定','effect'));
