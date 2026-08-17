@@ -4261,28 +4261,43 @@ function startInlineTextEdit(){
 
   liveEditToolbar?.addEventListener('pointerdown',(e)=>{
     const b=e.target.closest?.('[data-live-edit]');if(!b)return;
-    // Keep Player navigation from seeing the command strip.
     e.stopPropagation();
+
+    // On iPhone, tapping a toolbar button while the software keyboard is open
+    // can blur the editable Scene before the later click event is delivered.
+    // Handle the command immediately on pointerdown so one tap always means:
+    // save text -> close keyboard -> open the requested tool/action.
+    if(liveInlineEditEl){
+      e.preventDefault();
+      const kind=b.dataset.liveEdit;
+      syncInlineTextToScene();
+
+      if(kind==='add'){
+        finishInlineTextEdit();
+        liveEditAddScene();
+        return;
+      }
+
+      finishInlineTextEdit();
+      if(kind==='scene'){
+        renderLiveEditSceneMenu();
+        return;
+      }
+      renderLiveEditSheet(kind);
+      return;
+    }
   });
+
   liveEditToolbar?.addEventListener('click',(e)=>{
     const b=e.target.closest('[data-live-edit]');if(!b)return;
     e.preventDefault();e.stopPropagation();
+
+    // If pointerdown already handled an inline-edit command, ignore the
+    // follow-up click. Otherwise this is the normal keyboard-closed path.
+    if(liveInlineEditEl)return;
+
     const kind=b.dataset.liveEdit;
-
-    // Writing can flow straight into another Live Edit tool.
-    // For +, finish the current text first so the new Scene is based on the
-    // latest text; the add handler immediately focuses the new empty Scene.
-    if(kind==='add'){
-      if(liveInlineEditEl)syncInlineTextToScene();
-      liveEditAddScene();
-      return;
-    }
-
-    // Sheets replace the keyboard, but remain on the current Scene.
-    if(liveInlineEditEl){
-      syncInlineTextToScene();
-      finishInlineTextEdit();
-    }
+    if(kind==='add'){liveEditAddScene();return;}
     if(kind==='scene'){renderLiveEditSceneMenu();return;}
     renderLiveEditSheet(kind);
   });
