@@ -3761,8 +3761,12 @@
     el.addEventListener('input',sync,{signal:abort.signal});
     el.addEventListener('blur',()=>{sync();finishInlineTextEdit();},{once:true,signal:abort.signal});
 
+    // iPhone Safari only opens the software keyboard when focus happens
+    // synchronously inside the user's tap gesture. Do not defer this focus.
+    el.focus({preventScroll:true});
+
+    // Cursor placement can happen on the next frame without losing keyboard activation.
     requestAnimationFrame(()=>{
-      el.focus({preventScroll:true});
       const sel=getSelection(),range=document.createRange();
       range.selectNodeContents(el);range.collapse(false);
       sel.removeAllRanges();sel.addRange(range);
