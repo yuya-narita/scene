@@ -2533,7 +2533,8 @@
     }
     const btn=playerHost.querySelector('.live-edit-mute');
     if(btn){
-      btn.textContent=liveEditMuted?'♩':'♪';
+      // Match Prayer: the glyph stays ♪; the circular wash indicates mute/off.
+      btn.textContent='♪';
       btn.setAttribute('aria-pressed',liveEditMuted?'true':'false');
       btn.setAttribute('aria-label',liveEditMuted?'音声をオン':'音声をミュート');
       btn.title=liveEditMuted?'音声をオン':'音声をミュート';

@@ -1191,6 +1191,9 @@
           const text = document.createElement('span');
           text.className = 'sp-history-text';
           text.textContent = scene.text || '';
+          // History is still a navigator, but typography should identify the
+          // actual Scene the author is reviewing.
+          this._applyTextStyle(text, scene.presentation?.text || {}, false);
           body.appendChild(text);
         }
 
@@ -1198,6 +1201,7 @@
           const sub = document.createElement('span');
           sub.className = 'sp-history-subtext';
           sub.textContent = scene.subText;
+          this._applyTextStyle(sub, scene.presentation?.subText || {}, true);
           body.appendChild(sub);
         }
 
