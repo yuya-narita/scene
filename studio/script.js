@@ -4703,72 +4703,98 @@ function openDesktopBackgroundDetail(){
 
     // MOTION --------------------------------------------------------------
     const motionSec=section('背景の動き');
-    const motion=bg0.motion||{type:'none'};
-    const motionGrid=two(motionSec);
-    motionGrid.append(
-      desktopDetailSelect('動き',[
-        ['none','なし'],['slowZoom','ゆっくりズーム'],['breath','呼吸'],
-        ['panLeft','左へパン'],['panRight','右へパン'],['panUp','上へパン'],['panDown','下へパン']
-      ],motion.type||'none',v=>{
-        const currentModal=desktopLivePanel?.querySelector('.desktop-background-detail-modal');
-        const keepScroll=currentModal?.scrollTop||0;
+    const motionBase=bg0.motion||{type:'none'};
 
+    const motionTypeField=desktopDetailSelect('動き',[
+      ['none','なし'],['slowZoom','ゆっくりズーム'],['breath','呼吸'],
+      ['panLeft','左へパン'],['panRight','右へパン'],['panUp','上へパン'],['panDown','下へパン']
+    ],motionBase.type||'none',()=>{});
+    motionSec.appendChild(motionTypeField);
+
+    const motionDynamic=document.createElement('div');
+    motionDynamic.className='desktop-background-motion-dynamic';
+    motionSec.appendChild(motionDynamic);
+
+    const renderMotionControls=()=>{
+      motionDynamic.replaceChildren();
+
+      const bg=ensureImageState();
+      const motion=bg.motion||{type:'none'};
+      const motionType=motion.type||'none';
+
+      if(motionType==='none'){
+        const note=document.createElement('p');
+        note.className='desktop-text-detail-note';
+        note.textContent='「動き」を選ぶと時間・倍率・移動量を細かく設定できます。';
+        motionDynamic.appendChild(note);
+        return;
+      }
+
+      const timingGrid=two(motionDynamic);
+      timingGrid.append(
+        desktopDetailRange('動きの時間',{
+          min:.5,max:30,step:.25,
+          value:(Number(motion.duration)||6500)/1000,
+          unit:' 秒',format:v=>v.toFixed(2),
+          oninput:v=>{
+            const next=ensureImageState();
+            next.motion={...(next.motion||{}),type:next.motion?.type||motionType,duration:Math.round(v*1000)};
+            apply();
+          }
+        })
+      );
+
+      if(motionType==='slowZoom'||motionType==='breath'){
+        const zoomGrid=two(motionDynamic);
+        zoomGrid.append(
+          desktopDetailRange('開始倍率',{
+            min:1,max:1.5,step:.01,value:Number(motion.scaleFrom)||1,
+            format:v=>v.toFixed(2),
+            oninput:v=>{
+              const next=ensureImageState();
+              next.motion={...(next.motion||{}),type:motionType,scaleFrom:v};
+              apply();
+            }
+          }),
+          desktopDetailRange('終了倍率',{
+            min:1,max:1.7,step:.01,
+            value:Number(motion.scaleTo)||(motionType==='slowZoom'?1.14:1.11),
+            format:v=>v.toFixed(2),
+            oninput:v=>{
+              const next=ensureImageState();
+              next.motion={...(next.motion||{}),type:motionType,scaleTo:v};
+              apply();
+            }
+          })
+        );
+      }else if(/^pan/.test(motionType)){
+        const panGrid=two(motionDynamic);
+        panGrid.append(
+          desktopDetailRange('移動量',{
+            min:1,max:30,step:1,value:Number(motion.pan)||9,unit:' %',
+            format:v=>Math.round(v),
+            oninput:v=>{
+              const next=ensureImageState();
+              next.motion={...(next.motion||{}),type:motionType,pan:v};
+              apply();
+            }
+          })
+        );
+      }
+    };
+
+    const motionSelect=motionTypeField.querySelector('select');
+    if(motionSelect){
+      motionSelect.addEventListener('change',()=>{
         const bg=ensureImageState();
+        const v=motionSelect.value;
         bg.motion={...(bg.motion||{}),type:v};
         if(v==='none')bg.motion={type:'none'};
         apply();
-
-        // Rebuild only because the available motion controls change,
-        // then return to the exact same scroll position.
-        requestAnimationFrame(()=>{
-          closeDesktopBackgroundDetail();
-          openDesktopBackgroundDetail();
-          requestAnimationFrame(()=>{
-            const nextModal=desktopLivePanel?.querySelector('.desktop-background-detail-modal');
-            if(nextModal)nextModal.scrollTop=keepScroll;
-          });
-        });
-      }),
-      desktopDetailRange('動きの時間',{
-        min:.5,max:30,step:.25,
-        value:(Number(motion.duration)||6500)/1000,
-        unit:' 秒',format:v=>v.toFixed(2),
-        oninput:v=>{const bg=ensureImageState();bg.motion={...(bg.motion||{}),type:bg.motion?.type||'none',duration:Math.round(v*1000)};apply();}
-      })
-    );
-
-    const motionType=motion.type||'none';
-    if(motionType==='slowZoom'||motionType==='breath'){
-      const zoomGrid=two(motionSec);
-      zoomGrid.append(
-        desktopDetailRange('開始倍率',{
-          min:1,max:1.5,step:.01,value:Number(motion.scaleFrom)||1,
-          format:v=>v.toFixed(2),
-          oninput:v=>{const bg=ensureImageState();bg.motion={...(bg.motion||{}),type:motionType,scaleFrom:v};apply();}
-        }),
-        desktopDetailRange('終了倍率',{
-          min:1,max:1.7,step:.01,value:Number(motion.scaleTo)||(motionType==='slowZoom'?1.14:1.11),
-          format:v=>v.toFixed(2),
-          oninput:v=>{const bg=ensureImageState();bg.motion={...(bg.motion||{}),type:motionType,scaleTo:v};apply();}
-        })
-      );
-    }else if(/^pan/.test(motionType)){
-      const panGrid=two(motionSec);
-      panGrid.append(
-        desktopDetailRange('移動量',{
-          min:1,max:30,step:1,value:Number(motion.pan)||9,unit:' %',
-          format:v=>Math.round(v),
-          oninput:v=>{const bg=ensureImageState();bg.motion={...(bg.motion||{}),type:motionType,pan:v};apply();}
-        })
-      );
+        renderMotionControls();
+      });
     }
-    if(motionType==='none'){
-      motionSec.classList.add('is-disabled-soft');
-      const note=document.createElement('p');
-      note.className='desktop-text-detail-note';
-      note.textContent='「動き」を選ぶと時間・倍率・移動量を細かく設定できます。';
-      motionSec.appendChild(note);
-    }
+    renderMotionControls();
 
     const previewSec=section('プレビュー');
     const previewNote=document.createElement('p');
