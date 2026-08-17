@@ -4294,8 +4294,20 @@ function startInlineTextEdit(){
     timingGrid.append(
       desktopDetailRange('演出時間',{min:.15,max:3,step:.05,value:Number(p.effectTiming.duration)||0.8,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{p.effectTiming.duration=v;apply();}}),
       desktopDetailRange('開始遅延',{min:0,max:3,step:.05,value:Number(p.effectTiming.delay)||0,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{if(v<=0)delete p.effectTiming.delay;else p.effectTiming.delay=v;apply();}}),
-      desktopDetailRange('消えるまで',{min:0,max:12,step:.1,value:Number(p.disappear?.after)||0,unit:' 秒',format:v=>v.toFixed(1),oninput:v=>{p.disappear={...(p.disappear||{}),after:Math.round(v*1000)};if(v<=0)delete p.disappear;apply();}}),
-      desktopDetailRange('消える時のフェード',{min:.1,max:4,step:.05,value:(Number(p.disappear?.fade)||700)/1000,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{p.disappear={...(p.disappear||{}),after:Number(p.disappear?.after)||2500,fade:Math.round(v*1000)};apply();}})
+      desktopDetailRange('消えるまで',{min:0,max:12,step:.1,value:Number(p.disappear?.after)||0,unit:' 秒',format:v=>v.toFixed(1),oninput:v=>{
+        const motion=p.disappear?.motion||'stay';
+        p.disappear={...(p.disappear||{}),after:Math.round(v*1000),motion};
+        if(v<=0)delete p.disappear;
+        apply();
+      }}),
+      desktopDetailRange('消える時のフェード',{min:.1,max:4,step:.05,value:(Number(p.disappear?.fade)||700)/1000,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{
+        p.disappear={...(p.disappear||{}),after:Number(p.disappear?.after)||2500,fade:Math.round(v*1000),motion:p.disappear?.motion||'stay'};
+        apply();
+      }}),
+      desktopDetailSelect('消え方',[['stay','その場で消える'],['up','上に抜ける']],p.disappear?.motion||'stay',v=>{
+        p.disappear={...(p.disappear||{}),motion:v};
+        apply();
+      })
     );
 
     const typingSec=section('タイプライター');

@@ -1979,15 +1979,18 @@
       const after = asNumber(disappear?.after, 0);
       if (after > 0) {
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
+        const motion = disappear?.motion === 'up' ? 'up' : 'stay';
         article.style.setProperty('--sp-disappear-fade', `${fade}ms`);
+        article.classList.toggle('is-disappear-up', motion === 'up');
+        article.classList.toggle('is-disappear-stay', motion !== 'up');
         this._presentationTimeout(() => {
           if (!article.isConnected) return;
           article.classList.add('is-disappearing');
-          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start' });
+          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion });
           this._presentationTimeout(() => {
             if (!article.isConnected) return;
             article.classList.add('is-disappeared');
-            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end' });
+            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion });
           }, fade);
         }, after);
       }

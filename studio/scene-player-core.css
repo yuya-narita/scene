@@ -188,11 +188,20 @@
 .sp-text.is-typing::selection{background:transparent}
 .sp-scene.is-disappearing{
   opacity:0!important;
+  transition:opacity var(--sp-disappear-fade,700ms) ease!important;
+}
+/* Optional legacy-style exit: drift upward and soften while fading. */
+.sp-scene.is-disappearing.is-disappear-up{
   transform:translateY(-4px)!important;
   filter:blur(2px)!important;
   transition:opacity var(--sp-disappear-fade,700ms) ease,
              transform var(--sp-disappear-fade,700ms) ease,
              filter var(--sp-disappear-fade,700ms) ease!important;
+}
+/* Default: remain exactly at the landed position while fading out. */
+.sp-scene.is-disappearing.is-disappear-stay{
+  transform:none!important;
+  filter:none!important;
 }
 .sp-scene.is-disappeared{visibility:hidden;pointer-events:none}
 
