@@ -5401,7 +5401,7 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
 }
 
 
-/* Desktop Text Detail v2 — keep mobile Live Edit toolbar off the PC canvas. */
+/* Desktop Text Detail v2 SAFE — PC keeps preview clean; iPhone unchanged. */
 @media (min-width:900px){
   #playerScreen .live-edit-toolbar,
   #playerScreen .live-inline-toolbar{
@@ -5412,7 +5412,6 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
     padding:7px 18px calc(7px + env(safe-area-inset-bottom))!important;
   }
 }
-
 
 @media (min-width:900px){
   .desktop-range-with-number{
@@ -5438,4 +5437,3 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
     font:700 13px/1 system-ui,-apple-system,"Segoe UI",sans-serif!important;
   }
 }
-

@@ -1875,19 +1875,6 @@
       return 'fadeRise';
     }
 
-    _syncAuthorOpacity(el) {
-      if(!el)return;
-      const raw=el.style.getPropertyValue('--sp-author-opacity');
-      const n=raw===''?1:Math.max(0,Math.min(1,Number(raw)));
-      const holder=el.closest?.('.sp-line, .sp-text-wrap, .sp-scene-body') || el.parentElement;
-      if(holder && holder!==el){
-        holder.style.setProperty('--sp-author-opacity', String(Number.isFinite(n)?n:1));
-        holder.style.opacity=String(Number.isFinite(n)?n:1);
-      }
-      // Animated node must remain fully controlled by animation engine.
-      el.style.removeProperty('opacity');
-    }
-
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
       if (style.color) node.style.color = String(style.color);
@@ -1919,7 +1906,7 @@
       }
       if (Number.isFinite(Number(style.lineHeight))) node.style.lineHeight = String(Math.max(1, Math.min(3, Number(style.lineHeight))));
       if (Number.isFinite(Number(style.letterSpacing))) node.style.letterSpacing = `${Math.max(-0.2, Math.min(0.5, Number(style.letterSpacing)))}em`;
-      if (Number.isFinite(Number(style.opacity))) node.style.setProperty('--sp-author-opacity', String(clamp(asNumber(style.opacity,1),0,1)));
+      if (Number.isFinite(Number(style.opacity))) node.style.opacity = String(Math.max(0.1, Math.min(1, Number(style.opacity))));
       if (Number.isFinite(Number(style.sideMargin)) && Number(style.sideMargin) > 0) {
         const margin=Math.max(0,Math.min(40,Number(style.sideMargin)));
         node.style.width=`calc(100% - ${margin*2}%)`;
@@ -1928,8 +1915,7 @@
         node.style.marginRight='auto';
       }
       if (style.align === 'left' || style.align === 'center' || style.align === 'right') node.style.textAlign = style.align;
-    
-      this._syncAuthorOpacity(el);}
+    }
 
     _applyCorePresentation(scene) {
       const view = scene.presentation?.view || 'world';
