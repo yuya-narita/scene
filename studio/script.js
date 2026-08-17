@@ -4131,6 +4131,18 @@ function startInlineTextEdit(){
   let mobileLiveDetailReturnSection='';
   let mobileLiveDetailOpening=false;
 
+  function refreshMobileLiveDetail(section){
+    if(desktopLiveActive() || !liveEditEnabled)return false;
+
+    // Clear the current hosted detail content first.
+    if(liveEditSheetBody)liveEditSheetBody.replaceChildren();
+
+    // Reopen the exact same shared inspector so every control re-reads
+    // the newly reset Scene data immediately.
+    requestAnimationFrame(()=>openMobileLiveDetail(section));
+    return true;
+  }
+
   function openMobileLiveDetail(section){
     if(!liveEditEnabled || !liveEditSheet || !liveEditSheetBody)return;
 
@@ -4591,7 +4603,18 @@ function openDesktopEffectDetail(){
     const closeOnly=()=>{closeDesktopEffectDetail();};
     x.addEventListener('click',closeOnly);cancel.addEventListener('click',closeOnly);overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
     save.addEventListener('click',async()=>{committed=true;await saveDraftNow();closeDesktopEffectDetail();renderDesktopLivePanel();});
-    reset.addEventListener('click',()=>{delete p.effectTiming;delete p.disappear;delete p.typing;p.effect='auto';p.display='stack';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});closeDesktopEffectDetail();openDesktopEffectDetail();});
+    reset.addEventListener('click',()=>{
+      delete p.effectTiming;
+      delete p.disappear;
+      delete p.typing;
+      p.effect='auto';
+      p.display='stack';
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:false});
+      if(refreshMobileLiveDetail('effect'))return;
+      closeDesktopEffectDetail();
+      openDesktopEffectDetail();
+    });
   }
   
 function enhanceDesktopTextDetailRanges(root){
@@ -4628,6 +4651,7 @@ function enhanceDesktopTextDetailRanges(root){
       range.value=String(n);
       range.dispatchEvent(new Event('input',{bubbles:true}));
       range.dispatchEvent(new Event('change',{bubbles:true}));
+      if(refreshMobileLiveDetail('effect'))return;
     });
     numeric.addEventListener('blur',()=>{
       const n=normalize(numeric.value);
@@ -5017,6 +5041,7 @@ function openDesktopAudioDetail(){
       try{player?._stopAllAudio?.(true);}catch(_){}
       refreshLivePlayer({preserveSheet:false});
       renderDesktopLivePanel();
+      if(refreshMobileLiveDetail('audio'))return;
       renderTrack();
     });
 
@@ -5364,6 +5389,7 @@ function openDesktopBackgroundDetail(){
       scheduleDraftSave(40);
       refreshLivePlayer({preserveSheet:false});
       renderDesktopLivePanel();
+      if(refreshMobileLiveDetail('background'))return;
       closeDesktopBackgroundDetail();
       openDesktopBackgroundDetail();
     });
@@ -5428,7 +5454,14 @@ function openDesktopTextDetail(){
     const closeOnly=()=>{closeDesktopTextDetail();};
     x.addEventListener('click',closeOnly);cancel.addEventListener('click',closeOnly);
     save.addEventListener('click',async()=>{committed=true;await saveDraftNow();closeDesktopTextDetail();renderDesktopLivePanel();});
-    reset.addEventListener('click',()=>{p.text={};scheduleDraftSave(50);refreshLivePlayer({preserveSheet:false});closeDesktopTextDetail();openDesktopTextDetail();});
+    reset.addEventListener('click',()=>{
+      p.text={};
+      scheduleDraftSave(50);
+      refreshLivePlayer({preserveSheet:false});
+      if(refreshMobileLiveDetail('text'))return;
+      closeDesktopTextDetail();
+      openDesktopTextDetail();
+    });
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
   }
   function renderDesktopLivePanel(){
