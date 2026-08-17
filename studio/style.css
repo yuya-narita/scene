@@ -5031,7 +5031,25 @@ body.easy-player-open #undoCompactButton,
 .live-edit-toggle{flex:0 0 auto;min-width:62px;height:38px;border:0;border-radius:999px;background:#d7d9dd;color:#555;font:inherit;font-weight:900}
 .live-edit-toggle[data-on="true"]{background:#17181b;color:#fff}
 @media(min-width:900px){.live-inline-toolbar{left:24px;right:auto;width:360px}}
-\n\n/* Live Edit v0.3.0 — one-time cursor hint + tiny cursor dock + editable empty Scenes */\n.live-inline-toolbar:not(.is-intro){\n  right:8px;bottom:calc(var(--live-keyboard-inset,0px) + 5px);\n  border-radius:11px;box-shadow:0 5px 15px rgba(0,0,0,.11);\n}\n.live-inline-toolbar:not(.is-intro) .live-inline-compact{gap:0;padding:2px}\n.live-inline-toolbar:not(.is-intro) .live-inline-compact button{\n  width:33px;height:34px;border-radius:8px;font-size:13.5px;font-weight:850;padding:0\n}\n.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target{\n  pointer-events:auto;min-height:min(42vh,300px);width:100%;box-sizing:border-box;\n  display:flex;align-items:center;cursor:text;\n}\n.live-inline-text-edit .sp-scene.is-active .sp-text.live-edit-empty-target{\n  min-height:min(42vh,300px);\n}\n
+
+
+/* Live Edit v0.3.0 — one-time cursor hint + tiny cursor dock + editable empty Scenes */
+.live-inline-toolbar:not(.is-intro){
+  right:8px;bottom:calc(var(--live-keyboard-inset,0px) + 5px);
+  border-radius:11px;box-shadow:0 5px 15px rgba(0,0,0,.11);
+}
+.live-inline-toolbar:not(.is-intro) .live-inline-compact{gap:0;padding:2px}
+.live-inline-toolbar:not(.is-intro) .live-inline-compact button{
+  width:33px;height:34px;border-radius:8px;font-size:13.5px;font-weight:850;padding:0
+}
+.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target{
+  pointer-events:auto;min-height:min(42vh,300px);width:100%;box-sizing:border-box;
+  display:flex;align-items:center;cursor:text;
+}
+.live-inline-text-edit .sp-scene.is-active .sp-text.live-edit-empty-target{
+  min-height:min(42vh,300px);
+}
+
 
 /* Live Edit v0.3.1 — tucked cursor toolbox + instant empty-Scene writing */
 .live-inline-toolbar{
@@ -5064,4 +5082,19 @@ body.easy-player-open #undoCompactButton,
 @media(min-width:900px){
   .live-inline-toolbar{right:18px!important;left:auto!important;width:34px!important}
 }
-\n\n/* Live Edit v0.3.2 — reliable tucked toolbox + empty Scene writing guide */\n.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target:not(.live-inline-editing)::before{\n  content:"タップして入力";\n  width:100%;\n  text-align:center;\n  font:700 13px/1.5 system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;\n  letter-spacing:.08em;\n  color:rgba(70,72,76,.38);\n  pointer-events:none;\n}\n.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target:not(.live-inline-editing){\n  justify-content:center;\n}\n.live-inline-text-edit .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target::before{content:none!important}\n
+
+
+/* Live Edit v0.3.2 — reliable tucked toolbox + empty Scene writing guide */
+.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target:not(.live-inline-editing)::before{
+  content:"タップして入力";
+  width:100%;
+  text-align:center;
+  font:700 13px/1.5 system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;
+  letter-spacing:.08em;
+  color:rgba(70,72,76,.38);
+  pointer-events:none;
+}
+.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target:not(.live-inline-editing){
+  justify-content:center;
+}
+.live-inline-text-edit .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target::before{content:none!important}

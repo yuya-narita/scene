@@ -4185,12 +4185,12 @@
     if(player)player.options.historyAllScenes=false;
   }
 
-  liveInlineToolbar?.addEventListener('pointerdown',(e)=>{
-    const b=e.target.closest('[data-live-inline]');
+  // v0.3.3 — iPhone Safari may blur contenteditable before a normal click
+  // reaches a control outside the editable text. Handle the cursor toolbox
+  // on touchstart/mousedown, before that blur can tear down Live Edit.
+  const handleLiveInlinePress=(e)=>{
+    const b=e.target.closest?.('[data-live-inline]');
     if(!b)return;
-    // Keep the contenteditable focus alive while tapping authoring controls.
-    // On iPhone Safari preventDefault() can suppress the later click, so the
-    // tiny toolbox trigger is handled synchronously on pointerdown.
     e.preventDefault();
     e.stopPropagation();
     const kind=b.dataset.liveInline;
@@ -4198,15 +4198,10 @@
       if(liveInlineToolbar.classList.contains('is-expanded'))collapseInlineCursorDock();
       else expandInlineCursorDock();
       liveInlineEditEl?.focus({preventScroll:true});
+      return;
     }
-  });
-  liveInlineToolbar?.addEventListener('click',(e)=>{
-    const b=e.target.closest('[data-live-inline]');if(!b)return;
-    e.preventDefault();e.stopPropagation();
-    const kind=b.dataset.liveInline;
-    // tools-toggle is already handled on pointerdown for iPhone keyboard safety.
-    if(kind==='tools-toggle')return;
-    // Using one of the helpers keeps the dock open briefly, then it tucks away again.
+    // Execute helpers immediately on touch/mouse down as well, so they remain
+    // usable while the software keyboard stays open.
     clearTimeout(liveInlineDockTimer);
     liveInlineDockTimer=setTimeout(()=>liveInlineToolbar?.classList.remove('is-expanded'),4200);
     if(kind==='split'){liveEditSplitInlineAtCaret();return;}
@@ -4214,6 +4209,16 @@
     if(kind==='caret-next'){moveInlineCaret(1);return;}
     if(kind==='punct-prev'){jumpInlineCaretToPunctuation(-1);return;}
     if(kind==='punct-next'){jumpInlineCaretToPunctuation(1);return;}
+  };
+  liveInlineToolbar?.addEventListener('touchstart',handleLiveInlinePress,{passive:false});
+  liveInlineToolbar?.addEventListener('mousedown',handleLiveInlinePress);
+  liveInlineToolbar?.addEventListener('click',(e)=>{
+    const b=e.target.closest('[data-live-inline]');if(!b)return;
+    e.preventDefault();e.stopPropagation();
+    const kind=b.dataset.liveInline;
+    // Commands already run on touchstart/mousedown. Suppress the synthetic
+    // click so the same action never fires twice.
+    return;
   });
 
   liveEditToolbar?.addEventListener('click',(e)=>{
@@ -4261,6 +4266,7 @@
   playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
   playerHost.addEventListener('sceneplayer:scenechange',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(ensureLiveEditEmptyTarget);});
   playerHost.addEventListener('sceneplayer:historyopen',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
+  playerHost.addEventListener('sceneplayer:historyclose',()=>{requestAnimationFrame(ensureLiveEditEmptyTarget);});
   $('#autoRecStart')?.addEventListener('click',()=>{closeLiveEditSheet();if(liveEditToolbar)liveEditToolbar.hidden=true;});
   $('#autoRecCancel')?.addEventListener('click',()=>{if(liveEditEnabled)setLiveToolbarVisible(true);});
   $('#autoRecRetry')?.addEventListener('click',()=>{if(liveEditEnabled)setLiveToolbarVisible(true);});
