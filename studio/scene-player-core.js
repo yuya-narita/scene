@@ -109,6 +109,7 @@
         ambient: this._createAudioElement('ambient')
       };
       this.oneshots = new Set();
+      this.muted = false;
       this._audioRenderMode = 'restore';
 
       this._buildShell();
@@ -1351,6 +1352,26 @@
       this.els.ending.hidden = false;
       this._presentationTimeout(()=>this.els.ending?.classList.add('is-visible'),3000);
       emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
+    }
+
+    setMuted(muted = true) {
+      this.muted = Boolean(muted);
+      Object.values(this.audioEls || {}).forEach((audio) => {
+        try { audio.muted = this.muted; } catch (_) {}
+      });
+      this.oneshots.forEach((audio) => {
+        try { audio.muted = this.muted; } catch (_) {}
+      });
+      emit(this.host, 'sceneplayer:mutechange', { muted: this.muted });
+      return this.muted;
+    }
+
+    toggleMuted() {
+      return this.setMuted(!this.muted);
+    }
+
+    isMuted() {
+      return Boolean(this.muted);
     }
 
     startAuto() {

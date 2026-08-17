@@ -2519,47 +2519,38 @@
   }
 
 
-  let liveEditMuted=false;
   let liveEditChromeObserver=null;
+  let liveEditSoundBound=false;
 
-  function applyLiveEditMute(){
-    if(!player)return;
-    const media=[
-      ...Object.values(player.audioEls||{}),
-      ...Array.from(player.oneshots||[])
-    ].filter(Boolean);
-    for(const audio of media){
-      try{audio.muted=!!liveEditMuted;}catch(_){}
-    }
-    const btn=playerHost.querySelector('.live-edit-mute');
-    if(btn){
-      // Match Prayer: the glyph stays ♪; the circular wash indicates mute/off.
-      btn.textContent='♪';
-      btn.setAttribute('aria-pressed',liveEditMuted?'true':'false');
-      btn.setAttribute('aria-label',liveEditMuted?'音声をオン':'音声をミュート');
-      btn.title=liveEditMuted?'音声をオン':'音声をミュート';
-    }
-  }
+  function bindLiveEditSoundControl(){
+    if(!player || liveEditSoundBound)return;
+    const right=player.els?.restart || playerHost.querySelector('.sp-restart');
+    if(!right)return;
 
-  function toggleLiveEditMute(event){
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    liveEditMuted=!liveEditMuted;
-    applyLiveEditMute();
-  }
+    liveEditSoundBound=true;
+    right.hidden=false;
+    right.disabled=false;
+    right.textContent='♪';
+    right.setAttribute('aria-label','音声をオン・オフ');
+    right.setAttribute('aria-pressed', player.isMuted?.() ? 'false' : 'true');
+    right.classList.toggle('is-muted', Boolean(player.isMuted?.()));
 
-  function ensureLiveEditMuteButton(){
-    const header=playerHost.querySelector('.sp-header');
-    if(!header)return;
-    let btn=header.querySelector('.live-edit-mute');
-    if(!btn){
-      btn=document.createElement('button');
-      btn.type='button';
-      btn.className='sp-button live-edit-mute';
-      btn.addEventListener('click',toggleLiveEditMute);
-      header.appendChild(btn);
-    }
-    applyLiveEditMute();
+    // Same contract as Prayer/public-player.js:
+    // reuse the Core restart slot and override the original restart action.
+    right.addEventListener('click',(e)=>{
+      if(!liveEditEnabled)return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const muted=player.toggleMuted();
+      right.classList.toggle('is-muted',muted);
+      right.setAttribute('aria-pressed',muted?'false':'true');
+    },true);
+
+    playerHost.addEventListener('sceneplayer:mutechange',(e)=>{
+      const muted=Boolean(e.detail?.muted);
+      right.classList.toggle('is-muted',muted);
+      right.setAttribute('aria-pressed',muted?'false':'true');
+    });
   }
 
   function syncLiveEditPreviewChrome(){
@@ -2574,18 +2565,12 @@
       setLiveToolbarVisible(false);
       closeLiveEditSheet();
     }
-    ensureLiveEditMuteButton();
+    bindLiveEditSoundControl();
   }
 
   function observeLiveEditPreviewChrome(){
     liveEditChromeObserver?.disconnect?.();
-    liveEditChromeObserver=new MutationObserver(()=>{
-      syncLiveEditPreviewChrome();
-      if(liveEditMuted){
-        requestAnimationFrame(applyLiveEditMute);
-        setTimeout(applyLiveEditMute,40);
-      }
-    });
+    liveEditChromeObserver=new MutationObserver(syncLiveEditPreviewChrome);
     liveEditChromeObserver.observe(playerHost,{attributes:true,attributeFilter:['class']});
   }
 
@@ -2596,20 +2581,9 @@
       syncPublishPreviewButton(false);
       if(autoRecActive && event.detail?.direction==='next')recordAutoRecBoundary();
       syncLiveEditPreviewChrome();
-      if(liveEditMuted){
-        requestAnimationFrame(applyLiveEditMute);
-        setTimeout(applyLiveEditMute,40);
-      }
     });
     playerHost.addEventListener('sceneplayer:coverstart',syncLiveEditPreviewChrome);
     playerHost.addEventListener('sceneplayer:load',syncLiveEditPreviewChrome);
-    ['sceneplayer:audiostart','sceneplayer:oneshot','sceneplayer:audioready'].forEach(type=>{
-      playerHost.addEventListener(type,()=>{
-        if(!liveEditMuted)return;
-        requestAnimationFrame(applyLiveEditMute);
-        setTimeout(applyLiveEditMute,30);
-      });
-    });
     playerHost.addEventListener('sceneplayer:end',()=>{
       if(autoRecActive){finishAutoRec(true);syncPublishPreviewButton(false);}
       else syncPublishPreviewButton(true);
@@ -4297,7 +4271,7 @@ function startInlineTextEdit(){
     if(player)player.options.historyAllScenes=true;
     setLiveToolbarVisible(false);
     playerHost.classList.add('live-edit-enabled');
-    ensureLiveEditMuteButton();
+    bindLiveEditSoundControl();
     observeLiveEditPreviewChrome();
     syncLiveEditPreviewChrome();
     requestAnimationFrame(ensureLiveEditEmptyTarget);

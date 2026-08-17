@@ -5197,18 +5197,6 @@ body.easy-player-open #undoCompactButton,
   display:none!important;
 }
 
-#scenePlayer .live-edit-mute{
-  grid-column:3;
-  grid-row:1;
-  display:grid;
-  place-items:center;
-  font-size:22px;
-  line-height:1;
-}
-#scenePlayer.sp-cover-open .live-edit-mute{
-  display:none!important;
-}
-
 .easy-player-open #scenePlayer:not(.live-edit-toolbar-visible) .sp-footer{
   padding:7px 18px calc(7px + env(safe-area-inset-bottom))!important;
 }
@@ -5241,23 +5229,22 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
   line-height:1.05!important;
 }
 
-/* Prayer contract:
-   sound ON  = plain ♪
-   sound OFF = same ♪ inside a quiet circular wash */
-#scenePlayer .live-edit-mute{
-  width:44px!important;
-  height:44px!important;
-  border-radius:50%!important;
-  background:transparent!important;
-  transition:background .18s ease, color .18s ease!important;
-}
-#scenePlayer .live-edit-mute[aria-pressed="true"]{
-  background:var(--sp-line,rgba(55,50,45,.10))!important;
-}
-
 /* Core history CSS has a serif fallback. Inline Scene typography now wins.
    Keep history navigation sizing unless the Scene explicitly authored a size. */
 #scenePlayer .sp-history-text,
 #scenePlayer .sp-history-subtext{
   font-synthesis:none;
+}
+
+
+/* Live Edit v0.4.0 — exact Prayer sound-control parity.
+   Reuse the Core .sp-restart slot, just like public-player.js. */
+#scenePlayer.live-edit-enabled .sp-restart{
+  display:grid!important;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:22px;
+  line-height:1;
+}
+#scenePlayer.live-edit-enabled .sp-restart.is-muted{
+  opacity:.36;
 }
