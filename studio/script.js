@@ -4585,7 +4585,7 @@ function openDesktopEffectDetail(){
     const replay=document.createElement('button');replay.type='button';replay.className='desktop-effect-replay';replay.textContent='▶ 演出をもう一度見る';replay.addEventListener('click',replayCurrentDesktopEffect);preview.appendChild(replay);
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
-    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
+    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'文字設定を初期化';
     const spacer=document.createElement('span');const cancel=document.createElement('button');cancel.type='button';cancel.textContent='キャンセル';const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';foot.append(reset,spacer,cancel,save);
     modal.append(head,body,foot);overlay.appendChild(modal);liveDetailHost().appendChild(overlay);
     const closeOnly=()=>{closeDesktopEffectDetail();};
@@ -4879,7 +4879,7 @@ function openDesktopAudioDetail(){
       assetBtns.className='desktop-audio-detail-file-actions';
       assetBtns.append(
         desktopAction(track.src?'音源を変更':'ファイルを選択',()=>{
-          desktopPickFile('audio/*',(url,name)=>{
+          desktopPickFile((!desktopLiveActive() ? '' : 'audio/*'),(url,name)=>{
             track.src=url;
             track._editorFileName=name;
             if(kind==='se')track.action='play';
@@ -4952,19 +4952,22 @@ function openDesktopAudioDetail(){
       previewSec.className='desktop-text-detail-section';
       const ph=document.createElement('h3');ph.textContent='プレビュー';
       const pn=document.createElement('p');pn.className='desktop-text-detail-note';
-      pn.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの音設定を保持します。';
+      pn.textContent=desktopLiveActive()
+        ? '変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの音設定を保持します。'
+        : '変更は自動保存されます。閉じるとLive Editorでそのまま確認できます。';
       previewSec.append(ph,pn);
 
-      const audition=document.createElement('button');
-      audition.type='button';
-      audition.className='desktop-effect-replay';
-      audition.textContent='♪ このSceneの音を確認';
-      audition.addEventListener('click',()=>{
-        // This click is a trusted user gesture, so explicitly arm audio before rendering.
-        try{player?.unlockAudio?.(true);}catch(_){}
-        refreshAudioPreview(kind,{playOneShot:kind==='se'});
-      });
-      previewSec.appendChild(audition);
+      if(desktopLiveActive()){
+        const audition=document.createElement('button');
+        audition.type='button';
+        audition.className='desktop-effect-replay';
+        audition.textContent='♪ このSceneの音を確認';
+        audition.addEventListener('click',()=>{
+          try{player?.unlockAudio?.(true);}catch(_){}
+          refreshAudioPreview(kind,{playOneShot:kind==='se'});
+        });
+        previewSec.appendChild(audition);
+      }
       content.appendChild(previewSec);
     };
 
@@ -4979,7 +4982,7 @@ function openDesktopAudioDetail(){
 
     const foot=document.createElement('footer');
     foot.className='desktop-text-detail-foot';
-    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
+    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'演出設定を初期化';
     const spacer=document.createElement('span');
     const close=document.createElement('button');close.type='button';close.textContent='閉じる';
     const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';
@@ -5327,13 +5330,15 @@ function openDesktopBackgroundDetail(){
     const previewSec=section('プレビュー');
     const previewNote=document.createElement('p');
     previewNote.className='desktop-text-detail-note';
-    previewNote.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの背景設定を保持します。';
+    previewNote.textContent=desktopLiveActive()
+      ? '変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの背景設定を保持します。'
+      : '変更は自動保存されます。閉じるとLive Editorでそのまま確認できます。';
     previewSec.appendChild(previewNote);
 
     const foot=document.createElement('footer');
     foot.className='desktop-text-detail-foot';
     const reset=document.createElement('button');
-    reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
+    reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'背景設定を初期化';
     const spacer=document.createElement('span');
     const close=document.createElement('button');
     close.type='button';close.textContent='閉じる';
@@ -5413,7 +5418,7 @@ function openDesktopTextDetail(){
     const noteP=document.createElement('p');noteP.className='desktop-text-detail-note';noteP.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。';note.appendChild(noteP);
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
-    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
+    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'音設定を初期化';
     const spacer=document.createElement('span');
     const cancel=document.createElement('button');cancel.type='button';cancel.textContent='キャンセル';
     const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';

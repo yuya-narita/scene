@@ -6049,3 +6049,34 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
     padding-bottom:18px!important;
   }
 }
+
+
+/* v10 — mobile detail ergonomics */
+@media (max-width:899px){
+  body.mobile-live-detail-open input[type="range"]{
+    touch-action:pan-y!important;
+    -webkit-user-select:none!important;
+    user-select:none!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-range{
+    padding-block:3px!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-range input[type="range"]{
+    height:34px!important;
+    margin:6px 0 0!important;
+  }
+
+  /* PC-only replay/audition controls do not make sense in single-screen mobile detail. */
+  body.mobile-live-detail-open .desktop-effect-replay{
+    display:none!important;
+  }
+
+  /* Category reset labels are longer on iPhone. */
+  body.mobile-live-detail-open .desktop-text-detail-reset{
+    max-width:150px!important;
+    white-space:normal!important;
+    line-height:1.2!important;
+  }
+}
