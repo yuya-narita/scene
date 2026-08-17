@@ -4134,12 +4134,28 @@ function startInlineTextEdit(){
   function refreshMobileLiveDetail(section){
     if(desktopLiveActive() || !liveEditEnabled)return false;
 
-    // Clear the current hosted detail content first.
+    // Preserve where the author was looking before reset.
+    // The detail body is the actual scrolling element on iPhone.
+    const currentModal=liveEditSheetBody?.querySelector('.desktop-text-detail-modal');
+    const currentBody=currentModal?.querySelector('.desktop-text-detail-body');
+    const keepScroll=currentBody?.scrollTop||0;
+
     if(liveEditSheetBody)liveEditSheetBody.replaceChildren();
 
-    // Reopen the exact same shared inspector so every control re-reads
-    // the newly reset Scene data immediately.
-    requestAnimationFrame(()=>openMobileLiveDetail(section));
+    // Reopen with freshly reset Scene data, then restore the same viewport.
+    // This makes the changed numbers/sliders visibly snap back in place
+    // instead of jumping to the top of the inspector.
+    requestAnimationFrame(()=>{
+      openMobileLiveDetail(section);
+      requestAnimationFrame(()=>{
+        const nextModal=liveEditSheetBody?.querySelector('.desktop-text-detail-modal');
+        const nextBody=nextModal?.querySelector('.desktop-text-detail-body');
+        if(nextBody){
+          const maxScroll=Math.max(0,nextBody.scrollHeight-nextBody.clientHeight);
+          nextBody.scrollTop=Math.min(keepScroll,maxScroll);
+        }
+      });
+    });
     return true;
   }
 
