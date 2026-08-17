@@ -4239,6 +4239,23 @@ function startInlineTextEdit(){
   function closeDesktopEffectDetail(){
     desktopLivePanel?.querySelector('.desktop-effect-detail-overlay')?.remove();
   }
+
+  function currentDesktopDetailKind(){
+    if(!desktopLivePanel)return '';
+    if(desktopLivePanel.querySelector('.desktop-effect-detail-overlay'))return 'effect';
+    if(desktopLivePanel.querySelector('.desktop-text-detail-overlay'))return 'text';
+    return '';
+  }
+
+  function reopenDesktopDetailForCurrentScene(kind){
+    if(!kind||!desktopLiveActive())return;
+    // Scene navigation is not "cancel": keep edits already made to the
+    // previous Scene and simply retarget the open inspector to the new Scene.
+    closeDesktopEffectDetail();
+    closeDesktopTextDetail();
+    if(kind==='effect')openDesktopEffectDetail();
+    else if(kind==='text')openDesktopTextDetail();
+  }
   function openDesktopEffectDetail(){
     if(!desktopLiveActive()||!desktopLivePanel)return;
     closeDesktopEffectDetail();
@@ -4898,7 +4915,19 @@ function openDesktopTextDetail(){
     startInlineTextEdit();
   },true);
   playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
-  playerHost.addEventListener('sceneplayer:scenechange',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(desktopLiveActive());requestAnimationFrame(()=>{ensureLiveEditEmptyTarget();renderDesktopLivePanel();});});
+  playerHost.addEventListener('sceneplayer:scenechange',()=>{
+    const detailKind=currentDesktopDetailKind();
+    finishInlineTextEdit();
+    closeLiveEditSheet();
+    setLiveToolbarVisible(desktopLiveActive());
+    requestAnimationFrame(()=>{
+      ensureLiveEditEmptyTarget();
+      renderDesktopLivePanel();
+      if(detailKind){
+        requestAnimationFrame(()=>reopenDesktopDetailForCurrentScene(detailKind));
+      }
+    });
+  });
   playerHost.addEventListener('sceneplayer:historyopen',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
   playerHost.addEventListener('sceneplayer:historyclose',()=>{requestAnimationFrame(ensureLiveEditEmptyTarget);});
   $('#autoRecStart')?.addEventListener('click',()=>{closeLiveEditSheet();if(liveEditToolbar)liveEditToolbar.hidden=true;});
