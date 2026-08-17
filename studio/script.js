@@ -3743,6 +3743,7 @@
     liveInlineEditEl.classList.remove('live-inline-editing');
     liveInlineEditEl=null;
     playerHost.classList.remove('live-inline-text-edit');
+    document.body.classList.remove('live-inline-text-edit');
     resetInlineKeyboardShift();
     if(liveInlineToolbar){liveInlineToolbar.hidden=true;liveInlineToolbar.classList.remove('is-intro','is-expanded');}
     clearTimeout(liveInlineIntroTimer);
@@ -3966,6 +3967,11 @@ function startInlineTextEdit(){
     el.setAttribute('aria-label','Scene text');
     el.classList.add('live-inline-editing');
     playerHost.classList.add('live-inline-text-edit');
+    // Toolbar is a sibling of #scenePlayer, so expose editing state on body too.
+    // The iOS keyboard pinning CSS and visualViewport updater key off this class.
+    document.body.classList.add('live-inline-text-edit');
+    updateLiveKeyboardInset();
+    requestAnimationFrame(updateLiveKeyboardInset);
 
     const sync=()=>{
       if(!liveInlineEditEl)return;
