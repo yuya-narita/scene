@@ -3825,9 +3825,12 @@
       if(liveInlineToolbar)liveInlineToolbar.hidden=true;
       return;
     }
-    liveInlineEditEl.removeAttribute('contenteditable');
-    liveInlineEditEl.removeAttribute('role');
-    liveInlineEditEl.classList.remove('live-inline-editing');
+    const editingEl=liveInlineEditEl;
+    if(editingEl){
+      editingEl.removeAttribute('contenteditable');
+      editingEl.removeAttribute('role');
+      editingEl.classList.remove('live-inline-editing');
+    }
     liveInlineEditEl=null;
     playerHost.classList.remove('live-inline-text-edit');
     document.body.classList.remove('live-inline-text-edit');
@@ -4125,12 +4128,105 @@ function startInlineTextEdit(){
     if(!player||!workingDocument?.scenes?.length)return;
     liveEditRenderAt(player.index,{preserveSheet});
   }
+  let mobileLiveDetailReturnSection='';
+  let mobileLiveDetailOpening=false;
+
+  function openMobileLiveDetail(section){
+    if(!liveEditEnabled || !liveEditSheet || !liveEditSheetBody)return;
+
+    mobileLiveDetailReturnSection=section;
+    mobileLiveDetailOpening=true;
+
+    const selector = section==='effect' ? '.desktop-effect-detail-overlay' :
+      section==='background' ? '.desktop-background-detail-overlay' :
+      section==='audio' ? '.desktop-audio-detail-overlay' :
+      '.desktop-text-detail-overlay';
+
+    // Generate the shared detail inspector exactly as PC does.
+    if(section==='text')openDesktopTextDetail();
+    else if(section==='effect')openDesktopEffectDetail();
+    else if(section==='background')openDesktopBackgroundDetail();
+    else if(section==='audio')openDesktopAudioDetail();
+
+    const overlay=document.querySelector(selector);
+    const modal=overlay?.querySelector('.desktop-text-detail-modal');
+    if(!overlay || !modal){
+      mobileLiveDetailOpening=false;
+      console.error('[Live Detail] shared inspector generation failed:',section);
+      return;
+    }
+
+    // We only need the shared inspector contents. The iPhone's already-working
+    // Live Edit sheet becomes the visual host, avoiding a second overlay layer.
+    modal.dataset.mobileLiveDetail='true';
+    modal.remove();
+    overlay.remove();
+
+    liveEditSheet.hidden=false;
+    document.body.classList.add('live-edit-sheet-open','mobile-live-detail-open');
+    liveEditSheet.classList.add('mobile-live-detail-sheet');
+
+    const head=liveEditSheet.querySelector('.live-edit-sheet-head');
+    if(head)head.hidden=true;
+
+    liveEditSheetBody.replaceChildren(modal);
+
+    // PC modal is now inside the mobile sheet, so strip desktop constraints.
+    modal.style.setProperty('width','100%','important');
+    modal.style.setProperty('max-width','none','important');
+    modal.style.setProperty('max-height','none','important');
+    modal.style.setProperty('height','100%','important');
+    modal.style.setProperty('overflow','auto','important');
+    modal.style.setProperty('border','0','important');
+    modal.style.setProperty('border-radius','0','important');
+    modal.style.setProperty('box-shadow','none','important');
+
+    // Detail close buttons should return to the compact Live Edit sheet.
+    let mobileDetailReturned=false;
+    const returnToCompact=()=>{
+      if(mobileDetailReturned)return;
+      mobileDetailReturned=true;
+
+      const sec=mobileLiveDetailReturnSection || section;
+      mobileLiveDetailReturnSection='';
+      mobileLiveDetailOpening=true;
+
+      modal.remove();
+      liveEditSheetBody.replaceChildren();
+      liveEditSheet.classList.remove('mobile-live-detail-sheet','live-edit-sheet-audio');
+      document.body.classList.remove('mobile-live-detail-open');
+
+      const h=liveEditSheet.querySelector('.live-edit-sheet-head');
+      if(h)h.hidden=false;
+
+      mobileLiveDetailOpening=false;
+      renderLiveEditSheet(sec);
+    };
+
+    modal.querySelector('.desktop-text-detail-close')?.addEventListener('click',returnToCompact,{once:true});
+
+    // Close / Cancel / Save all return to the compact sheet.
+    // Reset stays inside the detail view.
+    const footerButtons=[...modal.querySelectorAll('.desktop-text-detail-foot button')];
+    footerButtons.forEach(btn=>{
+      const t=(btn.textContent||'').trim();
+      if(t==='閉じる'||t==='キャンセル'||t==='保存'){
+        btn.addEventListener('click',()=>requestAnimationFrame(returnToCompact),{once:true});
+      }
+    });
+
+    mobileLiveDetailOpening=false;
+  }
+
+  function restoreMobileLiveDetailSheet(section){
+    if(!section||!liveEditEnabled)return;
+    requestAnimationFrame(()=>renderLiveEditSheet(section));
+  }
+
   function liveEditAdvanced(section){
-    if(desktopLiveActive()){
-      if(section==='text'){openDesktopTextDetail();return;}
-      if(section==='effect'){openDesktopEffectDetail();return;}
-      if(section==='background'){openDesktopBackgroundDetail();return;}
-      if(section==='audio'){openDesktopAudioDetail();return;}
+    if(liveEditEnabled){
+      openMobileLiveDetail(section);
+      return;
     }
     const {index}=liveEditScene();
     selectedSceneIndex=index;
@@ -4180,20 +4276,44 @@ function startInlineTextEdit(){
     const head=document.createElement('span');head.className='desktop-text-detail-range-head';
     const name=document.createElement('strong');name.textContent=label;
 
-    // Build the numeric editor as part of the control itself instead of
-    // trying to attach one after the modal has rendered.
     const valueWrap=document.createElement('span');valueWrap.className='desktop-text-detail-value';
-    const numeric=document.createElement('input');numeric.type='number';numeric.className='desktop-text-detail-number';
 
     // Percent controls whose internal value is 0..1 are shown as 0..100.
     const displayScale=(String(unit).trim()==='%' && Number(max)<=1)?100:1;
     const displayMin=Number(min)*displayScale;
     const displayMax=Number(max)*displayScale;
     const displayStep=Number(step)*displayScale;
-    numeric.min=String(displayMin);
-    numeric.max=String(displayMax);
-    numeric.step=String(displayStep);
-    numeric.value=String(Number(value)*displayScale);
+
+    const mobileWheel=window.matchMedia('(max-width:899px)').matches && !desktopLiveActive();
+    const numeric=document.createElement(mobileWheel?'select':'input');
+    numeric.className='desktop-text-detail-number';
+    if(mobileWheel)numeric.classList.add('desktop-mobile-wheel-number');
+
+    const precision=(()=>{
+      const raw=String(displayStep);
+      if(raw.includes('e-'))return Number(raw.split('e-')[1])||0;
+      return raw.includes('.')?raw.split('.')[1].length:0;
+    })();
+    const clean=(n)=>Number(Number(n).toFixed(Math.min(6,precision+2)));
+
+    if(mobileWheel){
+      // Native iOS <select> is intentionally used here:
+      // tapping the visible number opens Apple's drum/wheel picker.
+      const count=Math.min(2000,Math.floor((displayMax-displayMin)/displayStep+0.5)+1);
+      for(let i=0;i<count;i++){
+        const shown=clean(displayMin+(displayStep*i));
+        if(shown>displayMax+(displayStep/2))break;
+        const o=document.createElement('option');
+        o.value=String(shown);
+        o.textContent=String(shown);
+        numeric.appendChild(o);
+      }
+    }else{
+      numeric.type='number';
+      numeric.min=String(displayMin);
+      numeric.max=String(displayMax);
+      numeric.step=String(displayStep);
+    }
 
     const suffix=document.createElement('span');suffix.className='desktop-text-detail-unit';suffix.textContent=unit.trim();
 
@@ -4205,7 +4325,8 @@ function startInlineTextEdit(){
     const clamp=(n,lo,hi)=>Math.min(hi,Math.max(lo,n));
     const sliderToNumber=()=>{
       const raw=Number(slider.value);
-      numeric.value=String(Number((raw*displayScale).toFixed(6)));
+      const shown=clean(raw*displayScale);
+      numeric.value=String(shown);
     };
     const applySlider=()=>{
       sliderToNumber();
@@ -4215,22 +4336,25 @@ function startInlineTextEdit(){
       let shown=Number(numeric.value);
       if(!Number.isFinite(shown))shown=Number(slider.value)*displayScale;
       shown=clamp(shown,displayMin,displayMax);
-      numeric.value=String(shown);
+      numeric.value=String(clean(shown));
       slider.value=String(shown/displayScale);
       oninput(Number(slider.value));
     };
 
     slider.addEventListener('input',applySlider);
-    numeric.addEventListener('input',applyNumber);
-    numeric.addEventListener('change',applyNumber);
-    numeric.addEventListener('blur',applyNumber);
+    if(mobileWheel){
+      numeric.addEventListener('change',applyNumber);
+    }else{
+      numeric.addEventListener('input',applyNumber);
+      numeric.addEventListener('change',applyNumber);
+      numeric.addEventListener('blur',applyNumber);
+    }
 
     valueWrap.append(numeric);
     if(unit.trim())valueWrap.append(suffix);
     head.append(name,valueWrap);
     field.append(head,slider);
 
-    // Initial value is visible immediately when the modal opens.
     sliderToNumber();
     return field;
   }
@@ -4241,20 +4365,39 @@ function startInlineTextEdit(){
     values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
     select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.append(cap,select);return wrap;
   }
+  function liveDetailHost(){
+    return desktopLiveActive() && desktopLivePanel ? desktopLivePanel : document.body;
+  }
+  function liveDetailQuery(selector){
+    return document.querySelector(selector);
+  }
+
   function closeDesktopTextDetail(){
-    desktopLivePanel?.querySelector('.desktop-text-detail-overlay')?.remove();
+    const el=liveDetailQuery('.desktop-text-detail-overlay');
+    const shouldRestore=el?.dataset.mobileLiveDetail==='true' && !mobileLiveDetailOpening;
+    el?.remove();
+    if(shouldRestore){const section=mobileLiveDetailReturnSection;mobileLiveDetailReturnSection='';restoreMobileLiveDetailSheet(section);}
   }
 
   function closeDesktopEffectDetail(){
-    desktopLivePanel?.querySelector('.desktop-effect-detail-overlay')?.remove();
+    const el=liveDetailQuery('.desktop-effect-detail-overlay');
+    const shouldRestore=el?.dataset.mobileLiveDetail==='true' && !mobileLiveDetailOpening;
+    el?.remove();
+    if(shouldRestore){const section=mobileLiveDetailReturnSection;mobileLiveDetailReturnSection='';restoreMobileLiveDetailSheet(section);}
   }
 
   function closeDesktopBackgroundDetail(){
-    desktopLivePanel?.querySelector('.desktop-background-detail-overlay')?.remove();
+    const el=liveDetailQuery('.desktop-background-detail-overlay');
+    const shouldRestore=el?.dataset.mobileLiveDetail==='true' && !mobileLiveDetailOpening;
+    el?.remove();
+    if(shouldRestore){const section=mobileLiveDetailReturnSection;mobileLiveDetailReturnSection='';restoreMobileLiveDetailSheet(section);}
   }
 
   function closeDesktopAudioDetail(){
-    desktopLivePanel?.querySelector('.desktop-audio-detail-overlay')?.remove();
+    const el=liveDetailQuery('.desktop-audio-detail-overlay');
+    const shouldRestore=el?.dataset.mobileLiveDetail==='true' && !mobileLiveDetailOpening;
+    el?.remove();
+    if(shouldRestore){const section=mobileLiveDetailReturnSection;mobileLiveDetailReturnSection='';restoreMobileLiveDetailSheet(section);}
   }
 
   function currentDesktopDetailKind(){
@@ -4355,7 +4498,7 @@ function startInlineTextEdit(){
   }
 
 function openDesktopEffectDetail(){
-    if(!desktopLiveActive()||!desktopLivePanel)return;
+    if(!liveEditEnabled)return;
     closeDesktopEffectDetail();
     const {scene,index}=liveEditScene();if(!scene)return;
     ensureDesktopEffectVisibleDefaults(scene);
@@ -4444,7 +4587,7 @@ function openDesktopEffectDetail(){
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
     const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
     const spacer=document.createElement('span');const cancel=document.createElement('button');cancel.type='button';cancel.textContent='キャンセル';const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';foot.append(reset,spacer,cancel,save);
-    modal.append(head,body,foot);overlay.appendChild(modal);desktopLivePanel.appendChild(overlay);
+    modal.append(head,body,foot);overlay.appendChild(modal);liveDetailHost().appendChild(overlay);
     const closeOnly=()=>{closeDesktopEffectDetail();};
     x.addEventListener('click',closeOnly);cancel.addEventListener('click',closeOnly);overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
     save.addEventListener('click',async()=>{committed=true;await saveDraftNow();closeDesktopEffectDetail();renderDesktopLivePanel();});
@@ -4497,7 +4640,7 @@ function enhanceDesktopTextDetailRanges(root){
 
 
 function openDesktopAudioDetail(){
-    if(!desktopLiveActive()||!desktopLivePanel)return;
+    if(!liveEditEnabled)return;
     closeDesktopAudioDetail();
 
     const {scene,index}=liveEditScene();
@@ -4844,7 +4987,7 @@ function openDesktopAudioDetail(){
 
     modal.append(head,body,foot);
     overlay.appendChild(modal);
-    desktopLivePanel.appendChild(overlay);
+    liveDetailHost().appendChild(overlay);
 
     const closeOnly=()=>{
       commitAll();
@@ -4878,7 +5021,7 @@ function openDesktopAudioDetail(){
   }
 
 function openDesktopBackgroundDetail(){
-    if(!desktopLiveActive()||!desktopLivePanel)return;
+    if(!liveEditEnabled)return;
     closeDesktopBackgroundDetail();
 
     const {scene,index}=liveEditScene();
@@ -5200,7 +5343,7 @@ function openDesktopBackgroundDetail(){
 
     modal.append(head,body,foot);
     overlay.appendChild(modal);
-    desktopLivePanel.appendChild(overlay);
+    liveDetailHost().appendChild(overlay);
 
     const closeOnly=()=>closeDesktopBackgroundDetail();
     x.addEventListener('click',closeOnly);
@@ -5222,7 +5365,7 @@ function openDesktopBackgroundDetail(){
   }
 
 function openDesktopTextDetail(){
-    if(!desktopLiveActive()||!desktopLivePanel)return;
+    if(!liveEditEnabled)return;
     closeDesktopTextDetail();
     const {scene,index}=liveEditScene();if(!scene)return;
     const p=ensurePresentation(scene);p.text ||= {};
@@ -5275,7 +5418,7 @@ function openDesktopTextDetail(){
     const cancel=document.createElement('button');cancel.type='button';cancel.textContent='キャンセル';
     const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';
     foot.append(reset,spacer,cancel,save);
-    modal.append(head,body,foot);overlay.appendChild(modal);desktopLivePanel.appendChild(overlay);
+    modal.append(head,body,foot);overlay.appendChild(modal);liveDetailHost().appendChild(overlay);
 
     const closeOnly=()=>{closeDesktopTextDetail();};
     x.addEventListener('click',closeOnly);cancel.addEventListener('click',closeOnly);
@@ -5374,6 +5517,7 @@ function openDesktopTextDetail(){
     liveEditSceneNumber.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     liveEditSheet.hidden=false;
     document.body.classList.add('live-edit-sheet-open');
+    liveEditSheet.classList.toggle('live-edit-sheet-audio',kind==='audio');
     liveEditSheetBody.innerHTML='';
 
     if(kind==='text'){
@@ -5415,7 +5559,7 @@ function openDesktopTextDetail(){
       }else{
         liveEditSheetBody.append(grid);
       }
-      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='文字の詳細設定';detail.addEventListener('click',()=>liveEditAdvanced('text'));
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='文字の詳細設定';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('text');});
       liveEditSheetBody.append(detail);return;
     }
 
@@ -5443,7 +5587,7 @@ function openDesktopTextDetail(){
         }),
         makeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();})
       );
-      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='演出の詳細設定';detail.addEventListener('click',()=>liveEditAdvanced('text'));
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='演出の詳細設定';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
       liveEditSheetBody.append(grid,detail);return;
     }
 
@@ -5500,7 +5644,7 @@ function openDesktopTextDetail(){
       toneRow.append(dark,light);
       if(!bg?.src){dark.disabled=true;light.disabled=true;}
       const status=document.createElement('div');status.className='live-edit-status';status.textContent=bg?.src?`選択中：${bg._editorFileName||'背景画像'}`:(bg?.src===''?'このSceneから背景なし':'前Sceneの背景を継続');
-      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='暗さ・動き・切替を細かく調整';detail.addEventListener('click',()=>liveEditAdvanced('background'));
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='暗さ・動き・切替を細かく調整';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('background');});
       liveEditSheetBody.append(actions,pick,toneRow,status,detail);return;
     }
 
@@ -5525,7 +5669,7 @@ function openDesktopTextDetail(){
     sePick.onclick=()=>pickLiveFile('audio/*',(url,fileName)=>setManagedAudio(scene,'oneshot',{channel:'oneshot',role:'se',action:'play',src:url,volume:.8,fadeIn:0,_editorFileName:fileName}));
     seButtons.append(seNone,sePick);seRow.append(seHead,seButtons);audioWrap.append(seRow);
     const presetNote=document.createElement('p');presetNote.className='live-edit-note';presetNote.textContent='Ambient / SE のプリセットは後から追加できます。今はファイル選択と状態変更だけをLive Editで行います。';
-    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='音量・フェード・ループを細かく調整';detail.addEventListener('click',()=>liveEditAdvanced('audio'));
+    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='音量・フェード・ループを細かく調整';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('audio');});
     liveEditSheetBody.append(audioWrap,presetNote,detail);
   }
 
@@ -5808,20 +5952,3 @@ function openDesktopTextDetail(){
   applyStaticUITranslations(); applyTheme('light'); updateCount();
 })();
 
-
-if(window.matchMedia?.('(min-width:900px)').matches){
-  const desktopTextDetailRangeObserver=new MutationObserver(()=>{
-    const root=document.querySelector(
-      '.desktop-text-detail-modal, .desktop-detail-modal, [data-desktop-text-detail]'
-    );
-    if(root && !root.hidden && root.getClientRects().length){
-      enhanceDesktopTextDetailRanges(root);
-    }
-  });
-  desktopTextDetailRangeObserver.observe(document.body,{
-    subtree:true,
-    childList:true,
-    attributes:true,
-    attributeFilter:['class','hidden','style']
-  });
-}

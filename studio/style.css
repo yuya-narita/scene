@@ -5587,3 +5587,465 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
   .desktop-audio-detail-overlay{display:none!important}
 }
 
+
+/* v0.3.x — iPhone Live Editor: reuse the four PC detail inspectors as overlays. */
+@media (max-width:1099px){
+  body > .desktop-text-detail-overlay{
+    position:fixed!important;z-index:10120!important;inset:0!important;
+    background:rgba(28,31,35,.24)!important;backdrop-filter:blur(5px);
+    display:flex!important;align-items:flex-end!important;justify-content:center!important;
+    padding:calc(12px + env(safe-area-inset-top)) 10px 0!important;box-sizing:border-box!important;
+  }
+  body > .desktop-text-detail-overlay .desktop-text-detail-modal{
+    width:100%!important;max-width:720px!important;max-height:88dvh!important;overflow:auto!important;
+    background:#fbfbfc!important;border:1px solid #d9dde2!important;border-radius:24px 24px 0 0!important;
+    box-shadow:0 -14px 44px rgba(20,24,30,.18)!important;color:#17191d!important;
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif!important;
+    padding-bottom:env(safe-area-inset-bottom)!important;
+  }
+  body > .desktop-text-detail-overlay .desktop-text-detail-head{
+    position:sticky;top:0;z-index:4;display:flex;align-items:center;justify-content:space-between;
+    padding:16px 18px 13px;background:rgba(251,251,252,.97);border-bottom:1px solid #e1e4e8;
+  }
+  body > .desktop-text-detail-overlay .desktop-text-detail-head small{display:block;color:#7a8088;font:700 11px/1.2 system-ui}
+  body > .desktop-text-detail-overlay .desktop-text-detail-head h2{margin:3px 0 0;font:850 21px/1.2 system-ui}
+  body > .desktop-text-detail-overlay .desktop-text-detail-close{width:44px;height:44px;border:0;border-radius:50%;background:#eef0f2;font-size:28px;color:#202329}
+  body > .desktop-text-detail-overlay .desktop-text-detail-body{padding:2px 18px 14px;display:grid}
+  body > .desktop-text-detail-overlay .desktop-text-detail-section{padding:17px 0;border-bottom:1px solid #e5e7ea;display:grid;gap:13px}
+  body > .desktop-text-detail-overlay .desktop-text-detail-section h3{margin:0;font:850 14px/1.25 system-ui}
+  body > .desktop-text-detail-overlay .desktop-text-detail-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  body > .desktop-text-detail-overlay .desktop-text-detail-field{display:grid;gap:7px;color:#545a63;font:750 11px/1.2 system-ui}
+  body > .desktop-text-detail-overlay .desktop-text-detail-field select{width:100%;height:42px;border:1px solid #d3d7dc;border-radius:10px;background:#fff;padding:0 9px;font:700 12px system-ui}
+  body > .desktop-text-detail-overlay .desktop-text-detail-range{display:grid;gap:9px;padding:8px 0}
+  body > .desktop-text-detail-overlay .desktop-text-detail-range-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  body > .desktop-text-detail-overlay .desktop-text-detail-range-head strong{font:750 11px system-ui;color:#4f555e}
+  body > .desktop-text-detail-overlay .desktop-text-detail-value{display:inline-flex;align-items:center;gap:4px}
+  body > .desktop-text-detail-overlay .desktop-text-detail-number{width:66px;height:34px;box-sizing:border-box;border:1px solid #d6dae0;border-radius:8px;background:#fff;text-align:center;font:700 12px ui-monospace,monospace}
+  body > .desktop-text-detail-overlay input[type="range"]{width:100%;accent-color:#111820}
+  body > .desktop-text-detail-overlay .desktop-text-detail-color{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:8px;padding:10px;border:1px solid #d8dce1;border-radius:10px;background:#fff;font:750 11px system-ui}
+  body > .desktop-text-detail-overlay .desktop-text-detail-foot{position:sticky;bottom:0;z-index:4;display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:rgba(251,251,252,.97);border-top:1px solid #e1e4e8}
+  body > .desktop-text-detail-overlay .desktop-text-detail-foot button{min-width:78px;height:40px;border:1px solid #d3d7dc;border-radius:999px;background:#fff;font:800 12px system-ui}
+  body > .desktop-text-detail-overlay .desktop-text-detail-foot button.is-primary{background:#171a1f;color:#fff;border-color:#171a1f}
+  body > .desktop-text-detail-overlay .desktop-text-detail-note{margin:0;color:#737982;font:600 12px/1.65 system-ui}
+  body > .desktop-text-detail-overlay .desktop-audio-detail-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px 18px 0}
+  body > .desktop-text-detail-overlay .desktop-audio-detail-tabs button{min-height:40px;border:1px solid #d3d7dc;border-radius:10px;background:#fff;font-weight:800}
+  body > .desktop-text-detail-overlay .desktop-audio-detail-tabs button.is-active{background:#171a1f;color:#fff}
+  body > .desktop-text-detail-overlay .desktop-audio-detail-asset{display:grid;grid-template-columns:1fr;gap:10px}
+  body > .desktop-text-detail-overlay .desktop-audio-detail-file-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  body > .desktop-text-detail-overlay .desktop-background-detail-preview{max-height:180px}
+}
+@media (max-width:520px){
+  body > .desktop-text-detail-overlay .desktop-text-detail-two{grid-template-columns:1fr 1fr}
+  body > .desktop-text-detail-overlay .desktop-text-detail-foot{grid-template-columns:auto 1fr auto}
+  body > .desktop-text-detail-overlay .desktop-text-detail-foot span{display:none}
+  body > .desktop-text-detail-overlay .desktop-text-detail-foot button{min-width:72px}
+}
+
+/* v0.3.x mobile detail hard override v4
+   The legacy PC inspectors had mobile hide rules for background/audio.
+   Live Editor now intentionally reuses all four inspectors on iPhone. */
+@media (max-width:1099px){
+  body > .desktop-text-detail-overlay,
+  body > .desktop-effect-detail-overlay,
+  body > .desktop-background-detail-overlay,
+  body > .desktop-audio-detail-overlay{
+    display:flex!important;
+    position:fixed!important;
+    z-index:10250!important;
+    inset:0!important;
+    pointer-events:auto!important;
+  }
+}
+
+
+/* v7 — iPhone detail inspector hosted inside the proven Live Edit sheet. */
+@media (max-width:899px){
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet{
+    display:block!important;
+    position:fixed!important;
+    z-index:10080!important;
+    left:0!important;
+    right:0!important;
+    top:calc(env(safe-area-inset-top) + 6px)!important;
+    bottom:0!important;
+    width:100%!important;
+    max-height:none!important;
+    height:auto!important;
+    border-radius:24px 24px 0 0!important;
+    overflow:hidden!important;
+    background:#fbfbfc!important;
+  }
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet .live-edit-sheet-body{
+    height:100%!important;
+    padding:0!important;
+    overflow:hidden!important;
+    display:block!important;
+  }
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet .desktop-text-detail-modal{
+    display:block!important;
+    width:100%!important;
+    height:100%!important;
+    max-width:none!important;
+    max-height:none!important;
+    overflow:auto!important;
+    background:#fbfbfc!important;
+  }
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet .desktop-text-detail-two{
+    grid-template-columns:1fr 1fr!important;
+  }
+}
+
+
+/* v8 — Mobile styling for shared PC detail inspectors hosted in Live Edit sheet */
+@media (max-width: 899px){
+  body.mobile-live-detail-open{
+    overflow:hidden!important;
+  }
+
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet{
+    top:max(env(safe-area-inset-top), 0px)!important;
+    left:0!important;
+    right:0!important;
+    bottom:0!important;
+    width:100vw!important;
+    height:100dvh!important;
+    max-width:none!important;
+    max-height:none!important;
+    margin:0!important;
+    border-radius:0!important;
+    background:#f7f8fa!important;
+    overflow:hidden!important;
+  }
+
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet .live-edit-sheet-body{
+    height:100%!important;
+    overflow:hidden!important;
+    padding:0!important;
+    background:#f7f8fa!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-modal,
+  body.mobile-live-detail-open .desktop-effect-detail-modal,
+  body.mobile-live-detail-open .desktop-background-detail-modal,
+  body.mobile-live-detail-open .desktop-audio-detail-modal{
+    box-sizing:border-box!important;
+    display:flex!important;
+    flex-direction:column!important;
+    width:100%!important;
+    height:100%!important;
+    min-height:0!important;
+    max-width:none!important;
+    max-height:none!important;
+    margin:0!important;
+    border:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    background:#f7f8fa!important;
+    overflow:hidden!important;
+    color:#17191d!important;
+    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Noto Sans JP",sans-serif!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-head{
+    position:sticky!important;
+    top:0!important;
+    z-index:20!important;
+    flex:0 0 auto!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:12px!important;
+    min-height:74px!important;
+    padding:14px 18px 12px!important;
+    border-bottom:1px solid #dde1e6!important;
+    background:rgba(247,248,250,.96)!important;
+    backdrop-filter:blur(18px)!important;
+    -webkit-backdrop-filter:blur(18px)!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-head small{
+    display:block!important;
+    margin:0 0 2px!important;
+    font-size:11px!important;
+    line-height:1.2!important;
+    color:#858b94!important;
+    font-weight:600!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-head h2{
+    margin:0!important;
+    font-size:22px!important;
+    line-height:1.25!important;
+    font-weight:800!important;
+    letter-spacing:-.02em!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-close{
+    flex:0 0 44px!important;
+    width:44px!important;
+    height:44px!important;
+    margin:0!important;
+    padding:0!important;
+    border:0!important;
+    border-radius:50%!important;
+    background:#e9ecf0!important;
+    color:#17191d!important;
+    font-size:28px!important;
+    line-height:1!important;
+    display:grid!important;
+    place-items:center!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-body{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+    padding:14px 14px 110px!important;
+    background:#f7f8fa!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-section{
+    box-sizing:border-box!important;
+    width:100%!important;
+    margin:0 0 14px!important;
+    padding:16px!important;
+    border:1px solid #dde1e6!important;
+    border-radius:18px!important;
+    background:#fff!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-section h3{
+    margin:0 0 14px!important;
+    font-size:16px!important;
+    line-height:1.35!important;
+    font-weight:800!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-two{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:14px!important;
+    width:100%!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-field,
+  body.mobile-live-detail-open .desktop-detail-field,
+  body.mobile-live-detail-open .desktop-detail-range{
+    min-width:0!important;
+    width:100%!important;
+  }
+
+  body.mobile-live-detail-open label,
+  body.mobile-live-detail-open .desktop-text-detail-label{
+    display:block!important;
+    margin:0 0 6px!important;
+    font-size:12px!important;
+    line-height:1.35!important;
+    color:#555d67!important;
+    font-weight:700!important;
+  }
+
+  body.mobile-live-detail-open select,
+  body.mobile-live-detail-open input[type="number"],
+  body.mobile-live-detail-open input[type="text"]{
+    box-sizing:border-box!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:44px!important;
+    margin:0!important;
+    padding:10px 12px!important;
+    border:1px solid #d7dce2!important;
+    border-radius:12px!important;
+    background:#fff!important;
+    color:#17191d!important;
+    font-size:16px!important;
+    line-height:1.25!important;
+  }
+
+  body.mobile-live-detail-open input[type="color"]{
+    width:100%!important;
+    height:54px!important;
+    padding:4px!important;
+    border:1px solid #d7dce2!important;
+    border-radius:12px!important;
+    background:#fff!important;
+  }
+
+  body.mobile-live-detail-open input[type="range"]{
+    width:100%!important;
+    margin:12px 0 2px!important;
+    accent-color:#17191d!important;
+  }
+
+  body.mobile-live-detail-open .desktop-detail-range-row,
+  body.mobile-live-detail-open .desktop-text-detail-range-row{
+    display:grid!important;
+    grid-template-columns:1fr 76px!important;
+    gap:10px!important;
+    align-items:center!important;
+    width:100%!important;
+  }
+
+  body.mobile-live-detail-open .desktop-detail-range-value,
+  body.mobile-live-detail-open .desktop-text-detail-range-value{
+    min-width:0!important;
+  }
+
+  body.mobile-live-detail-open .desktop-background-detail-asset,
+  body.mobile-live-detail-open .desktop-audio-detail-asset{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:10px!important;
+    width:100%!important;
+    margin-top:12px!important;
+  }
+
+  body.mobile-live-detail-open .desktop-background-detail-thumb{
+    width:100%!important;
+    min-height:150px!important;
+    border-radius:14px!important;
+  }
+
+  body.mobile-live-detail-open .desktop-background-detail-asset-actions,
+  body.mobile-live-detail-open .desktop-audio-detail-file-actions{
+    min-width:0!important;
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:8px!important;
+  }
+
+  body.mobile-live-detail-open .desktop-live-action,
+  body.mobile-live-detail-open .desktop-effect-replay,
+  body.mobile-live-detail-open .desktop-text-detail-reset,
+  body.mobile-live-detail-open .desktop-text-detail-foot button{
+    min-height:44px!important;
+    padding:10px 14px!important;
+    border-radius:12px!important;
+    font-size:14px!important;
+    font-weight:800!important;
+  }
+
+  body.mobile-live-detail-open .desktop-audio-detail-tabs{
+    position:sticky!important;
+    top:0!important;
+    z-index:8!important;
+    grid-template-columns:repeat(3,1fr)!important;
+    gap:6px!important;
+    padding:8px 0 12px!important;
+    background:#f7f8fa!important;
+  }
+
+  body.mobile-live-detail-open .desktop-audio-detail-tabs button{
+    min-width:0!important;
+    height:40px!important;
+    padding:0 8px!important;
+    font-size:13px!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-note{
+    margin:8px 0 0!important;
+    font-size:12px!important;
+    line-height:1.6!important;
+    color:#7a818b!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-foot{
+    position:fixed!important;
+    z-index:30!important;
+    left:0!important;
+    right:0!important;
+    bottom:0!important;
+    display:grid!important;
+    grid-template-columns:auto 1fr auto auto!important;
+    gap:8px!important;
+    align-items:center!important;
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom))!important;
+    border-top:1px solid #dde1e6!important;
+    background:rgba(247,248,250,.96)!important;
+    backdrop-filter:blur(18px)!important;
+    -webkit-backdrop-filter:blur(18px)!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-foot > span{
+    min-width:0!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-foot button{
+    white-space:nowrap!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-foot button.is-primary{
+    background:#17191d!important;
+    color:#fff!important;
+    border-color:#17191d!important;
+  }
+}
+
+/* Slightly wider phones can use two columns for compact basic selectors */
+@media (min-width: 430px) and (max-width: 899px){
+  body.mobile-live-detail-open .desktop-text-detail-section > .desktop-text-detail-two{
+    grid-template-columns:1fr 1fr!important;
+  }
+}
+
+
+/* v9 — iPhone Live Detail cleanup */
+@media (max-width:899px){
+  /* Do not let Player chrome visually mix with the full detail cockpit. */
+  body.mobile-live-detail-open #editReturnButton,
+  body.mobile-live-detail-open .easy-edit-return{
+    visibility:hidden!important;
+    pointer-events:none!important;
+  }
+
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet{
+    z-index:20000!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-head{
+    padding:
+      calc(14px + env(safe-area-inset-top))
+      18px
+      12px!important;
+    min-height:calc(74px + env(safe-area-inset-top))!important;
+    background:#f7f8fa!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-head > div{
+    min-width:0!important;
+    padding-left:2px!important;
+  }
+
+  body.mobile-live-detail-open .desktop-text-detail-head small{
+    position:relative!important;
+    z-index:2!important;
+    min-height:14px!important;
+  }
+
+  /* Number box becomes an iOS native select.
+     iPhone opens this as the native drum/wheel picker. */
+  body.mobile-live-detail-open select.desktop-mobile-wheel-number{
+    appearance:auto!important;
+    -webkit-appearance:menulist!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:52px!important;
+    padding:10px 34px 10px 12px!important;
+    border:1px solid #d7dce2!important;
+    border-radius:12px!important;
+    background:#fff!important;
+    color:#17191d!important;
+    font-size:16px!important;
+    font-weight:700!important;
+  }
+
+  /* Audio has three channel cards, so give only this compact sheet more room. */
+  .live-edit-sheet.live-edit-sheet-audio:not(.mobile-live-detail-sheet){
+    max-height:min(70vh,640px)!important;
+  }
+
+  .live-edit-sheet.live-edit-sheet-audio:not(.mobile-live-detail-sheet) .live-edit-sheet-body{
+    padding-bottom:18px!important;
+  }
+}
