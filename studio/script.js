@@ -4257,10 +4257,53 @@ function startInlineTextEdit(){
     else if(kind==='text')openDesktopTextDetail();
   }
   
+
+  function ensureDesktopEffectVisibleDefaults(scene,{save=true}={}){
+    if(!scene)return false;
+    const p=ensurePresentation(scene);
+    let changed=false;
+
+    p.effectTiming ||= {};
+    if(!Number.isFinite(Number(p.effectTiming.duration)) || Number(p.effectTiming.duration)<=0){
+      p.effectTiming.duration=0.8;
+      changed=true;
+    }
+    if(!Number.isFinite(Number(p.effectTiming.delay))){
+      p.effectTiming.delay=0;
+      changed=true;
+    }
+
+    if(p.disappear){
+      if(!Number.isFinite(Number(p.disappear.fade)) || Number(p.disappear.fade)<=0){
+        p.disappear.fade=700;
+        changed=true;
+      }
+      if(!p.disappear.motion){
+        p.disappear.motion='stay';
+        changed=true;
+      }
+    }
+
+    if(p.typing?.enabled){
+      if(!Number.isFinite(Number(p.typing.speed)) || Number(p.typing.speed)<=0){
+        p.typing.speed=55;
+        changed=true;
+      }
+      if(typeof p.typing.cursor!=='boolean'){
+        p.typing.cursor=true;
+        changed=true;
+      }
+    }
+
+    if(changed && save)scheduleDraftSave(40);
+    return changed;
+  }
+
   function replayCurrentDesktopEffect(){
     if(!player||!workingDocument?.scenes?.length)return;
     const scene=workingDocument.scenes[player.index];
     if(!scene)return;
+    ensureDesktopEffectVisibleDefaults(scene);
 
     // Re-render the authoring preview at the same Scene first so all current
     // presentation values are reflected.
@@ -4292,6 +4335,7 @@ function openDesktopEffectDetail(){
     if(!desktopLiveActive()||!desktopLivePanel)return;
     closeDesktopEffectDetail();
     const {scene,index}=liveEditScene();if(!scene)return;
+    ensureDesktopEffectVisibleDefaults(scene);
     const p=ensurePresentation(scene);
     const before={
       effect:p.effect,
@@ -4327,6 +4371,7 @@ function openDesktopEffectDetail(){
     const effectSelect=desktopDetailSelect('出かた',[
       ['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']
     ],currentEffect,v=>{
+      ensureDesktopEffectVisibleDefaults(scene,{save:false});
       if(v==='typewriter'){
         p.effect='none';
         p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
@@ -4528,7 +4573,19 @@ function openDesktopTextDetail(){
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
-      desktopMakeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']],effectValue,v=>{if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}scheduleDraftSave(40);replayCurrentDesktopEffect();renderDesktopLivePanel();}),
+      desktopMakeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']],effectValue,v=>{
+        ensureDesktopEffectVisibleDefaults(scene,{save:false});
+        if(v==='typewriter'){
+          p.effect='none';
+          p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
+        }else{
+          delete p.typing;
+          p.effect=v;
+        }
+        scheduleDraftSave(40);
+        replayCurrentDesktopEffect();
+        renderDesktopLivePanel();
+      }),
       desktopMakeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;refresh();})
     );
     effectCard.append(effectGrid,desktopDetail('演出の詳細設定','effect'));
