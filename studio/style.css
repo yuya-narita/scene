@@ -5032,3 +5032,35 @@ body.easy-player-open #undoCompactButton,
 .live-edit-toggle[data-on="true"]{background:#17181b;color:#fff}
 @media(min-width:900px){.live-inline-toolbar{left:24px;right:auto;width:360px}}
 \n\n/* Live Edit v0.3.0 — one-time cursor hint + tiny cursor dock + editable empty Scenes */\n.live-inline-toolbar:not(.is-intro){\n  right:8px;bottom:calc(var(--live-keyboard-inset,0px) + 5px);\n  border-radius:11px;box-shadow:0 5px 15px rgba(0,0,0,.11);\n}\n.live-inline-toolbar:not(.is-intro) .live-inline-compact{gap:0;padding:2px}\n.live-inline-toolbar:not(.is-intro) .live-inline-compact button{\n  width:33px;height:34px;border-radius:8px;font-size:13.5px;font-weight:850;padding:0\n}\n.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target{\n  pointer-events:auto;min-height:min(42vh,300px);width:100%;box-sizing:border-box;\n  display:flex;align-items:center;cursor:text;\n}\n.live-inline-text-edit .sp-scene.is-active .sp-text.live-edit-empty-target{\n  min-height:min(42vh,300px);\n}\n
+
+/* Live Edit v0.3.1 — tucked cursor toolbox + instant empty-Scene writing */
+.live-inline-toolbar{
+  right:7px!important;left:auto!important;
+  bottom:calc(var(--live-keyboard-inset,0px) + 6px)!important;
+  width:34px;height:34px;min-width:0;
+  border-radius:10px!important;overflow:visible;
+  transition:width .18s ease,height .18s ease,border-radius .18s ease!important;
+}
+.live-inline-trigger{
+  width:32px;height:32px;min-width:32px;padding:0;border:0;border-radius:9px;
+  background:transparent;color:inherit;font:800 14px/1 system-ui,-apple-system,sans-serif;
+  display:grid;place-items:center;
+}
+.live-inline-toolbar .live-inline-intro{display:none!important}
+.live-inline-toolbar .live-inline-compact{
+  display:none;position:absolute;right:36px;bottom:0;
+  align-items:center;gap:0;padding:1px;
+  border:1px solid rgba(120,124,132,.20);border-radius:10px;
+  background:rgba(248,249,250,.96);box-shadow:0 4px 12px rgba(0,0,0,.09);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  white-space:nowrap;
+}
+.live-inline-toolbar.is-expanded .live-inline-compact{display:flex}
+.live-inline-toolbar.is-expanded .live-inline-trigger{background:rgba(0,0,0,.055)}
+.live-inline-toolbar .live-inline-compact button{
+  width:30px!important;height:30px!important;border-radius:7px!important;
+  font-size:12.5px!important;padding:0!important;
+}
+@media(min-width:900px){
+  .live-inline-toolbar{right:18px!important;left:auto!important;width:34px!important}
+}

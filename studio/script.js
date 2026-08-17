@@ -3715,6 +3715,7 @@
   let liveInlineEditEl=null;
   let liveInlineKeyboardShift=0;
   let liveInlineIntroTimer=0;
+  let liveInlineDockTimer=0;
   const LIVE_INLINE_HINT_KEY='sceneStudio.liveEdit.cursorHintSeen.v1';
 
   function liveEditScene(){
@@ -3743,8 +3744,9 @@
     liveInlineEditEl=null;
     playerHost.classList.remove('live-inline-text-edit');
     resetInlineKeyboardShift();
-    if(liveInlineToolbar){liveInlineToolbar.hidden=true;liveInlineToolbar.classList.remove('is-intro');}
+    if(liveInlineToolbar){liveInlineToolbar.hidden=true;liveInlineToolbar.classList.remove('is-intro','is-expanded');}
     clearTimeout(liveInlineIntroTimer);
+    clearTimeout(liveInlineDockTimer);
     document.documentElement.style.removeProperty('--live-keyboard-inset');
     if(liveEditEnabled&&!autoRecActive&&!player?.historyOpen)setLiveToolbarVisible(true);
   }
@@ -3859,17 +3861,24 @@
       setInlineCaretOffset(text.length);
     }
   }
-  function showInlineAuthoringIntro(){
+  function collapseInlineCursorDock(){
     if(!liveInlineToolbar)return;
-    clearTimeout(liveInlineIntroTimer);
-    let seen=false;
-    try{seen=localStorage.getItem(LIVE_INLINE_HINT_KEY)==='1';}catch(_){seen=true;}
-    liveInlineToolbar.classList.toggle('is-intro',!seen);
-    if(seen)return;
-    try{localStorage.setItem(LIVE_INLINE_HINT_KEY,'1');}catch(_){}
-    liveInlineIntroTimer=setTimeout(()=>{
-      liveInlineToolbar?.classList.remove('is-intro');
-    },2800);
+    liveInlineToolbar.classList.remove('is-expanded','is-intro');
+    clearTimeout(liveInlineDockTimer);
+  }
+  function expandInlineCursorDock(){
+    if(!liveInlineToolbar)return;
+    liveInlineToolbar.classList.add('is-expanded');
+    liveInlineToolbar.classList.remove('is-intro');
+    clearTimeout(liveInlineDockTimer);
+    liveInlineDockTimer=setTimeout(()=>{
+      liveInlineToolbar?.classList.remove('is-expanded');
+    },4200);
+  }
+  function showInlineAuthoringIntro(){
+    // v0.3.1: cursor tools are intentionally tucked away.
+    // Editing shows only a tiny split/tool trigger; tap it to reveal helpers.
+    collapseInlineCursorDock();
   }
 
   function ensureLiveEditEmptyTarget(){
@@ -4089,6 +4098,10 @@
     workingDocument.scenes.splice(index+1,0,scene);
     liveEditReloadAt(index+1);
     showUndo('Sceneを追加しました');
+    // Keep this synchronous inside the + button's user gesture so iPhone Safari
+    // is allowed to open the software keyboard immediately. Empty is valid:
+    // pressing the iOS checkmark without typing leaves this Scene empty.
+    startInlineTextEdit();
   }
   function liveEditMoveScene(delta){
     const {index}=liveEditScene(),ni=index+delta;
@@ -4180,6 +4193,15 @@
     const b=e.target.closest('[data-live-inline]');if(!b)return;
     e.preventDefault();e.stopPropagation();
     const kind=b.dataset.liveInline;
+    if(kind==='tools-toggle'){
+      if(liveInlineToolbar.classList.contains('is-expanded'))collapseInlineCursorDock();
+      else expandInlineCursorDock();
+      liveInlineEditEl?.focus({preventScroll:true});
+      return;
+    }
+    // Using one of the helpers keeps the dock open briefly, then it tucks away again.
+    clearTimeout(liveInlineDockTimer);
+    liveInlineDockTimer=setTimeout(()=>liveInlineToolbar?.classList.remove('is-expanded'),4200);
     if(kind==='split'){liveEditSplitInlineAtCaret();return;}
     if(kind==='caret-prev'){moveInlineCaret(-1);return;}
     if(kind==='caret-next'){moveInlineCaret(1);return;}
