@@ -3705,6 +3705,7 @@
   // Preview is the navigation surface; Advanced remains the detail surface.
   // ---------------------------------------------------------
   const liveEditToolbar=$('#liveEditToolbar');
+  const liveInlineToolbar=$('#liveInlineToolbar');
   const liveEditSheet=$('#liveEditSheet');
   const liveEditSheetBody=$('#liveEditSheetBody');
   const liveEditSheetTitle=$('#liveEditSheetTitle');
@@ -3729,13 +3730,20 @@
     playerHost.style.removeProperty('--live-inline-keyboard-shift');
   }
   function finishInlineTextEdit(){
-    if(!liveInlineEditEl){ resetInlineKeyboardShift(); return; }
+    if(!liveInlineEditEl){
+      resetInlineKeyboardShift();
+      if(liveInlineToolbar)liveInlineToolbar.hidden=true;
+      return;
+    }
     liveInlineEditEl.removeAttribute('contenteditable');
     liveInlineEditEl.removeAttribute('role');
     liveInlineEditEl.classList.remove('live-inline-editing');
     liveInlineEditEl=null;
     playerHost.classList.remove('live-inline-text-edit');
     resetInlineKeyboardShift();
+    if(liveInlineToolbar)liveInlineToolbar.hidden=true;
+    document.documentElement.style.removeProperty('--live-keyboard-inset');
+    if(liveEditEnabled&&!autoRecActive&&!player?.historyOpen)setLiveToolbarVisible(true);
   }
   function updateInlineAutoFit(scene,el){
     if(!scene||!el)return;
@@ -3778,12 +3786,61 @@
     liveInlineKeyboardShift=next;
     playerHost.style.setProperty('--live-inline-keyboard-shift',`${Math.round(next)}px`);
   }
+  function updateLiveKeyboardInset(){
+    if(!liveInlineEditEl||!liveInlineToolbar)return;
+    const vv=window.visualViewport;
+    const inset=vv?Math.max(0,window.innerHeight-(vv.height+vv.offsetTop)):0;
+    document.documentElement.style.setProperty('--live-keyboard-inset',`${Math.round(inset)}px`);
+  }
+  function syncInlineTextToScene(){
+    const el=liveInlineEditEl;
+    if(!el)return '';
+    const {scene}=liveEditScene();if(!scene)return '';
+    const value=el.innerText.replace(/\n$/,'');
+    scene.text=value;
+    if(player?.currentScene)player.currentScene.text=value;
+    updateInlineAutoFit(scene,el);
+    scheduleDraftSave(100);
+    return value;
+  }
+  function inlineCaretOffset(){
+    const el=liveInlineEditEl,sel=getSelection();
+    if(!el||!sel||!sel.rangeCount)return -1;
+    const range=sel.getRangeAt(0);
+    if(!el.contains(range.startContainer))return -1;
+    const before=range.cloneRange();
+    before.selectNodeContents(el);
+    before.setEnd(range.startContainer,range.startOffset);
+    return before.toString().length;
+  }
+  function liveEditSplitInlineAtCaret(){
+    const {scene,index}=liveEditScene();if(!scene||!liveInlineEditEl)return;
+    const text=syncInlineTextToScene();
+    const pos=inlineCaretOffset();
+    if(pos<=0||pos>=text.length){showUndo('分割する位置にカーソルを置いてください');return;}
+    const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
+    if(!left||!right){showUndo('分割する位置にカーソルを置いてください');return;}
+    captureUndo('Scene分割を元に戻せます');
+    scene.text=left;
+    const next=clone(scene);next.id=nextUniqueId();next.text=right;delete next.subText;delete next.audio;
+    if(next.presentation)delete next.presentation.background;
+    workingDocument.scenes.splice(index+1,0,next);
+    finishInlineTextEdit();
+    liveEditRenderAt(index+1,{preserveSheet:false});
+    showUndo('カーソル位置で分割しました');
+    // This click is still a direct user gesture on iOS, so focus the new Scene now.
+    startInlineTextEdit();
+  }
+
   function startInlineTextEdit(){
     const {scene}=liveEditScene(); if(!scene)return;
     finishInlineTextEdit(); closeLiveEditSheet(); setLiveToolbarVisible(true);
     const el=playerHost.querySelector('.sp-scene.is-active .sp-text'); if(!el)return;
 
     liveInlineEditEl=el;
+    if(liveEditToolbar)liveEditToolbar.hidden=true;
+    if(liveInlineToolbar)liveInlineToolbar.hidden=false;
+    updateLiveKeyboardInset();
     // contenteditable=true is the most reliable option on iPhone Safari.
     // The element itself stays in the Player; no duplicate textarea/modal is created.
     el.setAttribute('contenteditable','true');
@@ -3794,15 +3851,8 @@
 
     const sync=()=>{
       if(!liveInlineEditEl)return;
-      const value=liveInlineEditEl.innerText.replace(/\n$/,'');
-      scene.text=value;
-      // Player owns a playback clone. Keep that clone in sync too so moving away
-      // and back during the same Live Edit session does not restore old text.
-      if(player?.currentScene) player.currentScene.text=value;
-      // Apply the exact same Auto Fit tier that a fresh Player render would use.
-      updateInlineAutoFit(scene,liveInlineEditEl);
-      requestAnimationFrame(keepInlineCaretVisible);
-      scheduleDraftSave(100);
+      syncInlineTextToScene();
+      requestAnimationFrame(()=>{updateLiveKeyboardInset();keepInlineCaretVisible();});
     };
 
     const abort=new AbortController();
@@ -3811,8 +3861,8 @@
     el.addEventListener('input',sync,{signal:abort.signal});
     el.addEventListener('keyup',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
     el.addEventListener('click',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
-    window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
-    window.visualViewport?.addEventListener('scroll',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
+    window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(()=>{updateLiveKeyboardInset();keepInlineCaretVisible();}),{signal:abort.signal});
+    window.visualViewport?.addEventListener('scroll',()=>requestAnimationFrame(()=>{updateLiveKeyboardInset();keepInlineCaretVisible();}),{signal:abort.signal});
     el.addEventListener('blur',()=>{sync();finishInlineTextEdit();},{once:true,signal:abort.signal});
 
     // iPhone Safari only opens the software keyboard when focus happens
@@ -3830,14 +3880,37 @@
       setTimeout(keepInlineCaretVisible,360);
     });
   }
+  function liveEditRenderAt(index,{preserveSheet=true}={}){
+    if(!player||!workingDocument?.scenes?.length)return;
+    const target=Math.max(0,Math.min(Number(index)||0,workingDocument.scenes.length-1));
+    const wasOpen=liveEditSheet&&!liveEditSheet.hidden;
+    const doc=getDocumentForPlayback();
+    // Live Edit must never return to the cover just because author data changed.
+    // Swap the playback document in place and ask the existing Player to render
+    // the same authoring surface without emitting a navigation event.
+    player._clearAutoTimer?.();
+    player._resetPresentationRuntime?.();
+    player._resetBackgroundRuntime?.();
+    player.document=doc;
+    player.index=target;
+    player.maxVisitedIndex=Math.max(player.maxVisitedIndex,target);
+    player.ended=false;
+    player.options.historyAllScenes=true;
+    const allowPrevious=doc.player?.navigation?.allowPrevious!==false;
+    player.options.allowPrevious=allowPrevious;
+    if(player.els?.prev)player.els.prev.hidden=!allowPrevious;
+    player.host?.classList.toggle('sp-no-previous',!allowPrevious);
+    if(player.els?.total)player.els.total.textContent=String(doc.scenes.length);
+    player._audioRenderMode='restore';
+    player._render?.();
+    if(player.els?.cover)player.els.cover.hidden=true;
+    player.host?.classList.remove('sp-cover-open');
+    selectedSceneIndex=target;
+    if(!preserveSheet||!wasOpen)closeLiveEditSheet();
+  }
   function refreshLivePlayer({preserveSheet=true}={}){
     if(!player||!workingDocument?.scenes?.length)return;
-    const index=Math.max(0,Math.min(player.index,workingDocument.scenes.length-1));
-    const wasOpen=liveEditSheet&&!liveEditSheet.hidden;
-    player.options.historyAllScenes=true;
-    player.load(getDocumentForPlayback(),{startAt:index});
-    player.maxVisitedIndex=Math.max(player.maxVisitedIndex,index);
-    if(!preserveSheet||!wasOpen)closeLiveEditSheet();
+    liveEditRenderAt(player.index,{preserveSheet});
   }
   function liveEditAdvanced(section){
     const {index}=liveEditScene();
@@ -3928,11 +4001,7 @@
     normalizeSceneIds();refreshDocumentLanguages();
     selectedSceneIndex=Math.max(0,Math.min(index,workingDocument.scenes.length-1));
     scheduleDraftSave(60);
-    if(player){
-      player.options.historyAllScenes=true;
-      player.load(getDocumentForPlayback(),{startAt:selectedSceneIndex});
-      player.maxVisitedIndex=Math.max(player.maxVisitedIndex,selectedSceneIndex);
-    }
+    liveEditRenderAt(selectedSceneIndex,{preserveSheet:false});
     setLiveToolbarVisible(true);
   }
   function liveEditAddScene(){
@@ -3964,6 +4033,25 @@
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(Math.min(index,workingDocument.scenes.length-1));showUndo('Sceneを削除しました');
   }
+  function liveEditMergePrevious(){
+    const {scene,index}=liveEditScene();if(!scene||index<=0)return;
+    captureUndo('Scene結合を元に戻せます');
+    const prev=workingDocument.scenes[index-1];
+    prev.text=[prev.text,scene.text].filter(Boolean).join('\n\n');
+    if(scene.subText&&!prev.subText)prev.subText=scene.subText;
+    workingDocument.scenes.splice(index,1);
+    liveEditReloadAt(index-1);
+    showUndo('前のSceneと結合しました');
+  }
+  function liveEditToggleAllowPrevious(){
+    workingDocument.player ||= {};workingDocument.player.navigation ||= {};
+    const next=workingDocument.player.navigation.allowPrevious===false;
+    workingDocument.player.navigation.allowPrevious=next;
+    scheduleDraftSave(60);
+    liveEditRenderAt(liveEditScene().index,{preserveSheet:true});
+    renderLiveEditSceneMenu();
+  }
+
   function renderLiveEditSceneMenu(){
     const {index}=liveEditScene();
     finishInlineTextEdit();
@@ -3975,10 +4063,18 @@
     grid.append(
       action('← 前へ移動',()=>liveEditMoveScene(-1),index===0),
       action('次へ移動 →',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1),
+      action('前のSceneと結合',liveEditMergePrevious,index===0),
       action('複製',liveEditDuplicateScene),
       action('削除',liveEditDeleteScene,workingDocument.scenes.length<=1,true)
     );
-    liveEditSheetBody.append(grid);
+    const nav=document.createElement('div');nav.className='live-edit-nav-toggle';
+    const label=document.createElement('div');label.innerHTML='<strong>読者が過去Sceneへ戻れる</strong><small>公開Playerの戻る操作を許可</small>';
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='live-edit-toggle';
+    const allowed=workingDocument.player?.navigation?.allowPrevious!==false;
+    toggle.dataset.on=allowed?'true':'false';toggle.setAttribute('aria-pressed',allowed?'true':'false');toggle.textContent=allowed?'ON':'OFF';
+    toggle.addEventListener('click',liveEditToggleAllowPrevious);
+    nav.append(label,toggle);
+    liveEditSheetBody.append(grid,nav);
   }
 
   function enableLiveEdit(){
@@ -3991,10 +4087,21 @@
   }
   function disableLiveEdit(){
     finishInlineTextEdit(); liveEditEnabled=false;closeLiveEditSheet();
+    if(liveInlineToolbar)liveInlineToolbar.hidden=true;
     setLiveToolbarVisible(false);
     playerHost.classList.remove('live-edit-enabled');
     if(player)player.options.historyAllScenes=false;
   }
+
+  liveInlineToolbar?.addEventListener('pointerdown',(e)=>{
+    // Keep the contenteditable focus alive while tapping authoring controls.
+    e.preventDefault();
+  });
+  liveInlineToolbar?.addEventListener('click',(e)=>{
+    const b=e.target.closest('[data-live-inline]');if(!b)return;
+    e.preventDefault();e.stopPropagation();
+    if(b.dataset.liveInline==='split')liveEditSplitInlineAtCaret();
+  });
 
   liveEditToolbar?.addEventListener('click',(e)=>{
     const b=e.target.closest('[data-live-edit]');if(!b)return;
