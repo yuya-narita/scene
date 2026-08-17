@@ -1904,6 +1904,17 @@
         node.style.whiteSpace = 'nowrap';
         node.style.overflowWrap = 'normal';
       }
+      if (Number.isFinite(Number(style.lineHeight))) node.style.lineHeight = String(Math.max(1, Math.min(3, Number(style.lineHeight))));
+      if (Number.isFinite(Number(style.letterSpacing))) node.style.letterSpacing = `${Math.max(-0.2, Math.min(0.5, Number(style.letterSpacing)))}em`;
+      if (Number.isFinite(Number(style.opacity))) node.style.opacity = String(Math.max(0.1, Math.min(1, Number(style.opacity))));
+      if (Number.isFinite(Number(style.sideMargin)) && Number(style.sideMargin) > 0) {
+        const margin=Math.max(0,Math.min(40,Number(style.sideMargin)));
+        node.style.width=`calc(100% - ${margin*2}%)`;
+        node.style.maxWidth=`calc(100% - ${margin*2}%)`;
+        node.style.marginLeft='auto';
+        node.style.marginRight='auto';
+      }
+      if (style.align === 'left' || style.align === 'center' || style.align === 'right') node.style.textAlign = style.align;
     }
 
     _applyCorePresentation(scene) {
