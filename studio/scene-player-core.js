@@ -1758,11 +1758,12 @@
 
     _applyBackgroundOverlays(state) {
       const isCinemaLight = this.document?.theme === 'cinema' && this.document?.appearance?.cinemaTone === 'light';
-      const themeDefaultDim = this.document?.theme === 'cinema' ? (isCinemaLight ? 0.72 : 0.34) : 0;
+      const sceneTone = state?.tone === 'light' ? 'light' : (state?.tone === 'dark' ? 'dark' : null);
+      const useLightWash = sceneTone ? sceneTone === 'light' : isCinemaLight;
+      const themeDefaultDim = this.document?.theme === 'cinema' ? (useLightWash ? 0.72 : 0.34) : (useLightWash ? 0.64 : 0);
       const dim = clamp(asNumber(state.dim, themeDefaultDim), 0, 1);
-      // CINEMA dark dims the image; CINEMA light washes it toward paper so
-      // black typography remains readable over photography.
-      this.els.veil.style.background = isCinemaLight
+      // A Scene may explicitly choose a light paper wash or a dark veil.
+      this.els.veil.style.background = useLightWash
         ? `rgba(250,247,240,${dim})`
         : `rgba(0,0,0,${dim})`;
 

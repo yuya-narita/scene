@@ -2996,7 +2996,16 @@
     scene.text=$('#sceneTextInput').value;
     const sub=$('#sceneSubTextInput').value; if(sub)scene.subText=sub; else delete scene.subText;
     scene.type=$('#sceneTypeSelect').value;
-    const p=ensurePresentation(scene); p.display=$('#sceneDisplaySelect').value; p.effect=$('#sceneEffectSelect').value; p.text.size=$('#sceneSizeSelect').value;
+    const p=ensurePresentation(scene); p.display=$('#sceneDisplaySelect').value;
+    const advancedEffect=$('#sceneEffectSelect').value;
+    if(advancedEffect==='typewriter'){
+      p.effect='none';
+      p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
+    }else{
+      if(p.typing)delete p.typing;
+      p.effect=advancedEffect;
+    }
+    p.text.size=$('#sceneSizeSelect').value;
     const colorChoice=$('#sceneColorSelect')?.value || 'auto';
     if(colorChoice==='white') p.text.color='#ffffff';
     else if(colorChoice==='black') p.text.color='#000000';
@@ -3027,7 +3036,7 @@
     $('#sceneTextInput').value=scene.text || ''; $('#sceneSubTextInput').value=scene.subText || '';
     requestAnimationFrame(autoGrowSubText);
     $('#sceneTypeSelect').value=scene.type || 'text'; $('#sceneDisplaySelect').value=scene.presentation?.display || 'stack';
-    $('#sceneEffectSelect').value=scene.presentation?.effect || 'auto'; $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto';
+    $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto';
     const sceneColor=scene.presentation?.text?.color || '';
     $('#sceneColorSelect').value=!sceneColor?'auto':(sceneColor.toLowerCase()==='#ffffff'||sceneColor.toLowerCase()==='white'?'white':(sceneColor.toLowerCase()==='#000000'||sceneColor.toLowerCase()==='black'?'black':'custom'));
     $('#sceneColorCustomInput').value=/^#[0-9a-f]{6}$/i.test(sceneColor)?sceneColor:'#ffffff';
@@ -3059,7 +3068,7 @@
       const typeLabel=emptyScene
         ? (sceneHasAdvancedMeaning(scene)?t('scene.effectOnly'):t('scene.empty'))
         : ({text:t('scene.type.text'),dialogue:t('scene.type.dialogue'),sound:t('scene.type.sound')}[scene.type]||scene.type);
-      const effectLabel={auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),slow:t('effect.slow'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto');
+      const effectLabel=scene.presentation?.typing?.enabled?'タイプライター':({auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto'));
       const sceneLang=scene.language || (workingDocument.language==='mul'?'':workingDocument.language) || '';
       const timing=Number.isFinite(Number(scene.pause)) && Number(scene.pause)>0 ? ` · AUTO ${(Number(scene.pause)/1000).toFixed(2)}s` : '';
       b.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><div><strong>${scenePreviewText(scene)}</strong><small>${typeLabel} · ${effectLabel}${sceneLang?' · '+sceneLang.toUpperCase():''}${media.length?' · '+media.join('/') : ''}${timing}</small></div>`;
@@ -3675,6 +3684,18 @@
   $('#allowPreviousInput').addEventListener('change',()=>{if(workingDocument){workingDocument.player ||= {};workingDocument.player.navigation ||= {};workingDocument.player.navigation.allowPrevious=$('#allowPreviousInput').checked;}});
   $('#moveUpButton').addEventListener('click',()=>moveScene(-1)); $('#moveDownButton').addEventListener('click',()=>moveScene(1));
   $('#mergePreviousButton').addEventListener('click',mergePrevious); $('#splitSceneButton').addEventListener('click',splitAtCursor); $('#addSceneButton').addEventListener('click',addScene); $('#deleteSceneButton').addEventListener('click',requestDeleteScene);
+  const advancedEffectSelect=$('#sceneEffectSelect');
+  if(advancedEffectSelect){
+    let typeOption=advancedEffectSelect.querySelector('option[value="typewriter"]');
+    if(!typeOption){
+      typeOption=advancedEffectSelect.querySelector('option[value="slow"]');
+      if(typeOption){typeOption.value='typewriter';typeOption.textContent='タイプライター';}
+      else{
+        typeOption=document.createElement('option');typeOption.value='typewriter';typeOption.textContent='タイプライター';
+        const none=advancedEffectSelect.querySelector('option[value="none"]');advancedEffectSelect.insertBefore(typeOption,none||null);
+      }
+    }
+  }
   ['sceneTextInput','sceneSubTextInput','sceneTypeSelect','sceneDisplaySelect','sceneEffectSelect','sceneSizeSelect','sceneFontSelect','sceneLanguageSelect','sceneLanguageCustomInput'].forEach(id=>$('#'+id).addEventListener('change',()=>{syncAdvancedFieldsToScene();renderSceneList();}));
 
   ['sceneBackgroundMode','sceneBackgroundTransition','sceneBackgroundFit','sceneBackgroundMotion','sceneBackgroundDim','sceneBgmAction','sceneBgmLoop','sceneBgmVolume','sceneBgmFadeIn','sceneBgmFadeOut','sceneBgmVolumeChange','sceneBgmVolumeFade','sceneBgmStopFade','sceneAmbientAction','sceneAmbientLoop','sceneAmbientVolume','sceneAmbientFadeIn','sceneAmbientFadeOut','sceneAmbientVolumeChange','sceneAmbientVolumeFade','sceneAmbientStopFade','sceneSeEnabled','sceneSeVolume','sceneSeFadeIn'].forEach(id=>{
@@ -4130,15 +4151,35 @@ function startInlineTextEdit(){
       };
       const p=ensurePresentation(scene);p.text ||= {};
       const rerender=()=>{scheduleDraftSave(80);refreshLivePlayer();};
-      const colorValue=!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom'));
+      let colorValue=!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom'));
+      const colorField=makeSelect('色',[['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],colorValue,v=>{
+        if(v==='white')p.text.color='#ffffff';
+        else if(v==='black')p.text.color='#000000';
+        else if(v==='custom'){
+          if(!p.text.color || ['#ffffff','#000000'].includes(String(p.text.color).toLowerCase()))p.text.color='#4a4a4a';
+        }else delete p.text.color;
+        rerender();
+        renderLiveEditSheet('text');
+      });
       grid.append(
         makeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
         makeSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
-        makeSelect('色',[['auto','おまかせ'],['white','白'],['black','黒']],colorValue==='custom'?'auto':colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else delete p.text.color;rerender();}),
+        colorField,
         makeSelect('影',[['auto','おまかせ'],['none','なし'],['soft','やわらか'],['strong','強く']],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;rerender();})
       );
+      if(colorValue==='custom'){
+        const custom=document.createElement('label');custom.className='live-edit-color-custom';
+        const label=document.createElement('span');label.textContent='任意色';
+        const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';
+        const value=document.createElement('code');value.textContent=picker.value.toUpperCase();
+        picker.addEventListener('input',()=>{p.text.color=picker.value;value.textContent=picker.value.toUpperCase();rerender();});
+        custom.append(label,picker,value);
+        liveEditSheetBody.append(grid,custom);
+      }else{
+        liveEditSheetBody.append(grid);
+      }
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='文字の詳細設定';detail.addEventListener('click',()=>liveEditAdvanced('text'));
-      liveEditSheetBody.append(grid,detail);return;
+      liveEditSheetBody.append(detail);return;
     }
 
     if(kind==='effect'){
@@ -4151,8 +4192,18 @@ function startInlineTextEdit(){
         select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
       };
       const p=ensurePresentation(scene);
+      const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
       grid.append(
-        makeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['slow','ゆっくり'],['none','なし']],p.effect||'auto',v=>{p.effect=v;scheduleDraftSave(80);refreshLivePlayer();}),
+        makeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']],effectValue,v=>{
+          if(v==='typewriter'){
+            p.effect='none';
+            p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
+          }else{
+            if(p.typing)delete p.typing;
+            p.effect=v;
+          }
+          scheduleDraftSave(80);refreshLivePlayer();
+        }),
         makeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();})
       );
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='演出の詳細設定';detail.addEventListener('click',()=>liveEditAdvanced('text'));
@@ -4161,10 +4212,25 @@ function startInlineTextEdit(){
 
     const makeActionButton=(label,cls='')=>{const b=document.createElement('button');b.type='button';b.className=`live-edit-action ${cls}`.trim();b.textContent=label;return b;};
     const pickLiveFile=async(accept,onPicked)=>{
-      const input=document.createElement('input');input.type='file';input.accept=accept;input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
+      const input=document.createElement('input');input.type='file';
+      const wantsAudio=String(accept||'').startsWith('audio/');
+      const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+      // iOS Files may gray out perfectly valid mp3/m4a assets when accept=audio/*.
+      // Let the user pick from Files, then validate locally.
+      input.accept=(isIOS&&wantsAudio)?'':accept;
+      input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
       input.addEventListener('change',async()=>{
         const file=input.files?.[0];
         if(file){
+          if(wantsAudio){
+            const name=(file.name||'').toLowerCase();
+            const audioLike=(file.type||'').startsWith('audio/') || /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(name);
+            if(!audioLike){
+              alert('音声ファイルを選択してください。');
+              input.remove();
+              return;
+            }
+          }
           const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);onPicked(url,snap.name,file);
           scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet(kind);
         }
@@ -4183,10 +4249,22 @@ function startInlineTextEdit(){
       clear.onclick=()=>{p.background={src:'',transition:'fade',_editorManaged:true};scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
       actions.append(inherit,clear);
       const pick=makeActionButton(bg?.src?'画像を変更':'画像を選択','is-primary');
-      pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',dim:p.background?.dim??.34};});
+      pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};});
+      const toneRow=document.createElement('div');toneRow.className='live-edit-choice-row live-edit-tone-row';
+      const tone=bg?.tone || ((workingDocument?.theme==='cinema'&&workingDocument?.appearance?.cinemaTone==='light')?'light':'dark');
+      const dark=makeActionButton('暗く',bg?.src&&tone==='dark'?'is-selected':'');
+      const light=makeActionButton('明るく',bg?.src&&tone==='light'?'is-selected':'');
+      const setTone=(next)=>{
+        if(!p.background?.src)return;
+        p.background={...p.background,tone:next,dim:next==='light'?.64:.38,_editorManaged:true};
+        scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');
+      };
+      dark.onclick=()=>setTone('dark');light.onclick=()=>setTone('light');
+      toneRow.append(dark,light);
+      if(!bg?.src){dark.disabled=true;light.disabled=true;}
       const status=document.createElement('div');status.className='live-edit-status';status.textContent=bg?.src?`選択中：${bg._editorFileName||'背景画像'}`:(bg?.src===''?'このSceneから背景なし':'前Sceneの背景を継続');
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='暗さ・動き・切替を細かく調整';detail.addEventListener('click',()=>liveEditAdvanced('background'));
-      liveEditSheetBody.append(actions,pick,status,detail);return;
+      liveEditSheetBody.append(actions,pick,toneRow,status,detail);return;
     }
 
     liveEditSheetTitle.textContent='音';

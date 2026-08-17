@@ -5260,3 +5260,36 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
 .live-edit-audio-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.live-edit-audio-row:last-child .live-edit-audio-actions{grid-template-columns:1fr 1fr}
 .live-edit-audio-actions .live-edit-action{min-height:40px;font-size:12px;padding:6px}
 @media(max-width:430px){.live-edit-sheet-body{gap:11px}.live-edit-audio-row{padding:11px}.live-edit-action{min-height:43px}}
+
+
+/* Live Edit v0.4.2 — color picker + background tone */
+.live-edit-color-custom{
+  min-height:52px;
+  border:1px solid #d4d6da;
+  border-radius:14px;
+  background:#fff;
+  padding:9px 12px;
+  display:grid;
+  grid-template-columns:1fr auto auto;
+  align-items:center;
+  gap:12px;
+  color:#666;
+  font-size:12px;
+  font-weight:800;
+}
+.live-edit-color-custom input[type="color"]{
+  width:44px;
+  height:34px;
+  padding:0;
+  border:1px solid #d4d6da;
+  border-radius:9px;
+  background:transparent;
+}
+.live-edit-color-custom code{
+  color:#555b64;
+  font:700 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+.live-edit-tone-row button:disabled{
+  opacity:.34;
+  pointer-events:none;
+}
