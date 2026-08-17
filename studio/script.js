@@ -4129,6 +4129,7 @@ function startInlineTextEdit(){
     if(desktopLiveActive()){
       if(section==='text'){openDesktopTextDetail();return;}
       if(section==='effect'){openDesktopEffectDetail();return;}
+      if(section==='background'){openDesktopBackgroundDetail();return;}
     }
     const {index}=liveEditScene();
     selectedSceneIndex=index;
@@ -4164,7 +4165,13 @@ function startInlineTextEdit(){
     const h=document.createElement('h3');h.textContent=title;card.appendChild(h);return card;
   }
   function desktopDetail(label,section){
-    const b=desktopAction(label,()=>liveEditAdvanced(section),'desktop-live-detail');return b;
+    const b=desktopAction(label,()=>{
+      if(desktopLiveActive() && section==='text'){openDesktopTextDetail();return;}
+      if(desktopLiveActive() && section==='effect'){openDesktopEffectDetail();return;}
+      if(desktopLiveActive() && section==='background'){openDesktopBackgroundDetail();return;}
+      liveEditAdvanced(section);
+    },'desktop-live-detail');
+    return b;
   }
   function desktopDetailRange(label,{min,max,step,value,unit='',format=(v)=>v,oninput}){
     const field=document.createElement('label');field.className='desktop-text-detail-range';
@@ -4240,8 +4247,13 @@ function startInlineTextEdit(){
     desktopLivePanel?.querySelector('.desktop-effect-detail-overlay')?.remove();
   }
 
+  function closeDesktopBackgroundDetail(){
+    desktopLivePanel?.querySelector('.desktop-background-detail-overlay')?.remove();
+  }
+
   function currentDesktopDetailKind(){
     if(!desktopLivePanel)return '';
+    if(desktopLivePanel.querySelector('.desktop-background-detail-overlay'))return 'background';
     if(desktopLivePanel.querySelector('.desktop-effect-detail-overlay'))return 'effect';
     if(desktopLivePanel.querySelector('.desktop-text-detail-overlay'))return 'text';
     return '';
@@ -4251,9 +4263,11 @@ function startInlineTextEdit(){
     if(!kind||!desktopLiveActive())return;
     // Scene navigation is not "cancel": keep edits already made to the
     // previous Scene and simply retarget the open inspector to the new Scene.
+    closeDesktopBackgroundDetail();
     closeDesktopEffectDetail();
     closeDesktopTextDetail();
-    if(kind==='effect')openDesktopEffectDetail();
+    if(kind==='background')openDesktopBackgroundDetail();
+    else if(kind==='effect')openDesktopEffectDetail();
     else if(kind==='text')openDesktopTextDetail();
   }
   
@@ -4470,6 +4484,319 @@ function enhanceDesktopTextDetailRanges(root){
     });
   });
 }
+
+
+function openDesktopBackgroundDetail(){
+    if(!desktopLiveActive()||!desktopLivePanel)return;
+    closeDesktopBackgroundDetail();
+
+    const {scene,index}=liveEditScene();
+    if(!scene)return;
+    const p=ensurePresentation(scene);
+
+    const apply=()=>{
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:false});
+      renderDesktopLivePanel();
+    };
+
+    const explicit=()=>p.background && typeof p.background==='object' ? p.background : null;
+    const ensureImageState=()=>{
+      if(!p.background || typeof p.background!=='object' || p.background.src===''){
+        p.background={
+          src:p.background?.src||'',
+          transition:p.background?.transition||'fade',
+          transitionDuration:Number(p.background?.transitionDuration)||700,
+          fit:p.background?.fit||'cover',
+          position:p.background?.position||'center center',
+          tone:p.background?.tone||'dark',
+          dim:Number.isFinite(Number(p.background?.dim))?Number(p.background.dim):.38,
+          blur:Number(p.background?.blur)||0,
+          motion:p.background?.motion||{type:'none'},
+          textures:p.background?.textures||{},
+          _editorManaged:true
+        };
+      }
+      return p.background;
+    };
+
+    const overlay=document.createElement('div');
+    overlay.className='desktop-text-detail-overlay desktop-background-detail-overlay';
+
+    const modal=document.createElement('section');
+    modal.className='desktop-text-detail-modal desktop-background-detail-modal';
+    modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+
+    const head=document.createElement('header');
+    head.className='desktop-text-detail-head';
+    const titleWrap=document.createElement('div');
+    const kicker=document.createElement('small');
+    kicker.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
+    const title=document.createElement('h2');
+    title.textContent='背景の詳細設定';
+    titleWrap.append(kicker,title);
+    const x=document.createElement('button');
+    x.type='button';x.className='desktop-text-detail-close';x.textContent='×';
+    head.append(titleWrap,x);
+
+    const body=document.createElement('div');
+    body.className='desktop-text-detail-body';
+
+    const section=(name)=>{
+      const s=document.createElement('section');
+      s.className='desktop-text-detail-section';
+      const h=document.createElement('h3');h.textContent=name;
+      s.appendChild(h);body.appendChild(s);return s;
+    };
+    const two=(parent)=>{
+      const g=document.createElement('div');
+      g.className='desktop-text-detail-two';
+      parent.appendChild(g);return g;
+    };
+
+    // SOURCE --------------------------------------------------------------
+    const sourceSec=section('背景');
+    const sourceGrid=two(sourceSec);
+    const mode=!p.background?'inherit':(p.background.src===''?'clear':'image');
+    sourceGrid.append(
+      desktopDetailSelect('このSceneの背景',[
+        ['inherit','前Sceneから継続'],
+        ['image','画像を使う'],
+        ['clear','背景なし']
+      ],mode,v=>{
+        if(v==='inherit'){
+          delete p.background;
+          apply();
+          closeDesktopBackgroundDetail();
+          openDesktopBackgroundDetail();
+          return;
+        }
+        if(v==='clear'){
+          p.background={src:'',transition:'fade',_editorManaged:true};
+          apply();
+          closeDesktopBackgroundDetail();
+          openDesktopBackgroundDetail();
+          return;
+        }
+        ensureImageState();
+        apply();
+      }),
+      desktopDetailSelect('表示方法',[
+        ['cover','画面いっぱい'],
+        ['contain','全体を表示']
+      ],explicit()?.fit||'cover',v=>{
+        const bg=ensureImageState();bg.fit=v;apply();
+      })
+    );
+
+    const assetRow=document.createElement('div');
+    assetRow.className='desktop-background-detail-asset';
+    const thumb=document.createElement('div');
+    thumb.className='desktop-background-detail-thumb';
+    if(explicit()?.src){
+      thumb.style.backgroundImage=`url("${explicit().src}")`;
+      thumb.classList.add('has-image');
+    }else{
+      thumb.textContent=mode==='inherit'?'前Sceneを継続':mode==='clear'?'背景なし':'画像未選択';
+    }
+    const assetActions=document.createElement('div');
+    assetActions.className='desktop-background-detail-asset-actions';
+    const choose=desktopAction(explicit()?.src?'画像を変更':'画像を選択',()=>{
+      desktopPickFile('image/*',(url,name)=>{
+        const bg=ensureImageState();
+        bg.src=url;bg._editorFileName=name;bg._editorManaged=true;
+        if(!bg.transition)bg.transition='fade';
+        apply();
+        closeDesktopBackgroundDetail();
+        openDesktopBackgroundDetail();
+      });
+    },'is-primary');
+    const clear=desktopAction('画像を外す',()=>{
+      p.background={src:'',transition:'fade',_editorManaged:true};
+      apply();closeDesktopBackgroundDetail();openDesktopBackgroundDetail();
+    });
+    assetActions.append(choose,clear);
+    assetRow.append(thumb,assetActions);
+    sourceSec.appendChild(assetRow);
+
+    // LIGHT ---------------------------------------------------------------
+    const lightSec=section('明るさ・質感');
+    const lightGrid=two(lightSec);
+    const bg0=explicit()||{};
+    lightGrid.append(
+      desktopDetailSelect('ベール',[
+        ['dark','暗く'],
+        ['light','明るく']
+      ],bg0.tone==='light'?'light':'dark',v=>{
+        const bg=ensureImageState();bg.tone=v;
+        if(!Number.isFinite(Number(bg.dim)))bg.dim=v==='light'?.64:.38;
+        apply();
+      }),
+      desktopDetailRange('ベール強度',{
+        min:0,max:1,step:.02,
+        value:Number.isFinite(Number(bg0.dim))?Number(bg0.dim):(bg0.tone==='light'?.64:.38),
+        unit:' %',
+        format:v=>Math.round(v*100),
+        oninput:v=>{const bg=ensureImageState();bg.dim=v;apply();}
+      }),
+      desktopDetailRange('背景ぼかし',{
+        min:0,max:24,step:.5,value:Number(bg0.blur)||0,unit:' px',
+        format:v=>v.toFixed(1),
+        oninput:v=>{const bg=ensureImageState();if(v<=0)delete bg.blur;else bg.blur=v;apply();}
+      }),
+      desktopDetailRange('ビネット',{
+        min:0,max:1,step:.05,value:Number(bg0.textures?.vignette)||0,unit:' %',
+        format:v=>Math.round(v*100),
+        oninput:v=>{
+          const bg=ensureImageState();bg.textures={...(bg.textures||{})};
+          if(v<=0)delete bg.textures.vignette;else bg.textures.vignette=v;apply();
+        }
+      }),
+      desktopDetailRange('粒子',{
+        min:0,max:1,step:.05,value:Number(bg0.textures?.grain)||0,unit:' %',
+        format:v=>Math.round(v*100),
+        oninput:v=>{
+          const bg=ensureImageState();bg.textures={...(bg.textures||{})};
+          if(v<=0)delete bg.textures.grain;else bg.textures.grain=v;apply();
+        }
+      }),
+      desktopDetailRange('モノクロ',{
+        min:0,max:1,step:.05,value:Number(bg0.textures?.monochrome)||0,unit:' %',
+        format:v=>Math.round(v*100),
+        oninput:v=>{
+          const bg=ensureImageState();bg.textures={...(bg.textures||{})};
+          if(v<=0)delete bg.textures.monochrome;else bg.textures.monochrome=v;apply();
+        }
+      })
+    );
+
+    // POSITION ------------------------------------------------------------
+    const positionSec=section('表示位置');
+    const positionGrid=two(positionSec);
+    positionGrid.append(
+      desktopDetailSelect('位置',[
+        ['left top','左上'],['center top','上'],['right top','右上'],
+        ['left center','左'],['center center','中央'],['right center','右'],
+        ['left bottom','左下'],['center bottom','下'],['right bottom','右下']
+      ],bg0.position||'center center',v=>{const bg=ensureImageState();bg.position=v;apply();}),
+      desktopDetailSelect('背景サイズ',[
+        ['cover','画面いっぱい（cover）'],
+        ['contain','画像全体（contain）']
+      ],bg0.fit||'cover',v=>{const bg=ensureImageState();bg.fit=v;apply();})
+    );
+
+    // TRANSITION ----------------------------------------------------------
+    const transSec=section('Scene切替');
+    const transGrid=two(transSec);
+    transGrid.append(
+      desktopDetailSelect('切替演出',[
+        ['fade','フェード'],['cut','カット'],['flash','フラッシュ'],['glitch','グリッチ']
+      ],bg0.transition||'fade',v=>{const bg=ensureImageState();bg.transition=v;apply();}),
+      desktopDetailRange('切替時間',{
+        min:0,max:3,step:.05,
+        value:(Number(bg0.transitionDuration)||700)/1000,
+        unit:' 秒',format:v=>v.toFixed(2),
+        oninput:v=>{const bg=ensureImageState();bg.transitionDuration=Math.round(v*1000);apply();}
+      })
+    );
+
+    // MOTION --------------------------------------------------------------
+    const motionSec=section('背景の動き');
+    const motion=bg0.motion||{type:'none'};
+    const motionGrid=two(motionSec);
+    motionGrid.append(
+      desktopDetailSelect('動き',[
+        ['none','なし'],['slowZoom','ゆっくりズーム'],['breath','呼吸'],
+        ['panLeft','左へパン'],['panRight','右へパン'],['panUp','上へパン'],['panDown','下へパン']
+      ],motion.type||'none',v=>{
+        const bg=ensureImageState();
+        bg.motion={...(bg.motion||{}),type:v};
+        if(v==='none')bg.motion={type:'none'};
+        apply();
+        closeDesktopBackgroundDetail();
+        openDesktopBackgroundDetail();
+      }),
+      desktopDetailRange('動きの時間',{
+        min:.5,max:30,step:.25,
+        value:(Number(motion.duration)||6500)/1000,
+        unit:' 秒',format:v=>v.toFixed(2),
+        oninput:v=>{const bg=ensureImageState();bg.motion={...(bg.motion||{}),type:bg.motion?.type||'none',duration:Math.round(v*1000)};apply();}
+      })
+    );
+
+    const motionType=motion.type||'none';
+    if(motionType==='slowZoom'||motionType==='breath'){
+      const zoomGrid=two(motionSec);
+      zoomGrid.append(
+        desktopDetailRange('開始倍率',{
+          min:1,max:1.5,step:.01,value:Number(motion.scaleFrom)||1,
+          format:v=>v.toFixed(2),
+          oninput:v=>{const bg=ensureImageState();bg.motion={...(bg.motion||{}),type:motionType,scaleFrom:v};apply();}
+        }),
+        desktopDetailRange('終了倍率',{
+          min:1,max:1.7,step:.01,value:Number(motion.scaleTo)||(motionType==='slowZoom'?1.14:1.11),
+          format:v=>v.toFixed(2),
+          oninput:v=>{const bg=ensureImageState();bg.motion={...(bg.motion||{}),type:motionType,scaleTo:v};apply();}
+        })
+      );
+    }else if(/^pan/.test(motionType)){
+      const panGrid=two(motionSec);
+      panGrid.append(
+        desktopDetailRange('移動量',{
+          min:1,max:30,step:1,value:Number(motion.pan)||9,unit:' %',
+          format:v=>Math.round(v),
+          oninput:v=>{const bg=ensureImageState();bg.motion={...(bg.motion||{}),type:motionType,pan:v};apply();}
+        })
+      );
+    }
+    if(motionType==='none'){
+      motionSec.classList.add('is-disabled-soft');
+      const note=document.createElement('p');
+      note.className='desktop-text-detail-note';
+      note.textContent='「動き」を選ぶと時間・倍率・移動量を細かく設定できます。';
+      motionSec.appendChild(note);
+    }
+
+    const previewSec=section('プレビュー');
+    const previewNote=document.createElement('p');
+    previewNote.className='desktop-text-detail-note';
+    previewNote.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの背景設定を保持します。';
+    previewSec.appendChild(previewNote);
+
+    const foot=document.createElement('footer');
+    foot.className='desktop-text-detail-foot';
+    const reset=document.createElement('button');
+    reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
+    const spacer=document.createElement('span');
+    const close=document.createElement('button');
+    close.type='button';close.textContent='閉じる';
+    const save=document.createElement('button');
+    save.type='button';save.className='is-primary';save.textContent='保存';
+    foot.append(reset,spacer,close,save);
+
+    modal.append(head,body,foot);
+    overlay.appendChild(modal);
+    desktopLivePanel.appendChild(overlay);
+
+    const closeOnly=()=>closeDesktopBackgroundDetail();
+    x.addEventListener('click',closeOnly);
+    close.addEventListener('click',closeOnly);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
+    save.addEventListener('click',async()=>{
+      await saveDraftNow();
+      closeDesktopBackgroundDetail();
+      renderDesktopLivePanel();
+    });
+    reset.addEventListener('click',()=>{
+      delete p.background;
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:false});
+      renderDesktopLivePanel();
+      closeDesktopBackgroundDetail();
+      openDesktopBackgroundDetail();
+    });
+  }
 
 function openDesktopTextDetail(){
     if(!desktopLiveActive()||!desktopLivePanel)return;

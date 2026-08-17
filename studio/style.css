@@ -5474,3 +5474,46 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
   .desktop-effect-replay{width:max-content;min-width:180px;height:40px;padding:0 18px;border:1px solid #d3d7dc;border-radius:999px;background:#fff;color:#171a1f;font:800 12px system-ui;cursor:pointer}
   .desktop-effect-replay:hover{background:#f3f4f5}
 }
+
+
+/* PC background detail */
+.desktop-background-detail-asset{
+  display:grid;
+  grid-template-columns:minmax(180px,1fr) auto;
+  gap:14px;
+  align-items:stretch;
+  margin-top:14px;
+}
+.desktop-background-detail-thumb{
+  min-height:112px;
+  border:1px solid #d9dce1;
+  border-radius:14px;
+  display:grid;
+  place-items:center;
+  background:#f5f6f7;
+  color:#8a9099;
+  font-size:12px;
+  background-size:cover;
+  background-position:center;
+  overflow:hidden;
+}
+.desktop-background-detail-thumb.has-image{
+  min-height:142px;
+}
+.desktop-background-detail-asset-actions{
+  min-width:140px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  justify-content:center;
+}
+.desktop-background-detail-asset-actions .desktop-live-action{
+  width:100%;
+}
+.desktop-background-detail-modal .desktop-text-detail-section.is-disabled-soft{
+  opacity:.66;
+}
+@media (max-width:899px){
+  .desktop-background-detail-overlay{display:none!important}
+}
+
