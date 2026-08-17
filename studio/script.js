@@ -4186,19 +4186,26 @@
   }
 
   liveInlineToolbar?.addEventListener('pointerdown',(e)=>{
+    const b=e.target.closest('[data-live-inline]');
+    if(!b)return;
     // Keep the contenteditable focus alive while tapping authoring controls.
+    // On iPhone Safari preventDefault() can suppress the later click, so the
+    // tiny toolbox trigger is handled synchronously on pointerdown.
     e.preventDefault();
-  });
-  liveInlineToolbar?.addEventListener('click',(e)=>{
-    const b=e.target.closest('[data-live-inline]');if(!b)return;
-    e.preventDefault();e.stopPropagation();
+    e.stopPropagation();
     const kind=b.dataset.liveInline;
     if(kind==='tools-toggle'){
       if(liveInlineToolbar.classList.contains('is-expanded'))collapseInlineCursorDock();
       else expandInlineCursorDock();
       liveInlineEditEl?.focus({preventScroll:true});
-      return;
     }
+  });
+  liveInlineToolbar?.addEventListener('click',(e)=>{
+    const b=e.target.closest('[data-live-inline]');if(!b)return;
+    e.preventDefault();e.stopPropagation();
+    const kind=b.dataset.liveInline;
+    // tools-toggle is already handled on pointerdown for iPhone keyboard safety.
+    if(kind==='tools-toggle')return;
     // Using one of the helpers keeps the dock open briefly, then it tucks away again.
     clearTimeout(liveInlineDockTimer);
     liveInlineDockTimer=setTimeout(()=>liveInlineToolbar?.classList.remove('is-expanded'),4200);
