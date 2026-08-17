@@ -4134,28 +4134,81 @@ function startInlineTextEdit(){
   function refreshMobileLiveDetail(section){
     if(desktopLiveActive() || !liveEditEnabled)return false;
 
-    // Preserve where the author was looking before reset.
-    // The detail body is the actual scrolling element on iPhone.
     const currentModal=liveEditSheetBody?.querySelector('.desktop-text-detail-modal');
     const currentBody=currentModal?.querySelector('.desktop-text-detail-body');
+    if(!currentModal)return false;
+
     const keepScroll=currentBody?.scrollTop||0;
 
-    if(liveEditSheetBody)liveEditSheetBody.replaceChildren();
+    // Reset already changed the Scene data. Build the fresh inspector off-screen,
+    // then swap only its contents into the visible modal. This avoids destroying
+    // the visible scroll container, which caused the one-frame "ビクッ".
+    const previousVisibility=currentModal.style.visibility;
+    currentModal.style.visibility='visible';
 
-    // Reopen with freshly reset Scene data, then restore the same viewport.
-    // This makes the changed numbers/sliders visibly snap back in place
-    // instead of jumping to the top of the inspector.
-    requestAnimationFrame(()=>{
-      openMobileLiveDetail(section);
-      requestAnimationFrame(()=>{
-        const nextModal=liveEditSheetBody?.querySelector('.desktop-text-detail-modal');
-        const nextBody=nextModal?.querySelector('.desktop-text-detail-body');
-        if(nextBody){
-          const maxScroll=Math.max(0,nextBody.scrollHeight-nextBody.clientHeight);
-          nextBody.scrollTop=Math.min(keepScroll,maxScroll);
-        }
-      });
+    let selector =
+      section==='effect' ? '.desktop-effect-detail-overlay' :
+      section==='background' ? '.desktop-background-detail-overlay' :
+      section==='audio' ? '.desktop-audio-detail-overlay' :
+      '.desktop-text-detail-overlay';
+
+    if(section==='text')openDesktopTextDetail();
+    else if(section==='effect')openDesktopEffectDetail();
+    else if(section==='background')openDesktopBackgroundDetail();
+    else if(section==='audio')openDesktopAudioDetail();
+
+    const freshOverlay=[...document.querySelectorAll(selector)]
+      .find(el=>!liveEditSheetBody?.contains(el));
+    const freshModal=freshOverlay?.querySelector('.desktop-text-detail-modal');
+
+    if(!freshModal){
+      currentModal.style.visibility=previousVisibility;
+      return false;
+    }
+
+    // Preserve the visible modal node and scrolling body node.
+    const freshHead=freshModal.querySelector('.desktop-text-detail-head');
+    const freshBody=freshModal.querySelector('.desktop-text-detail-body');
+    const freshFoot=freshModal.querySelector('.desktop-text-detail-foot');
+    const oldHead=currentModal.querySelector('.desktop-text-detail-head');
+    const oldBody=currentModal.querySelector('.desktop-text-detail-body');
+    const oldFoot=currentModal.querySelector('.desktop-text-detail-foot');
+
+    if(freshHead && oldHead)oldHead.replaceWith(freshHead);
+    if(freshBody && oldBody){
+      oldBody.replaceChildren(...freshBody.childNodes);
+      oldBody.scrollTop=keepScroll;
+    }
+    if(freshFoot && oldFoot)oldFoot.replaceWith(freshFoot);
+
+    freshOverlay.remove();
+
+    // Rebind mobile return behavior to the newly swapped header/footer controls.
+    let returned=false;
+    const returnToCompact=()=>{
+      if(returned)return;
+      returned=true;
+      const sec=section;
+      currentModal.remove();
+      liveEditSheetBody.replaceChildren();
+      liveEditSheet.classList.remove('mobile-live-detail-sheet','live-edit-sheet-audio');
+      document.body.classList.remove('mobile-live-detail-open');
+      const h=liveEditSheet.querySelector('.live-edit-sheet-head');
+      if(h)h.hidden=false;
+      renderLiveEditSheet(sec);
+    };
+
+    currentModal.querySelector('.desktop-text-detail-close')
+      ?.addEventListener('click',returnToCompact,{once:true});
+    [...currentModal.querySelectorAll('.desktop-text-detail-foot button')].forEach(btn=>{
+      const t=(btn.textContent||'').trim();
+      if(t==='閉じる'||t==='キャンセル'||t==='保存'){
+        btn.addEventListener('click',()=>requestAnimationFrame(returnToCompact),{once:true});
+      }
     });
+
+    currentModal.style.visibility=previousVisibility || 'visible';
+    if(currentBody)currentBody.scrollTop=keepScroll;
     return true;
   }
 
