@@ -4942,3 +4942,32 @@ body.easy-player-open #undoCompactButton,
   body.live-edit-sheet-open .live-edit-sheet{top:0;right:0;bottom:0;width:42vw;max-height:none;border-radius:0;border-top:0;border-bottom:0;border-right:0}
   body.live-edit-sheet-open .live-edit-toolbar{right:calc(42vw + 22px)}
 }
+
+/* Live Edit v0.2 — inline text + keyboard-like command strip */
+.live-edit-toolbar{
+  left:0;right:0;bottom:0;transform:none;width:100%;box-sizing:border-box;
+  justify-content:center;gap:0;padding:4px max(10px,env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));
+  border:0;border-top:1px solid rgba(255,255,255,.16);border-radius:0;
+  background:rgba(28,29,31,.94);box-shadow:0 -1px 12px rgba(0,0,0,.14);
+}
+.live-edit-toolbar button{flex:0 1 88px;min-width:64px;border-radius:8px;padding:7px 10px 5px}
+.live-edit-toolbar span{font-size:19px}.live-edit-toolbar small{font-size:10px}
+.live-edit-enabled.live-edit-toolbar-visible .sp-footer{padding-bottom:70px!important}
+.live-inline-editing{outline:none!important;caret-color:currentColor;cursor:text;-webkit-user-select:text!important;user-select:text!important;background:transparent!important;box-shadow:none!important;-webkit-tap-highlight-color:transparent}
+.live-inline-editing:focus{outline:none!important;background:transparent!important;box-shadow:none!important}
+@media (min-width:900px){
+ .live-edit-toolbar{left:50%;right:auto;bottom:18px;width:auto;transform:translateX(-50%);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:4px;background:rgba(20,22,25,.88)}
+ .live-edit-toolbar button{flex:none;min-width:72px}
+ .live-edit-enabled.live-edit-toolbar-visible .sp-footer{padding-bottom:20px!important}
+}
+
+/* Live Edit v0.2.4 — make only the current Scene text tappable.
+   ScenePlayerCore intentionally keeps .sp-scenes pointer-events:none so the
+   stage owns normal navigation taps. In Live Edit, explicitly re-enable the
+   active text node; the capture listener in script.js then opens the toolbar
+   without advancing the Player. */
+.live-edit-enabled .sp-scene.is-active .sp-text{
+  pointer-events:auto;
+  cursor:text;
+  -webkit-tap-highlight-color:transparent;
+}

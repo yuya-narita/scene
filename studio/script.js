@@ -3710,12 +3710,66 @@
   const liveEditSheetTitle=$('#liveEditSheetTitle');
   const liveEditSceneNumber=$('#liveEditSceneNumber');
   let liveEditEnabled=false;
+  let liveEditToolbarVisible=false;
+  let liveInlineEditEl=null;
 
   function liveEditScene(){
     const i=Math.max(0,Math.min(player?.index ?? selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
     return {scene:workingDocument?.scenes?.[i]||null,index:i};
   }
   function closeLiveEditSheet(){ if(liveEditSheet)liveEditSheet.hidden=true; document.body.classList.remove('live-edit-sheet-open'); }
+  function setLiveToolbarVisible(show){
+    liveEditToolbarVisible=!!show;
+    if(liveEditToolbar) liveEditToolbar.hidden=!liveEditEnabled||!liveEditToolbarVisible;
+    playerHost.classList.toggle('live-edit-toolbar-visible',liveEditEnabled&&liveEditToolbarVisible);
+  }
+  function finishInlineTextEdit(){
+    if(!liveInlineEditEl)return;
+    liveInlineEditEl.removeAttribute('contenteditable');
+    liveInlineEditEl.removeAttribute('role');
+    liveInlineEditEl.classList.remove('live-inline-editing');
+    liveInlineEditEl=null;
+    playerHost.classList.remove('live-inline-text-edit');
+  }
+  function startInlineTextEdit(){
+    const {scene}=liveEditScene(); if(!scene)return;
+    finishInlineTextEdit(); closeLiveEditSheet(); setLiveToolbarVisible(true);
+    const el=playerHost.querySelector('.sp-scene.is-active .sp-text'); if(!el)return;
+
+    liveInlineEditEl=el;
+    // contenteditable=true is the most reliable option on iPhone Safari.
+    // The element itself stays in the Player; no duplicate textarea/modal is created.
+    el.setAttribute('contenteditable','true');
+    el.setAttribute('role','textbox');
+    el.setAttribute('aria-label','Scene text');
+    el.classList.add('live-inline-editing');
+    playerHost.classList.add('live-inline-text-edit');
+
+    const sync=()=>{
+      if(!liveInlineEditEl)return;
+      const value=liveInlineEditEl.innerText.replace(/\n$/,'');
+      scene.text=value;
+      // Player owns a playback clone. Keep that clone in sync too so moving away
+      // and back during the same Live Edit session does not restore old text.
+      if(player?.currentScene) player.currentScene.text=value;
+      scheduleDraftSave(100);
+    };
+
+    const abort=new AbortController();
+    el._liveEditAbort?.abort();
+    el._liveEditAbort=abort;
+    el.addEventListener('input',sync,{signal:abort.signal});
+    el.addEventListener('blur',()=>{sync();finishInlineTextEdit();},{once:true,signal:abort.signal});
+
+    requestAnimationFrame(()=>{
+      el.focus({preventScroll:true});
+      const sel=getSelection(),range=document.createRange();
+      range.selectNodeContents(el);range.collapse(false);
+      sel.removeAllRanges();sel.addRange(range);
+      // Wait until iOS reports the keyboard/visual viewport before positioning.
+      setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'center'}),180);
+    });
+  }
   function refreshLivePlayer({preserveSheet=true}={}){
     if(!player||!workingDocument?.scenes?.length)return;
     const index=Math.max(0,Math.min(player.index,workingDocument.scenes.length-1));
@@ -3746,22 +3800,7 @@
     document.body.classList.add('live-edit-sheet-open');
     liveEditSheetBody.innerHTML='';
 
-    if(kind==='text'){
-      liveEditSheetTitle.textContent='文字';
-      const ta=document.createElement('textarea');
-      ta.value=scene.text||''; ta.placeholder='このSceneの本文';
-      ta.addEventListener('input',()=>{
-        scene.text=ta.value;
-        const current=playerHost.querySelector('.sp-scene.is-active .sp-text');
-        if(current)current.textContent=ta.value;
-        scheduleDraftSave(120);
-      });
-      const detail=document.createElement('button'); detail.type='button';detail.className='live-edit-detail';detail.textContent='文字の詳細設定';
-      detail.addEventListener('click',()=>liveEditAdvanced('text'));
-      liveEditSheetBody.append(ta,detail);
-      requestAnimationFrame(()=>ta.focus({preventScroll:true}));
-      return;
-    }
+    if(kind==='text'){ startInlineTextEdit(); return; }
 
     if(kind==='effect'){
       liveEditSheetTitle.textContent='演出';
@@ -3806,31 +3845,64 @@
   function enableLiveEdit(){
     liveEditEnabled=true;
     if(player)player.options.historyAllScenes=true;
-    if(liveEditToolbar)liveEditToolbar.hidden=false;
+    setLiveToolbarVisible(false);
     playerHost.classList.add('live-edit-enabled');
     const historyHelp=playerHost.querySelector('.sp-history-help');if(historyHelp)historyHelp.textContent='Sceneをスクロール';
     const historyKicker=playerHost.querySelector('.sp-history-kicker');if(historyKicker)historyKicker.textContent='SCENES';
   }
   function disableLiveEdit(){
-    liveEditEnabled=false;closeLiveEditSheet();
-    if(liveEditToolbar)liveEditToolbar.hidden=true;
+    finishInlineTextEdit(); liveEditEnabled=false;closeLiveEditSheet();
+    setLiveToolbarVisible(false);
     playerHost.classList.remove('live-edit-enabled');
     if(player)player.options.historyAllScenes=false;
   }
 
-  liveEditToolbar?.addEventListener('click',(e)=>{const b=e.target.closest('[data-live-edit]');if(b)renderLiveEditSheet(b.dataset.liveEdit);});
+  liveEditToolbar?.addEventListener('click',(e)=>{
+    const b=e.target.closest('[data-live-edit]');if(!b)return;
+    e.preventDefault();e.stopPropagation();
+    // Aa edits the text that is already visible in the Player. No sheet/modal.
+    if(b.dataset.liveEdit==='text'){ startInlineTextEdit(); return; }
+    renderLiveEditSheet(b.dataset.liveEdit);
+  });
   $('#liveEditSheetClose')?.addEventListener('click',closeLiveEditSheet);
+  // Live Edit v0.2.3: while the visible Scene text is being edited,
+  // the Player must not interpret taps / Enter / Space as navigation.
   playerHost.addEventListener('click',(e)=>{
-    if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
-    if(e.target.closest('.sp-scene.is-active .sp-text,.sp-scene.is-active .sp-subtext')){
-      e.preventDefault();e.stopPropagation();renderLiveEditSheet('text');
+    if(!liveInlineEditEl)return;
+    if(e.target===liveInlineEditEl||liveInlineEditEl.contains(e.target)){
+      e.stopImmediatePropagation();
     }
   },true);
-  playerHost.addEventListener('sceneplayer:scenechange',()=>{closeLiveEditSheet();});
-  playerHost.addEventListener('sceneplayer:historyopen',()=>{closeLiveEditSheet();});
+  playerHost.addEventListener('keydown',(e)=>{
+    if(!liveInlineEditEl)return;
+    if(e.target===liveInlineEditEl||liveInlineEditEl.contains(e.target)){
+      e.stopImmediatePropagation();
+    }
+  },true);
+
+  // Live Edit v0.2.2: never capture the whole Player surface.
+  // Normal Player taps must remain owned by ScenePlayerCore:
+  // cover Start works, and tapping empty stage space still advances.
+  // Only tapping the CURRENT Scene text is treated as an edit-intent gesture.
+  playerHost.addEventListener('click',(e)=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
+    if(liveInlineEditEl)return;
+
+    const activeText=e.target.closest('.sp-scene.is-active .sp-text');
+    if(!activeText)return;
+
+    // Current text tap opens/closes the keyboard-like Live Edit toolbar
+    // without advancing to the next Scene.
+    e.preventDefault();
+    e.stopPropagation();
+    setLiveToolbarVisible(!liveEditToolbarVisible);
+  },true);
+  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
+  playerHost.addEventListener('sceneplayer:scenechange',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
+  playerHost.addEventListener('sceneplayer:historyopen',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
   $('#autoRecStart')?.addEventListener('click',()=>{closeLiveEditSheet();if(liveEditToolbar)liveEditToolbar.hidden=true;});
-  $('#autoRecCancel')?.addEventListener('click',()=>{if(liveEditEnabled&&liveEditToolbar)liveEditToolbar.hidden=false;});
-  $('#autoRecRetry')?.addEventListener('click',()=>{if(liveEditEnabled&&liveEditToolbar)liveEditToolbar.hidden=false;});
+  $('#autoRecCancel')?.addEventListener('click',()=>{if(liveEditEnabled)setLiveToolbarVisible(true);});
+  $('#autoRecRetry')?.addEventListener('click',()=>{if(liveEditEnabled)setLiveToolbarVisible(true);});
 
   function openPlayerScreenFromApi(startAt=0){
     playerReturnTarget='advanced';
