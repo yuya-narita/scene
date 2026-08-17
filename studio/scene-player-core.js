@@ -1724,7 +1724,14 @@
       layer.style.backgroundImage = state.src ? `url("${String(state.src).replace(/"/g, '\"')}")` : 'none';
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
-      layer.style.filter = state.blur > 0 ? `blur(${state.blur}px)` : '';
+      {
+        const filters = [];
+        const blur = Math.max(0, asNumber(state.blur, 0));
+        const monochrome = clamp(asNumber(state.textures?.monochrome, 0), 0, 1);
+        if (blur > 0) filters.push(`blur(${blur}px)`);
+        if (monochrome > 0) filters.push(`grayscale(${monochrome})`);
+        layer.style.filter = filters.join(' ');
+      }
       this._applyBackgroundMotion(layer, state.motion);
     }
 
@@ -1733,7 +1740,14 @@
       if (!layer) return;
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
-      layer.style.filter = state.blur > 0 ? `blur(${state.blur}px)` : '';
+      {
+        const filters = [];
+        const blur = Math.max(0, asNumber(state.blur, 0));
+        const monochrome = clamp(asNumber(state.textures?.monochrome, 0), 0, 1);
+        if (blur > 0) filters.push(`blur(${blur}px)`);
+        if (monochrome > 0) filters.push(`grayscale(${monochrome})`);
+        layer.style.filter = filters.join(' ');
+      }
       if (resetMotion) this._applyBackgroundMotion(layer, state.motion);
     }
 

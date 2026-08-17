@@ -4710,12 +4710,24 @@ function openDesktopBackgroundDetail(){
         ['none','なし'],['slowZoom','ゆっくりズーム'],['breath','呼吸'],
         ['panLeft','左へパン'],['panRight','右へパン'],['panUp','上へパン'],['panDown','下へパン']
       ],motion.type||'none',v=>{
+        const currentModal=desktopLivePanel?.querySelector('.desktop-background-detail-modal');
+        const keepScroll=currentModal?.scrollTop||0;
+
         const bg=ensureImageState();
         bg.motion={...(bg.motion||{}),type:v};
         if(v==='none')bg.motion={type:'none'};
         apply();
-        closeDesktopBackgroundDetail();
-        openDesktopBackgroundDetail();
+
+        // Rebuild only because the available motion controls change,
+        // then return to the exact same scroll position.
+        requestAnimationFrame(()=>{
+          closeDesktopBackgroundDetail();
+          openDesktopBackgroundDetail();
+          requestAnimationFrame(()=>{
+            const nextModal=desktopLivePanel?.querySelector('.desktop-background-detail-modal');
+            if(nextModal)nextModal.scrollTop=keepScroll;
+          });
+        });
       }),
       desktopDetailRange('動きの時間',{
         min:.5,max:30,step:.25,
