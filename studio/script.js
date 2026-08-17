@@ -4126,9 +4126,9 @@ function startInlineTextEdit(){
     liveEditRenderAt(player.index,{preserveSheet});
   }
   function liveEditAdvanced(section){
-    if(section==='text' && desktopLiveActive()){
-      openDesktopTextDetail();
-      return;
+    if(desktopLiveActive()){
+      if(section==='text'){openDesktopTextDetail();return;}
+      if(section==='effect'){openDesktopEffectDetail();return;}
     }
     const {index}=liveEditScene();
     selectedSceneIndex=index;
@@ -4234,6 +4234,92 @@ function startInlineTextEdit(){
   }
   function closeDesktopTextDetail(){
     desktopLivePanel?.querySelector('.desktop-text-detail-overlay')?.remove();
+  }
+
+  function closeDesktopEffectDetail(){
+    desktopLivePanel?.querySelector('.desktop-effect-detail-overlay')?.remove();
+  }
+  function openDesktopEffectDetail(){
+    if(!desktopLiveActive()||!desktopLivePanel)return;
+    closeDesktopEffectDetail();
+    const {scene,index}=liveEditScene();if(!scene)return;
+    const p=ensurePresentation(scene);
+    const before={
+      effect:p.effect,
+      display:p.display,
+      typing:clone(p.typing||null),
+      effectTiming:clone(p.effectTiming||null),
+      disappear:clone(p.disappear||null)
+    };
+    let committed=false;
+    const apply=()=>{scheduleDraftSave(80);refreshLivePlayer({preserveSheet:false});};
+    const restore=()=>{
+      if(before.effect===undefined)delete p.effect;else p.effect=before.effect;
+      if(before.display===undefined)delete p.display;else p.display=before.display;
+      if(before.typing===null)delete p.typing;else p.typing=clone(before.typing);
+      if(before.effectTiming===null)delete p.effectTiming;else p.effectTiming=clone(before.effectTiming);
+      if(before.disappear===null)delete p.disappear;else p.disappear=clone(before.disappear);
+      scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();
+    };
+
+    const overlay=document.createElement('div');overlay.className='desktop-text-detail-overlay desktop-effect-detail-overlay';
+    const modal=document.createElement('section');modal.className='desktop-text-detail-modal desktop-effect-detail-modal';
+    const head=document.createElement('header');head.className='desktop-text-detail-head';
+    const titleWrap=document.createElement('div');const kicker=document.createElement('small');kicker.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
+    const title=document.createElement('h2');title.textContent='演出の詳細設定';titleWrap.append(kicker,title);
+    const x=document.createElement('button');x.type='button';x.className='desktop-text-detail-close';x.textContent='×';head.append(titleWrap,x);
+    const body=document.createElement('div');body.className='desktop-text-detail-body';
+    const section=(name)=>{const s=document.createElement('section');s.className='desktop-text-detail-section';const h=document.createElement('h3');h.textContent=name;s.appendChild(h);body.appendChild(s);return s;};
+    const two=(s)=>{const d=document.createElement('div');d.className='desktop-text-detail-two';s.appendChild(d);return d;};
+
+    const basic=section('基本');
+    const basicGrid=two(basic);
+    const currentEffect=p.typing?.enabled?'typewriter':(p.effect||'auto');
+    const effectSelect=desktopDetailSelect('出かた',[
+      ['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']
+    ],currentEffect,v=>{
+      if(v==='typewriter'){
+        p.effect='none';
+        p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
+      }else{
+        delete p.typing;p.effect=v;
+      }
+      apply();closeDesktopEffectDetail();openDesktopEffectDetail();
+    });
+    basicGrid.append(effectSelect,desktopDetailSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;apply();}));
+
+    const timing=section('タイミング');
+    const timingGrid=two(timing);
+    p.effectTiming ||= {};
+    timingGrid.append(
+      desktopDetailRange('演出時間',{min:.15,max:3,step:.05,value:Number(p.effectTiming.duration)||0.8,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{p.effectTiming.duration=v;apply();}}),
+      desktopDetailRange('開始遅延',{min:0,max:3,step:.05,value:Number(p.effectTiming.delay)||0,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{if(v<=0)delete p.effectTiming.delay;else p.effectTiming.delay=v;apply();}}),
+      desktopDetailRange('消えるまで',{min:0,max:12,step:.1,value:Number(p.disappear?.after)||0,unit:' 秒',format:v=>v.toFixed(1),oninput:v=>{p.disappear={...(p.disappear||{}),after:Math.round(v*1000)};if(v<=0)delete p.disappear;apply();}}),
+      desktopDetailRange('消える時のフェード',{min:.1,max:4,step:.05,value:(Number(p.disappear?.fade)||700)/1000,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{p.disappear={...(p.disappear||{}),after:Number(p.disappear?.after)||2500,fade:Math.round(v*1000)};apply();}})
+    );
+
+    const typingSec=section('タイプライター');
+    const typingOn=!!p.typing?.enabled;
+    typingSec.classList.toggle('is-disabled',!typingOn);
+    const typingGrid=two(typingSec);
+    const speed=desktopDetailRange('1文字の速度',{min:.01,max:.25,step:.005,value:(Number(p.typing?.speed)||55)/1000,unit:' 秒/文字',format:v=>v.toFixed(3),oninput:v=>{if(!p.typing?.enabled)return;p.typing.speed=Math.round(v*1000);apply();}});
+    const cursor=desktopDetailSelect('カーソル',[['on','表示する'],['off','表示しない']],p.typing?.cursor===false?'off':'on',v=>{if(!p.typing?.enabled)return;p.typing.cursor=v!=='off';apply();});
+    if(!typingOn){speed.querySelectorAll('input').forEach(el=>el.disabled=true);cursor.querySelector('select').disabled=true;}
+    typingGrid.append(speed,cursor);
+    const typingNote=document.createElement('p');typingNote.className='desktop-text-detail-note';typingNote.textContent=typingOn?'左のLive Previewで文字送りを確認できます。':'「出かた」をタイプライターにすると設定できます。';typingSec.appendChild(typingNote);
+
+    const preview=section('プレビュー');
+    const note=document.createElement('p');note.className='desktop-text-detail-note';note.textContent='数値変更は左のLive Previewへ即時反映されます。演出はSceneを再描画してその場で再生します。';preview.appendChild(note);
+    const replay=document.createElement('button');replay.type='button';replay.className='desktop-effect-replay';replay.textContent='▶ 演出をもう一度見る';replay.addEventListener('click',()=>refreshLivePlayer({preserveSheet:false}));preview.appendChild(replay);
+
+    const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
+    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
+    const spacer=document.createElement('span');const cancel=document.createElement('button');cancel.type='button';cancel.textContent='キャンセル';const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';foot.append(reset,spacer,cancel,save);
+    modal.append(head,body,foot);overlay.appendChild(modal);desktopLivePanel.appendChild(overlay);
+    const cancelAndClose=()=>{if(!committed)restore();closeDesktopEffectDetail();};
+    x.addEventListener('click',cancelAndClose);cancel.addEventListener('click',cancelAndClose);overlay.addEventListener('click',e=>{if(e.target===overlay)cancelAndClose();});
+    save.addEventListener('click',()=>{committed=true;scheduleDraftSave(40);closeDesktopEffectDetail();renderDesktopLivePanel();});
+    reset.addEventListener('click',()=>{delete p.effectTiming;delete p.disappear;delete p.typing;p.effect='auto';p.display='stack';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});closeDesktopEffectDetail();openDesktopEffectDetail();});
   }
   
 function enhanceDesktopTextDetailRanges(root){
@@ -4384,7 +4470,7 @@ function openDesktopTextDetail(){
       desktopMakeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']],effectValue,v=>{if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}refresh();}),
       desktopMakeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;refresh();})
     );
-    effectCard.append(effectGrid,desktopDetail('演出の詳細設定','text'));
+    effectCard.append(effectGrid,desktopDetail('演出の詳細設定','effect'));
 
     const bgCard=desktopCard('背景（▣）');
     const bg=p.background;

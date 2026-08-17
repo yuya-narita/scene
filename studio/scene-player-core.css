@@ -1268,3 +1268,25 @@
   .sp-cover-episode-block{margin-top:34px!important;}
   .sp-cover-start{margin-top:34px!important;}
 }
+
+
+/* Desktop/Advanced author timing overrides. Defaults remain unchanged when vars are absent. */
+.sp-scene.sp-fx-play .sp-text{
+  animation-duration:var(--sp-effect-duration)!important;
+  animation-delay:var(--sp-effect-delay,0s)!important;
+}
+
+.sp-scene.sp-fx-play[data-effect="pulse"] .sp-text{animation-duration:var(--sp-effect-duration,.95s)!important}
+.sp-scene.sp-fx-play[data-effect="shake"] .sp-text{animation-duration:var(--sp-effect-duration,.48s)!important}
+.sp-scene.sp-fx-play[data-effect="blur"] .sp-text{animation-duration:var(--sp-effect-duration,1.05s)!important}
+.sp-scene.sp-fx-play[data-effect="loud"] .sp-text{animation-duration:var(--sp-effect-duration,.58s)!important}
+.sp-scene.sp-fx-play[data-effect="fade"] .sp-text{animation-duration:var(--sp-effect-duration,1.2s)!important}
+.sp-scene.sp-fx-play[data-effect="pop"] .sp-text{animation-duration:var(--sp-effect-duration,.68s)!important}
+.sp-scene.sp-fx-play[data-effect="slow"] .sp-text{animation-duration:var(--sp-effect-duration,1.25s)!important}
+.sp-scene.sp-fx-play[data-effect="whisper"] .sp-text{animation-duration:var(--sp-effect-duration,.78s)!important}
+.sp-scene.sp-fx-play[data-effect="tilt"] .sp-text{animation-duration:var(--sp-effect-duration,.68s)!important}
+.sp-scene.sp-fx-play[data-effect="fadeRise"] .sp-text{animation-duration:var(--sp-effect-duration,.62s)!important}
+.sp-scene.sp-fx-play[data-effect="softRise"] .sp-text{animation-duration:var(--sp-effect-duration,.72s)!important}
+.sp-scene.sp-fx-play[data-effect="settle"] .sp-text{animation-duration:var(--sp-effect-duration,.82s)!important}
+.sp-scene.sp-fx-play[data-effect="whisperIn"] .sp-text{animation-duration:var(--sp-effect-duration,.86s)!important}
+.sp-scene.sp-fx-play[data-effect="emphasis"] .sp-text{animation-duration:var(--sp-effect-duration,.7s)!important}
