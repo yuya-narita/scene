@@ -5098,3 +5098,66 @@ body.easy-player-open #undoCompactButton,
   justify-content:center;
 }
 .live-inline-text-edit .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target::before{content:none!important}
+
+
+/* Live Edit v0.3.4 — smaller empty-Scene hit target + six-key strip while typing */
+
+/* An empty Scene should advertise where to write without turning the entire
+   lower half of the Player into an edit hit area. Only this compact target
+   catches taps; space below it belongs to normal Player preview/navigation. */
+.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene
+.sp-text.live-edit-empty-target:not(.live-inline-editing){
+  min-height:48px!important;
+  width:min(210px,64vw)!important;
+  margin-inline:auto!important;
+  padding:10px 14px!important;
+  box-sizing:border-box!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  cursor:text!important;
+}
+.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene
+.sp-text.live-edit-empty-target:not(.live-inline-editing)::before{
+  width:auto!important;
+  white-space:nowrap;
+}
+
+/* Once writing starts, restore a normal editable text region. */
+.live-inline-text-edit .sp-scene.is-active.live-edit-empty-scene
+.sp-text.live-edit-empty-target.live-inline-editing{
+  width:100%!important;
+  min-height:1.85em!important;
+  margin:0!important;
+  padding:0!important;
+  display:block!important;
+}
+
+/* The six-key command strip stays available above the software keyboard.
+   It uses the same visualViewport-derived inset as the compact cursor drawer. */
+.live-inline-text-edit .live-edit-toolbar{
+  bottom:calc(var(--live-keyboard-inset,0px) + 4px)!important;
+  z-index:10072;
+}
+.live-inline-text-edit.live-edit-toolbar-visible .sp-footer{
+  padding-bottom:20px!important;
+}
+
+/* The rare cursor/split tool sits just above the six-key strip while typing. */
+.live-inline-text-edit .live-inline-toolbar{
+  bottom:calc(var(--live-keyboard-inset,0px) + 58px)!important;
+  z-index:10074;
+}
+
+@media (max-width:899px){
+  .live-inline-text-edit .live-edit-toolbar{
+    padding-top:3px!important;
+    padding-bottom:3px!important;
+  }
+  .live-inline-text-edit .live-edit-toolbar button{
+    padding-top:5px!important;
+    padding-bottom:4px!important;
+  }
+  .live-inline-text-edit .live-edit-toolbar span{font-size:17px!important}
+  .live-inline-text-edit .live-edit-toolbar small{font-size:8.5px!important}
+}

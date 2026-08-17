@@ -3924,7 +3924,9 @@
     const el=playerHost.querySelector('.sp-scene.is-active .sp-text'); if(!el)return;
 
     liveInlineEditEl=el;
-    if(liveEditToolbar)liveEditToolbar.hidden=true;
+    // Keep the six-key Live Edit strip available while the iOS keyboard is open.
+    // This lets the author move directly from writing to typography/effects/etc.
+    setLiveToolbarVisible(true);
     if(liveInlineToolbar){liveInlineToolbar.hidden=false;showInlineAuthoringIntro();}
     updateLiveKeyboardInset();
     // contenteditable=true is the most reliable option on iPhone Safari.
@@ -4221,11 +4223,30 @@
     return;
   });
 
+  liveEditToolbar?.addEventListener('pointerdown',(e)=>{
+    const b=e.target.closest?.('[data-live-edit]');if(!b)return;
+    // Keep Player navigation from seeing the command strip.
+    e.stopPropagation();
+  });
   liveEditToolbar?.addEventListener('click',(e)=>{
     const b=e.target.closest('[data-live-edit]');if(!b)return;
     e.preventDefault();e.stopPropagation();
     const kind=b.dataset.liveEdit;
-    if(kind==='add'){liveEditAddScene();return;}
+
+    // Writing can flow straight into another Live Edit tool.
+    // For +, finish the current text first so the new Scene is based on the
+    // latest text; the add handler immediately focuses the new empty Scene.
+    if(kind==='add'){
+      if(liveInlineEditEl)syncInlineTextToScene();
+      liveEditAddScene();
+      return;
+    }
+
+    // Sheets replace the keyboard, but remain on the current Scene.
+    if(liveInlineEditEl){
+      syncInlineTextToScene();
+      finishInlineTextEdit();
+    }
     if(kind==='scene'){renderLiveEditSceneMenu();return;}
     renderLiveEditSheet(kind);
   });
