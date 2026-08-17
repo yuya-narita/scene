@@ -4581,12 +4581,6 @@ function openDesktopBackgroundDetail(){
         }
         ensureImageState();
         apply();
-      }),
-      desktopDetailSelect('表示方法',[
-        ['cover','画面いっぱい'],
-        ['contain','全体を表示']
-      ],explicit()?.fit||'cover',v=>{
-        const bg=ensureImageState();bg.fit=v;apply();
       })
     );
 
