@@ -5399,3 +5399,43 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
   .desktop-text-detail-foot{position:sticky;bottom:0;z-index:3;display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;padding:14px 22px 18px;background:rgba(251,251,252,.96);border-top:1px solid #e1e4e8;backdrop-filter:blur(12px)}
   .desktop-text-detail-foot button{min-width:104px;height:40px;border:1px solid #d3d7dc;border-radius:999px;background:#fff;color:#202329;font:800 12px system-ui}.desktop-text-detail-foot button.is-primary{background:#171a1f;color:#fff;border-color:#171a1f}.desktop-text-detail-reset{min-width:84px!important}
 }
+
+
+/* Desktop Text Detail v2 — keep mobile Live Edit toolbar off the PC canvas. */
+@media (min-width:900px){
+  #playerScreen .live-edit-toolbar,
+  #playerScreen .live-inline-toolbar{
+    display:none!important;
+  }
+  #playerScreen #scenePlayer.live-edit-toolbar-visible .sp-footer,
+  .easy-player-open #scenePlayer.live-edit-toolbar-visible .sp-footer{
+    padding:7px 18px calc(7px + env(safe-area-inset-bottom))!important;
+  }
+}
+
+
+@media (min-width:900px){
+  .desktop-range-with-number{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) 78px!important;
+    gap:12px!important;
+    align-items:center!important;
+  }
+  .desktop-range-with-number > input[type="range"]{
+    width:100%!important;
+    min-width:0!important;
+  }
+  .desktop-range-number{
+    width:78px!important;
+    height:36px!important;
+    box-sizing:border-box!important;
+    border:1px solid #d6d8dc!important;
+    border-radius:9px!important;
+    background:#fff!important;
+    padding:0 9px!important;
+    text-align:right!important;
+    color:#17191c!important;
+    font:700 13px/1 system-ui,-apple-system,"Segoe UI",sans-serif!important;
+  }
+}
+

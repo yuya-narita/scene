@@ -4185,7 +4185,60 @@ function startInlineTextEdit(){
   function closeDesktopTextDetail(){
     desktopLivePanel?.querySelector('.desktop-text-detail-overlay')?.remove();
   }
-  function openDesktopTextDetail(){
+  
+function enhanceDesktopTextDetailRanges(root){
+  if(!root)return;
+  const rows=[...root.querySelectorAll('input[type="range"]')];
+  rows.forEach(range=>{
+    if(range.dataset.numberLinked==='1')return;
+    range.dataset.numberLinked='1';
+
+    let numeric=range.parentElement?.querySelector('input[type="number"][data-range-number]');
+    if(!numeric){
+      numeric=document.createElement('input');
+      numeric.type='number';
+      numeric.dataset.rangeNumber='1';
+      numeric.className='desktop-range-number';
+      numeric.min=range.min||'';
+      numeric.max=range.max||'';
+      numeric.step=range.step||'any';
+      numeric.value=range.value;
+      numeric.setAttribute('aria-label',(range.getAttribute('aria-label')||'')+' 数値入力');
+      const host=range.parentElement;
+      if(host){
+        host.classList.add('desktop-range-with-number');
+        host.appendChild(numeric);
+      }
+    }
+
+    const clampNumber=(raw)=>{
+      let n=Number(raw);
+      if(!Number.isFinite(n))n=Number(range.value)||0;
+      const min=range.min!==''?Number(range.min):-Infinity;
+      const max=range.max!==''?Number(range.max):Infinity;
+      if(Number.isFinite(min))n=Math.max(min,n);
+      if(Number.isFinite(max))n=Math.min(max,n);
+      return n;
+    };
+
+    range.addEventListener('input',()=>{
+      numeric.value=range.value;
+    });
+    numeric.addEventListener('input',()=>{
+      const n=clampNumber(numeric.value);
+      range.value=String(n);
+      range.dispatchEvent(new Event('input',{bubbles:true}));
+      range.dispatchEvent(new Event('change',{bubbles:true}));
+    });
+    numeric.addEventListener('blur',()=>{
+      const n=clampNumber(numeric.value);
+      numeric.value=String(n);
+      range.value=String(n);
+    });
+  });
+}
+
+function openDesktopTextDetail(){
     if(!desktopLiveActive()||!desktopLivePanel)return;
     closeDesktopTextDetail();
     const {scene,index}=liveEditScene();if(!scene)return;
@@ -4743,3 +4796,11 @@ function startInlineTextEdit(){
   if(densitySelect)densitySelect.value='normal';
   applyStaticUITranslations(); applyTheme('light'); updateCount();
 })();
+
+if(window.matchMedia?.('(min-width:900px)').matches){
+  const desktopDetailObserver=new MutationObserver(()=>{
+    const root=document.querySelector('.desktop-text-detail-modal, .desktop-detail-modal, [data-desktop-text-detail]');
+    if(root && root.offsetParent!==null)enhanceDesktopTextDetailRanges(root);
+  });
+  desktopDetailObserver.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden','style']});
+}
