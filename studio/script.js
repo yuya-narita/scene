@@ -3712,6 +3712,7 @@
   let liveEditEnabled=false;
   let liveEditToolbarVisible=false;
   let liveInlineEditEl=null;
+  let liveInlineKeyboardShift=0;
 
   function liveEditScene(){
     const i=Math.max(0,Math.min(player?.index ?? selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
@@ -3723,13 +3724,59 @@
     if(liveEditToolbar) liveEditToolbar.hidden=!liveEditEnabled||!liveEditToolbarVisible;
     playerHost.classList.toggle('live-edit-toolbar-visible',liveEditEnabled&&liveEditToolbarVisible);
   }
+  function resetInlineKeyboardShift(){
+    liveInlineKeyboardShift=0;
+    playerHost.style.removeProperty('--live-inline-keyboard-shift');
+  }
   function finishInlineTextEdit(){
-    if(!liveInlineEditEl)return;
+    if(!liveInlineEditEl){ resetInlineKeyboardShift(); return; }
     liveInlineEditEl.removeAttribute('contenteditable');
     liveInlineEditEl.removeAttribute('role');
     liveInlineEditEl.classList.remove('live-inline-editing');
     liveInlineEditEl=null;
     playerHost.classList.remove('live-inline-text-edit');
+    resetInlineKeyboardShift();
+  }
+  function updateInlineAutoFit(scene,el){
+    if(!scene||!el)return;
+    const article=el.closest('.sp-scene');
+    if(!article)return;
+    // Reuse Scene Player Core's own Auto Fit tiers so Live Edit and replay match.
+    const textStyle=scene.presentation?.text||{};
+    const fit=typeof player?._resolveAutoFit==='function'
+      ? player._resolveAutoFit(scene,textStyle)
+      : 'normal';
+    article.dataset.fit=fit;
+  }
+  function keepInlineCaretVisible(){
+    const el=liveInlineEditEl;
+    if(!el||document.activeElement!==el)return;
+    const sel=getSelection();
+    if(!sel||!sel.rangeCount)return;
+    const range=sel.getRangeAt(0).cloneRange();
+    range.collapse(false);
+    let rect=range.getBoundingClientRect();
+    // Empty-line caret can report a zero rect on iOS; fall back to the text node.
+    if(!rect||(!rect.width&&!rect.height)) rect=el.getBoundingClientRect();
+
+    const vv=window.visualViewport;
+    const viewportTop=vv?.offsetTop||0;
+    const viewportHeight=vv?.height||window.innerHeight;
+    // Keep a comfortable strip above iOS' input accessory / keyboard.
+    const safeTop=viewportTop+72;
+    const safeBottom=viewportTop+viewportHeight-86;
+    let next=liveInlineKeyboardShift;
+
+    if(rect.bottom>safeBottom){
+      next-=rect.bottom-safeBottom+18;
+    }else if(rect.top<safeTop && liveInlineKeyboardShift<0){
+      next+=Math.min(safeTop-rect.top+18,-liveInlineKeyboardShift);
+    }
+    const minShift=-Math.round(window.innerHeight*0.48);
+    next=Math.max(minShift,Math.min(0,next));
+    if(Math.abs(next-liveInlineKeyboardShift)<1)return;
+    liveInlineKeyboardShift=next;
+    playerHost.style.setProperty('--live-inline-keyboard-shift',`${Math.round(next)}px`);
   }
   function startInlineTextEdit(){
     const {scene}=liveEditScene(); if(!scene)return;
@@ -3752,6 +3799,9 @@
       // Player owns a playback clone. Keep that clone in sync too so moving away
       // and back during the same Live Edit session does not restore old text.
       if(player?.currentScene) player.currentScene.text=value;
+      // Apply the exact same Auto Fit tier that a fresh Player render would use.
+      updateInlineAutoFit(scene,liveInlineEditEl);
+      requestAnimationFrame(keepInlineCaretVisible);
       scheduleDraftSave(100);
     };
 
@@ -3759,6 +3809,10 @@
     el._liveEditAbort?.abort();
     el._liveEditAbort=abort;
     el.addEventListener('input',sync,{signal:abort.signal});
+    el.addEventListener('keyup',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
+    el.addEventListener('click',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
+    window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
+    window.visualViewport?.addEventListener('scroll',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
     el.addEventListener('blur',()=>{sync();finishInlineTextEdit();},{once:true,signal:abort.signal});
 
     // iPhone Safari only opens the software keyboard when focus happens
@@ -3770,8 +3824,10 @@
       const sel=getSelection(),range=document.createRange();
       range.selectNodeContents(el);range.collapse(false);
       sel.removeAllRanges();sel.addRange(range);
-      // Wait until iOS reports the keyboard/visual viewport before positioning.
-      setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'center'}),180);
+      // Wait until iOS reports the keyboard/visual viewport, then keep the caret
+      // inside the visible Player area without leaving Live Edit.
+      setTimeout(keepInlineCaretVisible,180);
+      setTimeout(keepInlineCaretVisible,360);
     });
   }
   function refreshLivePlayer({preserveSheet=true}={}){

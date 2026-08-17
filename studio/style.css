@@ -4971,3 +4971,16 @@ body.easy-player-open #undoCompactButton,
   cursor:text;
   -webkit-tap-highlight-color:transparent;
 }
+
+
+/* Live Edit v0.2.6 — keyboard-aware inline writing.
+   Shift only the Scene canvas when iOS' visual viewport becomes shallow.
+   Auto Fit itself is owned by ScenePlayerCore and is refreshed from script.js. */
+.live-inline-text-edit .sp-scenes{
+  translate:0 var(--live-inline-keyboard-shift,0px);
+  transition:translate .16s ease-out;
+}
+.live-inline-text-edit .sp-scene.is-active .sp-text{
+  caret-color:currentColor;
+  outline:none;
+}
