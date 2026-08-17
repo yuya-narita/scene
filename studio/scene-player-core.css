@@ -200,8 +200,9 @@
 }
 /* Default: remain exactly at the landed position while fading out. */
 .sp-scene.is-disappearing.is-disappear-stay{
-  transform:none!important;
-  filter:none!important;
+  /* Keep the Scene's current layout transform exactly as-is.
+     Scene vertical placement itself is transform-driven, so resetting it
+     here would jump the Scene back to the stage origin before fading. */
 }
 .sp-scene.is-disappeared{visibility:hidden;pointer-events:none}
 
