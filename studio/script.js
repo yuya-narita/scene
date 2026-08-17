@@ -4269,7 +4269,7 @@ function startInlineTextEdit(){
       disappear:clone(p.disappear||null)
     };
     let committed=false;
-    const apply=()=>{scheduleDraftSave(80);refreshLivePlayer({preserveSheet:false});};
+    const apply=()=>{scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});};
     const restore=()=>{
       if(before.effect===undefined)delete p.effect;else p.effect=before.effect;
       if(before.display===undefined)delete p.display;else p.display=before.display;
@@ -4311,7 +4311,7 @@ function startInlineTextEdit(){
     timingGrid.append(
       desktopDetailRange('演出時間',{min:.15,max:3,step:.05,value:Number(p.effectTiming.duration)||0.8,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{p.effectTiming.duration=v;apply();}}),
       desktopDetailRange('開始遅延',{min:0,max:3,step:.05,value:Number(p.effectTiming.delay)||0,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{if(v<=0)delete p.effectTiming.delay;else p.effectTiming.delay=v;apply();}}),
-      desktopDetailRange('消えるまで',{min:0,max:12,step:.1,value:Number(p.disappear?.after)||0,unit:' 秒',format:v=>v.toFixed(1),oninput:v=>{
+      desktopDetailRange('消えるまで',{min:0,max:12,step:.1,value:(Number(p.disappear?.after)||0)/1000,unit:' 秒',format:v=>v.toFixed(1),oninput:v=>{
         const motion=p.disappear?.motion||'stay';
         p.disappear={...(p.disappear||{}),after:Math.round(v*1000),motion};
         if(v<=0)delete p.disappear;
@@ -4338,16 +4338,16 @@ function startInlineTextEdit(){
     const typingNote=document.createElement('p');typingNote.className='desktop-text-detail-note';typingNote.textContent=typingOn?'左のLive Previewで文字送りを確認できます。':'「出かた」をタイプライターにすると設定できます。';typingSec.appendChild(typingNote);
 
     const preview=section('プレビュー');
-    const note=document.createElement('p');note.className='desktop-text-detail-note';note.textContent='数値変更は左のLive Previewへ即時反映されます。演出はSceneを再描画してその場で再生します。';preview.appendChild(note);
+    const note=document.createElement('p');note.className='desktop-text-detail-note';note.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。';preview.appendChild(note);
     const replay=document.createElement('button');replay.type='button';replay.className='desktop-effect-replay';replay.textContent='▶ 演出をもう一度見る';replay.addEventListener('click',()=>refreshLivePlayer({preserveSheet:false}));preview.appendChild(replay);
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
     const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
     const spacer=document.createElement('span');const cancel=document.createElement('button');cancel.type='button';cancel.textContent='キャンセル';const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';foot.append(reset,spacer,cancel,save);
     modal.append(head,body,foot);overlay.appendChild(modal);desktopLivePanel.appendChild(overlay);
-    const cancelAndClose=()=>{if(!committed)restore();closeDesktopEffectDetail();};
-    x.addEventListener('click',cancelAndClose);cancel.addEventListener('click',cancelAndClose);overlay.addEventListener('click',e=>{if(e.target===overlay)cancelAndClose();});
-    save.addEventListener('click',()=>{committed=true;scheduleDraftSave(40);closeDesktopEffectDetail();renderDesktopLivePanel();});
+    const closeOnly=()=>{closeDesktopEffectDetail();};
+    x.addEventListener('click',closeOnly);cancel.addEventListener('click',closeOnly);overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
+    save.addEventListener('click',async()=>{committed=true;await saveDraftNow();closeDesktopEffectDetail();renderDesktopLivePanel();});
     reset.addEventListener('click',()=>{delete p.effectTiming;delete p.disappear;delete p.typing;p.effect='auto';p.display='stack';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});closeDesktopEffectDetail();openDesktopEffectDetail();});
   }
   
@@ -4401,7 +4401,7 @@ function openDesktopTextDetail(){
     const p=ensurePresentation(scene);p.text ||= {};
     const before=clone(p.text);
     let committed=false;
-    const apply=()=>{scheduleDraftSave(90);refreshLivePlayer({preserveSheet:false});};
+    const apply=()=>{scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});};
     const restore=()=>{p.text=clone(before);scheduleDraftSave(50);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();};
 
     const overlay=document.createElement('div');overlay.className='desktop-text-detail-overlay';
@@ -4440,7 +4440,7 @@ function openDesktopTextDetail(){
     );
 
     const note=section('プレビュー');
-    const noteP=document.createElement('p');noteP.className='desktop-text-detail-note';noteP.textContent='変更は左のLive Previewへ即時反映されます。キャンセルすると、この画面を開いた時点の文字設定へ戻ります。';note.appendChild(noteP);
+    const noteP=document.createElement('p');noteP.className='desktop-text-detail-note';noteP.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。';note.appendChild(noteP);
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
     const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent='リセット';
@@ -4450,11 +4450,11 @@ function openDesktopTextDetail(){
     foot.append(reset,spacer,cancel,save);
     modal.append(head,body,foot);overlay.appendChild(modal);desktopLivePanel.appendChild(overlay);
 
-    const cancelAndClose=()=>{if(!committed)restore();closeDesktopTextDetail();};
-    x.addEventListener('click',cancelAndClose);cancel.addEventListener('click',cancelAndClose);
-    save.addEventListener('click',()=>{committed=true;scheduleDraftSave(40);closeDesktopTextDetail();renderDesktopLivePanel();});
+    const closeOnly=()=>{closeDesktopTextDetail();};
+    x.addEventListener('click',closeOnly);cancel.addEventListener('click',closeOnly);
+    save.addEventListener('click',async()=>{committed=true;await saveDraftNow();closeDesktopTextDetail();renderDesktopLivePanel();});
     reset.addEventListener('click',()=>{p.text={};scheduleDraftSave(50);refreshLivePlayer({preserveSheet:false});closeDesktopTextDetail();openDesktopTextDetail();});
-    overlay.addEventListener('click',e=>{if(e.target===overlay)cancelAndClose();});
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
   }
   function renderDesktopLivePanel(){
     if(!desktopLivePanel)return;
@@ -4920,12 +4920,16 @@ function openDesktopTextDetail(){
     finishInlineTextEdit();
     closeLiveEditSheet();
     setLiveToolbarVisible(desktopLiveActive());
-    requestAnimationFrame(()=>{
-      ensureLiveEditEmptyTarget();
-      renderDesktopLivePanel();
-      if(detailKind){
-        requestAnimationFrame(()=>reopenDesktopDetailForCurrentScene(detailKind));
-      }
+    // Detail editing is auto-save. Flush the Scene we just left before
+    // retargeting the inspector to the newly visible Scene.
+    saveDraftNow().finally(()=>{
+      requestAnimationFrame(()=>{
+        ensureLiveEditEmptyTarget();
+        renderDesktopLivePanel();
+        if(detailKind){
+          requestAnimationFrame(()=>reopenDesktopDetailForCurrentScene(detailKind));
+        }
+      });
     });
   });
   playerHost.addEventListener('sceneplayer:historyopen',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
