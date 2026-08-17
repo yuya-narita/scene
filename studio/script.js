@@ -2142,6 +2142,7 @@
 
   function startAutoRec(){
     if(!workingDocument?.scenes?.length)return;
+    const recPanel=$('#autoRecPanel');if(recPanel)recPanel.hidden=false;
     const total=workingDocument.scenes.length;
     let startAt=Math.min(Math.max(0,Number(autoRecProgress?.nextIndex)||0),total-1);
     if(startAt>=total-1 && (autoRecProgress?.recordedCount||0)>=total){autoRecProgress={nextIndex:0,recordedCount:0};startAt=0;}
@@ -2517,12 +2518,96 @@
     if(!btn.hidden)syncPublishCopyForStatus();
   }
 
+
+  let liveEditMuted=false;
+  let liveEditChromeObserver=null;
+
+  function applyLiveEditMute(){
+    if(!player)return;
+    const media=[
+      ...Object.values(player.audioEls||{}),
+      ...Array.from(player.oneshots||[])
+    ].filter(Boolean);
+    for(const audio of media){
+      try{audio.muted=!!liveEditMuted;}catch(_){}
+    }
+    const btn=playerHost.querySelector('.live-edit-mute');
+    if(btn){
+      btn.textContent=liveEditMuted?'♩':'♪';
+      btn.setAttribute('aria-pressed',liveEditMuted?'true':'false');
+      btn.setAttribute('aria-label',liveEditMuted?'音声をオン':'音声をミュート');
+      btn.title=liveEditMuted?'音声をオン':'音声をミュート';
+    }
+  }
+
+  function toggleLiveEditMute(event){
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    liveEditMuted=!liveEditMuted;
+    applyLiveEditMute();
+  }
+
+  function ensureLiveEditMuteButton(){
+    const header=playerHost.querySelector('.sp-header');
+    if(!header)return;
+    let btn=header.querySelector('.live-edit-mute');
+    if(!btn){
+      btn=document.createElement('button');
+      btn.type='button';
+      btn.className='sp-button live-edit-mute';
+      btn.addEventListener('click',toggleLiveEditMute);
+      header.appendChild(btn);
+    }
+    applyLiveEditMute();
+  }
+
+  function syncLiveEditPreviewChrome(){
+    if(!liveEditEnabled)return;
+    const coverOpen=playerHost.classList.contains('sp-cover-open');
+    const recPanel=$('#autoRecPanel');
+
+    // Cover is an entry screen, not Scene 0.
+    if(recPanel)recPanel.hidden=coverOpen && !autoRecActive;
+
+    if(coverOpen){
+      setLiveToolbarVisible(false);
+      closeLiveEditSheet();
+    }
+    ensureLiveEditMuteButton();
+  }
+
+  function observeLiveEditPreviewChrome(){
+    liveEditChromeObserver?.disconnect?.();
+    liveEditChromeObserver=new MutationObserver(()=>{
+      syncLiveEditPreviewChrome();
+      if(liveEditMuted){
+        requestAnimationFrame(applyLiveEditMute);
+        setTimeout(applyLiveEditMute,40);
+      }
+    });
+    liveEditChromeObserver.observe(playerHost,{attributes:true,attributeFilter:['class']});
+  }
+
   function ensurePlayer(){
     if(player)return player;
     player=new ScenePlayerCore(playerHost,{allowPrevious:true,keyboard:true,swipe:true,endOnNextAction:true,maxStackVisible:4,autoDelay:2600,uiLanguage});
     playerHost.addEventListener('sceneplayer:scenechange',(event)=>{
       syncPublishPreviewButton(false);
       if(autoRecActive && event.detail?.direction==='next')recordAutoRecBoundary();
+      syncLiveEditPreviewChrome();
+      if(liveEditMuted){
+        requestAnimationFrame(applyLiveEditMute);
+        setTimeout(applyLiveEditMute,40);
+      }
+    });
+    playerHost.addEventListener('sceneplayer:coverstart',syncLiveEditPreviewChrome);
+    playerHost.addEventListener('sceneplayer:load',syncLiveEditPreviewChrome);
+    ['sceneplayer:audiostart','sceneplayer:oneshot','sceneplayer:audioready'].forEach(type=>{
+      playerHost.addEventListener(type,()=>{
+        if(!liveEditMuted)return;
+        requestAnimationFrame(applyLiveEditMute);
+        setTimeout(applyLiveEditMute,30);
+      });
     });
     playerHost.addEventListener('sceneplayer:end',()=>{
       if(autoRecActive){finishAutoRec(true);syncPublishPreviewButton(false);}
@@ -4211,6 +4296,9 @@ function startInlineTextEdit(){
     if(player)player.options.historyAllScenes=true;
     setLiveToolbarVisible(false);
     playerHost.classList.add('live-edit-enabled');
+    ensureLiveEditMuteButton();
+    observeLiveEditPreviewChrome();
+    syncLiveEditPreviewChrome();
     requestAnimationFrame(ensureLiveEditEmptyTarget);
     const historyHelp=playerHost.querySelector('.sp-history-help');if(historyHelp)historyHelp.textContent='Sceneをスクロール';
     const historyKicker=playerHost.querySelector('.sp-history-kicker');if(historyKicker)historyKicker.textContent='SCENES';
@@ -4219,7 +4307,10 @@ function startInlineTextEdit(){
     finishInlineTextEdit(); liveEditEnabled=false;closeLiveEditSheet();
     if(liveInlineToolbar)liveInlineToolbar.hidden=true;
     setLiveToolbarVisible(false);
+    liveEditChromeObserver?.disconnect?.();
+    liveEditChromeObserver=null;
     playerHost.classList.remove('live-edit-enabled');
+    const recPanel=$('#autoRecPanel');if(recPanel)recPanel.hidden=false;
     if(player)player.options.historyAllScenes=false;
   }
 
