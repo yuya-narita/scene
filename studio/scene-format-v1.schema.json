@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://scene.studio/schema/scene-format-v1.schema.json",
-  "title": "Scene Format v1.0",
+  "title": "Scene Format v1.0 — Studio Contract",
   "type": "object",
   "required": [
     "format",
@@ -32,7 +32,8 @@
       "pattern": "^(?:mul|und|[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*)$"
     },
     "title": {
-      "type": "string"
+      "type": "string",
+      "description": "Author-entered LF line breaks are significant and must be preserved by cover renderers; text without LF may wrap responsively."
     },
     "author": {
       "type": "string"
@@ -101,6 +102,33 @@
         "ltr",
         "rtl"
       ]
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "subtitle": {
+          "type": "string"
+        },
+        "seriesTitle": {
+          "type": "string"
+        },
+        "episode": {
+          "type": "string"
+        },
+        "episodeTitle": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "cover": {
+      "$ref": "#/$defs/cover"
+    },
+    "ending": {
+      "$ref": "#/$defs/ending"
     }
   },
   "additionalProperties": true,
@@ -124,10 +152,12 @@
           ]
         },
         "text": {
-          "type": "string"
+          "type": "string",
+          "description": "Primary Scene text. Author-entered LF line breaks are significant and must be preserved."
         },
         "subText": {
-          "type": "string"
+          "type": "string",
+          "description": "Secondary Scene text. Author-entered LF line breaks are significant and must be preserved."
         },
         "pause": {
           "type": "number",
@@ -213,9 +243,45 @@
         },
         "fontFamily": {
           "enum": [
+            "inherit",
             "serif",
             "sans",
             "mono"
+          ]
+        },
+        "shadow": {
+          "enum": [
+            "none",
+            "soft",
+            "strong"
+          ]
+        },
+        "lineHeight": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "letterSpacing": {
+          "type": "number",
+          "minimum": -0.2,
+          "maximum": 0.5
+        },
+        "sideMargin": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 40
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1
+        },
+        "align": {
+          "enum": [
+            "auto",
+            "left",
+            "center",
+            "right"
           ]
         }
       },
@@ -291,12 +357,32 @@
             "fade": {
               "type": "number",
               "minimum": 0
+            },
+            "motion": {
+              "enum": [
+                "stay",
+                "up"
+              ]
             }
           },
           "additionalProperties": true
         },
         "background": {
           "$ref": "#/$defs/background"
+        },
+        "effectTiming": {
+          "type": "object",
+          "properties": {
+            "duration": {
+              "type": "number",
+              "minimum": 0
+            },
+            "delay": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true
@@ -430,6 +516,16 @@
             }
           },
           "additionalProperties": true
+        },
+        "tone": {
+          "enum": [
+            "dark",
+            "light"
+          ]
+        },
+        "transitionDuration": {
+          "type": "number",
+          "minimum": 0
         }
       },
       "additionalProperties": true
@@ -505,6 +601,9 @@
         },
         "restart": {
           "type": "boolean"
+        },
+        "_editorFileName": {
+          "type": "string"
         }
       },
       "additionalProperties": true
@@ -523,6 +622,90 @@
         }
       },
       "additionalProperties": true
+    },
+    "coverLogo": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": "string"
+        },
+        "_editorFileName": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "cover": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": "string"
+        },
+        "fit": {
+          "enum": [
+            "cover",
+            "contain"
+          ]
+        },
+        "position": {
+          "type": "string"
+        },
+        "logo": {
+          "$ref": "#/$defs/coverLogo"
+        }
+      },
+      "additionalProperties": true
+    },
+    "endingLink": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "kicker": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ending": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "Author-entered LF line breaks are significant and must be preserved by Players."
+        },
+        "coverButton": {
+          "type": "object",
+          "properties": {
+            "kicker": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/endingLink"
+          },
+          "maxItems": 2
+        }
+      },
+      "additionalProperties": true
     }
-  }
+  },
+  "description": "Current Scene Studio / Player shared v1.0 contract. Existing v1.0 .scene files remain compatible."
 }
