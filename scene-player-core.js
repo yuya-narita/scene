@@ -1661,6 +1661,9 @@
     _swapBackground(state, transition) {
       const current = this._currentBackgroundLayer();
       const incoming = this._nextBackgroundLayer();
+      const transitionDuration=Math.max(0,asNumber(state.transitionDuration,700));
+      incoming.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
+      current.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
       this._prepareBackgroundLayer(incoming, state);
 
       const mode = ['fade','cut','flash','glitch'].includes(transition) ? transition : 'fade';
@@ -1694,7 +1697,14 @@
       layer.style.backgroundImage = state.src ? `url("${String(state.src).replace(/"/g, '\"')}")` : 'none';
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
-      layer.style.filter = state.blur > 0 ? `blur(${state.blur}px)` : '';
+      {
+        const filters = [];
+        const blur = Math.max(0, asNumber(state.blur, 0));
+        const monochrome = clamp(asNumber(state.textures?.monochrome, 0), 0, 1);
+        if (blur > 0) filters.push(`blur(${blur}px)`);
+        if (monochrome > 0) filters.push(`grayscale(${monochrome})`);
+        layer.style.filter = filters.join(' ');
+      }
       this._applyBackgroundMotion(layer, state.motion);
     }
 
@@ -1703,7 +1713,14 @@
       if (!layer) return;
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
-      layer.style.filter = state.blur > 0 ? `blur(${state.blur}px)` : '';
+      {
+        const filters = [];
+        const blur = Math.max(0, asNumber(state.blur, 0));
+        const monochrome = clamp(asNumber(state.textures?.monochrome, 0), 0, 1);
+        if (blur > 0) filters.push(`blur(${blur}px)`);
+        if (monochrome > 0) filters.push(`grayscale(${monochrome})`);
+        layer.style.filter = filters.join(' ');
+      }
       if (resetMotion) this._applyBackgroundMotion(layer, state.motion);
     }
 
@@ -1725,11 +1742,11 @@
 
     _applyBackgroundOverlays(state) {
       const isCinemaLight = this.document?.theme === 'cinema' && this.document?.appearance?.cinemaTone === 'light';
-      const themeDefaultDim = this.document?.theme === 'cinema' ? (isCinemaLight ? 0.72 : 0.34) : 0;
+      const sceneTone = state?.tone === 'light' ? 'light' : (state?.tone === 'dark' ? 'dark' : null);
+      const useLightWash = sceneTone ? sceneTone === 'light' : isCinemaLight;
+      const themeDefaultDim = this.document?.theme === 'cinema' ? (useLightWash ? 0.72 : 0.34) : (useLightWash ? 0.64 : 0);
       const dim = clamp(asNumber(state.dim, themeDefaultDim), 0, 1);
-      // CINEMA dark dims the image; CINEMA light washes it toward paper so
-      // black typography remains readable over photography.
-      this.els.veil.style.background = isCinemaLight
+      this.els.veil.style.background = useLightWash
         ? `rgba(250,247,240,${dim})`
         : `rgba(0,0,0,${dim})`;
 
@@ -1785,6 +1802,11 @@
       const requestedEffect = presentation.effect || 'auto';
       const effect = this._resolveSceneEffect(scene, requestedEffect);
       if (effect && /^[a-zA-Z0-9_-]+$/.test(effect)) article.dataset.effect = effect;
+      const fxTiming = presentation.effectTiming || {};
+      const fxDuration = Math.max(.08, Math.min(6, asNumber(fxTiming.duration, 0)));
+      const fxDelay = Math.max(0, Math.min(6, asNumber(fxTiming.delay, 0)));
+      if (fxDuration > 0) article.style.setProperty('--sp-effect-duration', `${fxDuration}s`);
+      if (fxDelay > 0) article.style.setProperty('--sp-effect-delay', `${fxDelay}s`);
       if (requestedEffect === 'auto') article.dataset.autoTransition = 'true';
       if (presentation.view && /^[a-zA-Z0-9_-]+$/.test(presentation.view)) article.dataset.view = presentation.view;
       article.dataset.fit = this._resolveAutoFit(scene, presentation.text || {});
@@ -1844,6 +1866,12 @@
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
       if (style.color) node.style.color = String(style.color);
+      const shadows={
+        none:'none',
+        soft:'0 1px 4px rgba(0,0,0,.48)',
+        strong:'0 2px 4px rgba(0,0,0,.86), 0 0 12px rgba(0,0,0,.48)'
+      };
+      if (style.shadow && shadows[style.shadow]) node.style.textShadow=shadows[style.shadow];
 
       const family = style.fontFamily || this.document?.appearance?.typography?.fontFamily || 'serif';
       const families = {
@@ -1864,6 +1892,17 @@
         node.style.whiteSpace = 'nowrap';
         node.style.overflowWrap = 'normal';
       }
+      if (Number.isFinite(Number(style.lineHeight))) node.style.lineHeight = String(Math.max(1, Math.min(3, Number(style.lineHeight))));
+      if (Number.isFinite(Number(style.letterSpacing))) node.style.letterSpacing = `${Math.max(-0.2, Math.min(0.5, Number(style.letterSpacing)))}em`;
+      if (Number.isFinite(Number(style.opacity))) node.style.opacity = String(Math.max(0.1, Math.min(1, Number(style.opacity))));
+      if (Number.isFinite(Number(style.sideMargin)) && Number(style.sideMargin) > 0) {
+        const margin=Math.max(0,Math.min(40,Number(style.sideMargin)));
+        node.style.width=`calc(100% - ${margin*2}%)`;
+        node.style.maxWidth=`calc(100% - ${margin*2}%)`;
+        node.style.marginLeft='auto';
+        node.style.marginRight='auto';
+      }
+      if (style.align === 'left' || style.align === 'center' || style.align === 'right') node.style.textAlign = style.align;
     }
 
     _applyCorePresentation(scene) {
@@ -1896,9 +1935,13 @@
       // Remove the trigger class afterwards so later layout changes cannot
       // restart the animation. Static effect character (whisper/tilt/loud)
       // is carried by data-effect rules and remains without animation.
+      const timing=article.dataset?.sceneId ? (this.currentScene?.presentation?.effectTiming || {}) : {};
+      const customDuration=Math.max(0,asNumber(timing.duration,0))*1000;
+      const customDelay=Math.max(0,asNumber(timing.delay,0))*1000;
+      const cleanupAfter=Math.max(1380,customDelay+customDuration+140);
       this._presentationTimeout(() => {
         if (article.isConnected) article.classList.remove('sp-fx-play');
-      }, 1380);
+      }, cleanupAfter);
     }
 
     _activatePresentation(scene, article) {
@@ -1919,15 +1962,18 @@
       const after = asNumber(disappear?.after, 0);
       if (after > 0) {
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
+        const motion = disappear?.motion === 'up' ? 'up' : 'stay';
         article.style.setProperty('--sp-disappear-fade', `${fade}ms`);
+        article.classList.toggle('is-disappear-up', motion === 'up');
+        article.classList.toggle('is-disappear-stay', motion !== 'up');
         this._presentationTimeout(() => {
           if (!article.isConnected) return;
           article.classList.add('is-disappearing');
-          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start' });
+          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion });
           this._presentationTimeout(() => {
             if (!article.isConnected) return;
             article.classList.add('is-disappeared');
-            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end' });
+            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion });
           }, fade);
         }, after);
       }
@@ -1991,7 +2037,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.13';
+  ScenePlayerCore.VERSION = '1.12.14-public.14-format-v1';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 

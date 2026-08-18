@@ -857,3 +857,52 @@
   font-family:var(--sp-font-serif)!important;
   font-weight:500!important;
 }
+
+
+/* ==========================================================
+   Format v1 Studio parity — public.14
+   ========================================================== */
+
+/* Author-entered line breaks are content. */
+.sp-cover-title,
+.sp-ending-title,
+.sp-text,
+.sp-subtext{
+  white-space:pre-line;
+}
+
+/* Custom Scene effect timing from presentation.effectTiming. */
+.sp-scene.sp-fx-play .sp-text{
+  animation-delay:var(--sp-effect-delay,0s)!important;
+}
+.sp-scene.sp-fx-play[data-effect="pulse"] .sp-text{animation-duration:var(--sp-effect-duration,.95s)!important}
+.sp-scene.sp-fx-play[data-effect="shake"] .sp-text{animation-duration:var(--sp-effect-duration,.48s)!important}
+.sp-scene.sp-fx-play[data-effect="blur"] .sp-text{animation-duration:var(--sp-effect-duration,1.05s)!important}
+.sp-scene.sp-fx-play[data-effect="loud"] .sp-text{animation-duration:var(--sp-effect-duration,.58s)!important}
+.sp-scene.sp-fx-play[data-effect="fade"] .sp-text{animation-duration:var(--sp-effect-duration,1.2s)!important}
+.sp-scene.sp-fx-play[data-effect="pop"] .sp-text{animation-duration:var(--sp-effect-duration,.68s)!important}
+.sp-scene.sp-fx-play[data-effect="slow"] .sp-text{animation-duration:var(--sp-effect-duration,1.25s)!important}
+.sp-scene.sp-fx-play[data-effect="whisper"] .sp-text{animation-duration:var(--sp-effect-duration,.78s)!important}
+.sp-scene.sp-fx-play[data-effect="tilt"] .sp-text{animation-duration:var(--sp-effect-duration,.68s)!important}
+.sp-scene.sp-fx-play[data-effect="fadeRise"] .sp-text{animation-duration:var(--sp-effect-duration,.62s)!important}
+.sp-scene.sp-fx-play[data-effect="softRise"] .sp-text{animation-duration:var(--sp-effect-duration,.72s)!important}
+.sp-scene.sp-fx-play[data-effect="settle"] .sp-text{animation-duration:var(--sp-effect-duration,.82s)!important}
+.sp-scene.sp-fx-play[data-effect="whisperIn"] .sp-text{animation-duration:var(--sp-effect-duration,.86s)!important}
+.sp-scene.sp-fx-play[data-effect="emphasis"] .sp-text{animation-duration:var(--sp-effect-duration,.7s)!important}
+
+/* Background Scene transition duration. */
+.sp-bg-layer{
+  transition-duration:var(--sp-bg-transition-duration,700ms)!important;
+}
+
+/* Disappear motion is explicit in Format. */
+.sp-scene.is-disappearing.is-disappear-up{
+  opacity:0!important;
+  transform:translate3d(0,-18px,0)!important;
+  filter:blur(1.5px)!important;
+}
+.sp-scene.is-disappearing.is-disappear-stay{
+  opacity:0!important;
+  transform:none!important;
+  filter:none!important;
+}

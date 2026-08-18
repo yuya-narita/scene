@@ -623,3 +623,14 @@ body{
     line-break:auto!important;
   }
 }
+
+
+/* ==========================================================
+   Format v1 authored line-break parity
+   ========================================================== */
+.public-title,
+.public-ending-label{
+  white-space:pre-line!important;
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+}
