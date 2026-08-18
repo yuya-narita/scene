@@ -1300,3 +1300,18 @@
 .sp-scene.sp-fx-play[data-effect="settle"] .sp-text{animation-duration:var(--sp-effect-duration,.82s)!important}
 .sp-scene.sp-fx-play[data-effect="whisperIn"] .sp-text{animation-duration:var(--sp-effect-duration,.86s)!important}
 .sp-scene.sp-fx-play[data-effect="emphasis"] .sp-text{animation-duration:var(--sp-effect-duration,.7s)!important}
+
+
+/* ==========================================================
+   Authored line breaks: cover title / ending center copy
+   ========================================================== */
+.sp-cover-title{
+  white-space:pre-line!important;
+  text-wrap:wrap!important;
+}
+.sp-ending-title{
+  white-space:pre-line!important;
+  text-wrap:wrap!important;
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+}

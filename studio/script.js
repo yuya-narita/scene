@@ -892,7 +892,11 @@
     };
   }
   function updateEndingPreview(){
-    if(endingPreviewLabel)endingPreviewLabel.textContent=String(endingLabelInput?.value||'').trim()||'つづく';
+    if(endingPreviewLabel){
+      const endingText=String(endingLabelInput?.value||'').trim()||'つづく';
+      endingPreviewLabel.textContent=endingText;
+      endingPreviewLabel.classList.toggle('has-authored-break',/\r?\n/.test(endingText));
+    }
     endingPreviewLinks.forEach((button,index)=>{
       const row=endingLinkInputs[index];
       const kicker=String(row?.kicker?.value||'').trim();
@@ -1037,7 +1041,12 @@
     const episodeTitle=String(episodeTitleInput?.value||'').trim();
 
     if(coverPreviewLogo){coverPreviewLogo.src=coverLogoUrl||'';coverPreviewLogo.hidden=!coverLogoUrl;}
-    if(coverPreviewTitle){coverPreviewTitle.textContent=title||t('cover.preview.untitled');coverPreviewTitle.hidden=Boolean(coverLogoUrl);}
+    if(coverPreviewTitle){
+      const previewTitle=title||t('cover.preview.untitled');
+      coverPreviewTitle.textContent=previewTitle;
+      coverPreviewTitle.hidden=Boolean(coverLogoUrl);
+      coverPreviewTitle.classList.toggle('has-authored-break',/\r?\n/.test(previewTitle));
+    }
     if(coverPreviewAuthor){coverPreviewAuthor.textContent=author;coverPreviewAuthor.hidden=!author;}
     if(coverPreviewEpisode){coverPreviewEpisode.textContent=episode;coverPreviewEpisode.hidden=!episode;}
     if(coverPreviewSubtitle){coverPreviewSubtitle.textContent=subtitle;coverPreviewSubtitle.hidden=!subtitle;}
@@ -2144,14 +2153,49 @@
     if(!workingDocument?.scenes?.length)return;
     const recPanel=$('#autoRecPanel');if(recPanel)recPanel.hidden=false;
     const total=workingDocument.scenes.length;
-    let startAt=Math.min(Math.max(0,Number(autoRecProgress?.nextIndex)||0),total-1);
-    if(startAt>=total-1 && (autoRecProgress?.recordedCount||0)>=total){autoRecProgress={nextIndex:0,recordedCount:0};startAt=0;}
+
+    // In Live Editor, AUTO REC must begin at the Scene the author is actually viewing.
+    // Outside Live Editor, keep the existing resume-from-progress behavior.
+    let startAt=liveEditEnabled
+      ? Math.max(0,Math.min(Number(player?.index)||0,total-1))
+      : Math.min(Math.max(0,Number(autoRecProgress?.nextIndex)||0),total-1);
+
+    if(!liveEditEnabled && startAt>=total-1 && (autoRecProgress?.recordedCount||0)>=total){
+      autoRecProgress={nextIndex:0,recordedCount:0};
+      startAt=0;
+    }
+
     const p=ensurePlayer();
-    p.stopAuto?.();p.load(getDocumentForPlayback(),{startAt});p.unlockAudio?.(true);
-    autoRecActive=true;syncPublishPreviewButton(false);autoRecDurations=[];autoRecCurrentIndex=startAt;
-    autoRecStartedAt=performance.now();autoRecSceneStartedAt=autoRecStartedAt;
+    p.stopAuto?.();
+    p.load(getDocumentForPlayback(),{startAt});
+
+    // A document with a cover re-enters Cover state on load().
+    // Live Editor is already inside the work, so restore the current Scene immediately.
+    if(liveEditEnabled){
+      p._clearAutoTimer?.();
+      p._resetPresentationRuntime?.();
+      p._resetBackgroundRuntime?.();
+      p.index=startAt;
+      p.maxVisitedIndex=Math.max(p.maxVisitedIndex,startAt);
+      p.ended=false;
+      p._audioRenderMode='restore';
+      p._render?.();
+      if(p.els?.cover)p.els.cover.hidden=true;
+      p.host?.classList.remove('sp-cover-open');
+      selectedSceneIndex=startAt;
+    }
+
+    p.unlockAudio?.(true);
+    autoRecActive=true;
+    syncPublishPreviewButton(false);
+    autoRecDurations=[];
+    autoRecCurrentIndex=startAt;
+    autoRecStartedAt=performance.now();
+    autoRecSceneStartedAt=autoRecStartedAt;
     const done=$('#autoRecDone'); if(done)done.hidden=true;
     renderAutoRecUI();
+    syncLiveEditPreviewChrome();
+    if(desktopLiveActive())requestAnimationFrame(renderDesktopLivePanel);
   }
 
   function recordAutoRecBoundary(){
@@ -2562,6 +2606,7 @@
     if(recPanel)recPanel.hidden=coverOpen && !autoRecActive;
 
     if(coverOpen){
+      syncPublishPreviewButton(false);
       setLiveToolbarVisible(false);
       closeLiveEditSheet();
     }
@@ -2582,7 +2627,10 @@
       if(autoRecActive && event.detail?.direction==='next')recordAutoRecBoundary();
       syncLiveEditPreviewChrome();
     });
-    playerHost.addEventListener('sceneplayer:coverstart',syncLiveEditPreviewChrome);
+    playerHost.addEventListener('sceneplayer:coverstart',()=>{
+      syncPublishPreviewButton(false);
+      syncLiveEditPreviewChrome();
+    });
     playerHost.addEventListener('sceneplayer:load',syncLiveEditPreviewChrome);
     playerHost.addEventListener('sceneplayer:end',()=>{
       if(autoRecActive){finishAutoRec(true);syncPublishPreviewButton(false);}
@@ -2708,7 +2756,13 @@
     selectedSceneIndex=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));
     renderAdvanced(); updateEasyFileActions(); setScreen('advanced');
     const modeFab=$('#floatingAdvancedButton');
-    if(modeFab){modeFab.hidden=false;modeFab.disabled=false;modeFab.querySelector('span').textContent='✎';modeFab.setAttribute('aria-label','Easy編集に戻る');modeFab.title='Easy';}
+    if(modeFab){
+      modeFab.hidden=false;
+      modeFab.disabled=false;
+      modeFab.querySelector('span').textContent='✎';
+      modeFab.setAttribute('aria-label','Easyへ戻る');
+      modeFab.title='Easyへ戻る';
+    }
     scrollScreenToTop(advancedScreen);
   }
   function closeAdvanced(){
@@ -2718,7 +2772,12 @@
     updateEasyFileActions();
     setScreen('easy');
     const modeFab=$('#floatingAdvancedButton');
-    if(modeFab){modeFab.querySelector('span').textContent='⚙︎';modeFab.setAttribute('aria-label','細かく調整');modeFab.title='Advanced';updateEasyFileActions();}
+    if(modeFab){
+      modeFab.querySelector('span').textContent='▦';
+      modeFab.setAttribute('aria-label','道具箱を開く');
+      modeFab.title='道具箱';
+      updateEasyFileActions();
+    }
   }
 
   function currentScene(){ return workingDocument?.scenes?.[selectedSceneIndex] || null; }
@@ -3675,12 +3734,12 @@
     if(menuExport) menuExport.disabled=!hasSource;
     const floatingAdvanced=$('#floatingAdvancedButton');
     if(floatingAdvanced){
-      floatingAdvanced.hidden=false;
-      const inAdvanced=!advancedScreen.hidden;
-      floatingAdvanced.disabled=inAdvanced ? false : !hasDocument;
-      floatingAdvanced.querySelector('span').textContent=inAdvanced?'✎':'⚙︎';
-      floatingAdvanced.setAttribute('aria-label',inAdvanced?'Easy編集に戻る':'細かく調整');
-      floatingAdvanced.title=inAdvanced?'Easy':'Advanced';
+      const inAdvanced=advancedScreen && !advancedScreen.hidden;
+      floatingAdvanced.hidden=!hasDocument;
+      floatingAdvanced.disabled=!hasDocument;
+      floatingAdvanced.querySelector('span').textContent=inAdvanced?'✎':'▦';
+      floatingAdvanced.setAttribute('aria-label',inAdvanced?'Easyへ戻る':'道具箱を開く');
+      floatingAdvanced.title=inAdvanced?'Easyへ戻る':'道具箱';
     }
     const floatingPreview=$('#floatingPreviewButton');
     if(floatingPreview)floatingPreview.disabled=!hasSource;
@@ -3805,10 +3864,13 @@
   $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();exportScenePackage();});
   $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
   $('#menuNewDraftButton')?.addEventListener('click',()=>{closeEasyMenu();$('#newDraftQuickButton')?.click();});
-  $('#floatingAdvancedButton')?.addEventListener('click',()=>{
+  $('#floatingAdvancedButton')?.addEventListener('click',(event)=>{
+    event.preventDefault();
+    event.stopPropagation();
     if(!advancedScreen.hidden) closeAdvanced();
     else openAdvanced();
   });
+  $('#toolboxEasyReturnButton')?.addEventListener('click',closeAdvanced);
 
   $('#floatingPreviewButton')?.addEventListener('click',()=>{
     if(!advancedScreen.hidden){
@@ -3962,7 +4024,9 @@
   const desktopSceneLabel=$('#desktopSceneLabel');
   const desktopPrevScene=$('#desktopPrevScene');
   const desktopNextScene=$('#desktopNextScene');
+  const desktopTimingButton=$('#desktopTimingButton');
   const desktopLiveMQ=window.matchMedia('(min-width:1100px)');
+  let desktopTimingOpen=false;
   let liveEditEnabled=false;
   let liveEditToolbarVisible=false;
   let liveInlineEditEl=null;
@@ -3977,7 +4041,13 @@
     const i=Math.max(0,Math.min(sourceIndex,(workingDocument?.scenes?.length||1)-1));
     return {scene:workingDocument?.scenes?.[i]||null,index:i};
   }
-  function closeLiveEditSheet(){ if(liveEditSheet)liveEditSheet.hidden=true; document.body.classList.remove('live-edit-sheet-open'); }
+  function closeLiveEditSheet(){
+    if(liveEditSheet){
+      liveEditSheet.hidden=true;
+      liveEditSheet.classList.remove('live-edit-sheet-timing','live-edit-sheet-audio');
+    }
+    document.body.classList.remove('live-edit-sheet-open');
+  }
   function setLiveToolbarVisible(show){
     liveEditToolbarVisible=!!show;
     if(liveEditToolbar) liveEditToolbar.hidden=!liveEditEnabled||!liveEditToolbarVisible;
@@ -5705,6 +5775,74 @@ function openDesktopTextDetail(){
     });
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
   }
+  function renderDesktopTimingPanel(){
+    if(!desktopLivePanel || !workingDocument?.scenes?.length)return;
+    const {index}=liveEditScene();
+    // PC timing follows the Scene currently visible in the left Live Preview.
+    liveTimingIndex=Math.max(0,Math.min(index,workingDocument.scenes.length-1));
+    const scene=workingDocument.scenes[liveTimingIndex];
+    const seconds=liveTimingSeconds(scene);
+    const recorded=liveTimingRecorded(scene);
+
+    desktopSceneLabel.textContent=`Scene ${liveTimingIndex+1} / ${workingDocument.scenes.length}`;
+    desktopTimingButton?.classList.add('is-active');
+    if(desktopTimingButton)desktopTimingButton.textContent='← 編集へ戻る';
+    desktopLivePanelBody.innerHTML='';
+
+    const wrap=document.createElement('div');
+    wrap.className='desktop-timing-panel';
+
+    const railWrap=document.createElement('section');
+    railWrap.className='desktop-timing-rail-wrap';
+    const railTitle=document.createElement('div');
+    railTitle.className='desktop-timing-rail-title';
+    railTitle.innerHTML=`<strong>${workingDocument.scenes.length} Scenes</strong><small>Sceneを横送り</small>`;
+    const rail=document.createElement('div');
+    rail.className='desktop-timing-rail';
+    workingDocument.scenes.forEach((item,idx)=>{
+      const card=document.createElement('button');
+      card.type='button';
+      card.className='desktop-timing-scene-card'+(idx===liveTimingIndex?' is-selected':'');
+      const txt=(item.text||item.subText||'空のScene').replace(/\\s+/g,' ').trim()||'空のScene';
+      card.innerHTML=`<span><b>${String(idx+1).padStart(2,'0')}</b><em>${liveTimingSeconds(item).toFixed(2)}s</em></span><strong>${txt}</strong>`;
+      card.addEventListener('click',()=>{
+        liveTimingIndex=idx;
+        player.index=idx;
+        selectedSceneIndex=idx;
+        liveEditRenderAt(idx,{preserveSheet:true});
+        renderDesktopTimingPanel();
+        requestAnimationFrame(()=>rail.querySelector('.is-selected')?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'}));
+      });
+      rail.append(card);
+    });
+    railWrap.append(railTitle,rail);
+
+    const editor=document.createElement('section');
+    editor.className='desktop-timing-editor';
+    const top=document.createElement('div');
+    top.className='desktop-timing-editor-head';
+    const left=document.createElement('div');
+    left.innerHTML=`<strong>AUTOタイミング</strong><small>${recorded?`記録済み・${seconds.toFixed(2)}s`:`未記録・標準 ${DEFAULT_AUTO_SECONDS.toFixed(2)}s`}</small>`;
+    const reset=document.createElement('button');reset.type='button';reset.textContent='標準に戻す';
+    reset.addEventListener('click',()=>{resetLiveTiming(liveTimingIndex);renderDesktopTimingPanel();});
+    top.append(left,reset);
+
+    const controls=document.createElement('div');
+    controls.className='desktop-timing-controls';
+    const makeNudge=(d)=>{const b=document.createElement('button');b.type='button';b.textContent=d<0?String(d):`+${d}`;b.addEventListener('click',()=>{setLiveTimingSeconds(liveTimingIndex,liveTimingSeconds(workingDocument.scenes[liveTimingIndex])+d);renderDesktopTimingPanel();});return b;};
+    const value=document.createElement('label');value.className='desktop-timing-value';
+    const input=document.createElement('input');input.type='number';input.min='0.15';input.max='60';input.step='0.05';input.value=seconds.toFixed(2);input.inputMode='decimal';
+    const unit=document.createElement('span');unit.textContent='秒';value.append(input,unit);
+    const commit=()=>{setLiveTimingSeconds(liveTimingIndex,input.value);renderDesktopTimingPanel();};
+    input.addEventListener('change',commit);input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commit();}});
+    controls.append(makeNudge(-.5),makeNudge(-.1),value,makeNudge(.1),makeNudge(.5));
+    const note=document.createElement('p');note.textContent='AUTO RECの記録値を微調整できます。秒数は直接入力もできます。';
+    editor.append(top,controls,note);
+    wrap.append(railWrap,editor);
+    desktopLivePanelBody.append(wrap);
+    requestAnimationFrame(()=>rail.querySelector('.is-selected')?.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}));
+  }
+
   function renderDesktopLivePanel(){
     if(!desktopLivePanel)return;
     if(!desktopLiveActive()){
@@ -5716,6 +5854,8 @@ function openDesktopTextDetail(){
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');
     desktopSceneLabel.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     desktopPrevScene.disabled=index<=0;desktopNextScene.disabled=index>=workingDocument.scenes.length-1;
+    if(desktopTimingOpen){renderDesktopTimingPanel();return;}
+    if(desktopTimingButton){desktopTimingButton.classList.remove('is-active');desktopTimingButton.textContent='⌛ 時間';}
     desktopLivePanelBody.innerHTML='';
     const p=ensurePresentation(scene);p.text ||= {};
     const refresh=()=>{scheduleDraftSave(70);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();};
@@ -5767,7 +5907,19 @@ function openDesktopTextDetail(){
     const bgTop=document.createElement('div');bgTop.className='desktop-live-bg-top';
     if(bg?.src){const img=document.createElement('img');img.src=bg.src;img.alt='背景';bgTop.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent='背景';bgTop.appendChild(ph);}
     const bgBtns=document.createElement('div');bgBtns.className='desktop-live-stack';
-    bgBtns.append(desktopAction(bg?.src?'画像を変更':'画像を選択',()=>desktopPickFile('image/*',(url,name)=>{p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};}),'is-primary'),desktopAction('背景なし',()=>{p.background={src:'',transition:'fade',_editorManaged:true};refresh();}));
+    bgBtns.append(
+      desktopAction('前Sceneから継続',()=>{
+        delete p.background;
+        refresh();
+      },!bg?'is-selected':''),
+      desktopAction(bg?.src?'画像を変更':'画像を選択',()=>desktopPickFile('image/*',(url,name)=>{
+        p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
+      }),'is-primary'),
+      desktopAction('背景なし',()=>{
+        p.background={src:'',transition:'fade',_editorManaged:true};
+        refresh();
+      },bg?.src===''?'is-selected':'')
+    );
     bgTop.appendChild(bgBtns);bgCard.appendChild(bgTop);
     const tone=document.createElement('div');tone.className='desktop-live-choice';
     tone.append(desktopAction('暗く',()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction('明るく',()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
@@ -5791,13 +5943,190 @@ function openDesktopTextDetail(){
     desktopLivePanelBody.append(bodyCard,three,audioCard,sceneCard);
   }
 
+
+  let liveTimingIndex=null;
+
+  function liveTimingSeconds(scene){
+    const pause=Number(scene?.pause);
+    return Number.isFinite(pause) && pause>0 ? pause/1000 : DEFAULT_AUTO_SECONDS;
+  }
+
+  function liveTimingRecorded(scene){
+    return Number.isFinite(Number(scene?.pause)) && Number(scene.pause)>0;
+  }
+
+  function setLiveTimingSeconds(index,seconds){
+    const scene=workingDocument?.scenes?.[index];
+    if(!scene)return;
+    const safe=Math.max(.15,Math.min(60,Number(seconds)||DEFAULT_AUTO_SECONDS));
+    scene.pause=Math.round(safe*1000);
+    scheduleDraftSave(50);
+  }
+
+  function resetLiveTiming(index){
+    const scene=workingDocument?.scenes?.[index];
+    if(!scene)return;
+    delete scene.pause;
+    scheduleDraftSave(50);
+  }
+
+  function renderLiveTimingPanel(){
+    if(!workingDocument?.scenes?.length || !liveEditSheetBody)return;
+
+    const current=liveEditScene().index;
+    if(!Number.isInteger(liveTimingIndex))liveTimingIndex=current;
+    liveTimingIndex=Math.max(0,Math.min(liveTimingIndex,workingDocument.scenes.length-1));
+
+    const scene=workingDocument.scenes[liveTimingIndex];
+    const seconds=liveTimingSeconds(scene);
+    const recorded=liveTimingRecorded(scene);
+
+    liveEditSceneNumber.textContent=`Scene ${liveTimingIndex+1} / ${workingDocument.scenes.length}`;
+    liveEditSheetTitle.textContent='時間';
+    liveEditSheet.hidden=false;
+    liveEditSheet.classList.remove('live-edit-sheet-audio');
+    liveEditSheet.classList.add('live-edit-sheet-timing');
+    document.body.classList.add('live-edit-sheet-open');
+    liveEditSheetBody.innerHTML='';
+
+    const railWrap=document.createElement('section');
+    railWrap.className='live-timing-rail-wrap';
+
+    const railHead=document.createElement('div');
+    railHead.className='live-timing-rail-head';
+    const railTitle=document.createElement('strong');
+    railTitle.textContent=`${workingDocument.scenes.length} Scenes`;
+    const railHint=document.createElement('small');
+    railHint.textContent='Sceneを横送り';
+    railHead.append(railTitle,railHint);
+
+    const rail=document.createElement('div');
+    rail.className='live-timing-rail';
+
+    workingDocument.scenes.forEach((item,i)=>{
+      const card=document.createElement('button');
+      card.type='button';
+      card.className='live-timing-scene-card';
+      if(i===liveTimingIndex)card.classList.add('is-selected');
+
+      const top=document.createElement('span');
+      top.className='live-timing-scene-top';
+      const no=document.createElement('b');
+      no.textContent=String(i+1).padStart(2,'0');
+      const sec=document.createElement('em');
+      sec.textContent=`${liveTimingSeconds(item).toFixed(2)}s`;
+      if(!liveTimingRecorded(item))sec.classList.add('is-default');
+      top.append(no,sec);
+
+      const text=document.createElement('strong');
+      text.className='live-timing-scene-text';
+      text.textContent=(item.text||item.subText||'空のScene').trim() || '空のScene';
+
+      card.append(top,text);
+      card.addEventListener('click',()=>{
+        liveTimingIndex=i;
+        renderLiveTimingPanel();
+        requestAnimationFrame(()=>{
+          rail.querySelector('.live-timing-scene-card.is-selected')
+            ?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+        });
+      });
+      rail.appendChild(card);
+    });
+
+    railWrap.append(railHead,rail);
+
+    const editor=document.createElement('section');
+    editor.className='live-timing-editor';
+
+    const head=document.createElement('div');
+    head.className='live-timing-editor-head';
+    const copy=document.createElement('div');
+    const title=document.createElement('strong');
+    title.textContent='AUTOタイミング';
+    const state=document.createElement('small');
+    state.textContent=recorded ? `記録済み・${seconds.toFixed(2)}s` : `未記録・標準 ${DEFAULT_AUTO_SECONDS.toFixed(2)}s`;
+    state.classList.toggle('is-recorded',recorded);
+    copy.append(title,state);
+
+    const reset=document.createElement('button');
+    reset.type='button';
+    reset.className='live-timing-reset';
+    reset.textContent='標準に戻す';
+    reset.addEventListener('click',()=>{
+      resetLiveTiming(liveTimingIndex);
+      renderLiveTimingPanel();
+    });
+    head.append(copy,reset);
+
+    const valueRow=document.createElement('label');
+    valueRow.className='live-timing-value';
+    const input=document.createElement('input');
+    input.type='number';
+    input.min='0.15';
+    input.max='60';
+    input.step='0.05';
+    input.inputMode='decimal';
+    input.value=seconds.toFixed(2);
+    input.setAttribute('aria-label','Sceneの表示秒数');
+    const unit=document.createElement('span');
+    unit.textContent='秒';
+    valueRow.append(input,unit);
+
+    const commit=()=>{
+      setLiveTimingSeconds(liveTimingIndex,input.value);
+      renderLiveTimingPanel();
+    };
+    input.addEventListener('change',commit);
+    input.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        input.blur();
+        commit();
+      }
+    });
+
+    const nudges=document.createElement('div');
+    nudges.className='live-timing-nudges';
+    [-.5,-.1,.1,.5].forEach(delta=>{
+      const b=document.createElement('button');
+      b.type='button';
+      b.textContent=delta<0?String(delta):`+${delta}`;
+      b.addEventListener('click',()=>{
+        const next=liveTimingSeconds(workingDocument.scenes[liveTimingIndex])+delta;
+        setLiveTimingSeconds(liveTimingIndex,next);
+        renderLiveTimingPanel();
+      });
+      nudges.appendChild(b);
+    });
+
+    const note=document.createElement('p');
+    note.className='live-timing-note';
+    note.textContent='AUTO RECの記録値を微調整できます。秒数を直接入力して手動設定することもできます。';
+
+    editor.append(head,valueRow,nudges,note);
+    liveEditSheetBody.append(railWrap,editor);
+
+    requestAnimationFrame(()=>{
+      liveEditSheetBody.querySelector('.live-timing-scene-card.is-selected')
+        ?.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'});
+    });
+  }
+
   function renderLiveEditSheet(kind){
     const {scene,index}=liveEditScene(); if(!scene||!liveEditSheetBody)return;
     liveEditSceneNumber.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     liveEditSheet.hidden=false;
     document.body.classList.add('live-edit-sheet-open');
     liveEditSheet.classList.toggle('live-edit-sheet-audio',kind==='audio');
+    liveEditSheet.classList.toggle('live-edit-sheet-timing',kind==='timing');
     liveEditSheetBody.innerHTML='';
+
+    if(kind==='timing'){
+      finishInlineTextEdit();
+      renderLiveTimingPanel();
+      return;
+    }
 
     if(kind==='text'){
       finishInlineTextEdit();
@@ -6121,6 +6450,11 @@ function openDesktopTextDetail(){
         renderLiveEditSceneMenu();
         return;
       }
+      if(kind==='timing'){
+        liveTimingIndex=liveEditScene().index;
+        renderLiveEditSheet('timing');
+        return;
+      }
       renderLiveEditSheet(kind);
       return;
     }
@@ -6137,11 +6471,27 @@ function openDesktopTextDetail(){
     const kind=b.dataset.liveEdit;
     if(kind==='add'){liveEditAddScene();return;}
     if(kind==='scene'){renderLiveEditSceneMenu();return;}
+    if(kind==='timing'){
+      liveTimingIndex=liveEditScene().index;
+      renderLiveEditSheet('timing');
+      return;
+    }
     renderLiveEditSheet(kind);
   });
   $('#liveEditSheetClose')?.addEventListener('click',closeLiveEditSheet);
-  desktopPrevScene?.addEventListener('click',()=>{const {index}=liveEditScene();if(index>0)liveEditRenderAt(index-1,{preserveSheet:false});});
-  desktopNextScene?.addEventListener('click',()=>{const {index}=liveEditScene();if(index<workingDocument.scenes.length-1)liveEditRenderAt(index+1,{preserveSheet:false});});
+  desktopPrevScene?.addEventListener('click',()=>{
+    const {index}=liveEditScene();
+    if(index>0)liveEditRenderAt(index-1,{preserveSheet:false});
+  });
+  desktopNextScene?.addEventListener('click',()=>{
+    const {index}=liveEditScene();
+    if(index<workingDocument.scenes.length-1)liveEditRenderAt(index+1,{preserveSheet:false});
+  });
+  desktopTimingButton?.addEventListener('click',()=>{
+    desktopTimingOpen=!desktopTimingOpen;
+    liveTimingIndex=liveEditScene().index;
+    renderDesktopLivePanel();
+  });
   desktopLiveMQ.addEventListener?.('change',()=>{renderDesktopLivePanel();if(desktopLiveActive())setLiveToolbarVisible(true);});
   // Live Edit v0.2.3: while the visible Scene text is being edited,
   // the Player must not interpret taps / Enter / Space as navigation.

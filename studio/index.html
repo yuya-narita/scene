@@ -175,9 +175,10 @@
 
   <section id="advancedScreen" class="screen advanced-screen" hidden>
     <section class="toolbox-title" aria-label="道具箱">
+      <button id="toolboxEasyReturnButton" class="toolbox-easy-return" type="button">← Easyへ戻る</button>
       <small>SCENE COCKPIT</small>
       <h1>道具箱</h1>
-      <p>Sceneを選び、本文・タイミング・演出をまとめて調整します。</p>
+      <p>Scene全体を見渡し、画像・音・設定の入り方を確認できます。</p>
     </section>
 
 
@@ -194,7 +195,7 @@
               <summary>フォームで細かく編集</summary>
             <label class="field" for="endingLabelInput">
               <span class="field-label">中央の文 <small>任意</small></span>
-              <input id="endingLabelInput" type="text" placeholder="例：つづく">
+              <textarea id="endingLabelInput" rows="2" placeholder="例：つづく"></textarea>
             </label>
             <div class="ending-link-editor ending-three-editor">
               <div class="ending-link-head"><strong>読了後の3ボックス</strong><small>中央は固定・左右は任意</small></div>
@@ -230,7 +231,7 @@
         <div class="work-meta-grid">
             <label class="field" for="titleInput">
               <span class="field-label">作品タイトル</span>
-              <input id="titleInput" type="text" placeholder="例：声のそろう通り">
+              <textarea id="titleInput" rows="2" placeholder="例：声のそろう通り"></textarea>
             </label>
             <label class="field">
               <span class="field-label">サブタイトル <small>任意</small></span>
@@ -472,6 +473,7 @@
       <button type="button" data-live-edit="effect"><span>✦</span><small>演出</small></button>
       <button type="button" data-live-edit="background"><span>▣</span><small>背景</small></button>
       <button type="button" data-live-edit="audio"><span>♪</span><small>音</small></button>
+      <button type="button" data-live-edit="timing"><span>⌛</span><small>時間</small></button>
       <button type="button" data-live-edit="scene"><span>•••</span><small>Scene</small></button>
     </nav>
     <nav id="liveInlineToolbar" class="live-inline-toolbar" aria-label="本文編集中の操作" hidden>
@@ -496,7 +498,10 @@
     <aside id="desktopLivePanel" class="desktop-live-panel" hidden aria-label="Desktop Live Edit">
       <div class="desktop-live-panel-head">
         <button id="desktopPrevScene" type="button">‹ 前のScene</button>
-        <strong id="desktopSceneLabel">Scene 1 / 1</strong>
+        <div class="desktop-live-panel-center">
+          <strong id="desktopSceneLabel">Scene 1 / 1</strong>
+          <button id="desktopTimingButton" class="desktop-timing-button" type="button" aria-label="時間を調整">⌛ 時間</button>
+        </div>
         <button id="desktopNextScene" type="button">次のScene ›</button>
       </div>
       <div id="desktopLivePanelBody" class="desktop-live-panel-body"></div>
@@ -629,7 +634,7 @@
     <span id="undoMessage">変更しました</span>
     <button id="undoButton" type="button">↶ 元に戻す</button>
   </div>
-  <button id="floatingAdvancedButton" class="studio-floating-advanced" type="button" aria-label="細かく調整" title="Advanced" disabled><span aria-hidden="true">⚙︎</span></button>
+  <button id="floatingAdvancedButton" class="studio-floating-advanced" type="button" aria-label="道具箱を開く" title="道具箱" disabled hidden><span aria-hidden="true">▦</span></button>
   <button id="floatingPreviewButton" class="studio-floating-preview" type="button" aria-label="作品をプレビュー" title="作品をプレビュー"><span aria-hidden="true">▶</span></button>
   <button id="undoCompactButton" class="studio-undo-compact" type="button" aria-label="元に戻す" disabled><span aria-hidden="true">↶</span></button>
 
@@ -642,7 +647,7 @@
         <button id="coverQuickClose" class="ending-quick-close" type="button" aria-label="閉じる">×</button>
       </div>
       <div class="ending-quick-fields cover-quick-fields">
-        <label><span>作品タイトル</span><input id="coverQuickWorkTitle" type="text" placeholder="Untitled"></label>
+        <label><span>作品タイトル</span><textarea id="coverQuickWorkTitle" rows="2" placeholder="Untitled"></textarea></label>
         <label><span>サブタイトル</span><input id="coverQuickSubtitle" type="text" placeholder="サブタイトル"></label>
         <label><span>作者名</span><input id="coverQuickAuthor" type="text" placeholder="作者名"></label>
         <div class="cover-quick-divider" aria-hidden="true"></div>
@@ -668,7 +673,7 @@
         <button id="endingQuickClose" class="ending-quick-close" type="button" aria-label="閉じる">×</button>
       </div>
       <div id="endingQuickCenterFields" class="ending-quick-fields" hidden>
-        <label><span>中央の文</span><input id="endingQuickCenterText" type="text" placeholder="例：つづく"></label>
+        <label><span>中央の文</span><textarea id="endingQuickCenterText" rows="2" placeholder="例：つづく"></textarea></label>
       </div>
       <div id="endingQuickSlotFields" class="ending-quick-fields" hidden>
         <label><span>小さい文字</span><input id="endingQuickKicker" type="text" placeholder="例：NEXT"></label>
