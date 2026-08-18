@@ -2608,7 +2608,7 @@
     // In authoring screens the slot is always present; availability is shown by tone.
     if(compact){compact.hidden=false;compact.disabled=!undoSnapshot;}
   }
-  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; const returnButton=$('#editReturnButton'); if(returnButton)returnButton.hidden=!open; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); const modeLabel=$('#studioModeLabel'); if(modeLabel) modeLabel.textContent=name==='advanced'?'Advanced Studio':'Easy Studio'; syncUndoVisibilityForScreen(name); }
+  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; const returnButton=$('#editReturnButton'); if(returnButton)returnButton.hidden=!open; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); const modeLabel=$('#studioModeLabel'); if(modeLabel) modeLabel.textContent=name==='advanced'?'道具箱':'Easy Studio'; syncUndoVisibilityForScreen(name); }
   // v0.2.97: the shared authoring header stays the same size while scrolling.
   const sharedHeader=$('#studioSharedHeader');
   sharedHeader?.classList.remove('is-compact');
@@ -3075,11 +3075,119 @@
       b.addEventListener('click',()=>{syncAdvancedFieldsToScene();selectedSceneIndex=i;renderAdvanced();}); list.appendChild(b);
     });
   }
+
+  function toolboxSceneSummary(){
+    const scene=currentScene();
+    if(!scene)return;
+
+    const p=scene.presentation||{};
+    const txt=p.text||{};
+
+    const textBits=[];
+    const fontMap={serif:'明朝',sans:'ゴシック',mono:'等幅'};
+    textBits.push(txt.fontFamily ? (fontMap[txt.fontFamily]||txt.fontFamily) : '作品設定');
+    textBits.push(txt.size && txt.size!=='auto' ? txt.size : 'おまかせ');
+    $('#toolboxTextSummary') && ($('#toolboxTextSummary').textContent=textBits.join(' / '));
+
+    const fx=p.typing?.enabled ? 'タイプライター' : (p.effect||'おまかせ');
+    const display=(p.display||'stack')==='solo' ? 'この文章だけ' : '前の文章を残す';
+    $('#toolboxEffectSummary') && ($('#toolboxEffectSummary').textContent=`${fx} / ${display}`);
+
+    let bg='前Sceneを継続';
+    if(p.background && typeof p.background==='object'){
+      if(p.background.src==='')bg='背景なし';
+      else if(p.background.src)bg=`画像あり / ${p.background.motion?.type||'動きなし'}`;
+    }
+    $('#toolboxBackgroundSummary') && ($('#toolboxBackgroundSummary').textContent=bg);
+
+    const audio=scene.audio||[];
+    const has=(ch)=>audio.some(cmd=>cmd?.channel===ch && cmd?.action!=='stop');
+    const stopped=(ch)=>audio.some(cmd=>cmd?.channel===ch && cmd?.action==='stop');
+    const parts=[
+      `BGM ${stopped('bgm')?'停止':(has('bgm')?'設定あり':'継続')}`,
+      `Ambient ${stopped('ambient')?'停止':(has('ambient')?'設定あり':'継続')}`,
+      `SE ${has('oneshot')?'あり':'なし'}`
+    ];
+    $('#toolboxAudioSummary') && ($('#toolboxAudioSummary').textContent=parts.join('・'));
+  }
+
+  function cleanupToolboxDetail(){
+    document.body.classList.remove('toolbox-detail-open');
+    requestAnimationFrame(()=>{
+      if(advancedScreen && !advancedScreen.hidden){
+        loadSceneIntoFields();
+        toolboxSceneSummary();
+      }
+    });
+  }
+
+  function openToolboxDetail(kind){
+    if(!workingDocument || advancedScreen?.hidden)return;
+    syncAdvancedFieldsToScene();
+
+    if(kind==='text')openDesktopTextDetail();
+    else if(kind==='effect')openDesktopEffectDetail();
+    else if(kind==='background')openDesktopBackgroundDetail();
+    else if(kind==='audio')openDesktopAudioDetail();
+
+    const selector=kind==='effect'?'.desktop-effect-detail-overlay':
+      kind==='background'?'.desktop-background-detail-overlay':
+      kind==='audio'?'.desktop-audio-detail-overlay':
+      '.desktop-text-detail-overlay';
+    const overlay=document.querySelector(selector);
+    if(!overlay)return;
+
+    overlay.dataset.toolboxDetail='true';
+    document.body.classList.add('toolbox-detail-open');
+
+    const clean=()=>requestAnimationFrame(cleanupToolboxDetail);
+    overlay.querySelector('.desktop-text-detail-close')?.addEventListener('click',clean,{once:true});
+    [...overlay.querySelectorAll('.desktop-text-detail-foot button')].forEach(btn=>{
+      const t=(btn.textContent||'').trim();
+      if(t==='閉じる'||t==='キャンセル'||t==='保存'){
+        btn.addEventListener('click',clean,{once:true});
+      }
+    });
+  }
+
+  function enhanceToolboxStructure(){
+    if(!advancedScreen || advancedScreen.dataset.toolboxReady==='1')return;
+    advancedScreen.dataset.toolboxReady='1';
+
+    const layout=advancedScreen.querySelector('.advanced-layout');
+    if(!layout)return;
+
+    // Old project-wide blocks remain available, but live below the cockpit.
+    const extras=document.createElement('details');
+    extras.className='toolbox-extras';
+    extras.innerHTML='<summary>作品全体・その他</summary><div class="toolbox-extras-body"></div>';
+    const extrasBody=extras.querySelector('.toolbox-extras-body');
+
+    const policy=advancedScreen.querySelector('.advanced-policy');
+    const ending=advancedScreen.querySelector('#advancedEndingEditor');
+    const meta=advancedScreen.querySelector('.advanced-work-meta');
+    [policy,ending,meta].forEach(el=>{if(el)extrasBody.appendChild(el);});
+    layout.after(extras);
+
+    advancedScreen.querySelectorAll('[data-toolbox-detail]').forEach(btn=>{
+      btn.addEventListener('click',()=>openToolboxDetail(btn.dataset.toolboxDetail));
+    });
+  }
+
   function renderAdvanced(){
-    if(!workingDocument)return; normalizeSceneIds(); selectedSceneIndex=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));
+    if(!workingDocument)return;
+    enhanceToolboxStructure();
+    normalizeSceneIds();
+    selectedSceneIndex=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));
     $('#allowPreviousInput').checked=workingDocument.player?.navigation?.allowPrevious !== false;
     const pos=$('#advancedScenePosition'); if(pos)pos.textContent=`Scene ${selectedSceneIndex+1} / ${workingDocument.scenes.length}`;
-    renderSceneList(); loadSceneIntoFields();
+    renderSceneList();
+    loadSceneIntoFields();
+    toolboxSceneSummary();
+    requestAnimationFrame(()=>{
+      const selected=$('#sceneList')?.querySelector('.scene-list-item.is-selected');
+      selected?.scrollIntoView?.({behavior:'smooth',block:'nearest',inline:'center'});
+    });
   }
   let undoSnapshot=null;
   let undoBarTimer=null;
@@ -3806,7 +3914,9 @@
   const LIVE_INLINE_HINT_KEY='sceneStudio.liveEdit.cursorHintSeen.v1';
 
   function liveEditScene(){
-    const i=Math.max(0,Math.min(player?.index ?? selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
+    const advancedActive=advancedScreen && !advancedScreen.hidden;
+    const sourceIndex=advancedActive ? selectedSceneIndex : (player?.index ?? selectedSceneIndex);
+    const i=Math.max(0,Math.min(sourceIndex,(workingDocument?.scenes?.length||1)-1));
     return {scene:workingDocument?.scenes?.[i]||null,index:i};
   }
   function closeLiveEditSheet(){ if(liveEditSheet)liveEditSheet.hidden=true; document.body.classList.remove('live-edit-sheet-open'); }
@@ -4579,7 +4689,7 @@ function startInlineTextEdit(){
   }
 
 function openDesktopEffectDetail(){
-    if(!liveEditEnabled)return;
+    if(!liveEditEnabled && advancedScreen?.hidden)return;
     closeDesktopEffectDetail();
     const {scene,index}=liveEditScene();if(!scene)return;
     ensureDesktopEffectVisibleDefaults(scene);
@@ -4733,7 +4843,7 @@ function enhanceDesktopTextDetailRanges(root){
 
 
 function openDesktopAudioDetail(){
-    if(!liveEditEnabled)return;
+    if(!liveEditEnabled && advancedScreen?.hidden)return;
     closeDesktopAudioDetail();
 
     const {scene,index}=liveEditScene();
@@ -5118,7 +5228,7 @@ function openDesktopAudioDetail(){
   }
 
 function openDesktopBackgroundDetail(){
-    if(!liveEditEnabled)return;
+    if(!liveEditEnabled && advancedScreen?.hidden)return;
     closeDesktopBackgroundDetail();
 
     const {scene,index}=liveEditScene();
@@ -5465,7 +5575,7 @@ function openDesktopBackgroundDetail(){
   }
 
 function openDesktopTextDetail(){
-    if(!liveEditEnabled)return;
+    if(!liveEditEnabled && advancedScreen?.hidden)return;
     closeDesktopTextDetail();
     const {scene,index}=liveEditScene();if(!scene)return;
     const p=ensurePresentation(scene);p.text ||= {};
