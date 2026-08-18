@@ -895,14 +895,15 @@
 
 /* Disappear motion is explicit in Format.
    IMPORTANT: Scene article transform belongs to the layout engine.
-   Motion is applied to the text content so "stay" keeps its exact landing position. */
+   Motion is applied to the text content so "stay" keeps its exact landing position.
+   Studio parity: "up" is intentionally subtle. */
 .sp-scene.is-disappearing.is-disappear-up{
   opacity:0!important;
   filter:blur(1.5px)!important;
 }
 .sp-scene.is-disappearing.is-disappear-up .sp-text,
 .sp-scene.is-disappearing.is-disappear-up .sp-subtext{
-  transform:translate3d(0,-18px,0)!important;
+  transform:translate3d(0,-8px,0)!important;
   transition:transform var(--sp-disappear-fade,700ms) ease!important;
 }
 .sp-scene.is-disappearing.is-disappear-stay{
