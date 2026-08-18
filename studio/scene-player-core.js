@@ -1055,7 +1055,9 @@
       this.backgroundState = null;
       this.backgroundLayerIndex = 0;
       this._resetBackgroundLayers();
-      this._audioRenderMode = 'load';
+      // Studio loads Scene 1 underneath the cover for layout/background,
+      // but Cover is not a Scene and must not execute Scene audio.
+      this._audioRenderMode = 'cover';
 
       this._render();
       this.showCover();
@@ -1595,7 +1597,11 @@
 
       this._applyCorePresentation(active);
       this._applyBackgroundForIndex(this.index);
-      if (this._audioRenderMode === 'advance') {
+
+      if (this._audioRenderMode === 'cover') {
+        // Cover preload: visuals only. Scene BGM / Ambient / SE must remain silent.
+        this._stopAllAudio(true);
+      } else if (this._audioRenderMode === 'advance') {
         this._applySceneAudio(active, false);
       } else {
         const mode = this._audioRenderMode;
