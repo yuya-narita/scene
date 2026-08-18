@@ -1350,7 +1350,14 @@
       this.ended = true;
       this.els.ending.classList.remove('is-visible');
       this.els.ending.hidden = false;
-      this._presentationTimeout(()=>this.els.ending?.classList.add('is-visible'),3000);
+
+      // Match the Public Player ending timing:
+      // - ending copy begins its own 280ms-delayed fade immediately
+      // - action boxes keep their CSS 3000ms afterglow delay
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => this.els.ending?.classList.add('is-visible'));
+      });
+
       emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
     }
 
