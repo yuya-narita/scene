@@ -113,6 +113,7 @@
 
       this._buildShell();
       this._bindControls();
+      this._bindPageLifecycle();
     }
 
     _buildShell() {
@@ -235,6 +236,63 @@
       this._bound.push([el, event, fn, options]);
     }
 
+
+    _bindPageLifecycle() {
+      const suspend = () => this._suspendForBackground();
+      this._on(document, 'visibilitychange', () => {
+        if (document.hidden) suspend();
+      }, { passive: true });
+      this._on(global, 'pagehide', suspend, { passive: true });
+      // Supported by some Chromium/WebKit lifecycle implementations.
+      this._on(global, 'freeze', suspend, { passive: true });
+      // iOS fallback: lock/home may blur before visibilitychange settles.
+      this._on(global, 'blur', () => {
+        setTimeout(() => {
+          if (document.hidden || !document.hasFocus()) suspend();
+        }, 0);
+      }, { passive: true });
+    }
+
+    _suspendForBackground() {
+      if (this.destroyed || this._backgroundSuspended) return;
+      this._backgroundSuspended = true;
+
+      // AUTO must not advance Scenes while the browser/app is in background.
+      this.stopAuto();
+
+      // Pause persistent channels in-place so currentTime is preserved.
+      Object.values(this.audioEls || {}).forEach((audio) => {
+        try { audio.pause(); } catch (_) {}
+      });
+
+      // One-shots/SE should never continue in background and should not replay.
+      this.oneshots.forEach((audio) => {
+        try { audio.pause(); } catch (_) {}
+      });
+      this.oneshots.clear();
+
+      // Also suspend WebAudio if available; this is important on iOS lock.
+      if (this.audioContext?.state === 'running') {
+        try { this.audioContext.suspend(); } catch (_) {}
+      }
+
+      emit(this.host, 'sceneplayer:backgroundsuspend', { index: this.index });
+    }
+
+    _resumeAudioAfterBackgroundGesture() {
+      if (!this._backgroundSuspended) return;
+      this._backgroundSuspended = false;
+
+      // Resume only persistent channels that are still logically active.
+      ['bgm', 'ambient'].forEach((channel) => {
+        if (!this.audioState?.[channel]) return;
+        const audio = this.audioEls?.[channel];
+        if (!audio) return;
+        this._safePlay(audio);
+      });
+
+      emit(this.host, 'sceneplayer:backgroundresume', { index: this.index });
+    }
 
     _bindControls() {
       // iOS/WebKit: the reading gesture unlocks Web Audio and arms playback.
@@ -551,6 +609,10 @@
       // Flush now so HTMLMediaElement.play() itself is still called from the
       // user's gesture. _safePlay handles delayed graph attachment.
       this._flushPendingAudio();
+
+      // If iOS/backgrounding paused media, only a new trusted reader gesture
+      // is allowed to resume the persistent BGM/Ambient channels.
+      if (armPlayback) this._resumeAudioAfterBackgroundGesture();
 
       emit(this.host, 'sceneplayer:audiounlock', {
         webAudio: !!ctx,
@@ -2037,7 +2099,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.16-studio-up-parity';
+  ScenePlayerCore.VERSION = '1.12.14-public.18-background-suspend';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
