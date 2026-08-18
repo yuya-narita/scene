@@ -3121,9 +3121,17 @@
     });
   }
 
+  function closeAllToolboxDetails(){
+    document.querySelectorAll('.desktop-text-detail-overlay').forEach(el=>el.remove());
+    document.body.classList.remove('toolbox-detail-open');
+  }
+
   function openToolboxDetail(kind){
     if(!workingDocument || advancedScreen?.hidden)return;
     syncAdvancedFieldsToScene();
+
+    // Toolbox is a cockpit: only one inspector can exist at a time.
+    closeAllToolboxDetails();
 
     if(kind==='text')openDesktopTextDetail();
     else if(kind==='effect')openDesktopEffectDetail();
@@ -3134,13 +3142,24 @@
       kind==='background'?'.desktop-background-detail-overlay':
       kind==='audio'?'.desktop-audio-detail-overlay':
       '.desktop-text-detail-overlay';
+
     const overlay=document.querySelector(selector);
     if(!overlay)return;
 
     overlay.dataset.toolboxDetail='true';
     document.body.classList.add('toolbox-detail-open');
 
-    const clean=()=>requestAnimationFrame(cleanupToolboxDetail);
+    // Always host Toolbox inspectors at body level so PC scroll position
+    // never dictates where the modal appears.
+    if(overlay.parentElement!==document.body)document.body.appendChild(overlay);
+
+    const clean=()=>{
+      requestAnimationFrame(()=>{
+        closeAllToolboxDetails();
+        cleanupToolboxDetail();
+      });
+    };
+
     overlay.querySelector('.desktop-text-detail-close')?.addEventListener('click',clean,{once:true});
     [...overlay.querySelectorAll('.desktop-text-detail-foot button')].forEach(btn=>{
       const t=(btn.textContent||'').trim();
@@ -3151,25 +3170,64 @@
   }
 
   function enhanceToolboxStructure(){
-    if(!advancedScreen || advancedScreen.dataset.toolboxReady==='1')return;
-    advancedScreen.dataset.toolboxReady='1';
+    if(!advancedScreen || advancedScreen.dataset.toolboxReady==='2')return;
+    advancedScreen.dataset.toolboxReady='2';
 
     const layout=advancedScreen.querySelector('.advanced-layout');
-    if(!layout)return;
+    const rail=advancedScreen.querySelector('.scene-rail');
+    const inspector=advancedScreen.querySelector('.scene-inspector');
+    if(!layout || !rail || !inspector)return;
 
-    // Old project-wide blocks remain available, but live below the cockpit.
-    const extras=document.createElement('details');
+    // AUTO timing belongs directly under Scene navigation on both phone and PC.
+    const auto=inspector.querySelector('.auto-timing-editor');
+    if(auto)rail.insertAdjacentElement('afterend',auto);
+
+    // Old background/audio accordions are retained only as hidden data controls.
+    advancedScreen.querySelectorAll('.legacy-advanced-detail').forEach(el=>{
+      el.hidden=true;
+      el.setAttribute('aria-hidden','true');
+    });
+
+    // Rebuild project-wide storage once, with the correct visible names.
+    let extras=advancedScreen.querySelector('.toolbox-extras');
+    extras?.remove();
+
+    extras=document.createElement('details');
     extras.className='toolbox-extras';
-    extras.innerHTML='<summary>作品全体・その他</summary><div class="toolbox-extras-body"></div>';
-    const extrasBody=extras.querySelector('.toolbox-extras-body');
+    extras.innerHTML=`
+      <summary>作品全体・その他</summary>
+      <div class="toolbox-extras-body">
+        <section class="toolbox-global-slot toolbox-global-navigation">
+          <h3>読者ナビゲーション</h3>
+        </section>
+        <section class="toolbox-global-slot toolbox-global-ending">
+          <h3>読了ページ</h3>
+        </section>
+        <section class="toolbox-global-slot toolbox-global-meta">
+          <h3>作品情報・表紙</h3>
+        </section>
+      </div>`;
+    layout.after(extras);
 
     const policy=advancedScreen.querySelector('.advanced-policy');
     const ending=advancedScreen.querySelector('#advancedEndingEditor');
     const meta=advancedScreen.querySelector('.advanced-work-meta');
-    [policy,ending,meta].forEach(el=>{if(el)extrasBody.appendChild(el);});
-    layout.after(extras);
+
+    if(policy)extras.querySelector('.toolbox-global-navigation').appendChild(policy);
+    if(ending){
+      ending.open=false;
+      ending.querySelector(':scope > summary')?.replaceChildren(document.createTextNode('読了ページを編集'));
+      extras.querySelector('.toolbox-global-ending').appendChild(ending);
+    }
+    if(meta){
+      meta.open=false;
+      meta.querySelector(':scope > summary')?.replaceChildren(document.createTextNode('作品情報・表紙を編集'));
+      extras.querySelector('.toolbox-global-meta').appendChild(meta);
+    }
 
     advancedScreen.querySelectorAll('[data-toolbox-detail]').forEach(btn=>{
+      if(btn.dataset.toolboxBound==='1')return;
+      btn.dataset.toolboxBound='1';
       btn.addEventListener('click',()=>openToolboxDetail(btn.dataset.toolboxDetail));
     });
   }
@@ -4771,12 +4829,16 @@ function openDesktopEffectDetail(){
     typingGrid.append(speed,cursor);
     const typingNote=document.createElement('p');typingNote.className='desktop-text-detail-note';typingNote.textContent=typingOn?'左のLive Previewで文字送りを確認できます。':'「出かた」をタイプライターにすると設定できます。';typingSec.appendChild(typingNote);
 
-    const preview=section('プレビュー');
-    const note=document.createElement('p');note.className='desktop-text-detail-note';note.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。';preview.appendChild(note);
-    const replay=document.createElement('button');replay.type='button';replay.className='desktop-effect-replay';replay.textContent='▶ 演出をもう一度見る';replay.addEventListener('click',replayCurrentDesktopEffect);preview.appendChild(replay);
+    if(advancedScreen?.hidden){
+      const preview=section('プレビュー');
+      const note=document.createElement('p');
+      note.className='desktop-text-detail-note';
+      note.textContent='変更はLive Previewへ即時反映され、自動保存されます。';
+      preview.appendChild(note);
+    }
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
-    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'文字設定を初期化';
+    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'演出設定を初期化';
     const spacer=document.createElement('span');const cancel=document.createElement('button');cancel.type='button';cancel.textContent='キャンセル';const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';foot.append(reset,spacer,cancel,save);
     modal.append(head,body,foot);overlay.appendChild(modal);liveDetailHost().appendChild(overlay);
     const closeOnly=()=>{closeDesktopEffectDetail();};

@@ -6455,3 +6455,392 @@ body.toolbox-detail-open > .desktop-text-detail-overlay{
     grid-column:2;
   }
 }
+
+
+/* ==========================================================
+   道具箱 v2 — hierarchy / modal / wiring cleanup
+   ========================================================== */
+
+.advanced-layout{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:14px!important;
+}
+
+.scene-rail{
+  order:1!important;
+  position:relative!important;
+  z-index:2!important;
+  margin:0!important;
+}
+
+.advanced-layout > .auto-timing-editor{
+  order:2!important;
+  position:relative!important;
+  z-index:1!important;
+  margin:0!important;
+}
+
+.scene-inspector{
+  order:3!important;
+  position:relative!important;
+  z-index:1!important;
+  margin:0!important;
+  clear:both!important;
+}
+
+/* No legacy Advanced tabs in the visible Toolbox. */
+.legacy-advanced-detail,
+.legacy-advanced-detail[hidden]{
+  display:none!important;
+}
+
+/* Toolbox detail modal: always open over the viewport you're currently on. */
+body.toolbox-detail-open{
+  overflow:hidden!important;
+}
+body.toolbox-detail-open > .desktop-text-detail-overlay{
+  display:flex!important;
+  position:fixed!important;
+  inset:0!important;
+  width:100vw!important;
+  height:100dvh!important;
+  z-index:30000!important;
+  padding:20px!important;
+  margin:0!important;
+  align-items:center!important;
+  justify-content:center!important;
+  background:rgba(20,21,22,.28)!important;
+  backdrop-filter:blur(7px)!important;
+  -webkit-backdrop-filter:blur(7px)!important;
+}
+body.toolbox-detail-open > .desktop-text-detail-overlay > .desktop-text-detail-modal{
+  position:relative!important;
+  inset:auto!important;
+  margin:0!important;
+  width:min(760px,calc(100vw - 40px))!important;
+  max-width:760px!important;
+  height:auto!important;
+  max-height:calc(100dvh - 40px)!important;
+  overflow:hidden!important;
+}
+body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-body{
+  min-height:0!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain!important;
+}
+
+/* Correctly named project-wide storage. */
+.toolbox-extras-body{
+  display:grid!important;
+  gap:10px!important;
+}
+.toolbox-global-slot{
+  padding:12px!important;
+  border:1px solid #ded9ce!important;
+  border-radius:16px!important;
+  background:#fff!important;
+}
+.toolbox-global-slot > h3{
+  margin:0 0 8px!important;
+  font-size:12px!important;
+  color:#777168!important;
+}
+.toolbox-global-slot .advanced-policy,
+.toolbox-global-slot .advanced-work-ending,
+.toolbox-global-slot .advanced-work-meta{
+  margin:0!important;
+  width:100%!important;
+}
+.toolbox-global-slot details > summary{
+  min-height:46px!important;
+  display:flex!important;
+  align-items:center!important;
+  padding:10px 12px!important;
+  border:1px solid #dedbd4!important;
+  border-radius:12px!important;
+  background:#faf9f6!important;
+  font-weight:800!important;
+}
+
+/* Scene list and AUTO feel like one timing instrument. */
+.scene-rail + .auto-timing-editor{
+  border-top-left-radius:16px!important;
+  border-top-right-radius:16px!important;
+}
+.advanced-layout > .auto-timing-editor + .scene-inspector{
+  margin-top:0!important;
+}
+
+@media(max-width:760px){
+  .advanced-layout{
+    gap:10px!important;
+  }
+
+  /* Fix the v1 overlap between the horizontal Scene deck and text editor. */
+  .scene-rail{
+    margin-bottom:0!important;
+    overflow:hidden!important;
+  }
+  .scene-list{
+    padding-bottom:10px!important;
+  }
+  .advanced-layout > .auto-timing-editor{
+    margin:0!important;
+    border-radius:18px!important;
+  }
+  .scene-inspector{
+    margin-top:0!important;
+    padding-top:12px!important;
+  }
+
+  /* AUTO timing is immediately under Scene deck and easy to thumb-control. */
+  .auto-timing-editor{
+    padding:13px!important;
+  }
+  .auto-timing-controls{
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:8px!important;
+  }
+  .auto-timing-controls label{
+    grid-column:1 / -1!important;
+    grid-row:1!important;
+    min-height:54px!important;
+  }
+  .auto-timing-controls button{
+    min-height:44px!important;
+  }
+
+  /* Toolbox detail uses the full iPhone viewport, no PC-position dependency. */
+  body.toolbox-detail-open > .desktop-text-detail-overlay{
+    padding:0!important;
+    align-items:stretch!important;
+    background:#f7f8fa!important;
+  }
+  body.toolbox-detail-open > .desktop-text-detail-overlay > .desktop-text-detail-modal{
+    width:100vw!important;
+    max-width:none!important;
+    height:100dvh!important;
+    max-height:none!important;
+    border-radius:0!important;
+  }
+  body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-head{
+    padding-top:calc(14px + env(safe-area-inset-top))!important;
+  }
+
+  .toolbox-global-slot{
+    padding:9px!important;
+  }
+}
+
+
+/* ==========================================================
+   道具箱 v3 — desktop cockpit width hardening
+   Old centered-Advanced rules were still constraining children.
+   ========================================================== */
+
+.advanced-screen .advanced-layout{
+  width:min(1440px,calc(100vw - 64px))!important;
+  max-width:1440px!important;
+  min-width:0!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+  justify-content:flex-start!important;
+  gap:12px!important;
+}
+
+.advanced-screen .advanced-layout > .scene-rail,
+.advanced-screen .advanced-layout > .auto-timing-editor,
+.advanced-screen .advanced-layout > .scene-inspector{
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  align-self:stretch!important;
+  box-sizing:border-box!important;
+}
+
+.advanced-screen .scene-rail{
+  position:relative!important;
+  top:auto!important;
+  max-height:none!important;
+}
+
+.advanced-screen .scene-list{
+  width:100%!important;
+  max-width:none!important;
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+}
+
+.advanced-screen .scene-list-item{
+  flex:0 0 168px!important;
+  width:168px!important;
+  min-width:168px!important;
+}
+
+.advanced-screen .auto-timing-editor{
+  margin:0!important;
+  display:block!important;
+}
+
+.advanced-screen .auto-timing-head{
+  width:100%!important;
+}
+
+.advanced-screen .auto-timing-controls{
+  width:100%!important;
+  grid-template-columns:120px 120px minmax(220px,1fr) 120px 120px!important;
+}
+
+.advanced-screen .scene-inspector{
+  overflow:visible!important;
+}
+
+/* PC: body + subtext become one wide editing deck. */
+@media(min-width:900px){
+  .advanced-screen .scene-inspector{
+    display:grid!important;
+    grid-template-columns:minmax(0,1.55fr) minmax(320px,.75fr)!important;
+    gap:12px!important;
+    align-items:start!important;
+  }
+
+  .advanced-screen .scene-inspector-head{
+    grid-column:1 / -1!important;
+  }
+
+  .advanced-screen .scene-inspector > .adv-field{
+    margin:0!important;
+    height:100%!important;
+  }
+
+  .advanced-screen .scene-inspector > .adv-field:first-of-type{
+    grid-column:1!important;
+  }
+
+  .advanced-screen .scene-inspector > .subtext-field{
+    grid-column:2!important;
+  }
+
+  .advanced-screen #sceneTextInput{
+    min-height:260px!important;
+  }
+
+  .advanced-screen #sceneSubTextInput{
+    min-height:260px!important;
+  }
+
+  .advanced-screen .toolbox-detail-grid,
+  .advanced-screen .toolbox-scene-actions{
+    grid-column:1 / -1!important;
+  }
+
+  .advanced-screen .toolbox-detail-grid{
+    margin-top:2px!important;
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:12px!important;
+  }
+
+  .advanced-screen .toolbox-detail-card{
+    min-height:168px!important;
+  }
+
+  .advanced-screen .toolbox-extras{
+    width:min(1440px,calc(100vw - 64px))!important;
+    max-width:1440px!important;
+    margin-left:auto!important;
+    margin-right:auto!important;
+  }
+
+  .advanced-screen .toolbox-title{
+    max-width:1440px!important;
+    margin-bottom:20px!important;
+  }
+}
+
+/* Medium desktop should still feel like a cockpit, not a phone column. */
+@media(min-width:900px) and (max-width:1199px){
+  .advanced-screen .advanced-layout,
+  .advanced-screen .toolbox-extras{
+    width:calc(100vw - 40px)!important;
+  }
+
+  .advanced-screen .scene-list-item{
+    flex-basis:150px!important;
+    width:150px!important;
+    min-width:150px!important;
+  }
+
+  .advanced-screen .auto-timing-controls{
+    grid-template-columns:92px 92px minmax(170px,1fr) 92px 92px!important;
+  }
+}
+
+/* iPhone/tablet keep the stacked Toolbox structure from v2. */
+@media(max-width:899px){
+  .advanced-screen .advanced-layout{
+    width:100%!important;
+    max-width:none!important;
+    gap:10px!important;
+  }
+
+  .advanced-screen .scene-list-item{
+    flex:0 0 128px!important;
+    width:128px!important;
+    min-width:128px!important;
+  }
+
+  .advanced-screen .auto-timing-controls{
+    grid-template-columns:1fr 1fr!important;
+  }
+
+  .advanced-screen .scene-inspector{
+    display:block!important;
+  }
+
+  .advanced-screen .scene-inspector > .adv-field{
+    margin:0 0 12px!important;
+  }
+
+  .advanced-screen #sceneTextInput{
+    min-height:150px!important;
+  }
+
+  .advanced-screen #sceneSubTextInput{
+    min-height:88px!important;
+  }
+
+  .advanced-screen .toolbox-extras{
+    width:100%!important;
+    max-width:none!important;
+  }
+}
+
+/* Ultra-wide: don't let controls look miniature in a huge empty page. */
+@media(min-width:1700px){
+  .advanced-screen .advanced-layout,
+  .advanced-screen .toolbox-extras{
+    width:min(1500px,calc(100vw - 96px))!important;
+    max-width:1500px!important;
+  }
+
+  .advanced-screen .toolbox-title{
+    max-width:1500px!important;
+  }
+
+  .advanced-screen .scene-list-item{
+    flex-basis:180px!important;
+    width:180px!important;
+    min-width:180px!important;
+  }
+
+  .advanced-screen .scene-inspector{
+    font-size:1rem!important;
+  }
+}
