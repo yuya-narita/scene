@@ -2037,7 +2037,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.16-format-v1';
+  ScenePlayerCore.VERSION = '1.12.14-public.16-studio-up-parity';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 

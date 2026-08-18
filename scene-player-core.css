@@ -893,24 +893,18 @@
   transition-duration:var(--sp-bg-transition-duration,700ms)!important;
 }
 
-/* Disappear motion is explicit in Format.
-   IMPORTANT: Scene article transform belongs to the layout engine.
-   Motion is applied to the text content so "stay" keeps its exact landing position.
-   Studio parity: "up" is intentionally subtle. */
+/* Disappear motion parity with the current Studio preview.
+   UP intentionally uses the same Scene-level transform as Studio.
+   STAY remains separate so it never resets the landed Scene position. */
 .sp-scene.is-disappearing.is-disappear-up{
   opacity:0!important;
-  filter:blur(1.5px)!important;
-}
-.sp-scene.is-disappearing.is-disappear-up .sp-text,
-.sp-scene.is-disappearing.is-disappear-up .sp-subtext{
-  transform:translate3d(0,-8px,0)!important;
-  transition:transform var(--sp-disappear-fade,700ms) ease!important;
+  transform:translateY(-4px)!important;
+  filter:blur(2px)!important;
+  transition:opacity var(--sp-disappear-fade,700ms) ease,
+             transform var(--sp-disappear-fade,700ms) ease,
+             filter var(--sp-disappear-fade,700ms) ease!important;
 }
 .sp-scene.is-disappearing.is-disappear-stay{
   opacity:0!important;
   filter:none!important;
-}
-.sp-scene.is-disappearing.is-disappear-stay .sp-text,
-.sp-scene.is-disappearing.is-disappear-stay .sp-subtext{
-  transform:none!important;
 }
