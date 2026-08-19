@@ -4,7 +4,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
 let lastStats=null;
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
@@ -71,7 +71,35 @@ async function cleanupOrphans(){
     await loadStats();
   }
 }
-async function loadDashboard(){await Promise.all([loadStats(),loadReports()]);}
+function formatRate(done,views){
+  const v=Number(views||0);
+  if(!v)return '–';
+  return `${((Number(done||0)/v)*100).toFixed(1)}%`;
+}
+function renderPopularWorks(rows){
+  if(!els.popularWorks)return;
+  if(!rows.length){els.popularWorks.innerHTML='<div class="empty">まだ閲覧データはありません。</div>';return;}
+  els.popularWorks.innerHTML=rows.map((w,i)=>`<div class="popular-work-row">
+    <span class="rank">${i+1}</span>
+    <div class="popular-work-main"><strong>${escapeHtml(w.title||'無題')}</strong><code>${escapeHtml(w.workId||'')}</code></div>
+    <div class="popular-metrics"><span><b>${Number(w.views||0).toLocaleString('ja-JP')}</b><small>閲覧</small></span><span><b>${Number(w.completions||0).toLocaleString('ja-JP')}</b><small>読了</small></span><span><b>${escapeHtml(formatRate(w.completions,w.views))}</b><small>読了率</small></span><span><b>${Number(w.sceneAdvances||0).toLocaleString('ja-JP')}</b><small>Scene</small></span></div>
+  </div>`).join('');
+}
+async function loadAnalytics(){
+  if(els.popularWorks)els.popularWorks.innerHTML='<div class="empty">読み込み中…</div>';
+  try{
+    const d=await api('/admin/analytics?days=7');
+    const t=d.today||{};
+    els.todayViews.textContent=Number(t.views||0).toLocaleString('ja-JP');
+    els.todayCompletions.textContent=Number(t.completions||0).toLocaleString('ja-JP');
+    els.todaySceneAdvances.textContent=Number(t.sceneAdvances||0).toLocaleString('ja-JP');
+    els.todayCompletionRate.textContent=formatRate(t.completions,t.views);
+    renderPopularWorks(d.popularWorks||[]);
+  }catch(e){
+    if(els.popularWorks)els.popularWorks.innerHTML=`<div class="empty">閲覧情報を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
+  }
+}
+async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadAnalytics()]);}
 
 async function loadReports(){const status=els.filter.value;els.list.innerHTML='<div class="empty">読み込み中…</div>';try{const [shown,open]=await Promise.all([api(`/admin/reports?status=${encodeURIComponent(status)}`),api('/admin/reports?status=open')]);els.openCount.textContent=open.count;els.shownCount.textContent=shown.count;renderReports(shown.reports);}catch(e){els.list.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}

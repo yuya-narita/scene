@@ -54,6 +54,42 @@
   const source = () => requested || DEFAULT_SCENE;
   const storageKey = () => `scene-public-progress:${source()}`;
 
+  // v0.3.64 — anonymous, work-level analytics.
+  // One small R2 session record is overwritten as reading progresses, so
+  // Scene taps do not create one object per tap. No account / personal ID is used.
+  const analyticsSessionId = crypto.randomUUID().replaceAll('-', '').slice(0, 24);
+  let analyticsSceneAdvances = 0;
+  let analyticsCompleted = false;
+  let analyticsViewSent = false;
+
+  function analyticsEndpoint(){
+    try{
+      const u=new URL(source(),location.href);
+      return (u.pathname.includes('/work/')?u.origin:'https://scene-studio-api.a-hako.workers.dev') + '/analytics';
+    }catch{
+      return 'https://scene-studio-api.a-hako.workers.dev/analytics';
+    }
+  }
+
+  function sendAnalytics(event, extra={}){
+    const workId=currentWorkId();
+    if(!workId)return;
+    const payload={
+      event, workId, sessionId:analyticsSessionId,
+      title:String(documentData?.title||'').slice(0,200),
+      sceneCount:Array.isArray(documentData?.scenes)?documentData.scenes.length:0,
+      sceneAdvances:analyticsSceneAdvances,
+      completed:analyticsCompleted,
+      ...extra
+    };
+    try{
+      fetch(analyticsEndpoint(),{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload), keepalive:true, cache:'no-store'
+      }).catch(()=>{});
+    }catch(_){}
+  }
+
   function safeProgress() {
     const n = Number(localStorage.getItem(storageKey()));
     return Number.isInteger(n) && n > 0 && documentData?.scenes?.[n] ? n : 0;
@@ -306,6 +342,10 @@
     ScenePlayerCore.validate(doc);
     documentData = doc;
     applyDocumentMeta(doc);
+    if(!analyticsViewSent && currentWorkId()){
+      analyticsViewSent=true;
+      sendAnalytics('view');
+    }
 
     intro.hidden = false;
     host.hidden = true;
@@ -356,6 +396,10 @@
     if (Number.isInteger(index) && index > 0) {
       localStorage.setItem(storageKey(), String(index));
     }
+    if(e.detail?.direction==='next'){
+      analyticsSceneAdvances += 1;
+      sendAnalytics('progress',{index});
+    }
 
     // Core disables Previous on Scene 1 / when author history is disabled.
     // In Public Player this control is not Previous: it is the always-available cover exit.
@@ -367,6 +411,10 @@
 
   function onEnd() {
     localStorage.removeItem(storageKey());
+    if(!analyticsCompleted){
+      analyticsCompleted=true;
+      sendAnalytics('complete',{index:Array.isArray(documentData?.scenes)?documentData.scenes.length-1:0});
+    }
 
     // Keep player/audio alive underneath the ending screen.
     // This preserves BGM/Ambient as the work's afterglow unless the Scene itself
