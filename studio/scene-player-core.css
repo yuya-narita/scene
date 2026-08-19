@@ -111,6 +111,15 @@
   transform:translateY(13px);
   filter:blur(2px)!important;
 }
+/* Entry motion can be decoupled from the inner text effect.
+   `still` means the Scene is born at its final reading position; blur/fade/typewriter
+   can still run on .sp-text without the Scene travelling down from the stage origin. */
+.sp-scene.entering[data-entry-motion="still"]{
+  opacity:0!important;
+  transform:var(--sp-entry-still-transform,translate3d(0,0,0))!important;
+  filter:none!important;
+  transition:none!important;
+}
 .sp-scene.sp-layout-leaving{
   opacity:0!important;
   filter:blur(2px)!important;
@@ -1315,3 +1324,100 @@
   overflow-wrap:normal!important;
   word-break:normal!important;
 }
+
+
+/* Display View Modes — restored from the pre-Format Syntax Frontier player.
+   presentation.view is a whole-stage semantic preset, not merely a font hint. */
+.sp-core[data-view="console"],
+.sp-core[data-view="system"],
+.sp-core[data-view="warning"],
+.sp-core[data-view="void"]{
+  transition:background .38s ease,color .38s ease;
+}
+.sp-core[data-view="console"],
+.sp-core[data-view="system"]{
+  --sp-bg:#020204;
+  --sp-text:#d9d5e5;
+  --sp-sub:#827c91;
+  --sp-line:rgba(123,101,210,.24);
+  --sp-panel:rgba(2,2,4,.9);
+  background:#020204;
+}
+.sp-core[data-view="system"]{
+  --sp-text:#79e7ff;
+  --sp-sub:rgba(121,231,255,.62);
+  --sp-line:rgba(121,231,255,.24);
+}
+.sp-core[data-view="warning"]{
+  --sp-bg:#14030a;
+  --sp-text:#ff738b;
+  --sp-sub:rgba(255,115,139,.62);
+  --sp-line:rgba(255,115,139,.25);
+  --sp-panel:rgba(20,3,10,.9);
+  background:radial-gradient(circle at 50% 38%,#310d1b 0,#14030a 42%,#060306 78%);
+}
+.sp-core[data-view="void"]{
+  --sp-bg:#000;
+  --sp-text:#f4f1fb;
+  --sp-sub:rgba(244,241,251,.42);
+  --sp-line:rgba(255,255,255,.08);
+  --sp-panel:rgba(0,0,0,.92);
+  background:#000;
+}
+
+/* Console/System deliberately leave the authored world and enter a terminal layer. */
+.sp-core[data-view="console"] .sp-background,
+.sp-core[data-view="system"] .sp-background,
+.sp-core[data-view="void"] .sp-background{opacity:0!important}
+.sp-core[data-view="warning"] .sp-background{opacity:.10!important;filter:saturate(.35) contrast(1.15)}
+.sp-core[data-view="console"] .sp-veil,
+.sp-core[data-view="system"] .sp-veil,
+.sp-core[data-view="void"] .sp-veil{background:transparent!important}
+.sp-core[data-view="warning"] .sp-veil{background:rgba(20,0,7,.78)!important}
+
+.sp-scene[data-view="console"] .sp-text,
+.sp-scene[data-view="system"] .sp-text{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  text-align:left!important;
+  letter-spacing:.08em!important;
+  line-height:1.8!important;
+  border-left:1px solid #7b65d2;
+  padding-left:18px;
+  color:#d9d5e5;
+  text-shadow:0 0 18px rgba(123,101,210,.14);
+}
+.sp-scene[data-view="system"] .sp-text{
+  color:#79e7ff;
+  border-left-color:rgba(121,231,255,.72);
+  text-shadow:0 0 16px rgba(121,231,255,.18);
+  font-weight:600;
+}
+.sp-scene[data-view="console"] .sp-subtext,
+.sp-scene[data-view="system"] .sp-subtext{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  text-align:left!important;
+  padding-left:19px;
+}
+.sp-scene[data-view="warning"] .sp-text{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  color:#ff738b;
+  text-transform:uppercase;
+  letter-spacing:.14em!important;
+  font-weight:750;
+  text-shadow:0 0 20px rgba(255,60,96,.20);
+}
+.sp-scene[data-view="warning"] .sp-subtext{color:rgba(255,150,168,.72)}
+.sp-scene[data-view="void"] .sp-text{
+  color:#f4f1fb;
+  text-align:center!important;
+  letter-spacing:.12em!important;
+}
+.sp-scene[data-view="void"] .sp-subtext{text-align:center!important;color:rgba(244,241,251,.42)}
+
+
+/* v0.3.47 — authored cover font in Studio Live Editor / Player Core */
+.sp-cover-title,
+.sp-cover-subtitle,
+.sp-cover-author,
+.sp-cover-episode,
+.sp-cover-episode-title{font-family:var(--sp-cover-font,var(--sp-font-serif))!important}

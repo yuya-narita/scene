@@ -39,6 +39,7 @@
   const coverQuickEpisode=$('#coverQuickEpisode');
   const coverQuickEpisodeTitle=$('#coverQuickEpisodeTitle');
   const coverQuickDescription=$('#coverQuickDescription');
+  const coverQuickFont=$('#coverQuickFont');
   const coverQuickLogo=$('#coverQuickLogo');
   const coverQuickLogoClear=$('#coverQuickLogoClear');
   const coverQuickImage=$('#coverQuickImage');
@@ -59,6 +60,7 @@
   const endingQuickCenterFields=$('#endingQuickCenterFields');
   const endingQuickSlotFields=$('#endingQuickSlotFields');
   const endingQuickCenterText=$('#endingQuickCenterText');
+  const endingQuickFont=$('#endingQuickFont');
   const endingQuickKicker=$('#endingQuickKicker');
   const endingQuickLabel=$('#endingQuickLabel');
   const endingQuickUrl=$('#endingQuickUrl');
@@ -72,6 +74,8 @@
   let coverImageFileName = '';
   let coverLogoUrl = '';
   let coverLogoFileName = '';
+  let coverFontFamily = 'serif';
+  let endingFontFamily = 'serif';
   const bodyInput = $('#bodyInput');
   const charCount = $('#charCount');
   const densitySelect = $('#densitySelect');
@@ -146,6 +150,8 @@
     ['.subtext-field > span','scene.subtext'],['#sceneSubTextInput','scene.subtext.ph','placeholder'],
     ['#sceneTypeSelect','scene.type','aria-label'],['#sceneTypeSelect option[value="text"]','scene.type.text'],['#sceneTypeSelect option[value="dialogue"]','scene.type.dialogue'],['#sceneTypeSelect option[value="sound"]','scene.type.sound'],
     ['#sceneDisplaySelect option[value="stack"]','scene.display.stack'],['#sceneDisplaySelect option[value="solo"]','scene.display.solo'],
+    ['#sceneViewSelect option[value="world"]','scene.view.world'],['#sceneViewSelect option[value="console"]','scene.view.console'],['#sceneViewSelect option[value="system"]','scene.view.system'],['#sceneViewSelect option[value="warning"]','scene.view.warning'],['#sceneViewSelect option[value="void"]','scene.view.void'],
+    ['#sceneEntryMotionSelect option[value="flow"]','scene.entry.flow'],['#sceneEntryMotionSelect option[value="still"]','scene.entry.still'],
     ['#sceneEffectSelect option[value="auto"]','effect.auto'],['#sceneEffectSelect option[value="fade"]','effect.fade'],['#sceneEffectSelect option[value="pop"]','effect.pop'],['#sceneEffectSelect option[value="blur"]','effect.blur'],
     ['#sceneEffectSelect option[value="whisper"]','effect.whisper'],['#sceneEffectSelect option[value="loud"]','effect.loud'],['#sceneEffectSelect option[value="pulse"]','effect.pulse'],['#sceneEffectSelect option[value="shake"]','effect.shake'],['#sceneEffectSelect option[value="tilt"]','effect.tilt'],['#sceneEffectSelect option[value="slow"]','effect.slow'],['#sceneEffectSelect option[value="none"]','effect.none'],
     ['#sceneSizeSelect option[value="auto"]','size.auto'],['#sceneSizeSelect option[value="small"]','size.small'],['#sceneSizeSelect option[value="normal"]','size.normal'],['#sceneSizeSelect option[value="large"]','size.large'],['#sceneSizeSelect option[value="xl"]','size.xl'],
@@ -223,6 +229,8 @@
       if(!sel||!head)return;
       if(sel.id==='sceneTypeSelect')head.textContent=t('scene.type');
       if(sel.id==='sceneDisplaySelect')head.textContent=t('scene.display');
+      if(sel.id==='sceneViewSelect')head.textContent=t('scene.view');
+      if(sel.id==='sceneEntryMotionSelect')head.textContent=t('scene.entryMotion');
       if(sel.id==='sceneEffectSelect')head.textContent=t('scene.effect');
       if(sel.id==='sceneSizeSelect')head.textContent=t('scene.size');
       if(sel.id==='sceneFontSelect')head.textContent=t('scene.font');
@@ -453,6 +461,8 @@
     if(densitySelect)densitySelect.value='normal';
     coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';
     coverLogoUrl=map.get(row.cover?.logoUrl)||row.cover?.logoUrl||row.document?.cover?.logo?.src||'';coverLogoFileName=row.cover?.logoName||row.document?.cover?.logo?._editorFileName||'';
+    coverFontFamily=['serif','sans','mono'].includes(workingDocument?.cover?.fontFamily)?workingDocument.cover.fontFamily:'serif';
+    endingFontFamily=['serif','sans','mono'].includes(workingDocument?.ending?.fontFamily)?workingDocument.ending.fontFamily:'serif';
     if(endingLabelInput)endingLabelInput.value=row.ending?.label||workingDocument?.ending?.label||'';
     endingLinkInputs.forEach((pair,index)=>{const pos=index===0?'left':'right';const links=row.ending?.links||workingDocument?.ending?.links||[];const hasPositions=links.some(x=>x?.position==='left'||x?.position==='right');const item=hasPositions?(links.find(x=>x?.position===pos)||{}):(links[index]||{});if(pair.kicker)pair.kicker.value=item.kicker||'';if(pair.label)pair.label.value=item.label||'';if(pair.url)pair.url.value=item.url||'';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateProtectedResplitPreview();
@@ -887,6 +897,7 @@
   function endingFromEasy(){
     return {
       label:String(endingLabelInput?.value||'').trim(),
+      fontFamily:endingFontFamily,
       coverButton:{kicker:'COVER',label:t('ending.cover')},
       links:endingLinkInputs.map((row,index)=>({position:index===0?'left':'right',kicker:String(row.kicker?.value||'').trim(),label:String(row.label?.value||'').trim(),url:String(row.url?.value||'').trim()})).filter(x=>x.label&&x.url)
     };
@@ -896,6 +907,8 @@
       const endingText=String(endingLabelInput?.value||'').trim()||'つづく';
       endingPreviewLabel.textContent=endingText;
       endingPreviewLabel.classList.toggle('has-authored-break',/\r?\n/.test(endingText));
+      const families={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
+      endingPreviewLabel.style.setProperty('font-family',families[endingFontFamily]||families.serif,'important');
     }
     endingPreviewLinks.forEach((button,index)=>{
       const row=endingLinkInputs[index];
@@ -959,10 +972,22 @@
     if(!rows.length){const e=document.createElement('small');e.className='ending-quick-empty';e.textContent='まだありません';endingQuickRecentList.appendChild(e);return;}
     rows.slice(0,6).forEach(item=>{const b=document.createElement('button');b.type='button';b.className='ending-quick-recent-chip';b.textContent=item.type==='center'?item.text:(item.kicker?`${item.kicker} / ${item.label}`:item.label);b.onclick=()=>{if(item.type==='center'){endingQuickCenterText.value=item.text||'';}else{endingQuickKicker.value=item.kicker||'';endingQuickLabel.value=item.label||'';endingQuickUrl.value=item.url||'';}syncQuickEndingToMain();};endingQuickRecentList.appendChild(b);});
   }
+  function refreshLivePlayerDocumentChrome(){
+    if(!player||!workingDocument)return;
+    const doc=getDocumentForPlayback();
+    if(typeof player.refreshDocumentChrome==='function'){
+      player.refreshDocumentChrome({document:doc});
+    }else{
+      // Older cached Core fallback: keep its document current. Reopening cover/end
+      // will then pick up the authored shell typography.
+      player.document=doc;
+    }
+  }
+
   function syncQuickEndingToMain(){
-    if(endingQuickTarget==='center'){if(endingLabelInput)endingLabelInput.value=endingQuickCenterText?.value||'';}
+    if(endingQuickTarget==='center'){if(endingLabelInput)endingLabelInput.value=endingQuickCenterText?.value||'';if(endingQuickFont)endingFontFamily=endingQuickFont.value||'serif';}
     else{const row=endingLinkInputs[endingQuickTarget==='left'?0:1];if(row?.kicker)row.kicker.value=endingQuickKicker?.value||'';if(row?.label)row.label.value=endingQuickLabel?.value||'';if(row?.url)row.url.value=endingQuickUrl?.value||'';}
-    updateEndingPreview();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(100);
+    updateEndingPreview();syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();syncEasyPublishButton();scheduleDraftSave(100);
   }
   function openEndingQuickEditor(target){
     if(!endingQuickDialog)return;
@@ -971,6 +996,7 @@
     endingQuickTitle.textContent=center?'中央の文':target==='left'?'左ボタン':'右ボタン';
     if(center){
       endingQuickCenterText.value=endingLabelInput?.value||'';
+      if(endingQuickFont)endingQuickFont.value=endingFontFamily;
       renderEndingRecents('center');
     }else{
       const row=endingLinkInputs[target==='left'?0:1];
@@ -1030,6 +1056,8 @@
       bg.style.backgroundPosition='center center';
     }
     coverPreview.classList.toggle('has-image',Boolean(coverImageUrl));
+    const coverFamilies={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
+    coverPreview.style.setProperty('--cover-author-font',coverFamilies[coverFontFamily]||coverFamilies.serif);
     const empty=coverPreview.querySelector('.cover-preview-empty');
     if(empty)empty.hidden=Boolean(coverImageUrl);
     if(coverImageClear)coverImageClear.hidden=!coverImageUrl;
@@ -1116,7 +1144,7 @@
         typography:{ fontFamily:selectedFont }
       },
       player:{ navigation:{ allowPrevious:true } },
-      ...((coverImageUrl||coverLogoUrl) ? {cover:{...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{})}} : {}),
+      cover:{...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily},
       ending:endingFromEasy(),
       scenes
     };
@@ -1535,9 +1563,7 @@
     workingDocument.appearance.typography ||= {};
     workingDocument.appearance.typography.fontFamily=selectedFont;
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
-    if(coverImageUrl||coverLogoUrl){
-      workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{})};
-    } else delete workingDocument.cover;
+    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -2025,6 +2051,8 @@
     if(descriptionInput)descriptionInput.value=doc.metadata?.description||'';
     coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';
     coverLogoUrl=doc.cover?.logo?.src||'';coverLogoFileName=doc.cover?.logo?._editorFileName||'';
+    coverFontFamily=['serif','sans','mono'].includes(doc.cover?.fontFamily)?doc.cover.fontFamily:'serif';
+    endingFontFamily=['serif','sans','mono'].includes(doc.ending?.fontFamily)?doc.ending.fontFamily:'serif';
     if(endingLabelInput)endingLabelInput.value=doc.ending?.label||doc.ending?.title||'';
     endingLinkInputs.forEach((pair,index)=>{const item=doc.ending?.links?.[index]||{};if(pair.label)pair.label.value=item.label||item.title||'';if(pair.url)pair.url.value=item.url||item.href||'';});
     bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n');
@@ -3055,7 +3083,7 @@
     scene.text=$('#sceneTextInput').value;
     const sub=$('#sceneSubTextInput').value; if(sub)scene.subText=sub; else delete scene.subText;
     scene.type=$('#sceneTypeSelect').value;
-    const p=ensurePresentation(scene); p.display=$('#sceneDisplaySelect').value;
+    const p=ensurePresentation(scene); p.display=$('#sceneDisplaySelect').value; p.view=$('#sceneViewSelect')?.value || 'world'; p.entryMotion=$('#sceneEntryMotionSelect')?.value || 'flow';
     const advancedEffect=$('#sceneEffectSelect').value;
     if(advancedEffect==='typewriter'){
       p.effect='none';
@@ -3095,6 +3123,8 @@
     $('#sceneTextInput').value=scene.text || ''; $('#sceneSubTextInput').value=scene.subText || '';
     requestAnimationFrame(autoGrowSubText);
     $('#sceneTypeSelect').value=scene.type || 'text'; $('#sceneDisplaySelect').value=scene.presentation?.display || 'stack';
+    if($('#sceneViewSelect')) $('#sceneViewSelect').value=scene.presentation?.view || 'world';
+    if($('#sceneEntryMotionSelect')) $('#sceneEntryMotionSelect').value=scene.presentation?.entryMotion || 'flow';
     $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto';
     const sceneColor=scene.presentation?.text?.color || '';
     $('#sceneColorSelect').value=!sceneColor?'auto':(sceneColor.toLowerCase()==='#ffffff'||sceneColor.toLowerCase()==='white'?'white':(sceneColor.toLowerCase()==='#000000'||sceneColor.toLowerCase()==='black'?'black':'custom'));
@@ -3582,8 +3612,10 @@
     if(episodeInput)episodeInput.value=coverQuickEpisode?.value||'';
     if(episodeTitleInput)episodeTitleInput.value=coverQuickEpisodeTitle?.value||'';
     if(descriptionInput)descriptionInput.value=coverQuickDescription?.value||'';
+    if(coverQuickFont)coverFontFamily=coverQuickFont.value||'serif';
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
+    refreshLivePlayerDocumentChrome();
     syncEasyPublishButton();
     rememberWorkIdentity();
     scheduleDraftSave(250);
@@ -3596,6 +3628,7 @@
     coverQuickEpisode.value=episodeInput?.value||'';
     coverQuickEpisodeTitle.value=episodeTitleInput?.value||'';
     if(coverQuickDescription)coverQuickDescription.value=descriptionInput?.value||'';
+    if(coverQuickFont)coverQuickFont.value=coverFontFamily;
     coverQuickImageClear.hidden=!coverImageUrl;
     coverQuickLogoClear.hidden=!coverLogoUrl;
     coverQuickDialog.hidden=false;
@@ -3624,6 +3657,7 @@
   coverPreviewAuthor?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('author');});
   coverPreviewSubtitle?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('subtitle');});
   [coverQuickWorkTitle,coverQuickAuthor,coverQuickSubtitle,coverQuickEpisode,coverQuickEpisodeTitle,coverQuickDescription].forEach(el=>el?.addEventListener('input',syncCoverQuickToMain));
+  coverQuickFont?.addEventListener('change',syncCoverQuickToMain);
   coverQuickLogo?.addEventListener('click',()=>coverLogoInput?.click());
   coverQuickLogoClear?.addEventListener('click',()=>coverLogoClear?.click());
   coverQuickImage?.addEventListener('click',()=>coverImageInput?.click());
@@ -3654,6 +3688,7 @@
   [endingQuickKicker,endingQuickLabel,endingQuickUrl].forEach(el=>el?.addEventListener('input',syncQuickEndingToMain));
   endingQuickClear?.addEventListener('click',()=>{endingQuickKicker.value='';endingQuickLabel.value='';endingQuickUrl.value='';syncQuickEndingToMain();});
   endingQuickDone?.addEventListener('click',()=>closeEndingQuickEditor(true));
+  endingQuickFont?.addEventListener('change',()=>{endingFontFamily=endingQuickFont.value||'serif';syncQuickEndingToMain();});
   endingQuickClose?.addEventListener('click',()=>closeEndingQuickEditor(true));
   endingQuickDialog?.addEventListener('click',(event)=>{if(event.target===endingQuickDialog)closeEndingQuickEditor(true);});
   endingLabelInput?.addEventListener('change',()=>saveEndingRecent({type:'center',text:endingLabelInput.value}));
@@ -3924,7 +3959,11 @@
       }
     }
   }
-  ['sceneTextInput','sceneSubTextInput','sceneTypeSelect','sceneDisplaySelect','sceneEffectSelect','sceneSizeSelect','sceneFontSelect','sceneLanguageSelect','sceneLanguageCustomInput'].forEach(id=>$('#'+id).addEventListener('change',()=>{syncAdvancedFieldsToScene();renderSceneList();}));
+  ['sceneTextInput','sceneSubTextInput','sceneTypeSelect','sceneDisplaySelect','sceneViewSelect','sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect','sceneFontSelect','sceneLanguageSelect','sceneLanguageCustomInput'].forEach(id=>$('#'+id)?.addEventListener('change',()=>{
+    syncAdvancedFieldsToScene();
+    renderSceneList();
+    if(liveEditEnabled && player && !playerScreen?.hidden) refreshLivePlayer({preserveSheet:true});
+  }));
 
   ['sceneBackgroundMode','sceneBackgroundTransition','sceneBackgroundFit','sceneBackgroundMotion','sceneBackgroundDim','sceneBgmAction','sceneBgmLoop','sceneBgmVolume','sceneBgmFadeIn','sceneBgmFadeOut','sceneBgmVolumeChange','sceneBgmVolumeFade','sceneBgmStopFade','sceneAmbientAction','sceneAmbientLoop','sceneAmbientVolume','sceneAmbientFadeIn','sceneAmbientFadeOut','sceneAmbientVolumeChange','sceneAmbientVolumeFade','sceneAmbientStopFade','sceneSeEnabled','sceneSeVolume','sceneSeFadeIn'].forEach(id=>{
     const el=$('#'+id); if(!el)return; const evt=el.type==='range'?'input':'change'; el.addEventListener(evt,()=>{updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
@@ -4337,24 +4376,32 @@ function startInlineTextEdit(){
     const target=Math.max(0,Math.min(Number(index)||0,workingDocument.scenes.length-1));
     const wasOpen=liveEditSheet&&!liveEditSheet.hidden;
     const doc=getDocumentForPlayback();
-    // Live Edit must never return to the cover just because author data changed.
-    // Swap the playback document in place and ask the existing Player to render
-    // the same authoring surface without emitting a navigation event.
-    player._clearAutoTimer?.();
-    player._resetPresentationRuntime?.();
-    player._resetBackgroundRuntime?.();
-    player.document=doc;
-    player.index=target;
-    player.maxVisitedIndex=Math.max(player.maxVisitedIndex,target);
-    player.ended=false;
+
+    // Keep Studio preview on the exact same renderer/API as the Public Player.
+    // refreshCurrent() redraws the current Scene immediately and replays its
+    // presentation while preserving the already-playing BGM/Ambient transport.
     player.options.historyAllScenes=true;
     const allowPrevious=doc.player?.navigation?.allowPrevious!==false;
     player.options.allowPrevious=allowPrevious;
     if(player.els?.prev)player.els.prev.hidden=!allowPrevious;
     player.host?.classList.toggle('sp-no-previous',!allowPrevious);
     if(player.els?.total)player.els.total.textContent=String(doc.scenes.length);
-    player._audioRenderMode='restore';
-    player._render?.();
+
+    if(typeof player.refreshCurrent==='function'){
+      player.refreshCurrent({document:doc,index:target,preserveAudio:true});
+    }else{
+      // Compatibility fallback for an older cached Core.
+      player._clearAutoTimer?.();
+      player._resetPresentationRuntime?.();
+      player._resetBackgroundRuntime?.();
+      player.document=doc;
+      player.index=target;
+      player.maxVisitedIndex=Math.max(player.maxVisitedIndex,target);
+      player.ended=false;
+      player._audioRenderMode='restore';
+      player._render?.();
+    }
+
     ensureLiveEditEmptyTarget();
     if(player.els?.cover)player.els.cover.hidden=true;
     player.host?.classList.remove('sp-cover-open');
@@ -4790,30 +4837,10 @@ function startInlineTextEdit(){
     if(!scene)return;
     ensureDesktopEffectVisibleDefaults(scene);
 
-    // Re-render the authoring preview at the same Scene first so all current
-    // presentation values are reflected.
+    // PlayerCore.refreshCurrent() performs a fresh real-Player render, so the
+    // selected entrance/position/view change is visible immediately. No second
+    // manual animation trigger is needed (and avoiding it prevents double-play).
     refreshLivePlayer({preserveSheet:false});
-
-    requestAnimationFrame(()=>{
-      const id=String(scene.id||'');
-      const nodes=[...playerHost.querySelectorAll('.sp-scene')];
-      const article=nodes.find(node=>String(node.dataset.sceneId||'')===id)
-        || nodes.find(node=>node.classList.contains('is-active'))
-        || nodes[nodes.length-1];
-      if(!article)return;
-
-      // Entrance effects are intentionally one-shot in the Player. In Studio,
-      // changing an effect means the author explicitly wants to preview it again.
-      article.classList.remove('sp-fx-play');
-      delete article.dataset.fxPlayed;
-      void article.offsetWidth;
-
-      if(scene.presentation?.typing?.enabled){
-        // A fresh render already restarted the typing engine.
-        return;
-      }
-      player._playEntranceEffectOnce?.(article);
-    });
   }
 
 function openDesktopEffectDetail(){
@@ -4825,6 +4852,8 @@ function openDesktopEffectDetail(){
     const before={
       effect:p.effect,
       display:p.display,
+      view:p.view,
+      entryMotion:p.entryMotion,
       typing:clone(p.typing||null),
       effectTiming:clone(p.effectTiming||null),
       disappear:clone(p.disappear||null)
@@ -4834,6 +4863,8 @@ function openDesktopEffectDetail(){
     const restore=()=>{
       if(before.effect===undefined)delete p.effect;else p.effect=before.effect;
       if(before.display===undefined)delete p.display;else p.display=before.display;
+      if(before.view===undefined)delete p.view;else p.view=before.view;
+      if(before.entryMotion===undefined)delete p.entryMotion;else p.entryMotion=before.entryMotion;
       if(before.typing===null)delete p.typing;else p.typing=clone(before.typing);
       if(before.effectTiming===null)delete p.effectTiming;else p.effectTiming=clone(before.effectTiming);
       if(before.disappear===null)delete p.disappear;else p.disappear=clone(before.disappear);
@@ -4865,7 +4896,12 @@ function openDesktopEffectDetail(){
       }
       apply();closeDesktopEffectDetail();openDesktopEffectDetail();
     });
-    basicGrid.append(effectSelect,desktopDetailSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;apply();}));
+    basicGrid.append(
+      effectSelect,
+      desktopDetailSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;apply();}),
+      desktopDetailSelect('表示モード',[['world','通常'],['console','コンソール'],['system','システム'],['warning','警告'],['void','虚無']],p.view||'world',v=>{p.view=v;apply();}),
+      desktopDetailSelect('位置の動き',[['flow','流れて着地'],['still','その場']],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();})
+    );
 
     const timing=section('タイミング');
     const timingGrid=two(timing);
@@ -4920,6 +4956,8 @@ function openDesktopEffectDetail(){
       delete p.typing;
       p.effect='auto';
       p.display='stack';
+      p.view='world';
+      p.entryMotion='flow';
       scheduleDraftSave(40);
       refreshLivePlayer({preserveSheet:false});
       if(refreshMobileLiveDetail('effect'))return;
@@ -5898,7 +5936,9 @@ function openDesktopTextDetail(){
         replayCurrentDesktopEffect();
         renderDesktopLivePanel();
       }),
-      desktopMakeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;refresh();})
+      desktopMakeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;refresh();}),
+      desktopMakeSelect('表示モード',[['world','通常'],['console','コンソール'],['system','システム'],['warning','警告'],['void','虚無']],p.view||'world',v=>{p.view=v;refresh();}),
+      desktopMakeSelect('位置の動き',[['flow','流れて着地'],['still','その場']],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();})
     );
     effectCard.append(effectGrid,desktopDetail('演出の詳細設定','effect'));
 
@@ -6193,7 +6233,8 @@ function openDesktopTextDetail(){
           }
           scheduleDraftSave(80);refreshLivePlayer();
         }),
-        makeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();})
+        makeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
+        makeSelect('位置の動き',[['flow','流れて着地'],['still','その場']],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();})
       );
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='演出の詳細設定';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
       liveEditSheetBody.append(grid,detail);return;
