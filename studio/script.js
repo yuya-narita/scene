@@ -5988,7 +5988,7 @@ function openDesktopTextDetail(){
     if(colorValue==='custom'){
       const color=document.createElement('input');color.type='color';color.className='desktop-live-color';color.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';
       color.addEventListener('input',()=>{p.text.color=color.value;scheduleDraftSave(60);refreshLivePlayer({preserveSheet:false});});
-      color.addEventListener('change',()=>{rememberTextColor(color.value);renderDesktopLivePanel();});
+      color.addEventListener('change',()=>{rememberTextColor(color.value);});
       textCard.append(color);
     }
     textCard.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}));
@@ -6277,7 +6277,7 @@ function openDesktopTextDetail(){
         const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';
         const value=document.createElement('code');value.textContent=picker.value.toUpperCase();
         picker.addEventListener('input',()=>{p.text.color=picker.value;value.textContent=picker.value.toUpperCase();rerender();});
-        picker.addEventListener('change',()=>{rememberTextColor(picker.value);renderLiveEditSheet('text');});
+        picker.addEventListener('change',()=>{rememberTextColor(picker.value);});
         custom.append(label,picker,value);
         liveEditSheetBody.append(grid,custom);
       }else{
