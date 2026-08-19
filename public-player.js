@@ -89,6 +89,8 @@
   }
   function applyCover(doc){
     const src=coverSource(doc);
+    const families={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
+    intro?.style.setProperty('--public-cover-font',families[doc?.cover?.fontFamily]||families.serif);
     if(introCover){
       introCover.style.backgroundImage=src?`url("${src.replace(/"/g,'\\"')}")`:'none';
       introCover.style.backgroundSize=doc?.cover?.fit==='contain'?'contain':'cover';
@@ -113,6 +115,8 @@
   }
 
   function buildEnding(doc) {
+    const families={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
+    endingLabel.style.fontFamily=families[doc?.ending?.fontFamily]||families.serif;
     const label=String(doc.ending?.label ?? doc.ending?.title ?? '').trim(); endingLabel.textContent=label; endingLabel.hidden=!label;
     const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
     const hasPositions=links.some(x=>x?.position==='left'||x?.position==='right'); const left=hasPositions?(links.find(x=>x?.position==='left')||null):(links[0]||null); const right=hasPositions?(links.find(x=>x?.position==='right')||null):(links.length>1?links[1]:null);

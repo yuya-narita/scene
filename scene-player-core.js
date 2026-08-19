@@ -1074,7 +1074,7 @@
       this.els.title.textContent = doc.title || '';
       this.els.author.textContent = doc.author || '';
       this.els.total.textContent = String(doc.scenes.length);
-      this.els.endingTitle.textContent = doc.title || this._uiText('player.ending.title');
+      this.refreshDocumentChrome({document:doc});
       this.els.ending.hidden = true;
       this.backgroundState = null;
       this.backgroundLayerIndex = 0;
@@ -1084,6 +1084,26 @@
       this._render();
       emit(this.host, 'sceneplayer:load', { document: doc, index: this.index });
       return this;
+    }
+
+    refreshDocumentChrome(options = {}) {
+      const nextDocument = options.document || null;
+      if (nextDocument) this.document = nextDocument;
+      const doc = this.document;
+      if (!doc) return false;
+      if (this.els.title) this.els.title.textContent = doc.title || '';
+      if (this.els.author) this.els.author.textContent = doc.author || '';
+      const families = {
+        serif: 'var(--sp-font-serif)',
+        sans: 'var(--sp-font-sans)',
+        mono: 'var(--sp-font-mono)'
+      };
+      const authoredEndingLabel = String(doc.ending?.label || doc.ending?.title || '').trim();
+      if (this.els.endingTitle) {
+        this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
+        this.els.endingTitle.style.fontFamily = families[doc.ending?.fontFamily] || families.serif;
+      }
+      return true;
     }
 
     get currentScene() {
@@ -1292,6 +1312,37 @@
 
       this.els.historyList.querySelectorAll('.is-nearest').forEach((el) => el.classList.remove('is-nearest'));
       if (nearest) nearest.classList.add('is-nearest');
+    }
+
+    refreshCurrent(options = {}) {
+      const nextDocument = options.document || null;
+      if (nextDocument) this.document = nextDocument;
+      if (!this.document || !this.document.scenes?.length) return false;
+      this.refreshDocumentChrome();
+
+      let nextIndex = options.index == null ? this.index : Number(options.index);
+      if (!Number.isFinite(nextIndex)) nextIndex = this.index;
+      nextIndex = Math.max(0, Math.min(nextIndex, this.document.scenes.length - 1));
+
+      this._clearAutoTimer();
+      this._resetPresentationRuntime();
+      this._resetBackgroundRuntime();
+      this.ended = false;
+      if (this.els?.ending) this.els.ending.hidden = true;
+      this.index = nextIndex;
+      this.maxVisitedIndex = Math.max(this.maxVisitedIndex, nextIndex);
+
+      // Live-authoring refresh: redraw the current Scene through the real Player
+      // renderer and replay its presentation immediately, but do not seek/restart
+      // persistent audio unless the caller explicitly asks for it.
+      this._audioRenderMode = options.preserveAudio === false ? 'restore' : 'preview';
+      this._render();
+      emit(this.host, 'sceneplayer:refresh', {
+        index: this.index,
+        scene: this.currentScene,
+        preserveAudio: options.preserveAudio !== false
+      });
+      return true;
     }
 
     goToVisited(sceneOrIndex) {
@@ -1551,14 +1602,56 @@
 
       this._updateSceneAges(nodes, visible);
 
-      // IMPORTANT: faithful Jump/Shino ordering.
+      const incomingStill = newestCreated?.dataset.entryMotion === 'still';
+
+      // `still` is intentionally a different layout path, not a variation of the
+      // Jump/Shino landing. The incoming Scene is pinned to its FINAL coordinate
+      // before it is ever revealed; only older Scene nodes are allowed to travel.
+      // This avoids even a single painted frame at the stage origin.
+      if (incomingStill) {
+        const final = this._measureScenePositions(nodes, visible, 0);
+        const newestMetric = final[final.length - 1];
+        if (newestMetric) {
+          newestCreated.style.transition = 'none';
+          newestCreated.style.transform = `translate3d(0,${Math.round(newestMetric.y)}px,0)`;
+          newestCreated.style.opacity = '0';
+          newestCreated.style.filter = 'none';
+        }
+
+        requestAnimationFrame(() => {
+          // Previous text may still move into its new stack position. The incoming
+          // still Scene is deliberately excluded from every geometry transition.
+          final.forEach(({node,y}) => {
+            if (node === newestCreated) return;
+            node.style.transform = `translate3d(0,${Math.round(y)}px,0)`;
+          });
+
+          if (newestCreated) {
+            newestCreated.classList.remove('entering');
+            newestCreated.classList.add('is-visible');
+            // Restore normal opacity without introducing container movement.
+            newestCreated.style.opacity = '';
+            newestCreated.style.filter = '';
+            this._activatePresentation(active, newestCreated);
+          }
+          // Keep transition disabled for this entrance frame, then hand future
+          // stack movement back to the normal Scene transition rules.
+          requestAnimationFrame(() => {
+            if (newestCreated) newestCreated.style.transition = '';
+          });
+          this._scheduleAuto();
+        });
+        return;
+      }
+
+      // IMPORTANT: faithful Jump/Shino ordering for normal `flow` entrances.
       // Leave the new Scene in its CSS entering position for one painted frame.
       // Without this frame, the incoming Scene has almost no travel distance.
       requestAnimationFrame(() => {
         this.host.classList.remove('sp-whitespace-exhale');
         this.host.classList.add('sp-whitespace-inhale');
 
-        // Phase 1: move all visible Scenes toward the expanded whitespace layout.
+        // Phase 1: move existing Scenes toward the expanded whitespace layout.
         this._positionSceneNodes(nodes, visible, this.options.whitespaceBreath);
 
         // Jump/Shino wait two frames before retargeting to the final geometry.
@@ -1602,8 +1695,18 @@
         // Restore/load/history jumps should be immediate and deterministic.
         this.els.scenes.innerHTML = '';
         const nodes = [];
+        const stillNodes = [];
         visible.forEach(({ scene, index }) => {
           const node = this._sceneNode(scene, index === this.index, this.index - index);
+          // Solo/load/history uses this deterministic render path instead of the
+          // forward-stack entrance path. A `still` Scene must therefore suppress
+          // the Scene-container transition here as well, otherwise the browser
+          // interpolates from the base translateY entrance to its measured Y and
+          // it visibly drops in even though entryMotion is `still`.
+          if (node.dataset.entryMotion === 'still') {
+            node.style.transition = 'none';
+            stillNodes.push(node);
+          }
           node.classList.add('is-visible');
           this.els.scenes.appendChild(node);
           nodes.push(node);
@@ -1612,6 +1715,13 @@
         this._positionSceneNodes(nodes, visible, 0);
         const newest = nodes[nodes.length - 1];
         if (newest) this._activatePresentation(active, newest);
+        if (stillNodes.length) {
+          // Keep transition suppression through the first painted frame. Restore it
+          // afterwards so later stack reflow/history movement behaves normally.
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            stillNodes.forEach((node) => { node.style.transition = ''; });
+          }));
+        }
       }
 
       this.els.current.textContent = String(this.index + 1);
@@ -1623,7 +1733,9 @@
 
       this._applyCorePresentation(active);
       this._applyBackgroundForIndex(this.index);
-      if (this._audioRenderMode === 'advance') {
+      if (this._audioRenderMode === 'preview') {
+        // Authoring refresh leaves the currently playing transport untouched.
+      } else if (this._audioRenderMode === 'advance') {
         this._applySceneAudio(active, false);
       } else {
         const mode = this._audioRenderMode;
@@ -1871,6 +1983,8 @@
       if (fxDelay > 0) article.style.setProperty('--sp-effect-delay', `${fxDelay}s`);
       if (requestedEffect === 'auto') article.dataset.autoTransition = 'true';
       if (presentation.view && /^[a-zA-Z0-9_-]+$/.test(presentation.view)) article.dataset.view = presentation.view;
+      const entryMotion = presentation.entryMotion === 'still' ? 'still' : 'flow';
+      article.dataset.entryMotion = entryMotion;
       article.dataset.fit = this._resolveAutoFit(scene, presentation.text || {});
 
       if (typeof scene.text === 'string' && scene.text.length) {
@@ -2099,7 +2213,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.14-public.18-background-suspend';
+  ScenePlayerCore.VERSION = '1.12.15-public.19-entry-motion';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 

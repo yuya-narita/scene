@@ -642,3 +642,11 @@ body{
   font-variant-numeric:lining-nums proportional-nums!important;
   font-feature-settings:"lnum" 1,"pnum" 1!important;
 }
+
+
+/* v0.3.40 — authored cover font */
+.public-intro .public-title,
+.public-intro .public-description,
+.public-intro .public-author,
+.public-intro .public-episode,
+.public-intro .public-episode-title{font-family:var(--public-cover-font)!important}

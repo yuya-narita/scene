@@ -383,6 +383,12 @@
             }
           },
           "additionalProperties": true
+        },
+        "entryMotion": {
+          "enum": [
+            "flow",
+            "still"
+          ]
         }
       },
       "additionalProperties": true
@@ -652,6 +658,13 @@
         },
         "logo": {
           "$ref": "#/$defs/coverLogo"
+        },
+        "fontFamily": {
+          "enum": [
+            "serif",
+            "sans",
+            "mono"
+          ]
         }
       },
       "additionalProperties": true
@@ -702,6 +715,13 @@
             "$ref": "#/$defs/endingLink"
           },
           "maxItems": 2
+        },
+        "fontFamily": {
+          "enum": [
+            "serif",
+            "sans",
+            "mono"
+          ]
         }
       },
       "additionalProperties": true
