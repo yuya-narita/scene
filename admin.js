@@ -3,14 +3,51 @@
 const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
 function toast(text){const n=document.createElement('div');n.className='toast';n.textContent=text;document.body.append(n);setTimeout(()=>n.remove(),1800);}
 const reasonLabel=r=>({copyright:'第三者の著作物・権利侵害',unauthorized:'自分の作品が無断で使用されている',other:'その他'})[r]||r;
 const subjectLabel=s=>({text:'本文・文章',cover:'表紙',image:'背景・画像',audio:'BGM・SE・音声',other:'その他'})[s]||s||'不明';
-async function connect(){token=els.token.value.trim();if(!token){els.loginStatus.textContent='ADMIN_TOKENを入力してください。';return;}els.connect.disabled=true;try{await api('/admin/reports?status=open');sessionStorage.setItem('ahako-admin-token',token);els.loginStatus.textContent='';els.login.hidden=true;els.content.hidden=false;els.refresh.disabled=false;await loadReports();}catch(e){els.loginStatus.textContent=e.status===401?'ADMIN_TOKENが違います。':`接続できません: ${e.message}`;}finally{els.connect.disabled=false;}}
+async function connect(){token=els.token.value.trim();if(!token){els.loginStatus.textContent='ADMIN_TOKENを入力してください。';return;}els.connect.disabled=true;try{await api('/admin/stats');sessionStorage.setItem('ahako-admin-token',token);els.loginStatus.textContent='';els.login.hidden=true;els.content.hidden=false;els.refresh.disabled=false;await loadDashboard();}catch(e){els.loginStatus.textContent=e.status===401?'ADMIN_TOKENが違います。':`接続できません: ${e.message}`;}finally{els.connect.disabled=false;}}
+
+function formatBytes(bytes){
+  const n=Number(bytes||0);
+  if(n<1024)return `${n} B`;
+  const units=['KB','MB','GB','TB'];
+  let v=n/1024,i=0;
+  while(v>=1024&&i<units.length-1){v/=1024;i++;}
+  const digits=v>=100?0:v>=10?1:2;
+  return `${v.toFixed(digits)} ${units[i]}`;
+}
+async function loadStats(){
+  if(els.heavyWorks)els.heavyWorks.innerHTML='<div class="empty">読み込み中…</div>';
+  try{
+    const d=await api('/admin/stats');
+    els.workCount.textContent=Number(d.works?.total||0).toLocaleString('ja-JP');
+    els.publishedCount.textContent=Number(d.works?.published||0).toLocaleString('ja-JP');
+    els.suspendedCount.textContent=Number(d.works?.suspended||0).toLocaleString('ja-JP');
+    els.r2Usage.textContent=formatBytes(d.storage?.totalBytes||0);
+    els.assetCount.textContent=Number(d.storage?.assetCount||0).toLocaleString('ja-JP');
+    els.openCount.textContent=Number(d.reports?.open||0).toLocaleString('ja-JP');
+    renderWorkSizes(d.heaviestWorks||[]);
+  }catch(e){
+    if(els.heavyWorks)els.heavyWorks.innerHTML=`<div class="empty">容量情報を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
+  }
+}
+function renderWorkSizes(rows){
+  if(!els.heavyWorks)return;
+  if(!rows.length){els.heavyWorks.innerHTML='<div class="empty">公開作品はありません。</div>';return;}
+  els.heavyWorks.innerHTML=rows.map((w,i)=>`<div class="work-size-row">
+    <span class="rank">${i+1}</span>
+    <div class="work-size-main"><strong>${escapeHtml(w.title||'無題')}</strong><code>${escapeHtml(w.id)}</code></div>
+    <div class="work-size-meta"><span class="state ${w.state==='suspended'?'stopped':''}">${w.state==='suspended'?'停止中':'公開中'}</span><small>${Number(w.assetCount||0)}素材</small></div>
+    <strong class="bytes">${escapeHtml(formatBytes(w.approxBytes||0))}</strong>
+  </div>`).join('');
+}
+async function loadDashboard(){await Promise.all([loadStats(),loadReports()]);}
+
 async function loadReports(){const status=els.filter.value;els.list.innerHTML='<div class="empty">読み込み中…</div>';try{const [shown,open]=await Promise.all([api(`/admin/reports?status=${encodeURIComponent(status)}`),api('/admin/reports?status=open')]);els.openCount.textContent=open.count;els.shownCount.textContent=shown.count;renderReports(shown.reports);}catch(e){els.list.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function renderReports(rows){
@@ -64,11 +101,11 @@ els.list.addEventListener('click',async e=>{
     }else{
       const done=await moderate(workId,action);if(done===false)return;
     }
-    await loadReports();
+    await loadDashboard();
   }catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 async function inspect(){const id=els.workId.value.trim();if(!id)return;els.direct.textContent='確認中…';try{const d=await api(`/admin/work/${encodeURIComponent(id)}`);els.direct.innerHTML=`<div class="report-card"><div class="meta"><span>workId</span><code>${escapeHtml(d.id)}</code><span>状態</span><strong>${escapeHtml(d.state)}</strong><span>素材</span><span>${Number(d.assets?.length||0)}件</span></div><div class="actions"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">作品を見る</a><button data-direct="suspend" class="stop">一時停止</button><button data-direct="republish">再公開</button><button data-direct="delete" class="delete">完全削除</button></div></div>`;}catch(e){els.direct.textContent=`確認できません: ${e.message}`;}}
-els.direct.addEventListener('click',async e=>{const b=e.target.closest('button[data-direct]');if(!b)return;const id=els.workId.value.trim();b.disabled=true;try{await moderate(id,b.dataset.direct);await inspect();await loadReports();}catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}});
-els.connect.addEventListener('click',connect);els.token.addEventListener('keydown',e=>{if(e.key==='Enter')connect();});els.refresh.addEventListener('click',loadReports);els.filter.addEventListener('change',loadReports);els.inspect.addEventListener('click',inspect);
+els.direct.addEventListener('click',async e=>{const b=e.target.closest('button[data-direct]');if(!b)return;const id=els.workId.value.trim();b.disabled=true;try{await moderate(id,b.dataset.direct);await inspect();await loadDashboard();}catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}});
+els.connect.addEventListener('click',connect);els.token.addEventListener('keydown',e=>{if(e.key==='Enter')connect();});els.refresh.addEventListener('click',loadDashboard);els.filter.addEventListener('change',loadReports);els.inspect.addEventListener('click',inspect);
 if(token)connect();
 })();
