@@ -770,3 +770,15 @@ body{
 .public-report-confirm{border-top:1px solid #e5e7eb;padding-top:11px!important;align-items:flex-start!important;font-size:12px!important}
 .public-report-confirm input{width:18px!important;height:18px!important;min-width:18px!important;margin:0!important;accent-color:#17191d}
 @media(max-width:600px){.public-report-dialog{max-width:calc(100vw - 28px);max-height:calc(100dvh - 28px)}.public-report-card{max-height:calc(100dvh - 28px);padding-bottom:calc(20px + env(safe-area-inset-bottom))!important}.public-report-field input,.public-report-field select,.public-report-field textarea{font-size:16px}}
+
+
+/* v0.3.61 — iPhone report close touch isolation */
+.public-report-close{
+  touch-action:manipulation!important;
+  pointer-events:auto!important;
+  user-select:none!important;
+  -webkit-user-select:none!important;
+  isolation:isolate!important;
+  z-index:20!important;
+}
+.public-report-card{isolation:isolate}

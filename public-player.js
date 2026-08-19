@@ -226,6 +226,34 @@
     };
     reportDialog.querySelectorAll('input[name="reportReason"]').forEach(el=>el.addEventListener('change',updateRequirements));
     reportButton.addEventListener('click',()=>{sync();reportDialog.showModal();});
+
+    // v0.3.61 — iOS Safari: the close control must never participate in
+    // form validation, and the terminating touch must not fall through to
+    // a field underneath the dialog after it closes.
+    const reportClose=document.getElementById('publicReportClose');
+    const closeReportDialog=(event)=>{
+      if(event){
+        event.preventDefault();
+        event.stopPropagation();
+        if(typeof event.stopImmediatePropagation==='function')event.stopImmediatePropagation();
+      }
+      const active=document.activeElement;
+      if(active&&typeof active.blur==='function')active.blur();
+      if(reportDialog.open)reportDialog.close('cancel');
+    };
+    if(reportClose){
+      reportClose.addEventListener('pointerdown',(event)=>{
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      reportClose.addEventListener('touchstart',(event)=>{
+        event.preventDefault();
+        event.stopPropagation();
+      },{passive:false});
+      reportClose.addEventListener('touchend',closeReportDialog,{passive:false});
+      reportClose.addEventListener('click',closeReportDialog);
+    }
+
     reportCopy?.addEventListener('click',async()=>{
       const workId=currentWorkId();
       const claimReason=reason();
