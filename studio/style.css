@@ -7953,3 +7953,17 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   box-sizing:border-box!important;
   justify-self:stretch!important;
 }
+
+/* v0.3.50 text color memory palette */
+.text-color-palette{display:grid;gap:7px;padding-top:2px}
+.text-color-palette-row{display:grid;grid-template-columns:34px minmax(0,1fr);align-items:center;gap:7px}
+.text-color-palette-label{font:700 10px/1.2 system-ui;color:#757b83}
+.text-color-palette-chips{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}
+.text-color-palette-chips small{font:600 10px/1.2 system-ui;color:#a0a5ab}
+.text-color-chip{width:22px;height:22px;flex:0 0 22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #cbd0d5;cursor:pointer;padding:0}
+.text-color-chip.is-current{box-shadow:0 0 0 2px #17191d,0 0 0 4px #fff}
+.text-color-pin{justify-self:start;min-height:27px;border:1px solid #d8dce0;border-radius:999px;background:#fff;padding:4px 9px;font:700 10px system-ui;color:#4d535a}
+.text-color-pin:disabled{opacity:.35}
+.text-color-palette-actions{display:flex;padding-left:41px}
+.desktop-text-detail-section>.text-color-palette{margin-top:10px;padding:10px;border:1px solid #e0e3e6;border-radius:10px;background:#fafbfc}
+.live-edit-sheet-body>.text-color-palette{margin-top:10px;padding:10px;border:1px solid #e0e3e6;border-radius:12px;background:#fff}

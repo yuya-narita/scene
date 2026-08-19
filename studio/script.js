@@ -856,6 +856,76 @@
 
   const AUTHOR_HISTORY_KEY='scene-studio-author-history-v1';
   const WORK_IDENTITY_KEY='scene-studio-work-identity-v1';
+  const TEXT_COLOR_RECENTS_KEY='scene-studio-text-color-recents-v1';
+  const TEXT_COLOR_PINS_KEY='scene-studio-text-color-pins-v1';
+
+  function normalizeTextColor(value){
+    const v=String(value||'').trim().toUpperCase();
+    if(/^#[0-9A-F]{6}$/.test(v))return v;
+    if(/^#[0-9A-F]{3}$/.test(v))return '#'+v.slice(1).split('').map(ch=>ch+ch).join('');
+    return '';
+  }
+  function readStoredTextColors(key){
+    try{
+      const raw=JSON.parse(localStorage.getItem(key)||'[]');
+      return Array.isArray(raw)?raw.map(normalizeTextColor).filter(Boolean):[];
+    }catch(_){return [];}
+  }
+  function documentTextColors(){
+    const out=[];
+    (workingDocument?.scenes||[]).forEach(scene=>{
+      const c=normalizeTextColor(scene?.presentation?.text?.color);
+      if(c && !['#FFFFFF','#000000'].includes(c) && !out.includes(c))out.push(c);
+    });
+    return out;
+  }
+  function readRecentTextColors(){
+    const out=[];
+    [...readStoredTextColors(TEXT_COLOR_RECENTS_KEY),...documentTextColors()].forEach(c=>{
+      if(c && !['#FFFFFF','#000000'].includes(c) && !out.includes(c))out.push(c);
+    });
+    return out.slice(0,8);
+  }
+  function readPinnedTextColors(){return readStoredTextColors(TEXT_COLOR_PINS_KEY).slice(0,8);}
+  function rememberTextColor(value){
+    const c=normalizeTextColor(value);if(!c || ['#FFFFFF','#000000'].includes(c))return;
+    const next=[c,...readStoredTextColors(TEXT_COLOR_RECENTS_KEY).filter(x=>x!==c)].slice(0,8);
+    localStorage.setItem(TEXT_COLOR_RECENTS_KEY,JSON.stringify(next));
+  }
+  function togglePinnedTextColor(value){
+    const c=normalizeTextColor(value);if(!c)return false;
+    const pins=readPinnedTextColors();
+    const exists=pins.includes(c);
+    const next=exists?pins.filter(x=>x!==c):[c,...pins.filter(x=>x!==c)].slice(0,8);
+    localStorage.setItem(TEXT_COLOR_PINS_KEY,JSON.stringify(next));
+    return !exists;
+  }
+  function makeTextColorPalette(currentColor,onApply){
+    const wrap=document.createElement('div');wrap.className='text-color-palette';
+    const makeRow=(label,colors)=>{
+      const row=document.createElement('div');row.className='text-color-palette-row';
+      const name=document.createElement('span');name.className='text-color-palette-label';name.textContent=label;row.appendChild(name);
+      const chips=document.createElement('div');chips.className='text-color-palette-chips';
+      if(colors.length){
+        colors.forEach(hex=>{
+          const b=document.createElement('button');b.type='button';b.className='text-color-chip';b.style.backgroundColor=hex;b.title=hex;b.setAttribute('aria-label',`${label} ${hex}`);
+          if(normalizeTextColor(currentColor)===hex)b.classList.add('is-current');
+          b.addEventListener('click',()=>{rememberTextColor(hex);onApply(hex);});chips.appendChild(b);
+        });
+      }else{
+        const empty=document.createElement('small');empty.textContent='まだなし';chips.appendChild(empty);
+      }
+      row.appendChild(chips);return row;
+    };
+    wrap.append(makeRow('最近',readRecentTextColors()),makeRow('固定',readPinnedTextColors()));
+    const actions=document.createElement('div');actions.className='text-color-palette-actions';
+    const pin=document.createElement('button');pin.type='button';pin.className='text-color-pin';
+    const current=normalizeTextColor(currentColor);
+    const pinned=current && readPinnedTextColors().includes(current);
+    pin.textContent=pinned?'★ 固定を外す':'☆ この色を固定';pin.disabled=!current;
+    pin.addEventListener('click',()=>{if(!current)return;togglePinnedTextColor(current);const fresh=makeTextColorPalette(current,onApply);wrap.replaceWith(fresh);});
+    actions.appendChild(pin);wrap.appendChild(actions);return wrap;
+  }
 
   function readAuthorHistory(){
     try{
@@ -5773,7 +5843,8 @@ function openDesktopTextDetail(){
       desktopDetailSelect('文字色',[['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom')),v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;apply();}),
       desktopDetailSelect('文字影',[['auto','おまかせ'],['none','なし'],['soft','弱'],['strong','強']],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
     );
-    const colorRow=document.createElement('label');colorRow.className='desktop-text-detail-color';const colorLabel=document.createElement('span');colorLabel.textContent='任意色';const color=document.createElement('input');color.type='color';color.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';const colorCode=document.createElement('code');colorCode.textContent=color.value.toUpperCase();color.addEventListener('input',()=>{p.text.color=color.value;colorCode.textContent=color.value.toUpperCase();apply();});colorRow.append(colorLabel,color,colorCode);typography.appendChild(colorRow);
+    const colorRow=document.createElement('label');colorRow.className='desktop-text-detail-color';const colorLabel=document.createElement('span');colorLabel.textContent='任意色';const color=document.createElement('input');color.type='color';color.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';const colorCode=document.createElement('code');colorCode.textContent=color.value.toUpperCase();color.addEventListener('input',()=>{p.text.color=color.value;colorCode.textContent=color.value.toUpperCase();apply();});color.addEventListener('change',()=>{rememberTextColor(color.value);});colorRow.append(colorLabel,color,colorCode);typography.appendChild(colorRow);
+    typography.appendChild(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;color.value=hex;colorCode.textContent=hex;apply();closeDesktopTextDetail();openDesktopTextDetail();}));
 
     const layout=section('レイアウト');
     const ranges=two(layout);
@@ -5911,12 +5982,16 @@ function openDesktopTextDetail(){
       desktopMakeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
       desktopMakeSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
       desktopMakeSelect('色',[['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;refresh();}),
-      desktopMakeSelect('影',[['auto','おまかせ'],['none','なし'],['soft','やわらか'],['strong','強く']],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;refresh();})
+      desktopMakeSelect('文字配置',[['auto','Sceneに合わせる'],['left','左'],['center','中央'],['right','右']],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;refresh();})
     );
     textCard.append(textGrid);
     if(colorValue==='custom'){
-      const color=document.createElement('input');color.type='color';color.className='desktop-live-color';color.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';color.addEventListener('input',()=>{p.text.color=color.value;scheduleDraftSave(60);refreshLivePlayer({preserveSheet:false});});textCard.append(color);
+      const color=document.createElement('input');color.type='color';color.className='desktop-live-color';color.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';
+      color.addEventListener('input',()=>{p.text.color=color.value;scheduleDraftSave(60);refreshLivePlayer({preserveSheet:false});});
+      color.addEventListener('change',()=>{rememberTextColor(color.value);renderDesktopLivePanel();});
+      textCard.append(color);
     }
+    textCard.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}));
     textCard.append(desktopDetail('文字の詳細設定','text'));
 
     const effectCard=desktopCard('演出（✦）');
@@ -6194,7 +6269,7 @@ function openDesktopTextDetail(){
         makeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
         makeSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
         colorField,
-        makeSelect('影',[['auto','おまかせ'],['none','なし'],['soft','やわらか'],['strong','強く']],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;rerender();})
+        makeSelect('文字配置',[['auto','Sceneに合わせる'],['left','左'],['center','中央'],['right','右']],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();})
       );
       if(colorValue==='custom'){
         const custom=document.createElement('label');custom.className='live-edit-color-custom';
@@ -6202,11 +6277,13 @@ function openDesktopTextDetail(){
         const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';
         const value=document.createElement('code');value.textContent=picker.value.toUpperCase();
         picker.addEventListener('input',()=>{p.text.color=picker.value;value.textContent=picker.value.toUpperCase();rerender();});
+        picker.addEventListener('change',()=>{rememberTextColor(picker.value);renderLiveEditSheet('text');});
         custom.append(label,picker,value);
         liveEditSheetBody.append(grid,custom);
       }else{
         liveEditSheetBody.append(grid);
       }
+      liveEditSheetBody.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;rerender();renderLiveEditSheet('text');}));
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='文字の詳細設定';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('text');});
       liveEditSheetBody.append(detail);return;
     }
