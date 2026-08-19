@@ -33,6 +33,12 @@
   let documentData = null;
   let shellBound = false;
   let muted = false;
+  const reportButton=document.getElementById('publicReportButton');
+  const reportDialog=document.getElementById('publicReportDialog');
+  const reportWorkId=document.getElementById('publicReportWorkId');
+  const reportUrl=document.getElementById('publicReportUrl');
+  const reportCopy=document.getElementById('publicReportCopy');
+  const reportStatus=document.getElementById('publicReportStatus');
 
   const params = new URLSearchParams(location.search);
   const requested = (params.get('src') || '').trim();
@@ -180,6 +186,29 @@
     applyCover(doc);
     buildEnding(doc);
     continueButton.hidden = safeProgress() <= 0;
+  }
+
+  function currentWorkId(){
+    const src=source();
+    const m=src.match(/\/work\/([^/?#]+)/i);
+    return m?decodeURIComponent(m[1]):'';
+  }
+
+  function bindReportControls(){
+    if(!reportButton||!reportDialog)return;
+    const sync=()=>{
+      const id=currentWorkId()||'不明';
+      if(reportWorkId)reportWorkId.textContent=id;
+      if(reportUrl)reportUrl.textContent=location.href;
+    };
+    reportButton.addEventListener('click',()=>{sync();reportDialog.showModal();});
+    reportCopy?.addEventListener('click',async()=>{
+      const reason=reportDialog.querySelector('input[name="reportReason"]:checked')?.value||'other';
+      const labels={copyright:'著作権・権利侵害',unauthorized:'自分の作品が無断で使用されている',other:'その他'};
+      const text=`あ箱 作品報告\n理由: ${labels[reason]}\nworkId: ${currentWorkId()||'不明'}\nURL: ${location.href}`;
+      try{await navigator.clipboard.writeText(text);if(reportStatus)reportStatus.textContent='報告情報をコピーしました。';}
+      catch(_){if(reportStatus)reportStatus.textContent=text;}
+    });
   }
 
   async function fetchScene() {
@@ -447,4 +476,5 @@
   };
 
   fetchScene().catch(showError);
+  bindReportControls();
 })();

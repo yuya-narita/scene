@@ -62,6 +62,23 @@
     </div>
   </section>
 
+
+  <button id="publicReportButton" class="public-report-trigger" type="button">この作品について報告</button>
+
+  <dialog id="publicReportDialog" class="public-report-dialog">
+    <form method="dialog" class="public-report-card">
+      <button id="publicReportClose" class="public-report-close" value="cancel" type="submit" aria-label="閉じる">×</button>
+      <small>REPORT</small>
+      <h2>この作品について報告</h2>
+      <label><input type="radio" name="reportReason" value="copyright" checked> 著作権・権利侵害</label>
+      <label><input type="radio" name="reportReason" value="unauthorized"> 自分の作品が無断で使用されている</label>
+      <label><input type="radio" name="reportReason" value="other"> その他</label>
+      <div class="public-report-meta"><span>workId</span><code id="publicReportWorkId">-</code><span>URL</span><code id="publicReportUrl">-</code></div>
+      <p id="publicReportStatus" class="public-report-status">報告時にこの作品のIDとURLを一緒に送れます。</p>
+      <button id="publicReportCopy" type="button" class="public-report-copy">報告内容をコピー</button>
+    </form>
+  </dialog>
+
   <script src="./scene-player-core.js"></script>
   <script src="./public-player.js"></script>
 </body>
