@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>あ箱 運営</title>
+  <link rel="stylesheet" href="./admin.css">
+</head>
+<body>
+  <main class="admin-shell">
+    <header class="admin-header">
+      <div><small>AHACO ADMIN</small><h1>運営</h1></div>
+      <button id="refreshButton" type="button" disabled>更新</button>
+    </header>
+
+    <section id="loginPanel" class="panel login-panel">
+      <h2>管理者として接続</h2>
+      <p>Cloudflareに設定した ADMIN_TOKEN を入力します。この端末のこのタブ内だけで保持します。</p>
+      <div class="row">
+        <input id="tokenInput" type="password" autocomplete="off" placeholder="ADMIN_TOKEN">
+        <button id="connectButton" class="primary" type="button">接続</button>
+      </div>
+      <p id="loginStatus" class="status"></p>
+    </section>
+
+    <div id="adminContent" hidden>
+      <section class="summary">
+        <div><small>未対応</small><strong id="openCount">0</strong></div>
+        <div><small>表示</small><strong id="shownCount">0</strong></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head"><div><small>REPORTS</small><h2>報告受信箱</h2></div><select id="reportFilter"><option value="open">未対応</option><option value="resolved">対応済み</option><option value="all">すべて</option></select></div>
+        <div id="reportList" class="report-list"></div>
+      </section>
+
+      <section class="panel">
+        <small>DIRECT CONTROL</small><h2>workIdから直接操作</h2>
+        <div class="row"><input id="workIdInput" type="text" placeholder="workId"><button id="inspectButton" type="button">確認</button></div>
+        <div id="directResult" class="direct-result"></div>
+      </section>
+    </div>
+  </main>
+  <script src="./admin.js"></script>
+</body>
+</html>

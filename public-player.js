@@ -203,11 +203,34 @@
     };
     reportButton.addEventListener('click',()=>{sync();reportDialog.showModal();});
     reportCopy?.addEventListener('click',async()=>{
+      const workId=currentWorkId();
       const reason=reportDialog.querySelector('input[name="reportReason"]:checked')?.value||'other';
-      const labels={copyright:'著作権・権利侵害',unauthorized:'自分の作品が無断で使用されている',other:'その他'};
-      const text=`あ箱 作品報告\n理由: ${labels[reason]}\nworkId: ${currentWorkId()||'不明'}\nURL: ${location.href}`;
-      try{await navigator.clipboard.writeText(text);if(reportStatus)reportStatus.textContent='報告情報をコピーしました。';}
-      catch(_){if(reportStatus)reportStatus.textContent=text;}
+      if(!workId){
+        if(reportStatus)reportStatus.textContent='公開作品IDを取得できませんでした。';
+        return;
+      }
+      const originalText=reportCopy.textContent;
+      reportCopy.disabled=true;
+      reportCopy.textContent='送信中…';
+      if(reportStatus)reportStatus.textContent='運営へ報告を送信しています。';
+      try{
+        const srcUrl=new URL(source(),location.href);
+        const apiBase=srcUrl.pathname.includes('/work/')?srcUrl.origin:'https://scene-studio-api.a-hako.workers.dev';
+        const response=await fetch(`${apiBase}/report`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({workId,reason,url:location.href,sourceUrl:srcUrl.toString()})
+        });
+        const data=await response.json().catch(()=>({}));
+        if(!response.ok||!data.ok)throw new Error(data.error||`HTTP ${response.status}`);
+        if(reportStatus)reportStatus.textContent='報告を受け付けました。運営が確認します。';
+        reportCopy.textContent='報告済み';
+      }catch(error){
+        console.warn('Report submission failed',error);
+        if(reportStatus)reportStatus.textContent='送信できませんでした。時間をおいてもう一度お試しください。';
+        reportCopy.disabled=false;
+        reportCopy.textContent=originalText;
+      }
     });
   }
 
