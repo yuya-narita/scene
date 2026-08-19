@@ -25,24 +25,29 @@ function renderReports(rows){
     reports.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
     const r=reports[0];
     const target=r.url||r.sourceUrl||`${API}/work/${encodeURIComponent(workId)}`;
-    const allResolved=reports.every(x=>x.status==='resolved');
+    const allDeleted=reports.every(x=>x.status==='deleted');
+    const allResolved=!allDeleted&&reports.every(x=>x.status==='resolved');
     const claims=reports.map((x,i)=>{
       const evidence=x.evidenceUrl||'';
       const details=x.details||'';
       const contact=x.contact||'';
       const legacy=!x.subject&&!x.details&&!x.evidenceUrl;
-      return `<div class="claim-item ${x.status==='resolved'?'is-resolved-claim':''}" data-report-id="${escapeHtml(x.id)}">
-        <div class="claim-item-head"><div><strong>${escapeHtml(reasonLabel(x.reason))}</strong><span class="subject-badge">${escapeHtml(subjectLabel(x.subject))}</span>${legacy?'<span class="legacy-badge">旧形式・情報不足</span>':''}${x.status==='resolved'?'<span class="resolved-badge">対応済み</span>':''}</div><time>${escapeHtml(new Date(x.createdAt).toLocaleString('ja-JP'))}</time></div>
+      return `<div class="claim-item ${x.status==='deleted'?'is-deleted-claim':x.status==='resolved'?'is-resolved-claim':''}" data-report-id="${escapeHtml(x.id)}">
+        <div class="claim-item-head"><div><strong>${escapeHtml(reasonLabel(x.reason))}</strong><span class="subject-badge">${escapeHtml(subjectLabel(x.subject))}</span>${legacy?'<span class="legacy-badge">旧形式・情報不足</span>':''}${x.status==='deleted'?'<span class="deleted-badge">作品削除済み</span>':x.status==='resolved'?'<span class="resolved-badge">対応済み</span>':''}</div><time>${escapeHtml(new Date(x.createdAt).toLocaleString('ja-JP'))}</time></div>
         ${details?`<div class="claim-detail"><small>申立て内容</small><p>${escapeHtml(details)}</p></div>`:''}
         <div class="meta claim-meta"><span>原作品</span>${evidence?`<a class="inline-link" href="${escapeHtml(evidence)}" target="_blank" rel="noopener noreferrer">${escapeHtml(evidence)}</a>`:'<em>未提出</em>'}<span>連絡先</span>${contact?`<a class="inline-link" href="mailto:${escapeHtml(contact)}">${escapeHtml(contact)}</a>`:'<em>未提出</em>'}</div>
         ${evidence?`<div class="claim-links"><a class="evidence" href="${escapeHtml(evidence)}" target="_blank" rel="noopener noreferrer">原作品を見る</a></div>`:''}
       </div>`;
     }).join('');
-    return `<article class="report-card work-group ${allResolved?'is-resolved':''}" data-work="${escapeHtml(workId)}">
-      <div class="report-top group-top"><div><h3>workId ${escapeHtml(workId)}</h3>${reports.length>1?`<span class="duplicate-badge">報告 ${reports.length}件</span>`:''}</div><time>最新 ${escapeHtml(new Date(r.createdAt).toLocaleString('ja-JP'))}</time></div>
+    const deletedAt=reports.find(x=>x.workDeletedAt)?.workDeletedAt||'';
+    const actions=allDeleted
+      ? `<div class="actions evidence-actions deleted-actions"><span class="deleted-state">作品削除済み${deletedAt?` · ${escapeHtml(new Date(deletedAt).toLocaleString('ja-JP'))}`:''}</span></div>`
+      : `<div class="actions evidence-actions"><a href="${escapeHtml(target)}" target="_blank" rel="noopener">対象作品を見る</a><button class="stop" data-group-action="suspend">一時停止</button><button data-group-action="republish">再公開</button><button data-group-action="${allResolved?'reopen':'resolve'}">${allResolved?'全件を未対応へ':'全件を対応済み'}</button><button class="delete" data-group-action="delete">完全削除</button></div>`;
+    return `<article class="report-card work-group ${allDeleted?'is-deleted':allResolved?'is-resolved':''}" data-work="${escapeHtml(workId)}">
+      <div class="report-top group-top"><div><h3>workId ${escapeHtml(workId)}</h3>${reports.length>1?`<span class="duplicate-badge">報告 ${reports.length}件</span>`:''}${allDeleted?'<span class="deleted-badge">作品削除済み</span>':''}</div><time>最新 ${escapeHtml(new Date(r.createdAt).toLocaleString('ja-JP'))}</time></div>
       <div class="meta group-meta"><span>対象URL</span><code>${escapeHtml(target)}</code></div>
       <div class="claim-stack">${claims}</div>
-      <div class="actions evidence-actions"><a href="${escapeHtml(target)}" target="_blank" rel="noopener">対象作品を見る</a><button class="stop" data-group-action="suspend">一時停止</button><button data-group-action="republish">再公開</button><button data-group-action="${allResolved?'reopen':'resolve'}">${allResolved?'全件を未対応へ':'全件を対応済み'}</button><button class="delete" data-group-action="delete">完全削除</button></div>
+      ${actions}
     </article>`;
   }).join('');
 }
