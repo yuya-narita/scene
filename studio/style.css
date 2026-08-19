@@ -8046,3 +8046,78 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   background:#6d5be7;
   box-shadow:0 0 0 1px rgba(18,21,25,.55);
 }
+
+/* v0.3.54 — iPhone/mobile text color picker containment + touch ergonomics */
+@media (max-width:640px){
+  .live-edit-color-custom{
+    grid-template-columns:1fr auto;
+    gap:8px 10px;
+    padding:10px 12px 12px;
+    overflow:visible;
+  }
+  .live-edit-color-custom > span:first-child{
+    grid-column:1;
+    grid-row:1;
+  }
+  .live-edit-color-custom > code{
+    grid-column:2;
+    grid-row:1;
+    justify-self:end;
+  }
+  .live-edit-color-custom > .studio-color-picker,
+  .live-edit-color-custom > .studio-color-picker.is-compact{
+    grid-column:1 / -1;
+    grid-row:2;
+    width:100%;
+    min-width:0;
+  }
+  .live-edit-color-custom .studio-color-trigger,
+  .live-edit-color-custom .studio-color-picker.is-compact .studio-color-trigger{
+    width:100%;
+    height:38px;
+  }
+  .live-edit-color-custom .studio-color-popover,
+  .live-edit-color-custom .studio-color-picker.is-compact .studio-color-popover{
+    position:static;
+    width:100%;
+    box-sizing:border-box;
+    margin-top:8px;
+    padding:10px;
+    transform:none;
+    border-radius:14px;
+    box-shadow:none;
+    background:#fff;
+  }
+  .live-edit-color-custom .studio-color-square{
+    width:100%;
+    height:160px;
+    border-radius:10px;
+    touch-action:none;
+  }
+  .live-edit-color-custom .studio-color-hue{
+    height:16px;
+    margin:12px 0 10px;
+    touch-action:pan-x;
+  }
+  .live-edit-color-custom .studio-color-hue::-webkit-slider-runnable-track{height:16px}
+  .live-edit-color-custom .studio-color-hue::-webkit-slider-thumb{
+    width:22px;
+    height:22px;
+    margin-top:-3px;
+  }
+  .live-edit-color-custom .studio-color-meta{
+    grid-template-columns:24px auto 1fr;
+    gap:8px;
+  }
+  .live-edit-color-custom .studio-color-dot{width:24px;height:24px}
+  .live-edit-color-custom .studio-color-meta small{font-size:9px;white-space:nowrap}
+  .live-edit-sheet-body > .text-color-palette{
+    margin-top:0;
+  }
+}
+
+@media (max-width:380px){
+  .live-edit-color-custom .studio-color-square{height:146px}
+  .live-edit-color-custom .studio-color-meta small{font-size:0}
+  .live-edit-color-custom .studio-color-meta small::after{content:'クリックで決定';font-size:9px}
+}
