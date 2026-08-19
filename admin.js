@@ -3,7 +3,8 @@
 const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
+let lastStats=null;
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
@@ -25,12 +26,19 @@ async function loadStats(){
   if(els.heavyWorks)els.heavyWorks.innerHTML='<div class="empty">読み込み中…</div>';
   try{
     const d=await api('/admin/stats');
+    lastStats=d;
     els.workCount.textContent=Number(d.works?.total||0).toLocaleString('ja-JP');
     els.publishedCount.textContent=Number(d.works?.published||0).toLocaleString('ja-JP');
     els.suspendedCount.textContent=Number(d.works?.suspended||0).toLocaleString('ja-JP');
     els.r2Usage.textContent=formatBytes(d.storage?.totalBytes||0);
     els.assetCount.textContent=Number(d.storage?.assetCount||0).toLocaleString('ja-JP');
     els.openCount.textContent=Number(d.reports?.open||0).toLocaleString('ja-JP');
+    const orphanCount=Number(d.storage?.orphanAssetCount||0);
+    const orphanBytes=Number(d.storage?.orphanAssetBytes||0);
+    const recentCount=Number(d.storage?.recentUnreferencedCount||0);
+    if(els.orphanSummary)els.orphanSummary.textContent=orphanCount?`${orphanCount.toLocaleString('ja-JP')}素材 · ${formatBytes(orphanBytes)}`:'0素材';
+    if(els.orphanNote)els.orphanNote.textContent=recentCount?`ほかに公開処理保護中 ${recentCount.toLocaleString('ja-JP')}素材（24時間未満）`:'現存作品から参照されていない古い素材だけが対象です。';
+    if(els.cleanupOrphans){els.cleanupOrphans.disabled=orphanCount===0;els.cleanupOrphans.textContent=orphanCount?'お掃除':'きれい';}
     renderWorkSizes(d.heaviestWorks||[]);
   }catch(e){
     if(els.heavyWorks)els.heavyWorks.innerHTML=`<div class="empty">容量情報を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
@@ -45,6 +53,23 @@ function renderWorkSizes(rows){
     <div class="work-size-meta"><span class="state ${w.state==='suspended'?'stopped':''}">${w.state==='suspended'?'停止中':'公開中'}</span><small>${Number(w.assetCount||0)}素材</small></div>
     <strong class="bytes">${escapeHtml(formatBytes(w.approxBytes||0))}</strong>
   </div>`).join('');
+}
+async function cleanupOrphans(){
+  const count=Number(lastStats?.storage?.orphanAssetCount||0);
+  const bytes=Number(lastStats?.storage?.orphanAssetBytes||0);
+  if(!count){toast('お掃除対象はありません');return;}
+  if(!confirm(`未参照素材 ${count.toLocaleString('ja-JP')}件（${formatBytes(bytes)}）をR2から完全削除します。\n\n現存作品が参照している素材と、アップロードから24時間未満の素材は削除しません。\nこの操作は元に戻せません。`))return;
+  els.cleanupOrphans.disabled=true;
+  els.cleanupOrphans.textContent='掃除中…';
+  try{
+    const d=await api('/admin/orphans/cleanup',{method:'POST'});
+    toast(`${Number(d.deletedCount||0).toLocaleString('ja-JP')}素材・${formatBytes(d.deletedBytes||0)}を削除しました`);
+    if(d.errors?.length)alert(`一部の素材を削除できませんでした（${d.errors.length}件）。安全のため残しています。`);
+    await loadDashboard();
+  }catch(e){
+    alert(`お掃除できませんでした: ${e.message}`);
+    await loadStats();
+  }
 }
 async function loadDashboard(){await Promise.all([loadStats(),loadReports()]);}
 
@@ -106,6 +131,7 @@ els.list.addEventListener('click',async e=>{
 });
 async function inspect(){const id=els.workId.value.trim();if(!id)return;els.direct.textContent='確認中…';try{const d=await api(`/admin/work/${encodeURIComponent(id)}`);els.direct.innerHTML=`<div class="report-card"><div class="meta"><span>workId</span><code>${escapeHtml(d.id)}</code><span>状態</span><strong>${escapeHtml(d.state)}</strong><span>素材</span><span>${Number(d.assets?.length||0)}件</span></div><div class="actions"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">作品を見る</a><button data-direct="suspend" class="stop">一時停止</button><button data-direct="republish">再公開</button><button data-direct="delete" class="delete">完全削除</button></div></div>`;}catch(e){els.direct.textContent=`確認できません: ${e.message}`;}}
 els.direct.addEventListener('click',async e=>{const b=e.target.closest('button[data-direct]');if(!b)return;const id=els.workId.value.trim();b.disabled=true;try{await moderate(id,b.dataset.direct);await inspect();await loadDashboard();}catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}});
+if(els.cleanupOrphans)els.cleanupOrphans.addEventListener('click',cleanupOrphans);
 els.connect.addEventListener('click',connect);els.token.addEventListener('keydown',e=>{if(e.key==='Enter')connect();});els.refresh.addEventListener('click',loadDashboard);els.filter.addEventListener('change',loadReports);els.inspect.addEventListener('click',inspect);
 if(token)connect();
 })();

@@ -34,7 +34,12 @@
       </section>
 
       <section class="panel">
-        <div class="section-head"><div><small>STORAGE</small><h2>容量の大きい作品</h2></div><small class="muted-note">概算・共有素材は各作品に計上</small></div>
+        <div class="section-head"><div><small>STORAGE</small><h2>R2ストレージ</h2></div><small class="muted-note">24時間未満の未参照素材は保護</small></div>
+        <div class="orphan-cleaner">
+          <div class="orphan-copy"><small>未参照素材</small><strong id="orphanSummary">確認中…</strong><span id="orphanNote">現存作品から参照されていない素材を検出します。</span></div>
+          <button id="cleanupOrphansButton" type="button" disabled>お掃除</button>
+        </div>
+        <div class="section-head work-ranking-head"><div><small>WORKS</small><h2>容量の大きい作品</h2></div><small class="muted-note">概算・共有素材は各作品に計上</small></div>
         <div id="heavyWorks" class="work-size-list"><div class="empty">読み込み中…</div></div>
       </section>
 
