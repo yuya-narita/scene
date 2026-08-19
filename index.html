@@ -70,12 +70,40 @@
       <button id="publicReportClose" class="public-report-close" value="cancel" type="submit" aria-label="閉じる">×</button>
       <small>REPORT</small>
       <h2>この作品について報告</h2>
-      <label><input type="radio" name="reportReason" value="copyright" checked> 著作権・権利侵害</label>
-      <label><input type="radio" name="reportReason" value="unauthorized"> 自分の作品が無断で使用されている</label>
-      <label><input type="radio" name="reportReason" value="other"> その他</label>
-      <div class="public-report-meta"><span>workId</span><code id="publicReportWorkId">-</code><span>URL</span><code id="publicReportUrl">-</code></div>
-      <p id="publicReportStatus" class="public-report-status">この作品のIDとURLを運営へ送信します。</p>
-      <button id="publicReportCopy" type="button" class="public-report-copy">運営に報告する</button>
+      <fieldset class="public-report-section">
+        <legend>報告理由</legend>
+        <label><input type="radio" name="reportReason" value="unauthorized" checked> 自分の作品が無断で使用されている</label>
+        <label><input type="radio" name="reportReason" value="copyright"> 第三者の著作物・権利侵害と思われる</label>
+        <label><input type="radio" name="reportReason" value="other"> その他</label>
+      </fieldset>
+      <label class="public-report-field">
+        <span>問題のある箇所 <b>必須</b></span>
+        <select id="publicReportSubject">
+          <option value="text">本文・文章</option>
+          <option value="cover">表紙</option>
+          <option value="image">背景・画像</option>
+          <option value="audio">BGM・SE・音声</option>
+          <option value="other">その他</option>
+        </select>
+      </label>
+      <label class="public-report-field" id="publicReportEvidenceWrap">
+        <span>元作品・権利を確認できるURL <b id="publicReportEvidenceRequired">必須</b></span>
+        <input id="publicReportEvidenceUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://note.com/...">
+        <small>元作品の掲載ページなど、運営が比較できるURLを入力してください。</small>
+      </label>
+      <label class="public-report-field">
+        <span>詳しい内容 <b>必須</b></span>
+        <textarea id="publicReportDetails" rows="4" maxlength="1200" placeholder="例：上記URLで公開している本文が、そのまま使用されています。"></textarea>
+      </label>
+      <label class="public-report-field">
+        <span>連絡先メール <b id="publicReportContactRequired">必須</b></span>
+        <input id="publicReportContact" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com">
+        <small id="publicReportContactHint">確認が必要な場合に運営から連絡するために使用します。</small>
+      </label>
+      <label class="public-report-confirm"><input id="publicReportConfirm" type="checkbox"> <span>この報告内容が正確であることを確認します。</span></label>
+      <div class="public-report-meta"><span>workId</span><code id="publicReportWorkId">-</code><span>対象URL</span><code id="publicReportUrl">-</code></div>
+      <p id="publicReportStatus" class="public-report-status">根拠を確認できる情報と一緒に運営へ送信します。</p>
+      <button id="publicReportCopy" type="button" class="public-report-copy">運営に申立てを送る</button>
     </form>
   </dialog>
 

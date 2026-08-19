@@ -39,6 +39,14 @@
   const reportUrl=document.getElementById('publicReportUrl');
   const reportCopy=document.getElementById('publicReportCopy');
   const reportStatus=document.getElementById('publicReportStatus');
+  const reportSubject=document.getElementById('publicReportSubject');
+  const reportEvidenceUrl=document.getElementById('publicReportEvidenceUrl');
+  const reportDetails=document.getElementById('publicReportDetails');
+  const reportContact=document.getElementById('publicReportContact');
+  const reportConfirm=document.getElementById('publicReportConfirm');
+  const reportEvidenceRequired=document.getElementById('publicReportEvidenceRequired');
+  const reportContactRequired=document.getElementById('publicReportContactRequired');
+  const reportContactHint=document.getElementById('publicReportContactHint');
 
   const params = new URLSearchParams(location.search);
   const requested = (params.get('src') || '').trim();
@@ -196,40 +204,61 @@
 
   function bindReportControls(){
     if(!reportButton||!reportDialog)return;
+    const reason=()=>reportDialog.querySelector('input[name="reportReason"]:checked')?.value||'other';
+    const rightsClaim=()=>reason()==='copyright'||reason()==='unauthorized';
+    const updateRequirements=()=>{
+      const required=rightsClaim();
+      if(reportEvidenceRequired)reportEvidenceRequired.hidden=!required;
+      if(reportContactRequired)reportContactRequired.hidden=!required;
+      if(reportEvidenceUrl)reportEvidenceUrl.required=required;
+      if(reportContact)reportContact.required=required;
+      if(reportContactHint)reportContactHint.textContent=required
+        ? '権利関係の確認が必要な場合に運営から連絡します。'
+        : '「その他」の報告では任意です。';
+    };
     const sync=()=>{
       const id=currentWorkId()||'不明';
       if(reportWorkId)reportWorkId.textContent=id;
       if(reportUrl)reportUrl.textContent=location.href;
+      if(reportStatus)reportStatus.textContent='根拠を確認できる情報と一緒に運営へ送信します。';
+      if(reportCopy){reportCopy.disabled=false;reportCopy.textContent='運営に申立てを送る';}
+      updateRequirements();
     };
+    reportDialog.querySelectorAll('input[name="reportReason"]').forEach(el=>el.addEventListener('change',updateRequirements));
     reportButton.addEventListener('click',()=>{sync();reportDialog.showModal();});
     reportCopy?.addEventListener('click',async()=>{
       const workId=currentWorkId();
-      const reason=reportDialog.querySelector('input[name="reportReason"]:checked')?.value||'other';
-      if(!workId){
-        if(reportStatus)reportStatus.textContent='公開作品IDを取得できませんでした。';
-        return;
-      }
+      const claimReason=reason();
+      const subject=reportSubject?.value||'other';
+      const evidenceUrl=(reportEvidenceUrl?.value||'').trim();
+      const details=(reportDetails?.value||'').trim();
+      const contact=(reportContact?.value||'').trim();
+      const required=rightsClaim();
+      if(!workId){if(reportStatus)reportStatus.textContent='公開作品IDを取得できませんでした。';return;}
+      if(!details){if(reportStatus)reportStatus.textContent='詳しい内容を入力してください。';reportDetails?.focus();return;}
+      if(required&&!evidenceUrl){if(reportStatus)reportStatus.textContent='元作品・権利を確認できるURLを入力してください。';reportEvidenceUrl?.focus();return;}
+      if(evidenceUrl){try{const u=new URL(evidenceUrl);if(!/^https?:$/.test(u.protocol))throw new Error();}catch{if(reportStatus)reportStatus.textContent='元作品URLを http(s):// から入力してください。';reportEvidenceUrl?.focus();return;}}
+      if(required&&!contact){if(reportStatus)reportStatus.textContent='連絡先メールを入力してください。';reportContact?.focus();return;}
+      if(contact&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)){if(reportStatus)reportStatus.textContent='連絡先メールの形式を確認してください。';reportContact?.focus();return;}
+      if(!reportConfirm?.checked){if(reportStatus)reportStatus.textContent='報告内容が正確であることを確認してください。';reportConfirm?.focus();return;}
       const originalText=reportCopy.textContent;
-      reportCopy.disabled=true;
-      reportCopy.textContent='送信中…';
-      if(reportStatus)reportStatus.textContent='運営へ報告を送信しています。';
+      reportCopy.disabled=true;reportCopy.textContent='送信中…';
+      if(reportStatus)reportStatus.textContent='運営へ申立てを送信しています。';
       try{
         const srcUrl=new URL(source(),location.href);
         const apiBase=srcUrl.pathname.includes('/work/')?srcUrl.origin:'https://scene-studio-api.a-hako.workers.dev';
         const response=await fetch(`${apiBase}/report`,{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({workId,reason,url:location.href,sourceUrl:srcUrl.toString()})
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({workId,reason:claimReason,subject,evidenceUrl,details,contact,confirmed:true,url:location.href,sourceUrl:srcUrl.toString()})
         });
         const data=await response.json().catch(()=>({}));
         if(!response.ok||!data.ok)throw new Error(data.error||`HTTP ${response.status}`);
-        if(reportStatus)reportStatus.textContent='報告を受け付けました。運営が確認します。';
-        reportCopy.textContent='報告済み';
+        if(reportStatus)reportStatus.textContent='申立てを受け付けました。運営が内容を確認します。';
+        reportCopy.textContent='送信済み';
       }catch(error){
         console.warn('Report submission failed',error);
-        if(reportStatus)reportStatus.textContent='送信できませんでした。時間をおいてもう一度お試しください。';
-        reportCopy.disabled=false;
-        reportCopy.textContent=originalText;
+        if(reportStatus)reportStatus.textContent='送信できませんでした。入力内容を確認してもう一度お試しください。';
+        reportCopy.disabled=false;reportCopy.textContent=originalText;
       }
     });
   }
