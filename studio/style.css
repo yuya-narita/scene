@@ -7938,3 +7938,18 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
 .player-like-cover-preview .cover-preview-episode-title,
 .player-like-cover-preview #coverPreviewAuthor{font-family:var(--cover-author-font)!important}
 .ending-quick-fields select,.cover-quick-fields select{width:100%;min-height:50px;border:1px solid var(--line);border-radius:14px;padding:0 14px;background:var(--panel);color:inherit;font:inherit;box-sizing:border-box}
+
+/* v0.3.49 — Easy Studio ending preview: equal three-button geometry */
+.easy-preview-card .ending-preview-tabs{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+}
+.easy-preview-card .ending-preview-tabs > button{
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  height:92px!important;
+  min-height:92px!important;
+  margin:0!important;
+  box-sizing:border-box!important;
+  justify-self:stretch!important;
+}

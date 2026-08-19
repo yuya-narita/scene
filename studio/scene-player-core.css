@@ -1421,3 +1421,34 @@
 .sp-cover-author,
 .sp-cover-episode,
 .sp-cover-episode-title{font-family:var(--sp-cover-font,var(--sp-font-serif))!important}
+
+/* v0.3.49 — ending navigation: equal three-button geometry */
+.sp-ending-three{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:8px!important;
+}
+.sp-ending-three > .sp-ending-slot,
+.sp-ending-three > .sp-ending-cover{
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  min-height:96px!important;
+  height:96px!important;
+  margin:0!important;
+  padding:10px 6px!important;
+  box-sizing:border-box!important;
+}
+.sp-ending-three > .sp-ending-slot strong,
+.sp-ending-three > .sp-ending-cover strong{
+  width:100%!important;
+  max-width:100%!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  line-height:1.2!important;
+  text-align:center!important;
+}
+@media(max-width:520px){
+  .sp-ending-three{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important}
+  .sp-ending-three > .sp-ending-slot,
+  .sp-ending-three > .sp-ending-cover{height:94px!important;min-height:94px!important;padding:9px 4px!important}
+}
