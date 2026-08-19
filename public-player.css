@@ -715,3 +715,45 @@ body{
 .public-report-meta code{overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .public-report-status{font-size:12px;color:#666;margin:0}
 .public-report-copy{border:0;border-radius:12px;background:#17191d;color:#fff;padding:13px;font-weight:700}
+
+/* v0.3.56 — iPhone report dialog close button */
+.public-report-close{
+  -webkit-appearance:none!important;
+  appearance:none!important;
+  -webkit-tap-highlight-color:transparent!important;
+  position:absolute!important;
+  top:10px!important;
+  right:10px!important;
+  z-index:3!important;
+  display:grid!important;
+  place-items:center!important;
+  width:40px!important;
+  height:40px!important;
+  min-width:40px!important;
+  min-height:40px!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:50%!important;
+  outline:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:#17191d!important;
+  -webkit-text-fill-color:#17191d!important;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:28px!important;
+  font-weight:400!important;
+  line-height:1!important;
+  text-align:center!important;
+}
+.public-report-close:focus,
+.public-report-close:focus-visible,
+.public-report-close:active{
+  outline:0!important;
+  box-shadow:none!important;
+  background:rgba(23,25,29,.06)!important;
+}
+@media(max-width:520px){
+  .public-report-card{padding:22px 20px 20px!important}
+  .public-report-card h2{padding-right:42px}
+}
