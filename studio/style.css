@@ -7967,3 +7967,20 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
 .text-color-palette-actions{display:flex;padding-left:41px}
 .desktop-text-detail-section>.text-color-palette{margin-top:10px;padding:10px;border:1px solid #e0e3e6;border-radius:10px;background:#fafbfc}
 .live-edit-sheet-body>.text-color-palette{margin-top:10px;padding:10px;border:1px solid #e0e3e6;border-radius:12px;background:#fff}
+
+/* v0.3.52 committed text color picker: hover previews, click commits */
+.studio-color-picker{position:relative;width:100%;min-width:0}
+.studio-color-picker.is-compact{width:46px;min-width:46px}
+.studio-color-trigger{display:block;width:100%;height:34px;border:1px solid #cfd4da;border-radius:9px;padding:0;background:#4a4a4a;cursor:pointer;box-shadow:inset 0 0 0 2px rgba(255,255,255,.7)}
+.studio-color-picker.is-compact .studio-color-trigger{width:46px}
+.studio-color-popover{position:absolute;z-index:12050;left:0;top:calc(100% + 6px);width:236px;padding:10px;border:1px solid #c9cdd3;border-radius:12px;background:#fff;box-shadow:0 14px 34px rgba(0,0,0,.18)}
+.studio-color-picker.is-compact .studio-color-popover{left:50%;transform:translateX(-50%)}
+.studio-color-square{--picker-hue:0;position:relative;width:100%;height:150px;border-radius:8px;cursor:crosshair;background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,hsl(var(--picker-hue) 100% 50%));overflow:hidden}
+.studio-color-cursor{position:absolute;width:13px;height:13px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #1b1d21;transform:translate(-50%,-50%);pointer-events:none}
+.studio-color-hue{display:block;width:100%;margin:10px 0 8px;accent-color:#6d5be7}
+.studio-color-meta{display:grid;grid-template-columns:22px auto 1fr;align-items:center;gap:8px}
+.studio-color-dot{width:22px;height:22px;border-radius:50%;border:1px solid #c9cdd3}
+.studio-color-meta code{font:700 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:#4d535a}
+.studio-color-meta small{justify-self:end;text-align:right;font:650 9px/1.3 system-ui;color:#858b92}
+.desktop-live-color{display:none!important}
+@media(max-width:640px){.studio-color-popover{width:min(236px,calc(100vw - 28px));}.studio-color-square{height:142px}}

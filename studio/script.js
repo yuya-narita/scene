@@ -880,11 +880,9 @@
     return out;
   }
   function readRecentTextColors(){
-    const out=[];
-    [...readStoredTextColors(TEXT_COLOR_RECENTS_KEY),...documentTextColors()].forEach(c=>{
-      if(c && !['#FFFFFF','#000000'].includes(c) && !out.includes(c))out.push(c);
-    });
-    return out.slice(0,8);
+    return readStoredTextColors(TEXT_COLOR_RECENTS_KEY)
+      .filter(c=>c && !['#FFFFFF','#000000'].includes(c))
+      .slice(0,8);
   }
   function readPinnedTextColors(){return readStoredTextColors(TEXT_COLOR_PINS_KEY).slice(0,8);}
   function rememberTextColor(value){
@@ -899,6 +897,64 @@
     const next=exists?pins.filter(x=>x!==c):[c,...pins.filter(x=>x!==c)].slice(0,8);
     localStorage.setItem(TEXT_COLOR_PINS_KEY,JSON.stringify(next));
     return !exists;
+  }
+  function previewCurrentSceneTextColor(value){
+    const c=normalizeTextColor(value);if(!c)return;
+    const text=player?.els?.scenes?.querySelector('.sp-scene.is-active .sp-text');
+    if(text)text.style.setProperty('color',c,'important');
+  }
+  function hsvToHex(h,s,v){
+    h=((Number(h)||0)%360+360)%360;s=Math.max(0,Math.min(1,Number(s)||0));v=Math.max(0,Math.min(1,Number(v)||0));
+    const c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c;let r=0,g=0,b=0;
+    if(h<60){r=c;g=x;}else if(h<120){r=x;g=c;}else if(h<180){g=c;b=x;}else if(h<240){g=x;b=c;}else if(h<300){r=x;b=c;}else{r=c;b=x;}
+    const toHex=n=>Math.round((n+m)*255).toString(16).padStart(2,'0');
+    return ('#'+toHex(r)+toHex(g)+toHex(b)).toUpperCase();
+  }
+  function hexToHsv(hex){
+    const c=normalizeTextColor(hex)||'#4A4A4A';const r=parseInt(c.slice(1,3),16)/255,g=parseInt(c.slice(3,5),16)/255,b=parseInt(c.slice(5,7),16)/255;
+    const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;let h=0;
+    if(d){if(max===r)h=60*(((g-b)/d)%6);else if(max===g)h=60*((b-r)/d+2);else h=60*((r-g)/d+4);}
+    if(h<0)h+=360;return {h,s:max?d/max:0,v:max};
+  }
+  function makeCommittedTextColorPicker(initialColor,{compact=false,onPreview,onCommit}={}){
+    let committed=normalizeTextColor(initialColor)||'#4A4A4A';
+    let hsv=hexToHsv(committed);let preview=committed;let open=false;
+    const root=document.createElement('div');root.className='studio-color-picker'+(compact?' is-compact':'');
+    const trigger=document.createElement('button');trigger.type='button';trigger.className='studio-color-trigger';trigger.style.backgroundColor=committed;trigger.setAttribute('aria-label','任意色を選ぶ');
+    const pop=document.createElement('div');pop.className='studio-color-popover';pop.hidden=true;
+    const square=document.createElement('div');square.className='studio-color-square';
+    const cursor=document.createElement('span');cursor.className='studio-color-cursor';square.appendChild(cursor);
+    const hue=document.createElement('input');hue.type='range';hue.min='0';hue.max='359';hue.step='1';hue.value=String(Math.round(hsv.h));hue.className='studio-color-hue';hue.setAttribute('aria-label','色相');
+    const meta=document.createElement('div');meta.className='studio-color-meta';
+    const dot=document.createElement('span');dot.className='studio-color-dot';
+    const code=document.createElement('code');code.textContent=committed;
+    const hint=document.createElement('small');hint.textContent='動かして確認・クリックで決定';
+    meta.append(dot,code,hint);pop.append(square,hue,meta);root.append(trigger,pop);
+    const paint=()=>{
+      square.style.setProperty('--picker-hue',String(Math.round(hsv.h)));
+      cursor.style.left=`${Math.max(0,Math.min(100,hsv.s*100))}%`;
+      cursor.style.top=`${Math.max(0,Math.min(100,(1-hsv.v)*100))}%`;
+      dot.style.backgroundColor=preview;code.textContent=preview;trigger.style.backgroundColor=preview;
+    };
+    const previewAt=e=>{
+      const r=square.getBoundingClientRect();if(!r.width||!r.height)return;
+      hsv.s=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+      hsv.v=1-Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));
+      preview=hsvToHex(hsv.h,hsv.s,hsv.v);paint();if(typeof onPreview==='function')onPreview(preview);
+    };
+    const close=(revert=true)=>{
+      if(!open)return;open=false;pop.hidden=true;root.classList.remove('is-open');document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',keyClose,true);
+      if(revert){preview=committed;hsv=hexToHsv(committed);hue.value=String(Math.round(hsv.h));paint();if(typeof onPreview==='function')onPreview(committed);}
+    };
+    const outside=e=>{if(!root.contains(e.target))close(true);};
+    const keyClose=e=>{if(e.key==='Escape'){e.preventDefault();close(true);}};
+    trigger.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();open=!open;pop.hidden=!open;root.classList.toggle('is-open',open);if(open){requestAnimationFrame(()=>{document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',keyClose,true);paint();});}});
+    square.addEventListener('pointermove',previewAt);
+    square.addEventListener('click',e=>{previewAt(e);committed=preview;rememberTextColor(committed);trigger.style.backgroundColor=committed;if(typeof onCommit==='function')onCommit(committed);close(false);});
+    hue.addEventListener('input',()=>{hsv.h=Number(hue.value)||0;preview=hsvToHex(hsv.h,hsv.s,hsv.v);paint();if(typeof onPreview==='function')onPreview(preview);});
+    // Hue itself is only a preview control; the saturation/value square click is the commit gesture.
+    paint();
+    return {root,get value(){return committed;},setValue(v){const c=normalizeTextColor(v);if(!c)return;committed=c;preview=c;hsv=hexToHsv(c);hue.value=String(Math.round(hsv.h));paint();}};
   }
   function makeTextColorPalette(currentColor,onApply){
     const wrap=document.createElement('div');wrap.className='text-color-palette';
@@ -5843,8 +5899,8 @@ function openDesktopTextDetail(){
       desktopDetailSelect('文字色',[['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom')),v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;apply();}),
       desktopDetailSelect('文字影',[['auto','おまかせ'],['none','なし'],['soft','弱'],['strong','強']],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
     );
-    const colorRow=document.createElement('label');colorRow.className='desktop-text-detail-color';const colorLabel=document.createElement('span');colorLabel.textContent='任意色';const color=document.createElement('input');color.type='color';color.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';const colorCode=document.createElement('code');colorCode.textContent=color.value.toUpperCase();color.addEventListener('input',()=>{p.text.color=color.value;colorCode.textContent=color.value.toUpperCase();apply();});color.addEventListener('change',()=>{rememberTextColor(color.value);});colorRow.append(colorLabel,color,colorCode);typography.appendChild(colorRow);
-    typography.appendChild(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;color.value=hex;colorCode.textContent=hex;apply();closeDesktopTextDetail();openDesktopTextDetail();}));
+    const colorRow=document.createElement('div');colorRow.className='desktop-text-detail-color';const colorLabel=document.createElement('span');colorLabel.textContent='任意色';const colorCode=document.createElement('code');const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';colorCode.textContent=initialColor;const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{colorCode.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;colorCode.textContent=c;apply();}});colorRow.append(colorLabel,colorPicker.root,colorCode);typography.appendChild(colorRow);
+    typography.appendChild(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;colorCode.textContent=hex;apply();closeDesktopTextDetail();openDesktopTextDetail();}));
 
     const layout=section('レイアウト');
     const ranges=two(layout);
@@ -5986,10 +6042,9 @@ function openDesktopTextDetail(){
     );
     textCard.append(textGrid);
     if(colorValue==='custom'){
-      const color=document.createElement('input');color.type='color';color.className='desktop-live-color';color.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';
-      color.addEventListener('input',()=>{p.text.color=color.value;scheduleDraftSave(60);refreshLivePlayer({preserveSheet:false});});
-      color.addEventListener('change',()=>{rememberTextColor(color.value);});
-      textCard.append(color);
+      const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';
+      const colorPicker=makeCommittedTextColorPicker(initialColor,{onPreview:c=>{previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}});
+      textCard.append(colorPicker.root);
     }
     textCard.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}));
     textCard.append(desktopDetail('文字の詳細設定','text'));
@@ -6272,13 +6327,12 @@ function openDesktopTextDetail(){
         makeSelect('文字配置',[['auto','Sceneに合わせる'],['left','左'],['center','中央'],['right','右']],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();})
       );
       if(colorValue==='custom'){
-        const custom=document.createElement('label');custom.className='live-edit-color-custom';
+        const custom=document.createElement('div');custom.className='live-edit-color-custom';
         const label=document.createElement('span');label.textContent='任意色';
-        const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?p.text.color:'#4a4a4a';
-        const value=document.createElement('code');value.textContent=picker.value.toUpperCase();
-        picker.addEventListener('input',()=>{p.text.color=picker.value;value.textContent=picker.value.toUpperCase();rerender();});
-        picker.addEventListener('change',()=>{rememberTextColor(picker.value);});
-        custom.append(label,picker,value);
+        const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';
+        const value=document.createElement('code');value.textContent=initialColor;
+        const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{value.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;value.textContent=c;rerender();}});
+        custom.append(label,colorPicker.root,value);
         liveEditSheetBody.append(grid,custom);
       }else{
         liveEditSheetBody.append(grid);
