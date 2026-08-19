@@ -2565,6 +2565,7 @@
     const readyTitle=$('#publishReadyTitle');
     const readyText=$('#publishReadyText');
     const confirm=$('#publishConfirmButton');
+    const rights=$('#publishRightsConfirm');
 
     if(status==='dirty'){
       if(readyTitle)readyTitle.textContent=t('publish.updateReady');
@@ -2597,11 +2598,19 @@
     openPublishDialog();
   }
 
+  function resetPublishRightsConfirmation(){
+    const rights=$('#publishRightsConfirm');
+    const confirm=$('#publishConfirmButton');
+    if(rights)rights.checked=false;
+    if(confirm)confirm.disabled=true;
+  }
+
   function openPublishDialog(){
     if(!workingDocument?.scenes?.length)return;
     const status=currentPublishStatus();
     syncPublishCopyForStatus();
 
+    resetPublishRightsConfirmation();
     if(status==='published'){
       const text=$('#publishUrlText');
       if(text)text.textContent=latestPublishedUrl;
@@ -2618,6 +2627,8 @@
 
   async function runPublish(){
     if(!workingDocument?.scenes?.length)return;
+    const rights=$('#publishRightsConfirm');
+    if(rights && !rights.checked){ rights.focus(); return; }
     const wasUpdate=currentPublishStatus()==='dirty';
     setPublishState('working');
     try{
@@ -3854,6 +3865,7 @@
   $('#publishFromPreviewButton')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();openPublishDialog();});
   $('#easyPublishButton')?.addEventListener('click',(event)=>{event.preventDefault();openPublishDialogFromEasy();});
   $('#publishDialogClose')?.addEventListener('click',closePublishDialog);
+  $('#publishRightsConfirm')?.addEventListener('change',(event)=>{const b=$('#publishConfirmButton');if(b)b.disabled=!event.currentTarget.checked;});
   $('#publishConfirmButton')?.addEventListener('click',runPublish);
   $('#publishRetryButton')?.addEventListener('click',runPublish);
   $('#publishCopyButton')?.addEventListener('click',copyPublishedUrl);

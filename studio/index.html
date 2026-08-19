@@ -535,7 +535,11 @@
         <span class="publish-kicker">PUBLISH</span>
         <h2 id="publishReadyTitle">この作品を公開しますか？</h2>
         <p id="publishReadyText">公開すると、読者へ渡せるURLを発行します。</p>
-        <button id="publishConfirmButton" class="publish-primary" type="button">公開する</button>
+        <label class="publish-rights-check">
+          <input id="publishRightsConfirm" type="checkbox">
+          <span>この作品を公開するために必要な権利を有している、または権利者から必要な許可を得ています。</span>
+        </label>
+        <button id="publishConfirmButton" class="publish-primary" type="button" disabled>公開する</button>
       </div>
 
       <div id="publishStateWorking" class="publish-state" hidden>

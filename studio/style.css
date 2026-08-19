@@ -8121,3 +8121,10 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   .live-edit-color-custom .studio-color-meta small{font-size:0}
   .live-edit-color-custom .studio-color-meta small::after{content:'クリックで決定';font-size:9px}
 }
+
+
+/* v0.3.55 — publish rights confirmation */
+.publish-rights-check{display:flex;gap:10px;align-items:flex-start;text-align:left;padding:12px 13px;margin:14px 0;border:1px solid #d9dce3;border-radius:12px;background:#fafafa;font-size:13px;line-height:1.55;color:#34373d}
+.publish-rights-check input{margin-top:3px;flex:0 0 auto}
+.publish-primary:disabled{opacity:.38;cursor:not-allowed}
+@media(max-width:520px){.publish-rights-check{font-size:12px;padding:11px}}
