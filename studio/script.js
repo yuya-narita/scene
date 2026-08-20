@@ -5356,7 +5356,7 @@ function openDesktopAudioDetail(){
       }catch(_){}
     };
 
-    const refreshAudioPreview=(kind,{playOneShot=false,startPersistent=false,liveVolume=null}={})=>{
+    const refreshAudioPreview=(kind,{playOneShot=false,startPersistent=false,replayPersistentStart=false,liveVolume=null}={})=>{
       commitAll();
       scheduleDraftSave(40);
 
@@ -5370,6 +5370,24 @@ function openDesktopAudioDetail(){
         applyLiveAudioVolume(kind,liveVolume);
         renderDesktopLivePanel();
         return;
+      }
+
+      // Explicit audition of a persistent START event must replay the authored
+      // start transition (including fadeIn). Live Preview scene reconstruction
+      // intentionally suppresses fadeIn so navigation stays fast, but that made
+      // it impossible to judge a 5s/10s fade from the Audio Detail UI.
+      if(replayPersistentStart && (kind==='bgm'||kind==='ambient')){
+        const cmd=managedAudio(scene,kind);
+        if(cmd?.action==='start' && cmd.src){
+          try{
+            player?.unlockAudio?.(true);
+            // restart:true seeks to startAt and reconstruct=false preserves the
+            // real fadeIn semantics used by the public Player.
+            player?._applyAudioCommand?.({...cmd,restart:true},false);
+          }catch(_){}
+          renderDesktopLivePanel();
+          return;
+        }
       }
 
       refreshLivePlayer({preserveSheet:false});
@@ -5594,7 +5612,10 @@ function openDesktopAudioDetail(){
         audition.textContent='♪ このSceneの音を確認';
         audition.addEventListener('click',()=>{
           try{player?.unlockAudio?.(true);}catch(_){}
-          refreshAudioPreview(kind,{playOneShot:kind==='se'});
+          refreshAudioPreview(kind,{
+            playOneShot:kind==='se',
+            replayPersistentStart:kind!=='se'
+          });
         });
         previewSec.appendChild(audition);
       }
