@@ -415,18 +415,44 @@
       return /^https?:\/\//i.test(String(src || '').trim());
     }
 
+    _isAhakoHostedAudio(src) {
+      const value = String(src || '').trim();
+      if (!this._isExternalHttpAudio(value)) return false;
+      try {
+        const u = new URL(value, global.location?.href || undefined);
+        // Scene Studio's R2 asset endpoint explicitly serves
+        // Access-Control-Allow-Origin: *, so it is safe to route through
+        // MediaElementSource + GainNode. This is required on iPhone because
+        // Safari does not reliably honor HTMLMediaElement.volume for media
+        // playback; GainNode must own Scene volume/fade automation instead.
+        return (
+          u.hostname === 'scene-studio-api.a-hako.workers.dev' &&
+          u.pathname.startsWith('/asset/')
+        );
+      } catch (_) {
+        return false;
+      }
+    }
+
     _prepareAudioTransport(audio, src) {
       if (!audio) return;
-      // Absolute HTTP(S) assets are intentionally played through the native
-      // HTMLMediaElement path. Routing them into MediaElementSource can become
-      // silent when the remote server/browser CORS combination is not suitable
-      // for Web Audio, even though the media element itself is perfectly able
-      // to play the file.
-      audio.__spNativeOnly = this._isExternalHttpAudio(src);
+      const external = this._isExternalHttpAudio(src);
+      const corsWebAudio = this._isAhakoHostedAudio(src);
+
+      // Unknown third-party absolute URLs stay on native media as a safe
+      // fallback because their CORS policy is not guaranteed. Official ahako
+      // R2 assets are CORS-enabled and therefore use Web Audio even though
+      // their URL is absolute. That lets GainNode control volume/fades on iOS.
+      audio.__spNativeOnly = external && !corsWebAudio;
       audio.__spTransportSrc = src || '';
+
       if (audio.__spNativeOnly) {
         try { audio.crossOrigin = null; } catch (_) {}
+      } else if (external) {
+        // Must be set before assigning audio.src.
+        try { audio.crossOrigin = 'anonymous'; } catch (_) {}
       }
+
       emit(this.host, 'sceneplayer:audiotransport', {
         src: src || '',
         transport: audio.__spNativeOnly ? 'native-media' : 'web-audio'
@@ -767,7 +793,7 @@
       let audio = this.audioEls[channel];
       if (!audio || !command.src) return;
 
-      const desiredNativeOnly = this._isExternalHttpAudio(command.src);
+      const desiredNativeOnly = this._isExternalHttpAudio(command.src) && !this._isAhakoHostedAudio(command.src);
       const hasWebAudioGraph = this.audioSourceNodes.has(audio) || this.audioGainNodes.has(audio);
       const currentNativeOnly = audio.__spNativeOnly === true;
 
