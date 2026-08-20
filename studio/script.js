@@ -5291,7 +5291,27 @@ function openDesktopAudioDetail(){
       loadMediaFields(scene);
     };
 
-    const refreshAudioPreview=(kind,{playOneShot=false}={})=>{
+    const applyLiveAudioVolume=(kind,value)=>{
+      if(!player)return;
+      const target=Math.max(0,Math.min(1,Number(value)||0));
+      try{
+        player.unlockAudio?.(true);
+        if(kind==='bgm' || kind==='ambient'){
+          const audio=player.audioEls?.[kind];
+          if(audio){
+            player._setAudioVolume?.(audio,target);
+            if(player.audioState?.[kind])player.audioState[kind].volume=target;
+          }
+          return;
+        }
+        // If a TEST one-shot is still playing, let its slider follow live too.
+        if(kind==='se' && player.oneshots){
+          player.oneshots.forEach(audio=>player._setAudioVolume?.(audio,target));
+        }
+      }catch(_){}
+    };
+
+    const refreshAudioPreview=(kind,{playOneShot=false,startPersistent=false,liveVolume=null}={})=>{
       commitAll();
       scheduleDraftSave(40);
 
@@ -5299,8 +5319,30 @@ function openDesktopAudioDetail(){
       // transport so desktop Live Edit can actually produce sound.
       try{player?.unlockAudio?.(true);}catch(_){}
 
+      // Volume is a mixer operation: do not rebuild the Player just to hear it.
+      // Apply the gain directly to the transport that is already sounding.
+      if(liveVolume!=null){
+        applyLiveAudioVolume(kind,liveVolume);
+        renderDesktopLivePanel();
+        return;
+      }
+
       refreshLivePlayer({preserveSheet:false});
       renderDesktopLivePanel();
+
+      // Selecting/starting a persistent source needs an explicit authoring
+      // transport start because refreshCurrent(preserveAudio) intentionally
+      // leaves existing audio untouched. restart:false avoids seeking when the
+      // same source is already sounding.
+      if(startPersistent && (kind==='bgm'||kind==='ambient')){
+        requestAnimationFrame(()=>{
+          try{
+            player?.unlockAudio?.(true);
+            const cmd=managedAudio(scene,kind);
+            if(cmd?.action==='start' && cmd.src)player?._applyAudioCommand?.({...cmd,restart:false},false);
+          }catch(_){}
+        });
+      }
 
       // Restore-mode rendering deliberately never fires SE events. For the
       // editor's explicit audition path, play the current one-shot directly.
@@ -5382,7 +5424,7 @@ function openDesktopAudioDetail(){
       controlGrid.append(
         desktopDetailSelect('動作',actionValues,track.action,v=>{
           track.action=v;
-          refreshAudioPreview(kind,{playOneShot:kind==='se'&&v==='play'});
+          refreshAudioPreview(kind,{playOneShot:kind==='se'&&v==='play',startPersistent:kind!=='se'&&v==='start'});
           renderTrack();
         })
       );
@@ -5402,7 +5444,7 @@ function openDesktopAudioDetail(){
             track._editorFileName=name;
             if(kind==='se')track.action='play';
             else track.action='start';
-            refreshAudioPreview(kind,{playOneShot:kind==='se'});
+            refreshAudioPreview(kind,{playOneShot:kind==='se',startPersistent:kind!=='se'});
             renderTrack();
           });
         },'is-primary'),
@@ -5429,7 +5471,7 @@ function openDesktopAudioDetail(){
         desktopDetailRange('音量',{
           min:0,max:1,step:.01,value:Number(track.volume),
           unit:' %',format:v=>Math.round(v*100),
-          oninput:v=>{track.volume=v;refreshAudioPreview(kind);}
+          oninput:v=>{track.volume=v;refreshAudioPreview(kind,{liveVolume:v});}
         }),
         desktopDetailRange('フェードイン',{
           min:0,max:10,step:.1,value:(Number(track.fadeIn)||0)/1000,
@@ -5471,7 +5513,7 @@ function openDesktopAudioDetail(){
       const ph=document.createElement('h3');ph.textContent='プレビュー';
       const pn=document.createElement('p');pn.className='desktop-text-detail-note';
       pn.textContent=desktopLiveActive()
-        ? '変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの音設定を保持します。'
+        ? '再生中の音は、音量スライダーを動かすとその場で変わります。変更は自動保存され、Sceneを移動して戻っても保持されます。'
         : '変更は自動保存されます。閉じるとLive Editorでそのまま確認できます。';
       previewSec.append(ph,pn);
 
