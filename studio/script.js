@@ -6253,10 +6253,20 @@ function openDesktopTextDetail(){
 
     const audioCard=desktopCard('音（♪）','desktop-live-audio-card');
     const audioGrid=document.createElement('div');audioGrid.className='desktop-live-audio-grid';
-    const channel=(title,ch)=>{const row=document.createElement('div');row.className='desktop-live-audio-col';const h=document.createElement('strong');h.textContent=title;row.appendChild(h);const cmd=managedAudio(scene,ch);const state=document.createElement('small');state.textContent=cmd?.action==='start'?(cmd._editorFileName||'音源あり'):cmd?.action==='volume'?`音量変更 ${Math.round((Number(cmd.volume)||0)*100)}%`:cmd?.action==='stop'?'停止':'前Sceneを継続';row.appendChild(state);row.append(desktopAction('継続',()=>{setManagedAudio(scene,ch,null);refresh();}),desktopAction('停止',()=>{setManagedAudio(scene,ch,{channel:ch,action:'stop',fadeOut:600});refresh();}),desktopAction(cmd?.action==='start'?'ファイルを変更':'ファイルを選択',()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,ch,{channel:ch,action:'start',src:url,volume:ch==='ambient'?.35:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:name})),'is-primary'));return row;};
-    audioGrid.append(channel('BGM','bgm'),channel('Ambient（環境音）','ambient'));
-    const se=document.createElement('div');se.className='desktop-live-audio-col';se.innerHTML='<strong>SE（効果音）</strong>';const secmd=managedAudio(scene,'oneshot');const sest=document.createElement('small');sest.textContent=secmd?.src?(secmd._editorFileName||'音源あり'):'なし';se.appendChild(sest);se.append(desktopAction('なし',()=>{setManagedAudio(scene,'oneshot',null);refresh();}),desktopAction(secmd?'ファイルを変更':'ファイルを選択',()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,'oneshot',{channel:'oneshot',role:'se',action:'play',src:url,volume:.8,fadeIn:0,_editorFileName:name})),'is-primary'));audioGrid.appendChild(se);
-    audioCard.append(audioGrid,desktopDetail('音の詳細設定','audio'));
+    const bgmRow=document.createElement('div');bgmRow.className='desktop-live-audio-col';
+    const bgmHead=document.createElement('strong');bgmHead.textContent='BGM';bgmRow.appendChild(bgmHead);
+    const bgmCmd=managedAudio(scene,'bgm');
+    const bgmState=document.createElement('small');
+    bgmState.textContent=bgmCmd?.action==='start'?(bgmCmd._editorFileName||'音源あり'):bgmCmd?.action==='volume'?`音量変更 ${Math.round((Number(bgmCmd.volume)||0)*100)}%`:bgmCmd?.action==='stop'?'停止':'前Sceneを継続';
+    bgmRow.appendChild(bgmState);
+    bgmRow.append(
+      desktopAction('継続',()=>{setManagedAudio(scene,'bgm',null);refresh();}),
+      desktopAction('停止',()=>{setManagedAudio(scene,'bgm',{channel:'bgm',action:'stop',fadeOut:600});refresh();}),
+      desktopAction(bgmCmd?.action==='start'?'ファイルを変更':'ファイルを選択',()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:name})),'is-primary')
+    );
+    audioGrid.append(bgmRow);
+    const audioQuickNote=document.createElement('p');audioQuickNote.className='live-edit-note';audioQuickNote.textContent='Ambient と SE は「音の詳細設定」で調整します。';
+    audioCard.append(audioGrid,audioQuickNote,desktopDetail('音の詳細設定','audio'));
 
     const sceneCard=desktopCard('Scene操作（•••）','desktop-live-scene-card');
     const ops=document.createElement('div');ops.className='desktop-live-scene-ops';
@@ -6585,26 +6595,17 @@ function openDesktopTextDetail(){
 
     liveEditSheetTitle.textContent='音';
     const audioWrap=document.createElement('div');audioWrap.className='live-edit-audio-list';
-    const channelRow=(title,channel,accept='audio/*')=>{
-      const cmd=managedAudio(scene,channel);const row=document.createElement('section');row.className='live-edit-audio-row';
-      const head=document.createElement('div');head.className='live-edit-audio-head';const name=document.createElement('strong');name.textContent=title;const state=document.createElement('small');
-      state.textContent=cmd?.action==='start'?(cmd._editorFileName||'音源あり'):cmd?.action==='stop'?'停止':'継続';head.append(name,state);
-      const buttons=document.createElement('div');buttons.className='live-edit-audio-actions';
-      const inherit=makeActionButton('継続',!cmd?'is-selected':'');const stop=makeActionButton('停止',cmd?.action==='stop'?'is-selected':'');const pick=makeActionButton(cmd?.action==='start'?'変更':'選択','is-primary');
-      inherit.onclick=()=>{setManagedAudio(scene,channel,null);scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
-      stop.onclick=()=>{setManagedAudio(scene,channel,{channel,action:'stop',fadeOut:600});scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
-      pick.onclick=()=>pickLiveFile(accept,(url,fileName)=>setManagedAudio(scene,channel,{channel,action:'start',src:url,volume:channel==='ambient'?.35:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:fileName}));
-      buttons.append(inherit,stop,pick);row.append(head,buttons);return row;
-    };
-    audioWrap.append(channelRow('BGM','bgm'),channelRow('Ambient','ambient'));
-    const se=managedAudio(scene,'oneshot');const seRow=document.createElement('section');seRow.className='live-edit-audio-row';
-    const seHead=document.createElement('div');seHead.className='live-edit-audio-head';seHead.innerHTML='<strong>SE</strong>';const seState=document.createElement('small');seState.textContent=se?.src?(se._editorFileName||'音源あり'):'なし';seHead.appendChild(seState);
-    const seButtons=document.createElement('div');seButtons.className='live-edit-audio-actions';const seNone=makeActionButton('なし',!se?'is-selected':'');const sePick=makeActionButton(se?'変更':'選択','is-primary');
-    seNone.onclick=()=>{setManagedAudio(scene,'oneshot',null);scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
-    sePick.onclick=()=>pickLiveFile('audio/*',(url,fileName)=>setManagedAudio(scene,'oneshot',{channel:'oneshot',role:'se',action:'play',src:url,volume:.8,fadeIn:0,_editorFileName:fileName}));
-    seButtons.append(seNone,sePick);seRow.append(seHead,seButtons);audioWrap.append(seRow);
-    const presetNote=document.createElement('p');presetNote.className='live-edit-note';presetNote.textContent='Ambient / SE のプリセットは後から追加できます。今はファイル選択と状態変更だけをLive Editで行います。';
-    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='音量・フェード・ループを細かく調整';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('audio');});
+    const bgmCmd=managedAudio(scene,'bgm');const bgmRow=document.createElement('section');bgmRow.className='live-edit-audio-row';
+    const bgmHead=document.createElement('div');bgmHead.className='live-edit-audio-head';const bgmName=document.createElement('strong');bgmName.textContent='BGM';const bgmState=document.createElement('small');
+    bgmState.textContent=bgmCmd?.action==='start'?(bgmCmd._editorFileName||'音源あり'):bgmCmd?.action==='volume'?`音量変更 ${Math.round((Number(bgmCmd.volume)||0)*100)}%`:bgmCmd?.action==='stop'?'停止':'継続';bgmHead.append(bgmName,bgmState);
+    const bgmButtons=document.createElement('div');bgmButtons.className='live-edit-audio-actions';
+    const bgmInherit=makeActionButton('継続',!bgmCmd?'is-selected':'');const bgmStop=makeActionButton('停止',bgmCmd?.action==='stop'?'is-selected':'');const bgmPick=makeActionButton(bgmCmd?.action==='start'?'変更':'選択','is-primary');
+    bgmInherit.onclick=()=>{setManagedAudio(scene,'bgm',null);scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
+    bgmStop.onclick=()=>{setManagedAudio(scene,'bgm',{channel:'bgm',action:'stop',fadeOut:600});scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
+    bgmPick.onclick=()=>pickLiveFile('audio/*',(url,fileName)=>setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:fileName}));
+    bgmButtons.append(bgmInherit,bgmStop,bgmPick);bgmRow.append(bgmHead,bgmButtons);audioWrap.append(bgmRow);
+    const presetNote=document.createElement('p');presetNote.className='live-edit-note';presetNote.textContent='Ambient と SE は「音の詳細設定」で調整します。';
+    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='音の詳細設定';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('audio');});
     liveEditSheetBody.append(audioWrap,presetNote,detail);
   }
 
