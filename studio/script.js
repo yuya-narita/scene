@@ -5282,6 +5282,13 @@ function openDesktopAudioDetail(){
       commitTrack('se');
       // presentation.audio was only a broken v1 editor cache.
       delete p.audio;
+
+      // Live Audio Detail edits the Scene model directly, while the legacy
+      // Advanced fields still exist behind the Live Studio. Draft saving can
+      // sync those fields back into the Scene, so keep them in lockstep here
+      // to prevent a stale value (for example 100%) from overwriting a newly
+      // edited value (for example 10%).
+      loadMediaFields(scene);
     };
 
     const refreshAudioPreview=(kind,{playOneShot=false}={})=>{
@@ -5517,17 +5524,19 @@ function openDesktopAudioDetail(){
       renderDesktopLivePanel();
     });
     reset.addEventListener('click',()=>{
-      setManagedAudio(scene,'bgm',null);
-      setManagedAudio(scene,'ambient',null);
-      setManagedAudio(scene,'oneshot',null);
-      delete p.audio;
-      audioModel.bgm=makeTrack('bgm');
-      audioModel.ambient=makeTrack('ambient');
-      audioModel.se=makeTrack('se');
-      scheduleDraftSave(40);
-      try{player?._stopAllAudio?.(true);}catch(_){}
-      refreshLivePlayer({preserveSheet:false});
-      renderDesktopLivePanel();
+      // Reset only the adjustable parameters of the currently open channel.
+      // Source and playback action are intentionally preserved; removing an
+      // audio source belongs exclusively to the explicit "音源を外す" action.
+      const track=audioModel[activeKind];
+      track.volume=1;
+      track.fadeIn=0;
+      track.fadeOut=0;
+      track.loop=true;
+      if(activeKind==='se'){
+        track.delay=0;
+        track.repeat=1;
+      }
+      refreshAudioPreview(activeKind,{playOneShot:false});
       if(refreshMobileLiveDetail('audio'))return;
       renderTrack();
     });
