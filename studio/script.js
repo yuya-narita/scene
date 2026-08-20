@@ -5169,6 +5169,36 @@ function openDesktopAudioDetail(){
       return managedAudio(scene,'oneshot');
     };
 
+    // Resolve the persistent BGM / Ambient state immediately before this Scene.
+    // This lets a "volume only" Scene start from the volume the author is
+    // actually hearing instead of a misleading 100% editor default.
+    const inheritedPersistentState=(kind)=>{
+      if(!(kind==='bgm'||kind==='ambient'))return null;
+      let state=null;
+      for(let i=0;i<index;i+=1){
+        const commands=workingDocument.scenes?.[i]?.audio;
+        if(!Array.isArray(commands))continue;
+        for(const cmd of commands){
+          if(cmd?.channel!==kind)continue;
+          if(cmd.action==='start'||cmd.action==='play'){
+            if(!cmd.src)continue;
+            state={
+              src:cmd.src,
+              volume:Number.isFinite(Number(cmd.volume))?Math.max(0,Math.min(1,Number(cmd.volume))):1,
+              loop:cmd.loop!==false,
+              _editorFileName:cmd._editorFileName||''
+            };
+          }else if(cmd.action==='stop'){
+            state=null;
+          }else if(cmd.action==='volume'&&state){
+            const next=Number(cmd.volume);
+            if(Number.isFinite(next))state.volume=Math.max(0,Math.min(1,next));
+          }
+        }
+      }
+      return state;
+    };
+
     const makeTrack=(kind)=>{
       const channel=kind==='se'?'oneshot':kind;
       const cmd=commandFor(kind);
@@ -5183,6 +5213,7 @@ function openDesktopAudioDetail(){
           volume:Number.isFinite(Number(cmd.volume))?Number(cmd.volume):1,
           fadeIn:Number(cmd.fadeIn)||0,
           fadeOut:Number(cmd.fadeOut)||0,
+          fade:Number(cmd.fade)||0,
           loop:cmd.loop!==false,
           delay:Number(cmd.delay)||0,
           repeat:Number(cmd.repeat)||1,
@@ -5197,6 +5228,7 @@ function openDesktopAudioDetail(){
           volume:Number.isFinite(Number(legacy.volume))?Number(legacy.volume):1,
           fadeIn:Number(legacy.fadeIn)||0,
           fadeOut:Number(legacy.fadeOut)||0,
+          fade:Number(legacy.fade)||0,
           loop:legacy.loop!==false,
           delay:Number(legacy.delay)||0,
           repeat:Number(legacy.repeat)||1,
@@ -5204,16 +5236,20 @@ function openDesktopAudioDetail(){
         };
       }
 
+      const inherited=inheritedPersistentState(kind);
       return {
         action:kind==='se'?'none':'continue',
         src:'',
-        volume:1,
+        volume:kind==='se'?1:(inherited?.volume ?? 1),
         fadeIn:0,
         fadeOut:0,
-        loop:true,
+        fade:0,
+        loop:inherited?.loop!==false,
         delay:0,
         repeat:1,
-        _editorFileName:''
+        _editorFileName:'',
+        _inheritedSrc:inherited?.src||'',
+        _inheritedFileName:inherited?._editorFileName||''
       };
     };
 
@@ -5255,6 +5291,15 @@ function openDesktopAudioDetail(){
           channel,
           action:'stop',
           fadeOut:Math.max(0,Number(track.fadeOut)||0)
+        });
+        return;
+      }
+      if(track.action==='volume'){
+        setManagedAudio(scene,channel,{
+          channel,
+          action:'volume',
+          volume:Math.max(0,Math.min(1,Number(track.volume)||0)),
+          fade:Math.max(0,Number(track.fade)||0)
         });
         return;
       }
@@ -5419,10 +5464,14 @@ function openDesktopAudioDetail(){
 
       const actionValues = kind==='se'
         ? [['none','なし'],['play','このSceneで鳴らす']]
-        : [['continue','前Sceneを継続'],['start','このSceneで開始'],['stop','このSceneで停止']];
+        : [['continue','前Sceneを継続'],['start','このSceneで開始'],['volume','このSceneで音量変更'],['stop','このSceneで停止']];
 
       controlGrid.append(
         desktopDetailSelect('動作',actionValues,track.action,v=>{
+          if(v==='volume'&&track.action!=='volume'){
+            const inherited=inheritedPersistentState(kind);
+            if(inherited)track.volume=inherited.volume;
+          }
           track.action=v;
           refreshAudioPreview(kind,{playOneShot:kind==='se'&&v==='play',startPersistent:kind!=='se'&&v==='start'});
           renderTrack();
@@ -5433,30 +5482,36 @@ function openDesktopAudioDetail(){
       asset.className='desktop-audio-detail-asset';
       const assetText=document.createElement('div');
       assetText.className='desktop-audio-detail-file';
-      assetText.innerHTML=`<strong>${track.src?'選択中':'音源未選択'}</strong><span>${track._editorFileName||track.src||'ファイルを選択してください'}</span>`;
-
-      const assetBtns=document.createElement('div');
-      assetBtns.className='desktop-audio-detail-file-actions';
-      assetBtns.append(
-        desktopAction(track.src?'音源を変更':'ファイルを選択',()=>{
-          desktopPickFile((!desktopLiveActive() ? '' : 'audio/*'),(url,name)=>{
-            track.src=url;
-            track._editorFileName=name;
-            if(kind==='se')track.action='play';
-            else track.action='start';
-            refreshAudioPreview(kind,{playOneShot:kind==='se',startPersistent:kind!=='se'});
+      const inherited=inheritedPersistentState(kind);
+      if(kind!=='se'&&(track.action==='continue'||track.action==='volume')){
+        const inheritedName=inherited?._editorFileName||inherited?.src||'現在BGM / Ambientなし';
+        assetText.innerHTML=`<strong>${track.action==='volume'?'前Sceneの音を音量変更':'前Sceneを継続'}</strong><span>${inheritedName}</span>`;
+        asset.append(assetText);
+      }else{
+        assetText.innerHTML=`<strong>${track.src?'選択中':'音源未選択'}</strong><span>${track._editorFileName||track.src||'ファイルを選択してください'}</span>`;
+        const assetBtns=document.createElement('div');
+        assetBtns.className='desktop-audio-detail-file-actions';
+        assetBtns.append(
+          desktopAction(track.src?'音源を変更':'ファイルを選択',()=>{
+            desktopPickFile((!desktopLiveActive() ? '' : 'audio/*'),(url,name)=>{
+              track.src=url;
+              track._editorFileName=name;
+              if(kind==='se')track.action='play';
+              else track.action='start';
+              refreshAudioPreview(kind,{playOneShot:kind==='se',startPersistent:kind!=='se'});
+              renderTrack();
+            });
+          },'is-primary'),
+          desktopAction('音源を外す',()=>{
+            track.src='';
+            track._editorFileName='';
+            track.action=kind==='se'?'none':'continue';
+            refreshAudioPreview(kind);
             renderTrack();
-          });
-        },'is-primary'),
-        desktopAction('音源を外す',()=>{
-          track.src='';
-          track._editorFileName='';
-          track.action=kind==='se'?'none':'continue';
-          refreshAudioPreview(kind);
-          renderTrack();
-        })
-      );
-      asset.append(assetText,assetBtns);
+          })
+        );
+        asset.append(assetText,assetBtns);
+      }
       controlSec.appendChild(asset);
       content.appendChild(controlSec);
 
@@ -5467,32 +5522,47 @@ function openDesktopAudioDetail(){
       const levelGrid=document.createElement('div');levelGrid.className='desktop-text-detail-two';
       levelSec.appendChild(levelGrid);
 
-      levelGrid.append(
-        desktopDetailRange('音量',{
-          min:0,max:1,step:.01,value:Number(track.volume),
-          unit:' %',format:v=>Math.round(v*100),
-          oninput:v=>{track.volume=v;refreshAudioPreview(kind,{liveVolume:v});}
-        }),
-        desktopDetailRange('フェードイン',{
-          min:0,max:10,step:.1,value:(Number(track.fadeIn)||0)/1000,
-          unit:' 秒',format:v=>v.toFixed(1),
-          oninput:v=>{track.fadeIn=Math.round(v*1000);refreshAudioPreview(kind);}
-        }),
-        desktopDetailRange('フェードアウト',{
-          min:0,max:10,step:.1,value:(Number(track.fadeOut)||0)/1000,
-          unit:' 秒',format:v=>v.toFixed(1),
-          oninput:v=>{track.fadeOut=Math.round(v*1000);refreshAudioPreview(kind);}
-        })
-      );
+      if(kind!=='se'&&track.action==='volume'){
+        levelGrid.append(
+          desktopDetailRange('このSceneからの音量',{
+            min:0,max:1,step:.01,value:Number(track.volume),
+            unit:' %',format:v=>Math.round(v*100),
+            oninput:v=>{track.volume=v;refreshAudioPreview(kind,{liveVolume:v});}
+          }),
+          desktopDetailRange('音量変化時間',{
+            min:0,max:10,step:.1,value:(Number(track.fade)||0)/1000,
+            unit:' 秒',format:v=>v.toFixed(1),
+            oninput:v=>{track.fade=Math.round(v*1000);refreshAudioPreview(kind);}
+          })
+        );
+      }else{
+        levelGrid.append(
+          desktopDetailRange('音量',{
+            min:0,max:1,step:.01,value:Number(track.volume),
+            unit:' %',format:v=>Math.round(v*100),
+            oninput:v=>{track.volume=v;refreshAudioPreview(kind,{liveVolume:v});}
+          }),
+          desktopDetailRange('フェードイン',{
+            min:0,max:10,step:.1,value:(Number(track.fadeIn)||0)/1000,
+            unit:' 秒',format:v=>v.toFixed(1),
+            oninput:v=>{track.fadeIn=Math.round(v*1000);refreshAudioPreview(kind);}
+          }),
+          desktopDetailRange('フェードアウト',{
+            min:0,max:10,step:.1,value:(Number(track.fadeOut)||0)/1000,
+            unit:' 秒',format:v=>v.toFixed(1),
+            oninput:v=>{track.fadeOut=Math.round(v*1000);refreshAudioPreview(kind);}
+          })
+        );
+      }
 
-      if(kind!=='se'){
+      if(kind!=='se'&&track.action!=='volume'){
         levelGrid.append(
           desktopDetailSelect('ループ',[['on','ON'],['off','OFF']],track.loop===false?'off':'on',v=>{
             track.loop=v!=='off';
             refreshAudioPreview(kind);
           })
         );
-      }else{
+      }else if(kind==='se'){
         levelGrid.append(
           desktopDetailRange('再生遅延',{
             min:0,max:10,step:.1,value:(Number(track.delay)||0)/1000,
@@ -5573,6 +5643,7 @@ function openDesktopAudioDetail(){
       track.volume=1;
       track.fadeIn=0;
       track.fadeOut=0;
+      track.fade=0;
       track.loop=true;
       if(activeKind==='se'){
         track.delay=0;
@@ -6161,7 +6232,7 @@ function openDesktopTextDetail(){
 
     const audioCard=desktopCard('音（♪）','desktop-live-audio-card');
     const audioGrid=document.createElement('div');audioGrid.className='desktop-live-audio-grid';
-    const channel=(title,ch)=>{const row=document.createElement('div');row.className='desktop-live-audio-col';const h=document.createElement('strong');h.textContent=title;row.appendChild(h);const cmd=managedAudio(scene,ch);const state=document.createElement('small');state.textContent=cmd?.action==='start'?(cmd._editorFileName||'音源あり'):cmd?.action==='stop'?'停止':'前Sceneを継続';row.appendChild(state);row.append(desktopAction('継続',()=>{setManagedAudio(scene,ch,null);refresh();}),desktopAction('停止',()=>{setManagedAudio(scene,ch,{channel:ch,action:'stop',fadeOut:600});refresh();}),desktopAction(cmd?.action==='start'?'ファイルを変更':'ファイルを選択',()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,ch,{channel:ch,action:'start',src:url,volume:ch==='ambient'?.35:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:name})),'is-primary'));return row;};
+    const channel=(title,ch)=>{const row=document.createElement('div');row.className='desktop-live-audio-col';const h=document.createElement('strong');h.textContent=title;row.appendChild(h);const cmd=managedAudio(scene,ch);const state=document.createElement('small');state.textContent=cmd?.action==='start'?(cmd._editorFileName||'音源あり'):cmd?.action==='volume'?`音量変更 ${Math.round((Number(cmd.volume)||0)*100)}%`:cmd?.action==='stop'?'停止':'前Sceneを継続';row.appendChild(state);row.append(desktopAction('継続',()=>{setManagedAudio(scene,ch,null);refresh();}),desktopAction('停止',()=>{setManagedAudio(scene,ch,{channel:ch,action:'stop',fadeOut:600});refresh();}),desktopAction(cmd?.action==='start'?'ファイルを変更':'ファイルを選択',()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,ch,{channel:ch,action:'start',src:url,volume:ch==='ambient'?.35:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:name})),'is-primary'));return row;};
     audioGrid.append(channel('BGM','bgm'),channel('Ambient（環境音）','ambient'));
     const se=document.createElement('div');se.className='desktop-live-audio-col';se.innerHTML='<strong>SE（効果音）</strong>';const secmd=managedAudio(scene,'oneshot');const sest=document.createElement('small');sest.textContent=secmd?.src?(secmd._editorFileName||'音源あり'):'なし';se.appendChild(sest);se.append(desktopAction('なし',()=>{setManagedAudio(scene,'oneshot',null);refresh();}),desktopAction(secmd?'ファイルを変更':'ファイルを選択',()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,'oneshot',{channel:'oneshot',role:'se',action:'play',src:url,volume:.8,fadeIn:0,_editorFileName:name})),'is-primary'));audioGrid.appendChild(se);
     audioCard.append(audioGrid,desktopDetail('音の詳細設定','audio'));
