@@ -7370,11 +7370,16 @@ function openDesktopTextDetail(){
       e.preventDefault();
       e.stopImmediatePropagation();
       if(b.dataset.liveEdit==='text'){
+        // Capture the selected cover target first. Finishing the inline edit
+        // clears liveCoverInlineTarget and may synchronously fire blur handlers.
         const target=liveCoverInlineTarget || desktopCoverStyleTarget || 'title';
-        liveShellTextContext={kind:'cover',target};
         if(liveCoverInlineTarget)finishLiveCoverInlineEdit({refresh:false});
         document.activeElement?.blur?.();
+        // Set shell context only after the inline editor has fully closed so
+        // its cleanup cannot erase/retarget the Aa sheet.
+        liveShellTextContext={kind:'cover',target};
         renderLiveEditSheet('text');
+        setLiveToolbarVisible(true);
       }
       return;
     }
@@ -7429,11 +7434,16 @@ function openDesktopTextDetail(){
     if(playerHost.classList.contains('sp-cover-open')){
       e.stopImmediatePropagation();
       if(b.dataset.liveEdit==='text'){
+        // Capture the selected cover target first. Finishing the inline edit
+        // clears liveCoverInlineTarget and may synchronously fire blur handlers.
         const target=liveCoverInlineTarget || desktopCoverStyleTarget || 'title';
-        liveShellTextContext={kind:'cover',target};
         if(liveCoverInlineTarget)finishLiveCoverInlineEdit({refresh:false});
         document.activeElement?.blur?.();
+        // Set shell context only after the inline editor has fully closed so
+        // its cleanup cannot erase/retarget the Aa sheet.
+        liveShellTextContext={kind:'cover',target};
         renderLiveEditSheet('text');
+        setLiveToolbarVisible(true);
       }
       return;
     }
