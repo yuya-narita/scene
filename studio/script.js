@@ -2950,9 +2950,24 @@
 
   const pct = (value, fallback=0) => Math.max(0, Math.min(100, Number(value ?? fallback))) / 100;
   const ms = (value, fallback=0) => Math.max(0, Number(value ?? fallback) || 0);
-  function managedAudio(scene, channel){ return (scene.audio || []).find(c => c?._editorManaged && c.channel === channel) || null; }
+  function managedAudio(scene, channel){
+    const list=scene.audio || [];
+    // Prefer events created by Studio, but imported .scene files are valid even
+    // when they do not contain the private _editorManaged marker. Falling back
+    // to the first matching Format v1 command lets Live/Advanced Studio show
+    // the value authored in the current Scene instead of only the inherited
+    // value from the previous Scene.
+    return list.find(c => c?._editorManaged && c.channel === channel)
+      || list.find(c => c && c.channel === channel && (channel !== 'oneshot' || c.role === 'se' || !c.role))
+      || null;
+  }
   function setManagedAudio(scene, channel, command){
-    const rest=(scene.audio || []).filter(c => !(c?._editorManaged && c.channel === channel));
+    const list=scene.audio || [];
+    const existing=managedAudio(scene,channel);
+    // If an imported raw Format v1 command is being edited, replace that exact
+    // command rather than appending a second Studio-managed event. Other raw
+    // commands (for example an additional one-shot) are preserved.
+    const rest=list.filter(c => c !== existing && !(c?._editorManaged && c.channel === channel));
     if(command) rest.push({...command, _editorManaged:true});
     if(rest.length) scene.audio=rest; else delete scene.audio;
   }
@@ -5205,18 +5220,25 @@ function openDesktopAudioDetail(){
       const legacy=legacyModel?.[kind]||null;
 
       if(cmd){
+        const inherited=(kind==='bgm'||kind==='ambient') ? inheritedPersistentState(kind) : null;
+        const usesOwnVolume=cmd.action==='start'||cmd.action==='play'||cmd.action==='volume';
         return {
           action: kind==='se'
             ? ((cmd.action==='play'||cmd.action==='start')?'play':'none')
             : (cmd.action||'continue'),
           src:cmd.src||'',
-          volume:Number.isFinite(Number(cmd.volume))?Number(cmd.volume):1,
+          // START/VOLUME/SE show the value authored by this Scene. STOP has no
+          // volume field, so show the level that is actually sounding when the
+          // Scene is entered instead of falling back to a misleading 100%.
+          volume:usesOwnVolume && Number.isFinite(Number(cmd.volume))
+            ? Number(cmd.volume)
+            : (inherited?.volume ?? 1),
           fadeIn:Number(cmd.fadeIn)||0,
           fadeOut:Number(cmd.fadeOut)||0,
           fade:Number(cmd.fade)||0,
-          loop:cmd.loop!==false,
+          loop:cmd.action==='start' ? cmd.loop!==false : inherited?.loop!==false,
           delay:Number(cmd.delay)||0,
-          repeat:Number(cmd.repeat)||1,
+          repeat:Number(cmd.repeat ?? cmd.count)||1,
           _editorFileName:cmd._editorFileName||''
         };
       }
