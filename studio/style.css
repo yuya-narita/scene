@@ -8461,3 +8461,46 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
     scroll-padding-bottom:calc(96px + env(safe-area-inset-bottom))!important;
   }
 }
+
+
+/* v0.3 Aa picker fit v8
+   The remaining "clipping" was the selector/thumb itself touching the edge.
+   Give both the SV cursor and hue thumb a real inner gutter instead of clipping them. */
+@media (max-width:640px){
+  .live-edit-sheet .studio-color-popover,
+  .live-edit-sheet .studio-color-picker.is-compact .studio-color-popover{
+    overflow:visible!important;
+    padding-left:12px!important;
+    padding-right:12px!important;
+  }
+
+  .live-edit-sheet .studio-color-square{
+    width:calc(100% - 20px)!important;
+    max-width:calc(100% - 20px)!important;
+    margin-left:10px!important;
+    margin-right:10px!important;
+    overflow:visible!important;
+    box-sizing:border-box!important;
+  }
+
+  .live-edit-sheet .studio-color-square-cursor,
+  .live-edit-sheet .studio-color-sv-cursor,
+  .live-edit-sheet .studio-color-cursor{
+    box-sizing:border-box!important;
+  }
+
+  .live-edit-sheet .studio-color-hue{
+    width:calc(100% - 28px)!important;
+    max-width:calc(100% - 28px)!important;
+    margin-left:14px!important;
+    margin-right:14px!important;
+  }
+
+  .live-edit-sheet .studio-color-meta{
+    width:calc(100% - 20px)!important;
+    max-width:calc(100% - 20px)!important;
+    margin-left:10px!important;
+    margin-right:10px!important;
+    box-sizing:border-box!important;
+  }
+}
