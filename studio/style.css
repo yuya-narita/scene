@@ -8504,3 +8504,61 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
     box-sizing:border-box!important;
   }
 }
+
+
+/* v0.3 Aa picker center v9
+   Mobile: center the picker exactly under the color field.
+   No asymmetric offsets, no left/right drift. Same for Scene / Cover / Ending. */
+@media (max-width:640px){
+  .live-edit-color-custom{
+    padding-left:0!important;
+    padding-right:0!important;
+    overflow:visible!important;
+  }
+
+  .live-edit-sheet .studio-color-picker,
+  .live-edit-sheet .studio-color-picker.is-compact{
+    width:100%!important;
+    max-width:100%!important;
+    margin:0 auto!important;
+    overflow:visible!important;
+  }
+
+  .live-edit-sheet .studio-color-popover,
+  .live-edit-sheet .studio-color-picker.is-compact .studio-color-popover{
+    position:static!important;
+    width:calc(100% - 28px)!important;
+    max-width:calc(100% - 28px)!important;
+    margin:8px auto 0!important;
+    padding:10px!important;
+    left:auto!important;
+    right:auto!important;
+    top:auto!important;
+    bottom:auto!important;
+    transform:none!important;
+    box-sizing:border-box!important;
+    overflow:visible!important;
+  }
+
+  .live-edit-sheet .studio-color-square{
+    width:100%!important;
+    max-width:100%!important;
+    margin:0!important;
+    box-sizing:border-box!important;
+    overflow:visible!important;
+  }
+
+  .live-edit-sheet .studio-color-hue{
+    width:calc(100% - 16px)!important;
+    max-width:calc(100% - 16px)!important;
+    margin:8px auto 5px!important;
+    box-sizing:border-box!important;
+  }
+
+  .live-edit-sheet .studio-color-meta{
+    width:100%!important;
+    max-width:100%!important;
+    margin:0 auto!important;
+    box-sizing:border-box!important;
+  }
+}
