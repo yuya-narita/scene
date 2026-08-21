@@ -1087,7 +1087,8 @@
       const endingFamily = families[doc.ending?.fontFamily] || families.serif;
       this.host.style.setProperty('--sp-cover-font', coverFamily);
 
-      if (this.els.title) this.els.title.textContent = doc.title || '';
+      const canonicalTitle = String(doc.title || '').trim()==='Untitled' ? '' : String(doc.title || '');
+      if (this.els.title) this.els.title.textContent = canonicalTitle;
       if (this.els.author) this.els.author.textContent = doc.author || '';
 
       const logoSrc = String(doc.cover?.logo?.src || '').trim();
@@ -1095,13 +1096,23 @@
         this.els.coverLogo.src = logoSrc;
         this.els.coverLogo.hidden = !logoSrc;
       }
-      const coverText = doc.cover?.text || {};
-      const coverValue = (key, fallback='') => Object.prototype.hasOwnProperty.call(coverText,key) ? String(coverText[key] ?? '') : String(fallback ?? '');
-      if (this.els.coverTitle) { const title=coverValue('title',doc.title||''); this.els.coverTitle.textContent=title; this.els.coverTitle.hidden=Boolean(logoSrc)||!title.trim(); }
-      if (this.els.coverAuthor) { const author=coverValue('author',doc.author||''); this.els.coverAuthor.textContent=author; this.els.coverAuthor.hidden=!author.trim(); }
-      if (this.els.coverSubtitle) { const subtitle=coverValue('subtitle',doc.metadata?.subtitle||doc.subtitle||''); this.els.coverSubtitle.textContent=subtitle; this.els.coverSubtitle.hidden=!subtitle.trim(); }
-      if (this.els.coverEpisode) { const episode=coverValue('episode',doc.metadata?.episode||doc.episode||''); this.els.coverEpisode.textContent=episode; this.els.coverEpisode.hidden=!episode.trim(); }
-      if (this.els.coverEpisodeTitle) { const episodeTitle=coverValue('episodeTitle',doc.metadata?.episodeTitle||doc.episodeTitle||''); this.els.coverEpisodeTitle.textContent=episodeTitle; this.els.coverEpisodeTitle.hidden=!episodeTitle.trim(); }
+      const coverText = doc.cover?.text || {}; // legacy read-only fallback
+      const visibility = doc.cover?.visibility || {};
+      const canonicalValue = (key, fallback='') => {
+        const clean=String(fallback??'');
+        if(clean.trim() && !(key==='title' && clean.trim()==='Untitled')) return clean;
+        return Object.prototype.hasOwnProperty.call(coverText,key) ? String(coverText[key] ?? '') : '';
+      };
+      const coverVisible = (key,value) => {
+        if(Object.prototype.hasOwnProperty.call(visibility,key)) return visibility[key]!==false && Boolean(String(value||'').trim());
+        if(Object.prototype.hasOwnProperty.call(coverText,key) && String(coverText[key]??'')==='') return false;
+        return Boolean(String(value||'').trim());
+      };
+      if (this.els.coverTitle) { const title=canonicalValue('title',doc.title||''); this.els.coverTitle.textContent=title; this.els.coverTitle.hidden=Boolean(logoSrc)||!coverVisible('title',title); }
+      if (this.els.coverAuthor) { const author=canonicalValue('author',doc.author||''); this.els.coverAuthor.textContent=author; this.els.coverAuthor.hidden=!coverVisible('author',author); }
+      if (this.els.coverSubtitle) { const subtitle=canonicalValue('subtitle',doc.metadata?.subtitle||doc.subtitle||''); this.els.coverSubtitle.textContent=subtitle; this.els.coverSubtitle.hidden=!coverVisible('subtitle',subtitle); }
+      if (this.els.coverEpisode) { const episode=canonicalValue('episode',doc.metadata?.episode||doc.episode||''); this.els.coverEpisode.textContent=episode; this.els.coverEpisode.hidden=!coverVisible('episode',episode); }
+      if (this.els.coverEpisodeTitle) { const episodeTitle=canonicalValue('episodeTitle',doc.metadata?.episodeTitle||doc.episodeTitle||''); this.els.coverEpisodeTitle.textContent=episodeTitle; this.els.coverEpisodeTitle.hidden=!coverVisible('episodeTitle',episodeTitle); }
 
       const coverStyles = doc.cover?.styles || {};
       const coverStyleMap = [
@@ -1442,15 +1453,25 @@
         this.els.coverBg.style.backgroundSize=cover.fit==='contain'?'contain':'cover';
         this.els.coverBg.style.backgroundPosition=cover.position||'center center';
       }
-      const coverText=this.document.cover?.text||{};
-      const coverValue=(key,fallback='')=>Object.prototype.hasOwnProperty.call(coverText,key)?String(coverText[key]??''):String(fallback??'');
+      const coverText=this.document.cover?.text||{}; // legacy fallback only
+      const visibility=this.document.cover?.visibility||{};
+      const coverValue=(key,fallback='')=>{
+        const clean=String(fallback??'');
+        if(clean.trim() && !(key==='title'&&clean.trim()==='Untitled'))return clean;
+        return Object.prototype.hasOwnProperty.call(coverText,key)?String(coverText[key]??''):'';
+      };
+      const coverVisible=(key,value)=>{
+        if(Object.prototype.hasOwnProperty.call(visibility,key))return visibility[key]!==false&&Boolean(String(value||'').trim());
+        if(Object.prototype.hasOwnProperty.call(coverText,key)&&String(coverText[key]??'')==='')return false;
+        return Boolean(String(value||'').trim());
+      };
       const logoSrc=String(this.document.cover?.logo?.src||'').trim();
       if(this.els.coverLogo){this.els.coverLogo.src=logoSrc;this.els.coverLogo.hidden=!logoSrc;}
-      if(this.els.coverAuthor){const author=coverValue('author',this.document.author||'');this.els.coverAuthor.textContent=author;this.els.coverAuthor.hidden=!author.trim();}
-      if(this.els.coverEpisode){const ep=coverValue('episode',this.document.metadata?.episode||this.document.episode||'');this.els.coverEpisode.textContent=ep;this.els.coverEpisode.hidden=!ep.trim();}
-      if(this.els.coverEpisodeTitle){const epTitle=coverValue('episodeTitle',this.document.metadata?.episodeTitle||this.document.episodeTitle||'');this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!epTitle.trim();}
-      if(this.els.coverTitle){const title=coverValue('title',this.document.title||'');this.els.coverTitle.textContent=title;this.els.coverTitle.hidden=Boolean(logoSrc)||!title.trim();}
-      if(this.els.coverSubtitle){const sub=coverValue('subtitle',this.document.metadata?.subtitle||this.document.subtitle||'');this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!sub.trim();}
+      if(this.els.coverAuthor){const author=coverValue('author',this.document.author||'');this.els.coverAuthor.textContent=author;this.els.coverAuthor.hidden=!coverVisible('author',author);}
+      if(this.els.coverEpisode){const ep=coverValue('episode',this.document.metadata?.episode||this.document.episode||'');this.els.coverEpisode.textContent=ep;this.els.coverEpisode.hidden=!coverVisible('episode',ep);}
+      if(this.els.coverEpisodeTitle){const epTitle=coverValue('episodeTitle',this.document.metadata?.episodeTitle||this.document.episodeTitle||'');this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!coverVisible('episodeTitle',epTitle);}
+      if(this.els.coverTitle){const title=coverValue('title',this.document.title||'');this.els.coverTitle.textContent=title;this.els.coverTitle.hidden=Boolean(logoSrc)||!coverVisible('title',title);}
+      if(this.els.coverSubtitle){const sub=coverValue('subtitle',this.document.metadata?.subtitle||this.document.subtitle||'');this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!coverVisible('subtitle',sub);}
       this.els.cover.hidden=false;
       this.host.classList.add('sp-cover-open');
       return true;

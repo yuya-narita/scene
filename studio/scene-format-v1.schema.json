@@ -689,7 +689,7 @@
         },
         "text": {
           "type": "object",
-          "description": "Cover-only text overrides. Missing fields inherit work metadata; empty string explicitly hides the field on the cover.",
+          "description": "Deprecated legacy cover-only text override. Studio v13+ uses canonical work metadata plus cover.visibility.",
           "properties": {
             "title": {
               "type": "string"
@@ -705,6 +705,28 @@
             },
             "episodeTitle": {
               "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "visibility": {
+          "type": "object",
+          "description": "Controls whether canonical work metadata is rendered on the cover. It does not change title/author/episode metadata.",
+          "properties": {
+            "title": {
+              "type": "boolean"
+            },
+            "subtitle": {
+              "type": "boolean"
+            },
+            "author": {
+              "type": "boolean"
+            },
+            "episode": {
+              "type": "boolean"
+            },
+            "episodeTitle": {
+              "type": "boolean"
             }
           },
           "additionalProperties": true

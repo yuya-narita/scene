@@ -1256,9 +1256,10 @@
   }
 
   function coverTextOverrideValue(target, fallback='') {
-    const text=workingDocument?.cover?.text;
-    if(text && Object.prototype.hasOwnProperty.call(text,target)) return String(text[target] ?? '');
-    return String(fallback ?? '');
+    // v13 compatibility name: cover display text now comes from canonical work info.
+    const canonical=coverTextStateFromDocument();
+    if(Object.prototype.hasOwnProperty.call(canonical,target))return String(canonical[target]??'');
+    return String(fallback??'');
   }
 
   function updateCoverPreview(){
@@ -1283,16 +1284,17 @@
     const episodeTitle=coverTextOverrideValue('episodeTitle',episodeTitleInput?.value||'').trim();
 
     if(coverPreviewLogo){coverPreviewLogo.src=coverLogoUrl||'';coverPreviewLogo.hidden=!coverLogoUrl;}
+    const visible=coverVisibilityStateFromDocument();
     if(coverPreviewTitle){
       const previewTitle=title;
       coverPreviewTitle.textContent=previewTitle;
-      coverPreviewTitle.hidden=Boolean(coverLogoUrl)||!previewTitle;
+      coverPreviewTitle.hidden=Boolean(coverLogoUrl)||!previewTitle||visible.title===false;
       coverPreviewTitle.classList.toggle('has-authored-break',/\r?\n/.test(previewTitle));
     }
-    if(coverPreviewAuthor){coverPreviewAuthor.textContent=author;coverPreviewAuthor.hidden=!author;}
-    if(coverPreviewEpisode){coverPreviewEpisode.textContent=episode;coverPreviewEpisode.hidden=!episode;}
-    if(coverPreviewSubtitle){coverPreviewSubtitle.textContent=subtitle;coverPreviewSubtitle.hidden=!subtitle;}
-    if(coverPreviewEpisodeTitle){coverPreviewEpisodeTitle.textContent=episodeTitle;coverPreviewEpisodeTitle.hidden=!episodeTitle;}
+    if(coverPreviewAuthor){coverPreviewAuthor.textContent=author;coverPreviewAuthor.hidden=!author||visible.author===false;}
+    if(coverPreviewEpisode){coverPreviewEpisode.textContent=episode;coverPreviewEpisode.hidden=!episode||visible.episode===false;}
+    if(coverPreviewSubtitle){coverPreviewSubtitle.textContent=subtitle;coverPreviewSubtitle.hidden=!subtitle||visible.subtitle===false;}
+    if(coverPreviewEpisodeTitle){coverPreviewEpisodeTitle.textContent=episodeTitle;coverPreviewEpisodeTitle.hidden=!episodeTitle||visible.episodeTitle===false;}
 
     coverPreview.dataset.liveTitle=title;
     coverPreview.dataset.liveAuthor=author;
@@ -1365,8 +1367,8 @@
         ...(workingDocument?.cover?.styles && Object.keys(workingDocument.cover.styles).length
           ? {styles:clone(workingDocument.cover.styles)}
           : {}),
-        ...(workingDocument?.cover?.text && Object.keys(workingDocument.cover.text).length
-          ? {text:clone(workingDocument.cover.text)}
+        ...(workingDocument?.cover?.visibility && Object.keys(workingDocument.cover.visibility).length
+          ? {visibility:clone(workingDocument.cover.visibility)}
           : {})
       },
       ending:endingFromEasy(),
@@ -1788,8 +1790,8 @@
     workingDocument.appearance.typography.fontFamily=selectedFont;
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
-    const preservedCoverText=clone(workingDocument.cover?.text||{});
-    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverText).length?{text:preservedCoverText}:{})};
+    const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
+    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -3905,6 +3907,63 @@
     rememberWorkIdentity();
     scheduleDraftSave(250);
   }
+
+  let coverVisibilityPanel=null;
+  const coverVisibilityChecks={};
+
+  function ensureCoverVisibilityPanel(){
+    if(coverVisibilityPanel||!coverQuickDialog)return coverVisibilityPanel;
+    const card=document.createElement('section');
+    card.className='cover-visibility-panel';
+    const h=document.createElement('strong');
+    h.textContent='表紙に表示する情報';
+    const note=document.createElement('p');
+    note.textContent='作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。';
+    const grid=document.createElement('div');
+    grid.className='cover-visibility-grid';
+
+    const labels=[
+      ['title','作品タイトル'],
+      ['subtitle','サブタイトル'],
+      ['author','作者名'],
+      ['episode','話数'],
+      ['episodeTitle','今回のタイトル']
+    ];
+    for(const [target,labelText] of labels){
+      const label=document.createElement('label');
+      label.className='cover-visibility-check';
+      const input=document.createElement('input');
+      input.type='checkbox';
+      input.dataset.coverVisibilityTarget=target;
+      const span=document.createElement('span');
+      span.textContent=labelText;
+      label.append(input,span);
+      grid.appendChild(label);
+      coverVisibilityChecks[target]=input;
+      input.addEventListener('change',()=>{
+        setCoverFieldVisible(target,input.checked,{refresh:true});
+      });
+    }
+    card.append(h,note,grid);
+
+    const fontAnchor=coverQuickFont?.closest?.('label') || coverQuickFont?.parentElement;
+    if(fontAnchor?.parentElement)fontAnchor.parentElement.insertBefore(card,fontAnchor);
+    else coverQuickDialog.querySelector?.('section,form,div')?.appendChild(card);
+    coverVisibilityPanel=card;
+    return card;
+  }
+
+  function syncCoverVisibilityControls(){
+    ensureCoverVisibilityPanel();
+    const state=coverVisibilityStateFromDocument();
+    for(const target of COVER_INFO_FIELDS){
+      const input=coverVisibilityChecks[target];
+      if(input)input.checked=state[target]!==false;
+      const desktop=desktopLivePanelBody?.querySelector?.(`[data-cover-visibility-target="${target}"]`);
+      if(desktop)desktop.checked=state[target]!==false;
+    }
+  }
+
   function openCoverQuickEditor(focusTarget='title'){
     if(!coverQuickDialog)return;
     coverQuickWorkTitle.value=titleInput?.value||'';
@@ -3914,6 +3973,8 @@
     coverQuickEpisodeTitle.value=episodeTitleInput?.value||'';
     if(coverQuickDescription)coverQuickDescription.value=descriptionInput?.value||'';
     if(coverQuickFont)coverQuickFont.value=coverFontFamily;
+    ensureCoverVisibilityPanel();
+    syncCoverVisibilityControls();
     coverQuickImageClear.hidden=!coverImageUrl;
     coverQuickLogoClear.hidden=!coverLogoUrl;
     coverQuickDialog.hidden=false;
@@ -6491,31 +6552,33 @@ function openDesktopTextDetail(){
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');desktopLivePanelBody.innerHTML='';
     desktopSceneLabel.textContent='表紙';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
-    const textCard=desktopCard('表紙表示テキスト');
+
+    const textCard=desktopCard('作品情報・表紙表示');
     const textNote=document.createElement('p');
-    textNote.textContent='左の表紙に表示する文字を編集します。Easy Studioの作品情報とは別です。';
+    textNote.textContent='左はプレビュー兼直接編集です。文字内容はEasy Studioと共通。チェックで表紙への表示だけ切り替えます。';
     Object.assign(textNote.style,{margin:'0 0 10px',fontSize:'12px',lineHeight:'1.55',color:'#737984'});
     textCard.appendChild(textNote);
+
     const displayText=coverTextStateFromDocument();
+    const visible=coverVisibilityStateFromDocument();
     [['作品タイトル','title'],['サブタイトル','subtitle'],['作者名','author'],['話数','episode'],['今回のタイトル','episodeTitle']].forEach(([label,target])=>{
       const row=document.createElement('div');row.className='desktop-live-field';
+      const head=document.createElement('div');
+      Object.assign(head.style,{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px'});
       const cap=document.createElement('span');cap.textContent=label;
-      const line=document.createElement('div');
-      Object.assign(line.style,{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto',gap:'8px',alignItems:'center'});
+      const showLabel=document.createElement('label');showLabel.className='desktop-cover-visible-check';
+      const check=document.createElement('input');check.type='checkbox';check.checked=visible[target]!==false;check.dataset.coverVisibilityTarget=target;
+      const checkText=document.createElement('span');checkText.textContent='表紙に表示';
+      showLabel.append(check,checkText);head.append(cap,showLabel);
+
       const input=document.createElement('input');
       input.type='text';input.value=displayText[target]||'';input.dataset.coverTextTarget=target;
       input.addEventListener('focus',()=>desktopCoverStyleTarget=target);
       input.addEventListener('input',()=>{desktopCoverStyleTarget=target;setCoverTextValue(target,input.value,{refresh:true});});
-      const reset=document.createElement('button');
-      reset.type='button';reset.textContent='作品情報に戻す';
-      Object.assign(reset.style,{height:'34px',padding:'0 10px',border:'1px solid #d7dbe2',borderRadius:'9px',background:'#fff',color:'#68707c',font:'700 11px/1 system-ui',whiteSpace:'nowrap'});
-      reset.addEventListener('click',()=>{
-        desktopCoverStyleTarget=target;
-        resetCoverTextOverride(target,{refresh:true});
-        renderDesktopLivePanel();
-      });
-      line.append(input,reset);row.append(cap,line);textCard.appendChild(row);
+      check.addEventListener('change',()=>setCoverFieldVisible(target,check.checked,{refresh:true}));
+      row.append(head,input);textCard.appendChild(row);
     });
+
     const styleCard=desktopCard('選択中の文字（Aa）');
     styleCard.append(desktopMakeSelect('対象',[['title','作品タイトル'],['subtitle','サブタイトル'],['author','作者名'],['episode','話数'],['episodeTitle','今回のタイトル']],desktopCoverStyleTarget,v=>{desktopCoverStyleTarget=v;renderDesktopLivePanel();}));
     styleCard.append(shellStyleControls(
@@ -7890,17 +7953,68 @@ function openDesktopTextDetail(){
   let liveCoverInlineTarget='';
   let liveCoverTextDraft=null;
 
+  const COVER_INFO_FIELDS=['title','subtitle','author','episode','episodeTitle'];
+
   function coverTextStateFromDocument(){
     const doc=workingDocument||{};
-    const text=doc.cover?.text||{};
-    const value=(key,fallback)=>Object.prototype.hasOwnProperty.call(text,key)?String(text[key]??''):String(fallback??'');
-    return {
-      title:value('title',String(doc.title||'').trim()==='Untitled'?'':doc.title||''),
-      subtitle:value('subtitle',doc.metadata?.subtitle||''),
-      author:value('author',doc.author||''),
-      episode:value('episode',doc.metadata?.episode||''),
-      episodeTitle:value('episodeTitle',doc.metadata?.episodeTitle||'')
+    const legacy=doc.cover?.text||{};
+    const canonical={
+      title:String(doc.title||'').trim()==='Untitled'?'':String(doc.title||''),
+      subtitle:String(doc.metadata?.subtitle||''),
+      author:String(doc.author||''),
+      episode:String(doc.metadata?.episode||''),
+      episodeTitle:String(doc.metadata?.episodeTitle||'')
     };
+    // Legacy v11/v12 cover.text is read only as a fallback when canonical metadata
+    // is genuinely empty. New edits never write cover.text.
+    for(const key of COVER_INFO_FIELDS){
+      if(!canonical[key] && Object.prototype.hasOwnProperty.call(legacy,key)){
+        canonical[key]=String(legacy[key]??'');
+      }
+    }
+    return canonical;
+  }
+
+  function coverVisibilityStateFromDocument(){
+    const doc=workingDocument||{};
+    const visibility=doc.cover?.visibility||{};
+    const legacy=doc.cover?.text||{};
+    const state={};
+    for(const key of COVER_INFO_FIELDS){
+      if(Object.prototype.hasOwnProperty.call(visibility,key)){
+        state[key]=visibility[key]!==false;
+      }else if(Object.prototype.hasOwnProperty.call(legacy,key) && String(legacy[key]??'')===''){
+        // Preserve old explicit-hide semantics once, without keeping two text stores.
+        state[key]=false;
+      }else{
+        state[key]=true;
+      }
+    }
+    return state;
+  }
+
+  function isCoverFieldVisible(target){
+    return coverVisibilityStateFromDocument()[target]!==false;
+  }
+
+  function setCoverFieldVisible(target,visible,{refresh=true}={}){
+    if(!COVER_INFO_FIELDS.includes(target))return;
+    if(!workingDocument)ensureWorkingDocumentFromEasy();
+    workingDocument.cover ||= {};
+    workingDocument.cover.visibility ||= {};
+    workingDocument.cover.visibility[target]=Boolean(visible);
+
+    // v13: once visibility is explicit, retire any legacy cover-only text override.
+    if(workingDocument.cover.text){
+      delete workingDocument.cover.text[target];
+      if(!Object.keys(workingDocument.cover.text).length)delete workingDocument.cover.text;
+    }
+
+    updateCoverPreview();
+    syncEasyPublishButton();
+    scheduleDraftSave(80);
+    if(refresh)refreshLivePlayerDocumentChrome();
+    syncCoverVisibilityControls();
   }
 
   function snapshotLiveCoverTextDraft(){
@@ -7926,32 +8040,53 @@ function openDesktopTextDetail(){
   function setCoverTextValue(target,value,{refresh=true}={}){
     if(!target)return;
     const raw=String(value??'');
+    if(!workingDocument)ensureWorkingDocumentFromEasy();
+
+    // One source of truth: editing the live cover edits the same work information
+    // that Easy Studio edits. Only visibility/style belong exclusively to the cover.
+    workingDocument.metadata ||= {};
+    if(target==='title'){
+      workingDocument.title=raw;
+      if(titleInput)titleInput.value=raw;
+      if(coverQuickWorkTitle)coverQuickWorkTitle.value=raw;
+    }else if(target==='author'){
+      workingDocument.author=raw;
+      if(authorInput)authorInput.value=raw;
+      if(coverQuickAuthor)coverQuickAuthor.value=raw;
+    }else if(target==='subtitle'){
+      workingDocument.metadata.subtitle=raw;
+      if(subtitleInput)subtitleInput.value=raw;
+      if(coverQuickSubtitle)coverQuickSubtitle.value=raw;
+    }else if(target==='episode'){
+      workingDocument.metadata.episode=raw;
+      if(episodeInput)episodeInput.value=raw;
+      if(coverQuickEpisode)coverQuickEpisode.value=raw;
+    }else if(target==='episodeTitle'){
+      workingDocument.metadata.episodeTitle=raw;
+      if(episodeTitleInput)episodeTitleInput.value=raw;
+      if(coverQuickEpisodeTitle)coverQuickEpisodeTitle.value=raw;
+    }
+
+    // Retire the old cover-only override for the edited field.
+    if(workingDocument.cover?.text){
+      delete workingDocument.cover.text[target];
+      if(!Object.keys(workingDocument.cover.text).length)delete workingDocument.cover.text;
+    }
+
     const d=ensureLiveCoverTextDraft();
     d[target]=raw;
-    workingDocument.cover ||= {};
-    workingDocument.cover.text ||= {};
-    workingDocument.cover.text[target]=raw;
     syncDesktopCoverDisplayInput(target,raw);
     updateCoverPreview();
     syncEasyPublishButton();
+    rememberWorkIdentity();
     scheduleDraftSave(90);
     if(refresh)refreshLivePlayerDocumentChrome();
   }
 
   function resetCoverTextOverride(target,{refresh=true}={}){
-    if(!target)return;
-    const text=workingDocument.cover?.text;
-    if(text && Object.prototype.hasOwnProperty.call(text,target)){
-      delete text[target];
-      if(!Object.keys(text).length)delete workingDocument.cover.text;
-    }
-    const fresh=coverTextStateFromDocument();
-    const d=ensureLiveCoverTextDraft();
-    d[target]=fresh[target]||'';
-    syncDesktopCoverDisplayInput(target,d[target]);
-    updateCoverPreview();
-    syncEasyPublishButton();
-    scheduleDraftSave(90);
+    // Kept only as a compatibility hook. v13 has no separate cover text override.
+    const current=coverTextStateFromDocument()[target]||'';
+    syncDesktopCoverDisplayInput(target,current);
     if(refresh)refreshLivePlayerDocumentChrome();
   }
 
