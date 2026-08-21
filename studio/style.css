@@ -8256,4 +8256,16 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
 .mobile-live-detail-sheet .studio-color-popover{
   z-index:2147483500!important;
 }
-\n\n/* Aa compact picker (Scene/Cover/Ending): viewport popover must beat the mobile inline rule. */\n.live-edit-sheet .live-edit-color-custom .studio-color-popover,\n.live-edit-sheet .live-edit-color-custom .studio-color-picker.is-compact .studio-color-popover{\n  position:fixed!important;\n  margin:0!important;\n  transform:none!important;\n  box-shadow:0 14px 34px rgba(0,0,0,.22)!important;\n  z-index:2147483500!important;\n  overflow:auto!important;\n}\n
+
+
+/* Aa compact picker (Scene/Cover/Ending): keep picker interactive and inside viewport. */
+.live-edit-sheet .live-edit-color-custom .studio-color-popover,
+.live-edit-sheet .live-edit-color-custom .studio-color-picker.is-compact .studio-color-popover{
+  position:fixed!important;
+  margin:0!important;
+  transform:none!important;
+  box-shadow:0 14px 34px rgba(0,0,0,.22)!important;
+  z-index:2147483500!important;
+  overflow:auto!important;
+  pointer-events:auto!important;
+}

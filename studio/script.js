@@ -7428,10 +7428,23 @@ function openDesktopTextDetail(){
 
     if(playerHost.classList.contains('sp-cover-open')){
       e.stopImmediatePropagation();
+      if(b.dataset.liveEdit==='text'){
+        const target=liveCoverInlineTarget || desktopCoverStyleTarget || 'title';
+        liveShellTextContext={kind:'cover',target};
+        if(liveCoverInlineTarget)finishLiveCoverInlineEdit({refresh:false});
+        document.activeElement?.blur?.();
+        renderLiveEditSheet('text');
+      }
       return;
     }
     if(player?.ended){
       e.stopImmediatePropagation();
+      if(b.dataset.liveEdit==='text'){
+        liveShellTextContext={kind:'ending'};
+        liveEndingInlineEl?.blur();
+        document.activeElement?.blur?.();
+        renderLiveEditSheet('text');
+      }
       return;
     }
 
