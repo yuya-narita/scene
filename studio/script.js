@@ -7304,6 +7304,9 @@ function openDesktopTextDetail(){
     const scale=Math.max(.35,Math.min(4,Number(store?.[d.key]?.scale)||1));
     d.el.style.setProperty('transform',`translate(-50%,-50%) scale(${scale})`,'important');
     d.el.style.zIndex='6';
+    if(liveCoverScaleControls?.style.display!=='none'){
+      requestAnimationFrame(()=>liveCoverScaleControls._place?.());
+    }
   }
 
   function endLiveCoverDrag(event){
@@ -7328,48 +7331,118 @@ function openDesktopTextDetail(){
 
   function ensureLiveCoverScaleControls(){
     if(liveCoverScaleControls?.isConnected)return liveCoverScaleControls;
-    const wrap=document.createElement('div');
-    wrap.className='live-cover-scale-controls';
-    Object.assign(wrap.style,{
+
+    const handle=document.createElement('button');
+    handle.type='button';
+    handle.className='live-cover-resize-handle';
+    handle.setAttribute('aria-label','選択中の表紙文字のサイズを変更');
+    Object.assign(handle.style,{
       position:'absolute',
-      right:'12px',
-      top:'55%',
-      transform:'translateY(-50%)',
-      zIndex:'90',
+      zIndex:'95',
       display:'none',
-      flexDirection:'column',
-      gap:'10px',
-      pointerEvents:'auto'
+      width:'28px',
+      height:'28px',
+      padding:'0',
+      margin:'0',
+      border:'0',
+      background:'transparent',
+      cursor:'nwse-resize',
+      touchAction:'none',
+      WebkitTapHighlightColor:'transparent'
     });
-    const make=(label,aria,delta)=>{
-      const b=document.createElement('button');
-      b.type='button';
-      b.textContent=label;
-      b.setAttribute('aria-label',aria);
-      Object.assign(b.style,{
-        width:'48px',height:'48px',
-        borderRadius:'50%',
-        border:'1px solid rgba(255,255,255,.28)',
-        background:'rgba(18,20,24,.86)',
-        color:'#fff',
-        font:'600 25px/1 system-ui,-apple-system,sans-serif',
-        boxShadow:'0 5px 20px rgba(0,0,0,.22)',
-        WebkitBackdropFilter:'blur(12px)',
-        backdropFilter:'blur(12px)',
-        WebkitTapHighlightColor:'transparent'
-      });
-      b.addEventListener('click',(event)=>{
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        adjustLiveCoverScale(delta);
-      },true);
-      return b;
+
+    const dot=document.createElement('span');
+    Object.assign(dot.style,{
+      position:'absolute',
+      left:'50%',
+      top:'50%',
+      transform:'translate(-50%,-50%)',
+      width:'12px',
+      height:'12px',
+      borderRadius:'50%',
+      background:'#8a5cff',
+      border:'2px solid rgba(255,255,255,.95)',
+      boxShadow:'0 1px 6px rgba(0,0,0,.28)'
+    });
+    handle.appendChild(dot);
+
+    let resize=null;
+
+    const place=()=>{
+      if(!liveCoverLayoutEl||!handle.isConnected)return;
+      const hostRect=playerHost.getBoundingClientRect();
+      const r=liveCoverLayoutEl.getBoundingClientRect();
+      handle.style.left=`${r.right-hostRect.left-14}px`;
+      handle.style.top=`${r.top-hostRect.top-14}px`;
     };
-    wrap.append(make('＋','選択中の表紙文字を大きくする',.1));
-    wrap.append(make('−','選択中の表紙文字を小さくする',-.1));
-    playerHost.appendChild(wrap);
-    liveCoverScaleControls=wrap;
-    return wrap;
+
+    const begin=(event)=>{
+      if(!liveCoverLayoutEl||!liveCoverLayoutKey)return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      const r=liveCoverLayoutEl.getBoundingClientRect();
+      const cx=r.left+r.width/2;
+      const cy=r.top+r.height/2;
+      const store=ensureCoverLayoutStore();
+      const item=store?.[liveCoverLayoutKey]||{};
+      resize={
+        pointerId:event.pointerId,
+        cx,cy,
+        startDistance:Math.max(24,Math.hypot(event.clientX-cx,event.clientY-cy)),
+        startScale:Math.max(.35,Math.min(4,Number(item.scale)||1))
+      };
+      suppressCoverClickUntil=performance.now()+700;
+      try{handle.setPointerCapture?.(event.pointerId);}catch(_){}
+    };
+
+    const move=(event)=>{
+      if(!resize||event.pointerId!==resize.pointerId)return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      const distance=Math.max(12,Math.hypot(event.clientX-resize.cx,event.clientY-resize.cy));
+      const next=Math.max(.35,Math.min(4,resize.startScale*(distance/resize.startDistance)));
+      const store=ensureCoverLayoutStore();
+      if(!store||!liveCoverLayoutKey)return;
+      const item=store[liveCoverLayoutKey]||{};
+      store[liveCoverLayoutKey]={...item,scale:next};
+
+      const x=Number.isFinite(Number(item.x))?Number(item.x):null;
+      const y=Number.isFinite(Number(item.y))?Number(item.y):null;
+      if(x!==null&&y!==null){
+        liveCoverLayoutEl.style.setProperty('position','absolute','important');
+        liveCoverLayoutEl.style.setProperty('left',`${Math.max(0,Math.min(1,x))*100}%`,'important');
+        liveCoverLayoutEl.style.setProperty('top',`${Math.max(0,Math.min(1,y))*100}%`,'important');
+      }
+      liveCoverLayoutEl.style.setProperty('transform',`translate(-50%,-50%) scale(${next})`,'important');
+      requestAnimationFrame(place);
+    };
+
+    const end=(event)=>{
+      if(!resize||event.pointerId!==resize.pointerId)return;
+      try{handle.releasePointerCapture?.(event.pointerId);}catch(_){}
+      resize=null;
+      suppressCoverClickUntil=performance.now()+500;
+      syncEasyShellToWorkingDocument();
+      refreshLivePlayerDocumentChrome();
+      syncEasyPublishButton();
+      scheduleDraftSave(80);
+      requestAnimationFrame(()=>{
+        applyLiveCoverLayout();
+        place();
+      });
+    };
+
+    handle.addEventListener('pointerdown',begin,{passive:false,capture:true});
+    handle.addEventListener('pointermove',move,{passive:false,capture:true});
+    handle.addEventListener('pointerup',end,{passive:true,capture:true});
+    handle.addEventListener('pointercancel',end,{passive:true,capture:true});
+
+    handle._place=place;
+    playerHost.appendChild(handle);
+    liveCoverScaleControls=handle;
+    return handle;
   }
 
   function clearLiveCoverLayoutSelection(){
@@ -7393,30 +7466,11 @@ function openDesktopTextDetail(){
     el.style.setProperty('outline','1px dashed rgba(255,255,255,.62)','important');
     el.style.setProperty('outline-offset','7px','important');
     const controls=ensureLiveCoverScaleControls();
-    controls.style.display='flex';
+    controls.style.display='block';
+    requestAnimationFrame(()=>controls._place?.());
     suppressCoverClickUntil=performance.now()+550;
   }
 
-  function adjustLiveCoverScale(delta){
-    if(!liveCoverLayoutEl||!liveCoverLayoutKey)return;
-    const store=ensureCoverLayoutStore();
-    if(!store)return;
-    const item=store[liveCoverLayoutKey]||{};
-    const current=Math.max(.35,Math.min(4,Number(item.scale)||1));
-    const next=Math.max(.35,Math.min(4,Math.round((current+delta)*10)/10));
-    store[liveCoverLayoutKey]={...item,scale:next};
-    const x=Number.isFinite(Number(item.x))?Number(item.x):null;
-    const y=Number.isFinite(Number(item.y))?Number(item.y):null;
-    if(x!==null&&y!==null){
-      liveCoverLayoutEl.style.setProperty('position','absolute','important');
-      liveCoverLayoutEl.style.setProperty('left',`${Math.max(0,Math.min(1,x))*100}%`,'important');
-      liveCoverLayoutEl.style.setProperty('top',`${Math.max(0,Math.min(1,y))*100}%`,'important');
-    }
-    liveCoverLayoutEl.style.setProperty('transform',`translate(-50%,-50%) scale(${next})`,'important');
-    syncEasyShellToWorkingDocument();
-    syncEasyPublishButton();
-    scheduleDraftSave(80);
-  }
 
   playerHost.addEventListener('pointerdown',(event)=>{
     if(!liveEditEnabled||autoRecActive||!playerHost.classList.contains('sp-cover-open'))return;
