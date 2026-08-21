@@ -665,6 +665,27 @@
             "sans",
             "mono"
           ]
+        },
+        "styles": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "$ref": "#/$defs/style"
+            },
+            "subtitle": {
+              "$ref": "#/$defs/style"
+            },
+            "author": {
+              "$ref": "#/$defs/style"
+            },
+            "episode": {
+              "$ref": "#/$defs/style"
+            },
+            "episodeTitle": {
+              "$ref": "#/$defs/style"
+            }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true
