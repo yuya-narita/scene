@@ -4237,6 +4237,7 @@
   let liveEditEnabled=false;
   let liveEditToolbarVisible=false;
   let liveInlineEditEl=null;
+  let liveInlineEditField='text';
   let liveInlineKeyboardShift=0;
   let liveInlineIntroTimer=0;
   let liveInlineDockTimer=0;
@@ -4277,6 +4278,7 @@
       editingEl.classList.remove('live-inline-editing');
     }
     liveInlineEditEl=null;
+    liveInlineEditField='text';
     playerHost.classList.remove('live-inline-text-edit');
     document.body.classList.remove('live-inline-text-edit');
     resetInlineKeyboardShift();
@@ -4338,11 +4340,20 @@
     if(!el)return '';
     const {scene}=liveEditScene();if(!scene)return '';
     const value=el.innerText.replace(/\n$/,'');
-    scene.text=value;
-    if(player?.currentScene)player.currentScene.text=value;
-    el.classList.toggle('live-edit-empty-target',value.length===0);
-    el.closest('.sp-scene')?.classList.toggle('live-edit-empty-scene',value.length===0);
-    updateInlineAutoFit(scene,el);
+    if(liveInlineEditField==='subText'){
+      if(value.length)scene.subText=value;
+      else delete scene.subText;
+      if(player?.currentScene){
+        if(value.length)player.currentScene.subText=value;
+        else delete player.currentScene.subText;
+      }
+    }else{
+      scene.text=value;
+      if(player?.currentScene)player.currentScene.text=value;
+      el.classList.toggle('live-edit-empty-target',value.length===0);
+      el.closest('.sp-scene')?.classList.toggle('live-edit-empty-scene',value.length===0);
+      updateInlineAutoFit(scene,el);
+    }
     scheduleDraftSave(100);
     return value;
   }
@@ -4480,11 +4491,13 @@ function bindLiveKeyboardViewport(){
 }
 bindLiveKeyboardViewport();
 
-function startInlineTextEdit(){
+function startInlineTextEdit(field='text'){
     const {scene}=liveEditScene(); if(!scene)return;
     finishInlineTextEdit(); closeLiveEditSheet(); setLiveToolbarVisible(true);
-    const el=playerHost.querySelector('.sp-scene.is-active .sp-text'); if(!el)return;
+    const selector=field==='subText'?'.sp-subtext':'.sp-text';
+    const el=playerHost.querySelector(`.sp-scene.is-active ${selector}`); if(!el)return;
 
+    liveInlineEditField=field==='subText'?'subText':'text';
     liveInlineEditEl=el;
     // Keep the six-key Live Edit strip available while the iOS keyboard is open.
     // This lets the author move directly from writing to typography/effects/etc.
@@ -4499,7 +4512,7 @@ function startInlineTextEdit(){
     // The element itself stays in the Player; no duplicate textarea/modal is created.
     el.setAttribute('contenteditable','true');
     el.setAttribute('role','textbox');
-    el.setAttribute('aria-label','Scene text');
+    el.setAttribute('aria-label',liveInlineEditField==='subText'?'Scene subtext':'Scene text');
     el.classList.add('live-inline-editing');
     playerHost.classList.add('live-inline-text-edit');
     // Toolbar is a sibling of #scenePlayer, so expose editing state on body too.
@@ -7198,15 +7211,16 @@ function openDesktopTextDetail(){
     if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
     if(liveInlineEditEl)return;
 
+    const activeSubText=e.target.closest('.sp-scene.is-active .sp-subtext');
     const activeText=e.target.closest('.sp-scene.is-active .sp-text');
-    if(!activeText)return;
+    if(!activeSubText&&!activeText)return;
 
-    // The text itself is the edit entry point: one tap opens the keyboard
-    // and edits the visible Scene in place. The command strip stays available.
+    // Visible authored text is the edit entry point. Main text and subtext
+    // are edited independently; tapping empty stage space still advances.
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
     setLiveToolbarVisible(true);
-    startInlineTextEdit();
+    startInlineTextEdit(activeSubText?'subText':'text');
   },true);
   playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});closeLiveEditSheet();setLiveToolbarVisible(false);});
   playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
