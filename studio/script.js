@@ -4258,7 +4258,8 @@
     document.body.classList.remove('live-edit-sheet-open');
   }
   function setLiveToolbarVisible(show){
-    liveEditToolbarVisible=!!show;
+    const coverOpen=playerHost?.classList?.contains('sp-cover-open');
+    liveEditToolbarVisible=!!show && !coverOpen;
     if(liveEditToolbar) liveEditToolbar.hidden=!liveEditEnabled||!liveEditToolbarVisible;
     playerHost.classList.toggle('live-edit-toolbar-visible',liveEditEnabled&&liveEditToolbarVisible);
   }
@@ -6808,6 +6809,16 @@ function openDesktopTextDetail(){
 
   liveEditToolbar?.addEventListener('pointerdown',(e)=>{
     const b=e.target.closest?.('[data-live-edit]');if(!b)return;
+
+    if(playerHost.classList.contains('sp-cover-open')){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget){
+        openLiveCoverStylePanel();
+      }
+      return;
+    }
+
     e.stopPropagation();
 
     // On iPhone, tapping a toolbar button while the software keyboard is open
@@ -6842,7 +6853,17 @@ function openDesktopTextDetail(){
 
   liveEditToolbar?.addEventListener('click',(e)=>{
     const b=e.target.closest('[data-live-edit]');if(!b)return;
-    e.preventDefault();e.stopPropagation();
+    e.preventDefault();
+
+    if(playerHost.classList.contains('sp-cover-open')){
+      e.stopImmediatePropagation();
+      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget){
+        openLiveCoverStylePanel();
+      }
+      return;
+    }
+
+    e.stopPropagation();
 
     // If pointerdown already handled an inline-edit command, ignore the
     // follow-up click. Otherwise this is the normal keyboard-closed path.
@@ -7159,23 +7180,37 @@ function openDesktopTextDetail(){
     if(liveCoverStyleButton)liveCoverStyleButton.hidden=true;
     closeLiveCoverStylePanel();
   }
+  function placeLiveCoverStyleButton(){
+    if(!liveCoverStyleButton||liveCoverStyleButton.hidden)return;
+    const vv=window.visualViewport;
+    const top=(vv?.offsetTop||0)+(vv?.height||window.innerHeight)-64;
+    liveCoverStyleButton.style.top=`${Math.max(70,Math.round(top))}px`;
+    liveCoverStyleButton.style.bottom='auto';
+  }
   function showLiveCoverStyleButton(){
     if(!liveCoverInlineEl)return;
     if(!liveCoverStyleButton){
       const b=document.createElement('button');
       b.type='button';b.textContent='Aa';b.setAttribute('aria-label','表紙文字の詳細設定');
       Object.assign(b.style,{
-        position:'fixed',right:'14px',bottom:'calc(var(--live-keyboard-inset, 0px) + 76px)',
+        position:'fixed',right:'14px',top:'70px',
         zIndex:'2147483200',width:'50px',height:'50px',borderRadius:'25px',
         border:'1px solid rgba(255,255,255,.32)',background:'rgba(20,22,26,.90)',
         color:'#fff',font:'800 18px/1 system-ui,-apple-system,sans-serif',
         boxShadow:'0 7px 22px rgba(0,0,0,.24)',WebkitTapHighlightColor:'transparent'
       });
-      b.addEventListener('pointerdown',e=>e.preventDefault());
-      b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();openLiveCoverStylePanel();},true);
+      b.addEventListener('pointerdown',e=>{
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      },true);
+      b.addEventListener('click',e=>{
+        e.preventDefault();e.stopImmediatePropagation();
+        openLiveCoverStylePanel();
+      },true);
       document.body.appendChild(b);liveCoverStyleButton=b;
     }
     liveCoverStyleButton.hidden=false;
+    placeLiveCoverStyleButton();
   }
   function openLiveCoverStylePanel(){
     if(!liveCoverInlineTarget)return;
@@ -7252,6 +7287,7 @@ function openDesktopTextDetail(){
 
   function startLiveCoverInlineEdit(el,target){
     if(!liveEditEnabled||autoRecActive||!playerHost.classList.contains('sp-cover-open')||!el)return;
+    setLiveToolbarVisible(false);
     if(liveCoverInlineEl===el)return;
     finishLiveCoverInlineEdit({refresh:false});
     liveCoverInlineEl=el;
@@ -7288,8 +7324,8 @@ function openDesktopTextDetail(){
     },{signal:abort.signal});
     el.addEventListener('keyup',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
     el.addEventListener('click',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
-    window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
-    window.visualViewport?.addEventListener('scroll',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
+    window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();}),{signal:abort.signal});
+    window.visualViewport?.addEventListener('scroll',()=>requestAnimationFrame(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();}),{signal:abort.signal});
     el.addEventListener('blur',()=>finishLiveCoverInlineEdit(),{once:true,signal:abort.signal});
 
     // Keep focus synchronous so iPhone still opens the keyboard on the first tap.
@@ -7304,10 +7340,10 @@ function openDesktopTextDetail(){
     }catch(_){}
 
     // iOS reports the reduced visualViewport shortly after the keyboard starts.
-    requestAnimationFrame(keepLiveCoverCaretVisible);
-    setTimeout(keepLiveCoverCaretVisible,120);
-    setTimeout(keepLiveCoverCaretVisible,260);
-    setTimeout(keepLiveCoverCaretVisible,420);
+    requestAnimationFrame(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();});
+    setTimeout(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();},120);
+    setTimeout(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();},260);
+    setTimeout(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();},420);
   }
 
   playerHost.addEventListener('click',(e)=>{
