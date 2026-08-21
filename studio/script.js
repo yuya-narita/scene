@@ -7268,6 +7268,7 @@ function openDesktopTextDetail(){
   function beginLiveCoverDrag(event,el,key){
     if(liveCoverPinch)return;
     if(!liveEditEnabled||autoRecActive||liveCoverInlineEl||!playerHost.classList.contains('sp-cover-open'))return;
+    if(liveCoverLayoutKey!==key||liveCoverLayoutEl!==el)return;
     if(event.pointerType==='mouse' && event.button!==0)return;
     const cover=playerHost.querySelector('.sp-cover');
     if(!cover)return;
@@ -7319,17 +7320,156 @@ function openDesktopTextDetail(){
     requestAnimationFrame(applyLiveCoverLayout);
   }
 
-  playerHost.addEventListener('touchstart',beginLiveCoverPinch,{passive:false,capture:true});
-  playerHost.addEventListener('touchmove',moveLiveCoverPinch,{passive:false,capture:true});
-  playerHost.addEventListener('touchend',(event)=>{if(liveCoverPinch && event.touches.length<2)endLiveCoverPinch();},{passive:true,capture:true});
-  playerHost.addEventListener('touchcancel',endLiveCoverPinch,{passive:true,capture:true});
+  let liveCoverLayoutEl=null;
+  let liveCoverLayoutKey='';
+  let liveCoverLongPressTimer=0;
+  let liveCoverPress=null;
+  let liveCoverScaleControls=null;
+
+  function ensureLiveCoverScaleControls(){
+    if(liveCoverScaleControls?.isConnected)return liveCoverScaleControls;
+    const wrap=document.createElement('div');
+    wrap.className='live-cover-scale-controls';
+    Object.assign(wrap.style,{
+      position:'absolute',
+      right:'12px',
+      top:'55%',
+      transform:'translateY(-50%)',
+      zIndex:'90',
+      display:'none',
+      flexDirection:'column',
+      gap:'10px',
+      pointerEvents:'auto'
+    });
+    const make=(label,aria,delta)=>{
+      const b=document.createElement('button');
+      b.type='button';
+      b.textContent=label;
+      b.setAttribute('aria-label',aria);
+      Object.assign(b.style,{
+        width:'48px',height:'48px',
+        borderRadius:'50%',
+        border:'1px solid rgba(255,255,255,.28)',
+        background:'rgba(18,20,24,.86)',
+        color:'#fff',
+        font:'600 25px/1 system-ui,-apple-system,sans-serif',
+        boxShadow:'0 5px 20px rgba(0,0,0,.22)',
+        WebkitBackdropFilter:'blur(12px)',
+        backdropFilter:'blur(12px)',
+        WebkitTapHighlightColor:'transparent'
+      });
+      b.addEventListener('click',(event)=>{
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        adjustLiveCoverScale(delta);
+      },true);
+      return b;
+    };
+    wrap.append(make('＋','選択中の表紙文字を大きくする',.1));
+    wrap.append(make('−','選択中の表紙文字を小さくする',-.1));
+    playerHost.appendChild(wrap);
+    liveCoverScaleControls=wrap;
+    return wrap;
+  }
+
+  function clearLiveCoverLayoutSelection(){
+    if(liveCoverLongPressTimer){clearTimeout(liveCoverLongPressTimer);liveCoverLongPressTimer=0;}
+    liveCoverPress=null;
+    if(liveCoverLayoutEl){
+      liveCoverLayoutEl.style.removeProperty('outline');
+      liveCoverLayoutEl.style.removeProperty('outline-offset');
+    }
+    liveCoverLayoutEl=null;
+    liveCoverLayoutKey='';
+    if(liveCoverScaleControls)liveCoverScaleControls.style.display='none';
+  }
+
+  function selectLiveCoverLayout(el,key){
+    if(!el||!key)return;
+    finishLiveCoverInlineEdit({refresh:false});
+    clearLiveCoverLayoutSelection();
+    liveCoverLayoutEl=el;
+    liveCoverLayoutKey=key;
+    el.style.setProperty('outline','1px dashed rgba(255,255,255,.62)','important');
+    el.style.setProperty('outline-offset','7px','important');
+    const controls=ensureLiveCoverScaleControls();
+    controls.style.display='flex';
+    suppressCoverClickUntil=performance.now()+550;
+  }
+
+  function adjustLiveCoverScale(delta){
+    if(!liveCoverLayoutEl||!liveCoverLayoutKey)return;
+    const store=ensureCoverLayoutStore();
+    if(!store)return;
+    const item=store[liveCoverLayoutKey]||{};
+    const current=Math.max(.35,Math.min(4,Number(item.scale)||1));
+    const next=Math.max(.35,Math.min(4,Math.round((current+delta)*10)/10));
+    store[liveCoverLayoutKey]={...item,scale:next};
+    const x=Number.isFinite(Number(item.x))?Number(item.x):null;
+    const y=Number.isFinite(Number(item.y))?Number(item.y):null;
+    if(x!==null&&y!==null){
+      liveCoverLayoutEl.style.setProperty('position','absolute','important');
+      liveCoverLayoutEl.style.setProperty('left',`${Math.max(0,Math.min(1,x))*100}%`,'important');
+      liveCoverLayoutEl.style.setProperty('top',`${Math.max(0,Math.min(1,y))*100}%`,'important');
+    }
+    liveCoverLayoutEl.style.setProperty('transform',`translate(-50%,-50%) scale(${next})`,'important');
+    syncEasyShellToWorkingDocument();
+    syncEasyPublishButton();
+    scheduleDraftSave(80);
+  }
 
   playerHost.addEventListener('pointerdown',(event)=>{
     if(!liveEditEnabled||autoRecActive||!playerHost.classList.contains('sp-cover-open'))return;
     for(const [selector,key] of liveCoverDragMap){
       const el=event.target.closest?.(selector);
-      if(el){beginLiveCoverDrag(event,el,key);return;}
+      if(!el)continue;
+
+      // Once selected, one-finger drag is enabled. Otherwise a long press
+      // explicitly enters layout mode; ordinary taps remain text editing.
+      if(liveCoverLayoutEl===el && liveCoverLayoutKey===key){
+        beginLiveCoverDrag(event,el,key);
+        return;
+      }
+
+      if(event.pointerType==='mouse'){
+        return; // mouse users keep click-to-edit; layout mode is touch-first for now.
+      }
+
+      liveCoverPress={
+        pointerId:event.pointerId,el,key,
+        startX:event.clientX,startY:event.clientY
+      };
+      liveCoverLongPressTimer=setTimeout(()=>{
+        liveCoverLongPressTimer=0;
+        if(!liveCoverPress||liveCoverPress.pointerId!==event.pointerId)return;
+        selectLiveCoverLayout(el,key);
+        try{navigator.vibrate?.(12);}catch(_){}
+      },430);
+      return;
     }
+  },{passive:true});
+
+  playerHost.addEventListener('pointermove',(event)=>{
+    if(liveCoverPress&&event.pointerId===liveCoverPress.pointerId){
+      if(Math.hypot(event.clientX-liveCoverPress.startX,event.clientY-liveCoverPress.startY)>10){
+        if(liveCoverLongPressTimer)clearTimeout(liveCoverLongPressTimer);
+        liveCoverLongPressTimer=0;
+        liveCoverPress=null;
+      }
+    }
+  },{passive:true});
+
+  playerHost.addEventListener('pointerup',(event)=>{
+    if(liveCoverPress&&event.pointerId===liveCoverPress.pointerId){
+      if(liveCoverLongPressTimer)clearTimeout(liveCoverLongPressTimer);
+      liveCoverLongPressTimer=0;
+      liveCoverPress=null;
+    }
+  },{passive:true});
+  playerHost.addEventListener('pointercancel',()=>{
+    if(liveCoverLongPressTimer)clearTimeout(liveCoverLongPressTimer);
+    liveCoverLongPressTimer=0;
+    liveCoverPress=null;
   },{passive:true});
   playerHost.addEventListener('pointermove',moveLiveCoverDrag,{passive:false});
   playerHost.addEventListener('pointerup',endLiveCoverDrag,{passive:true});
@@ -7339,6 +7479,11 @@ function openDesktopTextDetail(){
     if(!liveEditEnabled||autoRecActive)return;
 
     if(playerHost.classList.contains('sp-cover-open')){
+      const clickedEditable=liveCoverDragMap.some(([selector])=>Boolean(e.target.closest?.(selector)));
+      const clickedScale=Boolean(e.target.closest?.('.live-cover-scale-controls'));
+      if(liveCoverLayoutEl && !clickedEditable && !clickedScale){
+        clearLiveCoverLayoutSelection();
+      }
       if(performance.now()<suppressCoverClickUntil){
         e.preventDefault();e.stopImmediatePropagation();
         return;
@@ -7405,8 +7550,8 @@ function openDesktopTextDetail(){
     setLiveToolbarVisible(true);
     startInlineTextEdit();
   },true);
-  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(applyLiveCoverLayout);});
-  playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
+  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});clearLiveCoverLayoutSelection();closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(applyLiveCoverLayout);});
+  playerHost.addEventListener('sceneplayer:scenechange',()=>{finishLiveCoverInlineEdit({refresh:false});clearLiveCoverLayoutSelection();});
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
     const detailKind=currentDesktopDetailKind();
     finishInlineTextEdit();
