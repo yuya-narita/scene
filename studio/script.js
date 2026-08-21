@@ -942,13 +942,62 @@
       hsv.v=1-Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));
       preview=hsvToHex(hsv.h,hsv.s,hsv.v);paint();if(typeof onPreview==='function')onPreview(preview);
     };
+    const placePopover=()=>{
+      if(!open)return;
+      const vv=window.visualViewport;
+      const vw=vv?.width||window.innerWidth;
+      const vh=vv?.height||window.innerHeight;
+      const vo=vv?.offsetTop||0;
+      const r=trigger.getBoundingClientRect();
+      const width=Math.min(286,Math.max(220,vw-24));
+      pop.style.position='fixed';
+      pop.style.width=`${width}px`;
+      pop.style.boxSizing='border-box';
+      pop.style.transform='none';
+      const left=Math.max(12,Math.min(vw-width-12,r.left+(r.width/2)-(width/2)));
+      pop.style.left=`${left}px`;
+      pop.style.right='auto';
+
+      // Measure after width is set. Prefer below, otherwise place above.
+      const ph=Math.min(pop.scrollHeight||260,Math.max(220,vh-24));
+      const below=r.bottom+8;
+      const above=r.top-ph-8;
+      const top=(below+ph<=vo+vh-8)?below:Math.max(vo+8,above);
+      pop.style.top=`${top}px`;
+      pop.style.maxHeight=`${Math.max(180,vh-16)}px`;
+      pop.style.overflow='auto';
+    };
     const close=(revert=true)=>{
-      if(!open)return;open=false;pop.hidden=true;root.classList.remove('is-open');document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',keyClose,true);
+      if(!open)return;
+      open=false;
+      pop.hidden=true;
+      root.classList.remove('is-open');
+      document.removeEventListener('pointerdown',outside,true);
+      document.removeEventListener('keydown',keyClose,true);
+      window.visualViewport?.removeEventListener('resize',placePopover);
+      window.visualViewport?.removeEventListener('scroll',placePopover);
+      window.removeEventListener('resize',placePopover);
       if(revert){preview=committed;hsv=hexToHsv(committed);hue.value=String(Math.round(hsv.h));paint();if(typeof onPreview==='function')onPreview(committed);}
     };
     const outside=e=>{if(!root.contains(e.target))close(true);};
     const keyClose=e=>{if(e.key==='Escape'){e.preventDefault();close(true);}};
-    trigger.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();open=!open;pop.hidden=!open;root.classList.toggle('is-open',open);if(open){requestAnimationFrame(()=>{document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',keyClose,true);paint();});}});
+    trigger.addEventListener('click',e=>{
+      e.preventDefault();e.stopPropagation();
+      open=!open;pop.hidden=!open;root.classList.toggle('is-open',open);
+      if(open){
+        requestAnimationFrame(()=>{
+          placePopover();
+          document.addEventListener('pointerdown',outside,true);
+          document.addEventListener('keydown',keyClose,true);
+          window.visualViewport?.addEventListener('resize',placePopover);
+          window.visualViewport?.addEventListener('scroll',placePopover);
+          window.addEventListener('resize',placePopover);
+          paint();
+        });
+      }else{
+        close(false);
+      }
+    });
     square.addEventListener('pointermove',previewAt);
     square.addEventListener('click',e=>{previewAt(e);committed=preview;rememberTextColor(committed);trigger.style.backgroundColor=committed;if(typeof onCommit==='function')onCommit(committed);close(false);});
     hue.addEventListener('input',()=>{hsv.h=Number(hue.value)||0;preview=hsvToHex(hsv.h,hsv.s,hsv.v);paint();if(typeof onPreview==='function')onPreview(preview);});
@@ -4264,9 +4313,10 @@
   function closeLiveEditSheet(){
     if(liveEditSheet){
       liveEditSheet.hidden=true;
-      liveEditSheet.classList.remove('live-edit-sheet-timing','live-edit-sheet-audio');
+      liveEditSheet.classList.remove('live-edit-sheet-timing','live-edit-sheet-audio','mobile-live-detail-sheet');
     }
-    document.body.classList.remove('live-edit-sheet-open');
+    document.body.classList.remove('live-edit-sheet-open','mobile-live-detail-open');
+    liveShellTextContext=null;
   }
   function clearCoverToolbarState(){
     if(!liveEditToolbar)return;
@@ -6726,7 +6776,270 @@ function openDesktopTextDetail(){
     });
   }
 
+
+  // Shell text (Cover / Ending) now uses the SAME Aa bottom sheet as Scene text.
+  // Keep one compact UI and one color system instead of separate cover/ending modals.
+  let liveShellTextContext=null;
+
+  function liveShellTextStyleContext(){
+    const ctx=liveShellTextContext;
+    if(!ctx)return null;
+
+    if(ctx.kind==='cover'){
+      const target=ctx.target;
+      if(!target)return null;
+      const style=ensureCoverStyleStore(target);
+      return {
+        label:'表紙',
+        detailLabel:'表紙',
+        style,
+        apply(){
+          workingDocument.cover ||= {};
+          workingDocument.cover.styles ||= {};
+          workingDocument.cover.styles[target]=clone(style);
+          refreshLivePlayerDocumentChrome();
+          applyCoverStyleToLiveElement(target,workingDocument.cover.styles[target]);
+          updateCoverPreview();
+          syncEasyPublishButton();
+          scheduleDraftSave(70);
+        },
+        previewColor(c){
+          applyCoverStyleToLiveElement(target,{...style,color:c});
+        }
+      };
+    }
+
+    if(ctx.kind==='ending'){
+      const style=ensureEndingStyleStore();
+      return {
+        label:'読了ページ',
+        detailLabel:'読了ページ',
+        style,
+        apply(){
+          workingDocument.ending ||= {};
+          workingDocument.ending.style=clone(style);
+          refreshLivePlayerDocumentChrome();
+          applyEndingStyleToLiveElement(workingDocument.ending.style);
+          updateEndingPreview();
+          syncEasyPublishButton();
+          scheduleDraftSave(70);
+          requestAnimationFrame(prepareLiveEndingEditor);
+        },
+        previewColor(c){
+          applyEndingStyleToLiveElement({...style,color:c});
+        }
+      };
+    }
+    return null;
+  }
+
+  function renderShellTextDetail(){
+    const ctx=liveShellTextStyleContext();
+    if(!ctx||!liveEditSheetBody)return;
+
+    liveEditSheet.hidden=false;
+    document.body.classList.add('live-edit-sheet-open','mobile-live-detail-open');
+    liveEditSheet.classList.add('mobile-live-detail-sheet');
+    const head=liveEditSheet.querySelector('.live-edit-sheet-head');
+    if(head)head.hidden=true;
+    liveEditSheetBody.innerHTML='';
+
+    const modal=document.createElement('section');
+    modal.className='desktop-text-detail-modal';
+    modal.dataset.mobileLiveDetail='true';
+    Object.assign(modal.style,{
+      width:'100%',maxWidth:'none',maxHeight:'none',height:'100%',overflow:'auto',
+      border:'0',borderRadius:'0',boxShadow:'none'
+    });
+
+    const modalHead=document.createElement('header');
+    modalHead.className='desktop-text-detail-head';
+    const titleWrap=document.createElement('div');
+    const small=document.createElement('small');small.textContent=ctx.detailLabel;
+    const title=document.createElement('h2');title.textContent='文字の詳細設定';
+    titleWrap.append(small,title);
+    const close=document.createElement('button');
+    close.type='button';close.className='desktop-text-detail-close';close.textContent='×';
+    modalHead.append(titleWrap,close);
+
+    const body=document.createElement('div');
+    body.className='desktop-text-detail-body';
+    const section=document.createElement('section');
+    section.className='desktop-text-detail-section';
+    const h3=document.createElement('h3');h3.textContent='基本';
+    const grid=document.createElement('div');grid.className='desktop-text-detail-two';
+
+    const st=ctx.style;
+    const apply=()=>ctx.apply();
+    grid.append(
+      desktopDetailSelect('書体',
+        [['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],
+        st.fontFamily||'inherit',
+        v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;apply();}
+      ),
+      desktopDetailSelect('サイズ',
+        [['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],
+        st.size||'auto',
+        v=>{st.size=v;apply();}
+      ),
+      desktopDetailSelect('文字色',
+        [['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],
+        !st.color?'auto':(String(st.color).toLowerCase()==='#ffffff'?'white':(String(st.color).toLowerCase()==='#000000'?'black':'custom')),
+        v=>{
+          if(v==='white')st.color='#ffffff';
+          else if(v==='black')st.color='#000000';
+          else if(v==='custom'){
+            if(!normalizeTextColor(st.color)||['#FFFFFF','#000000'].includes(normalizeTextColor(st.color)))st.color='#4A4A4A';
+          }else delete st.color;
+          apply();
+          renderShellTextDetail();
+        }
+      )
+    );
+    section.append(h3,grid);
+
+    const colorRow=document.createElement('div');
+    colorRow.className='desktop-text-detail-color';
+    const colorLabel=document.createElement('span');colorLabel.textContent='任意色';
+    const colorCode=document.createElement('code');
+    const initialColor=normalizeTextColor(st.color)||'#4A4A4A';
+    colorCode.textContent=initialColor;
+    const picker=makeCommittedTextColorPicker(initialColor,{
+      compact:true,
+      onPreview:c=>{colorCode.textContent=c;ctx.previewColor(c);},
+      onCommit:c=>{st.color=c;colorCode.textContent=c;ctx.apply();}
+    });
+    colorRow.append(colorLabel,picker.root,colorCode);
+    section.appendChild(colorRow);
+    section.appendChild(makeTextColorPalette(st.color,hex=>{
+      st.color=hex;ctx.apply();renderShellTextDetail();
+    }));
+    body.appendChild(section);
+
+    const foot=document.createElement('footer');
+    foot.className='desktop-text-detail-foot';
+    const done=document.createElement('button');done.type='button';done.textContent='完了';
+    done.className='desktop-text-detail-save';
+    foot.appendChild(done);
+
+    modal.append(modalHead,body,foot);
+    liveEditSheetBody.appendChild(modal);
+
+    const returnCompact=()=>{
+      modal.remove();
+      liveEditSheet.classList.remove('mobile-live-detail-sheet');
+      document.body.classList.remove('mobile-live-detail-open');
+      const liveHead=liveEditSheet.querySelector('.live-edit-sheet-head');
+      if(liveHead)liveHead.hidden=false;
+      renderShellLiveTextSheet();
+    };
+    close.addEventListener('click',returnCompact,{once:true});
+    done.addEventListener('click',returnCompact,{once:true});
+  }
+
+  function renderShellLiveTextSheet(){
+    const ctx=liveShellTextStyleContext();
+    if(!ctx||!liveEditSheetBody)return false;
+
+    liveEditSceneNumber.textContent=ctx.label;
+    liveEditSheet.hidden=false;
+    document.body.classList.add('live-edit-sheet-open');
+    liveEditSheet.classList.remove('live-edit-sheet-audio','live-edit-sheet-timing','mobile-live-detail-sheet');
+    document.body.classList.remove('mobile-live-detail-open');
+    const head=liveEditSheet.querySelector('.live-edit-sheet-head');
+    if(head)head.hidden=false;
+    liveEditSheetTitle.textContent='文字';
+    liveEditSheetBody.innerHTML='';
+
+    const st=ctx.style;
+    const rerender=()=>ctx.apply();
+
+    const makeSelect=(label,values,current,onchange)=>{
+      const wrap=document.createElement('label');
+      wrap.className='live-edit-field';
+      wrap.append(label);
+      const select=document.createElement('select');
+      values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
+      select.value=current;
+      select.addEventListener('change',()=>onchange(select.value));
+      wrap.appendChild(select);
+      return wrap;
+    };
+
+    const grid=document.createElement('div');
+    grid.className='live-edit-grid';
+
+    let colorValue=!st.color?'auto':(
+      String(st.color).toLowerCase()==='#ffffff'?'white':
+      (String(st.color).toLowerCase()==='#000000'?'black':'custom')
+    );
+
+    const colorField=makeSelect(
+      '色',
+      [['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],
+      colorValue,
+      v=>{
+        if(v==='white')st.color='#ffffff';
+        else if(v==='black')st.color='#000000';
+        else if(v==='custom'){
+          if(!normalizeTextColor(st.color)||['#FFFFFF','#000000'].includes(normalizeTextColor(st.color)))st.color='#4A4A4A';
+        }else delete st.color;
+        rerender();
+        renderShellLiveTextSheet();
+      }
+    );
+
+    grid.append(
+      makeSelect('書体',
+        [['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],
+        st.fontFamily||'inherit',
+        v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;rerender();}
+      ),
+      makeSelect('サイズ',
+        [['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],
+        st.size||'auto',
+        v=>{st.size=v;rerender();}
+      ),
+      colorField
+    );
+
+    liveEditSheetBody.appendChild(grid);
+
+    if(colorValue==='custom'){
+      const custom=document.createElement('div');
+      custom.className='live-edit-color-custom';
+      const label=document.createElement('span');label.textContent='任意色';
+      const initialColor=normalizeTextColor(st.color)||'#4A4A4A';
+      const value=document.createElement('code');value.textContent=initialColor;
+      const colorPicker=makeCommittedTextColorPicker(initialColor,{
+        compact:true,
+        onPreview:c=>{value.textContent=c;ctx.previewColor(c);},
+        onCommit:c=>{st.color=c;value.textContent=c;ctx.apply();}
+      });
+      custom.append(label,colorPicker.root,value);
+      liveEditSheetBody.appendChild(custom);
+    }
+
+    liveEditSheetBody.appendChild(makeTextColorPalette(st.color,hex=>{
+      st.color=hex;ctx.apply();renderShellLiveTextSheet();
+    }));
+
+    const detail=document.createElement('button');
+    detail.type='button';
+    detail.className='live-edit-detail';
+    detail.textContent='文字の詳細設定';
+    detail.addEventListener('click',e=>{
+      e.preventDefault();e.stopPropagation();renderShellTextDetail();
+    });
+    liveEditSheetBody.appendChild(detail);
+    return true;
+  }
+
   function renderLiveEditSheet(kind){
+    if(kind==='text' && liveShellTextContext){
+      renderShellLiveTextSheet();
+      return;
+    }
     const {scene,index}=liveEditScene(); if(!scene||!liveEditSheetBody)return;
     liveEditSceneNumber.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     liveEditSheet.hidden=false;
@@ -7064,9 +7377,10 @@ function openDesktopTextDetail(){
       e.stopImmediatePropagation();
       if(b.dataset.liveEdit==='text' && liveCoverInlineTarget){
         const target=liveCoverInlineTarget;
+        liveShellTextContext={kind:'cover',target};
         finishLiveCoverInlineEdit({refresh:false});
         document.activeElement?.blur?.();
-        openLiveCoverStylePanel(target);
+        renderLiveEditSheet('text');
       }
       return;
     }
@@ -7074,9 +7388,10 @@ function openDesktopTextDetail(){
       e.preventDefault();
       e.stopImmediatePropagation();
       if(b.dataset.liveEdit==='text'){
+        liveShellTextContext={kind:'ending'};
         liveEndingInlineEl?.blur();
         document.activeElement?.blur?.();
-        setTimeout(openLiveEndingStylePanel,140);
+        renderLiveEditSheet('text');
       }
       return;
     }

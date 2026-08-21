@@ -8241,3 +8241,18 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   position:relative;
   z-index:20;
 }
+
+
+/* Unified Aa color picker: keep hue slider endpoints visible on iPhone. */
+.studio-color-popover{
+  box-sizing:border-box;
+}
+.studio-color-hue{
+  width:calc(100% - 12px)!important;
+  margin-left:6px!important;
+  margin-right:6px!important;
+}
+.live-edit-sheet .studio-color-popover,
+.mobile-live-detail-sheet .studio-color-popover{
+  z-index:2147483500!important;
+}
