@@ -1257,10 +1257,15 @@
   }
 
   function coverTextOverrideValue(target, fallback='') {
-    // v13 compatibility name: cover display text now comes from canonical work info.
+    // Easy preview must reflect the currently visible Easy inputs immediately.
+    // workingDocument can lag behind while the Quick Edit sheet is still open;
+    // that stale value caused visibility toggles to appear only after closing/reopening.
+    const live=String(fallback??'');
+    if(live!=='')return live;
+
     const canonical=coverTextStateFromDocument();
     if(Object.prototype.hasOwnProperty.call(canonical,target))return String(canonical[target]??'');
-    return String(fallback??'');
+    return '';
   }
 
   function updateCoverPreview(){
@@ -8153,6 +8158,7 @@ function openDesktopTextDetail(){
     }
 
     updateCoverPreview();
+    requestAnimationFrame(updateCoverPreview);
     syncEasyPublishButton();
     scheduleDraftSave(80);
     if(refresh)refreshLivePlayerDocumentChrome();
