@@ -6256,6 +6256,7 @@ function openDesktopTextDetail(){
   function shellStyleControls(store,onApply){
     const wrap=document.createElement('div');wrap.className='desktop-live-grid';
     const initial=store();
+
     wrap.append(
       desktopMakeSelect(
         '書体',
@@ -6276,72 +6277,105 @@ function openDesktopTextDetail(){
           st.size=v;
           onApply(st);
         }
-      ),
+      )
     );
 
+    // Use the same color controls as the normal Aa editor:
+    // おまかせ / 任意色 + committed picker + 最近 / 固定.
     const colorField=document.createElement('div');
     colorField.className='desktop-live-field';
     const colorLabel=document.createElement('span');
     colorLabel.textContent='色';
 
-    const colorRow=document.createElement('div');
-    Object.assign(colorRow.style,{
-      display:'flex',
-      alignItems:'center',
-      gap:'8px',
-      flexWrap:'wrap',
-      minHeight:'40px'
+    const colorSelect=document.createElement('select');
+    const currentColor=normalizeTextColor(initial.color);
+    [['auto','おまかせ'],['custom','任意色']].forEach(([value,label])=>{
+      const o=document.createElement('option');o.value=value;o.textContent=label;colorSelect.appendChild(o);
     });
+    colorSelect.value=currentColor?'custom':'auto';
 
-    const makeColorButton=(label,value)=>{
-      const b=document.createElement('button');
-      b.type='button';
-      b.textContent=label;
-      Object.assign(b.style,{
-        minHeight:'38px',
-        padding:'0 14px',
-        border:'1px solid #d7d9de',
-        borderRadius:'19px',
-        background:'#fff',
-        cursor:'pointer'
-      });
-      b.addEventListener('click',()=>{
-        const st=store();
-        if(value===null)delete st.color;
-        else st.color=value;
-        onApply(st);
-      });
-      return b;
+    const customWrap=document.createElement('div');
+    customWrap.className='desktop-text-detail-color';
+    customWrap.style.gridColumn='1 / -1';
+
+    const customLabel=document.createElement('span');
+    customLabel.textContent='任意色';
+    const colorCode=document.createElement('code');
+    let activeColor=currentColor || '#4A4A4A';
+    colorCode.textContent=activeColor;
+
+    const applyColor=c=>{
+      const st=store();
+      const normalized=normalizeTextColor(c);
+      if(normalized){
+        st.color=normalized;
+        activeColor=normalized;
+        colorCode.textContent=normalized;
+        rememberTextColor(normalized);
+      }else{
+        delete st.color;
+      }
+      onApply(st);
     };
 
-    colorRow.append(
-      makeColorButton('おまかせ',null),
-      makeColorButton('白','#ffffff'),
-      makeColorButton('黒','#000000')
-    );
-
-    const picker=document.createElement('input');
-    picker.type='color';
-    picker.value=/^#[0-9a-f]{6}$/i.test(initial.color||'') ? initial.color : '#ffffff';
-    picker.setAttribute('aria-label','文字色を選択');
-    Object.assign(picker.style,{
-      width:'44px',
-      height:'38px',
-      padding:'3px',
-      border:'1px solid #d7d9de',
-      borderRadius:'10px',
-      background:'#fff',
-      cursor:'pointer'
+    const picker=makeCommittedTextColorPicker(activeColor,{
+      compact:true,
+      onPreview:c=>{
+        colorCode.textContent=c;
+        const selectors={
+          title:'.sp-cover-title',
+          subtitle:'.sp-cover-subtitle',
+          author:'.sp-cover-author',
+          episode:'.sp-cover-episode',
+          episodeTitle:'.sp-cover-episode-title'
+        };
+        const el=player?.els?.cover?.querySelector?.(selectors[desktopCoverStyleTarget]||'');
+        if(el)el.style.setProperty('color',c,'important');
+      },
+      onCommit:c=>{
+        applyColor(c);
+        renderDesktopLivePanel();
+      }
     });
-    picker.addEventListener('input',()=>{
-      const st=store();
-      st.color=picker.value;
-      onApply(st);
-    });
-    colorRow.appendChild(picker);
 
-    colorField.append(colorLabel,colorRow);
-    wrap.appendChild(colorField);
+    customWrap.append(customLabel,picker.root,colorCode);
+
+    const paletteHost=document.createElement('div');
+    paletteHost.style.gridColumn='1 / -1';
+    const renderPalette=()=>{
+      paletteHost.replaceChildren(
+        makeTextColorPalette(activeColor,c=>{
+          picker.setValue(c);
+          applyColor(c);
+          renderDesktopLivePanel();
+        })
+      );
+    };
+    renderPalette();
+
+    const syncColorMode=()=>{
+      const custom=colorSelect.value==='custom';
+      customWrap.hidden=!custom;
+      paletteHost.hidden=!custom;
+    };
+    colorSelect.addEventListener('change',()=>{
+      if(colorSelect.value==='auto'){
+        const st=store();
+        delete st.color;
+        onApply(st);
+        customWrap.hidden=true;
+        paletteHost.hidden=true;
+      }else{
+        const st=store();
+        if(!normalizeTextColor(st.color))st.color=activeColor;
+        onApply(st);
+        syncColorMode();
+      }
+    });
+
+    colorField.append(colorLabel,colorSelect);
+    wrap.append(colorField,customWrap,paletteHost);
+    syncColorMode();
 
     return wrap;
   }
