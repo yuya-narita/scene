@@ -6833,6 +6833,30 @@ function openDesktopTextDetail(){
     return;
   });
 
+  function openAfterKeyboardDismiss(openFn){
+    const vv=window.visualViewport;
+    const started=performance.now();
+    const initialHeight=vv?.height||window.innerHeight;
+    const baseline=Math.max(window.innerHeight,document.documentElement.clientHeight||0);
+    let stableFrames=0;
+    let lastHeight=initialHeight;
+
+    const tick=()=>{
+      const h=vv?.height||window.innerHeight;
+      const keyboardMostlyGone=!vv || h>=baseline*.78 || h>=initialHeight+120;
+      const stable=Math.abs(h-lastHeight)<3;
+      stableFrames=stable?stableFrames+1:0;
+      lastHeight=h;
+
+      if((keyboardMostlyGone&&stableFrames>=2) || performance.now()-started>700){
+        requestAnimationFrame(()=>requestAnimationFrame(openFn));
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   liveEditToolbar?.addEventListener('pointerdown',(e)=>{
     const b=e.target.closest?.('[data-live-edit]');if(!b)return;
 
@@ -6841,10 +6865,9 @@ function openDesktopTextDetail(){
       e.stopImmediatePropagation();
       if(b.dataset.liveEdit==='text' && liveCoverInlineTarget){
         const target=liveCoverInlineTarget;
-        const editing=liveCoverInlineEl;
-        editing?.blur();
+        finishLiveCoverInlineEdit({refresh:false});
         document.activeElement?.blur?.();
-        setTimeout(()=>openLiveCoverStylePanel(target),140);
+        openAfterKeyboardDismiss(()=>openLiveCoverStylePanel(target));
       }
       return;
     }
