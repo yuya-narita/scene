@@ -4257,11 +4257,32 @@
     }
     document.body.classList.remove('live-edit-sheet-open');
   }
+  function clearCoverToolbarState(){
+    if(!liveEditToolbar)return;
+    liveEditToolbar.classList.remove('live-cover-toolbar-mode');
+    liveEditToolbar.querySelectorAll('[data-live-edit]').forEach(btn=>{
+      btn.disabled=false;
+      btn.removeAttribute('aria-disabled');
+    });
+  }
+  function updateCoverToolbarState(){
+    if(!liveEditToolbar)return;
+    const coverMode=playerHost.classList.contains('sp-cover-open') && !!liveCoverInlineTarget;
+    liveEditToolbar.classList.toggle('live-cover-toolbar-mode',coverMode);
+    liveEditToolbar.querySelectorAll('[data-live-edit]').forEach(btn=>{
+      const isText=btn.dataset.liveEdit==='text';
+      btn.disabled=coverMode && !isText;
+      if(btn.disabled)btn.setAttribute('aria-disabled','true');
+      else btn.removeAttribute('aria-disabled');
+    });
+  }
+
   function setLiveToolbarVisible(show){
-    const coverOpen=playerHost?.classList?.contains('sp-cover-open');
-    liveEditToolbarVisible=!!show && !coverOpen;
+    liveEditToolbarVisible=!!show;
     if(liveEditToolbar) liveEditToolbar.hidden=!liveEditEnabled||!liveEditToolbarVisible;
     playerHost.classList.toggle('live-edit-toolbar-visible',liveEditEnabled&&liveEditToolbarVisible);
+    if(playerHost?.classList?.contains('sp-cover-open'))updateCoverToolbarState();
+    else clearCoverToolbarState();
   }
   function resetInlineKeyboardShift(){
     liveInlineKeyboardShift=0;
@@ -7163,7 +7184,6 @@ function openDesktopTextDetail(){
     playerHost.style.setProperty('--live-cover-keyboard-shift',`${Math.round(shift)}px`);
   }
 
-  let liveCoverStyleButton=null;
   let liveCoverStylePanel=null;
 
   function ensureCoverStyleStore(target){
@@ -7175,42 +7195,6 @@ function openDesktopTextDetail(){
   function closeLiveCoverStylePanel(){
     liveCoverStylePanel?.remove();
     liveCoverStylePanel=null;
-  }
-  function hideLiveCoverStyleButton(){
-    if(liveCoverStyleButton)liveCoverStyleButton.hidden=true;
-    closeLiveCoverStylePanel();
-  }
-  function placeLiveCoverStyleButton(){
-    if(!liveCoverStyleButton||liveCoverStyleButton.hidden)return;
-    const vv=window.visualViewport;
-    const top=(vv?.offsetTop||0)+(vv?.height||window.innerHeight)-64;
-    liveCoverStyleButton.style.top=`${Math.max(70,Math.round(top))}px`;
-    liveCoverStyleButton.style.bottom='auto';
-  }
-  function showLiveCoverStyleButton(){
-    if(!liveCoverInlineEl)return;
-    if(!liveCoverStyleButton){
-      const b=document.createElement('button');
-      b.type='button';b.textContent='Aa';b.setAttribute('aria-label','表紙文字の詳細設定');
-      Object.assign(b.style,{
-        position:'fixed',right:'14px',top:'70px',
-        zIndex:'2147483200',width:'50px',height:'50px',borderRadius:'25px',
-        border:'1px solid rgba(255,255,255,.32)',background:'rgba(20,22,26,.90)',
-        color:'#fff',font:'800 18px/1 system-ui,-apple-system,sans-serif',
-        boxShadow:'0 7px 22px rgba(0,0,0,.24)',WebkitTapHighlightColor:'transparent'
-      });
-      b.addEventListener('pointerdown',e=>{
-        e.preventDefault();
-        e.stopImmediatePropagation();
-      },true);
-      b.addEventListener('click',e=>{
-        e.preventDefault();e.stopImmediatePropagation();
-        openLiveCoverStylePanel();
-      },true);
-      document.body.appendChild(b);liveCoverStyleButton=b;
-    }
-    liveCoverStyleButton.hidden=false;
-    placeLiveCoverStyleButton();
   }
   function openLiveCoverStylePanel(){
     if(!liveCoverInlineTarget)return;
@@ -7275,7 +7259,8 @@ function openDesktopTextDetail(){
     el.classList.remove('live-cover-inline-editing');
     liveCoverInlineEl=null;
     liveCoverInlineTarget='';
-    hideLiveCoverStyleButton();
+    clearCoverToolbarState();
+    setLiveToolbarVisible(false);
     resetLiveCoverKeyboardShift();
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
@@ -7287,7 +7272,8 @@ function openDesktopTextDetail(){
 
   function startLiveCoverInlineEdit(el,target){
     if(!liveEditEnabled||autoRecActive||!playerHost.classList.contains('sp-cover-open')||!el)return;
-    setLiveToolbarVisible(false);
+    setLiveToolbarVisible(true);
+    updateCoverToolbarState();
     if(liveCoverInlineEl===el)return;
     finishLiveCoverInlineEdit({refresh:false});
     liveCoverInlineEl=el;
@@ -7303,7 +7289,6 @@ function openDesktopTextDetail(){
     el.style.cursor='text';
     playerHost.classList.add('live-cover-inline-text-edit');
     playerHost.style.setProperty('--live-cover-keyboard-shift','0px');
-    showLiveCoverStyleButton();
 
     const abort=new AbortController();
     el._liveCoverEditAbort?.abort();
@@ -7324,8 +7309,8 @@ function openDesktopTextDetail(){
     },{signal:abort.signal});
     el.addEventListener('keyup',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
     el.addEventListener('click',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
-    window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();}),{signal:abort.signal});
-    window.visualViewport?.addEventListener('scroll',()=>requestAnimationFrame(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();}),{signal:abort.signal});
+    window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(()=>{keepLiveCoverCaretVisible();}),{signal:abort.signal});
+    window.visualViewport?.addEventListener('scroll',()=>requestAnimationFrame(()=>{keepLiveCoverCaretVisible();}),{signal:abort.signal});
     el.addEventListener('blur',()=>finishLiveCoverInlineEdit(),{once:true,signal:abort.signal});
 
     // Keep focus synchronous so iPhone still opens the keyboard on the first tap.
@@ -7340,10 +7325,10 @@ function openDesktopTextDetail(){
     }catch(_){}
 
     // iOS reports the reduced visualViewport shortly after the keyboard starts.
-    requestAnimationFrame(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();});
-    setTimeout(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();},120);
-    setTimeout(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();},260);
-    setTimeout(()=>{keepLiveCoverCaretVisible();placeLiveCoverStyleButton();},420);
+    requestAnimationFrame(keepLiveCoverCaretVisible);
+    setTimeout(()=>{keepLiveCoverCaretVisible();},120);
+    setTimeout(()=>{keepLiveCoverCaretVisible();},260);
+    setTimeout(()=>{keepLiveCoverCaretVisible();},420);
   }
 
   playerHost.addEventListener('click',(e)=>{

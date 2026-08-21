@@ -8200,3 +8200,16 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   translate:0 var(--live-cover-keyboard-shift,0px);
   transition:translate .16s ease-out;
 }
+
+
+/* Live Cover toolbar mode — reuse the normal Live Editor toolbar.
+   Only the text (Aa) command is active while editing cover text. */
+.live-edit-toolbar.live-cover-toolbar-mode [data-live-edit]:disabled{
+  opacity:.24 !important;
+  pointer-events:none !important;
+  filter:grayscale(1);
+}
+.live-edit-toolbar.live-cover-toolbar-mode [data-live-edit="text"]{
+  opacity:1 !important;
+  pointer-events:auto !important;
+}
