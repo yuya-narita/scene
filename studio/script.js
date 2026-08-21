@@ -1021,9 +1021,11 @@
     if(authorInput && !authorInput.value)value.author && (authorInput.value=value.author);
   }
   function endingFromEasy(){
+    const preservedStyle=clone(workingDocument?.ending?.style||{});
     return {
       label:String(endingLabelInput?.value||'').trim(),
       fontFamily:endingFontFamily,
+      ...(Object.keys(preservedStyle).length?{style:preservedStyle}:{}),
       coverButton:{kicker:'COVER',label:t('ending.cover')},
       links:endingLinkInputs.map((row,index)=>({position:index===0?'left':'right',kicker:String(row.kicker?.value||'').trim(),label:String(row.label?.value||'').trim(),url:String(row.url?.value||'').trim()})).filter(x=>x.label&&x.url)
     };
@@ -6837,13 +6839,23 @@ function openDesktopTextDetail(){
     if(playerHost.classList.contains('sp-cover-open')){
       e.preventDefault();
       e.stopImmediatePropagation();
-      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget)openLiveCoverStylePanel();
+      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget){
+        const target=liveCoverInlineTarget;
+        const editing=liveCoverInlineEl;
+        editing?.blur();
+        document.activeElement?.blur?.();
+        setTimeout(()=>openLiveCoverStylePanel(target),140);
+      }
       return;
     }
     if(player?.ended && liveEndingInlineEl){
       e.preventDefault();
       e.stopImmediatePropagation();
-      if(b.dataset.liveEdit==='text')openLiveEndingStylePanel();
+      if(b.dataset.liveEdit==='text'){
+        liveEndingInlineEl?.blur();
+        document.activeElement?.blur?.();
+        setTimeout(openLiveEndingStylePanel,140);
+      }
       return;
     }
 
@@ -6885,12 +6897,10 @@ function openDesktopTextDetail(){
 
     if(playerHost.classList.contains('sp-cover-open')){
       e.stopImmediatePropagation();
-      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget)openLiveCoverStylePanel();
       return;
     }
-    if(player?.ended && liveEndingInlineEl){
+    if(player?.ended){
       e.stopImmediatePropagation();
-      if(b.dataset.liveEdit==='text')openLiveEndingStylePanel();
       return;
     }
 
@@ -7090,8 +7100,26 @@ function openDesktopTextDetail(){
     liveEndingStylePanel?.remove();
     liveEndingStylePanel=null;
   }
+  function applyEndingStyleToLiveElement(style){
+    const el=playerHost.querySelector('.sp-ending-title');
+    if(!el)return;
+    const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)'};
+    const fontMap={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};
+    el.style.removeProperty('color');
+    el.style.removeProperty('font-size');
+    if(style?.color)el.style.setProperty('color',String(style.color),'important');
+    if(style?.size&&style.size!=='auto'){
+      const v=typeof style.size==='number'?`${style.size}px`:sizeMap[style.size];
+      if(v)el.style.setProperty('font-size',v,'important');
+    }
+    if(style?.fontFamily&&style.fontFamily!=='inherit'){
+      const v=fontMap[style.fontFamily];
+      if(v)el.style.setProperty('font-family',v,'important');
+    }
+  }
+
   function openLiveEndingStylePanel(){
-    if(!liveEndingInlineEl||!player?.ended)return;
+    if(!player?.ended)return;
     closeLiveEndingStylePanel();
     const st=ensureEndingStyleStore();
 
@@ -7132,8 +7160,9 @@ function openDesktopTextDetail(){
     const apply=()=>{
       if(font.sel.value==='inherit')delete st.fontFamily;else st.fontFamily=font.sel.value;
       st.size=size.sel.value;
-      refreshLivePlayerDocumentChrome();
       syncEasyShellToWorkingDocument();
+      refreshLivePlayerDocumentChrome();
+      applyEndingStyleToLiveElement(st);
       syncEasyPublishButton();
       scheduleDraftSave(70);
       requestAnimationFrame(prepareLiveEndingEditor);
@@ -7278,14 +7307,37 @@ function openDesktopTextDetail(){
     workingDocument.cover.styles[target] ||= {};
     return workingDocument.cover.styles[target];
   }
+  function applyCoverStyleToLiveElement(target,style){
+    const selector={
+      title:'.sp-cover-title',subtitle:'.sp-cover-subtitle',author:'.sp-cover-author',
+      episode:'.sp-cover-episode',episodeTitle:'.sp-cover-episode-title'
+    }[target];
+    const el=selector?playerHost.querySelector(selector):null;
+    if(!el)return;
+    const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)'};
+    const fontMap={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};
+    el.style.removeProperty('color');
+    el.style.removeProperty('font-size');
+    el.style.removeProperty('font-family');
+    if(style?.color)el.style.setProperty('color',String(style.color),'important');
+    if(style?.size&&style.size!=='auto'){
+      const v=typeof style.size==='number'?`${style.size}px`:sizeMap[style.size];
+      if(v)el.style.setProperty('font-size',v,'important');
+    }
+    if(style?.fontFamily&&style.fontFamily!=='inherit'){
+      const v=fontMap[style.fontFamily];
+      if(v)el.style.setProperty('font-family',v,'important');
+    }
+  }
+
   function closeLiveCoverStylePanel(){
     liveCoverStylePanel?.remove();
     liveCoverStylePanel=null;
   }
-  function openLiveCoverStylePanel(){
-    if(!liveCoverInlineTarget)return;
+  function openLiveCoverStylePanel(target=liveCoverInlineTarget){
+    if(!target)return;
     closeLiveCoverStylePanel();
-    const style=ensureCoverStyleStore(liveCoverInlineTarget);
+    const style=ensureCoverStyleStore(target);
     const overlay=document.createElement('div');
     Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483300',background:'rgba(0,0,0,.30)',display:'flex',alignItems:'flex-end',justifyContent:'center',padding:'12px'});
     const card=document.createElement('section');
@@ -7323,8 +7375,9 @@ function openDesktopTextDetail(){
     const apply=()=>{
       if(font.sel.value==='inherit')delete style.fontFamily;else style.fontFamily=font.sel.value;
       style.size=size.sel.value;
-      refreshLivePlayerDocumentChrome();
       syncEasyShellToWorkingDocument();
+      refreshLivePlayerDocumentChrome();
+      applyCoverStyleToLiveElement(target,style);
       syncEasyPublishButton();
       scheduleDraftSave(70);
     };
