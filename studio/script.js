@@ -2987,6 +2987,13 @@
 
     const p=ensurePlayer();
     p.options.historyAllScenes=true;
+
+    // Cover inline editing keeps a five-field working draft so editing one field
+    // never destroys the other four. It MUST be rebuilt for every preview.
+    // Otherwise a draft from a previous work/preview can overwrite the current
+    // Easy cover the moment the author taps a cover field or Aa.
+    liveCoverTextDraft=coverTextStateFromDocument();
+
     enableLiveEdit();
     p.setUILanguage?.(uiLanguage);
     const playbackDoc=getDocumentForPlayback();
@@ -3878,6 +3885,11 @@
     if(coverQuickFont)coverFontFamily=coverQuickFont.value||'serif';
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
+
+    // Easy is the source of truth here. Refresh all five cover text fields
+    // together instead of keeping an older Live Editor draft alive.
+    liveCoverTextDraft=coverTextStateFromDocument();
+
     refreshLivePlayerDocumentChrome();
     syncEasyPublishButton();
     rememberWorkIdentity();
@@ -7327,7 +7339,11 @@ function openDesktopTextDetail(){
     const historyKicker=playerHost.querySelector('.sp-history-kicker');if(historyKicker)historyKicker.textContent='SCENES';
   }
   function disableLiveEdit(){
-    finishInlineTextEdit(); liveEditEnabled=false;closeLiveEditSheet();
+    finishInlineTextEdit();
+    finishLiveCoverInlineEdit?.({refresh:false});
+    liveCoverTextDraft=null;
+    liveEditEnabled=false;
+    closeLiveEditSheet();
     if(liveInlineToolbar)liveInlineToolbar.hidden=true;
     setLiveToolbarVisible(false);
     liveEditChromeObserver?.disconnect?.();
