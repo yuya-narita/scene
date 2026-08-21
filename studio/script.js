@@ -4052,14 +4052,13 @@
 
 
   function removeCoverLogoQuickControl(){
-    // Important: never remove a parent/wrapper here.
-    // The Easy cover preview and its click handler can live in the same form section.
-    // We only retire the obsolete logo controls themselves.
-    if(coverQuickLogoPick){
-      coverQuickLogoPick.hidden=true;
-      coverQuickLogoPick.style.display='none';
-      coverQuickLogoPick.setAttribute('aria-hidden','true');
-      coverQuickLogoPick.tabIndex=-1;
+    // Hide only the obsolete logo controls; never touch their parent structure.
+    // NOTE: the actual DOM ref is coverQuickLogo (not coverQuickLogoPick).
+    if(coverQuickLogo){
+      coverQuickLogo.hidden=true;
+      coverQuickLogo.style.display='none';
+      coverQuickLogo.setAttribute('aria-hidden','true');
+      coverQuickLogo.tabIndex=-1;
     }
     if(coverQuickLogoClear){
       coverQuickLogoClear.hidden=true;
@@ -4082,7 +4081,6 @@
     ensureCoverVisibilityPanel();
     syncCoverVisibilityControls();
     coverQuickImageClear.hidden=!coverImageUrl;
-    coverQuickLogoClear.hidden=!coverLogoUrl;
     coverQuickDialog.hidden=false;
     document.documentElement.classList.add('ending-quick-open');
     const target={title:coverQuickWorkTitle,author:coverQuickAuthor,subtitle:coverQuickSubtitle,episode:coverQuickEpisode,episodeTitle:coverQuickEpisodeTitle,description:coverQuickDescription}[focusTarget]||coverQuickWorkTitle;
