@@ -4052,16 +4052,21 @@
 
 
   function removeCoverLogoQuickControl(){
-    const btn=coverQuickLogoPick;
-    if(!btn)return;
-    const wrapper=btn.closest?.('.cover-logo-control, .cover-quick-logo-row, label, .field, .form-field') || btn;
-    // Avoid deleting a shared wrapper containing other controls.
-    if(wrapper!==btn && wrapper.querySelectorAll?.('button,input,select,textarea').length===1){
-      wrapper.remove();
-    }else{
-      btn.remove();
+    // Important: never remove a parent/wrapper here.
+    // The Easy cover preview and its click handler can live in the same form section.
+    // We only retire the obsolete logo controls themselves.
+    if(coverQuickLogoPick){
+      coverQuickLogoPick.hidden=true;
+      coverQuickLogoPick.style.display='none';
+      coverQuickLogoPick.setAttribute('aria-hidden','true');
+      coverQuickLogoPick.tabIndex=-1;
     }
-    if(coverQuickLogoClear)coverQuickLogoClear.remove();
+    if(coverQuickLogoClear){
+      coverQuickLogoClear.hidden=true;
+      coverQuickLogoClear.style.display='none';
+      coverQuickLogoClear.setAttribute('aria-hidden','true');
+      coverQuickLogoClear.tabIndex=-1;
+    }
   }
 
   function openCoverQuickEditor(focusTarget='title'){
