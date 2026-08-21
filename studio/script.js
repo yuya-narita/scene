@@ -7024,14 +7024,8 @@ function openDesktopTextDetail(){
       st.color=hex;ctx.apply();renderShellLiveTextSheet();
     }));
 
-    const detail=document.createElement('button');
-    detail.type='button';
-    detail.className='live-edit-detail';
-    detail.textContent='文字の詳細設定';
-    detail.addEventListener('click',e=>{
-      e.preventDefault();e.stopPropagation();renderShellTextDetail();
-    });
-    liveEditSheetBody.appendChild(detail);
+    // Cover / Ending intentionally stop at the compact Aa controls.
+    // Scene text keeps its separate "文字の詳細設定" route below.
     return true;
   }
 
@@ -7375,16 +7369,16 @@ function openDesktopTextDetail(){
     if(playerHost.classList.contains('sp-cover-open')){
       e.preventDefault();
       e.stopImmediatePropagation();
-      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget){
-        const target=liveCoverInlineTarget;
+      if(b.dataset.liveEdit==='text'){
+        const target=liveCoverInlineTarget || desktopCoverStyleTarget || 'title';
         liveShellTextContext={kind:'cover',target};
-        finishLiveCoverInlineEdit({refresh:false});
+        if(liveCoverInlineTarget)finishLiveCoverInlineEdit({refresh:false});
         document.activeElement?.blur?.();
         renderLiveEditSheet('text');
       }
       return;
     }
-    if(player?.ended && liveEndingInlineEl){
+    if(player?.ended){
       e.preventDefault();
       e.stopImmediatePropagation();
       if(b.dataset.liveEdit==='text'){
