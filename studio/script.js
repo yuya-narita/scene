@@ -942,8 +942,33 @@
       hsv.v=1-Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));
       preview=hsvToHex(hsv.h,hsv.s,hsv.v);paint();if(typeof onPreview==='function')onPreview(preview);
     };
+    const fitMobilePopover=()=>{
+      if(!open||!matchMedia('(max-width:640px)').matches)return;
+      for(const prop of ['position','left','right','top','bottom','width','maxHeight','overflow','transform']){
+        pop.style.removeProperty(prop);
+      }
+      requestAnimationFrame(()=>{
+        const body=pop.closest('.live-edit-sheet-body');
+        if(!body)return;
+        const bodyRect=body.getBoundingClientRect();
+        const popRect=pop.getBoundingClientRect();
+        const safeBottom=Math.min(bodyRect.bottom,window.innerHeight-86);
+        const clipped=popRect.bottom-safeBottom;
+        if(clipped>0){
+          body.scrollTo({
+            top:body.scrollTop+clipped+18,
+            behavior:'smooth'
+          });
+        }
+      });
+    };
+
     const placePopover=()=>{
       if(!open)return;
+      if(matchMedia('(max-width:640px)').matches){
+        fitMobilePopover();
+        return;
+      }
       const vv=window.visualViewport;
       const vw=vv?.width||window.innerWidth;
       const vh=vv?.height||window.innerHeight;
@@ -958,7 +983,6 @@
       pop.style.left=`${left}px`;
       pop.style.right='auto';
 
-      // Measure after width is set. Prefer below, otherwise place above.
       const ph=Math.min(pop.scrollHeight||260,Math.max(220,vh-24));
       const below=r.bottom+8;
       const above=r.top-ph-8;
@@ -993,8 +1017,10 @@
           window.visualViewport?.addEventListener('resize',placePopover);
           window.visualViewport?.addEventListener('scroll',placePopover);
           window.addEventListener('resize',placePopover);
-          // On mobile the picker expands in-flow; keep it visible inside the scrollable Aa sheet.
-          if(matchMedia('(max-width:640px)').matches) pop.scrollIntoView({block:'nearest',inline:'nearest'});
+          if(matchMedia('(max-width:640px)').matches){
+            requestAnimationFrame(fitMobilePopover);
+            setTimeout(fitMobilePopover,80);
+          }
         });
       }else close(false);
     };
