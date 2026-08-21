@@ -686,6 +686,28 @@
             }
           },
           "additionalProperties": true
+        },
+        "text": {
+          "type": "object",
+          "description": "Cover-only text overrides. Missing fields inherit work metadata; empty string explicitly hides the field on the cover.",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "subtitle": {
+              "type": "string"
+            },
+            "author": {
+              "type": "string"
+            },
+            "episode": {
+              "type": "string"
+            },
+            "episodeTitle": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true
@@ -743,9 +765,6 @@
             "sans",
             "mono"
           ]
-        },
-        "style": {
-          "$ref": "#/$defs/style"
         }
       },
       "additionalProperties": true

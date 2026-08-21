@@ -1095,29 +1095,13 @@
         this.els.coverLogo.src = logoSrc;
         this.els.coverLogo.hidden = !logoSrc;
       }
-      if (this.els.coverTitle) {
-        this.els.coverTitle.textContent = doc.title || 'Untitled';
-        this.els.coverTitle.hidden = Boolean(logoSrc);
-      }
-      if (this.els.coverAuthor) {
-        this.els.coverAuthor.textContent = doc.author || '';
-        this.els.coverAuthor.hidden = !String(doc.author || '').trim();
-      }
-      if (this.els.coverSubtitle) {
-        const subtitle = doc.metadata?.subtitle || doc.subtitle || '';
-        this.els.coverSubtitle.textContent = subtitle;
-        this.els.coverSubtitle.hidden = !subtitle;
-      }
-      if (this.els.coverEpisode) {
-        const episode = doc.metadata?.episode || doc.episode || '';
-        this.els.coverEpisode.textContent = episode;
-        this.els.coverEpisode.hidden = !episode;
-      }
-      if (this.els.coverEpisodeTitle) {
-        const episodeTitle = doc.metadata?.episodeTitle || doc.episodeTitle || '';
-        this.els.coverEpisodeTitle.textContent = episodeTitle;
-        this.els.coverEpisodeTitle.hidden = !episodeTitle;
-      }
+      const coverText = doc.cover?.text || {};
+      const coverValue = (key, fallback='') => Object.prototype.hasOwnProperty.call(coverText,key) ? String(coverText[key] ?? '') : String(fallback ?? '');
+      if (this.els.coverTitle) { const title=coverValue('title',doc.title||''); this.els.coverTitle.textContent=title; this.els.coverTitle.hidden=Boolean(logoSrc)||!title.trim(); }
+      if (this.els.coverAuthor) { const author=coverValue('author',doc.author||''); this.els.coverAuthor.textContent=author; this.els.coverAuthor.hidden=!author.trim(); }
+      if (this.els.coverSubtitle) { const subtitle=coverValue('subtitle',doc.metadata?.subtitle||doc.subtitle||''); this.els.coverSubtitle.textContent=subtitle; this.els.coverSubtitle.hidden=!subtitle.trim(); }
+      if (this.els.coverEpisode) { const episode=coverValue('episode',doc.metadata?.episode||doc.episode||''); this.els.coverEpisode.textContent=episode; this.els.coverEpisode.hidden=!episode.trim(); }
+      if (this.els.coverEpisodeTitle) { const episodeTitle=coverValue('episodeTitle',doc.metadata?.episodeTitle||doc.episodeTitle||''); this.els.coverEpisodeTitle.textContent=episodeTitle; this.els.coverEpisodeTitle.hidden=!episodeTitle.trim(); }
 
       const coverStyles = doc.cover?.styles || {};
       const coverStyleMap = [
@@ -1127,11 +1111,11 @@
         [this.els.coverEpisode,'episode'],
         [this.els.coverEpisodeTitle,'episodeTitle']
       ];
-      const coverSizeScale = {
-        small:.78,
-        normal:1,
-        large:1.28,
-        xl:1.6
+      const coverSizeMap = {
+        small:'clamp(15px,3.5vw,22px)',
+        normal:'clamp(18px,4.6vw,30px)',
+        large:'clamp(24px,6.2vw,42px)',
+        xl:'clamp(30px,8vw,56px)'
       };
       const coverFontMap = {
         serif:'var(--sp-font-serif)',
@@ -1144,13 +1128,10 @@
         el.style.removeProperty('color');
         el.style.removeProperty('font-size');
         el.style.removeProperty('font-family');
-        const baseSize=parseFloat(getComputedStyle(el).fontSize)||16;
         if (st.color) el.style.setProperty('color',String(st.color),'important');
         if (st.size && st.size !== 'auto') {
-          const size = typeof st.size === 'number'
-            ? Number(st.size)
-            : baseSize*(coverSizeScale[st.size]||1);
-          if (Number.isFinite(size)) el.style.setProperty('font-size',`${size}px`,'important');
+          const size = typeof st.size === 'number' ? `${st.size}px` : coverSizeMap[st.size];
+          if (size) el.style.setProperty('font-size',size,'important');
         }
         if (st.fontFamily && st.fontFamily !== 'inherit') {
           const fam=coverFontMap[st.fontFamily];
@@ -1461,13 +1442,15 @@
         this.els.coverBg.style.backgroundSize=cover.fit==='contain'?'contain':'cover';
         this.els.coverBg.style.backgroundPosition=cover.position||'center center';
       }
-      if(this.els.coverAuthor)this.els.coverAuthor.textContent=this.document.author||'';
+      const coverText=this.document.cover?.text||{};
+      const coverValue=(key,fallback='')=>Object.prototype.hasOwnProperty.call(coverText,key)?String(coverText[key]??''):String(fallback??'');
       const logoSrc=String(this.document.cover?.logo?.src||'').trim();
       if(this.els.coverLogo){this.els.coverLogo.src=logoSrc;this.els.coverLogo.hidden=!logoSrc;}
-      if(this.els.coverEpisode){const ep=this.document.metadata?.episode||this.document.episode||'';this.els.coverEpisode.textContent=ep;this.els.coverEpisode.hidden=!ep;}
-      if(this.els.coverEpisodeTitle){const epTitle=this.document.metadata?.episodeTitle||this.document.episodeTitle||'';this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!epTitle;}
-      if(this.els.coverTitle){this.els.coverTitle.textContent=this.document.title||'Untitled';this.els.coverTitle.hidden=Boolean(logoSrc);}
-      if(this.els.coverSubtitle){const sub=this.document.metadata?.subtitle||this.document.subtitle||'';this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!sub;}
+      if(this.els.coverAuthor){const author=coverValue('author',this.document.author||'');this.els.coverAuthor.textContent=author;this.els.coverAuthor.hidden=!author.trim();}
+      if(this.els.coverEpisode){const ep=coverValue('episode',this.document.metadata?.episode||this.document.episode||'');this.els.coverEpisode.textContent=ep;this.els.coverEpisode.hidden=!ep.trim();}
+      if(this.els.coverEpisodeTitle){const epTitle=coverValue('episodeTitle',this.document.metadata?.episodeTitle||this.document.episodeTitle||'');this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!epTitle.trim();}
+      if(this.els.coverTitle){const title=coverValue('title',this.document.title||'');this.els.coverTitle.textContent=title;this.els.coverTitle.hidden=Boolean(logoSrc)||!title.trim();}
+      if(this.els.coverSubtitle){const sub=coverValue('subtitle',this.document.metadata?.subtitle||this.document.subtitle||'');this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!sub.trim();}
       this.els.cover.hidden=false;
       this.host.classList.add('sp-cover-open');
       return true;

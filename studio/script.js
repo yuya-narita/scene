@@ -1255,6 +1255,12 @@
     });
   }
 
+  function coverTextOverrideValue(target, fallback='') {
+    const text=workingDocument?.cover?.text;
+    if(text && Object.prototype.hasOwnProperty.call(text,target)) return String(text[target] ?? '');
+    return String(fallback ?? '');
+  }
+
   function updateCoverPreview(){
     if(!coverPreview)return;
     const bg=coverPreview.querySelector('.cover-preview-bg');
@@ -1270,17 +1276,17 @@
     if(empty)empty.hidden=Boolean(coverImageUrl);
     if(coverImageClear)coverImageClear.hidden=!coverImageUrl;
 
-    const title=String(titleInput?.value||'').trim();
-    const author=String(authorInput?.value||'').trim();
-    const subtitle=String(subtitleInput?.value||'').trim();
-    const episode=String(episodeInput?.value||'').trim();
-    const episodeTitle=String(episodeTitleInput?.value||'').trim();
+    const title=coverTextOverrideValue('title',titleInput?.value||'').trim();
+    const author=coverTextOverrideValue('author',authorInput?.value||'').trim();
+    const subtitle=coverTextOverrideValue('subtitle',subtitleInput?.value||'').trim();
+    const episode=coverTextOverrideValue('episode',episodeInput?.value||'').trim();
+    const episodeTitle=coverTextOverrideValue('episodeTitle',episodeTitleInput?.value||'').trim();
 
     if(coverPreviewLogo){coverPreviewLogo.src=coverLogoUrl||'';coverPreviewLogo.hidden=!coverLogoUrl;}
     if(coverPreviewTitle){
-      const previewTitle=title||t('cover.preview.untitled');
+      const previewTitle=title;
       coverPreviewTitle.textContent=previewTitle;
-      coverPreviewTitle.hidden=Boolean(coverLogoUrl);
+      coverPreviewTitle.hidden=Boolean(coverLogoUrl)||!previewTitle;
       coverPreviewTitle.classList.toggle('has-authored-break',/\r?\n/.test(previewTitle));
     }
     if(coverPreviewAuthor){coverPreviewAuthor.textContent=author;coverPreviewAuthor.hidden=!author;}
@@ -1338,7 +1344,7 @@
     return {
       format:'scene-format', version:'1.0', language:languageSummary.language,
       ...(languageSummary.languages?.length ? { languages: languageSummary.languages } : {}),
-      title:titleInput.value.trim() || 'Untitled', author:authorInput.value.trim(),
+      title:titleInput.value.trim(), author:authorInput.value.trim(),
       metadata:{
         subtitle:subtitleInput?.value.trim() || '',
         seriesTitle:seriesTitleInput?.value.trim() || '',
@@ -1358,6 +1364,9 @@
         fontFamily:coverFontFamily,
         ...(workingDocument?.cover?.styles && Object.keys(workingDocument.cover.styles).length
           ? {styles:clone(workingDocument.cover.styles)}
+          : {}),
+        ...(workingDocument?.cover?.text && Object.keys(workingDocument.cover.text).length
+          ? {text:clone(workingDocument.cover.text)}
           : {})
       },
       ending:endingFromEasy(),
@@ -1765,7 +1774,7 @@
   function syncEasyShellToWorkingDocument(){
     if(!workingDocument)return;
     // Easy may still change work-level metadata without destroying Scene edits.
-    workingDocument.title=titleInput.value.trim() || 'Untitled';
+    workingDocument.title=titleInput.value.trim();
     workingDocument.author=authorInput.value.trim();
     workingDocument.metadata ||= {};
     workingDocument.metadata.subtitle=subtitleInput?.value.trim() || '';
@@ -1779,7 +1788,8 @@
     workingDocument.appearance.typography.fontFamily=selectedFont;
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
-    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{})};
+    const preservedCoverText=clone(workingDocument.cover?.text||{});
+    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverText).length?{text:preservedCoverText}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -7863,12 +7873,14 @@ function openDesktopTextDetail(){
 
   function coverTextStateFromDocument(){
     const doc=workingDocument||{};
+    const text=doc.cover?.text||{};
+    const value=(key,fallback)=>Object.prototype.hasOwnProperty.call(text,key)?String(text[key]??''):String(fallback??'');
     return {
-      title:String(doc.title||'').trim()==='Untitled'?'':String(doc.title||''),
-      subtitle:String(doc.metadata?.subtitle||''),
-      author:String(doc.author||''),
-      episode:String(doc.metadata?.episode||''),
-      episodeTitle:String(doc.metadata?.episodeTitle||'')
+      title:value('title',String(doc.title||'').trim()==='Untitled'?'':doc.title||''),
+      subtitle:value('subtitle',doc.metadata?.subtitle||''),
+      author:value('author',doc.author||''),
+      episode:value('episode',doc.metadata?.episode||''),
+      episodeTitle:value('episodeTitle',doc.metadata?.episodeTitle||'')
     };
   }
 
@@ -7883,30 +7895,19 @@ function openDesktopTextDetail(){
   }
 
   function pushLiveCoverTextDraftToEasy(){
-    const d=liveCoverTextDraft || coverTextStateFromDocument();
-    if(titleInput)titleInput.value=d.title||'';
-    if(subtitleInput)subtitleInput.value=d.subtitle||'';
-    if(authorInput)authorInput.value=d.author||'';
-    if(episodeInput)episodeInput.value=d.episode||'';
-    if(episodeTitleInput)episodeTitleInput.value=d.episodeTitle||'';
+    // Cover display text is separate from canonical work metadata.
+    updateCoverPreview();
   }
 
   function setCoverTextValue(target,value,{refresh=true}={}){
     const raw=String(value??'');
     const d=ensureLiveCoverTextDraft();
     d[target]=raw;
-    pushLiveCoverTextDraftToEasy();
-
-    workingDocument.metadata ||= {};
-    if(target==='title')workingDocument.title=raw.trim()||'Untitled';
-    else if(target==='author')workingDocument.author=raw.trim();
-    else if(target==='subtitle')workingDocument.metadata.subtitle=raw.trim();
-    else if(target==='episode')workingDocument.metadata.episode=raw.trim();
-    else if(target==='episodeTitle')workingDocument.metadata.episodeTitle=raw.trim();
-
+    workingDocument.cover ||= {};
+    workingDocument.cover.text ||= {};
+    workingDocument.cover.text[target]=raw;
     updateCoverPreview();
     syncEasyPublishButton();
-    rememberWorkIdentity();
     scheduleDraftSave(90);
     if(refresh)refreshLivePlayerDocumentChrome();
   }
