@@ -1137,48 +1137,7 @@
       };
       applySlot(this.els.endingLeft, left);
       applySlot(this.els.endingRight, right);
-      this._applyCoverLayout();
       return true;
-    }
-
-
-    _applyCoverLayout() {
-      const layout = this.document?.cover?.layout || {};
-      const copy = this.els.cover?.querySelector('.sp-cover-copy');
-      const hasFreeLayout = Object.values(layout).some(item =>
-        item && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y))
-      );
-      if (copy) {
-        if (hasFreeLayout) copy.style.setProperty('position','static','important');
-        else copy.style.removeProperty('position');
-      }
-      const map = [
-        [this.els.coverTitle,'title'],
-        [this.els.coverSubtitle,'subtitle'],
-        [this.els.coverAuthor,'author'],
-        [this.els.coverEpisode,'episode'],
-        [this.els.coverEpisodeTitle,'episodeTitle']
-      ];
-      for (const [el,key] of map) {
-        if (!el) continue;
-        const item = layout[key];
-        if (item && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y))) {
-          const x = Math.max(0,Math.min(1,Number(item.x)));
-          const y = Math.max(0,Math.min(1,Number(item.y)));
-          el.style.setProperty('position','absolute','important');
-          el.style.setProperty('left',`${x*100}%`,'important');
-          el.style.setProperty('top',`${y*100}%`,'important');
-          const scale = Math.max(.35,Math.min(4,Number(item.scale)||1));
-          el.style.setProperty('transform',`translate(-50%,-50%) scale(${scale})`,'important');
-          el.style.zIndex = '6';
-        } else {
-          el.style.removeProperty('position');
-          el.style.removeProperty('left');
-          el.style.removeProperty('top');
-          el.style.removeProperty('transform');
-          el.style.removeProperty('z-index');
-        }
-      }
     }
 
     get currentScene() {
