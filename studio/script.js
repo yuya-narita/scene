@@ -6491,11 +6491,30 @@ function openDesktopTextDetail(){
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');desktopLivePanelBody.innerHTML='';
     desktopSceneLabel.textContent='表紙';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
-    const textCard=desktopCard('表紙テキスト');
-    [['作品タイトル','title',titleInput?.value||''],['サブタイトル','subtitle',subtitleInput?.value||''],['作者名','author',authorInput?.value||''],['話数','episode',episodeInput?.value||''],['今回のタイトル','episodeTitle',episodeTitleInput?.value||'']].forEach(([label,target,value])=>{
-      const row=document.createElement('label');row.className='desktop-live-field';const cap=document.createElement('span');cap.textContent=label;
-      const input=document.createElement('input');input.type='text';input.value=value;input.addEventListener('focus',()=>desktopCoverStyleTarget=target);
-      input.addEventListener('input',()=>{desktopCoverStyleTarget=target;setCoverTextValue(target,input.value,{refresh:true});});row.append(cap,input);textCard.appendChild(row);
+    const textCard=desktopCard('表紙表示テキスト');
+    const textNote=document.createElement('p');
+    textNote.textContent='左の表紙に表示する文字を編集します。Easy Studioの作品情報とは別です。';
+    Object.assign(textNote.style,{margin:'0 0 10px',fontSize:'12px',lineHeight:'1.55',color:'#737984'});
+    textCard.appendChild(textNote);
+    const displayText=coverTextStateFromDocument();
+    [['作品タイトル','title'],['サブタイトル','subtitle'],['作者名','author'],['話数','episode'],['今回のタイトル','episodeTitle']].forEach(([label,target])=>{
+      const row=document.createElement('div');row.className='desktop-live-field';
+      const cap=document.createElement('span');cap.textContent=label;
+      const line=document.createElement('div');
+      Object.assign(line.style,{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto',gap:'8px',alignItems:'center'});
+      const input=document.createElement('input');
+      input.type='text';input.value=displayText[target]||'';input.dataset.coverTextTarget=target;
+      input.addEventListener('focus',()=>desktopCoverStyleTarget=target);
+      input.addEventListener('input',()=>{desktopCoverStyleTarget=target;setCoverTextValue(target,input.value,{refresh:true});});
+      const reset=document.createElement('button');
+      reset.type='button';reset.textContent='作品情報に戻す';
+      Object.assign(reset.style,{height:'34px',padding:'0 10px',border:'1px solid #d7dbe2',borderRadius:'9px',background:'#fff',color:'#68707c',font:'700 11px/1 system-ui',whiteSpace:'nowrap'});
+      reset.addEventListener('click',()=>{
+        desktopCoverStyleTarget=target;
+        resetCoverTextOverride(target,{refresh:true});
+        renderDesktopLivePanel();
+      });
+      line.append(input,reset);row.append(cap,line);textCard.appendChild(row);
     });
     const styleCard=desktopCard('選択中の文字（Aa）');
     styleCard.append(desktopMakeSelect('対象',[['title','作品タイトル'],['subtitle','サブタイトル'],['author','作者名'],['episode','話数'],['episodeTitle','今回のタイトル']],desktopCoverStyleTarget,v=>{desktopCoverStyleTarget=v;renderDesktopLivePanel();}));
@@ -7864,9 +7883,9 @@ function openDesktopTextDetail(){
     requestAnimationFrame(renderDesktopLivePanel);
   });
 
-  // Live Cover inline editor. The visible cover text is the editor itself;
-  // values remain backed by the existing Easy Studio inputs, so Easy/Live
-  // always share one source of truth.
+  // Live Cover inline editor. The visible cover text is the editor itself.
+  // Easy Studio owns canonical work metadata; Live Editor owns cover display overrides.
+  // Left preview/direct edit and the desktop right panel edit that same display layer.
   let liveCoverInlineEl=null;
   let liveCoverInlineTarget='';
   let liveCoverTextDraft=null;
@@ -7899,13 +7918,37 @@ function openDesktopTextDetail(){
     updateCoverPreview();
   }
 
+  function syncDesktopCoverDisplayInput(target,value){
+    const input=desktopLivePanelBody?.querySelector?.(`[data-cover-text-target="${target}"]`);
+    if(input && document.activeElement!==input)input.value=String(value??'');
+  }
+
   function setCoverTextValue(target,value,{refresh=true}={}){
+    if(!target)return;
     const raw=String(value??'');
     const d=ensureLiveCoverTextDraft();
     d[target]=raw;
     workingDocument.cover ||= {};
     workingDocument.cover.text ||= {};
     workingDocument.cover.text[target]=raw;
+    syncDesktopCoverDisplayInput(target,raw);
+    updateCoverPreview();
+    syncEasyPublishButton();
+    scheduleDraftSave(90);
+    if(refresh)refreshLivePlayerDocumentChrome();
+  }
+
+  function resetCoverTextOverride(target,{refresh=true}={}){
+    if(!target)return;
+    const text=workingDocument.cover?.text;
+    if(text && Object.prototype.hasOwnProperty.call(text,target)){
+      delete text[target];
+      if(!Object.keys(text).length)delete workingDocument.cover.text;
+    }
+    const fresh=coverTextStateFromDocument();
+    const d=ensureLiveCoverTextDraft();
+    d[target]=fresh[target]||'';
+    syncDesktopCoverDisplayInput(target,d[target]);
     updateCoverPreview();
     syncEasyPublishButton();
     scheduleDraftSave(90);
