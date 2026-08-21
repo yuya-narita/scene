@@ -2183,7 +2183,19 @@
     coverFontFamily=['serif','sans','mono'].includes(doc.cover?.fontFamily)?doc.cover.fontFamily:'serif';
     endingFontFamily=['serif','sans','mono'].includes(doc.ending?.fontFamily)?doc.ending.fontFamily:'serif';
     if(endingLabelInput)endingLabelInput.value=doc.ending?.label||doc.ending?.title||'';
-    endingLinkInputs.forEach((pair,index)=>{const item=doc.ending?.links?.[index]||{};if(pair.label)pair.label.value=item.label||item.title||'';if(pair.url)pair.url.value=item.url||item.href||'';});
+    {
+      const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
+      const hasPositions=links.some(item=>item?.position==='left'||item?.position==='right');
+      endingLinkInputs.forEach((pair,index)=>{
+        const pos=index===0?'left':'right';
+        const item=hasPositions
+          ? (links.find(entry=>entry?.position===pos)||{})
+          : (links[index]||{});
+        if(pair.kicker)pair.kicker.value=item.kicker||'';
+        if(pair.label)pair.label.value=item.label||item.title||'';
+        if(pair.url)pair.url.value=item.url||item.href||'';
+      });
+    }
     bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n');
     updateCount();updateCoverPreview();updateEndingPreview();
     protectedResplitPending=false;
