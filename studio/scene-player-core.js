@@ -1159,6 +1159,20 @@
       if (this.els.endingTitle) {
         this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
         this.els.endingTitle.style.setProperty('font-family', endingFamily, 'important');
+        const endingStyle=doc.ending?.style||{};
+        const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)'};
+        const fontMap={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};
+        this.els.endingTitle.style.removeProperty('color');
+        this.els.endingTitle.style.removeProperty('font-size');
+        if(endingStyle.color)this.els.endingTitle.style.setProperty('color',String(endingStyle.color),'important');
+        if(endingStyle.size&&endingStyle.size!=='auto'){
+          const size=typeof endingStyle.size==='number'?`${endingStyle.size}px`:sizeMap[endingStyle.size];
+          if(size)this.els.endingTitle.style.setProperty('font-size',size,'important');
+        }
+        if(endingStyle.fontFamily&&endingStyle.fontFamily!=='inherit'){
+          const fam=fontMap[endingStyle.fontFamily];
+          if(fam)this.els.endingTitle.style.setProperty('font-family',fam,'important');
+        }
       }
       const endingLinks = Array.isArray(doc.ending?.links) ? doc.ending.links : [];
       const hasPositions = endingLinks.some((x) => x?.position === 'left' || x?.position === 'right');

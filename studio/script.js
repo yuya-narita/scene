@@ -4259,7 +4259,7 @@
   }
   function clearCoverToolbarState(){
     if(!liveEditToolbar)return;
-    liveEditToolbar.classList.remove('live-cover-toolbar-mode');
+    liveEditToolbar.classList.remove('live-cover-toolbar-mode','live-ending-toolbar-mode');
     liveEditToolbar.querySelectorAll('[data-live-edit]').forEach(btn=>{
       btn.disabled=false;
       btn.removeAttribute('aria-disabled');
@@ -4268,10 +4268,13 @@
   function updateCoverToolbarState(){
     if(!liveEditToolbar)return;
     const coverMode=playerHost.classList.contains('sp-cover-open') && !!liveCoverInlineTarget;
+    const endingMode=Boolean(player?.ended && liveEndingInlineEl);
+    const restricted=coverMode||endingMode;
     liveEditToolbar.classList.toggle('live-cover-toolbar-mode',coverMode);
+    liveEditToolbar.classList.toggle('live-ending-toolbar-mode',endingMode);
     liveEditToolbar.querySelectorAll('[data-live-edit]').forEach(btn=>{
       const isText=btn.dataset.liveEdit==='text';
-      btn.disabled=coverMode && !isText;
+      btn.disabled=restricted && !isText;
       if(btn.disabled)btn.setAttribute('aria-disabled','true');
       else btn.removeAttribute('aria-disabled');
     });
@@ -4281,7 +4284,7 @@
     liveEditToolbarVisible=!!show;
     if(liveEditToolbar) liveEditToolbar.hidden=!liveEditEnabled||!liveEditToolbarVisible;
     playerHost.classList.toggle('live-edit-toolbar-visible',liveEditEnabled&&liveEditToolbarVisible);
-    if(playerHost?.classList?.contains('sp-cover-open'))updateCoverToolbarState();
+    if(playerHost?.classList?.contains('sp-cover-open') || (player?.ended&&liveEndingInlineEl))updateCoverToolbarState();
     else clearCoverToolbarState();
   }
   function resetInlineKeyboardShift(){
@@ -6834,9 +6837,13 @@ function openDesktopTextDetail(){
     if(playerHost.classList.contains('sp-cover-open')){
       e.preventDefault();
       e.stopImmediatePropagation();
-      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget){
-        openLiveCoverStylePanel();
-      }
+      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget)openLiveCoverStylePanel();
+      return;
+    }
+    if(player?.ended && liveEndingInlineEl){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if(b.dataset.liveEdit==='text')openLiveEndingStylePanel();
       return;
     }
 
@@ -6878,9 +6885,12 @@ function openDesktopTextDetail(){
 
     if(playerHost.classList.contains('sp-cover-open')){
       e.stopImmediatePropagation();
-      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget){
-        openLiveCoverStylePanel();
-      }
+      if(b.dataset.liveEdit==='text' && liveCoverInlineTarget)openLiveCoverStylePanel();
+      return;
+    }
+    if(player?.ended && liveEndingInlineEl){
+      e.stopImmediatePropagation();
+      if(b.dataset.liveEdit==='text')openLiveEndingStylePanel();
       return;
     }
 
@@ -7069,6 +7079,72 @@ function openDesktopTextDetail(){
     });
   }
 
+  let liveEndingStylePanel=null;
+
+  function ensureEndingStyleStore(){
+    workingDocument.ending ||= {};
+    workingDocument.ending.style ||= {};
+    return workingDocument.ending.style;
+  }
+  function closeLiveEndingStylePanel(){
+    liveEndingStylePanel?.remove();
+    liveEndingStylePanel=null;
+  }
+  function openLiveEndingStylePanel(){
+    if(!liveEndingInlineEl||!player?.ended)return;
+    closeLiveEndingStylePanel();
+    const st=ensureEndingStyleStore();
+
+    const overlay=document.createElement('div');
+    Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483300',background:'rgba(0,0,0,.30)',display:'flex',alignItems:'flex-end',justifyContent:'center',padding:'12px'});
+    const card=document.createElement('section');
+    Object.assign(card.style,{width:'min(680px,100%)',borderRadius:'22px',background:'#fff',color:'#17181b',padding:'18px 18px 22px',boxShadow:'0 18px 55px rgba(0,0,0,.28)'});
+    const h=document.createElement('h2');h.textContent='読了文字の詳細設定';Object.assign(h.style,{margin:'0 0 16px',font:'800 20px/1.35 system-ui'});
+    card.appendChild(h);
+
+    const grid=document.createElement('div');Object.assign(grid.style,{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'});
+    const mkSelect=(label,items,value)=>{
+      const wrap=document.createElement('label');Object.assign(wrap.style,{display:'grid',gap:'7px',font:'700 13px/1.4 system-ui'});
+      const span=document.createElement('span');span.textContent=label;
+      const sel=document.createElement('select');Object.assign(sel.style,{height:'46px',border:'1px solid #d7d9de',borderRadius:'12px',background:'#fff',padding:'0 10px',font:'600 15px/1 system-ui'});
+      items.forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);});
+      sel.value=value;wrap.append(span,sel);return {wrap,sel};
+    };
+    const font=mkSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],st.fontFamily||'inherit');
+    const size=mkSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],typeof st.size==='string'?st.size:'auto');
+    grid.append(font.wrap,size.wrap);card.appendChild(grid);
+
+    const colorTitle=document.createElement('strong');colorTitle.textContent='文字色';Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
+    const colors=document.createElement('div');Object.assign(colors.style,{display:'flex',gap:'9px',alignItems:'center',marginTop:'8px',flexWrap:'wrap'});
+    const colorBtn=(text,value)=>{
+      const b=document.createElement('button');b.type='button';b.textContent=text;Object.assign(b.style,{height:'42px',padding:'0 14px',borderRadius:'21px',border:'1px solid #d7d9de',background:'#fff',font:'700 14px/1 system-ui'});
+      b.addEventListener('click',()=>{if(value===null)delete st.color;else st.color=value;apply();});colors.appendChild(b);
+    };
+    colorBtn('おまかせ',null);colorBtn('白','#ffffff');colorBtn('黒','#000000');
+    const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(st.color||'')?st.color:'#ffffff';
+    Object.assign(picker.style,{width:'48px',height:'42px',border:'1px solid #d7d9de',borderRadius:'10px',padding:'4px',background:'#fff'});
+    colors.appendChild(picker);card.append(colorTitle,colors);
+
+    const foot=document.createElement('div');Object.assign(foot.style,{display:'flex',justifyContent:'flex-end',marginTop:'18px'});
+    const done=document.createElement('button');done.type='button';done.textContent='完了';Object.assign(done.style,{width:'120px',height:'48px',border:'0',borderRadius:'24px',background:'#17181b',color:'#fff',font:'800 15px/1 system-ui'});
+    foot.appendChild(done);card.appendChild(foot);overlay.appendChild(card);
+
+    const apply=()=>{
+      if(font.sel.value==='inherit')delete st.fontFamily;else st.fontFamily=font.sel.value;
+      st.size=size.sel.value;
+      refreshLivePlayerDocumentChrome();
+      syncEasyShellToWorkingDocument();
+      syncEasyPublishButton();
+      scheduleDraftSave(70);
+      requestAnimationFrame(prepareLiveEndingEditor);
+    };
+    font.sel.addEventListener('change',apply);size.sel.addEventListener('change',apply);
+    picker.addEventListener('input',()=>{st.color=picker.value;apply();});
+    done.addEventListener('click',closeLiveEndingStylePanel);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeLiveEndingStylePanel();});
+    document.body.appendChild(overlay);liveEndingStylePanel=overlay;
+  }
+
   function finishLiveEndingInlineEdit({refresh=true}={}){
     const el=liveEndingInlineEl;
     if(!el)return;
@@ -7077,6 +7153,9 @@ function openDesktopTextDetail(){
     el.removeAttribute('contenteditable');
     el.classList.remove('live-ending-inline-editing');
     liveEndingInlineEl=null;
+    closeLiveEndingStylePanel();
+    clearCoverToolbarState();
+    setLiveToolbarVisible(false);
     updateEndingPreview();
     syncEasyShellToWorkingDocument();
     syncEasyPublishButton();
@@ -7094,6 +7173,8 @@ function openDesktopTextDetail(){
     if(liveEndingInlineEl===el)return;
     finishLiveEndingInlineEdit({refresh:false});
     liveEndingInlineEl=el;
+    setLiveToolbarVisible(true);
+    updateCoverToolbarState();
     el.setAttribute('contenteditable','true');
     el.setAttribute('role','textbox');
     el.setAttribute('aria-label','読了ページ中央の文を編集');
@@ -7272,12 +7353,12 @@ function openDesktopTextDetail(){
 
   function startLiveCoverInlineEdit(el,target){
     if(!liveEditEnabled||autoRecActive||!playerHost.classList.contains('sp-cover-open')||!el)return;
-    setLiveToolbarVisible(true);
-    updateCoverToolbarState();
     if(liveCoverInlineEl===el)return;
     finishLiveCoverInlineEdit({refresh:false});
     liveCoverInlineEl=el;
     liveCoverInlineTarget=target;
+    setLiveToolbarVisible(true);
+    updateCoverToolbarState();
     const input=coverInputForLiveTarget(target);
     // "Untitled" is a Player fallback, not authored data. Clear it on first edit.
     if(target==='title' && !String(input?.value||'').trim())el.textContent='';

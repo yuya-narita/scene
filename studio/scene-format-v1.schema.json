@@ -743,6 +743,9 @@
             "sans",
             "mono"
           ]
+        },
+        "style": {
+          "$ref": "#/$defs/style"
         }
       },
       "additionalProperties": true

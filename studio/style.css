@@ -8213,3 +8213,14 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   opacity:1 !important;
   pointer-events:auto !important;
 }
+
+
+.live-edit-toolbar.live-ending-toolbar-mode [data-live-edit]:disabled{
+  opacity:.24 !important;
+  pointer-events:none !important;
+  filter:grayscale(1);
+}
+.live-edit-toolbar.live-ending-toolbar-mode [data-live-edit="text"]{
+  opacity:1 !important;
+  pointer-events:auto !important;
+}
