@@ -6242,6 +6242,44 @@ function openDesktopTextDetail(){
     requestAnimationFrame(()=>rail.querySelector('.is-selected')?.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}));
   }
 
+  let desktopCoverStyleTarget='title';
+
+  function shellStyleControls(store,onApply){
+    const wrap=document.createElement('div');wrap.className='desktop-live-grid';const st=store();
+    wrap.append(
+      desktopMakeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],st.fontFamily||'inherit',v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;onApply();}),
+      desktopMakeSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],st.size||'auto',v=>{st.size=v;onApply();}),
+      desktopMakeSelect('色',[['auto','おまかせ'],['white','白'],['black','黒']],!st.color?'auto':(String(st.color).toLowerCase()==='#ffffff'?'white':'black'),v=>{if(v==='white')st.color='#ffffff';else if(v==='black')st.color='#000000';else delete st.color;onApply();})
+    );
+    return wrap;
+  }
+
+  function renderDesktopCoverPanel(){
+    desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');desktopLivePanelBody.innerHTML='';
+    desktopSceneLabel.textContent='表紙';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
+    if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
+    const textCard=desktopCard('表紙テキスト');
+    [['作品タイトル','title',titleInput?.value||''],['サブタイトル','subtitle',subtitleInput?.value||''],['作者名','author',authorInput?.value||''],['話数','episode',episodeInput?.value||''],['今回のタイトル','episodeTitle',episodeTitleInput?.value||'']].forEach(([label,target,value])=>{
+      const row=document.createElement('label');row.className='desktop-live-field';const cap=document.createElement('span');cap.textContent=label;
+      const input=document.createElement('input');input.type='text';input.value=value;input.addEventListener('focus',()=>desktopCoverStyleTarget=target);
+      input.addEventListener('input',()=>{desktopCoverStyleTarget=target;setCoverTextValue(target,input.value,{refresh:true});});row.append(cap,input);textCard.appendChild(row);
+    });
+    const styleCard=desktopCard('選択中の文字（Aa）');
+    styleCard.append(desktopMakeSelect('対象',[['title','作品タイトル'],['subtitle','サブタイトル'],['author','作者名'],['episode','話数'],['episodeTitle','今回のタイトル']],desktopCoverStyleTarget,v=>{desktopCoverStyleTarget=v;renderDesktopLivePanel();}));
+    styleCard.append(shellStyleControls(()=>{workingDocument.cover||={};workingDocument.cover.styles||={};workingDocument.cover.styles[desktopCoverStyleTarget]||={};return workingDocument.cover.styles[desktopCoverStyleTarget];},()=>{refreshLivePlayerDocumentChrome();updateCoverPreview();syncEasyPublishButton();scheduleDraftSave(70);}));
+    desktopLivePanelBody.append(textCard,styleCard);
+  }
+
+  function renderDesktopEndingPanel(){
+    desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');desktopLivePanelBody.innerHTML='';
+    desktopSceneLabel.textContent='読了ページ';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
+    if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
+    const textCard=desktopCard('中央の文');const ta=document.createElement('textarea');ta.value=endingLabelInput?.value||'';ta.placeholder='読了';ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
+    const styleCard=desktopCard('文字（Aa）');styleCard.append(shellStyleControls(()=>{workingDocument.ending||={};workingDocument.ending.style||={};return workingDocument.ending.style;},()=>{refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
+    const linksCard=desktopCard('下部ボタン');const ops=document.createElement('div');ops.className='desktop-live-scene-ops';ops.append(desktopAction('左ボタンを編集',()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('left');}),desktopAction('右ボタンを編集',()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('right');}));linksCard.appendChild(ops);
+    desktopLivePanelBody.append(textCard,styleCard,linksCard);
+  }
+
   function renderDesktopLivePanel(){
     if(!desktopLivePanel)return;
     if(!desktopLiveActive()){
@@ -6249,6 +6287,9 @@ function openDesktopTextDetail(){
       document.body.classList.remove('desktop-live-edit');
       return;
     }
+    if(playerHost.classList.contains('sp-cover-open')){renderDesktopCoverPanel();return;}
+    if(player?.ended){renderDesktopEndingPanel();return;}
+    if(desktopTimingButton)desktopTimingButton.disabled=false;
     const {scene,index}=liveEditScene();if(!scene)return;
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');
     desktopSceneLabel.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
@@ -7218,14 +7259,8 @@ function openDesktopTextDetail(){
     closeLiveEndingStylePanel();
     clearCoverToolbarState();
     setLiveToolbarVisible(false);
-    updateEndingPreview();
-    syncEasyShellToWorkingDocument();
-    syncEasyPublishButton();
-    scheduleDraftSave(100);
-    if(refresh){
-      refreshLivePlayerDocumentChrome();
-      requestAnimationFrame(prepareLiveEndingEditor);
-    }
+    setEndingTextValue(value,{refresh});
+    if(refresh)requestAnimationFrame(prepareLiveEndingEditor);
   }
 
   function startLiveEndingInlineEdit(){
@@ -7248,11 +7283,7 @@ function openDesktopTextDetail(){
     el.style.cursor='text';
     const sync=()=>{
       if(!liveEndingInlineEl)return;
-      if(endingLabelInput)endingLabelInput.value=String(liveEndingInlineEl.textContent||'').replace(/\u00a0/g,' ');
-      updateEndingPreview();
-      syncEasyShellToWorkingDocument();
-      syncEasyPublishButton();
-      scheduleDraftSave(120);
+      setEndingTextValue(String(liveEndingInlineEl.textContent||'').replace(/\u00a0/g,' '),{refresh:false});
     };
     el.addEventListener('input',sync);
     el.addEventListener('blur',()=>finishLiveEndingInlineEdit(),{once:true});
@@ -7271,6 +7302,7 @@ function openDesktopTextDetail(){
 
   playerHost.addEventListener('sceneplayer:end',()=>{
     requestAnimationFrame(prepareLiveEndingEditor);
+    requestAnimationFrame(renderDesktopLivePanel);
   });
 
   // Live Cover inline editor. The visible cover text is the editor itself;
@@ -7304,6 +7336,34 @@ function openDesktopTextDetail(){
     if(authorInput)authorInput.value=d.author||'';
     if(episodeInput)episodeInput.value=d.episode||'';
     if(episodeTitleInput)episodeTitleInput.value=d.episodeTitle||'';
+  }
+
+  function setCoverTextValue(target,value,{refresh=true}={}){
+    const raw=String(value??'');
+    const input=coverInputForLiveTarget(target);
+    if(input)input.value=raw;
+    workingDocument.metadata ||= {};
+    if(target==='title')workingDocument.title=raw.trim()||'Untitled';
+    else if(target==='author')workingDocument.author=raw.trim();
+    else if(target==='subtitle')workingDocument.metadata.subtitle=raw.trim();
+    else if(target==='episode')workingDocument.metadata.episode=raw.trim();
+    else if(target==='episodeTitle')workingDocument.metadata.episodeTitle=raw.trim();
+    updateCoverPreview();
+    syncEasyPublishButton();
+    rememberWorkIdentity();
+    scheduleDraftSave(90);
+    if(refresh)refreshLivePlayerDocumentChrome();
+  }
+
+  function setEndingTextValue(value,{refresh=true}={}){
+    const raw=String(value??'');
+    if(endingLabelInput)endingLabelInput.value=raw;
+    workingDocument.ending ||= {};
+    workingDocument.ending.label=raw.trim();
+    updateEndingPreview();
+    syncEasyPublishButton();
+    scheduleDraftSave(90);
+    if(refresh)refreshLivePlayerDocumentChrome();
   }
 
   function coverInputForLiveTarget(target){
@@ -7468,12 +7528,7 @@ function openDesktopTextDetail(){
     clearCoverToolbarState();
     setLiveToolbarVisible(false);
     resetLiveCoverKeyboardShift();
-    refreshCoverPreviewLayout();
-    syncEasyShellToWorkingDocument();
-    syncEasyPublishButton();
-    rememberWorkIdentity();
-    scheduleDraftSave(100);
-    if(refresh)refreshLivePlayerDocumentChrome();
+    setCoverTextValue(target,value,{refresh});
   }
 
   function startLiveCoverInlineEdit(el,target){
@@ -7510,11 +7565,7 @@ function openDesktopTextDetail(){
       const d=ensureLiveCoverTextDraft();
       d[target]=value;
       pushLiveCoverTextDraftToEasy();
-      refreshCoverPreviewLayout();
-      syncEasyShellToWorkingDocument();
-      syncEasyPublishButton();
-      rememberWorkIdentity();
-      scheduleDraftSave(120);
+      setCoverTextValue(target,value,{refresh:false});
     };
     el.addEventListener('input',()=>{
       sync();
@@ -7560,6 +7611,7 @@ function openDesktopTextDetail(){
         if(hit){
           e.preventDefault();e.stopImmediatePropagation();
           startLiveCoverInlineEdit(hit,target);
+          if(desktopLiveActive()){desktopCoverStyleTarget=target;renderDesktopLivePanel();}
           return;
         }
       }
@@ -7569,6 +7621,7 @@ function openDesktopTextDetail(){
     if(e.target.closest?.('.sp-ending-title,.sp-ending-text')){
       e.preventDefault();e.stopImmediatePropagation();
       startLiveEndingInlineEdit();
+      if(desktopLiveActive())renderDesktopLivePanel();
       return;
     }
     if(e.target.closest?.('.sp-ending-left')){
@@ -7608,7 +7661,7 @@ function openDesktopTextDetail(){
     setLiveToolbarVisible(true);
     startInlineTextEdit(activeSubText?'subText':'text');
   },true);
-  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});liveCoverTextDraft=null;requestAnimationFrame(snapshotLiveCoverTextDraft);closeLiveEditSheet();setLiveToolbarVisible(false);});
+  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});liveCoverTextDraft=null;requestAnimationFrame(snapshotLiveCoverTextDraft);closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(renderDesktopLivePanel);});
   playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
     const detailKind=currentDesktopDetailKind();
