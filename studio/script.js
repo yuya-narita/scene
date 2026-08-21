@@ -1275,7 +1275,14 @@
         typography:{ fontFamily:selectedFont }
       },
       player:{ navigation:{ allowPrevious:true } },
-      cover:{...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily},
+      cover:{
+        ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),
+        ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
+        fontFamily:coverFontFamily,
+        ...(workingDocument?.cover?.styles && Object.keys(workingDocument.cover.styles).length
+          ? {styles:clone(workingDocument.cover.styles)}
+          : {})
+      },
       ending:endingFromEasy(),
       scenes
     };
@@ -2900,6 +2907,8 @@
     p.setUILanguage?.(uiLanguage);
     const playbackDoc=getDocumentForPlayback();
     p.load(playbackDoc,{startAt});
+    requestAnimationFrame(renderDesktopLivePanel);
+    setTimeout(renderDesktopLivePanel,60);
     const ep=String(playbackDoc.metadata?.episode||'').trim();
     const epTitle=String(playbackDoc.metadata?.episodeTitle||'').trim();
     if(p.els?.title)p.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || playbackDoc.title || '';
@@ -6266,7 +6275,23 @@ function openDesktopTextDetail(){
     });
     const styleCard=desktopCard('選択中の文字（Aa）');
     styleCard.append(desktopMakeSelect('対象',[['title','作品タイトル'],['subtitle','サブタイトル'],['author','作者名'],['episode','話数'],['episodeTitle','今回のタイトル']],desktopCoverStyleTarget,v=>{desktopCoverStyleTarget=v;renderDesktopLivePanel();}));
-    styleCard.append(shellStyleControls(()=>{workingDocument.cover||={};workingDocument.cover.styles||={};workingDocument.cover.styles[desktopCoverStyleTarget]||={};return workingDocument.cover.styles[desktopCoverStyleTarget];},()=>{refreshLivePlayerDocumentChrome();updateCoverPreview();syncEasyPublishButton();scheduleDraftSave(70);}));
+    styleCard.append(shellStyleControls(
+      ()=>{
+        workingDocument.cover||={};
+        workingDocument.cover.styles||={};
+        workingDocument.cover.styles[desktopCoverStyleTarget]||={};
+        return workingDocument.cover.styles[desktopCoverStyleTarget];
+      },
+      ()=>{
+        const st=workingDocument.cover?.styles?.[desktopCoverStyleTarget]||{};
+        workingDocument.cover.styles[desktopCoverStyleTarget]=clone(st);
+        refreshLivePlayerDocumentChrome();
+        applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]);
+        updateCoverPreview();
+        syncEasyPublishButton();
+        scheduleDraftSave(70);
+      }
+    ));
     desktopLivePanelBody.append(textCard,styleCard);
   }
 
@@ -7445,15 +7470,16 @@ function openDesktopTextDetail(){
     }[target];
     const el=selector?playerHost.querySelector(selector):null;
     if(!el)return;
-    const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)'};
+    const sizeScale={small:.78,normal:1,large:1.28,xl:1.6};
     const fontMap={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};
     el.style.removeProperty('color');
     el.style.removeProperty('font-size');
     el.style.removeProperty('font-family');
+    const baseSize=parseFloat(getComputedStyle(el).fontSize)||16;
     if(style?.color)el.style.setProperty('color',String(style.color),'important');
     if(style?.size&&style.size!=='auto'){
-      const v=typeof style.size==='number'?`${style.size}px`:sizeMap[style.size];
-      if(v)el.style.setProperty('font-size',v,'important');
+      const v=typeof style.size==='number'?Number(style.size):baseSize*(sizeScale[style.size]||1);
+      if(Number.isFinite(v))el.style.setProperty('font-size',`${v}px`,'important');
     }
     if(style?.fontFamily&&style.fontFamily!=='inherit'){
       const v=fontMap[style.fontFamily];
@@ -7507,9 +7533,14 @@ function openDesktopTextDetail(){
     const apply=()=>{
       if(font.sel.value==='inherit')delete style.fontFamily;else style.fontFamily=font.sel.value;
       style.size=size.sel.value;
-      syncEasyShellToWorkingDocument();
+
+      workingDocument.cover ||= {};
+      workingDocument.cover.styles ||= {};
+      workingDocument.cover.styles[target]=clone(style);
+
       refreshLivePlayerDocumentChrome();
-      applyCoverStyleToLiveElement(target,style);
+      applyCoverStyleToLiveElement(target,workingDocument.cover.styles[target]);
+      updateCoverPreview();
       syncEasyPublishButton();
       scheduleDraftSave(70);
     };
