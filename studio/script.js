@@ -6858,6 +6858,66 @@ function openDesktopTextDetail(){
     }
   },true);
 
+  // Live Edit: disappearance is a reader-facing result, but the author must
+  // never lose the editing target. Keep the normal Player behavior outside
+  // Live Edit; inside Live Edit, immediately restore the active Scene after
+  // a disappear phase fires. The dedicated Preview still shows the authored
+  // disappear effect normally.
+  playerHost.addEventListener('sceneplayer:disappear',(e)=>{
+    if(!liveEditEnabled)return;
+    const article=playerHost.querySelector('.sp-scene.is-active');
+    if(!article)return;
+    article.classList.remove('is-disappearing','is-disappeared','is-disappear-up','is-disappear-stay');
+    article.style.removeProperty('--sp-disappear-fade');
+    requestAnimationFrame(()=>ensureLiveEditEmptyTarget());
+  });
+
+  // Cover / Ending direct edit in Live Editor. Reuse the existing Easy Studio
+  // quick editors so there is only one source of truth for authored shell data.
+  // Only authored text/slots are intercepted; Start, empty stage taps and the
+  // fixed COVER action retain their normal Player behavior.
+  playerHost.addEventListener('click',(e)=>{
+    if(!liveEditEnabled||autoRecActive)return;
+
+    if(playerHost.classList.contains('sp-cover-open')){
+      const map=[
+        ['.sp-cover-title','title'],
+        ['.sp-cover-subtitle','subtitle'],
+        ['.sp-cover-author','author'],
+        ['.sp-cover-episode','episode'],
+        ['.sp-cover-episode-title','episodeTitle']
+      ];
+      for(const [selector,target] of map){
+        if(e.target.closest?.(selector)){
+          e.preventDefault();e.stopImmediatePropagation();
+          openCoverQuickEditor(target);
+          return;
+        }
+      }
+    }
+
+    if(!player?.ended)return;
+    if(e.target.closest?.('.sp-ending-title,.sp-ending-text')){
+      e.preventDefault();e.stopImmediatePropagation();
+      openEndingQuickEditor('center');
+      return;
+    }
+    if(e.target.closest?.('.sp-ending-left')){
+      e.preventDefault();e.stopImmediatePropagation();
+      openEndingQuickEditor('left');
+      return;
+    }
+    if(e.target.closest?.('.sp-ending-right')){
+      e.preventDefault();e.stopImmediatePropagation();
+      openEndingQuickEditor('right');
+      return;
+    }
+    if(e.target.closest?.('.sp-ending-cover')){
+      e.preventDefault();e.stopImmediatePropagation();
+      showFixedActionNotice('「表紙に戻る」は固定です');
+    }
+  },true);
+
   // Live Edit v0.2.2: never capture the whole Player surface.
   // Normal Player taps must remain owned by ScenePlayerCore:
   // cover Start works, and tapping empty stage space still advances.
