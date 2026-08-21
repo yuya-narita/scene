@@ -8614,3 +8614,154 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
 @media(max-width:640px){
   .cover-visibility-grid{grid-template-columns:1fr;}
 }
+
+
+/* v13.2 — compact cover visibility control for Easy Studio */
+.cover-visibility-panel{display:none!important;}
+
+.cover-visibility-summary-button{
+  width:100%;
+  min-height:64px;
+  margin:14px 0;
+  padding:13px 15px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  border:1px solid #e0e3e8;
+  border-radius:14px;
+  background:#fff;
+  color:#17191d;
+  text-align:left;
+  box-sizing:border-box;
+}
+.cover-visibility-summary-copy{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  min-width:0;
+}
+.cover-visibility-summary-copy strong{
+  font:800 14px/1.35 system-ui;
+}
+.cover-visibility-summary-copy small{
+  font:600 11px/1.4 system-ui;
+  color:#8a9099;
+}
+.cover-visibility-summary-tail{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  color:#6f7680;
+  font:800 14px/1 system-ui;
+}
+.cover-visibility-summary-tail>span{
+  font-size:24px;
+  font-weight:400;
+  transform:translateY(-1px);
+}
+
+.cover-visibility-dialog-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:25000;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  padding:14px;
+  padding-bottom:calc(14px + env(safe-area-inset-bottom));
+  background:rgba(10,12,15,.36);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  box-sizing:border-box;
+}
+.cover-visibility-dialog-backdrop[hidden]{display:none!important;}
+body.cover-visibility-dialog-open{overflow:hidden!important;}
+
+.cover-visibility-dialog{
+  width:min(100%,560px);
+  max-height:min(72vh,650px);
+  overflow:auto;
+  padding:18px;
+  border-radius:22px;
+  background:#fff;
+  box-shadow:0 22px 70px rgba(0,0,0,.25);
+  box-sizing:border-box;
+}
+.cover-visibility-dialog-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+}
+.cover-visibility-dialog-head small{
+  display:block;
+  margin-bottom:3px;
+  color:#8b929c;
+  font:700 10px/1.2 system-ui;
+  letter-spacing:.16em;
+}
+.cover-visibility-dialog-head strong{
+  display:block;
+  font:900 22px/1.25 system-ui;
+}
+.cover-visibility-dialog-close{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  border:0;
+  border-radius:50%;
+  background:#f0f2f5;
+  font:500 30px/1 system-ui;
+  color:#17191d;
+}
+.cover-visibility-dialog-note{
+  margin:12px 0 14px;
+  color:#7d848e;
+  font:600 12px/1.55 system-ui;
+}
+.cover-visibility-dialog-list{
+  border:1px solid #e1e4e9;
+  border-radius:15px;
+  overflow:hidden;
+}
+.cover-visibility-dialog-row{
+  min-height:54px;
+  padding:0 15px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  background:#fff;
+  font:800 14px/1.35 system-ui;
+  box-sizing:border-box;
+}
+.cover-visibility-dialog-row+ .cover-visibility-dialog-row{
+  border-top:1px solid #eceef1;
+}
+.cover-visibility-dialog-row input{
+  width:24px;
+  height:24px;
+  margin:0;
+  accent-color:#17191d;
+}
+.cover-visibility-dialog-done{
+  width:100%;
+  min-height:52px;
+  margin-top:15px;
+  border:0;
+  border-radius:14px;
+  background:#17191d;
+  color:#fff;
+  font:800 16px/1 system-ui;
+}
+
+@media(min-width:700px){
+  .cover-visibility-dialog-backdrop{
+    align-items:center;
+  }
+  .cover-visibility-dialog{
+    width:min(480px,calc(100vw - 40px));
+  }
+}

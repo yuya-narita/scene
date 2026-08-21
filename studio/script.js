@@ -3910,19 +3910,51 @@
   }
 
   let coverVisibilityPanel=null;
+  let coverVisibilitySummaryButton=null;
+  let coverVisibilityDialog=null;
   const coverVisibilityChecks={};
 
-  function ensureCoverVisibilityPanel(){
-    if(coverVisibilityPanel||!coverQuickDialog)return coverVisibilityPanel;
-    const card=document.createElement('section');
-    card.className='cover-visibility-panel';
-    const h=document.createElement('strong');
-    h.textContent='表紙に表示する情報';
-    const note=document.createElement('p');
-    note.textContent='作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。';
-    const grid=document.createElement('div');
-    grid.className='cover-visibility-grid';
+  function coverVisibilitySummaryText(){
+    const state=coverVisibilityStateFromDocument();
+    const count=COVER_INFO_FIELDS.filter(k=>state[k]!==false).length;
+    return count===0?'なし':`${count}/5`;
+  }
 
+  function syncCoverVisibilitySummary(){
+    if(coverVisibilitySummaryButton){
+      const value=coverVisibilitySummaryText();
+      const valueEl=coverVisibilitySummaryButton.querySelector('.cover-visibility-summary-value');
+      if(valueEl)valueEl.textContent=value;
+    }
+  }
+
+  function ensureCoverVisibilityDialog(){
+    if(coverVisibilityDialog)return coverVisibilityDialog;
+    const overlay=document.createElement('div');
+    overlay.className='cover-visibility-dialog-backdrop';
+    overlay.hidden=true;
+
+    const dialog=document.createElement('div');
+    dialog.className='cover-visibility-dialog';
+    dialog.setAttribute('role','dialog');
+    dialog.setAttribute('aria-modal','true');
+
+    const head=document.createElement('div');
+    head.className='cover-visibility-dialog-head';
+    const title=document.createElement('div');
+    title.innerHTML='<small>COVER DISPLAY</small><strong>表紙に表示する情報</strong>';
+    const close=document.createElement('button');
+    close.type='button';
+    close.className='cover-visibility-dialog-close';
+    close.textContent='×';
+    head.append(title,close);
+
+    const note=document.createElement('p');
+    note.className='cover-visibility-dialog-note';
+    note.textContent='作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。';
+
+    const list=document.createElement('div');
+    list.className='cover-visibility-dialog-list';
     const labels=[
       ['title','作品タイトル'],
       ['subtitle','サブタイトル'],
@@ -3930,32 +3962,84 @@
       ['episode','話数'],
       ['episodeTitle','今回のタイトル']
     ];
+
     for(const [target,labelText] of labels){
       const label=document.createElement('label');
-      label.className='cover-visibility-check';
+      label.className='cover-visibility-dialog-row';
+      const span=document.createElement('span');
+      span.textContent=labelText;
       const input=document.createElement('input');
       input.type='checkbox';
       input.dataset.coverVisibilityTarget=target;
-      const span=document.createElement('span');
-      span.textContent=labelText;
-      label.append(input,span);
-      grid.appendChild(label);
+      label.append(span,input);
+      list.appendChild(label);
       coverVisibilityChecks[target]=input;
+
       input.addEventListener('change',()=>{
         setCoverFieldVisible(target,input.checked,{refresh:true});
+        syncCoverVisibilitySummary();
       });
     }
-    card.append(h,note,grid);
 
+    const done=document.createElement('button');
+    done.type='button';
+    done.className='cover-visibility-dialog-done';
+    done.textContent='完了';
+
+    const dismiss=()=>{
+      overlay.hidden=true;
+      document.body.classList.remove('cover-visibility-dialog-open');
+    };
+    close.addEventListener('click',dismiss);
+    done.addEventListener('click',dismiss);
+    overlay.addEventListener('click',e=>{ if(e.target===overlay)dismiss(); });
+
+    dialog.append(head,note,list,done);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    coverVisibilityDialog=overlay;
+    return overlay;
+  }
+
+  function openCoverVisibilityDialog(){
+    const overlay=ensureCoverVisibilityDialog();
+    syncCoverVisibilityControls();
+    overlay.hidden=false;
+    document.body.classList.add('cover-visibility-dialog-open');
+  }
+
+  function ensureCoverVisibilityPanel(){
+    if(coverVisibilityPanel||!coverQuickDialog)return coverVisibilityPanel;
+
+    const row=document.createElement('button');
+    row.type='button';
+    row.className='cover-visibility-summary-button';
+    row.innerHTML=`
+      <span class="cover-visibility-summary-copy">
+        <strong>表紙に表示する情報</strong>
+        <small>作品情報は残したまま表示だけ切替</small>
+      </span>
+      <span class="cover-visibility-summary-tail">
+        <b class="cover-visibility-summary-value">${coverVisibilitySummaryText()}</b>
+        <span aria-hidden="true">›</span>
+      </span>
+    `;
+    row.addEventListener('click',openCoverVisibilityDialog);
+
+    // Put this directly before the font controls so Easy stays short on iPhone.
     const fontAnchor=coverQuickFont?.closest?.('label') || coverQuickFont?.parentElement;
-    if(fontAnchor?.parentElement)fontAnchor.parentElement.insertBefore(card,fontAnchor);
-    else coverQuickDialog.querySelector?.('section,form,div')?.appendChild(card);
-    coverVisibilityPanel=card;
-    return card;
+    if(fontAnchor?.parentElement)fontAnchor.parentElement.insertBefore(row,fontAnchor);
+    else coverQuickDialog.querySelector?.('section,form,div')?.appendChild(row);
+
+    coverVisibilityPanel=row;
+    coverVisibilitySummaryButton=row;
+    syncCoverVisibilitySummary();
+    return row;
   }
 
   function syncCoverVisibilityControls(){
     ensureCoverVisibilityPanel();
+    ensureCoverVisibilityDialog();
     const state=coverVisibilityStateFromDocument();
     for(const target of COVER_INFO_FIELDS){
       const input=coverVisibilityChecks[target];
@@ -3963,10 +4047,26 @@
       const desktop=desktopLivePanelBody?.querySelector?.(`[data-cover-visibility-target="${target}"]`);
       if(desktop)desktop.checked=state[target]!==false;
     }
+    syncCoverVisibilitySummary();
+  }
+
+
+  function removeCoverLogoQuickControl(){
+    const btn=coverQuickLogoPick;
+    if(!btn)return;
+    const wrapper=btn.closest?.('.cover-logo-control, .cover-quick-logo-row, label, .field, .form-field') || btn;
+    // Avoid deleting a shared wrapper containing other controls.
+    if(wrapper!==btn && wrapper.querySelectorAll?.('button,input,select,textarea').length===1){
+      wrapper.remove();
+    }else{
+      btn.remove();
+    }
+    if(coverQuickLogoClear)coverQuickLogoClear.remove();
   }
 
   function openCoverQuickEditor(focusTarget='title'){
     if(!coverQuickDialog)return;
+    removeCoverLogoQuickControl();
     coverQuickWorkTitle.value=titleInput?.value||'';
     coverQuickAuthor.value=authorInput?.value||'';
     coverQuickSubtitle.value=subtitleInput?.value||'';
