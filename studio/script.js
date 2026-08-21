@@ -6867,7 +6867,7 @@ function openDesktopTextDetail(){
         const target=liveCoverInlineTarget;
         finishLiveCoverInlineEdit({refresh:false});
         document.activeElement?.blur?.();
-        openAfterKeyboardDismiss(()=>openLiveCoverStylePanel(target));
+        openLiveCoverStylePanel(target);
       }
       return;
     }
@@ -7147,9 +7147,17 @@ function openDesktopTextDetail(){
     const st=ensureEndingStyleStore();
 
     const overlay=document.createElement('div');
-    Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483300',background:'rgba(0,0,0,.30)',display:'flex',alignItems:'flex-end',justifyContent:'center',padding:'12px'});
+    Object.assign(overlay.style,{position:'fixed',left:'0',right:'0',zIndex:'2147483300',background:'rgba(0,0,0,.30)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'12px',boxSizing:'border-box'});
+    const placeOverlay=()=>{
+      const vv=window.visualViewport;
+      const top=vv?.offsetTop||0;
+      const height=vv?.height||window.innerHeight;
+      overlay.style.top=`${Math.round(top)}px`;
+      overlay.style.height=`${Math.max(240,Math.round(height))}px`;
+    };
+    placeOverlay();
     const card=document.createElement('section');
-    Object.assign(card.style,{width:'min(680px,100%)',borderRadius:'22px',background:'#fff',color:'#17181b',padding:'18px 18px 22px',boxShadow:'0 18px 55px rgba(0,0,0,.28)'});
+    Object.assign(card.style,{width:'min(680px,100%)',maxHeight:'calc(100% - 24px)',overflowY:'auto',borderRadius:'22px',background:'#fff',color:'#17181b',padding:'18px 18px 22px',boxShadow:'0 18px 55px rgba(0,0,0,.28)'});
     const h=document.createElement('h2');h.textContent='読了文字の詳細設定';Object.assign(h.style,{margin:'0 0 16px',font:'800 20px/1.35 system-ui'});
     card.appendChild(h);
 
@@ -7270,6 +7278,33 @@ function openDesktopTextDetail(){
   // always share one source of truth.
   let liveCoverInlineEl=null;
   let liveCoverInlineTarget='';
+  let liveCoverTextDraft=null;
+
+  function snapshotLiveCoverTextDraft(){
+    const read=(selector)=>String(playerHost.querySelector(selector)?.textContent||'').replace(/\u00a0/g,' ').trim();
+    liveCoverTextDraft={
+      title:read('.sp-cover-title'),
+      subtitle:read('.sp-cover-subtitle'),
+      author:read('.sp-cover-author'),
+      episode:read('.sp-cover-episode'),
+      episodeTitle:read('.sp-cover-episode-title')
+    };
+    if(liveCoverTextDraft.title==='Untitled' && !String(titleInput?.value||'').trim())liveCoverTextDraft.title='';
+    return liveCoverTextDraft;
+  }
+
+  function ensureLiveCoverTextDraft(){
+    return liveCoverTextDraft || snapshotLiveCoverTextDraft();
+  }
+
+  function pushLiveCoverTextDraftToEasy(){
+    const d=ensureLiveCoverTextDraft();
+    if(titleInput)titleInput.value=d.title||'';
+    if(subtitleInput)subtitleInput.value=d.subtitle||'';
+    if(authorInput)authorInput.value=d.author||'';
+    if(episodeInput)episodeInput.value=d.episode||'';
+    if(episodeTitleInput)episodeTitleInput.value=d.episodeTitle||'';
+  }
 
   function coverInputForLiveTarget(target){
     return {
@@ -7354,6 +7389,7 @@ function openDesktopTextDetail(){
   }
 
   function closeLiveCoverStylePanel(){
+    liveCoverStylePanel?._viewportAbort?.abort?.();
     liveCoverStylePanel?.remove();
     liveCoverStylePanel=null;
   }
@@ -7409,14 +7445,20 @@ function openDesktopTextDetail(){
     done.addEventListener('click',closeLiveCoverStylePanel);
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeLiveCoverStylePanel();});
     document.body.appendChild(overlay);liveCoverStylePanel=overlay;
+    const abort=new AbortController();
+    overlay._viewportAbort=abort;
+    window.visualViewport?.addEventListener('resize',placeOverlay,{signal:abort.signal});
+    window.visualViewport?.addEventListener('scroll',placeOverlay,{signal:abort.signal});
   }
 
   function finishLiveCoverInlineEdit({refresh=true}={}){
     const el=liveCoverInlineEl;
     if(!el)return;
-    const input=coverInputForLiveTarget(liveCoverInlineTarget);
+    const target=liveCoverInlineTarget;
     const value=String(el.textContent||'').replace(/\u00a0/g,' ').trim();
-    if(input)input.value=value;
+    const d=ensureLiveCoverTextDraft();
+    if(target)d[target]=value;
+    pushLiveCoverTextDraftToEasy();
     el.removeAttribute('contenteditable');
     el.classList.remove('live-cover-inline-editing');
     liveCoverInlineEl=null;
@@ -7438,6 +7480,7 @@ function openDesktopTextDetail(){
     if(!liveEditEnabled||autoRecActive||!playerHost.classList.contains('sp-cover-open')||!el)return;
     if(liveCoverInlineEl===el)return;
     finishLiveCoverInlineEdit({refresh:false});
+    ensureLiveCoverTextDraft();
     liveCoverInlineEl=el;
     liveCoverInlineTarget=target;
     document.body.classList.add('live-inline-text-edit');
@@ -7463,7 +7506,10 @@ function openDesktopTextDetail(){
 
     const sync=()=>{
       if(liveCoverInlineEl!==el)return;
-      if(input)input.value=String(el.textContent||'').replace(/\u00a0/g,' ');
+      const value=String(el.textContent||'').replace(/\u00a0/g,' ');
+      const d=ensureLiveCoverTextDraft();
+      d[target]=value;
+      pushLiveCoverTextDraftToEasy();
       refreshCoverPreviewLayout();
       syncEasyShellToWorkingDocument();
       syncEasyPublishButton();
@@ -7562,7 +7608,7 @@ function openDesktopTextDetail(){
     setLiveToolbarVisible(true);
     startInlineTextEdit(activeSubText?'subText':'text');
   },true);
-  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});closeLiveEditSheet();setLiveToolbarVisible(false);});
+  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});liveCoverTextDraft=null;requestAnimationFrame(snapshotLiveCoverTextDraft);closeLiveEditSheet();setLiveToolbarVisible(false);});
   playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
     const detailKind=currentDesktopDetailKind();
