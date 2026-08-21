@@ -6277,19 +6277,72 @@ function openDesktopTextDetail(){
           onApply(st);
         }
       ),
-      desktopMakeSelect(
-        '色',
-        [['auto','おまかせ'],['white','白'],['black','黒']],
-        !initial.color?'auto':(String(initial.color).toLowerCase()==='#ffffff'?'white':'black'),
-        v=>{
-          const st=store();
-          if(v==='white')st.color='#ffffff';
-          else if(v==='black')st.color='#000000';
-          else delete st.color;
-          onApply(st);
-        }
-      )
     );
+
+    const colorField=document.createElement('div');
+    colorField.className='desktop-live-field';
+    const colorLabel=document.createElement('span');
+    colorLabel.textContent='色';
+
+    const colorRow=document.createElement('div');
+    Object.assign(colorRow.style,{
+      display:'flex',
+      alignItems:'center',
+      gap:'8px',
+      flexWrap:'wrap',
+      minHeight:'40px'
+    });
+
+    const makeColorButton=(label,value)=>{
+      const b=document.createElement('button');
+      b.type='button';
+      b.textContent=label;
+      Object.assign(b.style,{
+        minHeight:'38px',
+        padding:'0 14px',
+        border:'1px solid #d7d9de',
+        borderRadius:'19px',
+        background:'#fff',
+        cursor:'pointer'
+      });
+      b.addEventListener('click',()=>{
+        const st=store();
+        if(value===null)delete st.color;
+        else st.color=value;
+        onApply(st);
+      });
+      return b;
+    };
+
+    colorRow.append(
+      makeColorButton('おまかせ',null),
+      makeColorButton('白','#ffffff'),
+      makeColorButton('黒','#000000')
+    );
+
+    const picker=document.createElement('input');
+    picker.type='color';
+    picker.value=/^#[0-9a-f]{6}$/i.test(initial.color||'') ? initial.color : '#ffffff';
+    picker.setAttribute('aria-label','文字色を選択');
+    Object.assign(picker.style,{
+      width:'44px',
+      height:'38px',
+      padding:'3px',
+      border:'1px solid #d7d9de',
+      borderRadius:'10px',
+      background:'#fff',
+      cursor:'pointer'
+    });
+    picker.addEventListener('input',()=>{
+      const st=store();
+      st.color=picker.value;
+      onApply(st);
+    });
+    colorRow.appendChild(picker);
+
+    colorField.append(colorLabel,colorRow);
+    wrap.appendChild(colorField);
+
     return wrap;
   }
 
