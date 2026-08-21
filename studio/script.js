@@ -6942,6 +6942,13 @@ function openDesktopTextDetail(){
     }
   });
 
+  // The disappear rescue target belongs only to the Scene that created it.
+  // Remove it synchronously whenever the Player leaves/reloads that Scene so
+  // the "タップして編集" target cannot survive as a ghost over later Scenes.
+  ['sceneplayer:scenechange','sceneplayer:load','sceneplayer:restart',
+   'sceneplayer:coverstart','sceneplayer:end','sceneplayer:historyopen']
+    .forEach(type=>playerHost.addEventListener(type,removeLiveDisappearEditTarget));
+
   // Cover / Ending direct edit in Live Editor. Reuse the existing Easy Studio
   // quick editors so there is only one source of truth for authored shell data.
   // Only authored text/slots are intercepted; Start, empty stage taps and the
