@@ -6254,11 +6254,41 @@ function openDesktopTextDetail(){
   let desktopCoverStyleTarget='title';
 
   function shellStyleControls(store,onApply){
-    const wrap=document.createElement('div');wrap.className='desktop-live-grid';const st=store();
+    const wrap=document.createElement('div');wrap.className='desktop-live-grid';
+    const initial=store();
     wrap.append(
-      desktopMakeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],st.fontFamily||'inherit',v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;onApply();}),
-      desktopMakeSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],st.size||'auto',v=>{st.size=v;onApply();}),
-      desktopMakeSelect('色',[['auto','おまかせ'],['white','白'],['black','黒']],!st.color?'auto':(String(st.color).toLowerCase()==='#ffffff'?'white':'black'),v=>{if(v==='white')st.color='#ffffff';else if(v==='black')st.color='#000000';else delete st.color;onApply();})
+      desktopMakeSelect(
+        '書体',
+        [['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],
+        initial.fontFamily||'inherit',
+        v=>{
+          const st=store();
+          if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;
+          onApply(st);
+        }
+      ),
+      desktopMakeSelect(
+        'サイズ',
+        [['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],
+        initial.size||'auto',
+        v=>{
+          const st=store();
+          st.size=v;
+          onApply(st);
+        }
+      ),
+      desktopMakeSelect(
+        '色',
+        [['auto','おまかせ'],['white','白'],['black','黒']],
+        !initial.color?'auto':(String(initial.color).toLowerCase()==='#ffffff'?'white':'black'),
+        v=>{
+          const st=store();
+          if(v==='white')st.color='#ffffff';
+          else if(v==='black')st.color='#000000';
+          else delete st.color;
+          onApply(st);
+        }
+      )
     );
     return wrap;
   }
@@ -6282,11 +6312,21 @@ function openDesktopTextDetail(){
         workingDocument.cover.styles[desktopCoverStyleTarget]||={};
         return workingDocument.cover.styles[desktopCoverStyleTarget];
       },
-      ()=>{
-        const st=workingDocument.cover?.styles?.[desktopCoverStyleTarget]||{};
+      st=>{
+        workingDocument.cover ||= {};
+        workingDocument.cover.styles ||= {};
         workingDocument.cover.styles[desktopCoverStyleTarget]=clone(st);
+
+        applyCoverStyleToLiveElement(
+          desktopCoverStyleTarget,
+          workingDocument.cover.styles[desktopCoverStyleTarget]
+        );
         refreshLivePlayerDocumentChrome();
-        applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]);
+        requestAnimationFrame(()=>applyCoverStyleToLiveElement(
+          desktopCoverStyleTarget,
+          workingDocument.cover.styles[desktopCoverStyleTarget]
+        ));
+
         updateCoverPreview();
         syncEasyPublishButton();
         scheduleDraftSave(70);
