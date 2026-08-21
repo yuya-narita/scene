@@ -6945,9 +6945,11 @@ function openDesktopTextDetail(){
     if(endingQuickDialog.parentElement!==document.body){
       document.body.appendChild(endingQuickDialog);
     }
-    endingQuickDialog.style.position='fixed';
-    endingQuickDialog.style.inset='0';
-    endingQuickDialog.style.zIndex='2147483000';
+    endingQuickDialog.style.setProperty('position','fixed','important');
+    endingQuickDialog.style.setProperty('inset','0','important');
+    // #playerScreen itself is 2147483000!important. Keep this editor above it,
+    // but below the hard "編集に戻る" control at 2147483647.
+    endingQuickDialog.style.setProperty('z-index','2147483640','important');
   }
 
   function prepareLiveEndingEditor(){
@@ -7032,17 +7034,17 @@ function openDesktopTextDetail(){
     };
     el.addEventListener('input',sync);
     el.addEventListener('blur',()=>finishLiveEndingInlineEdit(),{once:true});
-    requestAnimationFrame(()=>{
-      el.focus({preventScroll:true});
-      try{
-        const range=document.createRange();
-        range.selectNodeContents(el);
-        range.collapse(false);
-        const sel=window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }catch(_){}
-    });
+    // Focus synchronously while the first tap is still a user gesture.
+    // This is required for iPhone Safari to open the keyboard on one tap.
+    try{ el.focus({preventScroll:true}); }catch(_){ el.focus(); }
+    try{
+      const range=document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel=window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }catch(_){}
   }
 
   playerHost.addEventListener('sceneplayer:end',()=>{
@@ -7090,8 +7092,9 @@ function openDesktopTextDetail(){
       return;
     }
     if(e.target.closest?.('.sp-ending-cover')){
-      e.preventDefault();e.stopImmediatePropagation();
-      showFixedActionNotice('「表紙に戻る」は固定です');
+      // Fixed action, but still live: let ScenePlayerCore handle this click
+      // so the author can return to the cover and run another preview pass.
+      return;
     }
   },true);
 
