@@ -10,6 +10,7 @@
   const titleInput = $('#titleInput');
   const authorInput = $('#authorInput');
   const subtitleInput = $('#subtitleInput');
+  const COVER_INFO_FIELDS=['title','subtitle','author','episode','episodeTitle'];
   const languageInput = $('#languageInput');
   const seriesTitleInput = $('#seriesTitleInput');
   const episodeInput = $('#episodeInput');
@@ -7952,8 +7953,6 @@ function openDesktopTextDetail(){
   let liveCoverInlineEl=null;
   let liveCoverInlineTarget='';
   let liveCoverTextDraft=null;
-
-  const COVER_INFO_FIELDS=['title','subtitle','author','episode','episodeTitle'];
 
   function coverTextStateFromDocument(){
     const doc=workingDocument||{};
