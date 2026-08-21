@@ -1692,7 +1692,8 @@
     workingDocument.appearance.typography ||= {};
     workingDocument.appearance.typography.fontFamily=selectedFont;
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
-    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily};
+    const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
+    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -7141,6 +7142,94 @@ function openDesktopTextDetail(){
     playerHost.style.setProperty('--live-cover-keyboard-shift',`${Math.round(shift)}px`);
   }
 
+  let liveCoverStyleButton=null;
+  let liveCoverStylePanel=null;
+
+  function ensureCoverStyleStore(target){
+    workingDocument.cover ||= {};
+    workingDocument.cover.styles ||= {};
+    workingDocument.cover.styles[target] ||= {};
+    return workingDocument.cover.styles[target];
+  }
+  function closeLiveCoverStylePanel(){
+    liveCoverStylePanel?.remove();
+    liveCoverStylePanel=null;
+  }
+  function hideLiveCoverStyleButton(){
+    if(liveCoverStyleButton)liveCoverStyleButton.hidden=true;
+    closeLiveCoverStylePanel();
+  }
+  function showLiveCoverStyleButton(){
+    if(!liveCoverInlineEl)return;
+    if(!liveCoverStyleButton){
+      const b=document.createElement('button');
+      b.type='button';b.textContent='Aa';b.setAttribute('aria-label','表紙文字の詳細設定');
+      Object.assign(b.style,{
+        position:'fixed',right:'14px',bottom:'calc(var(--live-keyboard-inset, 0px) + 76px)',
+        zIndex:'2147483200',width:'50px',height:'50px',borderRadius:'25px',
+        border:'1px solid rgba(255,255,255,.32)',background:'rgba(20,22,26,.90)',
+        color:'#fff',font:'800 18px/1 system-ui,-apple-system,sans-serif',
+        boxShadow:'0 7px 22px rgba(0,0,0,.24)',WebkitTapHighlightColor:'transparent'
+      });
+      b.addEventListener('pointerdown',e=>e.preventDefault());
+      b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();openLiveCoverStylePanel();},true);
+      document.body.appendChild(b);liveCoverStyleButton=b;
+    }
+    liveCoverStyleButton.hidden=false;
+  }
+  function openLiveCoverStylePanel(){
+    if(!liveCoverInlineTarget)return;
+    closeLiveCoverStylePanel();
+    const style=ensureCoverStyleStore(liveCoverInlineTarget);
+    const overlay=document.createElement('div');
+    Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483300',background:'rgba(0,0,0,.30)',display:'flex',alignItems:'flex-end',justifyContent:'center',padding:'12px'});
+    const card=document.createElement('section');
+    Object.assign(card.style,{width:'min(680px,100%)',borderRadius:'22px',background:'#fff',color:'#17181b',padding:'18px 18px 22px',boxShadow:'0 18px 55px rgba(0,0,0,.28)'});
+    const h=document.createElement('h2');h.textContent='表紙文字の詳細設定';Object.assign(h.style,{margin:'0 0 16px',font:'800 20px/1.35 system-ui'});
+    card.appendChild(h);
+
+    const grid=document.createElement('div');Object.assign(grid.style,{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'});
+    const mkSelect=(label,items,value)=>{
+      const wrap=document.createElement('label');Object.assign(wrap.style,{display:'grid',gap:'7px',font:'700 13px/1.4 system-ui'});
+      const span=document.createElement('span');span.textContent=label;
+      const sel=document.createElement('select');Object.assign(sel.style,{height:'46px',border:'1px solid #d7d9de',borderRadius:'12px',background:'#fff',padding:'0 10px',font:'600 15px/1 system-ui'});
+      items.forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);});
+      sel.value=value;wrap.append(span,sel);return {wrap,sel};
+    };
+    const font=mkSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],style.fontFamily||'inherit');
+    const size=mkSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],typeof style.size==='string'?style.size:'auto');
+    grid.append(font.wrap,size.wrap);card.appendChild(grid);
+
+    const colorTitle=document.createElement('strong');colorTitle.textContent='文字色';Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
+    const colors=document.createElement('div');Object.assign(colors.style,{display:'flex',gap:'9px',alignItems:'center',marginTop:'8px',flexWrap:'wrap'});
+    const colorBtn=(text,value)=>{
+      const b=document.createElement('button');b.type='button';b.textContent=text;Object.assign(b.style,{height:'42px',padding:'0 14px',borderRadius:'21px',border:'1px solid #d7d9de',background:'#fff',font:'700 14px/1 system-ui'});
+      b.addEventListener('click',()=>{if(value===null)delete style.color;else style.color=value;apply();});colors.appendChild(b);
+    };
+    colorBtn('おまかせ',null);colorBtn('白','#ffffff');colorBtn('黒','#000000');
+    const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(style.color||'')?style.color:'#ffffff';
+    Object.assign(picker.style,{width:'48px',height:'42px',border:'1px solid #d7d9de',borderRadius:'10px',padding:'4px',background:'#fff'});
+    colors.appendChild(picker);card.append(colorTitle,colors);
+
+    const foot=document.createElement('div');Object.assign(foot.style,{display:'flex',justifyContent:'flex-end',marginTop:'18px'});
+    const done=document.createElement('button');done.type='button';done.textContent='完了';Object.assign(done.style,{width:'120px',height:'48px',border:'0',borderRadius:'24px',background:'#17181b',color:'#fff',font:'800 15px/1 system-ui'});
+    foot.appendChild(done);card.appendChild(foot);overlay.appendChild(card);
+
+    const apply=()=>{
+      if(font.sel.value==='inherit')delete style.fontFamily;else style.fontFamily=font.sel.value;
+      style.size=size.sel.value;
+      refreshLivePlayerDocumentChrome();
+      syncEasyShellToWorkingDocument();
+      syncEasyPublishButton();
+      scheduleDraftSave(70);
+    };
+    font.sel.addEventListener('change',apply);size.sel.addEventListener('change',apply);
+    picker.addEventListener('input',()=>{style.color=picker.value;apply();});
+    done.addEventListener('click',closeLiveCoverStylePanel);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeLiveCoverStylePanel();});
+    document.body.appendChild(overlay);liveCoverStylePanel=overlay;
+  }
+
   function finishLiveCoverInlineEdit({refresh=true}={}){
     const el=liveCoverInlineEl;
     if(!el)return;
@@ -7151,6 +7240,7 @@ function openDesktopTextDetail(){
     el.classList.remove('live-cover-inline-editing');
     liveCoverInlineEl=null;
     liveCoverInlineTarget='';
+    hideLiveCoverStyleButton();
     resetLiveCoverKeyboardShift();
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
@@ -7177,6 +7267,7 @@ function openDesktopTextDetail(){
     el.style.cursor='text';
     playerHost.classList.add('live-cover-inline-text-edit');
     playerHost.style.setProperty('--live-cover-keyboard-shift','0px');
+    showLiveCoverStyleButton();
 
     const abort=new AbortController();
     el._liveCoverEditAbort?.abort();

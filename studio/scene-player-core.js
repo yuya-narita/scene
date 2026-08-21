@@ -1119,6 +1119,42 @@
         this.els.coverEpisodeTitle.hidden = !episodeTitle;
       }
 
+      const coverStyles = doc.cover?.styles || {};
+      const coverStyleMap = [
+        [this.els.coverTitle,'title'],
+        [this.els.coverSubtitle,'subtitle'],
+        [this.els.coverAuthor,'author'],
+        [this.els.coverEpisode,'episode'],
+        [this.els.coverEpisodeTitle,'episodeTitle']
+      ];
+      const coverSizeMap = {
+        small:'clamp(15px,3.5vw,22px)',
+        normal:'clamp(18px,4.6vw,30px)',
+        large:'clamp(24px,6.2vw,42px)',
+        xl:'clamp(30px,8vw,56px)'
+      };
+      const coverFontMap = {
+        serif:'var(--sp-font-serif)',
+        sans:'var(--sp-font-sans)',
+        mono:'var(--sp-font-mono)'
+      };
+      for (const [el,key] of coverStyleMap) {
+        if (!el) continue;
+        const st = coverStyles[key] || {};
+        el.style.removeProperty('color');
+        el.style.removeProperty('font-size');
+        el.style.removeProperty('font-family');
+        if (st.color) el.style.setProperty('color',String(st.color),'important');
+        if (st.size && st.size !== 'auto') {
+          const size = typeof st.size === 'number' ? `${st.size}px` : coverSizeMap[st.size];
+          if (size) el.style.setProperty('font-size',size,'important');
+        }
+        if (st.fontFamily && st.fontFamily !== 'inherit') {
+          const fam=coverFontMap[st.fontFamily];
+          if (fam) el.style.setProperty('font-family',fam,'important');
+        }
+      }
+
       const authoredEndingLabel = String(doc.ending?.label || doc.ending?.title || '').trim();
       if (this.els.endingTitle) {
         this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
