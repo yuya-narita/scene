@@ -1286,16 +1286,56 @@
 
     if(coverPreviewLogo){coverPreviewLogo.src=coverLogoUrl||'';coverPreviewLogo.hidden=!coverLogoUrl;}
     const visible=coverVisibilityStateFromDocument();
+
+    // Easy cover preview has accumulated several later CSS rules with !important.
+    // Do not rely on the HTML hidden attribute alone: force the preview visibility
+    // at inline-important level so it always matches cover.visibility exactly.
+    const setEasyCoverPreviewVisible=(el,show)=>{
+      if(!el)return;
+      el.hidden=!show;
+      if(show){
+        el.style.removeProperty('display');
+      }else{
+        el.style.setProperty('display','none','important');
+      }
+    };
+
     if(coverPreviewTitle){
       const previewTitle=title;
       coverPreviewTitle.textContent=previewTitle;
-      coverPreviewTitle.hidden=Boolean(coverLogoUrl)||!previewTitle||visible.title===false;
+      setEasyCoverPreviewVisible(
+        coverPreviewTitle,
+        !coverLogoUrl && Boolean(previewTitle) && visible.title!==false
+      );
       coverPreviewTitle.classList.toggle('has-authored-break',/\r?\n/.test(previewTitle));
     }
-    if(coverPreviewAuthor){coverPreviewAuthor.textContent=author;coverPreviewAuthor.hidden=!author||visible.author===false;}
-    if(coverPreviewEpisode){coverPreviewEpisode.textContent=episode;coverPreviewEpisode.hidden=!episode||visible.episode===false;}
-    if(coverPreviewSubtitle){coverPreviewSubtitle.textContent=subtitle;coverPreviewSubtitle.hidden=!subtitle||visible.subtitle===false;}
-    if(coverPreviewEpisodeTitle){coverPreviewEpisodeTitle.textContent=episodeTitle;coverPreviewEpisodeTitle.hidden=!episodeTitle||visible.episodeTitle===false;}
+    if(coverPreviewAuthor){
+      coverPreviewAuthor.textContent=author;
+      setEasyCoverPreviewVisible(coverPreviewAuthor,Boolean(author)&&visible.author!==false);
+    }
+    if(coverPreviewEpisode){
+      coverPreviewEpisode.textContent=episode;
+      setEasyCoverPreviewVisible(coverPreviewEpisode,Boolean(episode)&&visible.episode!==false);
+    }
+    if(coverPreviewSubtitle){
+      coverPreviewSubtitle.textContent=subtitle;
+      setEasyCoverPreviewVisible(coverPreviewSubtitle,Boolean(subtitle)&&visible.subtitle!==false);
+    }
+    if(coverPreviewEpisodeTitle){
+      coverPreviewEpisodeTitle.textContent=episodeTitle;
+      setEasyCoverPreviewVisible(coverPreviewEpisodeTitle,Boolean(episodeTitle)&&visible.episodeTitle!==false);
+    }
+
+    // If both episode lines are hidden, hide their layout wrapper too so no stale
+    // episode-title text or spacing can remain in the Easy preview.
+    const episodeBlock=coverPreviewEpisodeTitle?.closest?.('.cover-preview-episode-block');
+    if(episodeBlock){
+      const showEpisodeBlock=
+        (Boolean(episode)&&visible.episode!==false) ||
+        (Boolean(episodeTitle)&&visible.episodeTitle!==false);
+      if(showEpisodeBlock)episodeBlock.style.removeProperty('display');
+      else episodeBlock.style.setProperty('display','none','important');
+    }
 
     coverPreview.dataset.liveTitle=title;
     coverPreview.dataset.liveAuthor=author;
