@@ -4526,6 +4526,7 @@ function startInlineTextEdit(){
   }
   function liveEditRenderAt(index,{preserveSheet=true}={}){
     if(!player||!workingDocument?.scenes?.length)return;
+    removeLiveDisappearEditTarget();
     const target=Math.max(0,Math.min(Number(index)||0,workingDocument.scenes.length-1));
     const wasOpen=liveEditSheet&&!liveEditSheet.hidden;
     const doc=getDocumentForPlayback();
@@ -6858,18 +6859,72 @@ function openDesktopTextDetail(){
     }
   },true);
 
-  // Live Edit: disappearance is a reader-facing result, but the author must
-  // never lose the editing target. Keep the normal Player behavior outside
-  // Live Edit; inside Live Edit, immediately restore the active Scene after
-  // a disappear phase fires. The dedicated Preview still shows the authored
-  // disappear effect normally.
+  // Live Edit disappear handling:
+  // Preview must stay faithful to the authored Scene, so disappear is allowed
+  // to complete normally. Once it has fully disappeared, Live Editor exposes
+  // the same kind of small "tap to edit" rescue target used by an empty Scene.
+  // Tapping the rescue target restores the Scene text and immediately enters
+  // inline editing. Public Player behavior is untouched.
+  function removeLiveDisappearEditTarget(){
+    playerHost?.querySelector('.live-disappear-edit-target')?.remove();
+  }
+  function showLiveDisappearEditTarget(){
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
+    removeLiveDisappearEditTarget();
+    const stage=playerHost.querySelector('.sp-stage');
+    const article=playerHost.querySelector('.sp-scene.is-active');
+    const {scene}=liveEditScene();
+    if(!stage||!article||!scene?.presentation?.disappear)return;
+
+    const target=document.createElement('button');
+    target.type='button';
+    target.className='live-disappear-edit-target';
+    target.textContent='タップして編集';
+    target.setAttribute('aria-label','消えたSceneのテキストを編集');
+    Object.assign(target.style,{
+      position:'absolute',
+      left:'50%',
+      top:'50%',
+      transform:'translate(-50%,-50%)',
+      zIndex:'40',
+      minWidth:'150px',
+      minHeight:'46px',
+      padding:'10px 14px',
+      border:'0',
+      borderRadius:'12px',
+      background:'transparent',
+      color:'rgba(120,120,124,.42)',
+      font:'700 13px/1.5 system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif',
+      letterSpacing:'.08em',
+      cursor:'text',
+      WebkitTapHighlightColor:'transparent'
+    });
+    target.addEventListener('click',(event)=>{
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      target.remove();
+
+      // The Player has already completed the authored disappear animation.
+      // Remove only its runtime exit classes so the text becomes editable
+      // again; do not re-render the Scene, otherwise disappear would restart.
+      article.classList.remove('is-disappearing','is-disappeared','is-disappear-up','is-disappear-stay');
+      article.style.removeProperty('--sp-disappear-fade');
+      setLiveToolbarVisible(true);
+      requestAnimationFrame(()=>startInlineTextEdit());
+    },true);
+    stage.appendChild(target);
+  }
+
   playerHost.addEventListener('sceneplayer:disappear',(e)=>{
     if(!liveEditEnabled)return;
-    const article=playerHost.querySelector('.sp-scene.is-active');
-    if(!article)return;
-    article.classList.remove('is-disappearing','is-disappeared','is-disappear-up','is-disappear-stay');
-    article.style.removeProperty('--sp-disappear-fade');
-    requestAnimationFrame(()=>ensureLiveEditEmptyTarget());
+    const phase=e?.detail?.phase||'';
+    if(phase==='start'){
+      removeLiveDisappearEditTarget();
+      return;
+    }
+    if(phase==='end'){
+      requestAnimationFrame(showLiveDisappearEditTarget);
+    }
   });
 
   // Cover / Ending direct edit in Live Editor. Reuse the existing Easy Studio
