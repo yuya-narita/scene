@@ -1103,6 +1103,7 @@
     const doc=getDocumentForPlayback();
     if(typeof player.refreshDocumentChrome==='function'){
       player.refreshDocumentChrome({document:doc});
+      if(liveEditEnabled&&player?.ended)requestAnimationFrame(prepareLiveEndingEditor);
     }else{
       // Older cached Core fallback: keep its document current. Reopening cover/end
       // will then pick up the authored shell typography.
@@ -1114,9 +1115,11 @@
     if(endingQuickTarget==='center'){if(endingLabelInput)endingLabelInput.value=endingQuickCenterText?.value||'';if(endingQuickFont)endingFontFamily=endingQuickFont.value||'serif';}
     else{const row=endingLinkInputs[endingQuickTarget==='left'?0:1];if(row?.kicker)row.kicker.value=endingQuickKicker?.value||'';if(row?.label)row.label.value=endingQuickLabel?.value||'';if(row?.url)row.url.value=endingQuickUrl?.value||'';}
     updateEndingPreview();syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();syncEasyPublishButton();scheduleDraftSave(100);
+    if(liveEditEnabled&&player?.ended)requestAnimationFrame(prepareLiveEndingEditor);
   }
   function openEndingQuickEditor(target){
     if(!endingQuickDialog)return;
+    if(liveEditEnabled)bringEndingQuickDialogToFront();
     endingQuickTarget=target;const center=target==='center';
     endingQuickCenterFields.hidden=!center;endingQuickSlotFields.hidden=center;
     endingQuickTitle.textContent=center?'中央の文':target==='left'?'左ボタン':'右ボタン';
@@ -6931,6 +6934,121 @@ function openDesktopTextDetail(){
   // quick editors so there is only one source of truth for authored shell data.
   // Only authored text/slots are intercepted; Start, empty stage taps and the
   // fixed COVER action retain their normal Player behavior.
+  // Live Ending Editor helpers.
+  let liveEndingInlineEl=null;
+
+  function bringEndingQuickDialogToFront(){
+    if(!endingQuickDialog)return;
+    // The Easy quick editor normally lives inside the Easy layer. Live Editor
+    // is a higher full-screen layer, so move the same editor to <body> rather
+    // than creating a second settings UI.
+    if(endingQuickDialog.parentElement!==document.body){
+      document.body.appendChild(endingQuickDialog);
+    }
+    endingQuickDialog.style.position='fixed';
+    endingQuickDialog.style.inset='0';
+    endingQuickDialog.style.zIndex='2147483000';
+  }
+
+  function prepareLiveEndingEditor(){
+    if(!liveEditEnabled||autoRecActive||!player?.ended)return;
+    const ending=playerHost.querySelector('.sp-ending');
+    if(!ending||ending.hidden)return;
+
+    const title=ending.querySelector('.sp-ending-title');
+    if(title){
+      title.classList.add('live-ending-center-editable');
+      title.setAttribute('role','textbox');
+      title.setAttribute('aria-label','読了ページ中央の文を編集');
+      title.style.cursor='text';
+      title.style.webkitTapHighlightColor='transparent';
+    }
+
+    // Reader mode hides unset links. Live Editor keeps two faint empty boxes so
+    // the author always has a direct entry point to the existing Easy settings.
+    [['.sp-ending-left','left'],['.sp-ending-right','right']].forEach(([selector,side])=>{
+      const button=ending.querySelector(selector);
+      if(!button)return;
+      const row=endingLinkInputs[side==='left'?0:1];
+      const kicker=String(row?.kicker?.value||'').trim();
+      const label=String(row?.label?.value||'').trim();
+      const url=String(row?.url?.value||'').trim();
+      const empty=!(label&&url);
+      button.hidden=false;
+      button.classList.toggle('live-ending-empty-slot',empty);
+      button.style.opacity=empty?'.32':'1';
+      button.style.cursor='pointer';
+      button.style.pointerEvents='auto';
+      const small=button.querySelector('small');
+      const strong=button.querySelector('strong');
+      if(empty){
+        if(small){small.textContent=side==='left'?'LEFT':'RIGHT';small.hidden=false;}
+        if(strong)strong.textContent='＋';
+      }else{
+        if(small){small.textContent=kicker;small.hidden=!kicker;}
+        if(strong)strong.textContent=label;
+      }
+    });
+  }
+
+  function finishLiveEndingInlineEdit({refresh=true}={}){
+    const el=liveEndingInlineEl;
+    if(!el)return;
+    const value=String(el.textContent||'').replace(/\u00a0/g,' ').trim();
+    if(endingLabelInput)endingLabelInput.value=value;
+    el.removeAttribute('contenteditable');
+    el.classList.remove('live-ending-inline-editing');
+    liveEndingInlineEl=null;
+    updateEndingPreview();
+    syncEasyShellToWorkingDocument();
+    syncEasyPublishButton();
+    scheduleDraftSave(100);
+    if(refresh){
+      refreshLivePlayerDocumentChrome();
+      requestAnimationFrame(prepareLiveEndingEditor);
+    }
+  }
+
+  function startLiveEndingInlineEdit(){
+    if(!liveEditEnabled||autoRecActive||!player?.ended)return;
+    const el=playerHost.querySelector('.sp-ending-title');
+    if(!el)return;
+    if(liveEndingInlineEl===el)return;
+    finishLiveEndingInlineEdit({refresh:false});
+    liveEndingInlineEl=el;
+    el.setAttribute('contenteditable','true');
+    el.setAttribute('role','textbox');
+    el.setAttribute('aria-label','読了ページ中央の文を編集');
+    el.classList.add('live-ending-inline-editing');
+    el.style.outline='none';
+    el.style.cursor='text';
+    const sync=()=>{
+      if(!liveEndingInlineEl)return;
+      if(endingLabelInput)endingLabelInput.value=String(liveEndingInlineEl.textContent||'').replace(/\u00a0/g,' ');
+      updateEndingPreview();
+      syncEasyShellToWorkingDocument();
+      syncEasyPublishButton();
+      scheduleDraftSave(120);
+    };
+    el.addEventListener('input',sync);
+    el.addEventListener('blur',()=>finishLiveEndingInlineEdit(),{once:true});
+    requestAnimationFrame(()=>{
+      el.focus({preventScroll:true});
+      try{
+        const range=document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        const sel=window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }catch(_){}
+    });
+  }
+
+  playerHost.addEventListener('sceneplayer:end',()=>{
+    requestAnimationFrame(prepareLiveEndingEditor);
+  });
+
   playerHost.addEventListener('click',(e)=>{
     if(!liveEditEnabled||autoRecActive)return;
 
@@ -6954,16 +7072,20 @@ function openDesktopTextDetail(){
     if(!player?.ended)return;
     if(e.target.closest?.('.sp-ending-title,.sp-ending-text')){
       e.preventDefault();e.stopImmediatePropagation();
-      openEndingQuickEditor('center');
+      startLiveEndingInlineEdit();
       return;
     }
     if(e.target.closest?.('.sp-ending-left')){
       e.preventDefault();e.stopImmediatePropagation();
+      finishLiveEndingInlineEdit();
+      bringEndingQuickDialogToFront();
       openEndingQuickEditor('left');
       return;
     }
     if(e.target.closest?.('.sp-ending-right')){
       e.preventDefault();e.stopImmediatePropagation();
+      finishLiveEndingInlineEdit();
+      bringEndingQuickDialogToFront();
       openEndingQuickEditor('right');
       return;
     }
