@@ -6862,8 +6862,9 @@ function openDesktopTextDetail(){
   // Live Edit v0.2.3: while the visible Scene text is being edited,
   // the Player must not interpret taps / Enter / Space as navigation.
   playerHost.addEventListener('click',(e)=>{
-    if(!liveInlineEditEl)return;
-    if(e.target===liveInlineEditEl||liveInlineEditEl.contains(e.target)){
+    const inline=liveInlineEditEl||liveCoverInlineEl;
+    if(!inline)return;
+    if(e.target===inline||inline.contains(e.target)){
       e.stopImmediatePropagation();
     }
   },true);
@@ -7070,6 +7071,77 @@ function openDesktopTextDetail(){
     requestAnimationFrame(prepareLiveEndingEditor);
   });
 
+  // Live Cover inline editor. The visible cover text is the editor itself;
+  // values remain backed by the existing Easy Studio inputs, so Easy/Live
+  // always share one source of truth.
+  let liveCoverInlineEl=null;
+  let liveCoverInlineTarget='';
+
+  function coverInputForLiveTarget(target){
+    return {
+      title:titleInput,
+      subtitle:subtitleInput,
+      author:authorInput,
+      episode:episodeInput,
+      episodeTitle:episodeTitleInput
+    }[target]||null;
+  }
+
+  function finishLiveCoverInlineEdit({refresh=true}={}){
+    const el=liveCoverInlineEl;
+    if(!el)return;
+    const input=coverInputForLiveTarget(liveCoverInlineTarget);
+    const value=String(el.textContent||'').replace(/\u00a0/g,' ').trim();
+    if(input)input.value=value;
+    el.removeAttribute('contenteditable');
+    el.classList.remove('live-cover-inline-editing');
+    liveCoverInlineEl=null;
+    liveCoverInlineTarget='';
+    refreshCoverPreviewLayout();
+    syncEasyShellToWorkingDocument();
+    syncEasyPublishButton();
+    rememberWorkIdentity();
+    scheduleDraftSave(100);
+    if(refresh)refreshLivePlayerDocumentChrome();
+  }
+
+  function startLiveCoverInlineEdit(el,target){
+    if(!liveEditEnabled||autoRecActive||!playerHost.classList.contains('sp-cover-open')||!el)return;
+    if(liveCoverInlineEl===el)return;
+    finishLiveCoverInlineEdit({refresh:false});
+    liveCoverInlineEl=el;
+    liveCoverInlineTarget=target;
+    const input=coverInputForLiveTarget(target);
+    // "Untitled" is a Player fallback, not authored data. Clear it on first edit.
+    if(target==='title' && !String(input?.value||'').trim())el.textContent='';
+    el.setAttribute('contenteditable','true');
+    el.setAttribute('role','textbox');
+    el.setAttribute('aria-label','表紙テキストを編集');
+    el.classList.add('live-cover-inline-editing');
+    el.style.outline='none';
+    el.style.cursor='text';
+    const sync=()=>{
+      if(liveCoverInlineEl!==el)return;
+      if(input)input.value=String(el.textContent||'').replace(/\u00a0/g,' ');
+      refreshCoverPreviewLayout();
+      syncEasyShellToWorkingDocument();
+      syncEasyPublishButton();
+      rememberWorkIdentity();
+      scheduleDraftSave(120);
+    };
+    el.addEventListener('input',sync);
+    el.addEventListener('blur',()=>finishLiveCoverInlineEdit(),{once:true});
+    try{el.focus({preventScroll:true});}catch(_){el.focus();}
+    try{
+      const range=document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel=window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }catch(_){}
+  }
+
   playerHost.addEventListener('click',(e)=>{
     if(!liveEditEnabled||autoRecActive)return;
 
@@ -7082,9 +7154,10 @@ function openDesktopTextDetail(){
         ['.sp-cover-episode-title','episodeTitle']
       ];
       for(const [selector,target] of map){
-        if(e.target.closest?.(selector)){
+        const hit=e.target.closest?.(selector);
+        if(hit){
           e.preventDefault();e.stopImmediatePropagation();
-          openCoverQuickEditor(target);
+          startLiveCoverInlineEdit(hit,target);
           return;
         }
       }
@@ -7135,7 +7208,8 @@ function openDesktopTextDetail(){
     setLiveToolbarVisible(true);
     startInlineTextEdit();
   },true);
-  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
+  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});closeLiveEditSheet();setLiveToolbarVisible(false);});
+  playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
     const detailKind=currentDesktopDetailKind();
     finishInlineTextEdit();
