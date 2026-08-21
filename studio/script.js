@@ -6287,8 +6287,14 @@ function openDesktopTextDetail(){
       document.body.classList.remove('desktop-live-edit');
       return;
     }
-    if(playerHost.classList.contains('sp-cover-open')){renderDesktopCoverPanel();return;}
-    if(player?.ended){renderDesktopEndingPanel();return;}
+    if(playerHost.classList.contains('sp-cover-open')){
+      renderDesktopCoverPanel();
+      return;
+    }
+    if(player?.ended || !playerHost.querySelector('.sp-ending')?.hidden){
+      renderDesktopEndingPanel();
+      return;
+    }
     if(desktopTimingButton)desktopTimingButton.disabled=false;
     const {scene,index}=liveEditScene();if(!scene)return;
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');
@@ -7312,16 +7318,20 @@ function openDesktopTextDetail(){
   let liveCoverInlineTarget='';
   let liveCoverTextDraft=null;
 
-  function snapshotLiveCoverTextDraft(){
-    const read=(selector)=>String(playerHost.querySelector(selector)?.textContent||'').replace(/\u00a0/g,' ').trim();
-    liveCoverTextDraft={
-      title:read('.sp-cover-title'),
-      subtitle:read('.sp-cover-subtitle'),
-      author:read('.sp-cover-author'),
-      episode:read('.sp-cover-episode'),
-      episodeTitle:read('.sp-cover-episode-title')
+  function coverTextStateFromDocument(){
+    const doc=workingDocument||{};
+    return {
+      title:String(doc.title||'').trim()==='Untitled'?'':String(doc.title||''),
+      subtitle:String(doc.metadata?.subtitle||''),
+      author:String(doc.author||''),
+      episode:String(doc.metadata?.episode||''),
+      episodeTitle:String(doc.metadata?.episodeTitle||'')
     };
-    if(liveCoverTextDraft.title==='Untitled' && !String(titleInput?.value||'').trim())liveCoverTextDraft.title='';
+  }
+
+  function snapshotLiveCoverTextDraft(){
+    liveCoverTextDraft=coverTextStateFromDocument();
+    pushLiveCoverTextDraftToEasy();
     return liveCoverTextDraft;
   }
 
@@ -7330,7 +7340,7 @@ function openDesktopTextDetail(){
   }
 
   function pushLiveCoverTextDraftToEasy(){
-    const d=ensureLiveCoverTextDraft();
+    const d=liveCoverTextDraft || coverTextStateFromDocument();
     if(titleInput)titleInput.value=d.title||'';
     if(subtitleInput)subtitleInput.value=d.subtitle||'';
     if(authorInput)authorInput.value=d.author||'';
@@ -7340,14 +7350,17 @@ function openDesktopTextDetail(){
 
   function setCoverTextValue(target,value,{refresh=true}={}){
     const raw=String(value??'');
-    const input=coverInputForLiveTarget(target);
-    if(input)input.value=raw;
+    const d=ensureLiveCoverTextDraft();
+    d[target]=raw;
+    pushLiveCoverTextDraftToEasy();
+
     workingDocument.metadata ||= {};
     if(target==='title')workingDocument.title=raw.trim()||'Untitled';
     else if(target==='author')workingDocument.author=raw.trim();
     else if(target==='subtitle')workingDocument.metadata.subtitle=raw.trim();
     else if(target==='episode')workingDocument.metadata.episode=raw.trim();
     else if(target==='episodeTitle')workingDocument.metadata.episodeTitle=raw.trim();
+
     updateCoverPreview();
     syncEasyPublishButton();
     rememberWorkIdentity();
@@ -7544,8 +7557,10 @@ function openDesktopTextDetail(){
     setLiveToolbarVisible(true);
     updateCoverToolbarState();
     const input=coverInputForLiveTarget(target);
+    const canonical=String(ensureLiveCoverTextDraft()[target]||'');
+    el.textContent=canonical;
     // "Untitled" is a Player fallback, not authored data. Clear it on first edit.
-    if(target==='title' && !String(input?.value||'').trim())el.textContent='';
+    if(target==='title' && !canonical.trim())el.textContent='';
     el.setAttribute('contenteditable','true');
     el.setAttribute('role','textbox');
     el.setAttribute('aria-label','表紙テキストを編集');
@@ -7650,6 +7665,7 @@ function openDesktopTextDetail(){
   // wins before the stage can interpret the same tap as "next Scene".
   playerHost.addEventListener('click',(e)=>{
     if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
+    if(playerHost.classList.contains('sp-cover-open')||player?.ended)return;
     if(liveInlineEditEl)return;
 
     const activeSubText=e.target.closest?.('.sp-scene.is-active .sp-subtext');
@@ -7661,7 +7677,7 @@ function openDesktopTextDetail(){
     setLiveToolbarVisible(true);
     startInlineTextEdit(activeSubText?'subText':'text');
   },true);
-  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});liveCoverTextDraft=null;requestAnimationFrame(snapshotLiveCoverTextDraft);closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(renderDesktopLivePanel);});
+  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});liveCoverTextDraft=coverTextStateFromDocument();pushLiveCoverTextDraftToEasy();closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(renderDesktopLivePanel);});
   playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
     const detailKind=currentDesktopDetailKind();

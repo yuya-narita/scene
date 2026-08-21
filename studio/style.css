@@ -8224,3 +8224,20 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   opacity:1 !important;
   pointer-events:auto !important;
 }
+
+
+/* Live shell editing: cover/ending text must own pointer hits on every device.
+   This prevents clicks from falling through to Scene 1 / the final Scene. */
+.live-edit-enabled.sp-cover-open .sp-cover-title,
+.live-edit-enabled.sp-cover-open .sp-cover-subtitle,
+.live-edit-enabled.sp-cover-open .sp-cover-author,
+.live-edit-enabled.sp-cover-open .sp-cover-episode,
+.live-edit-enabled.sp-cover-open .sp-cover-episode-title,
+.live-edit-enabled .sp-ending:not([hidden]) .sp-ending-title,
+.live-edit-enabled .sp-ending:not([hidden]) .sp-ending-text{
+  pointer-events:auto !important;
+  cursor:text;
+  -webkit-tap-highlight-color:transparent;
+  position:relative;
+  z-index:20;
+}
