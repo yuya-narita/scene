@@ -8269,4 +8269,23 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   overflow:auto!important;
   pointer-events:auto!important;
 }
-\n\n/* v0.3 Aa mobile stability — compact picker expands inside the sheet.\n   Avoid fixed-position + visualViewport math on iOS; the sheet itself scrolls. */\n@media (max-width:640px){\n  .live-edit-sheet .live-edit-color-custom .studio-color-popover,\n  .live-edit-sheet .live-edit-color-custom .studio-color-picker.is-compact .studio-color-popover{\n    position:static!important;\n    left:auto!important;\n    right:auto!important;\n    top:auto!important;\n    width:100%!important;\n    max-width:none!important;\n    max-height:none!important;\n    margin-top:8px!important;\n    overflow:visible!important;\n    transform:none!important;\n    box-shadow:none!important;\n  }\n  .live-edit-sheet .live-edit-color-custom .studio-color-picker{\n    width:100%!important;\n  }\n  .live-edit-sheet .live-edit-color-custom .studio-color-square{\n    width:100%!important;\n  }\n}\n
+
+
+/* v0.3 Aa stability v4 — one in-sheet picker for Scene/Cover/Ending on iPhone. */
+@media (max-width:640px){
+  .live-edit-sheet{overflow:hidden!important;}
+  .live-edit-sheet-body{overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
+  .live-edit-sheet .studio-color-picker,
+  .live-edit-sheet .studio-color-picker.is-compact{width:100%!important;min-width:0!important;}
+  .live-edit-sheet .studio-color-trigger,
+  .live-edit-sheet .studio-color-picker.is-compact .studio-color-trigger{width:100%!important;height:38px!important;}
+  .live-edit-sheet .studio-color-popover,
+  .live-edit-sheet .studio-color-picker.is-compact .studio-color-popover{
+    position:static!important;display:block;left:auto!important;right:auto!important;top:auto!important;
+    width:100%!important;max-width:none!important;max-height:none!important;margin:8px 0 0!important;
+    transform:none!important;overflow:visible!important;box-shadow:none!important;z-index:auto!important;
+  }
+  .live-edit-sheet .studio-color-popover[hidden]{display:none!important;}
+  .live-edit-sheet .studio-color-square{width:100%!important;height:150px!important;}
+  .live-edit-sheet .studio-color-hue{width:calc(100% - 16px)!important;margin:10px 8px 8px!important;}
+}

@@ -981,10 +981,11 @@
     };
     const outside=e=>{if(!root.contains(e.target))close(true);};
     const keyClose=e=>{if(e.key==='Escape'){e.preventDefault();close(true);}};
-    trigger.addEventListener('click',e=>{
+    const togglePicker=e=>{
       e.preventDefault();e.stopPropagation();
       open=!open;pop.hidden=!open;root.classList.toggle('is-open',open);
       if(open){
+        paint();
         requestAnimationFrame(()=>{
           placePopover();
           document.addEventListener('pointerdown',outside,true);
@@ -992,12 +993,13 @@
           window.visualViewport?.addEventListener('resize',placePopover);
           window.visualViewport?.addEventListener('scroll',placePopover);
           window.addEventListener('resize',placePopover);
-          paint();
+          // On mobile the picker expands in-flow; keep it visible inside the scrollable Aa sheet.
+          if(matchMedia('(max-width:640px)').matches) pop.scrollIntoView({block:'nearest',inline:'nearest'});
         });
-      }else{
-        close(false);
-      }
-    });
+      }else close(false);
+    };
+    trigger.addEventListener('pointerdown',togglePicker);
+    trigger.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();});
     square.addEventListener('pointermove',previewAt);
     square.addEventListener('click',e=>{previewAt(e);committed=preview;rememberTextColor(committed);trigger.style.backgroundColor=committed;if(typeof onCommit==='function')onCommit(committed);close(false);});
     hue.addEventListener('input',()=>{hsv.h=Number(hue.value)||0;preview=hsvToHex(hsv.h,hsv.s,hsv.v);paint();if(typeof onPreview==='function')onPreview(preview);});
@@ -7363,10 +7365,18 @@ function openDesktopTextDetail(){
     requestAnimationFrame(tick);
   }
 
+  function liveCoverIsVisible(){
+    if(playerHost?.classList?.contains('sp-cover-open'))return true;
+    const cover=playerHost?.querySelector?.('.sp-cover');
+    if(!cover)return false;
+    const cs=getComputedStyle(cover);
+    return !cover.hidden && cs.display!=='none' && cs.visibility!=='hidden' && Number(cs.opacity||1)!==0;
+  }
+
   liveEditToolbar?.addEventListener('pointerdown',(e)=>{
     const b=e.target.closest?.('[data-live-edit]');if(!b)return;
 
-    if(playerHost.classList.contains('sp-cover-open')){
+    if(liveCoverIsVisible()){
       e.preventDefault();
       e.stopImmediatePropagation();
       if(b.dataset.liveEdit==='text'){
@@ -7431,7 +7441,7 @@ function openDesktopTextDetail(){
     const b=e.target.closest('[data-live-edit]');if(!b)return;
     e.preventDefault();
 
-    if(playerHost.classList.contains('sp-cover-open')){
+    if(liveCoverIsVisible()){
       e.stopImmediatePropagation();
       if(b.dataset.liveEdit==='text'){
         // Capture the selected cover target first. Finishing the inline edit
