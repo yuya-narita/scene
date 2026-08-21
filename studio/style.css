@@ -8191,3 +8191,12 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   }
   .publish-primary{margin-top:4px}
 }
+
+
+/* Live Cover direct-edit — keyboard-aware lift.
+   Keep the selected cover text above the iPhone software keyboard without
+   permanently changing the authored cover layout. */
+.live-cover-inline-text-edit .sp-cover-copy{
+  translate:0 var(--live-cover-keyboard-shift,0px);
+  transition:translate .16s ease-out;
+}

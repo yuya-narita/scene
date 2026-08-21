@@ -7100,6 +7100,47 @@ function openDesktopTextDetail(){
     }[target]||null;
   }
 
+  function resetLiveCoverKeyboardShift(){
+    playerHost.style.removeProperty('--live-cover-keyboard-shift');
+    playerHost.classList.remove('live-cover-inline-text-edit');
+  }
+
+  function keepLiveCoverCaretVisible(){
+    const el=liveCoverInlineEl;
+    if(!el||document.activeElement!==el)return;
+
+    const vv=window.visualViewport;
+    const viewportTop=vv?.offsetTop||0;
+    const viewportHeight=vv?.height||window.innerHeight;
+    const safeTop=viewportTop+70;
+    const safeBottom=viewportTop+viewportHeight-88;
+
+    let rect;
+    const sel=getSelection();
+    if(sel?.rangeCount){
+      try{
+        const range=sel.getRangeAt(0).cloneRange();
+        range.collapse(false);
+        rect=range.getBoundingClientRect();
+      }catch(_){}
+    }
+    if(!rect||(!rect.width&&!rect.height))rect=el.getBoundingClientRect();
+
+    let shift=Number.parseFloat(
+      getComputedStyle(playerHost).getPropertyValue('--live-cover-keyboard-shift')
+    )||0;
+
+    if(rect.bottom>safeBottom){
+      shift-=rect.bottom-safeBottom+20;
+    }else if(rect.top<safeTop&&shift<0){
+      shift+=Math.min(safeTop-rect.top+20,-shift);
+    }
+
+    const minShift=-Math.round(window.innerHeight*.46);
+    shift=Math.max(minShift,Math.min(0,shift));
+    playerHost.style.setProperty('--live-cover-keyboard-shift',`${Math.round(shift)}px`);
+  }
+
   function finishLiveCoverInlineEdit({refresh=true}={}){
     const el=liveCoverInlineEl;
     if(!el)return;
@@ -7110,6 +7151,7 @@ function openDesktopTextDetail(){
     el.classList.remove('live-cover-inline-editing');
     liveCoverInlineEl=null;
     liveCoverInlineTarget='';
+    resetLiveCoverKeyboardShift();
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
     syncEasyPublishButton();
@@ -7133,6 +7175,13 @@ function openDesktopTextDetail(){
     el.classList.add('live-cover-inline-editing');
     el.style.outline='none';
     el.style.cursor='text';
+    playerHost.classList.add('live-cover-inline-text-edit');
+    playerHost.style.setProperty('--live-cover-keyboard-shift','0px');
+
+    const abort=new AbortController();
+    el._liveCoverEditAbort?.abort();
+    el._liveCoverEditAbort=abort;
+
     const sync=()=>{
       if(liveCoverInlineEl!==el)return;
       if(input)input.value=String(el.textContent||'').replace(/\u00a0/g,' ');
@@ -7142,8 +7191,17 @@ function openDesktopTextDetail(){
       rememberWorkIdentity();
       scheduleDraftSave(120);
     };
-    el.addEventListener('input',sync);
-    el.addEventListener('blur',()=>finishLiveCoverInlineEdit(),{once:true});
+    el.addEventListener('input',()=>{
+      sync();
+      requestAnimationFrame(keepLiveCoverCaretVisible);
+    },{signal:abort.signal});
+    el.addEventListener('keyup',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
+    el.addEventListener('click',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
+    window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
+    window.visualViewport?.addEventListener('scroll',()=>requestAnimationFrame(keepLiveCoverCaretVisible),{signal:abort.signal});
+    el.addEventListener('blur',()=>finishLiveCoverInlineEdit(),{once:true,signal:abort.signal});
+
+    // Keep focus synchronous so iPhone still opens the keyboard on the first tap.
     try{el.focus({preventScroll:true});}catch(_){el.focus();}
     try{
       const range=document.createRange();
@@ -7153,6 +7211,12 @@ function openDesktopTextDetail(){
       sel.removeAllRanges();
       sel.addRange(range);
     }catch(_){}
+
+    // iOS reports the reduced visualViewport shortly after the keyboard starts.
+    requestAnimationFrame(keepLiveCoverCaretVisible);
+    setTimeout(keepLiveCoverCaretVisible,120);
+    setTimeout(keepLiveCoverCaretVisible,260);
+    setTimeout(keepLiveCoverCaretVisible,420);
   }
 
   playerHost.addEventListener('click',(e)=>{
