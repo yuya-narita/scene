@@ -7153,6 +7153,8 @@ function openDesktopTextDetail(){
     el.removeAttribute('contenteditable');
     el.classList.remove('live-ending-inline-editing');
     liveEndingInlineEl=null;
+    document.body.classList.remove('live-inline-text-edit');
+    document.documentElement.style.removeProperty('--live-keyboard-inset');
     closeLiveEndingStylePanel();
     clearCoverToolbarState();
     setLiveToolbarVisible(false);
@@ -7173,6 +7175,9 @@ function openDesktopTextDetail(){
     if(liveEndingInlineEl===el)return;
     finishLiveEndingInlineEdit({refresh:false});
     liveEndingInlineEl=el;
+    document.body.classList.add('live-inline-text-edit');
+    updateLiveKeyboardInset();
+    requestAnimationFrame(updateLiveKeyboardInset);
     setLiveToolbarVisible(true);
     updateCoverToolbarState();
     el.setAttribute('contenteditable','true');
@@ -7340,6 +7345,8 @@ function openDesktopTextDetail(){
     el.classList.remove('live-cover-inline-editing');
     liveCoverInlineEl=null;
     liveCoverInlineTarget='';
+    document.body.classList.remove('live-inline-text-edit');
+    document.documentElement.style.removeProperty('--live-keyboard-inset');
     clearCoverToolbarState();
     setLiveToolbarVisible(false);
     resetLiveCoverKeyboardShift();
@@ -7357,6 +7364,9 @@ function openDesktopTextDetail(){
     finishLiveCoverInlineEdit({refresh:false});
     liveCoverInlineEl=el;
     liveCoverInlineTarget=target;
+    document.body.classList.add('live-inline-text-edit');
+    updateLiveKeyboardInset();
+    requestAnimationFrame(updateLiveKeyboardInset);
     setLiveToolbarVisible(true);
     updateCoverToolbarState();
     const input=coverInputForLiveTarget(target);
