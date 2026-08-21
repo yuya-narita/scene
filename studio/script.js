@@ -1103,6 +1103,7 @@
     const doc=getDocumentForPlayback();
     if(typeof player.refreshDocumentChrome==='function'){
       player.refreshDocumentChrome({document:doc});
+      if(liveEditEnabled&&playerHost.classList.contains('sp-cover-open'))requestAnimationFrame(applyLiveCoverLayout);
       if(liveEditEnabled&&player?.ended)requestAnimationFrame(prepareLiveEndingEditor);
     }else{
       // Older cached Core fallback: keep its document current. Reopening cover/end
@@ -1692,7 +1693,8 @@
     workingDocument.appearance.typography ||= {};
     workingDocument.appearance.typography.fontFamily=selectedFont;
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
-    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily};
+    const preservedCoverLayout=clone(workingDocument.cover?.layout||{});
+    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverLayout).length?{layout:preservedCoverLayout}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -7142,10 +7144,119 @@ function openDesktopTextDetail(){
     }catch(_){}
   }
 
+
+  const liveCoverDragMap=[
+    ['.sp-cover-title','title'],
+    ['.sp-cover-subtitle','subtitle'],
+    ['.sp-cover-author','author'],
+    ['.sp-cover-episode','episode'],
+    ['.sp-cover-episode-title','episodeTitle']
+  ];
+  let liveCoverDrag=null;
+  let suppressCoverClickUntil=0;
+
+  function ensureCoverLayoutStore(){
+    if(!workingDocument)return null;
+    workingDocument.cover ||= {};
+    workingDocument.cover.layout ||= {};
+    return workingDocument.cover.layout;
+  }
+
+  function applyLiveCoverLayout(){
+    if(!playerHost.classList.contains('sp-cover-open'))return;
+    const cover=playerHost.querySelector('.sp-cover');
+    if(!cover)return;
+    const layout=workingDocument?.cover?.layout||{};
+    for(const [selector,key] of liveCoverDragMap){
+      const el=cover.querySelector(selector);
+      if(!el)continue;
+      const item=layout[key];
+      el.style.touchAction='none';
+      if(item && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y))){
+        el.style.position='absolute';
+        el.style.left=`${Math.max(0,Math.min(1,Number(item.x)))*100}%`;
+        el.style.top=`${Math.max(0,Math.min(1,Number(item.y)))*100}%`;
+        el.style.transform='translate(-50%,-50%)';
+        el.style.zIndex='6';
+      }else{
+        el.style.removeProperty('position');
+        el.style.removeProperty('left');
+        el.style.removeProperty('top');
+        el.style.removeProperty('transform');
+        el.style.removeProperty('z-index');
+      }
+    }
+  }
+
+  function beginLiveCoverDrag(event,el,key){
+    if(!liveEditEnabled||autoRecActive||liveCoverInlineEl||!playerHost.classList.contains('sp-cover-open'))return;
+    if(event.pointerType==='mouse' && event.button!==0)return;
+    const cover=playerHost.querySelector('.sp-cover');
+    if(!cover)return;
+    const er=el.getBoundingClientRect();
+    liveCoverDrag={
+      pointerId:event.pointerId,el,key,cover,
+      startX:event.clientX,startY:event.clientY,
+      centerX:er.left+er.width/2,centerY:er.top+er.height/2,
+      moved:false
+    };
+    try{el.setPointerCapture?.(event.pointerId);}catch(_){}
+  }
+
+  function moveLiveCoverDrag(event){
+    const d=liveCoverDrag;
+    if(!d||event.pointerId!==d.pointerId)return;
+    const dx=event.clientX-d.startX,dy=event.clientY-d.startY;
+    if(!d.moved && Math.hypot(dx,dy)<7)return;
+    d.moved=true;
+    event.preventDefault();
+    const r=d.cover.getBoundingClientRect();
+    const cx=Math.max(r.left,Math.min(r.right,d.centerX+dx));
+    const cy=Math.max(r.top,Math.min(r.bottom,d.centerY+dy));
+    const x=(cx-r.left)/Math.max(1,r.width);
+    const y=(cy-r.top)/Math.max(1,r.height);
+    const store=ensureCoverLayoutStore();
+    if(store)store[d.key]={...(store[d.key]||{}),x,y};
+    d.el.style.position='absolute';
+    d.el.style.left=`${x*100}%`;
+    d.el.style.top=`${y*100}%`;
+    d.el.style.transform='translate(-50%,-50%)';
+    d.el.style.zIndex='6';
+  }
+
+  function endLiveCoverDrag(event){
+    const d=liveCoverDrag;
+    if(!d||event.pointerId!==d.pointerId)return;
+    try{d.el.releasePointerCapture?.(event.pointerId);}catch(_){}
+    liveCoverDrag=null;
+    if(!d.moved)return;
+    suppressCoverClickUntil=performance.now()+450;
+    syncEasyShellToWorkingDocument();
+    refreshLivePlayerDocumentChrome();
+    syncEasyPublishButton();
+    scheduleDraftSave(80);
+    requestAnimationFrame(applyLiveCoverLayout);
+  }
+
+  playerHost.addEventListener('pointerdown',(event)=>{
+    if(!liveEditEnabled||autoRecActive||!playerHost.classList.contains('sp-cover-open'))return;
+    for(const [selector,key] of liveCoverDragMap){
+      const el=event.target.closest?.(selector);
+      if(el){beginLiveCoverDrag(event,el,key);return;}
+    }
+  },{passive:true});
+  playerHost.addEventListener('pointermove',moveLiveCoverDrag,{passive:false});
+  playerHost.addEventListener('pointerup',endLiveCoverDrag,{passive:true});
+  playerHost.addEventListener('pointercancel',endLiveCoverDrag,{passive:true});
+
   playerHost.addEventListener('click',(e)=>{
     if(!liveEditEnabled||autoRecActive)return;
 
     if(playerHost.classList.contains('sp-cover-open')){
+      if(performance.now()<suppressCoverClickUntil){
+        e.preventDefault();e.stopImmediatePropagation();
+        return;
+      }
       const map=[
         ['.sp-cover-title','title'],
         ['.sp-cover-subtitle','subtitle'],
@@ -7208,7 +7319,7 @@ function openDesktopTextDetail(){
     setLiveToolbarVisible(true);
     startInlineTextEdit();
   },true);
-  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});closeLiveEditSheet();setLiveToolbarVisible(false);});
+  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(applyLiveCoverLayout);});
   playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
     const detailKind=currentDesktopDetailKind();

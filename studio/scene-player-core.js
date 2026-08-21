@@ -1137,7 +1137,39 @@
       };
       applySlot(this.els.endingLeft, left);
       applySlot(this.els.endingRight, right);
+      this._applyCoverLayout();
       return true;
+    }
+
+
+    _applyCoverLayout() {
+      const layout = this.document?.cover?.layout || {};
+      const map = [
+        [this.els.coverTitle,'title'],
+        [this.els.coverSubtitle,'subtitle'],
+        [this.els.coverAuthor,'author'],
+        [this.els.coverEpisode,'episode'],
+        [this.els.coverEpisodeTitle,'episodeTitle']
+      ];
+      for (const [el,key] of map) {
+        if (!el) continue;
+        const item = layout[key];
+        if (item && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y))) {
+          const x = Math.max(0,Math.min(1,Number(item.x)));
+          const y = Math.max(0,Math.min(1,Number(item.y)));
+          el.style.position = 'absolute';
+          el.style.left = `${x*100}%`;
+          el.style.top = `${y*100}%`;
+          el.style.transform = 'translate(-50%,-50%)';
+          el.style.zIndex = '6';
+        } else {
+          el.style.removeProperty('position');
+          el.style.removeProperty('left');
+          el.style.removeProperty('top');
+          el.style.removeProperty('transform');
+          el.style.removeProperty('z-index');
+        }
+      }
     }
 
     get currentScene() {
