@@ -8289,3 +8289,32 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   .live-edit-sheet .studio-color-square{width:100%!important;height:150px!important;}
   .live-edit-sheet .studio-color-hue{width:calc(100% - 16px)!important;margin:10px 8px 8px!important;}
 }
+\n\n/* v0.3 Aa stability v5 — cover observer fix companion + iPhone picker fit. */
+@media (max-width:640px){
+  /* Give the expanded picker enough scroll room above the fixed toolbar. */
+  .live-edit-sheet-body{
+    padding-bottom:calc(150px + env(safe-area-inset-bottom))!important;
+    scroll-padding-bottom:calc(150px + env(safe-area-inset-bottom))!important;
+  }
+  .live-edit-sheet .studio-color-popover,
+  .live-edit-sheet .studio-color-picker.is-compact .studio-color-popover{
+    box-sizing:border-box!important;
+    padding:8px!important;
+  }
+  .live-edit-sheet .studio-color-square{
+    height:128px!important;
+    min-height:128px!important;
+  }
+  .live-edit-sheet .studio-color-hue{
+    display:block!important;
+    width:calc(100% - 24px)!important;
+    margin:8px 12px 6px!important;
+    box-sizing:border-box!important;
+  }
+  .live-edit-sheet .studio-color-meta{
+    margin-top:4px!important;
+  }
+  .live-edit-sheet .studio-color-picker.is-open .studio-color-popover{
+    scroll-margin-bottom:calc(150px + env(safe-area-inset-bottom));
+  }
+}

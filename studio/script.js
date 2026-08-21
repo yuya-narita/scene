@@ -2848,8 +2848,15 @@
 
     if(coverOpen){
       syncPublishPreviewButton(false);
-      setLiveToolbarVisible(false);
-      closeLiveEditSheet();
+      // Keep the toolbar/Aa sheet alive while the author is actively editing
+      // cover text. setLiveToolbarVisible() itself mutates playerHost.classList,
+      // so this observer used to immediately close the sheet it had just opened.
+      const coverAaOpen=liveShellTextContext?.kind==='cover';
+      const coverTextActive=!!liveCoverInlineTarget;
+      if(!coverAaOpen && !coverTextActive){
+        setLiveToolbarVisible(false);
+        closeLiveEditSheet();
+      }
     }
     bindLiveEditSoundControl();
   }
