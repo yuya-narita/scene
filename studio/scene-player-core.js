@@ -319,6 +319,10 @@
 
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
+        if (this.host.classList.contains('live-edit-enabled')
+            && e.target.closest('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext')) {
+          return;
+        }
         if (this.suppressNextClick) {
           this.suppressNextClick = false;
           return;

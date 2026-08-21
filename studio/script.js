@@ -7203,8 +7203,8 @@ function openDesktopTextDetail(){
     }
   },true);
 
-  // Live Edit: visible authored text owns its tap before the Player stage
-  // can interpret that same tap as "next Scene".
+  // Live Edit: visible main/sub text owns its tap. Capture before the
+  // ScenePlayer stage can convert the same gesture into "next Scene".
   playerHost.addEventListener('click',(e)=>{
     if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
     if(liveInlineEditEl)return;
