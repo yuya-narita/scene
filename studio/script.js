@@ -7167,16 +7167,22 @@ function openDesktopTextDetail(){
     const cover=playerHost.querySelector('.sp-cover');
     if(!cover)return;
     const layout=workingDocument?.cover?.layout||{};
+    const copy=cover.querySelector('.sp-cover-copy');
+    const hasFreeLayout=Object.values(layout).some(item=>item && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y)));
+    if(copy){
+      if(hasFreeLayout)copy.style.setProperty('position','static','important');
+      else copy.style.removeProperty('position');
+    }
     for(const [selector,key] of liveCoverDragMap){
       const el=cover.querySelector(selector);
       if(!el)continue;
       const item=layout[key];
       el.style.touchAction='none';
       if(item && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y))){
-        el.style.position='absolute';
-        el.style.left=`${Math.max(0,Math.min(1,Number(item.x)))*100}%`;
-        el.style.top=`${Math.max(0,Math.min(1,Number(item.y)))*100}%`;
-        el.style.transform='translate(-50%,-50%)';
+        el.style.setProperty('position','absolute','important');
+        el.style.setProperty('left',`${Math.max(0,Math.min(1,Number(item.x)))*100}%`,'important');
+        el.style.setProperty('top',`${Math.max(0,Math.min(1,Number(item.y)))*100}%`,'important');
+        el.style.setProperty('transform','translate(-50%,-50%)','important');
         el.style.zIndex='6';
       }else{
         el.style.removeProperty('position');
@@ -7217,10 +7223,12 @@ function openDesktopTextDetail(){
     const y=(cy-r.top)/Math.max(1,r.height);
     const store=ensureCoverLayoutStore();
     if(store)store[d.key]={...(store[d.key]||{}),x,y};
-    d.el.style.position='absolute';
-    d.el.style.left=`${x*100}%`;
-    d.el.style.top=`${y*100}%`;
-    d.el.style.transform='translate(-50%,-50%)';
+    const copy=d.cover.querySelector('.sp-cover-copy');
+    copy?.style.setProperty('position','static','important');
+    d.el.style.setProperty('position','absolute','important');
+    d.el.style.setProperty('left',`${x*100}%`,'important');
+    d.el.style.setProperty('top',`${y*100}%`,'important');
+    d.el.style.setProperty('transform','translate(-50%,-50%)','important');
     d.el.style.zIndex='6';
   }
 
