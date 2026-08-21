@@ -7203,20 +7203,16 @@ function openDesktopTextDetail(){
     }
   },true);
 
-  // Live Edit v0.2.2: never capture the whole Player surface.
-  // Normal Player taps must remain owned by ScenePlayerCore:
-  // cover Start works, and tapping empty stage space still advances.
-  // Only tapping the CURRENT Scene text is treated as an edit-intent gesture.
+  // Live Edit: visible authored text owns its tap before the Player stage
+  // can interpret that same tap as "next Scene".
   playerHost.addEventListener('click',(e)=>{
     if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
     if(liveInlineEditEl)return;
 
-    const activeSubText=e.target.closest('.sp-scene.is-active .sp-subtext');
-    const activeText=e.target.closest('.sp-scene.is-active .sp-text');
+    const activeSubText=e.target.closest?.('.sp-scene.is-active .sp-subtext');
+    const activeText=e.target.closest?.('.sp-scene.is-active .sp-text');
     if(!activeSubText&&!activeText)return;
 
-    // Visible authored text is the edit entry point. Main text and subtext
-    // are edited independently; tapping empty stage space still advances.
     e.preventDefault();
     e.stopImmediatePropagation();
     setLiveToolbarVisible(true);
