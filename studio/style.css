@@ -4966,7 +4966,8 @@ body.easy-player-open #undoCompactButton,
    stage owns normal navigation taps. In Live Edit, explicitly re-enable the
    active text node; the capture listener in script.js then opens the toolbar
    without advancing the Player. */
-.live-edit-enabled .sp-scene.is-active .sp-text{
+.live-edit-enabled .sp-scene.is-active .sp-text,
+.live-edit-enabled .sp-scene.is-active .sp-subtext{
   pointer-events:auto;
   cursor:text;
   -webkit-tap-highlight-color:transparent;

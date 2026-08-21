@@ -7203,8 +7203,9 @@ function openDesktopTextDetail(){
     }
   },true);
 
-  // Live Edit: visible main/sub text owns its tap. Capture before the
-  // ScenePlayer stage can convert the same gesture into "next Scene".
+  // Live Edit: main text and subtext are both direct edit targets.
+  // The CSS re-enables pointer events for both nodes; this capture listener
+  // wins before the stage can interpret the same tap as "next Scene".
   playerHost.addEventListener('click',(e)=>{
     if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
     if(liveInlineEditEl)return;
