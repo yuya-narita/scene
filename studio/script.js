@@ -7182,7 +7182,8 @@ function openDesktopTextDetail(){
         el.style.setProperty('position','absolute','important');
         el.style.setProperty('left',`${Math.max(0,Math.min(1,Number(item.x)))*100}%`,'important');
         el.style.setProperty('top',`${Math.max(0,Math.min(1,Number(item.y)))*100}%`,'important');
-        el.style.setProperty('transform','translate(-50%,-50%)','important');
+        const scale=Math.max(.35,Math.min(4,Number(item.scale)||1));
+        el.style.setProperty('transform',`translate(-50%,-50%) scale(${scale})`,'important');
         el.style.zIndex='6';
       }else{
         el.style.removeProperty('position');
@@ -7194,7 +7195,78 @@ function openDesktopTextDetail(){
     }
   }
 
+  let liveCoverPinch=null;
+
+  function coverTouchPoint(touch){
+    return {x:touch.clientX,y:touch.clientY};
+  }
+  function coverTouchDistance(a,b){
+    return Math.hypot(a.x-b.x,a.y-b.y);
+  }
+  function findLiveCoverTarget(node){
+    for(const [selector,key] of liveCoverDragMap){
+      const el=node?.closest?.(selector);
+      if(el)return {el,key};
+    }
+    return null;
+  }
+  function beginLiveCoverPinch(event){
+    if(!liveEditEnabled||autoRecActive||liveCoverInlineEl||!playerHost.classList.contains('sp-cover-open'))return;
+    if(event.touches?.length!==2)return;
+    const a=findLiveCoverTarget(event.touches[0].target);
+    const b=findLiveCoverTarget(event.touches[1].target);
+    if(!a||!b||a.el!==b.el)return;
+    const p1=coverTouchPoint(event.touches[0]),p2=coverTouchPoint(event.touches[1]);
+    const item=workingDocument?.cover?.layout?.[a.key]||{};
+    liveCoverPinch={
+      el:a.el,key:a.key,
+      startDistance:Math.max(1,coverTouchDistance(p1,p2)),
+      startScale:Math.max(.35,Math.min(4,Number(item.scale)||1)),
+      moved:false
+    };
+    liveCoverDrag=null;
+    event.preventDefault();
+  }
+  function moveLiveCoverPinch(event){
+    const p=liveCoverPinch;
+    if(!p||event.touches?.length!==2)return;
+    const a=findLiveCoverTarget(event.touches[0].target);
+    const b=findLiveCoverTarget(event.touches[1].target);
+    if(!a||!b||a.el!==p.el||b.el!==p.el)return;
+    const p1=coverTouchPoint(event.touches[0]),p2=coverTouchPoint(event.touches[1]);
+    const scale=Math.max(.35,Math.min(4,p.startScale*(coverTouchDistance(p1,p2)/p.startDistance)));
+    if(Math.abs(scale-p.startScale)>.025)p.moved=true;
+    const store=ensureCoverLayoutStore();
+    if(store)store[p.key]={...(store[p.key]||{}),scale};
+    const current=store?.[p.key]||{};
+    const x=Number.isFinite(Number(current.x))?Number(current.x):null;
+    const y=Number.isFinite(Number(current.y))?Number(current.y):null;
+    if(x!==null&&y!==null){
+      const copy=playerHost.querySelector('.sp-cover-copy');
+      copy?.style.setProperty('position','static','important');
+      p.el.style.setProperty('position','absolute','important');
+      p.el.style.setProperty('left',`${Math.max(0,Math.min(1,x))*100}%`,'important');
+      p.el.style.setProperty('top',`${Math.max(0,Math.min(1,y))*100}%`,'important');
+    }
+    p.el.style.setProperty('transform',`translate(-50%,-50%) scale(${scale})`,'important');
+    p.el.style.zIndex='6';
+    event.preventDefault();
+  }
+  function endLiveCoverPinch(){
+    const p=liveCoverPinch;
+    if(!p)return;
+    liveCoverPinch=null;
+    if(!p.moved)return;
+    suppressCoverClickUntil=performance.now()+500;
+    syncEasyShellToWorkingDocument();
+    refreshLivePlayerDocumentChrome();
+    syncEasyPublishButton();
+    scheduleDraftSave(80);
+    requestAnimationFrame(applyLiveCoverLayout);
+  }
+
   function beginLiveCoverDrag(event,el,key){
+    if(liveCoverPinch)return;
     if(!liveEditEnabled||autoRecActive||liveCoverInlineEl||!playerHost.classList.contains('sp-cover-open'))return;
     if(event.pointerType==='mouse' && event.button!==0)return;
     const cover=playerHost.querySelector('.sp-cover');
@@ -7228,7 +7300,8 @@ function openDesktopTextDetail(){
     d.el.style.setProperty('position','absolute','important');
     d.el.style.setProperty('left',`${x*100}%`,'important');
     d.el.style.setProperty('top',`${y*100}%`,'important');
-    d.el.style.setProperty('transform','translate(-50%,-50%)','important');
+    const scale=Math.max(.35,Math.min(4,Number(store?.[d.key]?.scale)||1));
+    d.el.style.setProperty('transform',`translate(-50%,-50%) scale(${scale})`,'important');
     d.el.style.zIndex='6';
   }
 
@@ -7245,6 +7318,11 @@ function openDesktopTextDetail(){
     scheduleDraftSave(80);
     requestAnimationFrame(applyLiveCoverLayout);
   }
+
+  playerHost.addEventListener('touchstart',beginLiveCoverPinch,{passive:false,capture:true});
+  playerHost.addEventListener('touchmove',moveLiveCoverPinch,{passive:false,capture:true});
+  playerHost.addEventListener('touchend',(event)=>{if(liveCoverPinch && event.touches.length<2)endLiveCoverPinch();},{passive:true,capture:true});
+  playerHost.addEventListener('touchcancel',endLiveCoverPinch,{passive:true,capture:true});
 
   playerHost.addEventListener('pointerdown',(event)=>{
     if(!liveEditEnabled||autoRecActive||!playerHost.classList.contains('sp-cover-open'))return;

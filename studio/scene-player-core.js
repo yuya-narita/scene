@@ -1168,7 +1168,8 @@
           el.style.setProperty('position','absolute','important');
           el.style.setProperty('left',`${x*100}%`,'important');
           el.style.setProperty('top',`${y*100}%`,'important');
-          el.style.setProperty('transform','translate(-50%,-50%)','important');
+          const scale = Math.max(.35,Math.min(4,Number(item.scale)||1));
+          el.style.setProperty('transform',`translate(-50%,-50%) scale(${scale})`,'important');
           el.style.zIndex = '6';
         } else {
           el.style.removeProperty('position');
