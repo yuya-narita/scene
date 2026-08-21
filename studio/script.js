@@ -7642,16 +7642,83 @@ function openDesktopTextDetail(){
     const size=mkSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],typeof style.size==='string'?style.size:'auto');
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
-    const colorTitle=document.createElement('strong');colorTitle.textContent='文字色';Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
-    const colors=document.createElement('div');Object.assign(colors.style,{display:'flex',gap:'9px',alignItems:'center',marginTop:'8px',flexWrap:'wrap'});
-    const colorBtn=(text,value)=>{
-      const b=document.createElement('button');b.type='button';b.textContent=text;Object.assign(b.style,{height:'42px',padding:'0 14px',borderRadius:'21px',border:'1px solid #d7d9de',background:'#fff',font:'700 14px/1 system-ui'});
-      b.addEventListener('click',()=>{if(value===null)delete style.color;else style.color=value;apply();});colors.appendChild(b);
+    const colorTitle=document.createElement('strong');
+    colorTitle.textContent='文字色';
+    Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
+
+    const colorModeWrap=document.createElement('label');
+    Object.assign(colorModeWrap.style,{display:'grid',gap:'7px',marginTop:'8px',font:'700 13px/1.4 system-ui'});
+    const colorModeLabel=document.createElement('span');
+    colorModeLabel.textContent='色';
+    const colorMode=document.createElement('select');
+    Object.assign(colorMode.style,{height:'46px',border:'1px solid #d7d9de',borderRadius:'12px',background:'#fff',padding:'0 10px',font:'600 15px/1 system-ui'});
+    [['auto','おまかせ'],['custom','任意色']].forEach(([v,t])=>{
+      const o=document.createElement('option');o.value=v;o.textContent=t;colorMode.appendChild(o);
+    });
+
+    let activeColor=normalizeTextColor(style.color)||'#4A4A4A';
+    colorMode.value=normalizeTextColor(style.color)?'custom':'auto';
+    colorModeWrap.append(colorModeLabel,colorMode);
+
+    const customColorWrap=document.createElement('div');
+    Object.assign(customColorWrap.style,{display:'grid',gap:'10px',marginTop:'10px'});
+
+    const customRow=document.createElement('div');
+    Object.assign(customRow.style,{display:'grid',gridTemplateColumns:'1fr auto auto',alignItems:'center',gap:'10px'});
+    const customLabel=document.createElement('span');
+    customLabel.textContent='任意色';
+    Object.assign(customLabel.style,{font:'700 13px/1.4 system-ui'});
+    const colorCode=document.createElement('code');
+    colorCode.textContent=activeColor;
+
+    const committedPicker=makeCommittedTextColorPicker(activeColor,{
+      compact:true,
+      onPreview:c=>{
+        colorCode.textContent=c;
+        applyCoverStyleToLiveElement(target,{...style,color:c});
+      },
+      onCommit:c=>{
+        activeColor=normalizeTextColor(c)||activeColor;
+        style.color=activeColor;
+        colorCode.textContent=activeColor;
+        apply();
+        renderPalette();
+      }
+    });
+    customRow.append(customLabel,committedPicker.root,colorCode);
+
+    const paletteHost=document.createElement('div');
+    const renderPalette=()=>{
+      paletteHost.replaceChildren(
+        makeTextColorPalette(activeColor,c=>{
+          activeColor=normalizeTextColor(c)||activeColor;
+          committedPicker.setValue(activeColor);
+          style.color=activeColor;
+          apply();
+          renderPalette();
+        })
+      );
     };
-    colorBtn('おまかせ',null);colorBtn('白','#ffffff');colorBtn('黒','#000000');
-    const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(style.color||'')?style.color:'#ffffff';
-    Object.assign(picker.style,{width:'48px',height:'42px',border:'1px solid #d7d9de',borderRadius:'10px',padding:'4px',background:'#fff'});
-    colors.appendChild(picker);card.append(colorTitle,colors);
+    renderPalette();
+
+    const syncColorMode=()=>{
+      const custom=colorMode.value==='custom';
+      customColorWrap.hidden=!custom;
+    };
+    colorMode.addEventListener('change',()=>{
+      if(colorMode.value==='auto'){
+        delete style.color;
+        apply();
+      }else{
+        if(!normalizeTextColor(style.color))style.color=activeColor;
+        apply();
+      }
+      syncColorMode();
+    });
+
+    customColorWrap.append(customRow,paletteHost);
+    card.append(colorTitle,colorModeWrap,customColorWrap);
+    syncColorMode();
 
     const foot=document.createElement('div');Object.assign(foot.style,{display:'flex',justifyContent:'flex-end',marginTop:'18px'});
     const done=document.createElement('button');done.type='button';done.textContent='完了';Object.assign(done.style,{width:'120px',height:'48px',border:'0',borderRadius:'24px',background:'#17181b',color:'#fff',font:'800 15px/1 system-ui'});
@@ -7671,8 +7738,8 @@ function openDesktopTextDetail(){
       syncEasyPublishButton();
       scheduleDraftSave(70);
     };
-    font.sel.addEventListener('change',apply);size.sel.addEventListener('change',apply);
-    picker.addEventListener('input',()=>{style.color=picker.value;apply();});
+    font.sel.addEventListener('change',apply);
+    size.sel.addEventListener('change',apply);
     done.addEventListener('click',closeLiveCoverStylePanel);
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeLiveCoverStylePanel();});
     document.body.appendChild(overlay);liveCoverStylePanel=overlay;
