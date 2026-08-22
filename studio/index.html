@@ -666,9 +666,23 @@
         <button id="coverQuickLogo" class="ending-quick-clear" type="button">作品ロゴ（透過PNG）を選ぶ / 変更</button>
         <button id="coverQuickLogoClear" class="ending-quick-clear" type="button">作品ロゴを外す</button>
         <button id="coverQuickImage" class="ending-quick-clear" type="button">表紙画像を選ぶ / 変更</button>
+        <button id="coverQuickPosition" class="ending-quick-clear" type="button">表示位置を調整</button>
         <button id="coverQuickImageClear" class="ending-quick-clear" type="button">表紙画像を外す</button>
       </div>
       <small class="cover-quick-note">入力は表紙プレビューへ即時反映されます。</small>
+  <div id="coverPositionDialog" class="cover-position-dialog" hidden>
+    <div class="cover-position-card" role="dialog" aria-modal="true" aria-labelledby="coverPositionTitle">
+      <div class="cover-position-head">
+        <button id="coverPositionCancel" type="button">キャンセル</button>
+        <strong id="coverPositionTitle">表示位置</strong>
+        <button id="coverPositionSave" type="button">保存</button>
+      </div>
+      <div class="cover-position-help">画像をドラッグして、見せたい位置を合わせます</div>
+      <div id="coverPositionStage" class="cover-position-stage" aria-label="表紙画像の表示位置を調整"></div>
+      <button id="coverPositionReset" class="cover-position-reset" type="button">中央に戻す</button>
+    </div>
+  </div>
+
       <button id="coverQuickDone" class="ending-quick-done" type="button">完了</button>
     </div>
   </div>

@@ -45,6 +45,12 @@
   const coverQuickLogoClear=$('#coverQuickLogoClear');
   const coverQuickImage=$('#coverQuickImage');
   const coverQuickImageClear=$('#coverQuickImageClear');
+  const coverQuickPosition=$('#coverQuickPosition');
+  const coverPositionDialog=$('#coverPositionDialog');
+  const coverPositionStage=$('#coverPositionStage');
+  const coverPositionCancel=$('#coverPositionCancel');
+  const coverPositionSave=$('#coverPositionSave');
+  const coverPositionReset=$('#coverPositionReset');
 
   const authorHistoryList = $('#authorHistoryList');
   const endingLabelInput = $('#endingLabelInput');
@@ -73,6 +79,26 @@
   let endingQuickTarget='center';
   let coverImageUrl = '';
   let coverImageFileName = '';
+  let coverPositionX = 50;
+  let coverPositionY = 50;
+  let coverPositionBeforeEdit = {x:50,y:50};
+  const coverPositionCss=()=>`${Math.round(coverPositionX*100)/100}% ${Math.round(coverPositionY*100)/100}%`;
+  function setCoverPositionFromValue(value){
+    const raw=String(value||'center center').trim().toLowerCase();
+    const named={left:0,center:50,right:100,top:0,bottom:100};
+    const parts=raw.split(/\s+/);
+    let x=50,y=50;
+    if(parts.length===1){
+      if(parts[0] in named){ if(parts[0]==='top'||parts[0]==='bottom')y=named[parts[0]]; else x=named[parts[0]]; }
+      else if(/^-?[\d.]+%$/.test(parts[0]))x=parseFloat(parts[0]);
+    }else{
+      const a=parts[0],b=parts[1];
+      if(a in named){ if(a==='top'||a==='bottom')y=named[a]; else x=named[a]; } else if(/^-?[\d.]+%$/.test(a))x=parseFloat(a);
+      if(b in named){ if(b==='left'||b==='right')x=named[b]; else y=named[b]; } else if(/^-?[\d.]+%$/.test(b))y=parseFloat(b);
+    }
+    coverPositionX=Math.max(0,Math.min(100,Number.isFinite(x)?x:50));
+    coverPositionY=Math.max(0,Math.min(100,Number.isFinite(y)?y:50));
+  }
   let coverLogoUrl = '';
   let coverLogoFileName = '';
   let coverFontFamily = 'serif';
@@ -400,7 +426,7 @@
         stoppedAt:latestPublicationStoppedAt||0
       },
       recProgress:clone(autoRecProgress),
-      cover:{url:coverImageUrl||'',name:coverImageFileName||'',logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||''},
+      cover:{url:coverImageUrl||'',name:coverImageFileName||'',position:coverPositionCss(),logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||''},
       assets:serializeDraftAssets()
     };
   }
@@ -460,7 +486,7 @@
     if(descriptionInput)descriptionInput.value=row.easy?.description||row.document?.metadata?.description||'';
     if(languageInput)languageInput.value=row.easy?.language||'auto';
     if(densitySelect)densitySelect.value='normal';
-    coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';
+    coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';setCoverPositionFromValue(row.document?.cover?.position||row.cover?.position||'center center');
     coverLogoUrl=map.get(row.cover?.logoUrl)||row.cover?.logoUrl||row.document?.cover?.logo?.src||'';coverLogoFileName=row.cover?.logoName||row.document?.cover?.logo?._editorFileName||'';
     coverFontFamily=['serif','sans','mono'].includes(workingDocument?.cover?.fontFamily)?workingDocument.cover.fontFamily:'serif';
     endingFontFamily=['serif','sans','mono'].includes(workingDocument?.ending?.fontFamily)?workingDocument.ending.fontFamily:'serif';
@@ -1299,7 +1325,7 @@
     if(bg){
       bg.style.backgroundImage=coverImageUrl ? `url("${coverImageUrl}")` : 'none';
       bg.style.backgroundSize='cover';
-      bg.style.backgroundPosition='center center';
+      bg.style.backgroundPosition=coverPositionCss();
     }
     coverPreview.classList.toggle('has-image',Boolean(coverImageUrl));
     const coverFamilies={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
@@ -1468,7 +1494,7 @@
       },
       player:{ navigation:{ allowPrevious:true } },
       cover:{
-        ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),
+        ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
         fontFamily:coverFontFamily,
         ...(workingDocument?.cover?.styles && Object.keys(workingDocument.cover.styles).length
@@ -1898,7 +1924,7 @@
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
     const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
-    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:'center center'}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
+    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -2234,7 +2260,7 @@
         title:packaged.title||'Untitled', author:packaged.author||'',
         language:packaged.language||'und', entry:'scene.json'
       };
-      if(coverPath)manifest.cover={image:coverPath,fit:'cover',position:'center'};
+      if(coverPath)manifest.cover={image:coverPath,fit:'cover',position:coverPositionCss()};
     }
 
     entries.unshift(
@@ -2329,10 +2355,11 @@
         coverImageUrl=URL.createObjectURL(blob);
         coverImageFileName=manifest.cover.image.split('/').pop()||'cover';
         assetRegistry.set(coverImageUrl,{blob,name:coverImageFileName});
-        doc.cover={src:coverImageUrl,fit:'cover',position:'center center'};
+        setCoverPositionFromValue(manifest?.cover?.position||'center center');
+        doc.cover={src:coverImageUrl,fit:'cover',position:coverPositionCss()};
         updateCoverPreview();
       } else {
-        coverImageUrl=''; coverImageFileName=''; updateCoverPreview();
+        coverImageUrl=''; coverImageFileName=''; coverPositionX=50; coverPositionY=50; updateCoverPreview();
       }
       await saveDraftNow();
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
@@ -2384,7 +2411,7 @@
     if(episodeInput)episodeInput.value=doc.metadata?.episode||'';
     if(episodeTitleInput)episodeTitleInput.value=doc.metadata?.episodeTitle||'';
     if(descriptionInput)descriptionInput.value=doc.metadata?.description||'';
-    coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';
+    coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';setCoverPositionFromValue(doc.cover?.position||'center center');
     coverLogoUrl=doc.cover?.logo?.src||'';coverLogoFileName=doc.cover?.logo?._editorFileName||'';
     coverFontFamily=['serif','sans','mono'].includes(doc.cover?.fontFamily)?doc.cover.fontFamily:'serif';
     endingFontFamily=['serif','sans','mono'].includes(doc.ending?.fontFamily)?doc.ending.fontFamily:'serif';
@@ -2869,6 +2896,7 @@
       if(result.document){
         workingDocument=clone(result.document);
         coverImageUrl=workingDocument.cover?.src||'';
+        setCoverPositionFromValue(workingDocument.cover?.position||'center center');
         coverLogoUrl=workingDocument.cover?.logo?.src||'';
         refreshCoverPreviewLayout();
         updateEndingPreview();
@@ -3954,7 +3982,9 @@
       coverImageUrl=URL.createObjectURL(snap.blob);
       coverImageFileName=snap.name||'cover';
       assetRegistry.set(coverImageUrl,{blob:snap.blob,name:coverImageFileName});
+      coverPositionX=50;coverPositionY=50;
       refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
+      requestAnimationFrame(()=>openCoverPositionEditor());
     }catch(error){console.error(error);alert('画像を読み込めませんでした。もう一度選択してください。');coverImageInput.value='';}
   });
   coverImageClear?.addEventListener('click',()=>{if(coverQuickImageClear)coverQuickImageClear.hidden=true;
@@ -4176,6 +4206,47 @@
     }
   }
 
+  function renderCoverPositionStage(){
+    if(!coverPositionStage)return;
+    coverPositionStage.style.backgroundImage=coverImageUrl?`url("${coverImageUrl}")`:'none';
+    coverPositionStage.style.backgroundPosition=coverPositionCss();
+  }
+  function openCoverPositionEditor(){
+    if(!coverPositionDialog||!coverImageUrl)return;
+    coverPositionBeforeEdit={x:coverPositionX,y:coverPositionY};
+    renderCoverPositionStage();
+    coverPositionDialog.hidden=false;
+    document.documentElement.classList.add('cover-position-open');
+  }
+  function closeCoverPositionEditor(save=true){
+    if(!coverPositionDialog)return;
+    if(!save){coverPositionX=coverPositionBeforeEdit.x;coverPositionY=coverPositionBeforeEdit.y;}
+    coverPositionDialog.hidden=true;
+    document.documentElement.classList.remove('cover-position-open');
+    refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();
+    if(save)scheduleDraftSave(80);
+  }
+  if(coverPositionStage){
+    let drag=null;
+    coverPositionStage.addEventListener('pointerdown',(event)=>{
+      drag={id:event.pointerId,x:event.clientX,y:event.clientY,px:coverPositionX,py:coverPositionY};
+      coverPositionStage.setPointerCapture?.(event.pointerId);event.preventDefault();
+    });
+    coverPositionStage.addEventListener('pointermove',(event)=>{
+      if(!drag||drag.id!==event.pointerId)return;
+      const r=coverPositionStage.getBoundingClientRect();
+      coverPositionX=Math.max(0,Math.min(100,drag.px+(event.clientX-drag.x)/Math.max(1,r.width)*100));
+      coverPositionY=Math.max(0,Math.min(100,drag.py+(event.clientY-drag.y)/Math.max(1,r.height)*100));
+      renderCoverPositionStage();refreshCoverPreviewLayout();event.preventDefault();
+    });
+    const endDrag=(event)=>{if(drag?.id===event.pointerId)drag=null;};
+    coverPositionStage.addEventListener('pointerup',endDrag);coverPositionStage.addEventListener('pointercancel',endDrag);
+  }
+  coverPositionReset?.addEventListener('click',()=>{coverPositionX=50;coverPositionY=50;renderCoverPositionStage();refreshCoverPreviewLayout();});
+  coverPositionSave?.addEventListener('click',()=>closeCoverPositionEditor(true));
+  coverPositionCancel?.addEventListener('click',()=>closeCoverPositionEditor(false));
+  coverPositionDialog?.addEventListener('click',(event)=>{if(event.target===coverPositionDialog)closeCoverPositionEditor(false);});
+
   function openCoverQuickEditor(focusTarget='title'){
     if(!coverQuickDialog)return;
     removeCoverLogoQuickControl();
@@ -4189,6 +4260,7 @@
     ensureCoverVisibilityPanel();
     syncCoverVisibilityControls();
     coverQuickImageClear.hidden=!coverImageUrl;
+    if(coverQuickPosition)coverQuickPosition.hidden=!coverImageUrl;
     coverQuickDialog.hidden=false;
     document.documentElement.classList.add('ending-quick-open');
     const target={title:coverQuickWorkTitle,author:coverQuickAuthor,subtitle:coverQuickSubtitle,episode:coverQuickEpisode,episodeTitle:coverQuickEpisodeTitle,description:coverQuickDescription}[focusTarget]||coverQuickWorkTitle;
@@ -4219,6 +4291,7 @@
   coverQuickLogo?.addEventListener('click',()=>coverLogoInput?.click());
   coverQuickLogoClear?.addEventListener('click',()=>coverLogoClear?.click());
   coverQuickImage?.addEventListener('click',()=>coverImageInput?.click());
+  coverQuickPosition?.addEventListener('click',openCoverPositionEditor);
   coverQuickImageClear?.addEventListener('click',()=>{coverImageClear?.click();coverQuickImageClear.hidden=true;});
   coverQuickDone?.addEventListener('click',closeCoverQuickEditor);
   coverQuickClose?.addEventListener('click',closeCoverQuickEditor);
