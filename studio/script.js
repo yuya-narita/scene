@@ -1356,6 +1356,42 @@
       setEasyCoverPreviewVisible(coverPreviewEpisodeTitle,Boolean(episodeTitle)&&visible.episodeTitle!==false);
     }
 
+    // Keep Easy preview typography in parity with Live Editor.
+    // Sizes are role-relative: each field starts from its own CSS default, then
+    // small/normal/large/xl scales that default. This is the same model used by
+    // direct Live editing, so a title stays a title and an author stays an author.
+    const easyCoverStyles=workingDocument?.cover?.styles||{};
+    const easySizeScale={small:.78,normal:1,large:1.28,xl:1.6};
+    const easyFontMap={
+      serif:'"Yu Mincho","Hiragino Mincho ProN",serif',
+      sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',
+      mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'
+    };
+    const applyEasyCoverStyle=(el,key)=>{
+      if(!el)return;
+      const st=easyCoverStyles[key]||{};
+      // Clear authored overrides first so computed font-size is always the role's
+      // native Easy-preview size and never compounds across refreshes.
+      el.style.removeProperty('font-size');
+      el.style.removeProperty('color');
+      el.style.removeProperty('font-family');
+      const base=parseFloat(getComputedStyle(el).fontSize)||16;
+      if(st.color)el.style.setProperty('color',String(st.color),'important');
+      if(st.size&&st.size!=='auto'){
+        const v=typeof st.size==='number'?Number(st.size):base*(easySizeScale[String(st.size)]||1);
+        if(Number.isFinite(v))el.style.setProperty('font-size',`${v}px`,'important');
+      }
+      if(st.fontFamily&&st.fontFamily!=='inherit'){
+        const fam=easyFontMap[String(st.fontFamily)];
+        if(fam)el.style.setProperty('font-family',fam,'important');
+      }
+    };
+    applyEasyCoverStyle(coverPreviewTitle,'title');
+    applyEasyCoverStyle(coverPreviewSubtitle,'subtitle');
+    applyEasyCoverStyle(coverPreviewAuthor,'author');
+    applyEasyCoverStyle(coverPreviewEpisode,'episode');
+    applyEasyCoverStyle(coverPreviewEpisodeTitle,'episodeTitle');
+
     // If both episode lines are hidden, hide their layout wrapper too so no stale
     // episode-title text or spacing can remain in the Easy preview.
     const episodeBlock=coverPreviewEpisodeTitle?.closest?.('.cover-preview-episode-block');
