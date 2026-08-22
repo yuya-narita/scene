@@ -84,25 +84,16 @@
   let coverPositionBeforeEdit = {x:50,y:50};
   let positionEditorMode='cover';
   let sceneBackgroundPositionContext=null;
-  let coverPositionHomeParent=null;
-  let coverPositionHomeNext=null;
+  // The position editor is shared by Cover and Scene backgrounds. Keep it at
+  // document.body level permanently so it can never inherit `hidden` from the
+  // Cover Quick Edit modal when opened from Background tools.
+  if(coverPositionDialog && coverPositionDialog.parentNode!==document.body){
+    document.body.appendChild(coverPositionDialog);
+  }
   function portalCoverPositionDialog(){
-    if(!coverPositionDialog)return;
-    if(!coverPositionHomeParent){
-      coverPositionHomeParent=coverPositionDialog.parentNode;
-      coverPositionHomeNext=coverPositionDialog.nextSibling;
-    }
-    if(coverPositionDialog.parentNode!==document.body)document.body.appendChild(coverPositionDialog);
+    if(coverPositionDialog && coverPositionDialog.parentNode!==document.body)document.body.appendChild(coverPositionDialog);
   }
-  function restoreCoverPositionDialog(){
-    if(!coverPositionDialog||!coverPositionHomeParent)return;
-    if(coverPositionDialog.parentNode===coverPositionHomeParent)return;
-    if(coverPositionHomeNext && coverPositionHomeNext.parentNode===coverPositionHomeParent){
-      coverPositionHomeParent.insertBefore(coverPositionDialog,coverPositionHomeNext);
-    }else{
-      coverPositionHomeParent.appendChild(coverPositionDialog);
-    }
-  }
+  function restoreCoverPositionDialog(){ /* intentionally stays under body */ }
   const coverPositionCss=()=>`${Math.round(coverPositionX*100)/100}% ${Math.round(coverPositionY*100)/100}%`;
   function positionPairFromValue(value){
     const raw=String(value||'center center').trim().toLowerCase();
@@ -4251,6 +4242,7 @@
     coverPositionBeforeEdit={x:coverPositionX,y:coverPositionY};
     if(coverPositionStage)coverPositionStage.setAttribute('aria-label','表紙画像の表示位置を調整');
     renderCoverPositionStage();
+    coverPositionDialog.style.setProperty('z-index','2147483647','important');
     coverPositionDialog.hidden=false;
     document.documentElement.classList.add('cover-position-open');
   }
@@ -4266,7 +4258,7 @@
     coverPositionBeforeEdit={x:pos.x,y:pos.y};
     if(coverPositionStage)coverPositionStage.setAttribute('aria-label','背景画像の表示位置を調整');
     renderCoverPositionStage();
-    coverPositionDialog.style.zIndex='10120';
+    coverPositionDialog.style.setProperty('z-index','2147483647','important');
     coverPositionDialog.hidden=false;
     document.documentElement.classList.add('cover-position-open');
   }
@@ -4283,8 +4275,7 @@
       sceneBackgroundPositionContext=null;
       positionEditorMode='cover';
       coverPositionDialog.hidden=true;
-      coverPositionDialog.style.zIndex='';
-      document.documentElement.classList.remove('cover-position-open');
+            document.documentElement.classList.remove('cover-position-open');
       restoreCoverPositionDialog();
       if(save){
         try{ctx.onApply?.();}catch(error){console.error(error);}
@@ -4295,8 +4286,7 @@
 
     if(!save){coverPositionX=coverPositionBeforeEdit.x;coverPositionY=coverPositionBeforeEdit.y;}
     coverPositionDialog.hidden=true;
-    coverPositionDialog.style.zIndex='';
-    document.documentElement.classList.remove('cover-position-open');
+        document.documentElement.classList.remove('cover-position-open');
 
     // Returning to Cover Quick Edit should immediately expose the adjust button.
     if(coverQuickPosition){
@@ -6429,11 +6419,11 @@ function openDesktopBackgroundDetail(){
         apply();
         closeDesktopBackgroundDetail();
         openDesktopBackgroundDetail();
-        // After a new image is chosen, go straight to framing.
-        setTimeout(()=>openSceneBackgroundPositionEditor(scene,()=>{
+        // A newly selected image goes straight into framing.
+        openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(40);
           refreshLivePlayer({preserveSheet:true});
-        }),0);
+        });
       });
     },'is-primary');
     const clear=desktopAction('画像を外す',()=>{
@@ -6452,13 +6442,20 @@ function openDesktopBackgroundDetail(){
     },'is-primary');
     if(!sourceBg.src)sourcePositionAdjust.disabled=true;
 
-    // Same action group = same button dimensions as 画像を変更 / 画像を外す.
-    assetActions.append(choose,clear,sourcePositionAdjust);
+    assetActions.append(choose,clear);
     assetRow.append(thumb,assetActions);
     sourceSec.appendChild(assetRow);
 
+    // Framing row: position control + background size, aligned as two equal fields.
     const sourcePositionGrid=two(sourceSec);
+    sourcePositionGrid.classList.add('desktop-background-position-row');
+    const positionField=document.createElement('label');
+    positionField.className='desktop-text-detail-field desktop-background-position-field';
+    const positionCap=document.createElement('span');positionCap.textContent='表示位置';
+    sourcePositionAdjust.classList.add('desktop-background-position-action');
+    positionField.append(positionCap,sourcePositionAdjust);
     sourcePositionGrid.append(
+      positionField,
       desktopDetailSelect('背景サイズ',[
         ['cover','画面いっぱい（cover）'],
         ['contain','画像全体（contain）']
@@ -7689,12 +7686,12 @@ function openDesktopTextDetail(){
       const pick=makeActionButton(bg?.src?'画像を変更':'画像を選択','is-primary');
       pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{
         p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
-        // pickLiveFile refreshes the sheet after this callback. Open framing on
-        // the next task so the position editor stays on top of the refreshed UI.
-        setTimeout(()=>openSceneBackgroundPositionEditor(scene,()=>{
+        // Open framing immediately. The shared editor is body-level, so the
+        // Live Edit sheet refresh cannot hide or remove it.
+        openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(60);
           refreshLivePlayer({preserveSheet:true});
-        }),0);
+        });
       });
       const positionAdjust=makeActionButton('表示位置を調整');
       positionAdjust.disabled=!bg?.src;

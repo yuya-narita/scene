@@ -8842,3 +8842,20 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     margin-bottom:0;
   }
 }
+
+
+/* v1.6 — shared Cover/Scene background position editor + aligned detail framing row */
+.cover-position-dialog{z-index:2147483647!important}
+.desktop-background-position-row{align-items:end!important}
+.desktop-background-position-field{align-self:stretch}
+.desktop-background-position-action{
+  width:100%!important;
+  height:42px!important;
+  min-height:42px!important;
+  box-sizing:border-box!important;
+  margin:0!important;
+}
+@media(max-width:1099px){
+  body.mobile-live-detail-open .desktop-background-position-row{grid-template-columns:1fr 1fr!important;align-items:end!important}
+  body.mobile-live-detail-open .desktop-background-position-action{height:42px!important;min-height:42px!important}
+}
