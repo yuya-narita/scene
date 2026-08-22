@@ -4235,8 +4235,11 @@
     coverPositionStage.addEventListener('pointermove',(event)=>{
       if(!drag||drag.id!==event.pointerId)return;
       const r=coverPositionStage.getBoundingClientRect();
-      coverPositionX=Math.max(0,Math.min(100,drag.px+(event.clientX-drag.x)/Math.max(1,r.width)*100));
-      coverPositionY=Math.max(0,Math.min(100,drag.py+(event.clientY-drag.y)/Math.max(1,r.height)*100));
+      // Direct-manipulation drag: the image should follow the finger.
+      // CSS background-position moves the crop in the opposite visual direction,
+      // so subtract the pointer delta rather than adding it.
+      coverPositionX=Math.max(0,Math.min(100,drag.px-(event.clientX-drag.x)/Math.max(1,r.width)*100));
+      coverPositionY=Math.max(0,Math.min(100,drag.py-(event.clientY-drag.y)/Math.max(1,r.height)*100));
       renderCoverPositionStage();refreshCoverPreviewLayout();event.preventDefault();
     });
     const endDrag=(event)=>{if(drag?.id===event.pointerId)drag=null;};
