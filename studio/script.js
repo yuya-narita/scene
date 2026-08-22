@@ -82,8 +82,10 @@
   let coverPositionX = 50;
   let coverPositionY = 50;
   let coverPositionBeforeEdit = {x:50,y:50};
+  let positionEditorMode='cover';
+  let sceneBackgroundPositionContext=null;
   const coverPositionCss=()=>`${Math.round(coverPositionX*100)/100}% ${Math.round(coverPositionY*100)/100}%`;
-  function setCoverPositionFromValue(value){
+  function positionPairFromValue(value){
     const raw=String(value||'center center').trim().toLowerCase();
     const named={left:0,center:50,right:100,top:0,bottom:100};
     const parts=raw.split(/\s+/);
@@ -96,8 +98,14 @@
       if(a in named){ if(a==='top'||a==='bottom')y=named[a]; else x=named[a]; } else if(/^-?[\d.]+%$/.test(a))x=parseFloat(a);
       if(b in named){ if(b==='left'||b==='right')x=named[b]; else y=named[b]; } else if(/^-?[\d.]+%$/.test(b))y=parseFloat(b);
     }
-    coverPositionX=Math.max(0,Math.min(100,Number.isFinite(x)?x:50));
-    coverPositionY=Math.max(0,Math.min(100,Number.isFinite(y)?y:50));
+    return {
+      x:Math.max(0,Math.min(100,Number.isFinite(x)?x:50)),
+      y:Math.max(0,Math.min(100,Number.isFinite(y)?y:50))
+    };
+  }
+  function setCoverPositionFromValue(value){
+    const pos=positionPairFromValue(value);
+    coverPositionX=pos.x;coverPositionY=pos.y;
   }
   let coverLogoUrl = '';
   let coverLogoFileName = '';
@@ -4206,26 +4214,66 @@
     }
   }
 
+  function activePositionEditorImage(){
+    if(positionEditorMode==='background')return sceneBackgroundPositionContext?.scene?.presentation?.background?.src||'';
+    return coverImageUrl;
+  }
   function renderCoverPositionStage(){
     if(!coverPositionStage)return;
-    coverPositionStage.style.backgroundImage=coverImageUrl?`url("${coverImageUrl}")`:'none';
+    const src=activePositionEditorImage();
+    coverPositionStage.style.backgroundImage=src?`url("${src}")`:'none';
     coverPositionStage.style.backgroundPosition=coverPositionCss();
   }
   function openCoverPositionEditor(){
     if(!coverPositionDialog||!coverImageUrl)return;
+    positionEditorMode='cover';
+    sceneBackgroundPositionContext=null;
     coverPositionBeforeEdit={x:coverPositionX,y:coverPositionY};
+    if(coverPositionStage)coverPositionStage.setAttribute('aria-label','表紙画像の表示位置を調整');
+    renderCoverPositionStage();
+    coverPositionDialog.hidden=false;
+    document.documentElement.classList.add('cover-position-open');
+  }
+  function openSceneBackgroundPositionEditor(scene,onApply){
+    const bg=scene?.presentation?.background;
+    if(!coverPositionDialog||!bg?.src)return;
+    const restoreCover={x:coverPositionX,y:coverPositionY};
+    const pos=positionPairFromValue(bg.position||'center center');
+    positionEditorMode='background';
+    sceneBackgroundPositionContext={scene,restoreCover,onApply};
+    coverPositionX=pos.x;coverPositionY=pos.y;
+    coverPositionBeforeEdit={x:pos.x,y:pos.y};
+    if(coverPositionStage)coverPositionStage.setAttribute('aria-label','背景画像の表示位置を調整');
     renderCoverPositionStage();
     coverPositionDialog.hidden=false;
     document.documentElement.classList.add('cover-position-open');
   }
   function closeCoverPositionEditor(save=true){
     if(!coverPositionDialog)return;
+
+    if(positionEditorMode==='background' && sceneBackgroundPositionContext){
+      const ctx=sceneBackgroundPositionContext;
+      if(save){
+        const bg=ctx.scene?.presentation?.background;
+        if(bg?.src)bg.position=coverPositionCss();
+      }
+      coverPositionX=ctx.restoreCover.x;coverPositionY=ctx.restoreCover.y;
+      sceneBackgroundPositionContext=null;
+      positionEditorMode='cover';
+      coverPositionDialog.hidden=true;
+      document.documentElement.classList.remove('cover-position-open');
+      if(save){
+        try{ctx.onApply?.();}catch(error){console.error(error);}
+        scheduleDraftSave(80);
+      }
+      return;
+    }
+
     if(!save){coverPositionX=coverPositionBeforeEdit.x;coverPositionY=coverPositionBeforeEdit.y;}
     coverPositionDialog.hidden=true;
     document.documentElement.classList.remove('cover-position-open');
 
     // Returning to Cover Quick Edit should immediately expose the adjust button.
-    // Previously it was only refreshed the next time the Quick Edit modal opened.
     if(coverQuickPosition){
       coverQuickPosition.hidden=!coverImageUrl;
       coverQuickPosition.style.display=coverImageUrl?'':'none';
@@ -4251,12 +4299,17 @@
       // so subtract the pointer delta rather than adding it.
       coverPositionX=Math.max(0,Math.min(100,drag.px-(event.clientX-drag.x)/Math.max(1,r.width)*100));
       coverPositionY=Math.max(0,Math.min(100,drag.py-(event.clientY-drag.y)/Math.max(1,r.height)*100));
-      renderCoverPositionStage();refreshCoverPreviewLayout();event.preventDefault();
+      renderCoverPositionStage();
+      if(positionEditorMode==='cover')refreshCoverPreviewLayout();
+      event.preventDefault();
     });
     const endDrag=(event)=>{if(drag?.id===event.pointerId)drag=null;};
     coverPositionStage.addEventListener('pointerup',endDrag);coverPositionStage.addEventListener('pointercancel',endDrag);
   }
-  coverPositionReset?.addEventListener('click',()=>{coverPositionX=50;coverPositionY=50;renderCoverPositionStage();refreshCoverPreviewLayout();});
+  coverPositionReset?.addEventListener('click',()=>{
+    coverPositionX=50;coverPositionY=50;renderCoverPositionStage();
+    if(positionEditorMode==='cover')refreshCoverPreviewLayout();
+  });
   coverPositionSave?.addEventListener('click',()=>closeCoverPositionEditor(true));
   coverPositionCancel?.addEventListener('click',()=>closeCoverPositionEditor(false));
   coverPositionDialog?.addEventListener('click',(event)=>{if(event.target===coverPositionDialog)closeCoverPositionEditor(false);});
@@ -6415,12 +6468,17 @@ function openDesktopBackgroundDetail(){
     // POSITION ------------------------------------------------------------
     const positionSec=section('表示位置');
     const positionGrid=two(positionSec);
+    const positionAdjust=desktopAction('表示位置を調整',()=>{
+      const bg=explicit();
+      if(!bg?.src)return;
+      openSceneBackgroundPositionEditor(scene,()=>{
+        scheduleDraftSave(40);
+        refreshLivePlayer({preserveSheet:true});
+      });
+    },'is-primary');
+    if(!bg0.src)positionAdjust.disabled=true;
     positionGrid.append(
-      desktopDetailSelect('位置',[
-        ['left top','左上'],['center top','上'],['right top','右上'],
-        ['left center','左'],['center center','中央'],['right center','右'],
-        ['left bottom','左下'],['center bottom','下'],['right bottom','右下']
-      ],bg0.position||'center center',v=>{const bg=ensureImageState();bg.position=v;apply();}),
+      positionAdjust,
       desktopDetailSelect('背景サイズ',[
         ['cover','画面いっぱい（cover）'],
         ['contain','画像全体（contain）']
@@ -7598,7 +7656,16 @@ function openDesktopTextDetail(){
       clear.onclick=()=>{p.background={src:'',transition:'fade',_editorManaged:true};scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
       actions.append(inherit,clear);
       const pick=makeActionButton(bg?.src?'画像を変更':'画像を選択','is-primary');
-      pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};});
+      pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:p.background?.position||'center center',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};});
+      const positionAdjust=makeActionButton('表示位置を調整');
+      positionAdjust.disabled=!bg?.src;
+      positionAdjust.onclick=()=>{
+        if(!p.background?.src)return;
+        openSceneBackgroundPositionEditor(scene,()=>{
+          scheduleDraftSave(60);
+          refreshLivePlayer({preserveSheet:true});
+        });
+      };
       const toneRow=document.createElement('div');toneRow.className='live-edit-choice-row live-edit-tone-row';
       const tone=bg?.tone || ((workingDocument?.theme==='cinema'&&workingDocument?.appearance?.cinemaTone==='light')?'light':'dark');
       const dark=makeActionButton('暗く',bg?.src&&tone==='dark'?'is-selected':'');
@@ -7613,7 +7680,7 @@ function openDesktopTextDetail(){
       if(!bg?.src){dark.disabled=true;light.disabled=true;}
       const status=document.createElement('div');status.className='live-edit-status';status.textContent=bg?.src?`選択中：${bg._editorFileName||'背景画像'}`:(bg?.src===''?'このSceneから背景なし':'前Sceneの背景を継続');
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='暗さ・動き・切替を細かく調整';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('background');});
-      liveEditSheetBody.append(actions,pick,toneRow,status,detail);return;
+      liveEditSheetBody.append(actions,pick,positionAdjust,toneRow,status,detail);return;
     }
 
     liveEditSheetTitle.textContent='音';
