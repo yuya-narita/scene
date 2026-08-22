@@ -25,7 +25,8 @@
     swipe: true,
     swipeThreshold: 44,
     endOnNextAction: true,
-    uiLanguage: 'ja'
+    uiLanguage: 'ja',
+    historyAllScenes: false
   });
 
   const THEMES = new Set(['light', 'dark', 'cinema']);
@@ -92,7 +93,6 @@
       this.backgroundLayerIndex = 0;
       this.backgroundTimers = [];
       this.audioUnlocked = false;
-      this.muted = false;
       // AudioContext unlock and story playback are separate states.
       // A restarted story must wait for the reader's next stage gesture even
       // when the AudioContext itself is already unlocked.
@@ -109,11 +109,11 @@
         ambient: this._createAudioElement('ambient')
       };
       this.oneshots = new Set();
+      this.muted = false;
       this._audioRenderMode = 'restore';
 
       this._buildShell();
       this._bindControls();
-      this._bindPageLifecycle();
     }
 
     _buildShell() {
@@ -126,8 +126,25 @@
         <div class="sp-bg-textures" aria-hidden="true"></div>
         <div class="sp-bg-flash" aria-hidden="true"></div>
         <div class="sp-veil" aria-hidden="true"></div>
+        <section class="sp-cover" hidden>
+          <div class="sp-cover-bg" aria-hidden="true"></div>
+          <div class="sp-cover-dim" aria-hidden="true"></div>
+          <div class="sp-cover-copy">
+            <div class="sp-cover-work-block">
+              <img class="sp-cover-logo" alt="" hidden>
+              <strong class="sp-cover-title"></strong>
+              <span class="sp-cover-subtitle"></span>
+              <small class="sp-cover-author"></small>
+            </div>
+            <div class="sp-cover-episode-block">
+              <span class="sp-cover-episode"></span>
+              <strong class="sp-cover-episode-title"></strong>
+            </div>
+          </div>
+          <button class="sp-cover-start" type="button">はじめる</button>
+        </section>
         <header class="sp-header">
-          <button class="sp-button sp-prev" type="button" aria-label="Past scenes">‹</button>
+          <button class="sp-button sp-prev" type="button" aria-label="Previous scene">‹</button>
           <div class="sp-meta">
             <span class="sp-author"></span>
             <strong class="sp-title"></strong>
@@ -157,14 +174,27 @@
           <div class="sp-ending-copy">
             <span class="sp-ending-kicker">END</span>
             <strong class="sp-ending-title">読了</strong>
-            <p class="sp-ending-text">最後まで読みました。</p>
+            <p class="sp-ending-text"></p>
           </div>
-          <button class="sp-ending-restart" type="button">最初から読む</button>
+          <div class="sp-ending-three">
+            <button class="sp-ending-slot sp-ending-left" type="button" hidden><small></small><strong></strong></button>
+            <button class="sp-ending-slot sp-ending-cover" type="button"><small>COVER</small><strong>表紙に戻る</strong></button>
+            <button class="sp-ending-slot sp-ending-right" type="button" hidden><small></small><strong></strong></button>
+          </div>
         </section>
       `;
 
       const q = (s) => this.host.querySelector(s);
       this.els = {
+        cover: q('.sp-cover'),
+        coverBg: q('.sp-cover-bg'),
+        coverAuthor: q('.sp-cover-author'),
+        coverLogo: q('.sp-cover-logo'),
+        coverEpisode: q('.sp-cover-episode'),
+        coverEpisodeTitle: q('.sp-cover-episode-title'),
+        coverTitle: q('.sp-cover-title'),
+        coverSubtitle: q('.sp-cover-subtitle'),
+        coverStart: q('.sp-cover-start'),
         background: q('.sp-background'),
         bgA: q('.sp-bg-a'),
         bgB: q('.sp-bg-b'),
@@ -189,7 +219,9 @@
         bar: q('.sp-progress-bar'),
         ending: q('.sp-ending'),
         endingTitle: q('.sp-ending-title'),
-        endingRestart: q('.sp-ending-restart'),
+        endingCover: q('.sp-ending-cover'),
+        endingLeft: q('.sp-ending-left'),
+        endingRight: q('.sp-ending-right'),
         endingText: q('.sp-ending-text'),
         historyHelp: q('.sp-history-help'),
         historyClose: q('.sp-history-close'),
@@ -208,11 +240,11 @@
       const fallback = {
         ja:{
           'player.previous':'過去Scene','player.restart':'最初から','player.history':'過去Sceneをスクロール','player.history.close':'履歴を閉じる',
-          'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'最初から読む'
+          'player.ending.title':'読了','player.ending.text':'最後まで読みました。','player.ending.restart':'もう一度読む','player.ending.cover':'表紙に戻る'
         },
         en:{
           'player.previous':'Past Scenes','player.restart':'Restart','player.history':'Scroll past Scenes','player.history.close':'Close history',
-          'player.ending.title':'Finished','player.ending.text':'You reached the end.','player.ending.restart':'Read from start'
+          'player.ending.title':'Finished','player.ending.text':'You reached the end.','player.ending.restart':'Read again','player.ending.cover':'Back to cover'
         }
       };
       return fallback[this.uiLanguage]?.[key] || fallback.ja[key] || key;
@@ -226,7 +258,11 @@
       this.els.historyHelp.textContent = this._uiText('player.history');
       this.els.historyClose.setAttribute('aria-label', this._uiText('player.history.close'));
       this.els.endingText.textContent = this._uiText('player.ending.text');
-      this.els.endingRestart.textContent = this._uiText('player.ending.restart');
+      if(this.els.endingCover){
+        const coverLabel = this.uiLanguage==='en' ? 'Back to cover' : '表紙に戻る';
+        this.els.endingCover.innerHTML = `<small>COVER</small><strong>${coverLabel}</strong>`;
+      }
+      if(this.els.coverStart)this.els.coverStart.textContent = this.uiLanguage==='en' ? 'Start' : 'はじめる';
       if (!this.document) this.els.endingTitle.textContent = this._uiText('player.ending.title');
       return this.uiLanguage;
     }
@@ -236,63 +272,6 @@
       this._bound.push([el, event, fn, options]);
     }
 
-
-    _bindPageLifecycle() {
-      const suspend = () => this._suspendForBackground();
-      this._on(document, 'visibilitychange', () => {
-        if (document.hidden) suspend();
-      }, { passive: true });
-      this._on(global, 'pagehide', suspend, { passive: true });
-      // Supported by some Chromium/WebKit lifecycle implementations.
-      this._on(global, 'freeze', suspend, { passive: true });
-      // iOS fallback: lock/home may blur before visibilitychange settles.
-      this._on(global, 'blur', () => {
-        setTimeout(() => {
-          if (document.hidden || !document.hasFocus()) suspend();
-        }, 0);
-      }, { passive: true });
-    }
-
-    _suspendForBackground() {
-      if (this.destroyed || this._backgroundSuspended) return;
-      this._backgroundSuspended = true;
-
-      // AUTO must not advance Scenes while the browser/app is in background.
-      this.stopAuto();
-
-      // Pause persistent channels in-place so currentTime is preserved.
-      Object.values(this.audioEls || {}).forEach((audio) => {
-        try { audio.pause(); } catch (_) {}
-      });
-
-      // One-shots/SE should never continue in background and should not replay.
-      this.oneshots.forEach((audio) => {
-        try { audio.pause(); } catch (_) {}
-      });
-      this.oneshots.clear();
-
-      // Also suspend WebAudio if available; this is important on iOS lock.
-      if (this.audioContext?.state === 'running') {
-        try { this.audioContext.suspend(); } catch (_) {}
-      }
-
-      emit(this.host, 'sceneplayer:backgroundsuspend', { index: this.index });
-    }
-
-    _resumeAudioAfterBackgroundGesture() {
-      if (!this._backgroundSuspended) return;
-      this._backgroundSuspended = false;
-
-      // Resume only persistent channels that are still logically active.
-      ['bgm', 'ambient'].forEach((channel) => {
-        if (!this.audioState?.[channel]) return;
-        const audio = this.audioEls?.[channel];
-        if (!audio) return;
-        this._safePlay(audio);
-      });
-
-      emit(this.host, 'sceneplayer:backgroundresume', { index: this.index });
-    }
 
     _bindControls() {
       // iOS/WebKit: the reading gesture unlocks Web Audio and arms playback.
@@ -310,13 +289,14 @@
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
 
-      // Previous is no longer a one-scene step. It opens the continuous History Scroll.
+      // Header back arrow returns to the cover. History remains available by downward gesture.
       this._on(this.els.prev, 'click', (e) => {
         e.stopPropagation();
-        this.openHistory();
+        this.showCover({restart:true});
       });
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
-      this._on(this.els.endingRestart, 'click', () => this.restart());
+      if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover();});
+      if(this.els.endingCover)this._on(this.els.endingCover,'click',()=>this.showCover({restart:true}));
       this._on(this.els.auto, 'click', (e) => {
         e.stopPropagation();
         this.unlockAudio(true);
@@ -332,14 +312,6 @@
         if (!item) return;
         const nextIndex = Number(item.dataset.index);
         if (!Number.isInteger(nextIndex)) return;
-
-        // A swipe used to open History sets suppressNextClick so the synthetic
-        // click following that gesture cannot advance the story accidentally.
-        // Once the reader deliberately chooses a History item, that protection
-        // has served its purpose. Leaving it armed would swallow the first
-        // intentional tap after returning to the selected Scene.
-        this.suppressNextClick = false;
-
         this.closeHistory({ keepVisualState: true });
         this.goToVisited(nextIndex);
       });
@@ -347,6 +319,10 @@
 
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
+        if (this.host.classList.contains('live-edit-enabled')
+            && e.target.closest('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext')) {
+          return;
+        }
         if (this.suppressNextClick) {
           this.suppressNextClick = false;
           return;
@@ -400,12 +376,14 @@
           if (Math.max(Math.abs(dx), Math.abs(dy)) < this.options.swipeThreshold) return;
           this.suppressNextClick = true;
 
-          // Navigation is intentionally vertical on mobile:
-          // pull down = Past Scenes (only when the author allows it),
-          // push up = next Scene. Horizontal swipes do nothing.
+          // Pulling down/right enters History Scroll. Pushing up/left still advances
+          // only one unread Scene at a time.
           if (Math.abs(dy) >= Math.abs(dx)) {
             if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
             else if (dy < 0) this.next();
+          } else {
+            if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
+            else this.next();
           }
         }, { passive: true });
       }
@@ -415,44 +393,18 @@
       return /^https?:\/\//i.test(String(src || '').trim());
     }
 
-    _isAhakoHostedAudio(src) {
-      const value = String(src || '').trim();
-      if (!this._isExternalHttpAudio(value)) return false;
-      try {
-        const u = new URL(value, global.location?.href || undefined);
-        // Scene Studio's R2 asset endpoint explicitly serves
-        // Access-Control-Allow-Origin: *, so it is safe to route through
-        // MediaElementSource + GainNode. This is required on iPhone because
-        // Safari does not reliably honor HTMLMediaElement.volume for media
-        // playback; GainNode must own Scene volume/fade automation instead.
-        return (
-          u.hostname === 'scene-studio-api.a-hako.workers.dev' &&
-          u.pathname.startsWith('/asset/')
-        );
-      } catch (_) {
-        return false;
-      }
-    }
-
     _prepareAudioTransport(audio, src) {
       if (!audio) return;
-      const external = this._isExternalHttpAudio(src);
-      const corsWebAudio = this._isAhakoHostedAudio(src);
-
-      // Unknown third-party absolute URLs stay on native media as a safe
-      // fallback because their CORS policy is not guaranteed. Official ahako
-      // R2 assets are CORS-enabled and therefore use Web Audio even though
-      // their URL is absolute. That lets GainNode control volume/fades on iOS.
-      audio.__spNativeOnly = external && !corsWebAudio;
+      // Absolute HTTP(S) assets are intentionally played through the native
+      // HTMLMediaElement path. Routing them into MediaElementSource can become
+      // silent when the remote server/browser CORS combination is not suitable
+      // for Web Audio, even though the media element itself is perfectly able
+      // to play the file.
+      audio.__spNativeOnly = this._isExternalHttpAudio(src);
       audio.__spTransportSrc = src || '';
-
       if (audio.__spNativeOnly) {
         try { audio.crossOrigin = null; } catch (_) {}
-      } else if (external) {
-        // Must be set before assigning audio.src.
-        try { audio.crossOrigin = 'anonymous'; } catch (_) {}
       }
-
       emit(this.host, 'sceneplayer:audiotransport', {
         src: src || '',
         transport: audio.__spNativeOnly ? 'native-media' : 'web-audio'
@@ -636,10 +588,6 @@
       // user's gesture. _safePlay handles delayed graph attachment.
       this._flushPendingAudio();
 
-      // If iOS/backgrounding paused media, only a new trusted reader gesture
-      // is allowed to resume the persistent BGM/Ambient channels.
-      if (armPlayback) this._resumeAudioAfterBackgroundGesture();
-
       emit(this.host, 'sceneplayer:audiounlock', {
         webAudio: !!ctx,
         armed: this.audioPlaybackArmed,
@@ -793,7 +741,7 @@
       let audio = this.audioEls[channel];
       if (!audio || !command.src) return;
 
-      const desiredNativeOnly = this._isExternalHttpAudio(command.src) && !this._isAhakoHostedAudio(command.src);
+      const desiredNativeOnly = this._isExternalHttpAudio(command.src);
       const hasWebAudioGraph = this.audioSourceNodes.has(audio) || this.audioGainNodes.has(audio);
       const currentNativeOnly = audio.__spNativeOnly === true;
 
@@ -874,8 +822,6 @@
       const audio = new Audio();
       audio.preload = 'auto';
       audio.playsInline = true;
-      audio.muted = Boolean(this.muted);
-      audio.muted = Boolean(this.muted);
       this._prepareAudioTransport(audio, command.src);
       audio.src = command.src;
       try { audio.load(); } catch (_) {}
@@ -1101,13 +1047,27 @@
       this.els.author.textContent = doc.author || '';
       this.els.total.textContent = String(doc.scenes.length);
       this.refreshDocumentChrome({document:doc});
+      const authoredEndingLabel=String(doc.ending?.label || doc.ending?.title || '').trim();
+      this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
+      const endingFamilies={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};
+      this.els.endingTitle.style.setProperty('font-family', endingFamilies[doc.ending?.fontFamily]||endingFamilies.serif, 'important');
+      this.els.endingText.textContent = '';
+      const endingLinks=Array.isArray(doc.ending?.links)?doc.ending.links:[];
+      const endingHasPositions=endingLinks.some(x=>x?.position==='left'||x?.position==='right');
+      const left=endingHasPositions?(endingLinks.find(x=>x?.position==='left')||null):(endingLinks[0]||null);
+      const right=endingHasPositions?(endingLinks.find(x=>x?.position==='right')||null):(endingLinks.length>1?endingLinks[1]:null);
+      const applyEndingSlot=(button,item)=>{if(!button)return;const label=String(item?.label||item?.title||'').trim();const kicker=String(item?.kicker||'').trim();button.hidden=!label;const s=button.querySelector('small'),b=button.querySelector('strong');if(s){s.textContent=kicker;s.hidden=!kicker;}if(b)b.textContent=label;button.dataset.previewUrl=String(item?.url||item?.href||'').trim();};
+      applyEndingSlot(this.els.endingLeft,left); applyEndingSlot(this.els.endingRight,right);
       this.els.ending.hidden = true;
       this.backgroundState = null;
       this.backgroundLayerIndex = 0;
       this._resetBackgroundLayers();
-      this._audioRenderMode = 'load';
+      // Studio loads Scene 1 underneath the cover for layout/background,
+      // but Cover is not a Scene and must not execute Scene audio.
+      this._audioRenderMode = 'cover';
 
       this._render();
+      this.showCover();
       emit(this.host, 'sceneplayer:load', { document: doc, index: this.index });
       return this;
     }
@@ -1117,19 +1077,86 @@
       if (nextDocument) this.document = nextDocument;
       const doc = this.document;
       if (!doc) return false;
-      if (this.els.title) this.els.title.textContent = doc.title || '';
-      if (this.els.author) this.els.author.textContent = doc.author || '';
+
       const families = {
         serif: 'var(--sp-font-serif)',
         sans: 'var(--sp-font-sans)',
         mono: 'var(--sp-font-mono)'
       };
+      const coverFamily = families[doc.cover?.fontFamily] || families.serif;
+      const endingFamily = families[doc.ending?.fontFamily] || families.serif;
+      this.host.style.setProperty('--sp-cover-font', coverFamily);
+
+      const canonicalTitle = String(doc.title || '').trim()==='Untitled' ? '' : String(doc.title || '');
+      if (this.els.title) this.els.title.textContent = canonicalTitle;
+      if (this.els.author) this.els.author.textContent = doc.author || '';
+
+      const logoSrc = String(doc.cover?.logo?.src || '').trim();
+      if (this.els.coverLogo) {
+        this.els.coverLogo.src = logoSrc;
+        this.els.coverLogo.hidden = !logoSrc;
+      }
+      const coverText = doc.cover?.text || {}; // legacy read-only fallback
+      const visibility = doc.cover?.visibility || {};
+      const canonicalValue = (key, fallback='') => {
+        const clean=String(fallback??'');
+        if(clean.trim() && !(key==='title' && clean.trim()==='Untitled')) return clean;
+        return Object.prototype.hasOwnProperty.call(coverText,key) ? String(coverText[key] ?? '') : '';
+      };
+      const coverVisible = (key,value) => {
+        if(Object.prototype.hasOwnProperty.call(visibility,key)) return visibility[key]!==false && Boolean(String(value||'').trim());
+        if(Object.prototype.hasOwnProperty.call(coverText,key) && String(coverText[key]??'')==='') return false;
+        return Boolean(String(value||'').trim());
+      };
+      if (this.els.coverTitle) { const title=canonicalValue('title',doc.title||''); this.els.coverTitle.textContent=title; this.els.coverTitle.hidden=Boolean(logoSrc)||!coverVisible('title',title); }
+      if (this.els.coverAuthor) { const author=canonicalValue('author',doc.author||''); this.els.coverAuthor.textContent=author; this.els.coverAuthor.hidden=!coverVisible('author',author); }
+      if (this.els.coverSubtitle) { const subtitle=canonicalValue('subtitle',doc.metadata?.subtitle||doc.subtitle||''); this.els.coverSubtitle.textContent=subtitle; this.els.coverSubtitle.hidden=!coverVisible('subtitle',subtitle); }
+      if (this.els.coverEpisode) { const episode=canonicalValue('episode',doc.metadata?.episode||doc.episode||''); this.els.coverEpisode.textContent=episode; this.els.coverEpisode.hidden=!coverVisible('episode',episode); }
+      if (this.els.coverEpisodeTitle) { const episodeTitle=canonicalValue('episodeTitle',doc.metadata?.episodeTitle||doc.episodeTitle||''); this.els.coverEpisodeTitle.textContent=episodeTitle; this.els.coverEpisodeTitle.hidden=!coverVisible('episodeTitle',episodeTitle); }
+
+      const coverStyles = doc.cover?.styles || {};
+      const coverStyleMap = [
+        [this.els.coverTitle,'title'],
+        [this.els.coverSubtitle,'subtitle'],
+        [this.els.coverAuthor,'author'],
+        [this.els.coverEpisode,'episode'],
+        [this.els.coverEpisodeTitle,'episodeTitle']
+      ];
+      const coverSizeMap = {
+        small:'clamp(15px,3.5vw,22px)',
+        normal:'clamp(18px,4.6vw,30px)',
+        large:'clamp(24px,6.2vw,42px)',
+        xl:'clamp(30px,8vw,56px)'
+      };
+      const coverFontMap = {
+        serif:'var(--sp-font-serif)',
+        sans:'var(--sp-font-sans)',
+        mono:'var(--sp-font-mono)'
+      };
+      for (const [el,key] of coverStyleMap) {
+        if (!el) continue;
+        const st = coverStyles[key] || {};
+        el.style.removeProperty('color');
+        el.style.removeProperty('font-size');
+        el.style.removeProperty('font-family');
+        if (st.color) el.style.setProperty('color',String(st.color),'important');
+        if (st.size && st.size !== 'auto') {
+          const size = typeof st.size === 'number' ? `${st.size}px` : coverSizeMap[st.size];
+          if (size) el.style.setProperty('font-size',size,'important');
+        }
+        if (st.fontFamily && st.fontFamily !== 'inherit') {
+          const fam=coverFontMap[st.fontFamily];
+          if (fam) el.style.setProperty('font-family',fam,'important');
+        }
+      }
+
       const authoredEndingLabel = String(doc.ending?.label || doc.ending?.title || '').trim();
       if (this.els.endingTitle) {
         this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
-        this.els.endingTitle.style.fontFamily = families[doc.ending?.fontFamily] || families.serif;
+        this.els.endingTitle.style.setProperty('font-family', endingFamily, 'important');
         const endingStyle=doc.ending?.style||{};
         const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)'};
+        const fontMap={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};
         this.els.endingTitle.style.removeProperty('color');
         this.els.endingTitle.style.removeProperty('font-size');
         if(endingStyle.color)this.els.endingTitle.style.setProperty('color',String(endingStyle.color),'important');
@@ -1138,10 +1165,27 @@
           if(size)this.els.endingTitle.style.setProperty('font-size',size,'important');
         }
         if(endingStyle.fontFamily&&endingStyle.fontFamily!=='inherit'){
-          const fam=families[endingStyle.fontFamily];
+          const fam=fontMap[endingStyle.fontFamily];
           if(fam)this.els.endingTitle.style.setProperty('font-family',fam,'important');
         }
       }
+      const endingLinks = Array.isArray(doc.ending?.links) ? doc.ending.links : [];
+      const hasPositions = endingLinks.some((x) => x?.position === 'left' || x?.position === 'right');
+      const left = hasPositions ? (endingLinks.find((x) => x?.position === 'left') || null) : (endingLinks[0] || null);
+      const right = hasPositions ? (endingLinks.find((x) => x?.position === 'right') || null) : (endingLinks.length > 1 ? endingLinks[1] : null);
+      const applySlot = (button, item) => {
+        if (!button) return;
+        const label = String(item?.label || item?.title || '').trim();
+        const kicker = String(item?.kicker || '').trim();
+        button.hidden = !label;
+        const small = button.querySelector('small');
+        const strong = button.querySelector('strong');
+        if (small) { small.textContent = kicker; small.hidden = !kicker; }
+        if (strong) strong.textContent = label;
+        button.dataset.previewUrl = String(item?.url || item?.href || '').trim();
+      };
+      applySlot(this.els.endingLeft, left);
+      applySlot(this.els.endingRight, right);
       return true;
     }
 
@@ -1191,7 +1235,7 @@
     }
 
     openHistory(options = {}) {
-      if (!this.document || !this.options.allowPrevious || this.maxVisitedIndex <= 0) return false;
+      if (!this.document || !this.options.allowPrevious || (!this.options.historyAllScenes && this.maxVisitedIndex <= 0)) return false;
       this.stopAuto();
       this._clearPresentationTimers();
       this.historyOpen = true;
@@ -1233,7 +1277,6 @@
     closeHistory(options = {}) {
       if (!this.historyOpen) return false;
       this.historyOpen = false;
-      this.suppressNextClick = false;
       this.host.classList.remove('sp-history-open');
       this.els.history.hidden = true;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
@@ -1244,41 +1287,13 @@
       return true;
     }
 
-    _applyHistoryTypography(node, scene) {
-      if (!node || !scene) return;
-
-      const sceneTextStyle = scene?.presentation?.text || {};
-      const workTypography = this.document?.appearance?.typography || {};
-
-      const family = sceneTextStyle.fontFamily || workTypography.fontFamily || 'serif';
-      const families = {
-        serif: 'var(--sp-font-serif)',
-        sans: 'var(--sp-font-sans)',
-        mono: 'var(--sp-font-mono)'
-      };
-
-      node.style.fontFamily = families[family] || families.serif;
-
-      if (sceneTextStyle.fontWeight != null) {
-        node.style.fontWeight = String(sceneTextStyle.fontWeight);
-      }
-
-      if (sceneTextStyle.fontStyle) {
-        node.style.fontStyle = String(sceneTextStyle.fontStyle);
-      }
-
-      if (sceneTextStyle.letterSpacing != null) {
-        const v = sceneTextStyle.letterSpacing;
-        node.style.letterSpacing = typeof v === 'number' ? `${v}em` : String(v);
-      }
-    }
-
     _renderHistory() {
       if (!this.document) return;
       const fragment = document.createDocumentFragment();
       this.els.historyList.innerHTML = '';
 
-      for (let i = 0; i <= this.maxVisitedIndex; i += 1) {
+      const historyLastIndex = this.options.historyAllScenes ? this.document.scenes.length - 1 : this.maxVisitedIndex;
+      for (let i = 0; i <= historyLastIndex; i += 1) {
         const scene = this.document.scenes[i];
         const item = document.createElement('button');
         item.type = 'button';
@@ -1298,13 +1313,14 @@
           const mark = document.createElement('span');
           mark.className = 'sp-history-text';
           mark.textContent = '♪';
-          this._applyHistoryTypography(mark, scene);
           body.appendChild(mark);
         } else {
           const text = document.createElement('span');
           text.className = 'sp-history-text';
           text.textContent = scene.text || '';
-          this._applyHistoryTypography(text, scene);
+          // History is still a navigator, but typography should identify the
+          // actual Scene the author is reviewing.
+          this._applyTextStyle(text, scene.presentation?.text || {}, false);
           body.appendChild(text);
         }
 
@@ -1312,7 +1328,7 @@
           const sub = document.createElement('span');
           sub.className = 'sp-history-subtext';
           sub.textContent = scene.subText;
-          this._applyHistoryTypography(sub, scene);
+          this._applyTextStyle(sub, scene.presentation?.subText || {}, true);
           body.appendChild(sub);
         }
 
@@ -1389,7 +1405,7 @@
       let nextIndex = -1;
       if (typeof sceneOrIndex === 'number') nextIndex = sceneOrIndex;
       else if (typeof sceneOrIndex === 'string') nextIndex = this.document.scenes.findIndex((s) => s.id === sceneOrIndex);
-      if (nextIndex < 0 || nextIndex > this.maxVisitedIndex) return false;
+      if (nextIndex < 0 || nextIndex > (this.options.historyAllScenes ? this.document.scenes.length - 1 : this.maxVisitedIndex)) return false;
       return this.goTo(nextIndex, { audioMode: 'history' });
     }
 
@@ -1409,6 +1425,112 @@
       this._audioRenderMode = options.audioMode === 'history' ? 'history' : 'restore';
       this._render();
       emit(this.host, 'sceneplayer:scenechange', { index: this.index, scene: this.currentScene, direction: 'jump' });
+      return true;
+    }
+
+    showCover(options = {}) {
+      if (!this.document || !this.els?.cover) return false;
+      if (options.restart) {
+        this._finishVisibleEntranceEffects();
+        this._clearAutoTimer();
+        this._resetPresentationRuntime();
+        this._resetBackgroundRuntime();
+        this._stopAllAudio(true);
+        this.audioPlaybackArmed = false;
+        this.index = 0;
+        this.maxVisitedIndex = 0;
+        this.closeHistory({ keepVisualState: true });
+        this.ended = false;
+        this.els.ending.hidden = true;
+        this._audioRenderMode = 'restore';
+        this._render();
+      }
+      this.refreshDocumentChrome();
+
+      // Public Player parity:
+      // Cover can be reopened/re-rendered after load, so explicitly reapply
+      // authored per-field typography here as well. This prevents CSS defaults
+      // from restoring the original cover sizes after publication.
+      const coverStyles=this.document.cover?.styles||{};
+      const coverSizeMap={
+        small:'clamp(15px,3.5vw,22px)',
+        normal:'clamp(18px,4.6vw,30px)',
+        large:'clamp(24px,6.2vw,42px)',
+        xl:'clamp(30px,8vw,56px)'
+      };
+      const coverFontMap={
+        serif:'var(--sp-font-serif)',
+        sans:'var(--sp-font-sans)',
+        mono:'var(--sp-font-mono)'
+      };
+      const coverStyleTargets=[
+        [this.els.coverTitle,'title'],
+        [this.els.coverSubtitle,'subtitle'],
+        [this.els.coverAuthor,'author'],
+        [this.els.coverEpisode,'episode'],
+        [this.els.coverEpisodeTitle,'episodeTitle']
+      ];
+      for(const [el,key] of coverStyleTargets){
+        if(!el)continue;
+        const st=coverStyles[key]||{};
+        el.style.removeProperty('font-size');
+        el.style.removeProperty('font-family');
+        el.style.removeProperty('color');
+
+        if(st.color){
+          el.style.setProperty('color',String(st.color),'important');
+        }
+        if(st.size && st.size!=='auto'){
+          const resolved=typeof st.size==='number'
+            ? `${st.size}px`
+            : coverSizeMap[String(st.size)];
+          if(resolved)el.style.setProperty('font-size',resolved,'important');
+        }
+        if(st.fontFamily && st.fontFamily!=='inherit'){
+          const family=coverFontMap[String(st.fontFamily)];
+          if(family)el.style.setProperty('font-family',family,'important');
+        }
+      }
+
+      const cover=this.document.cover||{};
+      const src=String(cover.src||cover.url||cover.image||'').trim();
+      if(this.els.coverBg){
+        this.els.coverBg.style.backgroundImage=src?`url("${src.replace(/"/g,'\\"')}")`:'none';
+        this.els.coverBg.style.backgroundSize=cover.fit==='contain'?'contain':'cover';
+        this.els.coverBg.style.backgroundPosition=cover.position||'center center';
+      }
+      const coverText=this.document.cover?.text||{}; // legacy fallback only
+      const visibility=this.document.cover?.visibility||{};
+      const coverValue=(key,fallback='')=>{
+        const clean=String(fallback??'');
+        if(clean.trim() && !(key==='title'&&clean.trim()==='Untitled'))return clean;
+        return Object.prototype.hasOwnProperty.call(coverText,key)?String(coverText[key]??''):'';
+      };
+      const coverVisible=(key,value)=>{
+        if(Object.prototype.hasOwnProperty.call(visibility,key))return visibility[key]!==false&&Boolean(String(value||'').trim());
+        if(Object.prototype.hasOwnProperty.call(coverText,key)&&String(coverText[key]??'')==='')return false;
+        return Boolean(String(value||'').trim());
+      };
+      const logoSrc=String(this.document.cover?.logo?.src||'').trim();
+      if(this.els.coverLogo){this.els.coverLogo.src=logoSrc;this.els.coverLogo.hidden=!logoSrc;}
+      if(this.els.coverAuthor){const author=coverValue('author',this.document.author||'');this.els.coverAuthor.textContent=author;this.els.coverAuthor.hidden=!coverVisible('author',author);}
+      if(this.els.coverEpisode){const ep=coverValue('episode',this.document.metadata?.episode||this.document.episode||'');this.els.coverEpisode.textContent=ep;this.els.coverEpisode.hidden=!coverVisible('episode',ep);}
+      if(this.els.coverEpisodeTitle){const epTitle=coverValue('episodeTitle',this.document.metadata?.episodeTitle||this.document.episodeTitle||'');this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!coverVisible('episodeTitle',epTitle);}
+      if(this.els.coverTitle){const title=coverValue('title',this.document.title||'');this.els.coverTitle.textContent=title;this.els.coverTitle.hidden=Boolean(logoSrc)||!coverVisible('title',title);}
+      if(this.els.coverSubtitle){const sub=coverValue('subtitle',this.document.metadata?.subtitle||this.document.subtitle||'');this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!coverVisible('subtitle',sub);}
+      this.els.cover.hidden=false;
+      this.host.classList.add('sp-cover-open');
+      return true;
+    }
+
+    _beginFromCover() {
+      if(!this.document || !this.els?.cover)return false;
+      this.unlockAudio(true);
+      this.els.cover.hidden=true;
+      this.host.classList.remove('sp-cover-open');
+      this._audioRenderMode='restore';
+      this._render();
+      emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index});
       return true;
     }
 
@@ -1432,6 +1554,7 @@
       this.els.ending.hidden = true;
       this._audioRenderMode = 'restore';
       this._render();
+      this.showCover();
       emit(this.host, 'sceneplayer:restart', { scene: this.currentScene });
     }
 
@@ -1441,42 +1564,17 @@
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this.ended = true;
+      this.els.ending.classList.remove('is-visible');
       this.els.ending.hidden = false;
-      emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
-    }
 
-    fadeOutAudio(duration = 1600, { includeOneShots = true } = {}) {
-      const ms = Math.max(0, Number(duration) || 0);
-      this._clearAudioTimers();
-
-      ['bgm', 'ambient'].forEach((channel) => {
-        this._stopPersistentChannel(channel, ms);
+      // Match the Public Player ending timing:
+      // - ending copy begins its own 280ms-delayed fade immediately
+      // - action boxes keep their CSS 3000ms afterglow delay
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => this.els.ending?.classList.add('is-visible'));
       });
 
-      if (includeOneShots) {
-        this.oneshots.forEach((audio) => {
-          if (!audio || audio.paused) return;
-          const startVolume = Number.isFinite(audio.volume) ? audio.volume : 1;
-          const startedAt = performance.now();
-          const step = (now) => {
-            if (!this.oneshots.has(audio)) return;
-            const t = Math.min(1, (now - startedAt) / Math.max(1, ms));
-            try { audio.volume = Math.max(0, startVolume * (1 - t)); } catch (_) {}
-            if (t < 1) requestAnimationFrame(step);
-            else {
-              try { audio.pause(); } catch (_) {}
-              this.oneshots.delete(audio);
-            }
-          };
-          if (ms > 0) requestAnimationFrame(step);
-          else {
-            try { audio.pause(); } catch (_) {}
-            this.oneshots.delete(audio);
-          }
-        });
-      }
-
-      return ms;
+      emit(this.host, 'sceneplayer:end', { document: this.document, index: this.index });
     }
 
     setMuted(muted = true) {
@@ -1772,8 +1870,12 @@
 
       this._applyCorePresentation(active);
       this._applyBackgroundForIndex(this.index);
+
       if (this._audioRenderMode === 'preview') {
         // Authoring refresh leaves the currently playing transport untouched.
+      } else if (this._audioRenderMode === 'cover') {
+        // Cover preload: visuals only. Scene BGM / Ambient / SE must remain silent.
+        this._stopAllAudio(true);
       } else if (this._audioRenderMode === 'advance') {
         this._applySceneAudio(active, false);
       } else {
@@ -1947,10 +2049,13 @@
       const type = ['parallax','breath','slowZoom','panLeft','panRight','panUp','panDown'].includes(motion.type) ? motion.type : null;
       if (!type) return;
       layer.classList.add(`sp-motion-${type}`);
-      layer.style.setProperty('--sp-bg-duration', `${Math.max(250, asNumber(motion.duration, 12000))}ms`);
-      layer.style.setProperty('--sp-bg-scale-from', String(asNumber(motion.scaleFrom, 1)));
-      layer.style.setProperty('--sp-bg-scale-to', String(asNumber(motion.scaleTo, type === 'slowZoom' ? 1.08 : 1.04)));
-      layer.style.setProperty('--sp-bg-pan', `${asNumber(motion.pan, 4)}%`);
+      const defaultDuration = type === 'breath' ? 4200 : 6500;
+      const defaultFrom = type === 'slowZoom' ? 1.0 : 1.06;
+      const defaultTo = type === 'slowZoom' ? 1.14 : (type === 'breath' ? 1.11 : 1.08);
+      layer.style.setProperty('--sp-bg-duration', `${Math.max(250, asNumber(motion.duration, defaultDuration))}ms`);
+      layer.style.setProperty('--sp-bg-scale-from', String(asNumber(motion.scaleFrom, defaultFrom)));
+      layer.style.setProperty('--sp-bg-scale-to', String(asNumber(motion.scaleTo, defaultTo)));
+      layer.style.setProperty('--sp-bg-pan', `${asNumber(motion.pan, 9)}%`);
     }
 
     _applyBackgroundOverlays(state) {
@@ -1959,6 +2064,7 @@
       const useLightWash = sceneTone ? sceneTone === 'light' : isCinemaLight;
       const themeDefaultDim = this.document?.theme === 'cinema' ? (useLightWash ? 0.72 : 0.34) : (useLightWash ? 0.64 : 0);
       const dim = clamp(asNumber(state.dim, themeDefaultDim), 0, 1);
+      // A Scene may explicitly choose a light paper wash or a dark veil.
       this.els.veil.style.background = useLightWash
         ? `rgba(250,247,240,${dim})`
         : `rgba(0,0,0,${dim})`;
@@ -2220,39 +2326,26 @@
       this.typingState = { timer, node, text: scene.text, sceneId: scene.id };
     }
 
-    destroy(options = {}) {
+    destroy() {
       if (this.destroyed) return;
-      const preserveHost = Boolean(options?.preserveHost);
-
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this._stopAllAudio(true);
-
       if (this.audioContext && typeof this.audioContext.close === 'function') {
         try { this.audioContext.close(); } catch (_) {}
       }
-
       this.audioGainNodes.clear();
       this.audioSourceNodes.clear();
-      this._bound.forEach(([el, event, fn, eventOptions]) => {
-        el.removeEventListener(event, fn, eventOptions);
-      });
+      this._bound.forEach(([el, event, fn, options]) => el.removeEventListener(event, fn, options));
       this._bound.length = 0;
-
-      // Public Player may keep an old instance alive briefly only so its audio
-      // can fade out. A newer instance can already be using the SAME host.
-      // Never let delayed cleanup of the old instance erase the new DOM.
-      if (!preserveHost) {
-        this.host.innerHTML = '';
-        this.host.classList.remove('sp-core');
-      }
-
+      this.host.innerHTML = '';
+      this.host.classList.remove('sp-core');
       this.destroyed = true;
     }
   }
 
-  ScenePlayerCore.VERSION = '1.12.15-public.19-entry-motion';
+  ScenePlayerCore.VERSION = '1.4.2-entry-motion';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
