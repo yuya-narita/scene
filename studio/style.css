@@ -8797,3 +8797,48 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     scroll-padding-top:18px;
   }
 }
+
+
+/* v1.5 — desktop cover-position editor: fit the whole editor in one viewport */
+@media (min-width:601px){
+  .cover-position-dialog{
+    top:52px;
+    bottom:0;
+    height:calc(100dvh - 52px);
+    padding:8px 18px 10px;
+    overflow:hidden;
+    place-items:center;
+  }
+
+  .cover-position-card{
+    width:min(680px, calc(100vw - 36px));
+    height:calc(100dvh - 68px);
+    max-height:calc(100dvh - 68px);
+    overflow:hidden;
+    padding-top:8px;
+    padding-bottom:10px;
+    display:flex;
+    flex-direction:column;
+  }
+
+  .cover-position-stage{
+    flex:1 1 auto;
+    min-height:0;
+    height:auto;
+    max-height:none;
+    width:auto;
+    max-width:100%;
+    margin-left:auto;
+    margin-right:auto;
+  }
+
+  .cover-position-stage img{
+    max-height:100%;
+  }
+
+  .cover-position-reset{
+    flex:0 0 auto;
+    margin-top:10px;
+    margin-bottom:0;
+  }
+}
