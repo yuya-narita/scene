@@ -314,6 +314,11 @@
         if (!Number.isInteger(nextIndex)) return;
         this.closeHistory({ keepVisualState: true });
         this.goToVisited(nextIndex);
+        // The swipe that opened History arms suppressNextClick so its synthetic
+        // click cannot advance a Scene. Once the author explicitly selects a
+        // History Scene, that protection is stale; clear it so the very next tap
+        // advances normally.
+        this.suppressNextClick = false;
       });
       this._on(this.els.historyScroll, 'scroll', () => this._scheduleHistoryDepth(), { passive: true });
 
