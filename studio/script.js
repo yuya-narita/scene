@@ -3407,8 +3407,8 @@
           type:motion,
           duration,
           pan:amount,
-          scaleFrom: motion==='slowZoom' ? 1 : (/^pan/.test(motion) ? 1+amount*2.12/100 : 1+amount/200),
-          scaleTo: /^pan/.test(motion) ? 1+amount*2.12/100 : 1+amount/100
+          scaleFrom: motion==='slowZoom' ? 1 : (/^pan/.test(motion) ? Math.min(3,1.035/Math.max(.40,1-(Math.min(30,amount)/100*2))) : 1+amount/200),
+          scaleTo: /^pan/.test(motion) ? Math.min(3,1.035/Math.max(.40,1-(Math.min(30,amount)/100*2))) : 1+amount/100
         };
       }
       p.background=bg;
@@ -4282,12 +4282,30 @@
         scheduleDraftSave(80);
       }
 
-      // iOS can keep Scene Player chrome/background geometry from the full-screen
-      // position editor for one frame. A settled redraw restores the footer and
-      // cover background immediately (the same thing advancing a Scene was doing).
+      // iOS can preserve the editor-reserved footer padding after the full-screen
+      // position editor disappears. Leave sheet/toolbar edit mode first, then force
+      // the same geometry rebuild that advancing a Scene would trigger.
+      try{
+        closeLiveEditSheet();
+        setLiveToolbarVisible(false);
+        playerHost?.classList.remove('live-edit-toolbar-visible');
+        playerHost?.style?.removeProperty('--live-keyboard-inset');
+        document.body.classList.remove('live-inline-text-edit','mobile-live-detail-open','live-edit-sheet-open');
+      }catch(error){console.warn('position editor chrome cleanup failed',error);}
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         if(liveEditEnabled && player && !playerScreen?.hidden){
-          refreshLivePlayer({preserveSheet:true});
+          try{
+            const doc=getDocumentForPlayback();
+            if(typeof player.refreshCurrent==='function'){
+              player.refreshCurrent({document:doc,index:player.index,preserveAudio:true});
+            }else{
+              player.document=doc;
+              player._render?.();
+            }
+            refreshLivePlayer({preserveSheet:false});
+            window.dispatchEvent(new Event('resize'));
+            void playerHost?.offsetHeight;
+          }catch(error){console.error(error);}
         }
       }));
       return;
@@ -6337,10 +6355,15 @@ function openDesktopBackgroundDetail(){
     };
 
     const explicit=()=>p.background && typeof p.background==='object' ? p.background : null;
-    const safePanScale=(pan)=>1+Math.max(1,Number(pan)||9)*2.12/100;
+    const safePanScale=(pan)=>{
+      const pct=Math.max(1,Math.min(30,Number(pan)||9))/100;
+      // Exact no-gap scale for symmetric ±pan movement, plus a small safety
+      // margin for fractional pixels / iOS compositing.
+      return Math.min(3,1.035/Math.max(.40,1-(pct*2)));
+    };
     const ensurePanCoverage=(motion)=>{
       if(!motion || !/^pan/.test(motion.type||''))return motion;
-      const pan=Math.max(1,Number(motion.pan)||9);
+      const pan=Math.max(1,Math.min(30,Number(motion.pan)||9));
       const scale=safePanScale(pan);
       motion.pan=pan;
       motion.scaleFrom=Math.max(Number(motion.scaleFrom)||1,scale);
