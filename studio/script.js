@@ -404,14 +404,14 @@
       assets:serializeDraftAssets()
     };
   }
-  async function saveDraftNow(){
+  async function saveDraftNow({force=false}={}){
     try{
       clearTimeout(draftSaveTimer);
       const row=await buildDraftRecord();
       if(!row)return true;
       if(!await getDraftRecord(row.id)){
         const all=await listDraftRecords();
-        if(all.length>=DRAFT_MAX){
+        if(all.length>=DRAFT_MAX && !force){
           const ind=$('#draftSaveIndicator');
           if(ind){ind.textContent=t('draft.full');ind.hidden=false;}
           return false;
@@ -500,8 +500,21 @@
     }
   }
 
+  function draftPublicationUrl(row){
+    const pub=row?.publication||{};
+    if(pub.url)return String(pub.url);
+    if(pub.id && !Number(pub.stoppedAt)){
+      return `${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(pub.id)}`;
+    }
+    return '';
+  }
+
+  function draftIsPublished(row){
+    return Boolean(draftPublicationUrl(row));
+  }
+
   function draftPublishStatus(row){
-    if(!row?.publication?.url)return 'unpublished';
+    if(!draftIsPublished(row))return 'unpublished';
     const current=draftPublishFingerprint(row);
     return current && current===row.publication?.fingerprint ? 'published' : 'dirty';
   }
@@ -605,8 +618,8 @@
     const list=$('#draftList');
     if(!list)return;
 
-    const publishedRows=rows.filter(row=>Boolean(row.publication?.url));
-    const draftRows=rows.filter(row=>!row.publication?.url);
+    const publishedRows=rows.filter(draftIsPublished);
+    const draftRows=rows.filter(row=>!draftIsPublished(row));
     const allCount=$('#allCountLabel');
     const draftOnlyCount=$('#draftOnlyCountLabel');
     const publishedCount=$('#publishedCountLabel');
@@ -631,7 +644,8 @@
     visibleRows.forEach(row=>{
       const total=row.sceneCount||row.document?.scenes?.length||0;
       const rec=Math.min(total,Number(row.recProgress?.completedCount||row.recCompletedCount||0));
-      const isPublished=Boolean(row.publication?.url);
+      const publicationUrl=draftPublicationUrl(row);
+      const isPublished=Boolean(publicationUrl);
       const isStopped=!isPublished && Boolean(row.publication?.id);
       const status=isPublished?draftPublishStatus(row):(isStopped?'stopped':'draft');
       const el=document.createElement('article');
@@ -674,9 +688,10 @@
       el.querySelector('.unified-work-meta').textContent=meta;
 
       if(isPublished){
-        el.querySelector('.published-url').textContent=row.publication.url;
-        el.querySelector('[data-share]').onclick=()=>shareDraftPublication(row);
-        el.querySelector('[data-copy]').onclick=e=>copyAnyPublishedUrl(row.publication.url,e.currentTarget);
+        el.querySelector('.published-url').textContent=publicationUrl;
+        const publishRow={...row,publication:{...(row.publication||{}),url:publicationUrl}};
+        el.querySelector('[data-share]').onclick=()=>shareDraftPublication(publishRow);
+        el.querySelector('[data-copy]').onclick=e=>copyAnyPublishedUrl(publicationUrl,e.currentTarget);
         el.querySelector('[data-stop]').onclick=()=>stopDraftPublication(row);
       }
       if(isStopped)el.querySelector('[data-republish]').onclick=()=>republishDraftPublication(row);
@@ -713,6 +728,16 @@
   }
 
   async function startNewDraft(){
+    // Never create an invisible/unsavable 11th work.
+    const rowsBefore=await listDraftRecords();
+    const currentStored=currentDraftId ? await getDraftRecord(currentDraftId) : null;
+    if(rowsBefore.length>=DRAFT_MAX && currentStored){
+      alert(uiLanguage==='ja'
+        ? `制作途中の作品が${DRAFT_MAX}件あります。新しく作る前に、不要な作品を1件削除してください。`
+        : `You already have ${DRAFT_MAX} local works. Delete one before creating another.`);
+      return false;
+    }
+
     // Never abandon the currently edited work silently.
     const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
     const saved=await saveDraftNow();
@@ -2826,7 +2851,9 @@
       if(text)text.textContent=latestPublishedUrl;
       setPublishState('success');
       syncPublishCopyForStatus();
-      await saveDraftNow();
+      // Publication state is more important than the soft 10-work shelf limit.
+      // Never leave a hosted work detached from its local record.
+      await saveDraftNow({force:true});
 
     }catch(error){
       console.warn('Publish failed',error);
