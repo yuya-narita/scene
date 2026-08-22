@@ -4245,6 +4245,7 @@
     coverPositionBeforeEdit={x:pos.x,y:pos.y};
     if(coverPositionStage)coverPositionStage.setAttribute('aria-label','背景画像の表示位置を調整');
     renderCoverPositionStage();
+    coverPositionDialog.style.zIndex='10120';
     coverPositionDialog.hidden=false;
     document.documentElement.classList.add('cover-position-open');
   }
@@ -4261,6 +4262,7 @@
       sceneBackgroundPositionContext=null;
       positionEditorMode='cover';
       coverPositionDialog.hidden=true;
+      coverPositionDialog.style.zIndex='';
       document.documentElement.classList.remove('cover-position-open');
       if(save){
         try{ctx.onApply?.();}catch(error){console.error(error);}
@@ -4271,6 +4273,7 @@
 
     if(!save){coverPositionX=coverPositionBeforeEdit.x;coverPositionY=coverPositionBeforeEdit.y;}
     coverPositionDialog.hidden=true;
+    coverPositionDialog.style.zIndex='';
     document.documentElement.classList.remove('cover-position-open');
 
     // Returning to Cover Quick Edit should immediately expose the adjust button.
@@ -6414,6 +6417,26 @@ function openDesktopBackgroundDetail(){
     assetRow.append(thumb,assetActions);
     sourceSec.appendChild(assetRow);
 
+    // Keep image framing controls beside the image source itself.
+    const sourceBg=explicit()||{};
+    const sourcePositionGrid=two(sourceSec);
+    const sourcePositionAdjust=desktopAction('表示位置を調整',()=>{
+      const bg=explicit();
+      if(!bg?.src)return;
+      openSceneBackgroundPositionEditor(scene,()=>{
+        scheduleDraftSave(40);
+        refreshLivePlayer({preserveSheet:true});
+      });
+    },'is-primary');
+    if(!sourceBg.src)sourcePositionAdjust.disabled=true;
+    sourcePositionGrid.append(
+      sourcePositionAdjust,
+      desktopDetailSelect('背景サイズ',[
+        ['cover','画面いっぱい（cover）'],
+        ['contain','画像全体（contain）']
+      ],sourceBg.fit||'cover',v=>{const bg=ensureImageState();bg.fit=v;apply();})
+    );
+
     // LIGHT ---------------------------------------------------------------
     const lightSec=section('明るさ・質感');
     const lightGrid=two(lightSec);
@@ -6463,26 +6486,6 @@ function openDesktopBackgroundDetail(){
           if(v<=0)delete bg.textures.monochrome;else bg.textures.monochrome=v;apply();
         }
       })
-    );
-
-    // POSITION ------------------------------------------------------------
-    const positionSec=section('表示位置');
-    const positionGrid=two(positionSec);
-    const positionAdjust=desktopAction('表示位置を調整',()=>{
-      const bg=explicit();
-      if(!bg?.src)return;
-      openSceneBackgroundPositionEditor(scene,()=>{
-        scheduleDraftSave(40);
-        refreshLivePlayer({preserveSheet:true});
-      });
-    },'is-primary');
-    if(!bg0.src)positionAdjust.disabled=true;
-    positionGrid.append(
-      positionAdjust,
-      desktopDetailSelect('背景サイズ',[
-        ['cover','画面いっぱい（cover）'],
-        ['contain','画像全体（contain）']
-      ],bg0.fit||'cover',v=>{const bg=ensureImageState();bg.fit=v;apply();})
     );
 
     // TRANSITION ----------------------------------------------------------
