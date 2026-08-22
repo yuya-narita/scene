@@ -216,18 +216,98 @@
     opening.hidden = true;
   }
 
+  function applyPublicCoverTypography(doc){
+    const styles=doc?.cover?.styles||{};
+    const baseFamily={
+      serif:'"Yu Mincho","Hiragino Mincho ProN",serif',
+      sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',
+      mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'
+    };
+    const sizeMap={
+      small:'clamp(15px,3.5vw,22px)',
+      normal:'clamp(18px,4.6vw,30px)',
+      large:'clamp(24px,6.2vw,42px)',
+      xl:'clamp(30px,8vw,56px)'
+    };
+    const fields=[
+      [introTitle,'title'],
+      [introDescription,'subtitle'],
+      [introAuthor,'author'],
+      [introEpisode,'episode'],
+      [introEpisodeTitle,'episodeTitle']
+    ];
+
+    for(const [el,key] of fields){
+      if(!el)continue;
+      const st=styles[key]||{};
+      el.style.removeProperty('font-size');
+      el.style.removeProperty('font-family');
+      el.style.removeProperty('color');
+
+      const family=st.fontFamily && st.fontFamily!=='inherit'
+        ? baseFamily[st.fontFamily]
+        : baseFamily[doc?.cover?.fontFamily];
+      if(family)el.style.setProperty('font-family',family,'important');
+
+      if(st.color)el.style.setProperty('color',String(st.color),'important');
+
+      if(st.size && st.size!=='auto'){
+        const resolved=typeof st.size==='number'
+          ? `${st.size}px`
+          : sizeMap[String(st.size)];
+        if(resolved)el.style.setProperty('font-size',resolved,'important');
+      }
+    }
+  }
+
   function applyDocumentMeta(doc) {
-    document.title = doc.title || 'Scene';
+    const cleanTitle=String(doc.title||'').trim()==='Untitled'?'':String(doc.title||'');
+    document.title = cleanTitle || 'Scene';
+
+    const legacyText=doc.cover?.text||{};
+    const visibility=doc.cover?.visibility||{};
+    const visible=(key,value)=>{
+      if(Object.prototype.hasOwnProperty.call(visibility,key)){
+        return visibility[key]!==false && Boolean(String(value||'').trim());
+      }
+      if(Object.prototype.hasOwnProperty.call(legacyText,key) && String(legacyText[key]??'')===''){
+        return false;
+      }
+      return Boolean(String(value||'').trim());
+    };
+
     const logoSrc=String(doc.cover?.logo?.src||'').trim();
     if(introLogo){introLogo.src=logoSrc;introLogo.hidden=!logoSrc;}
-    introTitle.textContent = doc.title || 'Scene';
-    introTitle.hidden=Boolean(logoSrc);
-    introAuthor.textContent = doc.author || '';
-    if(introEpisode){const ep=doc.metadata?.episode||doc.episode||'';introEpisode.textContent=ep;introEpisode.hidden=!ep;}
-    if(introEpisodeTitle){const et=doc.metadata?.episodeTitle||doc.episodeTitle||'';introEpisodeTitle.textContent=et;introEpisodeTitle.hidden=!et;}
-    introDescription.textContent = doc.description || doc.metadata?.subtitle || doc.subtitle || '';
+
+    const title=cleanTitle;
+    const subtitle=String(doc.metadata?.subtitle||doc.subtitle||'');
+    const author=String(doc.author||'');
+    const ep=String(doc.metadata?.episode||doc.episode||'');
+    const et=String(doc.metadata?.episodeTitle||doc.episodeTitle||'');
+
+    introTitle.textContent=title;
+    introTitle.hidden=Boolean(logoSrc)||!visible('title',title);
+
+    introAuthor.textContent=author;
+    introAuthor.hidden=!visible('author',author);
+
+    if(introEpisode){
+      introEpisode.textContent=ep;
+      introEpisode.hidden=!visible('episode',ep);
+    }
+    if(introEpisodeTitle){
+      introEpisodeTitle.textContent=et;
+      introEpisodeTitle.hidden=!visible('episodeTitle',et);
+    }
+
+    // This node is the public cover's subtitle slot.
+    // Do not substitute the long work description here.
+    introDescription.textContent=subtitle;
+    introDescription.hidden=!visible('subtitle',subtitle);
+
     setTheme(doc);
     applyCover(doc);
+    applyPublicCoverTypography(doc);
     buildEnding(doc);
     continueButton.hidden = safeProgress() <= 0;
   }
