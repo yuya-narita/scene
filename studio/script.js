@@ -3407,8 +3407,8 @@
           type:motion,
           duration,
           pan:amount,
-          scaleFrom: motion==='slowZoom' ? 1 : 1+amount/200,
-          scaleTo: 1+amount/100
+          scaleFrom: motion==='slowZoom' ? 1 : (/^pan/.test(motion) ? 1+amount*2.12/100 : 1+amount/200),
+          scaleTo: /^pan/.test(motion) ? 1+amount*2.12/100 : 1+amount/100
         };
       }
       p.background=bg;
@@ -4805,12 +4805,24 @@
     return {scene:workingDocument?.scenes?.[i]||null,index:i};
   }
   function closeLiveEditSheet(){
+    const wasOpen=!!(liveEditSheet && !liveEditSheet.hidden);
     if(liveEditSheet){
       liveEditSheet.hidden=true;
       liveEditSheet.classList.remove('live-edit-sheet-timing','live-edit-sheet-audio','mobile-live-detail-sheet');
     }
     document.body.classList.remove('live-edit-sheet-open','mobile-live-detail-open');
     liveShellTextContext=null;
+    if(wasOpen && liveEditEnabled && player && !playerScreen?.hidden){
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        try{
+          const doc=getDocumentForPlayback();
+          if(typeof player.refreshCurrent==='function')player.refreshCurrent({document:doc,index:player.index,preserveAudio:true});
+          else{player.document=doc;player._render?.();}
+          window.dispatchEvent(new Event('resize'));
+          void playerHost?.offsetHeight;
+        }catch(error){console.error(error);}
+      }));
+    }
   }
   function clearCoverToolbarState(){
     if(!liveEditToolbar)return;
@@ -6320,11 +6332,21 @@ function openDesktopBackgroundDetail(){
 
     const apply=()=>{
       scheduleDraftSave(40);
-      refreshLivePlayer({preserveSheet:false});
-      renderDesktopLivePanel();
+      refreshLivePlayer({preserveSheet:true});
+      if(desktopLiveActive())renderDesktopLivePanel();
     };
 
     const explicit=()=>p.background && typeof p.background==='object' ? p.background : null;
+    const safePanScale=(pan)=>1+Math.max(1,Number(pan)||9)*2.12/100;
+    const ensurePanCoverage=(motion)=>{
+      if(!motion || !/^pan/.test(motion.type||''))return motion;
+      const pan=Math.max(1,Number(motion.pan)||9);
+      const scale=safePanScale(pan);
+      motion.pan=pan;
+      motion.scaleFrom=Math.max(Number(motion.scaleFrom)||1,scale);
+      motion.scaleTo=Math.max(Number(motion.scaleTo)||1,scale);
+      return motion;
+    };
     const ensureImageState=()=>{
       if(!p.background || typeof p.background!=='object' || p.background.src===''){
         p.background={
@@ -6475,6 +6497,7 @@ function openDesktopBackgroundDetail(){
     const lightSec=section('明るさ・質感');
     const lightGrid=two(lightSec);
     const bg0=explicit()||{};
+    if(bg0.motion && /^pan/.test(bg0.motion.type||''))ensurePanCoverage(bg0.motion);
     lightGrid.append(
       desktopDetailSelect('ベール',[
         ['dark','暗く'],
@@ -6611,7 +6634,7 @@ function openDesktopBackgroundDetail(){
             format:v=>Math.round(v),
             oninput:v=>{
               const next=ensureImageState();
-              next.motion={...(next.motion||{}),type:motionType,pan:v};
+              next.motion=ensurePanCoverage({...(next.motion||{}),type:motionType,pan:v,scaleFrom:1,scaleTo:1});
               apply();
             }
           })
@@ -6626,6 +6649,7 @@ function openDesktopBackgroundDetail(){
         const v=motionSelect.value;
         bg.motion={...(bg.motion||{}),type:v};
         if(v==='none')bg.motion={type:'none'};
+        else if(/^pan/.test(v))bg.motion=ensurePanCoverage(bg.motion);
         apply();
         renderMotionControls();
       });
@@ -6667,8 +6691,8 @@ function openDesktopBackgroundDetail(){
     reset.addEventListener('click',()=>{
       delete p.background;
       scheduleDraftSave(40);
-      refreshLivePlayer({preserveSheet:false});
-      renderDesktopLivePanel();
+      refreshLivePlayer({preserveSheet:true});
+      if(desktopLiveActive())renderDesktopLivePanel();
       if(refreshMobileLiveDetail('background'))return;
       closeDesktopBackgroundDetail();
       openDesktopBackgroundDetail();
