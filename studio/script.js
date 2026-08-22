@@ -4282,16 +4282,9 @@
         scheduleDraftSave(80);
       }
 
-      // iOS can preserve the editor-reserved footer padding after the full-screen
-      // position editor disappears. Leave sheet/toolbar edit mode first, then force
-      // the same geometry rebuild that advancing a Scene would trigger.
-      try{
-        closeLiveEditSheet();
-        setLiveToolbarVisible(false);
-        playerHost?.classList.remove('live-edit-toolbar-visible');
-        playerHost?.style?.removeProperty('--live-keyboard-inset');
-        document.body.classList.remove('live-inline-text-edit','mobile-live-detail-open','live-edit-sheet-open');
-      }catch(error){console.warn('position editor chrome cleanup failed',error);}
+      // Return to the compact/detail sheet that launched the position editor.
+      // Do not close that sheet here; closing it prematurely leaves the Player
+      // toolbar/footer state out of sync on iPhone.
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         if(liveEditEnabled && player && !playerScreen?.hidden){
           try{
@@ -4302,7 +4295,6 @@
               player.document=doc;
               player._render?.();
             }
-            refreshLivePlayer({preserveSheet:false});
             window.dispatchEvent(new Event('resize'));
             void playerHost?.offsetHeight;
           }catch(error){console.error(error);}
@@ -6710,6 +6702,22 @@ function openDesktopBackgroundDetail(){
       await saveDraftNow();
       closeDesktopBackgroundDetail();
       renderDesktopLivePanel();
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        try{
+          if(liveEditEnabled && player && !playerScreen?.hidden){
+            const doc=getDocumentForPlayback();
+            if(typeof player.refreshCurrent==='function'){
+              player.refreshCurrent({document:doc,index:index,preserveAudio:true});
+            }else{
+              player.document=doc;
+              player.index=index;
+              player._render?.();
+            }
+            ensureLiveEditEmptyTarget();
+            window.dispatchEvent(new Event('resize'));
+          }
+        }catch(error){console.error(error);}
+      }));
     });
     reset.addEventListener('click',()=>{
       delete p.background;
@@ -8093,7 +8101,26 @@ function openDesktopTextDetail(){
     }
     renderLiveEditSheet(kind);
   });
-  $('#liveEditSheetClose')?.addEventListener('click',closeLiveEditSheet);
+  $('#liveEditSheetClose')?.addEventListener('click',()=>{
+    closeLiveEditSheet();
+    setLiveToolbarVisible(false);
+    playerHost?.classList.remove('live-edit-toolbar-visible');
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      try{
+        if(liveEditEnabled && player && !playerScreen?.hidden){
+          const doc=getDocumentForPlayback();
+          if(typeof player.refreshCurrent==='function'){
+            player.refreshCurrent({document:doc,index:player.index,preserveAudio:true});
+          }else{
+            player.document=doc;
+            player._render?.();
+          }
+          window.dispatchEvent(new Event('resize'));
+          void playerHost?.offsetHeight;
+        }
+      }catch(error){console.error(error);}
+    }));
+  });
   desktopPrevScene?.addEventListener('click',()=>{
     const {index}=liveEditScene();
     if(index>0)liveEditRenderAt(index-1,{preserveSheet:false});
