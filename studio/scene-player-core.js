@@ -1446,6 +1446,52 @@
         this._render();
       }
       this.refreshDocumentChrome();
+
+      // Public Player parity:
+      // Cover can be reopened/re-rendered after load, so explicitly reapply
+      // authored per-field typography here as well. This prevents CSS defaults
+      // from restoring the original cover sizes after publication.
+      const coverStyles=this.document.cover?.styles||{};
+      const coverSizeMap={
+        small:'clamp(15px,3.5vw,22px)',
+        normal:'clamp(18px,4.6vw,30px)',
+        large:'clamp(24px,6.2vw,42px)',
+        xl:'clamp(30px,8vw,56px)'
+      };
+      const coverFontMap={
+        serif:'var(--sp-font-serif)',
+        sans:'var(--sp-font-sans)',
+        mono:'var(--sp-font-mono)'
+      };
+      const coverStyleTargets=[
+        [this.els.coverTitle,'title'],
+        [this.els.coverSubtitle,'subtitle'],
+        [this.els.coverAuthor,'author'],
+        [this.els.coverEpisode,'episode'],
+        [this.els.coverEpisodeTitle,'episodeTitle']
+      ];
+      for(const [el,key] of coverStyleTargets){
+        if(!el)continue;
+        const st=coverStyles[key]||{};
+        el.style.removeProperty('font-size');
+        el.style.removeProperty('font-family');
+        el.style.removeProperty('color');
+
+        if(st.color){
+          el.style.setProperty('color',String(st.color),'important');
+        }
+        if(st.size && st.size!=='auto'){
+          const resolved=typeof st.size==='number'
+            ? `${st.size}px`
+            : coverSizeMap[String(st.size)];
+          if(resolved)el.style.setProperty('font-size',resolved,'important');
+        }
+        if(st.fontFamily && st.fontFamily!=='inherit'){
+          const family=coverFontMap[String(st.fontFamily)];
+          if(family)el.style.setProperty('font-family',family,'important');
+        }
+      }
+
       const cover=this.document.cover||{};
       const src=String(cover.src||cover.url||cover.image||'').trim();
       if(this.els.coverBg){
