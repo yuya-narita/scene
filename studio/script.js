@@ -4223,6 +4223,17 @@
     if(!save){coverPositionX=coverPositionBeforeEdit.x;coverPositionY=coverPositionBeforeEdit.y;}
     coverPositionDialog.hidden=true;
     document.documentElement.classList.remove('cover-position-open');
+
+    // Returning to Cover Quick Edit should immediately expose the adjust button.
+    // Previously it was only refreshed the next time the Quick Edit modal opened.
+    if(coverQuickPosition){
+      coverQuickPosition.hidden=!coverImageUrl;
+      coverQuickPosition.style.display=coverImageUrl?'':'none';
+    }
+    if(coverQuickImageClear){
+      coverQuickImageClear.hidden=!coverImageUrl;
+    }
+
     refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();
     if(save)scheduleDraftSave(80);
   }
