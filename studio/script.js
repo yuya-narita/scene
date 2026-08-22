@@ -4281,6 +4281,15 @@
         try{ctx.onApply?.();}catch(error){console.error(error);}
         scheduleDraftSave(80);
       }
+
+      // iOS can keep Scene Player chrome/background geometry from the full-screen
+      // position editor for one frame. A settled redraw restores the footer and
+      // cover background immediately (the same thing advancing a Scene was doing).
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(liveEditEnabled && player && !playerScreen?.hidden){
+          refreshLivePlayer({preserveSheet:true});
+        }
+      }));
       return;
     }
 
@@ -7559,6 +7568,16 @@ function openDesktopTextDetail(){
       return;
     }
     const {scene,index}=liveEditScene(); if(!scene||!liveEditSheetBody)return;
+
+    // Always normalize from a full-detail inspector back to the compact sheet.
+    // This prevents the top Scene / title / × header from staying hidden on reopen.
+    mobileLiveDetailOpening=false;
+    mobileLiveDetailReturnSection='';
+    document.body.classList.remove('mobile-live-detail-open');
+    liveEditSheet.classList.remove('mobile-live-detail-sheet');
+    const compactHead=liveEditSheet.querySelector('.live-edit-sheet-head');
+    if(compactHead)compactHead.hidden=false;
+
     liveEditSceneNumber.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     liveEditSheet.hidden=false;
     document.body.classList.add('live-edit-sheet-open');
