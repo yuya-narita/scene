@@ -223,12 +223,7 @@
       sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',
       mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'
     };
-    const sizeMap={
-      small:'clamp(15px,3.5vw,22px)',
-      normal:'clamp(18px,4.6vw,30px)',
-      large:'clamp(24px,6.2vw,42px)',
-      xl:'clamp(30px,8vw,56px)'
-    };
+    const sizeScale={small:.78,normal:1,large:1.28,xl:1.6};
     const fields=[
       [introTitle,'title'],
       [introDescription,'subtitle'],
@@ -243,6 +238,7 @@
       el.style.removeProperty('font-size');
       el.style.removeProperty('font-family');
       el.style.removeProperty('color');
+      const baseSize=parseFloat(getComputedStyle(el).fontSize)||16;
 
       const family=st.fontFamily && st.fontFamily!=='inherit'
         ? baseFamily[st.fontFamily]
@@ -253,9 +249,9 @@
 
       if(st.size && st.size!=='auto'){
         const resolved=typeof st.size==='number'
-          ? `${st.size}px`
-          : sizeMap[String(st.size)];
-        if(resolved)el.style.setProperty('font-size',resolved,'important');
+          ? Number(st.size)
+          : baseSize*(sizeScale[String(st.size)]||1);
+        if(Number.isFinite(resolved))el.style.setProperty('font-size',`${resolved}px`,'important');
       }
     }
   }
