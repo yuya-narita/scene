@@ -8778,3 +8778,22 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
 .cover-position-stage:active{cursor:grabbing}.cover-position-stage::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 2px rgba(255,255,255,.78)}
 .cover-position-reset{display:block;width:min(100%,430px);margin:14px auto 0;border:1px solid #d8dadd;background:#fff;border-radius:16px;padding:14px;font-weight:800}
 @media(max-width:600px){.cover-position-dialog{padding:0;place-items:end center}.cover-position-card{width:100%;max-height:calc(100dvh - 18px);border-radius:28px 28px 0 0;padding:16px 16px max(18px,env(safe-area-inset-bottom))}.cover-position-stage{width:min(82vw,360px);max-height:68dvh}}
+
+
+/* v1.4 — desktop cover-position modal: keep controls below the fixed Studio header */
+@media (min-width:601px){
+  .cover-position-dialog{
+    top:52px;
+    bottom:0;
+    left:0;
+    right:0;
+    inset:auto 0 0 0;
+    height:calc(100dvh - 52px);
+    padding:12px 18px 18px;
+    place-items:center;
+  }
+  .cover-position-card{
+    max-height:calc(100dvh - 82px);
+    scroll-padding-top:18px;
+  }
+}
