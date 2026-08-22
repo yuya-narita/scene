@@ -84,6 +84,25 @@
   let coverPositionBeforeEdit = {x:50,y:50};
   let positionEditorMode='cover';
   let sceneBackgroundPositionContext=null;
+  let coverPositionHomeParent=null;
+  let coverPositionHomeNext=null;
+  function portalCoverPositionDialog(){
+    if(!coverPositionDialog)return;
+    if(!coverPositionHomeParent){
+      coverPositionHomeParent=coverPositionDialog.parentNode;
+      coverPositionHomeNext=coverPositionDialog.nextSibling;
+    }
+    if(coverPositionDialog.parentNode!==document.body)document.body.appendChild(coverPositionDialog);
+  }
+  function restoreCoverPositionDialog(){
+    if(!coverPositionDialog||!coverPositionHomeParent)return;
+    if(coverPositionDialog.parentNode===coverPositionHomeParent)return;
+    if(coverPositionHomeNext && coverPositionHomeNext.parentNode===coverPositionHomeParent){
+      coverPositionHomeParent.insertBefore(coverPositionDialog,coverPositionHomeNext);
+    }else{
+      coverPositionHomeParent.appendChild(coverPositionDialog);
+    }
+  }
   const coverPositionCss=()=>`${Math.round(coverPositionX*100)/100}% ${Math.round(coverPositionY*100)/100}%`;
   function positionPairFromValue(value){
     const raw=String(value||'center center').trim().toLowerCase();
@@ -4226,6 +4245,7 @@
   }
   function openCoverPositionEditor(){
     if(!coverPositionDialog||!coverImageUrl)return;
+    restoreCoverPositionDialog();
     positionEditorMode='cover';
     sceneBackgroundPositionContext=null;
     coverPositionBeforeEdit={x:coverPositionX,y:coverPositionY};
@@ -4237,6 +4257,7 @@
   function openSceneBackgroundPositionEditor(scene,onApply){
     const bg=scene?.presentation?.background;
     if(!coverPositionDialog||!bg?.src)return;
+    portalCoverPositionDialog();
     const restoreCover={x:coverPositionX,y:coverPositionY};
     const pos=positionPairFromValue(bg.position||'center center');
     positionEditorMode='background';
@@ -4264,6 +4285,7 @@
       coverPositionDialog.hidden=true;
       coverPositionDialog.style.zIndex='';
       document.documentElement.classList.remove('cover-position-open');
+      restoreCoverPositionDialog();
       if(save){
         try{ctx.onApply?.();}catch(error){console.error(error);}
         scheduleDraftSave(80);
@@ -6407,19 +6429,19 @@ function openDesktopBackgroundDetail(){
         apply();
         closeDesktopBackgroundDetail();
         openDesktopBackgroundDetail();
+        // After a new image is chosen, go straight to framing.
+        setTimeout(()=>openSceneBackgroundPositionEditor(scene,()=>{
+          scheduleDraftSave(40);
+          refreshLivePlayer({preserveSheet:true});
+        }),0);
       });
     },'is-primary');
     const clear=desktopAction('画像を外す',()=>{
       p.background={src:'',transition:'fade',_editorManaged:true};
       apply();closeDesktopBackgroundDetail();openDesktopBackgroundDetail();
     });
-    assetActions.append(choose,clear);
-    assetRow.append(thumb,assetActions);
-    sourceSec.appendChild(assetRow);
 
-    // Keep image framing controls beside the image source itself.
     const sourceBg=explicit()||{};
-    const sourcePositionGrid=two(sourceSec);
     const sourcePositionAdjust=desktopAction('表示位置を調整',()=>{
       const bg=explicit();
       if(!bg?.src)return;
@@ -6429,8 +6451,14 @@ function openDesktopBackgroundDetail(){
       });
     },'is-primary');
     if(!sourceBg.src)sourcePositionAdjust.disabled=true;
+
+    // Same action group = same button dimensions as 画像を変更 / 画像を外す.
+    assetActions.append(choose,clear,sourcePositionAdjust);
+    assetRow.append(thumb,assetActions);
+    sourceSec.appendChild(assetRow);
+
+    const sourcePositionGrid=two(sourceSec);
     sourcePositionGrid.append(
-      sourcePositionAdjust,
       desktopDetailSelect('背景サイズ',[
         ['cover','画面いっぱい（cover）'],
         ['contain','画像全体（contain）']
@@ -7659,7 +7687,15 @@ function openDesktopTextDetail(){
       clear.onclick=()=>{p.background={src:'',transition:'fade',_editorManaged:true};scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
       actions.append(inherit,clear);
       const pick=makeActionButton(bg?.src?'画像を変更':'画像を選択','is-primary');
-      pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:p.background?.position||'center center',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};});
+      pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{
+        p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
+        // pickLiveFile refreshes the sheet after this callback. Open framing on
+        // the next task so the position editor stays on top of the refreshed UI.
+        setTimeout(()=>openSceneBackgroundPositionEditor(scene,()=>{
+          scheduleDraftSave(60);
+          refreshLivePlayer({preserveSheet:true});
+        }),0);
+      });
       const positionAdjust=makeActionButton('表示位置を調整');
       positionAdjust.disabled=!bg?.src;
       positionAdjust.onclick=()=>{
