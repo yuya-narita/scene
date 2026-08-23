@@ -8036,15 +8036,17 @@ function openDesktopTextDetail(){
     captureUndo('Scene結合を元に戻せます');
     const prev=workingDocument.scenes[index-1];
     const before=(prev.text||'').length;
-    const gap=(before&&scene.text?2:0);
-    prev.text=[prev.text,scene.text].filter(Boolean).join('\n\n');
+    // Merge without inserting any separator. This makes "split -> merge previous"
+    // a true reverse operation: only line breaks that already belong to either
+    // Scene's text are preserved.
+    prev.text=`${prev.text||''}${scene.text||''}`;
     if(scene.subText&&!prev.subText)prev.subText=scene.subText;
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(index-1);
     showUndo('前のSceneと結合しました');
     renderDesktopLivePanel();
     // Put the caret at the former Scene boundary so split -> merge feels like Undo.
-    focusDesktopSceneTextarea(before+gap);
+    focusDesktopSceneTextarea(before);
   }
 
   const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v5';
