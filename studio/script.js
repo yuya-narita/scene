@@ -7241,7 +7241,7 @@ function openDesktopTextDetail(){
     writingActions.append(
       writingButton('＋ 次に空Scene','Ctrl/⌘ ↵',desktopAddSceneAndFocus,false,'is-primary'),
       writingButton('｜↩︎ カーソル位置で分割','⇧ ↵',()=>desktopSplitFromActiveCaret(ta)),
-      writingButton('次Sceneと結合','',desktopMergeNext,index>=workingDocument.scenes.length-1)
+      writingButton('前Sceneと結合','',desktopMergePrevious,index<=0)
     );
     bodyCard.appendChild(writingActions);
 
@@ -8030,19 +8030,21 @@ function openDesktopTextDetail(){
     renderDesktopLivePanel();
     focusDesktopSceneTextarea(0);
   }
-  function desktopMergeNext(){
+  function desktopMergePrevious(){
     const {scene,index}=liveEditScene();
-    if(!scene||index>=workingDocument.scenes.length-1)return;
+    if(!scene||index<=0)return;
     captureUndo('Scene結合を元に戻せます');
-    const next=workingDocument.scenes[index+1];
-    const before=(scene.text||'').length;
-    scene.text=[scene.text,next.text].filter(Boolean).join('\n\n');
-    if(next.subText&&!scene.subText)scene.subText=next.subText;
-    workingDocument.scenes.splice(index+1,1);
-    liveEditReloadAt(index);
-    showUndo('次のSceneと結合しました');
+    const prev=workingDocument.scenes[index-1];
+    const before=(prev.text||'').length;
+    const gap=(before&&scene.text?2:0);
+    prev.text=[prev.text,scene.text].filter(Boolean).join('\n\n');
+    if(scene.subText&&!prev.subText)prev.subText=scene.subText;
+    workingDocument.scenes.splice(index,1);
+    liveEditReloadAt(index-1);
+    showUndo('前のSceneと結合しました');
     renderDesktopLivePanel();
-    focusDesktopSceneTextarea(before+(before&&next.text?2:0));
+    // Put the caret at the former Scene boundary so split -> merge feels like Undo.
+    focusDesktopSceneTextarea(before+gap);
   }
 
   const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v5';
@@ -8055,7 +8057,7 @@ function openDesktopTextDetail(){
     Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483647',display:'grid',placeItems:'center',background:'rgba(12,14,18,.45)',padding:'24px'});
     const modal=document.createElement('section');modal.className='desktop-writing-guide';
     Object.assign(modal.style,{width:'min(520px,calc(100vw - 48px))',background:'#fff',color:'#111',borderRadius:'24px',padding:'24px',boxShadow:'0 24px 80px rgba(0,0,0,.28)'});
-    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button type="button" aria-label="閉じる">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>改行</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>カーソル位置で分割</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>次に空Scene</span></div><div><kbd>↑</kbd><span>先頭行から前Sceneを編集</span></div><div><kbd>↓</kbd><span>最終行から次Sceneを編集</span></div></div><p>結合は本文欄の「次Sceneと結合」ボタンから行えます。</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
+    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button type="button" aria-label="閉じる">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>改行</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>カーソル位置で分割</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>次に空Scene</span></div><div><kbd>↑</kbd><span>先頭行から前Sceneを編集</span></div><div><kbd>↓</kbd><span>最終行から次Sceneを編集</span></div></div><p>分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
     overlay.appendChild(modal);document.body.appendChild(overlay);
     const close=()=>{try{localStorage.setItem(DESKTOP_WRITING_GUIDE_KEY,'1');}catch(_){}overlay.remove();};
     modal.querySelector('.desktop-writing-guide-head button')?.addEventListener('click',close);
