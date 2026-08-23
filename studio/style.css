@@ -8859,3 +8859,122 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   body.mobile-live-detail-open .desktop-background-position-row{grid-template-columns:1fr 1fr!important;align-items:end!important}
   body.mobile-live-detail-open .desktop-background-position-action{height:42px!important;min-height:42px!important}
 }
+
+/* =========================================================
+   Desktop writing flow v1 — PC Live Editor only
+   ========================================================= */
+@media (min-width:1100px){
+  .desktop-shortcut-button{
+    min-width:38px!important;
+    width:38px;
+    padding:0!important;
+    font-size:16px!important;
+  }
+  .desktop-writing-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8px;
+  }
+  .desktop-writing-action{
+    min-height:42px;
+    border:1px solid #d6d9dd;
+    border-radius:10px;
+    background:#fff;
+    color:#1c2024;
+    padding:7px 10px;
+    font:800 12px/1.25 system-ui;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    text-align:left;
+  }
+  .desktop-writing-action:hover{background:#f4f6f8}
+  .desktop-writing-action.is-primary{color:#0786e8}
+  .desktop-writing-action:disabled{opacity:.3}
+  .desktop-writing-action kbd{
+    margin-left:auto;
+    white-space:nowrap;
+    border:1px solid #d9dde1;
+    border-bottom-width:2px;
+    border-radius:6px;
+    background:#f7f8f9;
+    color:#7a8087;
+    padding:2px 6px;
+    font:700 10px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .desktop-writing-action kbd:empty{display:none}
+  .desktop-live-scene-ops{grid-template-columns:repeat(5,minmax(0,1fr));}
+
+  .desktop-writing-guide-overlay{
+    position:fixed;
+    z-index:10050;
+    inset:0;
+    display:grid;
+    place-items:center;
+    padding:24px;
+    background:rgba(24,28,33,.28);
+    backdrop-filter:blur(4px);
+  }
+  .desktop-writing-guide{
+    width:min(520px,calc(100vw - 48px));
+    border:1px solid #d9dde1;
+    border-radius:20px;
+    background:#fff;
+    box-shadow:0 24px 80px rgba(0,0,0,.18);
+    padding:20px;
+    display:grid;
+    gap:16px;
+    color:#181b1f;
+  }
+  .desktop-writing-guide-head{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+  }
+  .desktop-writing-guide-head>div{display:grid;gap:3px}
+  .desktop-writing-guide-head small{font:800 10px/1.2 system-ui;letter-spacing:.14em;color:#9a9fa6}
+  .desktop-writing-guide-head strong{font:900 20px/1.3 system-ui}
+  .desktop-writing-guide-head button{
+    width:38px;height:38px;border:0;border-radius:999px;background:#f1f2f4;font-size:24px;line-height:1;cursor:pointer;
+  }
+  .desktop-writing-guide-list{
+    border:1px solid #e0e3e6;
+    border-radius:14px;
+    overflow:hidden;
+  }
+  .desktop-writing-guide-list>div{
+    min-height:52px;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    padding:0 14px;
+    border-bottom:1px solid #eceef0;
+  }
+  .desktop-writing-guide-list>div:last-child{border-bottom:0}
+  .desktop-writing-guide-list span{margin-left:auto;font:750 13px system-ui;color:#33383e}
+  .desktop-writing-guide-list b{font:800 11px system-ui;color:#a1a6ac}
+  .desktop-writing-guide-list kbd{
+    border:1px solid #cfd4d9;
+    border-bottom-width:2px;
+    border-radius:7px;
+    background:#f8f9fa;
+    padding:5px 8px;
+    font:800 11px ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .desktop-writing-guide p{margin:0;color:#777d85;font:600 11px/1.6 system-ui}
+  .desktop-writing-guide-ok{
+    min-height:44px;
+    border:0;
+    border-radius:12px;
+    background:#17191d;
+    color:#fff;
+    font:850 13px system-ui;
+  }
+}
+@media (min-width:1100px) and (max-width:1320px){
+  .desktop-writing-actions{grid-template-columns:1fr 1fr}
+  .desktop-writing-actions .desktop-writing-action:last-child{grid-column:1/-1}
+  .desktop-live-scene-ops{grid-template-columns:repeat(3,1fr)}
+}

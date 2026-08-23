@@ -4857,6 +4857,7 @@
   const desktopPrevScene=$('#desktopPrevScene');
   const desktopNextScene=$('#desktopNextScene');
   const desktopTimingButton=$('#desktopTimingButton');
+  const desktopShortcutButton=$('#desktopShortcutButton');
   const desktopLiveMQ=window.matchMedia('(min-width:1100px)');
   let desktopTimingOpen=false;
   let liveEditEnabled=false;
@@ -7197,7 +7198,28 @@ function openDesktopTextDetail(){
     const bodyCard=desktopCard('本文','desktop-live-body-card');
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder='本文を入力';
     ta.addEventListener('input',()=>{scene.text=ta.value;scheduleDraftSave(100);refreshLivePlayer({preserveSheet:false});});
+    ta.addEventListener('keydown',e=>{
+      if(e.isComposing||e.key!=='Enter')return;
+      if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey){
+        e.preventDefault();desktopSplitAtCursor(ta);return;
+      }
+      if((e.ctrlKey||e.metaKey) && !e.shiftKey && !e.altKey){
+        e.preventDefault();desktopAddSceneAndFocus();return;
+      }
+    });
     bodyCard.appendChild(ta);
+    const writingActions=document.createElement('div');writingActions.className='desktop-writing-actions';
+    const writingButton=(label,hint,fn,disabled=false,cls='')=>{
+      const b=document.createElement('button');b.type='button';b.className=`desktop-writing-action ${cls}`.trim();b.disabled=disabled;
+      const text=document.createElement('span');text.textContent=label;const key=document.createElement('kbd');key.textContent=hint;
+      b.append(text,key);b.addEventListener('click',fn);return b;
+    };
+    writingActions.append(
+      writingButton('＋ 次に空Scene','Ctrl/⌘ ↵',desktopAddSceneAndFocus,false,'is-primary'),
+      writingButton('｜↩︎ カーソル位置で分割','⇧ ↵',()=>desktopSplitAtCursor(ta)),
+      writingButton('次Sceneと結合','',desktopMergeNext,index>=workingDocument.scenes.length-1)
+    );
+    bodyCard.appendChild(writingActions);
 
     const three=document.createElement('div');three.className='desktop-live-three';
     const textCard=desktopCard('文字（Aa）');
@@ -7285,11 +7307,13 @@ function openDesktopTextDetail(){
     const sceneCard=desktopCard('Scene操作（•••）','desktop-live-scene-card');
     const ops=document.createElement('div');ops.className='desktop-live-scene-ops';
     const addOp=(label,fn,disabled=false,cls='')=>{const b=desktopAction(label,fn,cls);b.disabled=disabled;ops.appendChild(b);};
-    addOp('＋ 次にScene追加',liveEditAddScene,false,'is-primary');addOp('← 前へ移動',()=>liveEditMoveScene(-1),index===0);addOp('次へ移動 →',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1);addOp('前のSceneと結合',liveEditMergePrevious,index===0);addOp('複製',liveEditDuplicateScene);addOp('削除',liveEditDeleteScene,workingDocument.scenes.length<=1,'is-danger');
+    addOp('← 前へ移動',()=>liveEditMoveScene(-1),index===0);addOp('次へ移動 →',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1);addOp('前のSceneと結合',liveEditMergePrevious,index===0);addOp('複製',liveEditDuplicateScene);addOp('削除',liveEditDeleteScene,workingDocument.scenes.length<=1,'is-danger');
     sceneCard.appendChild(ops);
     const nav=document.createElement('div');nav.className='desktop-live-nav';const navText=document.createElement('div');navText.innerHTML='<strong>読者が過去Sceneへ戻れる</strong><small>公開Playerの戻る操作を許可</small>';const toggle=desktopAction(workingDocument.player?.navigation?.allowPrevious===false?'OFF':'ON',()=>{liveEditToggleAllowPrevious();renderDesktopLivePanel();},'desktop-live-toggle');nav.append(navText,toggle);sceneCard.appendChild(nav);
 
     desktopLivePanelBody.append(bodyCard,three,audioCard,sceneCard);
+    if(desktopShortcutButton)desktopShortcutButton.hidden=false;
+    maybeShowDesktopWritingGuide();
   }
 
 
@@ -7927,6 +7951,81 @@ function openDesktopTextDetail(){
     // pressing the iOS checkmark without typing leaves this Scene empty.
     startInlineTextEdit();
   }
+  function focusDesktopSceneTextarea(selectionStart=0){
+    requestAnimationFrame(()=>{
+      const input=desktopLivePanelBody?.querySelector?.('.desktop-live-body-card textarea');
+      if(!input)return;
+      try{input.focus({preventScroll:true});}catch(_){input.focus();}
+      const pos=Math.max(0,Math.min(Number(selectionStart)||0,input.value.length));
+      try{input.setSelectionRange(pos,pos);}catch(_){}
+    });
+  }
+  function desktopAddSceneAndFocus(){
+    const {index}=liveEditScene();
+    captureUndo('Scene追加を元に戻せます');
+    const scene={id:nextUniqueId(),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}};
+    workingDocument.scenes.splice(index+1,0,scene);
+    liveEditReloadAt(index+1);
+    showUndo('Sceneを追加しました');
+    renderDesktopLivePanel();
+    focusDesktopSceneTextarea(0);
+  }
+  function desktopSplitAtCursor(input){
+    const {scene,index}=liveEditScene();
+    if(!scene||!input)return;
+    const text=input.value;
+    const pos=Number(input.selectionStart);
+    if(!Number.isFinite(pos)||pos<=0||pos>=text.length)return;
+    const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
+    if(!left||!right)return;
+    captureUndo('Scene分割を元に戻せます');
+    scene.text=left;
+    const cloneScene=clone(scene);
+    cloneScene.id=nextUniqueId();
+    cloneScene.text=right;
+    delete cloneScene.subText;
+    delete cloneScene.audio;
+    if(cloneScene.presentation)delete cloneScene.presentation.background;
+    workingDocument.scenes.splice(index+1,0,cloneScene);
+    liveEditReloadAt(index+1);
+    showUndo('カーソル位置で分割しました');
+    renderDesktopLivePanel();
+    focusDesktopSceneTextarea(0);
+  }
+  function desktopMergeNext(){
+    const {scene,index}=liveEditScene();
+    if(!scene||index>=workingDocument.scenes.length-1)return;
+    captureUndo('Scene結合を元に戻せます');
+    const next=workingDocument.scenes[index+1];
+    const before=(scene.text||'').length;
+    scene.text=[scene.text,next.text].filter(Boolean).join('\n\n');
+    if(next.subText&&!scene.subText)scene.subText=next.subText;
+    workingDocument.scenes.splice(index+1,1);
+    liveEditReloadAt(index);
+    showUndo('次のSceneと結合しました');
+    renderDesktopLivePanel();
+    focusDesktopSceneTextarea(before+(before&&next.text?2:0));
+  }
+
+  const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v1';
+  function openDesktopWritingGuide({auto=false}={}){
+    if(!desktopLiveActive())return;
+    if(document.querySelector('.desktop-writing-guide-overlay'))return;
+    const overlay=document.createElement('div');overlay.className='desktop-writing-guide-overlay';
+    const modal=document.createElement('section');modal.className='desktop-writing-guide';
+    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button type="button" aria-label="閉じる">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>改行</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>カーソル位置で分割</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>次に空Scene</span></div></div><p>結合は本文欄の「次Sceneと結合」ボタンから行えます。</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
+    overlay.appendChild(modal);document.body.appendChild(overlay);
+    const close=()=>{try{localStorage.setItem(DESKTOP_WRITING_GUIDE_KEY,'1');}catch(_){}overlay.remove();};
+    modal.querySelector('.desktop-writing-guide-head button')?.addEventListener('click',close);
+    modal.querySelector('.desktop-writing-guide-ok')?.addEventListener('click',close);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+    if(auto){try{localStorage.setItem(DESKTOP_WRITING_GUIDE_KEY,'1');}catch(_){}}
+  }
+  function maybeShowDesktopWritingGuide(){
+    if(!desktopLiveActive())return;
+    let seen=false;try{seen=localStorage.getItem(DESKTOP_WRITING_GUIDE_KEY)==='1';}catch(_){}
+    if(!seen)setTimeout(()=>openDesktopWritingGuide({auto:true}),250);
+  }
   function liveEditMoveScene(delta){
     const {index}=liveEditScene(),ni=index+delta;
     if(ni<0||ni>=workingDocument.scenes.length)return;
@@ -8232,6 +8331,7 @@ function openDesktopTextDetail(){
     liveTimingIndex=liveEditScene().index;
     renderDesktopLivePanel();
   });
+  desktopShortcutButton?.addEventListener('click',()=>openDesktopWritingGuide());
   desktopLiveMQ.addEventListener?.('change',()=>{renderDesktopLivePanel();if(desktopLiveActive())setLiveToolbarVisible(true);});
   // Live Edit v0.2.3: while the visible Scene text is being edited,
   // the Player must not interpret taps / Enter / Space as navigation.
