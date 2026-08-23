@@ -5112,20 +5112,26 @@
   }
   function liveEditSplitInlineAtCaret(){
     const {scene,index}=liveEditScene();if(!scene||!liveInlineEditEl)return;
-    const text=syncInlineTextToScene();
+    // Capture the caret BEFORE syncing. Sync may update auto-fit/runtime state.
     const pos=inlineCaretOffset();
+    const text=syncInlineTextToScene();
     if(pos<=0||pos>=text.length){showUndo('分割する位置にカーソルを置いてください');return;}
     const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
     if(!left||!right){showUndo('分割する位置にカーソルを置いてください');return;}
     captureUndo('Scene分割を元に戻せます');
     scene.text=left;
+    // The currently visible Scene becomes Player history when we move to the
+    // new Scene. Shorten that DOM now so history cannot keep the old full text.
+    liveInlineEditEl.innerText=left;
+    if(player?.currentScene)player.currentScene.text=left;
     const next=clone(scene);next.id=nextUniqueId();next.text=right;delete next.subText;delete next.audio;
     if(next.presentation)delete next.presentation.background;
     workingDocument.scenes.splice(index+1,0,next);
     finishInlineTextEdit();
+    liveEditRenderAt(index,{preserveSheet:false});
     liveEditRenderAt(index+1,{preserveSheet:false});
     showUndo('カーソル位置で分割しました');
-    // This click is still a direct user gesture on iOS, so focus the new Scene now.
+    // Keep the direct-preview writing flow on both iPhone and desktop.
     startInlineTextEdit();
   }
 
@@ -7212,7 +7218,25 @@ function openDesktopTextDetail(){
     const writingButton=(label,hint,fn,disabled=false,cls='')=>{
       const b=document.createElement('button');b.type='button';b.className=`desktop-writing-action ${cls}`.trim();b.disabled=disabled;
       const text=document.createElement('span');text.textContent=label;const key=document.createElement('kbd');key.textContent=hint;
-      b.append(text,key);b.addEventListener('click',fn);return b;
+      b.append(text,key);
+      // When the left Live Preview is contenteditable, a normal mouse click on
+      // the inspector first blurs that editor. The blur can rebuild this panel
+      // before the click event arrives, making the button look dead. Execute on
+      // pointerdown (while the caret/selection still exists), and keep click as
+      // a keyboard-accessible fallback.
+      let ranOnPointer=false;
+      b.addEventListener('pointerdown',e=>{
+        if(b.disabled || (typeof e.button==='number' && e.button!==0))return;
+        e.preventDefault();
+        ranOnPointer=true;
+        fn();
+      });
+      b.addEventListener('click',e=>{
+        e.preventDefault();
+        if(ranOnPointer){ranOnPointer=false;return;}
+        if(!b.disabled)fn();
+      });
+      return b;
     };
     writingActions.append(
       writingButton('＋ 次に空Scene','Ctrl/⌘ ↵',desktopAddSceneAndFocus,false,'is-primary'),
@@ -7975,9 +7999,9 @@ function openDesktopTextDetail(){
     if(!scene||!input)return;
     const text=input.value;
     const pos=Number(input.selectionStart);
-    if(!Number.isFinite(pos)||pos<=0||pos>=text.length)return;
+    if(!Number.isFinite(pos)||pos<=0||pos>=text.length){showUndo('分割する位置にカーソルを置いてください');return;}
     const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
-    if(!left||!right)return;
+    if(!left||!right){showUndo('分割する位置にカーソルを置いてください');return;}
     captureUndo('Scene分割を元に戻せます');
     scene.text=left;
     const cloneScene=clone(scene);
@@ -7987,7 +8011,10 @@ function openDesktopTextDetail(){
     delete cloneScene.audio;
     if(cloneScene.presentation)delete cloneScene.presentation.background;
     workingDocument.scenes.splice(index+1,0,cloneScene);
-    liveEditReloadAt(index+1);
+    // Refresh the shortened source Scene before moving forward. Otherwise the
+    // Player's stacked-history DOM can retain the pre-split full sentence.
+    liveEditRenderAt(index,{preserveSheet:false});
+    liveEditRenderAt(index+1,{preserveSheet:false});
     showUndo('カーソル位置で分割しました');
     renderDesktopLivePanel();
     focusDesktopSceneTextarea(0);
@@ -8007,7 +8034,7 @@ function openDesktopTextDetail(){
     focusDesktopSceneTextarea(before+(before&&next.text?2:0));
   }
 
-  const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v2';
+  const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v3';
   function openDesktopWritingGuide({auto=false}={}){
     if(!desktopLiveActive())return;
     if(document.querySelector('.desktop-writing-guide-overlay'))return;
@@ -8019,7 +8046,8 @@ function openDesktopTextDetail(){
     modal.querySelector('.desktop-writing-guide-head button')?.addEventListener('click',close);
     modal.querySelector('.desktop-writing-guide-ok')?.addEventListener('click',close);
     overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
-    if(auto){try{localStorage.setItem(DESKTOP_WRITING_GUIDE_KEY,'1');}catch(_){}}
+    // Do not mark the guide as seen merely because an auto-open was attempted.
+    // Persist only when the user actually closes/acknowledges it.
   }
   function maybeShowDesktopWritingGuide(){
     if(!desktopLiveActive())return;
