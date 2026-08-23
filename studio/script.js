@@ -5551,6 +5551,26 @@ function startInlineTextEdit(field='text'){
     if(shouldRestore){const section=mobileLiveDetailReturnSection;mobileLiveDetailReturnSection='';restoreMobileLiveDetailSheet(section);}
   }
 
+  function settleLivePreviewAfterDetailSave(index){
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      try{
+        if(liveEditEnabled && player && !playerScreen?.hidden){
+          const doc=getDocumentForPlayback();
+          if(typeof player.refreshCurrent==='function'){
+            player.refreshCurrent({document:doc,index:index,preserveAudio:true});
+          }else{
+            player.document=doc;
+            player.index=index;
+            player._render?.();
+          }
+          ensureLiveEditEmptyTarget();
+          window.dispatchEvent(new Event('resize'));
+          void playerHost?.offsetHeight;
+        }
+      }catch(error){console.error(error);}
+    }));
+  }
+
   function currentDesktopDetailKind(){
     if(!desktopLivePanel)return '';
     if(desktopLivePanel.querySelector('.desktop-audio-detail-overlay'))return 'audio';
@@ -5625,7 +5645,8 @@ function startInlineTextEdit(field='text'){
     // PlayerCore.refreshCurrent() performs a fresh real-Player render, so the
     // selected entrance/position/view change is visible immediately. No second
     // manual animation trigger is needed (and avoiding it prevents double-play).
-    refreshLivePlayer({preserveSheet:false});
+    refreshLivePlayer({preserveSheet:true});
+    if(desktopLiveActive())renderDesktopLivePanel();
   }
 
 function openDesktopEffectDetail(){
@@ -5653,7 +5674,9 @@ function openDesktopEffectDetail(){
       if(before.typing===null)delete p.typing;else p.typing=clone(before.typing);
       if(before.effectTiming===null)delete p.effectTiming;else p.effectTiming=clone(before.effectTiming);
       if(before.disappear===null)delete p.disappear;else p.disappear=clone(before.disappear);
-      scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:true});
+      if(desktopLiveActive())renderDesktopLivePanel();
     };
 
     const overlay=document.createElement('div');overlay.className='desktop-text-detail-overlay desktop-effect-detail-overlay';
@@ -5679,7 +5702,10 @@ function openDesktopEffectDetail(){
       }else{
         delete p.typing;p.effect=v;
       }
-      apply();closeDesktopEffectDetail();openDesktopEffectDetail();
+      apply();
+      if(refreshMobileLiveDetail('effect'))return;
+      closeDesktopEffectDetail();
+      openDesktopEffectDetail();
     });
     basicGrid.append(
       effectSelect,
@@ -5734,7 +5760,13 @@ function openDesktopEffectDetail(){
     modal.append(head,body,foot);overlay.appendChild(modal);liveDetailHost().appendChild(overlay);
     const closeOnly=()=>{closeDesktopEffectDetail();};
     x.addEventListener('click',closeOnly);cancel.addEventListener('click',closeOnly);overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
-    save.addEventListener('click',async()=>{committed=true;await saveDraftNow();closeDesktopEffectDetail();renderDesktopLivePanel();});
+    save.addEventListener('click',async()=>{
+      committed=true;
+      await saveDraftNow();
+      closeDesktopEffectDetail();
+      if(desktopLiveActive())renderDesktopLivePanel();
+      settleLivePreviewAfterDetailSave(index);
+    });
     reset.addEventListener('click',()=>{
       delete p.effectTiming;
       delete p.disappear;
@@ -5744,7 +5776,7 @@ function openDesktopEffectDetail(){
       p.view='world';
       p.entryMotion='flow';
       scheduleDraftSave(40);
-      refreshLivePlayer({preserveSheet:false});
+      refreshLivePlayer({preserveSheet:true});
       if(refreshMobileLiveDetail('effect'))return;
       closeDesktopEffectDetail();
       openDesktopEffectDetail();
@@ -6022,7 +6054,7 @@ function openDesktopAudioDetail(){
       // Apply the gain directly to the transport that is already sounding.
       if(liveVolume!=null){
         applyLiveAudioVolume(kind,liveVolume);
-        renderDesktopLivePanel();
+        if(desktopLiveActive())renderDesktopLivePanel();
         return;
       }
 
@@ -6039,13 +6071,13 @@ function openDesktopAudioDetail(){
             // real fadeIn semantics used by the public Player.
             player?._applyAudioCommand?.({...cmd,restart:true},false);
           }catch(_){}
-          renderDesktopLivePanel();
+          if(desktopLiveActive())renderDesktopLivePanel();
           return;
         }
       }
 
-      refreshLivePlayer({preserveSheet:false});
-      renderDesktopLivePanel();
+      refreshLivePlayer({preserveSheet:true});
+      if(desktopLiveActive())renderDesktopLivePanel();
 
       // Selecting/starting a persistent source needs an explicit authoring
       // transport start because refreshCurrent(preserveAudio) intentionally
@@ -6308,7 +6340,9 @@ function openDesktopAudioDetail(){
       commitAll();
       await saveDraftNow();
       closeDesktopAudioDetail();
-      renderDesktopLivePanel();
+      if(desktopLiveActive())if(desktopLiveActive())renderDesktopLivePanel();
+    
+      settleLivePreviewAfterDetailSave(index);
     });
     reset.addEventListener('click',()=>{
       // Reset only the adjustable parameters of the currently open channel.
@@ -6701,23 +6735,8 @@ function openDesktopBackgroundDetail(){
     save.addEventListener('click',async()=>{
       await saveDraftNow();
       closeDesktopBackgroundDetail();
-      renderDesktopLivePanel();
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{
-        try{
-          if(liveEditEnabled && player && !playerScreen?.hidden){
-            const doc=getDocumentForPlayback();
-            if(typeof player.refreshCurrent==='function'){
-              player.refreshCurrent({document:doc,index:index,preserveAudio:true});
-            }else{
-              player.document=doc;
-              player.index=index;
-              player._render?.();
-            }
-            ensureLiveEditEmptyTarget();
-            window.dispatchEvent(new Event('resize'));
-          }
-        }catch(error){console.error(error);}
-      }));
+      if(desktopLiveActive())renderDesktopLivePanel();
+      settleLivePreviewAfterDetailSave(index);
     });
     reset.addEventListener('click',()=>{
       delete p.background;
@@ -6737,8 +6756,17 @@ function openDesktopTextDetail(){
     const p=ensurePresentation(scene);p.text ||= {};
     const before=clone(p.text);
     let committed=false;
-    const apply=()=>{scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});};
-    const restore=()=>{p.text=clone(before);scheduleDraftSave(50);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();};
+    const apply=()=>{
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:true});
+      if(desktopLiveActive())renderDesktopLivePanel();
+    };
+    const restore=()=>{
+      p.text=clone(before);
+      scheduleDraftSave(50);
+      refreshLivePlayer({preserveSheet:true});
+      if(desktopLiveActive())renderDesktopLivePanel();
+    };
 
     const overlay=document.createElement('div');overlay.className='desktop-text-detail-overlay';
     const modal=document.createElement('section');modal.className='desktop-text-detail-modal';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','文字の詳細設定');
@@ -6760,7 +6788,11 @@ function openDesktopTextDetail(){
       desktopDetailSelect('文字影',[['auto','おまかせ'],['none','なし'],['soft','弱'],['strong','強']],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
     );
     const colorRow=document.createElement('div');colorRow.className='desktop-text-detail-color';const colorLabel=document.createElement('span');colorLabel.textContent='任意色';const colorCode=document.createElement('code');const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';colorCode.textContent=initialColor;const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{colorCode.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;colorCode.textContent=c;apply();}});colorRow.append(colorLabel,colorPicker.root,colorCode);typography.appendChild(colorRow);
-    typography.appendChild(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;colorCode.textContent=hex;apply();closeDesktopTextDetail();openDesktopTextDetail();}));
+    typography.appendChild(makeTextColorPalette(p.text.color,hex=>{
+      p.text.color=hex;
+      colorCode.textContent=hex;
+      apply();
+    }));
 
     const layout=section('レイアウト');
     const ranges=two(layout);
@@ -6789,11 +6821,17 @@ function openDesktopTextDetail(){
 
     const closeOnly=()=>{closeDesktopTextDetail();};
     x.addEventListener('click',closeOnly);cancel.addEventListener('click',closeOnly);
-    save.addEventListener('click',async()=>{committed=true;await saveDraftNow();closeDesktopTextDetail();renderDesktopLivePanel();});
+    save.addEventListener('click',async()=>{
+      committed=true;
+      await saveDraftNow();
+      closeDesktopTextDetail();
+      if(desktopLiveActive())renderDesktopLivePanel();
+      settleLivePreviewAfterDetailSave(index);
+    });
     reset.addEventListener('click',()=>{
       p.text={};
       scheduleDraftSave(50);
-      refreshLivePlayer({preserveSheet:false});
+      refreshLivePlayer({preserveSheet:true});
       if(refreshMobileLiveDetail('text'))return;
       closeDesktopTextDetail();
       openDesktopTextDetail();
