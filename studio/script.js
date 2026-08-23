@@ -391,9 +391,69 @@
     const row=await new Promise((resolve,reject)=>{const r=store.get(id);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error);});
     db.close();return row;
   }
+  function mergeDraftPublication(existingPublication,incomingPublication){
+    const previous=existingPublication||{};
+    const next=incomingPublication||{};
+
+    // Publication identity is durable metadata. A delayed autosave that was
+    // created before publish must never be able to erase a workId/public URL
+    // written by the publish flow a moment later.
+    const previousId=String(previous.id||'');
+    const nextId=String(next.id||'');
+    const previousStoppedAt=Number(previous.stoppedAt)||0;
+    const nextStoppedAt=Number(next.stoppedAt)||0;
+
+    // Explicit unpublish wins. It intentionally keeps the work id while
+    // clearing the public URL.
+    if(nextStoppedAt>0){
+      return {
+        ...previous,
+        ...next,
+        id:nextId||previousId,
+        url:'',
+        fingerprint:next.fingerprint||previous.fingerprint||'',
+        publishedAt:Number(next.publishedAt)||Number(previous.publishedAt)||0,
+        stoppedAt:nextStoppedAt
+      };
+    }
+
+    const incomingHasPublication=Boolean(
+      nextId || next.url || next.fingerprint || Number(next.publishedAt)
+    );
+
+    // A blank publication object is normally an older autosave racing with a
+    // completed publish/republish. Preserve the durable publication metadata.
+    if(!incomingHasPublication && previousId){
+      return {...previous};
+    }
+
+    // Normal publish / republish / subsequent edits.
+    return {
+      ...previous,
+      ...next,
+      id:nextId||previousId,
+      url:next.url||(!nextId && previousId ? previous.url||'' : ''),
+      fingerprint:next.fingerprint||previous.fingerprint||'',
+      publishedAt:Number(next.publishedAt)||Number(previous.publishedAt)||0,
+      stoppedAt:0
+    };
+  }
+
   async function putDraftRecord(row){
     const {db,store}=await draftStore('readwrite');
-    await new Promise((resolve,reject)=>{const r=store.put(row);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error);});
+    await new Promise((resolve,reject)=>{
+      const get=store.get(row.id);
+      get.onerror=()=>reject(get.error);
+      get.onsuccess=()=>{
+        const existing=get.result||null;
+        const safeRow=existing
+          ? {...row,publication:mergeDraftPublication(existing.publication,row.publication)}
+          : row;
+        const put=store.put(safeRow);
+        put.onsuccess=()=>resolve();
+        put.onerror=()=>reject(put.error);
+      };
+    });
     db.close();
   }
   async function removeDraftRecord(id){
