@@ -8007,7 +8007,7 @@ function openDesktopTextDetail(){
     focusDesktopSceneTextarea(before+(before&&next.text?2:0));
   }
 
-  const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v1';
+  const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v2';
   function openDesktopWritingGuide({auto=false}={}){
     if(!desktopLiveActive())return;
     if(document.querySelector('.desktop-writing-guide-overlay'))return;
@@ -8344,9 +8344,30 @@ function openDesktopTextDetail(){
   },true);
   playerHost.addEventListener('keydown',(e)=>{
     if(!liveInlineEditEl)return;
-    if(e.target===liveInlineEditEl||liveInlineEditEl.contains(e.target)){
-      e.stopImmediatePropagation();
+    if(!(e.target===liveInlineEditEl||liveInlineEditEl.contains(e.target)))return;
+
+    // Desktop writing shortcuts must also work while directly editing the
+    // left Live Preview.  The previous implementation only bound them to
+    // the inspector textarea on the right, which defeated the direct-edit
+    // writing flow.  Never steal Enter while an IME composition is active.
+    if(desktopLiveActive() && !e.isComposing && e.key==='Enter'){
+      if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        liveEditSplitInlineAtCaret();
+        return;
+      }
+      if((e.ctrlKey||e.metaKey) && !e.shiftKey && !e.altKey){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        syncInlineTextToScene();
+        // Keep the same direct-preview authoring flow after creating the
+        // next empty Scene; liveEditAddScene() focuses that Scene inline.
+        liveEditAddScene();
+        return;
+      }
     }
+    e.stopImmediatePropagation();
   },true);
 
   // Live Edit disappear handling:
