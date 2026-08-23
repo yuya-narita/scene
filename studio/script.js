@@ -7240,7 +7240,7 @@ function openDesktopTextDetail(){
     };
     writingActions.append(
       writingButton('＋ 次に空Scene','Ctrl/⌘ ↵',desktopAddSceneAndFocus,false,'is-primary'),
-      writingButton('｜↩︎ カーソル位置で分割','⇧ ↵',()=>desktopSplitAtCursor(ta)),
+      writingButton('｜↩︎ カーソル位置で分割','⇧ ↵',()=>desktopSplitFromActiveCaret(ta)),
       writingButton('次Sceneと結合','',desktopMergeNext,index>=workingDocument.scenes.length-1)
     );
     bodyCard.appendChild(writingActions);
@@ -7994,6 +7994,17 @@ function openDesktopTextDetail(){
     renderDesktopLivePanel();
     focusDesktopSceneTextarea(0);
   }
+  function desktopSplitFromActiveCaret(input){
+    // Prefer the caret in the left direct-edit preview while it is active.
+    // pointerdown runs before focus leaves contenteditable, so its selection
+    // is still available here. Otherwise fall back to the right textarea.
+    const inlineActive=!!(liveInlineEditEl && (document.activeElement===liveInlineEditEl || liveInlineEditEl.contains(document.activeElement)));
+    if(inlineActive){
+      liveEditSplitInlineAtCaret();
+      return;
+    }
+    desktopSplitAtCursor(input);
+  }
   function desktopSplitAtCursor(input){
     const {scene,index}=liveEditScene();
     if(!scene||!input)return;
@@ -8034,13 +8045,13 @@ function openDesktopTextDetail(){
     focusDesktopSceneTextarea(before+(before&&next.text?2:0));
   }
 
-  const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v3';
+  const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v4';
   function openDesktopWritingGuide({auto=false}={}){
     if(!desktopLiveActive())return;
     if(document.querySelector('.desktop-writing-guide-overlay'))return;
     const overlay=document.createElement('div');overlay.className='desktop-writing-guide-overlay';
     const modal=document.createElement('section');modal.className='desktop-writing-guide';
-    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button type="button" aria-label="閉じる">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>改行</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>カーソル位置で分割</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>次に空Scene</span></div></div><p>結合は本文欄の「次Sceneと結合」ボタンから行えます。</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
+    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button type="button" aria-label="閉じる">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>改行</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>カーソル位置で分割</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>次に空Scene</span></div><div><kbd>↑</kbd><span>先頭行から前Sceneを編集</span></div></div><p>結合は本文欄の「次Sceneと結合」ボタンから行えます。</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
     overlay.appendChild(modal);document.body.appendChild(overlay);
     const close=()=>{try{localStorage.setItem(DESKTOP_WRITING_GUIDE_KEY,'1');}catch(_){}overlay.remove();};
     modal.querySelector('.desktop-writing-guide-head button')?.addEventListener('click',close);
@@ -8049,10 +8060,18 @@ function openDesktopTextDetail(){
     // Do not mark the guide as seen merely because an auto-open was attempted.
     // Persist only when the user actually closes/acknowledges it.
   }
+  let desktopWritingGuideTimer=0;
   function maybeShowDesktopWritingGuide(){
     if(!desktopLiveActive())return;
     let seen=false;try{seen=localStorage.getItem(DESKTOP_WRITING_GUIDE_KEY)==='1';}catch(_){}
-    if(!seen)setTimeout(()=>openDesktopWritingGuide({auto:true}),250);
+    if(seen||document.querySelector('.desktop-writing-guide-overlay'))return;
+    clearTimeout(desktopWritingGuideTimer);
+    // Wait until the desktop panel/player have finished their first paint.
+    // Re-check at fire time so an intermediate render cannot swallow the guide.
+    desktopWritingGuideTimer=setTimeout(()=>{
+      let nowSeen=false;try{nowSeen=localStorage.getItem(DESKTOP_WRITING_GUIDE_KEY)==='1';}catch(_){}
+      if(!nowSeen && desktopLiveActive() && !document.querySelector('.desktop-writing-guide-overlay'))openDesktopWritingGuide({auto:true});
+    },650);
   }
   function liveEditMoveScene(delta){
     const {index}=liveEditScene(),ni=index+delta;
@@ -8361,6 +8380,37 @@ function openDesktopTextDetail(){
   });
   desktopShortcutButton?.addEventListener('click',()=>openDesktopWritingGuide());
   desktopLiveMQ.addEventListener?.('change',()=>{renderDesktopLivePanel();if(desktopLiveActive())setLiveToolbarVisible(true);});
+  function inlineCaretIsOnFirstVisualLine(){
+    const el=liveInlineEditEl,sel=getSelection();
+    if(!el||!sel||!sel.rangeCount||!sel.isCollapsed)return false;
+    const range=sel.getRangeAt(0);
+    if(!el.contains(range.startContainer))return false;
+    if(inlineCaretOffset()===0)return true;
+    const probe=range.cloneRange();probe.collapse(true);
+    const caret=probe.getBoundingClientRect();
+    const box=el.getBoundingClientRect();
+    const cs=getComputedStyle(el);
+    const fontSize=parseFloat(cs.fontSize)||16;
+    const lineHeight=parseFloat(cs.lineHeight)||fontSize*1.5;
+    if(!caret || (!caret.width&&!caret.height))return false;
+    return caret.top <= box.top + lineHeight*1.15;
+  }
+  function editPreviousSceneFromInline(){
+    const {index}=liveEditScene();
+    if(index<=0||!liveInlineEditEl)return false;
+    syncInlineTextToScene();
+    finishInlineTextEdit();
+    liveEditRenderAt(index-1,{preserveSheet:false});
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      startInlineTextEdit();
+      requestAnimationFrame(()=>{
+        const {scene}=liveEditScene();
+        setInlineCaretOffset((scene?.text||'').length);
+      });
+    }));
+    return true;
+  }
+
   // Live Edit v0.2.3: while the visible Scene text is being edited,
   // the Player must not interpret taps / Enter / Space as navigation.
   playerHost.addEventListener('click',(e)=>{
@@ -8377,7 +8427,13 @@ function openDesktopTextDetail(){
     // Desktop writing shortcuts must also work while directly editing the
     // left Live Preview.  The previous implementation only bound them to
     // the inspector textarea on the right, which defeated the direct-edit
-    // writing flow.  Never steal Enter while an IME composition is active.
+    // writing flow.  Never steal keys while an IME composition is active.
+    if(desktopLiveActive() && !e.isComposing && e.key==='ArrowUp' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && inlineCaretIsOnFirstVisualLine()){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      editPreviousSceneFromInline();
+      return;
+    }
     if(desktopLiveActive() && !e.isComposing && e.key==='Enter'){
       if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey){
         e.preventDefault();
