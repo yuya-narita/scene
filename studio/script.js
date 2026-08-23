@@ -3970,7 +3970,7 @@
     syncAdvancedFieldsToScene();
     captureUndo('Scene結合を元に戻せます');
     const prev=workingDocument.scenes[selectedSceneIndex-1], cur=workingDocument.scenes[selectedSceneIndex];
-    prev.text=[prev.text,cur.text].filter(Boolean).join('\n\n');
+    prev.text=`${prev.text||''}${cur.text||''}`;
     if(cur.subText&&!prev.subText)prev.subText=cur.subText;
     workingDocument.scenes.splice(selectedSceneIndex,1);
     selectedSceneIndex-=1;
@@ -8111,7 +8111,7 @@ function openDesktopTextDetail(){
     const {scene,index}=liveEditScene();if(!scene||index<=0)return;
     captureUndo('Scene結合を元に戻せます');
     const prev=workingDocument.scenes[index-1];
-    prev.text=[prev.text,scene.text].filter(Boolean).join('\n\n');
+    prev.text=`${prev.text||''}${scene.text||''}`;
     if(scene.subText&&!prev.subText)prev.subText=scene.subText;
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(index-1);
