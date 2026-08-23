@@ -8045,13 +8045,17 @@ function openDesktopTextDetail(){
     focusDesktopSceneTextarea(before+(before&&next.text?2:0));
   }
 
-  const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v4';
+  const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v5';
   function openDesktopWritingGuide({auto=false}={}){
     if(!desktopLiveActive())return;
     if(document.querySelector('.desktop-writing-guide-overlay'))return;
     const overlay=document.createElement('div');overlay.className='desktop-writing-guide-overlay';
+    // Inline fallback styles make the first-run guide independent from stylesheet
+    // cache/version skew. This also guarantees it sits above the Player/inspector.
+    Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483647',display:'grid',placeItems:'center',background:'rgba(12,14,18,.45)',padding:'24px'});
     const modal=document.createElement('section');modal.className='desktop-writing-guide';
-    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button type="button" aria-label="閉じる">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>改行</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>カーソル位置で分割</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>次に空Scene</span></div><div><kbd>↑</kbd><span>先頭行から前Sceneを編集</span></div></div><p>結合は本文欄の「次Sceneと結合」ボタンから行えます。</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
+    Object.assign(modal.style,{width:'min(520px,calc(100vw - 48px))',background:'#fff',color:'#111',borderRadius:'24px',padding:'24px',boxShadow:'0 24px 80px rgba(0,0,0,.28)'});
+    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button type="button" aria-label="閉じる">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>改行</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>カーソル位置で分割</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>次に空Scene</span></div><div><kbd>↑</kbd><span>先頭行から前Sceneを編集</span></div><div><kbd>↓</kbd><span>最終行から次Sceneを編集</span></div></div><p>結合は本文欄の「次Sceneと結合」ボタンから行えます。</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
     overlay.appendChild(modal);document.body.appendChild(overlay);
     const close=()=>{try{localStorage.setItem(DESKTOP_WRITING_GUIDE_KEY,'1');}catch(_){}overlay.remove();};
     modal.querySelector('.desktop-writing-guide-head button')?.addEventListener('click',close);
@@ -8066,12 +8070,17 @@ function openDesktopTextDetail(){
     let seen=false;try{seen=localStorage.getItem(DESKTOP_WRITING_GUIDE_KEY)==='1';}catch(_){}
     if(seen||document.querySelector('.desktop-writing-guide-overlay'))return;
     clearTimeout(desktopWritingGuideTimer);
-    // Wait until the desktop panel/player have finished their first paint.
-    // Re-check at fire time so an intermediate render cannot swallow the guide.
-    desktopWritingGuideTimer=setTimeout(()=>{
+    // The Live Editor can render itself several times during startup. Retry after
+    // those renders instead of relying on one fragile first-paint timeout.
+    let attempts=0;
+    const tryOpen=()=>{
+      attempts+=1;
       let nowSeen=false;try{nowSeen=localStorage.getItem(DESKTOP_WRITING_GUIDE_KEY)==='1';}catch(_){}
-      if(!nowSeen && desktopLiveActive() && !document.querySelector('.desktop-writing-guide-overlay'))openDesktopWritingGuide({auto:true});
-    },650);
+      if(nowSeen||document.querySelector('.desktop-writing-guide-overlay'))return;
+      if(desktopLiveActive() && document.body){openDesktopWritingGuide({auto:true});return;}
+      if(attempts<8)desktopWritingGuideTimer=setTimeout(tryOpen,250);
+    };
+    desktopWritingGuideTimer=setTimeout(tryOpen,180);
   }
   function liveEditMoveScene(delta){
     const {index}=liveEditScene(),ni=index+delta;
@@ -8410,6 +8419,34 @@ function openDesktopTextDetail(){
     }));
     return true;
   }
+  function inlineCaretIsOnLastVisualLine(){
+    const el=liveInlineEditEl,sel=getSelection();
+    if(!el||!sel||!sel.rangeCount||!sel.isCollapsed)return false;
+    const range=sel.getRangeAt(0);
+    if(!el.contains(range.startContainer))return false;
+    const textLength=(liveEditScene().scene?.text||'').length;
+    if(inlineCaretOffset()>=textLength)return true;
+    const probe=range.cloneRange();probe.collapse(true);
+    const caret=probe.getBoundingClientRect();
+    const box=el.getBoundingClientRect();
+    const cs=getComputedStyle(el);
+    const fontSize=parseFloat(cs.fontSize)||16;
+    const lineHeight=parseFloat(cs.lineHeight)||fontSize*1.5;
+    if(!caret || (!caret.width&&!caret.height))return false;
+    return caret.bottom >= box.bottom - lineHeight*1.15;
+  }
+  function editNextSceneFromInline(){
+    const {index}=liveEditScene();
+    if(!liveInlineEditEl||index>=workingDocument.scenes.length-1)return false;
+    syncInlineTextToScene();
+    finishInlineTextEdit();
+    liveEditRenderAt(index+1,{preserveSheet:false});
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      startInlineTextEdit();
+      requestAnimationFrame(()=>setInlineCaretOffset(0));
+    }));
+    return true;
+  }
 
   // Live Edit v0.2.3: while the visible Scene text is being edited,
   // the Player must not interpret taps / Enter / Space as navigation.
@@ -8433,6 +8470,15 @@ function openDesktopTextDetail(){
       e.stopImmediatePropagation();
       editPreviousSceneFromInline();
       return;
+    }
+    if(desktopLiveActive() && !e.isComposing && e.key==='ArrowDown' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && inlineCaretIsOnLastVisualLine()){
+      const {index}=liveEditScene();
+      if(index<workingDocument.scenes.length-1){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        editNextSceneFromInline();
+        return;
+      }
     }
     if(desktopLiveActive() && !e.isComposing && e.key==='Enter'){
       if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey){
