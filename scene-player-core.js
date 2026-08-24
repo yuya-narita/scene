@@ -90,6 +90,10 @@
       this.layoutTimers = [];
       this.typingState = null;
       this.backgroundState = null;
+      // Prefix cache for inherited background state. Without this, every Scene
+      // advance rescans Scene 1..N, which becomes O(n²) over a long work.
+      this._backgroundStateCache = [];
+      this._backgroundStateCacheDocument = null;
       this.backgroundLayerIndex = 0;
       this.backgroundTimers = [];
       this.audioUnlocked = false;
@@ -1025,6 +1029,8 @@
 
       this.audioPlaybackArmed = false;
       this.document = assertSceneDocument(doc);
+      this._backgroundStateCache = [];
+      this._backgroundStateCacheDocument = this.document;
 
       // Scene Format v1: author-level navigation policy.
       // Constructor options remain the fallback for older documents.
@@ -1391,6 +1397,14 @@
       if (this.els?.ending) this.els.ending.hidden = true;
       this.index = nextIndex;
       this.maxVisitedIndex = Math.max(this.maxVisitedIndex, nextIndex);
+      // Authoring may mutate the current Scene's background while retaining the
+      // same document object. Keep earlier prefixes, invalidate this Scene onward.
+      if (this._backgroundStateCacheDocument !== this.document) {
+        this._backgroundStateCacheDocument = this.document;
+        this._backgroundStateCache = [];
+      } else if (Array.isArray(this._backgroundStateCache)) {
+        this._backgroundStateCache.length = Math.min(this._backgroundStateCache.length, nextIndex);
+      }
 
       // Live-authoring refresh: redraw the current Scene through the real Player
       // renderer and replay its presentation immediately, but do not seek/restart
@@ -1924,7 +1938,20 @@
     }
 
     _backgroundStateAt(index) {
-      const state = {
+      const doc = this.document;
+      const scenes = doc?.scenes || [];
+      const target = Math.max(0, Math.min(Number(index) || 0, Math.max(0, scenes.length - 1)));
+
+      // A different document must never inherit cached state from the old one.
+      if (this._backgroundStateCacheDocument !== doc) {
+        this._backgroundStateCacheDocument = doc;
+        this._backgroundStateCache = [];
+      }
+
+      const cache = this._backgroundStateCache || (this._backgroundStateCache = []);
+      if (cache[target]) return { ...cache[target] };
+
+      const defaults = {
         src: '',
         transition: 'fade',
         dim: null,
@@ -1935,17 +1962,31 @@
         motion: null,
         textures: null
       };
-      for (let i = 0; i <= index; i += 1) {
-        const bg = this.document?.scenes?.[i]?.presentation?.background;
-        if (!bg || typeof bg !== 'object') continue;
-        Object.keys(bg).forEach((key) => {
-          const value = bg[key];
-          if (value !== undefined) state[key] = (value && typeof value === 'object' && !Array.isArray(value))
-            ? { ...(state[key] && typeof state[key] === 'object' ? state[key] : {}), ...value }
-            : value;
-        });
+
+      // Continue from the nearest cached prefix instead of rescanning Scene 1.
+      let start = 0;
+      let state = { ...defaults };
+      for (let i = target - 1; i >= 0; i -= 1) {
+        if (cache[i]) {
+          state = { ...cache[i] };
+          start = i + 1;
+          break;
+        }
       }
-      return state;
+
+      for (let i = start; i <= target; i += 1) {
+        const bg = scenes[i]?.presentation?.background;
+        if (bg && typeof bg === 'object') {
+          Object.keys(bg).forEach((key) => {
+            const value = bg[key];
+            if (value !== undefined) state[key] = (value && typeof value === 'object' && !Array.isArray(value))
+              ? { ...(state[key] && typeof state[key] === 'object' ? state[key] : {}), ...value }
+              : value;
+          });
+        }
+        cache[i] = { ...state };
+      }
+      return { ...cache[target] };
     }
 
     _applyBackgroundForIndex(index) {
