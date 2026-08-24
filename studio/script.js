@@ -5222,7 +5222,7 @@ function startInlineTextEdit(field='text'){
       setTimeout(keepInlineCaretVisible,360);
     });
   }
-  function liveEditRenderAt(index,{preserveSheet=true}={}){
+  function liveEditRenderAt(index,{preserveSheet=true,preserveDesktopEditor=false}={}){
     if(!player||!workingDocument?.scenes?.length)return;
     removeLiveDisappearEditTarget();
     const target=Math.max(0,Math.min(Number(index)||0,workingDocument.scenes.length-1));
@@ -5259,11 +5259,11 @@ function startInlineTextEdit(field='text'){
     player.host?.classList.remove('sp-cover-open');
     selectedSceneIndex=target;
     if(!preserveSheet||!wasOpen)closeLiveEditSheet();
-    if(desktopLiveActive())requestAnimationFrame(renderDesktopLivePanel);
+    if(desktopLiveActive()&&!preserveDesktopEditor)requestAnimationFrame(renderDesktopLivePanel);
   }
-  function refreshLivePlayer({preserveSheet=true}={}){
+  function refreshLivePlayer({preserveSheet=true,preserveDesktopEditor=false}={}){
     if(!player||!workingDocument?.scenes?.length)return;
-    liveEditRenderAt(player.index,{preserveSheet});
+    liveEditRenderAt(player.index,{preserveSheet,preserveDesktopEditor});
   }
   let mobileLiveDetailReturnSection='';
   let mobileLiveDetailOpening=false;
@@ -7203,7 +7203,7 @@ function openDesktopTextDetail(){
 
     const bodyCard=desktopCard('本文','desktop-live-body-card');
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder='本文を入力';
-    ta.addEventListener('input',()=>{scene.text=ta.value;scheduleDraftSave(100);refreshLivePlayer({preserveSheet:false});});
+    ta.addEventListener('input',()=>{scene.text=ta.value;scheduleDraftSave(100);refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});});
     ta.addEventListener('keydown',e=>{
       if(e.isComposing||e.key!=='Enter')return;
       if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey){
@@ -7224,7 +7224,7 @@ function openDesktopTextDetail(){
     subTa.addEventListener('input',()=>{
       if(subTa.value)scene.subText=subTa.value;else delete scene.subText;
       scheduleDraftSave(100);
-      refreshLivePlayer({preserveSheet:false});
+      refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});
     });
     subField.append(subLabel,subTa);
     bodyCard.appendChild(subField);

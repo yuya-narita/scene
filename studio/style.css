@@ -9038,34 +9038,35 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   }
   .desktop-writing-action kbd{font-size:9px;padding:1px 5px}
 
-  /* Four current-Scene cards share one compact row. */
+  /* Current-Scene controls: readable 2 x 2 cockpit.
+     Row 1 = Text / Effect, Row 2 = Background / Audio. */
   .desktop-live-three{
-    grid-template-columns:repeat(4,minmax(0,1fr));
+    grid-template-columns:repeat(2,minmax(0,1fr));
     gap:8px;
   }
-  .desktop-live-grid{gap:6px}
-  .desktop-live-field{gap:3px;font-size:9px}
+  .desktop-live-grid{gap:7px}
+  .desktop-live-field{gap:4px;font-size:10px}
   .desktop-live-field select{
-    min-height:30px;
-    padding:0 7px;
-    border-radius:8px;
-    font-size:10px;
+    min-height:34px;
+    padding:0 8px;
+    border-radius:9px;
+    font-size:11px;
   }
   .desktop-live-action{
-    min-height:30px;
-    padding:4px 7px;
-    font-size:10px;
-    border-radius:8px;
+    min-height:34px;
+    padding:5px 8px;
+    font-size:11px;
+    border-radius:9px;
   }
-  .desktop-live-detail{min-height:24px;font-size:9px}
-  .desktop-live-stack{gap:5px}
-  .desktop-live-choice{gap:5px}
-  .desktop-live-bg-top{grid-template-columns:66px 1fr;gap:7px}
+  .desktop-live-detail{min-height:27px;font-size:10px}
+  .desktop-live-stack{gap:6px}
+  .desktop-live-choice{gap:6px}
+  .desktop-live-bg-top{grid-template-columns:78px 1fr;gap:8px}
   .desktop-live-bg-top img,.desktop-live-bg-placeholder{
-    width:66px;
-    height:56px;
-    border-radius:8px;
-    font-size:9px;
+    width:78px;
+    height:64px;
+    border-radius:9px;
+    font-size:10px;
   }
 
   /* Audio is a peer of Text / Effect / Background, not a full-width block. */
@@ -9077,19 +9078,19 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   }
   .desktop-live-audio-col strong{
     grid-column:1/2;
-    font-size:10px;
+    font-size:11px;
   }
   .desktop-live-audio-col small{
     grid-column:2/4;
     min-height:0;
     text-align:right;
-    font-size:8px;
+    font-size:9px;
   }
   .desktop-live-audio-col .desktop-live-action{min-width:0}
   .desktop-live-audio-note{
     margin:0!important;
     color:#858a91!important;
-    font:650 8px/1.25 system-ui!important;
+    font:650 9px/1.3 system-ui!important;
   }
 
   /* Scene structural controls stay visible at the bottom of the cockpit. */
