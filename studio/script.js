@@ -7376,7 +7376,7 @@ function openDesktopTextDetail(){
     );
     effectCard.append(effectGrid,desktopDetail('演出の詳細設定','effect'));
 
-    const bgCard=desktopCard('背景（▣）');
+    const bgCard=desktopCard('背景（▣）','desktop-live-bg-card');
     const bg=p.background;
     const bgTop=document.createElement('div');bgTop.className='desktop-live-bg-top';
     if(bg?.src){const img=document.createElement('img');img.src=bg.src;img.alt='背景';bgTop.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent='背景';bgTop.appendChild(ph);}
