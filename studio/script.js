@@ -4860,6 +4860,7 @@
   const desktopShortcutButton=$('#desktopShortcutButton');
   const desktopLiveMQ=window.matchMedia('(min-width:1100px)');
   let desktopTimingOpen=false;
+  let desktopSceneUnderlaySnapshot=null;
   let liveEditEnabled=false;
   let liveEditToolbarVisible=false;
   let liveInlineEditEl=null;
@@ -7102,8 +7103,44 @@ function openDesktopTextDetail(){
     return wrap;
   }
 
+  function cloneDesktopSceneUnderlay(){
+    if(desktopSceneUnderlaySnapshot){
+      return desktopSceneUnderlaySnapshot.cloneNode(true);
+    }
+    const shell=document.createElement('div');
+    shell.className='desktop-live-special-underlay';
+    const scene=workingDocument?.scenes?.[Math.max(0,Math.min(Number(player?.index)||0,(workingDocument?.scenes?.length||1)-1))]||workingDocument?.scenes?.[0]||{};
+    const body=desktopCard('本文','desktop-live-body-card');
+    const ta=document.createElement('textarea');ta.value=scene.text||'';ta.readOnly=true;body.appendChild(ta);
+    const sub=document.createElement('label');sub.className='desktop-live-subtext-field';
+    const cap=document.createElement('span');cap.textContent='サブテキスト';
+    const sta=document.createElement('textarea');sta.className='desktop-live-subtext';sta.value=scene.subText||'';sta.readOnly=true;
+    sub.append(cap,sta);body.appendChild(sub);
+    const cards=document.createElement('div');cards.className='desktop-live-three';
+    ['文字（Aa）','演出（✦）','背景（▣）','音（♪）'].forEach(t=>cards.appendChild(desktopCard(t)));
+    const ops=desktopCard('Scene操作（•••）','desktop-live-scene-card');
+    shell.append(body,cards,ops);
+    return shell;
+  }
+
+  function mountDesktopSpecialModal(title,nodes=[]){
+    desktopLivePanel.hidden=false;
+    document.body.classList.add('desktop-live-edit','desktop-live-special-open');
+    desktopLivePanelBody.innerHTML='';
+    const underlay=cloneDesktopSceneUnderlay();
+    underlay.classList.add('desktop-live-special-underlay');
+    const shade=document.createElement('div');shade.className='desktop-live-special-shade';
+    const modal=document.createElement('section');modal.className='desktop-live-special-modal';
+    const head=document.createElement('div');head.className='desktop-live-special-modal-head';
+    const kicker=document.createElement('small');kicker.textContent=title==='表紙'?'COVER':'ENDING';
+    const h=document.createElement('strong');h.textContent=title==='表紙'?'表紙を編集':'読了ページを編集';
+    head.append(kicker,h);modal.appendChild(head);
+    nodes.forEach(n=>modal.appendChild(n));
+    desktopLivePanelBody.append(underlay,shade,modal);
+    return modal;
+  }
+
   function renderDesktopCoverPanel(){
-    desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');desktopLivePanelBody.innerHTML='';
     desktopSceneLabel.textContent='表紙';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
 
@@ -7146,33 +7183,22 @@ function openDesktopTextDetail(){
         workingDocument.cover ||= {};
         workingDocument.cover.styles ||= {};
         workingDocument.cover.styles[desktopCoverStyleTarget]=clone(st);
-
-        applyCoverStyleToLiveElement(
-          desktopCoverStyleTarget,
-          workingDocument.cover.styles[desktopCoverStyleTarget]
-        );
+        applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]);
         refreshLivePlayerDocumentChrome();
-        requestAnimationFrame(()=>applyCoverStyleToLiveElement(
-          desktopCoverStyleTarget,
-          workingDocument.cover.styles[desktopCoverStyleTarget]
-        ));
-
-        updateCoverPreview();
-        syncEasyPublishButton();
-        scheduleDraftSave(70);
+        requestAnimationFrame(()=>applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]));
+        updateCoverPreview();syncEasyPublishButton();scheduleDraftSave(70);
       }
     ));
-    desktopLivePanelBody.append(textCard,styleCard);
+    mountDesktopSpecialModal('表紙',[textCard,styleCard]);
   }
 
   function renderDesktopEndingPanel(){
-    desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');desktopLivePanelBody.innerHTML='';
     desktopSceneLabel.textContent='読了ページ';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
     const textCard=desktopCard('中央の文');const ta=document.createElement('textarea');ta.value=endingLabelInput?.value||'';ta.placeholder='読了';ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
     const styleCard=desktopCard('文字（Aa）');styleCard.append(shellStyleControls(()=>{workingDocument.ending||={};workingDocument.ending.style||={};return workingDocument.ending.style;},()=>{refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
     const linksCard=desktopCard('下部ボタン');const ops=document.createElement('div');ops.className='desktop-live-scene-ops';ops.append(desktopAction('左ボタンを編集',()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('left');}),desktopAction('右ボタンを編集',()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('right');}));linksCard.appendChild(ops);
-    desktopLivePanelBody.append(textCard,styleCard,linksCard);
+    mountDesktopSpecialModal('読了ページ',[textCard,styleCard,linksCard]);
   }
 
   function renderDesktopLivePanel(){
@@ -7182,7 +7208,7 @@ function openDesktopTextDetail(){
       document.body.classList.remove('desktop-live-edit');
       return;
     }
-    if(playerHost.classList.contains('sp-cover-open')){
+    if(liveCoverIsVisible()){
       renderDesktopCoverPanel();
       return;
     }
@@ -7190,6 +7216,7 @@ function openDesktopTextDetail(){
       renderDesktopEndingPanel();
       return;
     }
+    document.body.classList.remove('desktop-live-special-open');
     if(desktopTimingButton)desktopTimingButton.disabled=false;
     const {scene,index}=liveEditScene();if(!scene)return;
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');
@@ -7203,18 +7230,37 @@ function openDesktopTextDetail(){
 
     const bodyCard=desktopCard('本文','desktop-live-body-card');
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder='本文を入力';
-    // Do not rebuild the preview on every keystroke. A short debounce keeps
-    // continuous writing visually calm while still updating shortly after the
-    // author pauses. The right editor DOM stays intact, so the caret is kept.
-    const scheduleCalmTextPreview=()=>{
-      clearTimeout(window.__desktopLiveTextPreviewTimer);
-      window.__desktopLiveTextPreviewTimer=setTimeout(()=>{
-        if(!desktopLiveActive())return;
-        refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});
-      },320);
+    // Writing should feel like writing, not replaying a Scene on every key.
+    // While the field is focused, update only the visible text node. This keeps
+    // typography/background stable and deliberately does NOT replay entrance,
+    // typing, shake, blur, etc. A full Scene render happens once editing ends.
+    const mirrorDesktopTextOnly=(field,value)=>{
+      const article=playerHost?.querySelector?.('.sp-scene.is-active');
+      if(!article)return;
+      const selector=field==='subText'?'.sp-subtext':'.sp-text';
+      let el=article.querySelector(selector);
+      if(!el && value){
+        el=document.createElement('div');
+        el.className=selector.slice(1);
+        article.appendChild(el);
+      }
+      if(el){
+        el.textContent=value;
+        el.classList.add('desktop-live-typing-mirror');
+        el.style.setProperty('animation','none','important');
+        el.style.setProperty('transition','none','important');
+      }
     };
-    ta.addEventListener('input',()=>{scene.text=ta.value;scheduleDraftSave(100);scheduleCalmTextPreview();});
-    ta.addEventListener('blur',()=>{clearTimeout(window.__desktopLiveTextPreviewTimer);refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});});
+    const finishDesktopTextMirror=()=>{
+      playerHost?.querySelectorAll?.('.desktop-live-typing-mirror').forEach(el=>{
+        el.classList.remove('desktop-live-typing-mirror');
+        el.style.removeProperty('animation');
+        el.style.removeProperty('transition');
+      });
+      refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});
+    };
+    ta.addEventListener('input',()=>{scene.text=ta.value;scheduleDraftSave(100);mirrorDesktopTextOnly('text',ta.value);});
+    ta.addEventListener('blur',finishDesktopTextMirror);
     ta.addEventListener('keydown',e=>{
       if(e.isComposing||e.key!=='Enter')return;
       if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey){
@@ -7235,9 +7281,9 @@ function openDesktopTextDetail(){
     subTa.addEventListener('input',()=>{
       if(subTa.value)scene.subText=subTa.value;else delete scene.subText;
       scheduleDraftSave(100);
-      scheduleCalmTextPreview();
+      mirrorDesktopTextOnly('subText',subTa.value);
     });
-    subTa.addEventListener('blur',()=>{clearTimeout(window.__desktopLiveTextPreviewTimer);refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});});
+    subTa.addEventListener('blur',finishDesktopTextMirror);
     subField.append(subLabel,subTa);
     bodyCard.appendChild(subField);
 
@@ -7382,6 +7428,7 @@ function openDesktopTextDetail(){
     nav.append(navText,switchLabel);sceneCard.appendChild(nav);
 
     desktopLivePanelBody.append(bodyCard,three,sceneCard);
+    desktopSceneUnderlaySnapshot=desktopLivePanelBody.cloneNode(true);
     if(desktopShortcutButton)desktopShortcutButton.hidden=false;
     maybeShowDesktopWritingGuide();
   }
