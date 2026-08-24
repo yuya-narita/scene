@@ -9473,3 +9473,24 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     bottom:10px;
   }
 }
+
+
+/* =========================================================
+   Desktop Live Editor card clearance v8 — PC only
+   Custom text colors add a picker + palette below the four quick fields.
+   Reserve enough common height for every card so the blue detail route never
+   sits on top of those controls, while keeping the 2 x 2 grid aligned.
+   ========================================================= */
+@media (min-width:1100px){
+  .desktop-live-three{
+    grid-auto-rows:258px;
+  }
+  .desktop-live-three > .desktop-live-card{
+    height:258px;
+    min-height:258px;
+    padding-bottom:46px;
+  }
+  .desktop-live-three > .desktop-live-card > .desktop-live-detail{
+    bottom:11px;
+  }
+}

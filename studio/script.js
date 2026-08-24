@@ -7213,11 +7213,23 @@ function openDesktopTextDetail(){
     // Cover / ending are explicit editor modes.  Keep the right inspector in
     // sync with the action the author just took instead of relying only on
     // ScenePlayer's transient DOM/ended state during the same frame.
-    if(desktopSpecialIntent==='cover' || liveCoverIsVisible()){
+    if(desktopSpecialIntent==='cover'){
       renderDesktopCoverPanel();
       return;
     }
-    if(desktopSpecialIntent==='ending' || player?.ended || !playerHost.querySelector('.sp-ending')?.hidden){
+    if(desktopSpecialIntent==='ending'){
+      renderDesktopEndingPanel();
+      return;
+    }
+    // During Cover -> Scene 1 and Ending -> Scene transitions, ScenePlayer's
+    // cover/ending DOM can remain visible for a frame.  Once a real Scene
+    // change has fired, trust that explicit editor mode instead of the stale
+    // shell DOM so Scene 1 immediately gets the normal Scene inspector.
+    if(desktopSpecialIntent!=='scene' && liveCoverIsVisible()){
+      renderDesktopCoverPanel();
+      return;
+    }
+    if(desktopSpecialIntent!=='scene' && (player?.ended || !playerHost.querySelector('.sp-ending')?.hidden)){
       renderDesktopEndingPanel();
       return;
     }
@@ -9426,7 +9438,10 @@ function openDesktopTextDetail(){
   playerHost.addEventListener('sceneplayer:coverstart',()=>{desktopSpecialIntent='cover';finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});liveCoverTextDraft=coverTextStateFromDocument();pushLiveCoverTextDraftToEasy();closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(()=>requestAnimationFrame(renderDesktopLivePanel));});
   playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
-    desktopSpecialIntent=null;
+    // A Scene change is authoritative. Keep this explicit mode until the
+    // player emits coverstart/end; otherwise the fading Cover DOM can make
+    // Scene 1 incorrectly reopen the Cover inspector.
+    desktopSpecialIntent='scene';
     const detailKind=currentDesktopDetailKind();
     finishInlineTextEdit();
     closeLiveEditSheet();
