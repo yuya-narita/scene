@@ -9614,3 +9614,67 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     padding-bottom:8px!important;
   }
 }
+
+/* =========================================================
+   Desktop Live Editor text-card custom-color fit v11 — PC only
+   Keep the shared 240px card footprint, but compress only the quick
+   color-memory block so the pin button remains visible above the
+   protected blue detail-link footer.
+   ========================================================= */
+@media (min-width:1100px){
+  .desktop-live-three .desktop-live-card:has(.text-color-palette){
+    padding-bottom:42px!important;
+  }
+  .desktop-live-three .studio-color-picker.is-compact{
+    width:40px!important;
+    min-width:40px!important;
+    margin:-1px auto 0!important;
+  }
+  .desktop-live-three .studio-color-picker.is-compact .studio-color-trigger{
+    width:40px!important;
+    min-width:40px!important;
+    height:25px!important;
+    min-height:25px!important;
+    border-radius:8px!important;
+  }
+  .desktop-live-three .text-color-palette{
+    gap:2px!important;
+    margin:0 auto!important;
+    padding:0!important;
+    line-height:1!important;
+  }
+  .desktop-live-three .text-color-palette-row{
+    grid-template-columns:30px minmax(0,1fr)!important;
+    gap:4px!important;
+    min-height:18px!important;
+  }
+  .desktop-live-three .text-color-palette-label{
+    font-size:9px!important;
+    line-height:1!important;
+  }
+  .desktop-live-three .text-color-palette-chips{
+    gap:4px!important;
+    flex-wrap:nowrap!important;
+  }
+  .desktop-live-three .text-color-chip{
+    width:18px!important;
+    height:18px!important;
+    flex:0 0 18px!important;
+    border-width:1px!important;
+  }
+  .desktop-live-three .text-color-palette-actions{
+    padding-left:34px!important;
+    margin-top:0!important;
+    min-height:22px!important;
+  }
+  .desktop-live-three .text-color-pin{
+    min-height:22px!important;
+    height:22px!important;
+    padding:2px 7px!important;
+    font-size:9px!important;
+    line-height:1!important;
+  }
+  .desktop-live-three .desktop-live-card:has(.text-color-palette) > .desktop-live-detail{
+    bottom:6px!important;
+  }
+}
