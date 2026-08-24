@@ -214,7 +214,7 @@
     ['#sceneBgmLoop + span','audio.loop'],['#sceneAmbientLoop + span','audio.loop'],['#sceneSeEnabled + span','audio.seEnable'],
     ['.audio-card:nth-child(1) .audio-card-title small','audio.bgm.note'],['.audio-card:nth-child(2) .audio-card-title small','audio.ambient.note'],['.audio-card:nth-child(3) .audio-card-title small','audio.se.note'],
     ['.advanced-hint','audio.hint'],['#editReturnButton','preview.return'],
-    ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#easyPublishButton span','publish.action'],['#easyPublishButton small','publish.short'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],
+    ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#easyPublishButton span','publish.action'],['#easyPublishButton small','publish.short'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],['#easyMenuPanel label[for="importPackageInput"] span','file.open'],['#menuExportPackageButton span','file.export'],['#menuDraftManageButton span','draft.manager'],['#menuNewDraftButton span','draft.new'],['#menuNewDraftButton small','draft.new.note'],['#easyMenuPanel .easy-menu-language > span','work.language'],
     ['.work-meta-section > summary','work.info'],['.author-history-help','work.authorHistory'],['label[for="descriptionInput"] .field-label','work.description'],['#descriptionInput','work.description.ph','placeholder'],['.work-description-help','work.description.help'],['.ending-editor .section-heading > span','ending.heading'],['.ending-editor .section-heading > small','ending.note'],['#endingLabelInput','ending.label.ph','placeholder'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.easy-cover-simple .section-heading > span','work.cover'],['.easy-cover-simple .section-heading > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.easy-cover-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
     ['#advancedPreviewButton','common.preview'],['#advancedExportButton','file.export'],['.auto-timing-head strong','auto.heading'],['#sceneAutoTimingReset','auto.reset'],['.auto-timing-controls label span','auto.second'],['.auto-timing-editor > p','auto.hint'],
     ['#sceneColorSelect','text.color','aria-label'],['#sceneShadowSelect','text.shadow','aria-label'],['#sceneColorSelect option[value="auto"]','effect.auto'],['#sceneColorSelect option[value="white"]','color.white'],['#sceneColorSelect option[value="black"]','color.black'],['#sceneColorSelect option[value="custom"]','color.custom'],['#sceneShadowSelect option[value="auto"]','effect.auto'],['#sceneShadowSelect option[value="none"]','shadow.none'],['#sceneShadowSelect option[value="soft"]','shadow.soft'],['#sceneShadowSelect option[value="strong"]','shadow.strong'],
@@ -259,6 +259,8 @@
       ['#endingQuickCenterText','ending.center'],['#endingQuickFont','scene.font'],['#endingQuickKicker','ending.smallText'],['#endingQuickLabel','ending.buttonLabel'],['#endingQuickUrl','ending.link']
     ];
     quickEndLabels.forEach(([sel,key])=>{const input=$(sel);const cap=input?.closest('label')?.querySelector(':scope > span');if(cap)cap.textContent=t(key);});
+    if(coverQuickEpisodeTitle)coverQuickEpisodeTitle.placeholder=u('例：窯の前で','e.g. Before the Kiln');
+    if(coverQuickWorkTitle)coverQuickWorkTitle.placeholder=u('作品タイトル','Untitled');
     const coverFont=$('#coverQuickFont'); if(coverFont){const map={serif:'font.serif',sans:'font.sans',mono:'font.mono'};[...coverFont.options].forEach(o=>{if(map[o.value])o.textContent=t(map[o.value]);});}
     const endingFont=$('#endingQuickFont'); if(endingFont){const map={serif:'font.serif',sans:'font.sans',mono:'font.mono'};[...endingFont.options].forEach(o=>{if(map[o.value])o.textContent=t(map[o.value]);});}
 
@@ -1271,7 +1273,7 @@
   }
   function updateEndingPreview(){
     if(endingPreviewLabel){
-      const endingText=String(endingLabelInput?.value||'').trim()||'つづく';
+      const endingText=String(endingLabelInput?.value||'').trim()||u('つづく','Continue');
       endingPreviewLabel.textContent=endingText;
       endingPreviewLabel.classList.toggle('has-authored-break',/\r?\n/.test(endingText));
       const families={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
@@ -1286,7 +1288,7 @@
       button.classList.toggle('is-placeholder',empty);
       const small=button.querySelector('small'); const strong=button.querySelector('strong');
       if(small){small.textContent=kicker || (index===0?'PREVIOUS':'NEXT');small.hidden=false;}
-      if(strong)strong.textContent=label || (index===0?'前の話':'続き');
+      if(strong)strong.textContent=label || (index===0?u('前の話','Previous'):u('続き','Next'));
     });
   }
 
@@ -1832,7 +1834,7 @@
 
     if(!bodyInput.value.trim() && !workingDocument?.scenes?.length){
       count.textContent='—';
-      detail.textContent='本文を入力すると表示します。';
+      detail.textContent=u('本文を入力すると表示します。','Enter text to show it here.');
       return;
     }
 
@@ -3317,7 +3319,7 @@
     if(modeFab){
       modeFab.querySelector('span').textContent='▦';
       modeFab.setAttribute('aria-label',uiLanguage==='en'?'Open Toolbox':'道具箱を開く');
-      modeFab.title='道具箱';
+      modeFab.title=u('道具箱','Toolbox');
       updateEasyFileActions();
     }
   }
@@ -3686,7 +3688,7 @@
       const typeLabel=emptyScene
         ? (sceneHasAdvancedMeaning(scene)?t('scene.effectOnly'):t('scene.empty'))
         : ({text:t('scene.type.text'),dialogue:t('scene.type.dialogue'),sound:t('scene.type.sound')}[scene.type]||scene.type);
-      const effectLabel=scene.presentation?.typing?.enabled?'タイプライター':({auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto'));
+      const effectLabel=scene.presentation?.typing?.enabled?u('タイプライター','Typewriter'):({auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto'));
       const sceneLang=scene.language || (workingDocument.language==='mul'?'':workingDocument.language) || '';
       const timing=Number.isFinite(Number(scene.pause)) && Number(scene.pause)>0 ? ` · AUTO ${(Number(scene.pause)/1000).toFixed(2)}s` : '';
       b.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><div><strong>${scenePreviewText(scene)}</strong><small>${typeLabel} · ${effectLabel}${sceneLang?' · '+sceneLang.toUpperCase():''}${media.length?' · '+media.join('/') : ''}${timing}</small></div>`;
@@ -3702,19 +3704,19 @@
     const txt=p.text||{};
 
     const textBits=[];
-    const fontMap={serif:'明朝',sans:'ゴシック',mono:'等幅'};
-    textBits.push(txt.fontFamily ? (fontMap[txt.fontFamily]||txt.fontFamily) : '作品設定');
-    textBits.push(txt.size && txt.size!=='auto' ? txt.size : 'おまかせ');
+    const fontMap={serif:u('明朝','Serif'),sans:u('ゴシック','Sans'),mono:u('等幅','Monospace')};
+    textBits.push(txt.fontFamily ? (fontMap[txt.fontFamily]||txt.fontFamily) : u('作品設定','Work setting'));
+    textBits.push(txt.size && txt.size!=='auto' ? txt.size : u('おまかせ','Automatic'));
     $('#toolboxTextSummary') && ($('#toolboxTextSummary').textContent=textBits.join(' / '));
 
-    const fx=p.typing?.enabled ? 'タイプライター' : (p.effect||'おまかせ');
-    const display=(p.display||'stack')==='solo' ? 'この文章だけ' : '前の文章を残す';
+    const fx=p.typing?.enabled ? u('タイプライター','Typewriter') : (p.effect||u('おまかせ','Automatic'));
+    const display=(p.display||'stack')==='solo' ? u('この文章だけ','Only this text') : u('前の文章を残す','Keep previous text');
     $('#toolboxEffectSummary') && ($('#toolboxEffectSummary').textContent=`${fx} / ${display}`);
 
-    let bg='前Sceneを継続';
+    let bg=u('前Sceneを継続','Continue previous Scene');
     if(p.background && typeof p.background==='object'){
-      if(p.background.src==='')bg='背景なし';
-      else if(p.background.src)bg=`画像あり / ${p.background.motion?.type||'動きなし'}`;
+      if(p.background.src==='')bg=u('背景なし','No background');
+      else if(p.background.src)bg=`${u('画像あり','Image')} / ${p.background.motion?.type||u('動きなし','No motion')}`;
     }
     $('#toolboxBackgroundSummary') && ($('#toolboxBackgroundSummary').textContent=bg);
 
@@ -4190,7 +4192,7 @@
     const head=document.createElement('div');
     head.className='cover-visibility-dialog-head';
     const title=document.createElement('div');
-    title.innerHTML='<small>COVER DISPLAY</small><strong>表紙に表示する情報</strong>';
+    title.innerHTML=`<small>COVER DISPLAY</small><strong>${u('表紙に表示する情報','Show on cover')}</strong>`;
     const close=document.createElement('button');
     close.type='button';
     close.className='cover-visibility-dialog-close';
@@ -4199,16 +4201,16 @@
 
     const note=document.createElement('p');
     note.className='cover-visibility-dialog-note';
-    note.textContent='作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。';
+    note.textContent=u('作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。','Keep the work info and choose only what appears on the cover. Turn everything off for an image-only cover.');
 
     const list=document.createElement('div');
     list.className='cover-visibility-dialog-list';
     const labels=[
-      ['title','作品タイトル'],
-      ['subtitle','サブタイトル'],
-      ['author','作者名'],
-      ['episode','話数'],
-      ['episodeTitle','今回のタイトル']
+      ['title',u('作品タイトル','Work title')],
+      ['subtitle',u('サブタイトル','Subtitle')],
+      ['author',u('作者名','Author')],
+      ['episode',u('話数','Episode label')],
+      ['episodeTitle',u('今回のタイトル','Episode title')]
     ];
 
     for(const [target,labelText] of labels){
@@ -4264,8 +4266,8 @@
     row.className='cover-visibility-summary-button';
     row.innerHTML=`
       <span class="cover-visibility-summary-copy">
-        <strong>表紙に表示する情報</strong>
-        <small>作品情報は残したまま表示だけ切替</small>
+        <strong>${u('表紙に表示する情報','Show on cover')}</strong>
+        <small>${u('作品情報は残したまま表示だけ切替','Keep work info; only toggle cover visibility')}</small>
       </span>
       <span class="cover-visibility-summary-tail">
         <b class="cover-visibility-summary-value">${coverVisibilitySummaryText()}</b>
@@ -4496,7 +4498,7 @@
     const notifyFixedCover=(event)=>{
       event?.preventDefault?.();
       event?.stopPropagation?.();
-      showFixedActionNotice('「表紙に戻る」は固定です');
+      showFixedActionNotice(u('「表紙に戻る」は固定です','“Back to cover” is fixed'));
     };
     endingPreviewCover.addEventListener('pointerup',notifyFixedCover);
     endingPreviewCover.addEventListener('click',(event)=>{
@@ -5793,7 +5795,7 @@ function openDesktopEffectDetail(){
     const basicGrid=two(basic);
     const currentEffect=p.typing?.enabled?'typewriter':(p.effect||'auto');
     const effectSelect=desktopDetailSelect(u('出かた','Entrance'),[
-      ['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']
+      ['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]
     ],currentEffect,v=>{
       ensureDesktopEffectVisibleDefaults(scene,{save:false});
       if(v==='typewriter'){
@@ -5818,15 +5820,15 @@ function openDesktopEffectDetail(){
     const timingGrid=two(timing);
     p.effectTiming ||= {};
     timingGrid.append(
-      desktopDetailRange(u('演出時間','Effect duration'),{min:.15,max:3,step:.05,value:Number(p.effectTiming.duration)||0.8,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{p.effectTiming.duration=v;apply();}}),
-      desktopDetailRange(u('開始遅延','Start delay'),{min:0,max:3,step:.05,value:Number(p.effectTiming.delay)||0,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{if(v<=0)delete p.effectTiming.delay;else p.effectTiming.delay=v;apply();}}),
-      desktopDetailRange(u('消えるまで','Time until exit'),{min:0,max:12,step:.1,value:(Number(p.disappear?.after)||0)/1000,unit:' 秒',format:v=>v.toFixed(1),oninput:v=>{
+      desktopDetailRange(u('演出時間','Effect duration'),{min:.15,max:3,step:.05,value:Number(p.effectTiming.duration)||0.8,unit:u(' 秒',' sec'),format:v=>v.toFixed(2),oninput:v=>{p.effectTiming.duration=v;apply();}}),
+      desktopDetailRange(u('開始遅延','Start delay'),{min:0,max:3,step:.05,value:Number(p.effectTiming.delay)||0,unit:u(' 秒',' sec'),format:v=>v.toFixed(2),oninput:v=>{if(v<=0)delete p.effectTiming.delay;else p.effectTiming.delay=v;apply();}}),
+      desktopDetailRange(u('消えるまで','Time until exit'),{min:0,max:12,step:.1,value:(Number(p.disappear?.after)||0)/1000,unit:u(' 秒',' sec'),format:v=>v.toFixed(1),oninput:v=>{
         const motion=p.disappear?.motion||'stay';
         p.disappear={...(p.disappear||{}),after:Math.round(v*1000),motion};
         if(v<=0)delete p.disappear;
         apply();
       }}),
-      desktopDetailRange(u('消える時のフェード','Exit fade'),{min:.1,max:4,step:.05,value:(Number(p.disappear?.fade)||700)/1000,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{
+      desktopDetailRange(u('消える時のフェード','Exit fade'),{min:.1,max:4,step:.05,value:(Number(p.disappear?.fade)||700)/1000,unit:u(' 秒',' sec'),format:v=>v.toFixed(2),oninput:v=>{
         p.disappear={...(p.disappear||{}),after:Number(p.disappear?.after)||2500,fade:Math.round(v*1000),motion:p.disappear?.motion||'stay'};
         apply();
       }}),
@@ -5840,7 +5842,7 @@ function openDesktopEffectDetail(){
     const typingOn=!!p.typing?.enabled;
     typingSec.classList.toggle('is-disabled',!typingOn);
     const typingGrid=two(typingSec);
-    const speed=desktopDetailRange(u('1文字の速度','Per-character speed'),{min:.01,max:.25,step:.005,value:(Number(p.typing?.speed)||55)/1000,unit:' 秒/文字',format:v=>v.toFixed(3),oninput:v=>{if(!p.typing?.enabled)return;p.typing.speed=Math.round(v*1000);apply();}});
+    const speed=desktopDetailRange(u('1文字の速度','Per-character speed'),{min:.01,max:.25,step:.005,value:(Number(p.typing?.speed)||55)/1000,unit:u(' 秒/文字',' sec/char'),format:v=>v.toFixed(3),oninput:v=>{if(!p.typing?.enabled)return;p.typing.speed=Math.round(v*1000);apply();}});
     const cursor=desktopDetailSelect(u('カーソル','Cursor'),[['on',u('表示する','Show')],['off',u('表示しない','Hide')]],p.typing?.cursor===false?'off':'on',v=>{if(!p.typing?.enabled)return;p.typing.cursor=v!=='off';apply();});
     if(!typingOn){speed.querySelectorAll('input').forEach(el=>el.disabled=true);cursor.querySelector('select').disabled=true;}
     typingGrid.append(speed,cursor);
@@ -6236,9 +6238,9 @@ function openDesktopAudioDetail(){
     let activeKind='bgm';
 
     const tabDefs=[
-      ['bgm','BGM','続いていた時間'],
-      ['ambient','Ambient','その時そこにあった音'],
-      ['se','SE','その時起きた音']
+      ['bgm','BGM',u('続いていた時間','Time that kept flowing')],
+      ['ambient','Ambient',u('その時そこにあった音','Sound that existed there')],
+      ['se','SE',u('その時起きた音','Sound that happened then')]
     ];
 
     const renderTrack=()=>{
@@ -6288,15 +6290,15 @@ function openDesktopAudioDetail(){
       assetText.className='desktop-audio-detail-file';
       const inherited=inheritedPersistentState(kind);
       if(kind!=='se'&&(track.action==='continue'||track.action==='volume')){
-        const inheritedName=inherited?._editorFileName||inherited?.src||'現在BGM / Ambientなし';
-        assetText.innerHTML=`<strong>${track.action==='volume'?'前Sceneの音を音量変更':'前Sceneを継続'}</strong><span>${inheritedName}</span>`;
+        const inheritedName=inherited?._editorFileName||inherited?.src||u('現在BGM / Ambientなし','No current BGM / Ambient');
+        assetText.innerHTML=`<strong>${track.action==='volume'?u('前Sceneの音を音量変更','Change previous Scene volume'):u('前Sceneを継続','Continue previous Scene')}</strong><span>${inheritedName}</span>`;
         asset.append(assetText);
       }else{
-        assetText.innerHTML=`<strong>${track.src?'選択中':'音源未選択'}</strong><span>${track._editorFileName||track.src||'ファイルを選択してください'}</span>`;
+        assetText.innerHTML=`<strong>${track.src?u('選択中','Selected'):u('音源未選択','No audio selected')}</strong><span>${track._editorFileName||track.src||u('ファイルを選択してください','Choose an audio file')}</span>`;
         const assetBtns=document.createElement('div');
         assetBtns.className='desktop-audio-detail-file-actions';
         assetBtns.append(
-          desktopAction(track.src?'音源を変更':'ファイルを選択',()=>{
+          desktopAction(track.src?u('音源を変更','Change audio'):u('ファイルを選択','Choose file'),()=>{
             desktopPickFile((!desktopLiveActive() ? '' : 'audio/*'),(url,name)=>{
               track.src=url;
               track._editorFileName=name;
@@ -6306,7 +6308,7 @@ function openDesktopAudioDetail(){
               renderTrack();
             });
           },'is-primary'),
-          desktopAction('音源を外す',()=>{
+          desktopAction(u('音源を外す','Remove audio'),()=>{
             track.src='';
             track._editorFileName='';
             track.action=kind==='se'?'none':'continue';
@@ -6321,39 +6323,39 @@ function openDesktopAudioDetail(){
 
       const levelSec=document.createElement('section');
       levelSec.className='desktop-text-detail-section';
-      const lh=document.createElement('h3');lh.textContent='音量・フェード';
+      const lh=document.createElement('h3');lh.textContent=u('音量・フェード','Volume & fade');
       levelSec.appendChild(lh);
       const levelGrid=document.createElement('div');levelGrid.className='desktop-text-detail-two';
       levelSec.appendChild(levelGrid);
 
       if(kind!=='se'&&track.action==='volume'){
         levelGrid.append(
-          desktopDetailRange('このSceneからの音量',{
+          desktopDetailRange(u('このSceneからの音量','Volume from this Scene'),{
             min:0,max:1,step:.01,value:Number(track.volume),
             unit:' %',format:v=>Math.round(v*100),
             oninput:v=>{track.volume=v;refreshAudioPreview(kind,{liveVolume:v});}
           }),
-          desktopDetailRange('音量変化時間',{
+          desktopDetailRange(u('音量変化時間','Volume change time'),{
             min:0,max:10,step:.1,value:(Number(track.fade)||0)/1000,
-            unit:' 秒',format:v=>v.toFixed(1),
+            unit:u(' 秒',' sec'),format:v=>v.toFixed(1),
             oninput:v=>{track.fade=Math.round(v*1000);refreshAudioPreview(kind);}
           })
         );
       }else{
         levelGrid.append(
-          desktopDetailRange('音量',{
+          desktopDetailRange(u('音量','Volume'),{
             min:0,max:1,step:.01,value:Number(track.volume),
             unit:' %',format:v=>Math.round(v*100),
             oninput:v=>{track.volume=v;refreshAudioPreview(kind,{liveVolume:v});}
           }),
-          desktopDetailRange('フェードイン',{
+          desktopDetailRange(u('フェードイン','Fade in'),{
             min:0,max:10,step:.1,value:(Number(track.fadeIn)||0)/1000,
-            unit:' 秒',format:v=>v.toFixed(1),
+            unit:u(' 秒',' sec'),format:v=>v.toFixed(1),
             oninput:v=>{track.fadeIn=Math.round(v*1000);refreshAudioPreview(kind);}
           }),
-          desktopDetailRange('フェードアウト',{
+          desktopDetailRange(u('フェードアウト','Fade out'),{
             min:0,max:10,step:.1,value:(Number(track.fadeOut)||0)/1000,
-            unit:' 秒',format:v=>v.toFixed(1),
+            unit:u(' 秒',' sec'),format:v=>v.toFixed(1),
             oninput:v=>{track.fadeOut=Math.round(v*1000);refreshAudioPreview(kind);}
           })
         );
@@ -6361,21 +6363,21 @@ function openDesktopAudioDetail(){
 
       if(kind!=='se'&&track.action!=='volume'){
         levelGrid.append(
-          desktopDetailSelect('ループ',[['on','ON'],['off','OFF']],track.loop===false?'off':'on',v=>{
+          desktopDetailSelect(u('ループ','Loop'),[['on','ON'],['off','OFF']],track.loop===false?'off':'on',v=>{
             track.loop=v!=='off';
             refreshAudioPreview(kind);
           })
         );
       }else if(kind==='se'){
         levelGrid.append(
-          desktopDetailRange('再生遅延',{
+          desktopDetailRange(u('再生遅延','Playback delay'),{
             min:0,max:10,step:.1,value:(Number(track.delay)||0)/1000,
-            unit:' 秒',format:v=>v.toFixed(1),
+            unit:u(' 秒',' sec'),format:v=>v.toFixed(1),
             oninput:v=>{track.delay=Math.round(v*1000);commitAll();scheduleDraftSave(40);}
           }),
-          desktopDetailRange('再生回数',{
+          desktopDetailRange(u('再生回数','Repeat count'),{
             min:1,max:10,step:1,value:Number(track.repeat)||1,
-            unit:' 回',format:v=>Math.round(v),
+            unit:u(' 回',' times'),format:v=>Math.round(v),
             oninput:v=>{track.repeat=Math.round(v);commitAll();scheduleDraftSave(40);}
           })
         );
@@ -6384,18 +6386,18 @@ function openDesktopAudioDetail(){
 
       const previewSec=document.createElement('section');
       previewSec.className='desktop-text-detail-section';
-      const ph=document.createElement('h3');ph.textContent='プレビュー';
+      const ph=document.createElement('h3');ph.textContent=u('プレビュー','Preview');
       const pn=document.createElement('p');pn.className='desktop-text-detail-note';
       pn.textContent=desktopLiveActive()
-        ? '再生中の音は、音量スライダーを動かすとその場で変わります。変更は自動保存され、Sceneを移動して戻っても保持されます。'
-        : '変更は自動保存されます。閉じるとLive Editorでそのまま確認できます。';
+        ? u('再生中の音は、音量スライダーを動かすとその場で変わります。変更は自動保存され、Sceneを移動して戻っても保持されます。','While audio is playing, volume changes immediately. Changes are autosaved and stay with this Scene.')
+        : u('変更は自動保存されます。閉じるとLive Editorでそのまま確認できます。','Changes are autosaved. Close this panel to continue in Live Editor.');
       previewSec.append(ph,pn);
 
       if(desktopLiveActive()){
         const audition=document.createElement('button');
         audition.type='button';
         audition.className='desktop-effect-replay';
-        audition.textContent='♪ このSceneの音を確認';
+        audition.textContent=u('♪ このSceneの音を確認','♪ Preview this Scene audio');
         audition.addEventListener('click',()=>{
           try{player?.unlockAudio?.(true);}catch(_){}
           refreshAudioPreview(kind,{
@@ -6421,7 +6423,7 @@ function openDesktopAudioDetail(){
     foot.className='desktop-text-detail-foot';
     const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?u('リセット','Reset'):u('演出設定を初期化','Reset effect settings');
     const spacer=document.createElement('span');
-    const close=document.createElement('button');close.type='button';close.textContent='閉じる';
+    const close=document.createElement('button');close.type='button';close.textContent=t('common.close');
     const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent=t('common.save');
     foot.append(reset,spacer,close,save);
 
@@ -6556,9 +6558,9 @@ function openDesktopBackgroundDetail(){
     const mode=!p.background?'inherit':(p.background.src===''?'clear':'image');
     sourceGrid.append(
       desktopDetailSelect(u('このSceneの背景','Background for this Scene'),[
-        ['inherit','前Sceneから継続'],
-        ['image','画像を使う'],
-        ['clear','背景なし']
+        ['inherit',u('前Sceneから継続','Continue previous Scene')],
+        ['image',u('画像を使う','Use image')],
+        ['clear',u('背景なし','No background')]
       ],mode,v=>{
         if(v==='inherit'){
           delete p.background;
@@ -6637,8 +6639,8 @@ function openDesktopBackgroundDetail(){
     sourcePositionGrid.append(
       positionField,
       desktopDetailSelect(u('背景サイズ','Background fit'),[
-        ['cover','画面いっぱい（cover）'],
-        ['contain','画像全体（contain）']
+        ['cover',u('画面いっぱい（cover）','Fill screen (cover)')],
+        ['contain',u('画像全体（contain）','Fit whole image (contain)')]
       ],sourceBg.fit||'cover',v=>{const bg=ensureImageState();bg.fit=v;apply();})
     );
 
@@ -6649,8 +6651,8 @@ function openDesktopBackgroundDetail(){
     if(bg0.motion && /^pan/.test(bg0.motion.type||''))ensurePanCoverage(bg0.motion);
     lightGrid.append(
       desktopDetailSelect(u('ベール','Veil'),[
-        ['dark','暗く'],
-        ['light','明るく']
+        ['dark',u('暗く','Dark')],
+        ['light',u('明るく','Light')]
       ],bg0.tone==='light'?'light':'dark',v=>{
         const bg=ensureImageState();bg.tone=v;
         if(!Number.isFinite(Number(bg.dim)))bg.dim=v==='light'?.64:.38;
@@ -6695,27 +6697,27 @@ function openDesktopBackgroundDetail(){
     );
 
     // TRANSITION ----------------------------------------------------------
-    const transSec=section('Scene切替');
+    const transSec=section(u('Scene切替','Scene transition'));
     const transGrid=two(transSec);
     transGrid.append(
-      desktopDetailSelect('切替演出',[
-        ['fade','フェード'],['cut','カット'],['flash','フラッシュ'],['glitch','グリッチ']
+      desktopDetailSelect(u('切替演出','Transition'),[
+        ['fade',t('transition.fade')],['cut',t('transition.cut')],['flash',t('transition.flash')],['glitch',t('transition.glitch')]
       ],bg0.transition||'fade',v=>{const bg=ensureImageState();bg.transition=v;apply();}),
-      desktopDetailRange('切替時間',{
+      desktopDetailRange(u('切替時間','Transition duration'),{
         min:0,max:3,step:.05,
         value:(Number(bg0.transitionDuration)||700)/1000,
-        unit:' 秒',format:v=>v.toFixed(2),
+        unit:u(' 秒',' sec'),format:v=>v.toFixed(2),
         oninput:v=>{const bg=ensureImageState();bg.transitionDuration=Math.round(v*1000);apply();}
       })
     );
 
     // MOTION --------------------------------------------------------------
-    const motionSec=section('背景の動き');
+    const motionSec=section(u('背景の動き','Background motion'));
     const motionBase=bg0.motion||{type:'none'};
 
-    const motionTypeField=desktopDetailSelect('動き',[
-      ['none','なし'],['slowZoom','ゆっくりズーム'],['breath','呼吸'],
-      ['panLeft','左へパン'],['panRight','右へパン'],['panUp','上へパン'],['panDown','下へパン']
+    const motionTypeField=desktopDetailSelect(u('動き','Motion'),[
+      ['none',t('motion.none')],['slowZoom',t('motion.slowZoom')],['breath',t('motion.breath')],
+      ['panLeft',t('motion.panLeft')],['panRight',t('motion.panRight')],['panUp',t('motion.panUp')],['panDown',t('motion.panDown')]
     ],motionBase.type||'none',()=>{});
     motionSec.appendChild(motionTypeField);
 
@@ -6733,17 +6735,17 @@ function openDesktopBackgroundDetail(){
       if(motionType==='none'){
         const note=document.createElement('p');
         note.className='desktop-text-detail-note';
-        note.textContent='「動き」を選ぶと時間・倍率・移動量を細かく設定できます。';
+        note.textContent=u('「動き」を選ぶと時間・倍率・移動量を細かく設定できます。','Choose a motion to fine-tune duration, scale, and travel distance.');
         motionDynamic.appendChild(note);
         return;
       }
 
       const timingGrid=two(motionDynamic);
       timingGrid.append(
-        desktopDetailRange('動きの時間',{
+        desktopDetailRange(u('動きの時間','Motion duration'),{
           min:.5,max:30,step:.25,
           value:(Number(motion.duration)||6500)/1000,
-          unit:' 秒',format:v=>v.toFixed(2),
+          unit:u(' 秒',' sec'),format:v=>v.toFixed(2),
           oninput:v=>{
             const next=ensureImageState();
             next.motion={...(next.motion||{}),type:next.motion?.type||motionType,duration:Math.round(v*1000)};
@@ -6755,7 +6757,7 @@ function openDesktopBackgroundDetail(){
       if(motionType==='slowZoom'||motionType==='breath'){
         const zoomGrid=two(motionDynamic);
         zoomGrid.append(
-          desktopDetailRange('開始倍率',{
+          desktopDetailRange(u('開始倍率','Start scale'),{
             min:1,max:1.5,step:.01,value:Number(motion.scaleFrom)||1,
             format:v=>v.toFixed(2),
             oninput:v=>{
@@ -6764,7 +6766,7 @@ function openDesktopBackgroundDetail(){
               apply();
             }
           }),
-          desktopDetailRange('終了倍率',{
+          desktopDetailRange(u('終了倍率','End scale'),{
             min:1,max:1.7,step:.01,
             value:Number(motion.scaleTo)||(motionType==='slowZoom'?1.14:1.11),
             format:v=>v.toFixed(2),
@@ -6778,7 +6780,7 @@ function openDesktopBackgroundDetail(){
       }else if(/^pan/.test(motionType)){
         const panGrid=two(motionDynamic);
         panGrid.append(
-          desktopDetailRange('移動量',{
+          desktopDetailRange(u('移動量','Travel amount'),{
             min:1,max:30,step:1,value:Number(motion.pan)||9,unit:' %',
             format:v=>Math.round(v),
             oninput:v=>{
@@ -6809,17 +6811,17 @@ function openDesktopBackgroundDetail(){
     const previewNote=document.createElement('p');
     previewNote.className='desktop-text-detail-note';
     previewNote.textContent=desktopLiveActive()
-      ? '変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの背景設定を保持します。'
-      : '変更は自動保存されます。閉じるとLive Editorでそのまま確認できます。';
+      ? u('変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの背景設定を保持します。','Changes appear in Live Preview immediately and are autosaved. Background settings stay with this Scene.')
+      : u('変更は自動保存されます。閉じるとLive Editorでそのまま確認できます。','Changes are autosaved. Close this panel to continue in Live Editor.');
     previewSec.appendChild(previewNote);
 
     const foot=document.createElement('footer');
     foot.className='desktop-text-detail-foot';
     const reset=document.createElement('button');
-    reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'背景設定を初期化';
+    reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?u('リセット','Reset'):u('背景設定を初期化','Reset background settings');
     const spacer=document.createElement('span');
     const close=document.createElement('button');
-    close.type='button';close.textContent='閉じる';
+    close.type='button';close.textContent=t('common.close');
     const save=document.createElement('button');
     save.type='button';save.className='is-primary';save.textContent=t('common.save');
     foot.append(reset,spacer,close,save);
@@ -6869,7 +6871,7 @@ function openDesktopTextDetail(){
     };
 
     const overlay=document.createElement('div');overlay.className='desktop-text-detail-overlay';
-    const modal=document.createElement('section');modal.className='desktop-text-detail-modal';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','文字の詳細設定');
+    const modal=document.createElement('section');modal.className='desktop-text-detail-modal';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label',t('detail.text'));
     const head=document.createElement('header');head.className='desktop-text-detail-head';
     const title=document.createElement('div');const sceneNo=document.createElement('small');sceneNo.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;const h=document.createElement('h2');h.textContent=t('detail.text');title.append(sceneNo,h);
     const x=document.createElement('button');x.type='button';x.className='desktop-text-detail-close';x.textContent='×';x.setAttribute('aria-label',t('common.close'));
@@ -6949,7 +6951,7 @@ function openDesktopTextDetail(){
 
     desktopSceneLabel.textContent=`Scene ${liveTimingIndex+1} / ${workingDocument.scenes.length}`;
     desktopTimingButton?.classList.add('is-active');
-    if(desktopTimingButton)desktopTimingButton.textContent='← 編集へ戻る';
+    if(desktopTimingButton)desktopTimingButton.textContent=u('← 編集へ戻る','← Back to edit');
     desktopLivePanelBody.innerHTML='';
 
     const wrap=document.createElement('div');
@@ -6959,14 +6961,14 @@ function openDesktopTextDetail(){
     railWrap.className='desktop-timing-rail-wrap';
     const railTitle=document.createElement('div');
     railTitle.className='desktop-timing-rail-title';
-    railTitle.innerHTML=`<strong>${workingDocument.scenes.length} Scenes</strong><small>Sceneを横送り</small>`;
+    railTitle.innerHTML=`<strong>${workingDocument.scenes.length} Scenes</strong><small>${u('Sceneを横送り','Scroll Scenes horizontally')}</small>`;
     const rail=document.createElement('div');
     rail.className='desktop-timing-rail';
     workingDocument.scenes.forEach((item,idx)=>{
       const card=document.createElement('button');
       card.type='button';
       card.className='desktop-timing-scene-card'+(idx===liveTimingIndex?' is-selected':'');
-      const txt=(item.text||item.subText||'空のScene').replace(/\\s+/g,' ').trim()||'空のScene';
+      const txt=(item.text||item.subText||u('空のScene','Empty Scene')).replace(/\\s+/g,' ').trim()||u('空のScene','Empty Scene');
       card.innerHTML=`<span><b>${String(idx+1).padStart(2,'0')}</b><em>${liveTimingSeconds(item).toFixed(2)}s</em></span><strong>${txt}</strong>`;
       card.addEventListener('click',()=>{
         liveTimingIndex=idx;
@@ -6985,8 +6987,8 @@ function openDesktopTextDetail(){
     const top=document.createElement('div');
     top.className='desktop-timing-editor-head';
     const left=document.createElement('div');
-    left.innerHTML=`<strong>AUTOタイミング</strong><small>${recorded?`記録済み・${seconds.toFixed(2)}s`:`未記録・標準 ${DEFAULT_AUTO_SECONDS.toFixed(2)}s`}</small>`;
-    const reset=document.createElement('button');reset.type='button';reset.textContent='標準に戻す';
+    left.innerHTML=`<strong>${u('AUTOタイミング','AUTO Timing')}</strong><small>${recorded?`${u('記録済み','Recorded')} · ${seconds.toFixed(2)}s`:`${u('未記録・標準','Not recorded · default')} ${DEFAULT_AUTO_SECONDS.toFixed(2)}s`}</small>`;
+    const reset=document.createElement('button');reset.type='button';reset.textContent=u('標準に戻す','Reset to default');
     reset.addEventListener('click',()=>{resetLiveTiming(liveTimingIndex);renderDesktopTimingPanel();});
     top.append(left,reset);
 
@@ -6995,11 +6997,11 @@ function openDesktopTextDetail(){
     const makeNudge=(d)=>{const b=document.createElement('button');b.type='button';b.textContent=d<0?String(d):`+${d}`;b.addEventListener('click',()=>{setLiveTimingSeconds(liveTimingIndex,liveTimingSeconds(workingDocument.scenes[liveTimingIndex])+d);renderDesktopTimingPanel();});return b;};
     const value=document.createElement('label');value.className='desktop-timing-value';
     const input=document.createElement('input');input.type='number';input.min='0.15';input.max='60';input.step='0.05';input.value=seconds.toFixed(2);input.inputMode='decimal';
-    const unit=document.createElement('span');unit.textContent='秒';value.append(input,unit);
+    const unit=document.createElement('span');unit.textContent=u('秒','sec');value.append(input,unit);
     const commit=()=>{setLiveTimingSeconds(liveTimingIndex,input.value);renderDesktopTimingPanel();};
     input.addEventListener('change',commit);input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commit();}});
     controls.append(makeNudge(-.5),makeNudge(-.1),value,makeNudge(.1),makeNudge(.5));
-    const note=document.createElement('p');note.textContent='AUTO RECの記録値を微調整できます。秒数は直接入力もできます。';
+    const note=document.createElement('p');note.textContent=u('AUTO RECの記録値を微調整できます。秒数は直接入力もできます。','Fine-tune AUTO REC timing. You can also enter seconds directly.');
     editor.append(top,controls,note);
     wrap.append(railWrap,editor);
     desktopLivePanelBody.append(wrap);
@@ -7044,7 +7046,7 @@ function openDesktopTextDetail(){
 
     const colorSelect=document.createElement('select');
     const currentColor=normalizeTextColor(initial.color);
-    [['auto','おまかせ'],['custom','任意色']].forEach(([value,label])=>{
+    [['auto',u('おまかせ','Automatic')],['custom',u('任意色','Custom color')]].forEach(([value,label])=>{
       const o=document.createElement('option');o.value=value;o.textContent=label;colorSelect.appendChild(o);
     });
     colorSelect.value=currentColor?'custom':'auto';
@@ -7054,7 +7056,7 @@ function openDesktopTextDetail(){
     customWrap.style.gridColumn='1 / -1';
 
     const customLabel=document.createElement('span');
-    customLabel.textContent='任意色';
+    customLabel.textContent=u('任意色','Custom color');
     const colorCode=document.createElement('code');
     let activeColor=currentColor || '#4A4A4A';
     colorCode.textContent=activeColor;
@@ -7142,14 +7144,14 @@ function openDesktopTextDetail(){
     const shell=document.createElement('div');
     shell.className='desktop-live-special-underlay';
     const scene=workingDocument?.scenes?.[Math.max(0,Math.min(Number(player?.index)||0,(workingDocument?.scenes?.length||1)-1))]||workingDocument?.scenes?.[0]||{};
-    const body=desktopCard('本文','desktop-live-body-card');
+    const body=desktopCard(u('本文','Text'),'desktop-live-body-card');
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.readOnly=true;body.appendChild(ta);
     const sub=document.createElement('label');sub.className='desktop-live-subtext-field';
-    const cap=document.createElement('span');cap.textContent='サブテキスト';
+    const cap=document.createElement('span');cap.textContent=u('サブテキスト','Subtext');
     const sta=document.createElement('textarea');sta.className='desktop-live-subtext';sta.value=scene.subText||'';sta.readOnly=true;
     sub.append(cap,sta);body.appendChild(sub);
     const cards=document.createElement('div');cards.className='desktop-live-three';
-    ['文字（Aa）','演出（✦）','背景（▣）','音（♪）'].forEach(t=>cards.appendChild(desktopCard(t)));
+    [u('文字（Aa）','Text (Aa)'),u('演出（✦）','Effects (✦)'),u('背景（▣）','Background (▣)'),u('音（♪）','Audio (♪)')].forEach(t=>cards.appendChild(desktopCard(t)));
     const ops=desktopCard(uiLanguage==='en'?'Scene actions (•••)':'Scene操作（•••）','desktop-live-scene-card');
     shell.append(body,cards,ops);
     return shell;
@@ -7185,7 +7187,7 @@ function openDesktopTextDetail(){
 
     const displayText=coverTextStateFromDocument();
     const visible=coverVisibilityStateFromDocument();
-    [['作品タイトル','title'],['サブタイトル','subtitle'],['作者名','author'],['話数','episode'],['今回のタイトル','episodeTitle']].forEach(([label,target])=>{
+    [[u('作品タイトル','Work title'),'title'],[u('サブタイトル','Subtitle'),'subtitle'],[u('作者名','Author'),'author'],[u('話数','Episode label'),'episode'],[u('今回のタイトル','Episode title'),'episodeTitle']].forEach(([label,target])=>{
       const row=document.createElement('div');row.className='desktop-live-field';
       const head=document.createElement('div');
       Object.assign(head.style,{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px'});
@@ -7203,8 +7205,8 @@ function openDesktopTextDetail(){
       row.append(head,input);textCard.appendChild(row);
     });
 
-    const styleCard=desktopCard('選択中の文字（Aa）');
-    styleCard.append(desktopMakeSelect('対象',[['title','作品タイトル'],['subtitle','サブタイトル'],['author','作者名'],['episode','話数'],['episodeTitle','今回のタイトル']],desktopCoverStyleTarget,v=>{desktopCoverStyleTarget=v;renderDesktopLivePanel();}));
+    const styleCard=desktopCard(u('選択中の文字（Aa）','Selected text (Aa)'));
+    styleCard.append(desktopMakeSelect(u('対象','Target'),[['title',u('作品タイトル','Work title')],['subtitle',u('サブタイトル','Subtitle')],['author',u('作者名','Author')],['episode',u('話数','Episode label')],['episodeTitle',u('今回のタイトル','Episode title')]],desktopCoverStyleTarget,v=>{desktopCoverStyleTarget=v;renderDesktopLivePanel();}));
     styleCard.append(shellStyleControls(
       ()=>{
         workingDocument.cover||={};
@@ -7222,16 +7224,16 @@ function openDesktopTextDetail(){
         updateCoverPreview();syncEasyPublishButton();scheduleDraftSave(70);
       }
     ));
-    mountDesktopSpecialModal('表紙',[textCard,styleCard]);
+    mountDesktopSpecialModal(u('表紙','Cover'),[textCard,styleCard]);
   }
 
   function renderDesktopEndingPanel(){
-    desktopSceneLabel.textContent='読了ページ';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
+    desktopSceneLabel.textContent=u('読了ページ','Ending page');desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
-    const textCard=desktopCard('中央の文');const ta=document.createElement('textarea');ta.className='desktop-live-ending-text';ta.value=endingLabelInput?.value||'';ta.placeholder='読了';ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
+    const textCard=desktopCard(u('中央の文','Center text'));const ta=document.createElement('textarea');ta.className='desktop-live-ending-text';ta.value=endingLabelInput?.value||'';ta.placeholder=u('読了','Finished');ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
     const styleCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');styleCard.append(shellStyleControls(()=>{workingDocument.ending||={};workingDocument.ending.style||={};return workingDocument.ending.style;},()=>{refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
     const linksCard=desktopCard(u('下部ボタン','Bottom buttons'));const ops=document.createElement('div');ops.className='desktop-live-scene-ops';ops.append(desktopAction(u('左ボタンを編集','Edit left button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('left');}),desktopAction(u('右ボタンを編集','Edit right button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('right');}));linksCard.appendChild(ops);
-    mountDesktopSpecialModal('読了ページ',[textCard,styleCard,linksCard]);
+    mountDesktopSpecialModal(u('読了ページ','Ending page'),[textCard,styleCard,linksCard]);
   }
 
   let desktopSpecialIntent=null;
@@ -7272,13 +7274,13 @@ function openDesktopTextDetail(){
     desktopSceneLabel.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     desktopPrevScene.disabled=index<=0;desktopNextScene.disabled=index>=workingDocument.scenes.length-1;
     if(desktopTimingOpen){renderDesktopTimingPanel();return;}
-    if(desktopTimingButton){desktopTimingButton.classList.remove('is-active');desktopTimingButton.textContent='⌛ 時間';}
+    if(desktopTimingButton){desktopTimingButton.classList.remove('is-active');desktopTimingButton.textContent=u('⌛ 時間','⌛ Time');}
     desktopLivePanelBody.innerHTML='';
     const p=ensurePresentation(scene);p.text ||= {};
     const refresh=()=>{scheduleDraftSave(70);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();};
 
-    const bodyCard=desktopCard('本文','desktop-live-body-card');
-    const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder='本文を入力';
+    const bodyCard=desktopCard(u('本文','Text'),'desktop-live-body-card');
+    const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder=u('本文を入力','Enter text');
     // Writing should feel like writing, not replaying a Scene on every key.
     // While the field is focused, update only the visible text node. This keeps
     // typography/background stable and deliberately does NOT replay entrance,
@@ -7325,8 +7327,8 @@ function openDesktopTextDetail(){
     // canonical field here so Desktop Live Editor can finish one Scene without
     // leaving the preview-first workspace.
     const subField=document.createElement('label');subField.className='desktop-live-subtext-field';
-    const subLabel=document.createElement('span');subLabel.textContent='サブテキスト';
-    const subTa=document.createElement('textarea');subTa.className='desktop-live-subtext';subTa.value=scene.subText||'';subTa.placeholder='補足が必要なSceneだけ';
+    const subLabel=document.createElement('span');subLabel.textContent=u('サブテキスト','Subtext');
+    const subTa=document.createElement('textarea');subTa.className='desktop-live-subtext';subTa.value=scene.subText||'';subTa.placeholder=u('補足が必要なSceneだけ','Only when a Scene needs extra context');
     subTa.addEventListener('input',()=>{
       if(subTa.value)scene.subText=subTa.value;else delete scene.subText;
       scheduleDraftSave(100);
@@ -7361,9 +7363,9 @@ function openDesktopTextDetail(){
       return b;
     };
     writingActions.append(
-      writingButton('＋ 次に空Scene','Ctrl/⌘ ↵',desktopAddSceneAndFocus,false,'is-primary'),
-      writingButton('｜↩︎ カーソル位置で分割','⇧ ↵',()=>desktopSplitFromActiveCaret(ta)),
-      writingButton('前Sceneと結合','',desktopMergePrevious,index<=0)
+      writingButton(u('＋ 次に空Scene','+ Add empty Scene'),'Ctrl/⌘ ↵',desktopAddSceneAndFocus,false,'is-primary'),
+      writingButton(u('｜↩︎ カーソル位置で分割','↵ Split at cursor'),'⇧ ↵',()=>desktopSplitFromActiveCaret(ta)),
+      writingButton(u('前Sceneと結合','Merge with previous'),'',desktopMergePrevious,index<=0)
     );
     bodyCard.appendChild(writingActions);
 
@@ -7372,10 +7374,10 @@ function openDesktopTextDetail(){
     const textGrid=document.createElement('div');textGrid.className='desktop-live-grid';
     const colorValue=!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom'));
     textGrid.append(
-      desktopMakeSelect('書体',[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
-      desktopMakeSelect('サイズ',[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
-      desktopMakeSelect('色',[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;refresh();}),
-      desktopMakeSelect('文字配置',[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;refresh();})
+      desktopMakeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
+      desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
+      desktopMakeSelect(u('色','Color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;refresh();}),
+      desktopMakeSelect(u('文字配置','Alignment'),[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;refresh();})
     );
     textCard.append(textGrid);
     if(colorValue==='custom'){
@@ -7390,7 +7392,7 @@ function openDesktopTextDetail(){
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
-      desktopMakeSelect('出かた',[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+      desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
         ensureDesktopEffectVisibleDefaults(scene,{save:false});
         if(v==='typewriter'){
           p.effect='none';
@@ -7403,23 +7405,23 @@ function openDesktopTextDetail(){
         replayCurrentDesktopEffect();
         renderDesktopLivePanel();
       }),
-      desktopMakeSelect('表示',[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')]],p.display||'stack',v=>{p.display=v;refresh();}),
-      desktopMakeSelect('表示モード',[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')]],p.view||'world',v=>{p.view=v;refresh();}),
-      desktopMakeSelect('位置の動き',[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();})
+      desktopMakeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')]],p.display||'stack',v=>{p.display=v;refresh();}),
+      desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')]],p.view||'world',v=>{p.view=v;refresh();}),
+      desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();})
     );
     effectCard.append(effectGrid,desktopDetail(t('detail.effect'),'effect'));
 
     const bgCard=desktopCard(uiLanguage==='en'?'Background (▣)':'背景（▣）','desktop-live-bg-card');
     const bg=p.background;
     const bgTop=document.createElement('div');bgTop.className='desktop-live-bg-top';
-    if(bg?.src){const img=document.createElement('img');img.src=bg.src;img.alt='背景';bgTop.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent='背景';bgTop.appendChild(ph);}
+    if(bg?.src){const img=document.createElement('img');img.src=bg.src;img.alt=u('背景','Background');bgTop.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent=u('背景','Background');bgTop.appendChild(ph);}
     const bgBtns=document.createElement('div');bgBtns.className='desktop-live-stack';
     bgBtns.append(
-      desktopAction('前Sceneから継続',()=>{
+      desktopAction(u('前Sceneから継続','Continue previous Scene'),()=>{
         delete p.background;
         refresh();
       },!bg?'is-selected':''),
-      desktopAction(bg?.src?'画像を変更':'画像を選択',()=>desktopPickFile('image/*',(url,name)=>{
+      desktopAction(bg?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{
         p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:p.background?.position||'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
         openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(40);
@@ -7427,7 +7429,7 @@ function openDesktopTextDetail(){
           if(desktopLiveActive())renderDesktopLivePanel();
         });
       }),'is-primary'),
-      desktopAction('背景なし',()=>{
+      desktopAction(u('背景なし','No background'),()=>{
         p.background={src:'',transition:'fade',_editorManaged:true};
         refresh();
       },bg?.src===''?'is-selected':'')
@@ -7445,7 +7447,7 @@ function openDesktopTextDetail(){
     bgPositionAction.classList.add('desktop-live-bg-position');
     bgCard.appendChild(bgPositionAction);
     const tone=document.createElement('div');tone.className='desktop-live-choice';
-    tone.append(desktopAction('暗く',()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction('明るく',()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
+    tone.append(desktopAction(u('暗く','Dark'),()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction(u('明るく','Light'),()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
     bgCard.append(tone,desktopDetail(t('detail.background'),'background'));
 
     const audioCard=desktopCard(uiLanguage==='en'?'Audio (♪)':'音（♪）','desktop-live-audio-card');
@@ -7454,12 +7456,12 @@ function openDesktopTextDetail(){
     const bgmHead=document.createElement('strong');bgmHead.textContent='BGM';bgmRow.appendChild(bgmHead);
     const bgmCmd=managedAudio(scene,'bgm');
     const bgmState=document.createElement('small');
-    bgmState.textContent=bgmCmd?.action==='start'?(bgmCmd._editorFileName||'音源あり'):bgmCmd?.action==='volume'?`音量変更 ${Math.round((Number(bgmCmd.volume)||0)*100)}%`:bgmCmd?.action==='stop'?'停止':'前Sceneを継続';
+    bgmState.textContent=bgmCmd?.action==='start'?(bgmCmd._editorFileName||u('音源あり','Audio selected')):bgmCmd?.action==='volume'?`${u('音量変更','Volume change')} ${Math.round((Number(bgmCmd.volume)||0)*100)}%`:bgmCmd?.action==='stop'?u('停止','Stop'):u('前Sceneを継続','Continue previous Scene');
     bgmRow.appendChild(bgmState);
     bgmRow.append(
-      desktopAction('継続',()=>{setManagedAudio(scene,'bgm',null);refresh();}),
-      desktopAction('停止',()=>{setManagedAudio(scene,'bgm',{channel:'bgm',action:'stop',fadeOut:600});refresh();}),
-      desktopAction(bgmCmd?.action==='start'?'ファイルを変更':'ファイルを選択',()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:name})),'is-primary')
+      desktopAction(u('継続','Continue'),()=>{setManagedAudio(scene,'bgm',null);refresh();}),
+      desktopAction(u('停止','Stop'),()=>{setManagedAudio(scene,'bgm',{channel:'bgm',action:'stop',fadeOut:600});refresh();}),
+      desktopAction(bgmCmd?.action==='start'?u('ファイルを変更','Change file'):u('ファイルを選択','Choose file'),()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:name})),'is-primary')
     );
     audioGrid.append(bgmRow);
     const audioQuickNote=document.createElement('p');audioQuickNote.className='live-edit-note desktop-live-audio-note';audioQuickNote.textContent=t('audio.ambientSeDetail');
@@ -7537,7 +7539,7 @@ function openDesktopTextDetail(){
     const recorded=liveTimingRecorded(scene);
 
     liveEditSceneNumber.textContent=`Scene ${liveTimingIndex+1} / ${workingDocument.scenes.length}`;
-    liveEditSheetTitle.textContent='時間';
+    liveEditSheetTitle.textContent=u('時間','Time');
     liveEditSheet.hidden=false;
     liveEditSheet.classList.remove('live-edit-sheet-audio');
     liveEditSheet.classList.add('live-edit-sheet-timing');
@@ -7552,7 +7554,7 @@ function openDesktopTextDetail(){
     const railTitle=document.createElement('strong');
     railTitle.textContent=`${workingDocument.scenes.length} Scenes`;
     const railHint=document.createElement('small');
-    railHint.textContent='Sceneを横送り';
+    railHint.textContent=u('Sceneを横送り','Scroll Scenes horizontally');
     railHead.append(railTitle,railHint);
 
     const rail=document.createElement('div');
@@ -7598,7 +7600,7 @@ function openDesktopTextDetail(){
     head.className='live-timing-editor-head';
     const copy=document.createElement('div');
     const title=document.createElement('strong');
-    title.textContent='AUTOタイミング';
+    title.textContent=u('AUTOタイミング','AUTO Timing');
     const state=document.createElement('small');
     state.textContent=recorded ? `記録済み・${seconds.toFixed(2)}s` : `未記録・標準 ${DEFAULT_AUTO_SECONDS.toFixed(2)}s`;
     state.classList.toggle('is-recorded',recorded);
@@ -7607,7 +7609,7 @@ function openDesktopTextDetail(){
     const reset=document.createElement('button');
     reset.type='button';
     reset.className='live-timing-reset';
-    reset.textContent='標準に戻す';
+    reset.textContent=u('標準に戻す','Reset to default');
     reset.addEventListener('click',()=>{
       resetLiveTiming(liveTimingIndex);
       renderLiveTimingPanel();
@@ -7625,7 +7627,7 @@ function openDesktopTextDetail(){
     input.value=seconds.toFixed(2);
     input.setAttribute('aria-label','Sceneの表示秒数');
     const unit=document.createElement('span');
-    unit.textContent='秒';
+    unit.textContent=u('秒','sec');
     valueRow.append(input,unit);
 
     const commit=()=>{
@@ -7657,7 +7659,7 @@ function openDesktopTextDetail(){
 
     const note=document.createElement('p');
     note.className='live-timing-note';
-    note.textContent='AUTO RECの記録値を微調整できます。秒数を直接入力して手動設定することもできます。';
+    note.textContent=u('AUTO RECの記録値を微調整できます。秒数を直接入力して手動設定することもできます。','Fine-tune AUTO REC timing, or enter seconds directly.');
 
     editor.append(head,valueRow,nudges,note);
     liveEditSheetBody.append(railWrap,editor);
@@ -7758,7 +7760,7 @@ function openDesktopTextDetail(){
     body.className='desktop-text-detail-body';
     const section=document.createElement('section');
     section.className='desktop-text-detail-section';
-    const h3=document.createElement('h3');h3.textContent='基本';
+    const h3=document.createElement('h3');h3.textContent=u('基本','Basic');
     const grid=document.createElement('div');grid.className='desktop-text-detail-two';
 
     const st=ctx.style;
@@ -8057,8 +8059,8 @@ function openDesktopTextDetail(){
       liveEditSheetTitle.textContent=uiLanguage==='en'?'Background':'背景';
       const p=ensurePresentation(scene),bg=p.background;
       const actions=document.createElement('div');actions.className='live-edit-choice-row';
-      const inherit=makeActionButton('前Sceneを継続',!bg?'is-selected':'');
-      const clear=makeActionButton('背景なし',bg?.src===''?'is-selected':'');
+      const inherit=makeActionButton(u('前Sceneを継続','Continue previous Scene'),!bg?'is-selected':'');
+      const clear=makeActionButton(u('背景なし','No background'),bg?.src===''?'is-selected':'');
       inherit.onclick=()=>{delete p.background;scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
       clear.onclick=()=>{p.background={src:'',transition:'fade',_editorManaged:true};scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
       actions.append(inherit,clear);
@@ -8083,8 +8085,8 @@ function openDesktopTextDetail(){
       };
       const toneRow=document.createElement('div');toneRow.className='live-edit-choice-row live-edit-tone-row';
       const tone=bg?.tone || ((workingDocument?.theme==='cinema'&&workingDocument?.appearance?.cinemaTone==='light')?'light':'dark');
-      const dark=makeActionButton('暗く',bg?.src&&tone==='dark'?'is-selected':'');
-      const light=makeActionButton('明るく',bg?.src&&tone==='light'?'is-selected':'');
+      const dark=makeActionButton(u('暗く','Dark'),bg?.src&&tone==='dark'?'is-selected':'');
+      const light=makeActionButton(u('明るく','Light'),bg?.src&&tone==='light'?'is-selected':'');
       const setTone=(next)=>{
         if(!p.background?.src)return;
         p.background={...p.background,tone:next,dim:next==='light'?.64:.38,_editorManaged:true};
@@ -8093,7 +8095,7 @@ function openDesktopTextDetail(){
       dark.onclick=()=>setTone('dark');light.onclick=()=>setTone('light');
       toneRow.append(dark,light);
       if(!bg?.src){dark.disabled=true;light.disabled=true;}
-      const status=document.createElement('div');status.className='live-edit-status';status.textContent=bg?.src?`選択中：${bg._editorFileName||'背景画像'}`:(bg?.src===''?'このSceneから背景なし':'前Sceneの背景を継続');
+      const status=document.createElement('div');status.className='live-edit-status';status.textContent=bg?.src?`${u('選択中：','Selected: ')}${bg._editorFileName||u('背景画像','background image')}`:(bg?.src===''?u('このSceneから背景なし','No background from this Scene'):u('前Sceneの背景を継続','Continue previous Scene background'));
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='暗さ・動き・切替を細かく調整';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('background');});
       liveEditSheetBody.append(actions,pick,positionAdjust,toneRow,status,detail);return;
     }
@@ -8102,9 +8104,9 @@ function openDesktopTextDetail(){
     const audioWrap=document.createElement('div');audioWrap.className='live-edit-audio-list';
     const bgmCmd=managedAudio(scene,'bgm');const bgmRow=document.createElement('section');bgmRow.className='live-edit-audio-row';
     const bgmHead=document.createElement('div');bgmHead.className='live-edit-audio-head';const bgmName=document.createElement('strong');bgmName.textContent='BGM';const bgmState=document.createElement('small');
-    bgmState.textContent=bgmCmd?.action==='start'?(bgmCmd._editorFileName||'音源あり'):bgmCmd?.action==='volume'?`音量変更 ${Math.round((Number(bgmCmd.volume)||0)*100)}%`:bgmCmd?.action==='stop'?'停止':'継続';bgmHead.append(bgmName,bgmState);
+    bgmState.textContent=bgmCmd?.action==='start'?(bgmCmd._editorFileName||u('音源あり','Audio selected')):bgmCmd?.action==='volume'?`${u('音量変更','Volume change')} ${Math.round((Number(bgmCmd.volume)||0)*100)}%`:bgmCmd?.action==='stop'?'停止':'継続';bgmHead.append(bgmName,bgmState);
     const bgmButtons=document.createElement('div');bgmButtons.className='live-edit-audio-actions';
-    const bgmInherit=makeActionButton('継続',!bgmCmd?'is-selected':'');const bgmStop=makeActionButton('停止',bgmCmd?.action==='stop'?'is-selected':'');const bgmPick=makeActionButton(bgmCmd?.action==='start'?'変更':'選択','is-primary');
+    const bgmInherit=makeActionButton(u('継続','Continue'),!bgmCmd?'is-selected':'');const bgmStop=makeActionButton(u('停止','Stop'),bgmCmd?.action==='stop'?'is-selected':'');const bgmPick=makeActionButton(bgmCmd?.action==='start'?'変更':'選択','is-primary');
     bgmInherit.onclick=()=>{setManagedAudio(scene,'bgm',null);scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
     bgmStop.onclick=()=>{setManagedAudio(scene,'bgm',{channel:'bgm',action:'stop',fadeOut:600});scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
     bgmPick.onclick=()=>pickLiveFile('audio/*',(url,fileName)=>setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:fileName}));
@@ -8218,7 +8220,7 @@ function openDesktopTextDetail(){
     Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483647',display:'grid',placeItems:'center',background:'rgba(12,14,18,.45)',padding:'24px'});
     const modal=document.createElement('section');modal.className='desktop-writing-guide';
     Object.assign(modal.style,{width:'min(520px,calc(100vw - 48px))',background:'#fff',color:'#111',borderRadius:'24px',padding:'24px',boxShadow:'0 24px 80px rgba(0,0,0,.28)'});
-    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button type="button" aria-label="閉じる">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>改行</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>カーソル位置で分割</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>次に空Scene</span></div><div><kbd>↑</kbd><span>先頭行から前Sceneを編集</span></div><div><kbd>↓</kbd><span>最終行から次Sceneを編集</span></div></div><p>分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
+    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>${u('キーボードだけでも書けます','Write with the keyboard')}</strong></div><button type="button" aria-label="${u('閉じる','Close')}">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>${u('改行','New line')}</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>${u('カーソル位置で分割','Split at cursor')}</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>${u('次に空Scene','Add empty Scene')}</span></div><div><kbd>↑</kbd><span>${u('先頭行から前Sceneを編集','From first line: edit previous Scene')}</span></div><div><kbd>↓</kbd><span>${u('最終行から次Sceneを編集','From last line: edit next Scene')}</span></div></div><p>${u('分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。','To undo a split, use “Merge with previous” below the text field.')}</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
     overlay.appendChild(modal);document.body.appendChild(overlay);
     const close=()=>{try{localStorage.setItem(DESKTOP_WRITING_GUIDE_KEY,'1');}catch(_){}overlay.remove();};
     modal.querySelector('.desktop-writing-guide-head button')?.addEventListener('click',close);
@@ -8290,21 +8292,21 @@ function openDesktopTextDetail(){
     finishInlineTextEdit();
     liveEditSceneNumber.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     liveEditSheet.hidden=false;document.body.classList.add('live-edit-sheet-open');
-    liveEditSheetTitle.textContent='Scene操作';liveEditSheetBody.innerHTML='';
+    liveEditSheetTitle.textContent=u('Scene操作','Scene actions');liveEditSheetBody.innerHTML='';
     const grid=document.createElement('div');grid.className='live-edit-scene-actions';
     const action=(label,fn,disabled=false,danger=false)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.disabled=disabled;if(danger)b.classList.add('is-danger');b.addEventListener('click',fn);return b;};
     grid.append(
-      action('↑ 上へ移動',()=>liveEditMoveScene(-1),index===0),
-      action('↓ 下へ移動',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1),
-      action('前のSceneと結合',liveEditMergePrevious,index===0),
-      action('複製',liveEditDuplicateScene),
-      action('削除',liveEditDeleteScene,workingDocument.scenes.length<=1,true)
+      action(u('↑ 上へ移動','↑ Move up'),()=>liveEditMoveScene(-1),index===0),
+      action(u('↓ 下へ移動','↓ Move down'),()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1),
+      action(u('前のSceneと結合','Merge with previous'),liveEditMergePrevious,index===0),
+      action(u('複製','Duplicate'),liveEditDuplicateScene),
+      action(u('削除','Delete'),liveEditDeleteScene,workingDocument.scenes.length<=1,true)
     );
     const nav=document.createElement('div');nav.className='live-edit-nav-toggle';
-    const label=document.createElement('div');label.innerHTML='<strong>読者が過去Sceneへ戻れる</strong><small>公開Playerの戻る操作を許可</small>';
+    const label=document.createElement('div');label.innerHTML=`<strong>${u('読者が過去Sceneへ戻れる','Readers can revisit past Scenes')}</strong><small>${u('公開Playerの戻る操作を許可','Allow back navigation in the public Player')}</small>`;
     const allowed=workingDocument.player?.navigation?.allowPrevious!==false;
     const switchLabel=document.createElement('label');switchLabel.className='live-edit-mobile-switch';
-    const switchInput=document.createElement('input');switchInput.type='checkbox';switchInput.checked=allowed;switchInput.setAttribute('aria-label','読者が過去Sceneへ戻れる');
+    const switchInput=document.createElement('input');switchInput.type='checkbox';switchInput.checked=allowed;switchInput.setAttribute('aria-label',u('読者が過去Sceneへ戻れる','Readers can revisit past Scenes'));
     const switchTrack=document.createElement('span');switchTrack.className='live-edit-mobile-switch-track';
     const switchState=document.createElement('span');switchState.className='live-edit-mobile-switch-state';switchState.textContent=allowed?'ON':'OFF';
     switchInput.addEventListener('change',()=>{
@@ -8332,7 +8334,7 @@ function openDesktopTextDetail(){
     observeLiveEditPreviewChrome();
     syncLiveEditPreviewChrome();
     requestAnimationFrame(()=>{ensureLiveEditEmptyTarget();renderDesktopLivePanel();});
-    const historyHelp=playerHost.querySelector('.sp-history-help');if(historyHelp)historyHelp.textContent='Sceneをスクロール';
+    const historyHelp=playerHost.querySelector('.sp-history-help');if(historyHelp)historyHelp.textContent=u('Sceneをスクロール','Scroll Scenes');
     const historyKicker=playerHost.querySelector('.sp-history-kicker');if(historyKicker)historyKicker.textContent='SCENES';
   }
   function disableLiveEdit(){
@@ -8704,7 +8706,7 @@ function openDesktopTextDetail(){
     const target=document.createElement('button');
     target.type='button';
     target.className='live-disappear-edit-target';
-    target.textContent='タップして編集';
+    target.textContent=u('タップして編集','Tap to edit');
     target.setAttribute('aria-label','消えたSceneのテキストを編集');
     Object.assign(target.style,{
       position:'absolute',
@@ -8868,7 +8870,7 @@ function openDesktopTextDetail(){
     placeOverlay();
     const card=document.createElement('section');
     Object.assign(card.style,{width:'min(680px,100%)',maxHeight:'calc(100% - 24px)',overflowY:'auto',borderRadius:'22px',background:'#fff',color:'#17181b',padding:'18px 18px 22px',boxShadow:'0 18px 55px rgba(0,0,0,.28)'});
-    const h=document.createElement('h2');h.textContent='読了文字の詳細設定';Object.assign(h.style,{margin:'0 0 16px',font:'800 20px/1.35 system-ui'});
+    const h=document.createElement('h2');h.textContent=u('読了文字の詳細設定','Ending text details');Object.assign(h.style,{margin:'0 0 16px',font:'800 20px/1.35 system-ui'});
     card.appendChild(h);
 
     const grid=document.createElement('div');Object.assign(grid.style,{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'});
@@ -8883,13 +8885,13 @@ function openDesktopTextDetail(){
     const size=mkSelect('サイズ',[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof st.size==='string'?st.size:'auto');
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
-    const colorTitle=document.createElement('strong');colorTitle.textContent='文字色';Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
+    const colorTitle=document.createElement('strong');colorTitle.textContent=u('文字色','Text color');Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
     const colors=document.createElement('div');Object.assign(colors.style,{display:'flex',gap:'9px',alignItems:'center',marginTop:'8px',flexWrap:'wrap'});
     const colorBtn=(text,value)=>{
       const b=document.createElement('button');b.type='button';b.textContent=text;Object.assign(b.style,{height:'42px',padding:'0 14px',borderRadius:'21px',border:'1px solid #d7d9de',background:'#fff',font:'700 14px/1 system-ui'});
       b.addEventListener('click',()=>{if(value===null)delete st.color;else st.color=value;apply();});colors.appendChild(b);
     };
-    colorBtn('おまかせ',null);colorBtn('白','#ffffff');colorBtn('黒','#000000');
+    colorBtn(u('おまかせ','Automatic'),null);colorBtn(u('白','White'),'#ffffff');colorBtn(u('黒','Black'),'#000000');
     const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(st.color||'')?st.color:'#ffffff';
     Object.assign(picker.style,{width:'48px',height:'42px',border:'1px solid #d7d9de',borderRadius:'10px',padding:'4px',background:'#fff'});
     colors.appendChild(picker);card.append(colorTitle,colors);
@@ -9225,7 +9227,7 @@ function openDesktopTextDetail(){
     Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483300',background:'rgba(0,0,0,.30)',display:'flex',alignItems:'flex-end',justifyContent:'center',padding:'12px'});
     const card=document.createElement('section');
     Object.assign(card.style,{width:'min(680px,100%)',borderRadius:'22px',background:'#fff',color:'#17181b',padding:'18px 18px 22px',boxShadow:'0 18px 55px rgba(0,0,0,.28)'});
-    const h=document.createElement('h2');h.textContent='表紙文字の詳細設定';Object.assign(h.style,{margin:'0 0 16px',font:'800 20px/1.35 system-ui'});
+    const h=document.createElement('h2');h.textContent=u('表紙文字の詳細設定','Cover text details');Object.assign(h.style,{margin:'0 0 16px',font:'800 20px/1.35 system-ui'});
     card.appendChild(h);
 
     const grid=document.createElement('div');Object.assign(grid.style,{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'});
@@ -9241,16 +9243,16 @@ function openDesktopTextDetail(){
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');
-    colorTitle.textContent='文字色';
+    colorTitle.textContent=u('文字色','Text color');
     Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
 
     const colorModeWrap=document.createElement('label');
     Object.assign(colorModeWrap.style,{display:'grid',gap:'7px',marginTop:'8px',font:'700 13px/1.4 system-ui'});
     const colorModeLabel=document.createElement('span');
-    colorModeLabel.textContent='色';
+    colorModeLabel.textContent=u('色','Color');
     const colorMode=document.createElement('select');
     Object.assign(colorMode.style,{height:'46px',border:'1px solid #d7d9de',borderRadius:'12px',background:'#fff',padding:'0 10px',font:'600 15px/1 system-ui'});
-    [['auto','おまかせ'],['custom','任意色']].forEach(([v,t])=>{
+    [['auto',u('おまかせ','Automatic')],['custom',u('任意色','Custom color')]].forEach(([v,t])=>{
       const o=document.createElement('option');o.value=v;o.textContent=t;colorMode.appendChild(o);
     });
 
@@ -9264,7 +9266,7 @@ function openDesktopTextDetail(){
     const customRow=document.createElement('div');
     Object.assign(customRow.style,{display:'grid',gridTemplateColumns:'1fr auto auto',alignItems:'center',gap:'10px'});
     const customLabel=document.createElement('span');
-    customLabel.textContent='任意色';
+    customLabel.textContent=u('任意色','Custom color');
     Object.assign(customLabel.style,{font:'700 13px/1.4 system-ui'});
     const colorCode=document.createElement('code');
     colorCode.textContent=activeColor;
