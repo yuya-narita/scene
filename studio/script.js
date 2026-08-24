@@ -8269,11 +8269,21 @@ function openDesktopTextDetail(){
     );
     const nav=document.createElement('div');nav.className='live-edit-nav-toggle';
     const label=document.createElement('div');label.innerHTML='<strong>読者が過去Sceneへ戻れる</strong><small>公開Playerの戻る操作を許可</small>';
-    const toggle=document.createElement('button');toggle.type='button';toggle.className='live-edit-toggle';
     const allowed=workingDocument.player?.navigation?.allowPrevious!==false;
-    toggle.dataset.on=allowed?'true':'false';toggle.setAttribute('aria-pressed',allowed?'true':'false');toggle.textContent=allowed?'ON':'OFF';
-    toggle.addEventListener('click',liveEditToggleAllowPrevious);
-    nav.append(label,toggle);
+    const switchLabel=document.createElement('label');switchLabel.className='live-edit-mobile-switch';
+    const switchInput=document.createElement('input');switchInput.type='checkbox';switchInput.checked=allowed;switchInput.setAttribute('aria-label','読者が過去Sceneへ戻れる');
+    const switchTrack=document.createElement('span');switchTrack.className='live-edit-mobile-switch-track';
+    const switchState=document.createElement('span');switchState.className='live-edit-mobile-switch-state';switchState.textContent=allowed?'ON':'OFF';
+    switchInput.addEventListener('change',()=>{
+      workingDocument.player ||= {};workingDocument.player.navigation ||= {};
+      workingDocument.player.navigation.allowPrevious=switchInput.checked;
+      switchState.textContent=switchInput.checked?'ON':'OFF';
+      scheduleDraftSave(60);
+      liveEditRenderAt(liveEditScene().index,{preserveSheet:true});
+      renderLiveEditSceneMenu();
+    });
+    switchLabel.append(switchInput,switchTrack,switchState);
+    nav.append(label,switchLabel);
     liveEditSheetBody.append(grid,nav);
   }
 
