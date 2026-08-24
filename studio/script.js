@@ -7214,6 +7214,21 @@ function openDesktopTextDetail(){
       }
     });
     bodyCard.appendChild(ta);
+
+    // Scene subtext lives beside the main text in the Toolbox. Keep the same
+    // canonical field here so Desktop Live Editor can finish one Scene without
+    // leaving the preview-first workspace.
+    const subField=document.createElement('label');subField.className='desktop-live-subtext-field';
+    const subLabel=document.createElement('span');subLabel.textContent='サブテキスト';
+    const subTa=document.createElement('textarea');subTa.className='desktop-live-subtext';subTa.value=scene.subText||'';subTa.placeholder='補足が必要なSceneだけ';
+    subTa.addEventListener('input',()=>{
+      if(subTa.value)scene.subText=subTa.value;else delete scene.subText;
+      scheduleDraftSave(100);
+      refreshLivePlayer({preserveSheet:false});
+    });
+    subField.append(subLabel,subTa);
+    bodyCard.appendChild(subField);
+
     const writingActions=document.createElement('div');writingActions.className='desktop-writing-actions';
     const writingButton=(label,hint,fn,disabled=false,cls='')=>{
       const b=document.createElement('button');b.type='button';b.className=`desktop-writing-action ${cls}`.trim();b.disabled=disabled;
@@ -7309,7 +7324,6 @@ function openDesktopTextDetail(){
     const tone=document.createElement('div');tone.className='desktop-live-choice';
     tone.append(desktopAction('暗く',()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction('明るく',()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
     bgCard.append(tone,desktopDetail('背景の詳細設定','background'));
-    three.append(textCard,effectCard,bgCard);
 
     const audioCard=desktopCard('音（♪）','desktop-live-audio-card');
     const audioGrid=document.createElement('div');audioGrid.className='desktop-live-audio-grid';
@@ -7325,17 +7339,37 @@ function openDesktopTextDetail(){
       desktopAction(bgmCmd?.action==='start'?'ファイルを変更':'ファイルを選択',()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:name})),'is-primary')
     );
     audioGrid.append(bgmRow);
-    const audioQuickNote=document.createElement('p');audioQuickNote.className='live-edit-note';audioQuickNote.textContent='Ambient と SE は「音の詳細設定」で調整します。';
+    const audioQuickNote=document.createElement('p');audioQuickNote.className='live-edit-note desktop-live-audio-note';audioQuickNote.textContent='Ambient / SE は詳細設定';
     audioCard.append(audioGrid,audioQuickNote,desktopDetail('音の詳細設定','audio'));
+    three.append(textCard,effectCard,bgCard,audioCard);
 
     const sceneCard=desktopCard('Scene操作（•••）','desktop-live-scene-card');
     const ops=document.createElement('div');ops.className='desktop-live-scene-ops';
     const addOp=(label,fn,disabled=false,cls='')=>{const b=desktopAction(label,fn,cls);b.disabled=disabled;ops.appendChild(b);};
-    addOp('← 前へ移動',()=>liveEditMoveScene(-1),index===0);addOp('次へ移動 →',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1);addOp('前のSceneと結合',liveEditMergePrevious,index===0);addOp('複製',liveEditDuplicateScene);addOp('削除',liveEditDeleteScene,workingDocument.scenes.length<=1,'is-danger');
+    addOp('↑ 上へ移動',()=>liveEditMoveScene(-1),index===0);
+    addOp('↓ 下へ移動',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1);
+    addOp('前Sceneと結合',liveEditMergePrevious,index===0);
+    addOp('複製',liveEditDuplicateScene);
+    addOp('削除',liveEditDeleteScene,workingDocument.scenes.length<=1,'is-danger');
     sceneCard.appendChild(ops);
-    const nav=document.createElement('div');nav.className='desktop-live-nav';const navText=document.createElement('div');navText.innerHTML='<strong>読者が過去Sceneへ戻れる</strong><small>公開Playerの戻る操作を許可</small>';const toggle=desktopAction(workingDocument.player?.navigation?.allowPrevious===false?'OFF':'ON',()=>{liveEditToggleAllowPrevious();renderDesktopLivePanel();},'desktop-live-toggle');nav.append(navText,toggle);sceneCard.appendChild(nav);
 
-    desktopLivePanelBody.append(bodyCard,three,audioCard,sceneCard);
+    const nav=document.createElement('div');nav.className='desktop-live-nav';
+    const navText=document.createElement('div');navText.innerHTML='<strong>読者が過去Sceneへ戻れる</strong><small>公開Playerの戻る操作を許可</small>';
+    const switchLabel=document.createElement('label');switchLabel.className='desktop-live-switch';
+    const switchInput=document.createElement('input');switchInput.type='checkbox';switchInput.checked=workingDocument.player?.navigation?.allowPrevious!==false;
+    const switchTrack=document.createElement('span');switchTrack.className='desktop-live-switch-track';
+    const switchState=document.createElement('span');switchState.className='desktop-live-switch-state';switchState.textContent=switchInput.checked?'ON':'OFF';
+    switchInput.addEventListener('change',()=>{
+      workingDocument.player ||= {};workingDocument.player.navigation ||= {};
+      workingDocument.player.navigation.allowPrevious=switchInput.checked;
+      switchState.textContent=switchInput.checked?'ON':'OFF';
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:false});
+    });
+    switchLabel.append(switchInput,switchTrack,switchState);
+    nav.append(navText,switchLabel);sceneCard.appendChild(nav);
+
+    desktopLivePanelBody.append(bodyCard,three,sceneCard);
     if(desktopShortcutButton)desktopShortcutButton.hidden=false;
     maybeShowDesktopWritingGuide();
   }

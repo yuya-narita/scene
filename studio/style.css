@@ -8978,3 +8978,178 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   .desktop-writing-actions .desktop-writing-action:last-child{grid-column:1/-1}
   .desktop-live-scene-ops{grid-template-columns:repeat(3,1fr)}
 }
+
+/* =========================================================
+   Desktop Live Editor compact cockpit v1 — PC only
+   Toolbox = overview, Live Editor = current Scene.
+   Mobile/iPhone Live Editor remains unchanged.
+   ========================================================= */
+@media (min-width:1100px){
+  body.desktop-live-edit .desktop-live-panel{
+    overflow:auto;
+    padding:10px 12px 14px;
+  }
+  .desktop-live-panel-head{
+    top:-10px;
+    margin:-10px -12px 8px;
+    padding:8px 12px;
+    min-height:38px;
+    grid-template-columns:132px 1fr 132px;
+  }
+  .desktop-live-panel-head button{min-height:30px;font-size:11px}
+  .desktop-live-panel-body{gap:8px}
+  .desktop-live-card{
+    padding:9px;
+    gap:7px;
+    border-radius:12px;
+  }
+  .desktop-live-card h3{font-size:12px}
+
+  /* Writing area: main text + subtext + Scene writing actions. */
+  .desktop-live-body-card textarea{
+    min-height:76px;
+    max-height:128px;
+    padding:9px 10px;
+    font-size:13px;
+    line-height:1.55;
+  }
+  .desktop-live-subtext-field{
+    display:grid;
+    grid-template-columns:86px minmax(0,1fr);
+    align-items:center;
+    gap:8px;
+  }
+  .desktop-live-subtext-field>span{
+    color:#646a72;
+    font:800 10px/1.2 system-ui;
+  }
+  .desktop-live-body-card textarea.desktop-live-subtext{
+    min-height:40px;
+    max-height:64px;
+    resize:vertical;
+    font-size:12px;
+    line-height:1.45;
+  }
+  .desktop-writing-actions{gap:6px}
+  .desktop-writing-action{
+    min-height:34px;
+    padding:5px 8px;
+    font-size:10px;
+  }
+  .desktop-writing-action kbd{font-size:9px;padding:1px 5px}
+
+  /* Four current-Scene cards share one compact row. */
+  .desktop-live-three{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:8px;
+  }
+  .desktop-live-grid{gap:6px}
+  .desktop-live-field{gap:3px;font-size:9px}
+  .desktop-live-field select{
+    min-height:30px;
+    padding:0 7px;
+    border-radius:8px;
+    font-size:10px;
+  }
+  .desktop-live-action{
+    min-height:30px;
+    padding:4px 7px;
+    font-size:10px;
+    border-radius:8px;
+  }
+  .desktop-live-detail{min-height:24px;font-size:9px}
+  .desktop-live-stack{gap:5px}
+  .desktop-live-choice{gap:5px}
+  .desktop-live-bg-top{grid-template-columns:66px 1fr;gap:7px}
+  .desktop-live-bg-top img,.desktop-live-bg-placeholder{
+    width:66px;
+    height:56px;
+    border-radius:8px;
+    font-size:9px;
+  }
+
+  /* Audio is a peer of Text / Effect / Background, not a full-width block. */
+  .desktop-live-audio-grid{display:block}
+  .desktop-live-audio-col{
+    grid-template-columns:1fr 1fr 1fr;
+    gap:5px;
+    align-items:center;
+  }
+  .desktop-live-audio-col strong{
+    grid-column:1/2;
+    font-size:10px;
+  }
+  .desktop-live-audio-col small{
+    grid-column:2/4;
+    min-height:0;
+    text-align:right;
+    font-size:8px;
+  }
+  .desktop-live-audio-col .desktop-live-action{min-width:0}
+  .desktop-live-audio-note{
+    margin:0!important;
+    color:#858a91!important;
+    font:650 8px/1.25 system-ui!important;
+  }
+
+  /* Scene structural controls stay visible at the bottom of the cockpit. */
+  .desktop-live-scene-card{gap:7px}
+  .desktop-live-scene-ops{
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:5px;
+  }
+  .desktop-live-nav{
+    padding-top:6px;
+    gap:8px;
+  }
+  .desktop-live-nav strong{font-size:10px}
+  .desktop-live-nav small{font-size:8px}
+
+  /* Native semantic switch for reader backward navigation. */
+  .desktop-live-switch{
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .desktop-live-switch input{
+    position:absolute;
+    inline-size:1px;
+    block-size:1px;
+    opacity:0;
+    pointer-events:none;
+  }
+  .desktop-live-switch-track{
+    position:relative;
+    width:38px;
+    height:22px;
+    border-radius:999px;
+    background:#c8cdd2;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);
+    transition:.16s ease;
+  }
+  .desktop-live-switch-track::after{
+    content:"";
+    position:absolute;
+    top:3px;
+    left:3px;
+    width:16px;
+    height:16px;
+    border-radius:50%;
+    background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.22);
+    transition:.16s ease;
+  }
+  .desktop-live-switch input:checked + .desktop-live-switch-track{background:#17191d}
+  .desktop-live-switch input:checked + .desktop-live-switch-track::after{transform:translateX(16px)}
+  .desktop-live-switch input:focus-visible + .desktop-live-switch-track{outline:2px solid #0786e8;outline-offset:2px}
+  .desktop-live-switch-state{min-width:22px;color:#697079;font:850 9px/1 system-ui}
+}
+
+@media (min-width:1100px) and (max-width:1320px){
+  .desktop-live-three{grid-template-columns:1fr 1fr}
+  .desktop-live-three>.desktop-live-card:last-child{grid-column:auto}
+  .desktop-live-scene-ops{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
