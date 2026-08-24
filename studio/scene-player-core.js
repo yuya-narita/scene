@@ -1893,11 +1893,12 @@
       const scenes = this.document.scenes;
       if (display === 'solo') return [{ scene: scenes[this.index], index: this.index }];
 
-      // A previous solo scene is a visual barrier: stack starts after it.
+      // A previous solo scene resets the visual stack, but that solo Scene itself
+      // becomes the new base. Later `stack` Scenes must build on top of it.
       let start = 0;
       for (let i = this.index - 1; i >= 0; i -= 1) {
         if ((scenes[i].presentation?.display || 'stack') === 'solo') {
-          start = i + 1;
+          start = i;
           break;
         }
       }
