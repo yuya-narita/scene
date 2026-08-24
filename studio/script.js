@@ -171,6 +171,7 @@
 
   const I18N = window.SceneStudioI18n;
   const t = (key, vars={}) => I18N?.t(key, vars) ?? key;
+  const u = (ja,en) => uiLanguage==='en' ? en : ja;
   let uiLanguage = I18N?.getLocale?.() || 'ja';
 
   const UI_BINDINGS = [
@@ -220,7 +221,24 @@
     ['.scene-motion-preview-field > span','background.preview'],['#publishFromPreviewButton','publish.action'],['#publishDialogClose','unpublish.cancel','aria-label'],['#deleteSceneDialog h2','delete.scene.title'],['#deleteSceneDialogText','delete.scene.text'],['#deleteSceneCancel','delete.scene.cancel'],['#deleteSceneConfirm','delete.scene.confirm'],['#unpublishDialog h2','unpublish.title'],['#unpublishDialogText','unpublish.text'],['#unpublishCancel','unpublish.cancel'],['#unpublishConfirm','unpublish.confirm'],['#draftManagerDialog h2','draft.title'],['#draftManagerClose','unpublish.cancel','aria-label'],['#newDraftButton','draft.new'],
     ['#autoRecCancel','rec.cancel'],['#autoRecDone strong','rec.done'],['#autoRecRetry','rec.retry'],
     ['#undoButton','undo.action'],['#undoCompactButton','undo.action','aria-label'],
-    ['#sceneColorCustomField > span','color.custom']
+    ['#sceneColorCustomField > span','color.custom'],
+    ['.easy-preview-card:nth-child(1) .easy-preview-card-head strong','cover.label'],
+    ['.easy-preview-card:nth-child(1) .easy-preview-card-head small','cover.tapEdit'],
+    ['.easy-preview-card:nth-child(2) .easy-preview-card-head strong','ending.heading'],
+    ['.easy-preview-card:nth-child(2) .easy-preview-card-head small','cover.tapEdit'],
+    ['.cover-preview-start','cover.start'],
+    ['[data-preview-cover] strong','ending.cover'],
+    ['#publishRightsConfirm + span','publish.rights'],
+    ['#coverQuickTitle','cover.edit'],
+    ['#coverQuickSubtitle','work.subtitle','placeholder'],
+    ['#coverQuickAuthor','field.author','placeholder'],
+    ['#coverQuickEpisode','work.episode.ph','placeholder'],
+    ['#coverQuickDescription','work.description.ph','placeholder'],
+    ['#coverQuickLogo','cover.logoChoose'],['#coverQuickLogoClear','cover.logoRemove'],['#coverQuickImage','cover.imageChooseChange'],['#coverQuickPosition','cover.positionAdjust'],['#coverQuickImageClear','cover.imageRemove'],['.cover-quick-note','cover.liveNote'],
+    ['#coverPositionCancel','common.cancel'],['#coverPositionTitle','cover.position'],['#coverPositionSave','common.save'],['.cover-position-help','cover.positionHelp'],['#coverPositionReset','common.resetCenter'],['#coverQuickDone','common.done'],
+    ['#endingQuickTitle','ending.heading'],['#endingQuickCenterText','ending.label.ph','placeholder'],['#endingQuickKicker','ending.smallText','placeholder'],['#endingQuickLabel','ending.label.ph','placeholder'],['#endingQuickClear','ending.clearButton'],['.ending-quick-recent-head strong','ending.recent'],['.ending-quick-recent-head small','ending.savedDevice'],['#endingQuickDone','common.done'],
+    ['[data-toolbox-detail="text"] .toolbox-card-copy strong','detail.text'],['[data-toolbox-detail="effect"] .toolbox-card-copy strong','detail.effect'],['[data-toolbox-detail="background"] .toolbox-card-copy strong','detail.background'],['[data-toolbox-detail="audio"] .toolbox-card-copy strong','detail.audio'],
+    ['.toolbox-detail-card .toolbox-card-open','toolbox.open']
   ];
 
   function applyStaticUITranslations(){
@@ -229,6 +247,20 @@
       const el=document.querySelector(selector); if(!el)return;
       if(attr) el.setAttribute(attr,t(key)); else el.textContent=t(key);
     });
+
+    // Repeated / nested controls used by the quick editors and Toolbox.
+    document.querySelectorAll('.toolbox-detail-card .toolbox-card-open').forEach(el=>el.textContent=t('toolbox.open'));
+    const quickCoverLabels=[
+      ['#coverQuickWorkTitle','field.title'],['#coverQuickSubtitle','work.subtitle'],['#coverQuickAuthor','field.author'],
+      ['#coverQuickEpisode','work.episode'],['#coverQuickEpisodeTitle','Episode title'],['#coverQuickDescription','work.description'],['#coverQuickFont','cover.font']
+    ];
+    quickCoverLabels.forEach(([sel,key])=>{const input=$(sel);const cap=input?.closest('label')?.querySelector(':scope > span');if(cap){cap.textContent=key==='Episode title'?u('今回のタイトル','Episode title'):t(key);}});
+    const quickEndLabels=[
+      ['#endingQuickCenterText','ending.center'],['#endingQuickFont','scene.font'],['#endingQuickKicker','ending.smallText'],['#endingQuickLabel','ending.buttonLabel'],['#endingQuickUrl','ending.link']
+    ];
+    quickEndLabels.forEach(([sel,key])=>{const input=$(sel);const cap=input?.closest('label')?.querySelector(':scope > span');if(cap)cap.textContent=t(key);});
+    const coverFont=$('#coverQuickFont'); if(coverFont){const map={serif:'font.serif',sans:'font.sans',mono:'font.mono'};[...coverFont.options].forEach(o=>{if(map[o.value])o.textContent=t(map[o.value]);});}
+    const endingFont=$('#endingQuickFont'); if(endingFont){const map={serif:'font.serif',sans:'font.sans',mono:'font.mono'};[...endingFont.options].forEach(o=>{if(map[o.value])o.textContent=t(map[o.value]);});}
 
     // Easy metadata uses nested labels/smalls, so translate without destroying structure.
     const metaSummary=$('.work-meta-section > summary');
@@ -1050,15 +1082,15 @@
     let committed=normalizeTextColor(initialColor)||'#4A4A4A';
     let hsv=hexToHsv(committed);let preview=committed;let open=false;
     const root=document.createElement('div');root.className='studio-color-picker'+(compact?' is-compact':'');
-    const trigger=document.createElement('button');trigger.type='button';trigger.className='studio-color-trigger';trigger.style.backgroundColor=committed;trigger.setAttribute('aria-label','任意色を選ぶ');
+    const trigger=document.createElement('button');trigger.type='button';trigger.className='studio-color-trigger';trigger.style.backgroundColor=committed;trigger.setAttribute('aria-label',t('color.custom'));
     const pop=document.createElement('div');pop.className='studio-color-popover';pop.hidden=true;
     const square=document.createElement('div');square.className='studio-color-square';
     const cursor=document.createElement('span');cursor.className='studio-color-cursor';square.appendChild(cursor);
-    const hue=document.createElement('input');hue.type='range';hue.min='0';hue.max='359';hue.step='1';hue.value=String(Math.round(hsv.h));hue.className='studio-color-hue';hue.setAttribute('aria-label','色相');
+    const hue=document.createElement('input');hue.type='range';hue.min='0';hue.max='359';hue.step='1';hue.value=String(Math.round(hsv.h));hue.className='studio-color-hue';hue.setAttribute('aria-label',uiLanguage==='en'?'Hue':'色相');
     const meta=document.createElement('div');meta.className='studio-color-meta';
     const dot=document.createElement('span');dot.className='studio-color-dot';
     const code=document.createElement('code');code.textContent=committed;
-    const hint=document.createElement('small');hint.textContent='動かして確認・クリックで決定';
+    const hint=document.createElement('small');hint.textContent=uiLanguage==='en'?'Drag to preview · click to apply':'動かして確認・クリックで決定';
     meta.append(dot,code,hint);pop.append(square,hue,meta);root.append(trigger,pop);
     const paint=()=>{
       square.style.setProperty('--picker-hue',String(Math.round(hsv.h)));
@@ -1176,16 +1208,16 @@
           b.addEventListener('click',()=>{rememberTextColor(hex);onApply(hex);});chips.appendChild(b);
         });
       }else{
-        const empty=document.createElement('small');empty.textContent='まだなし';chips.appendChild(empty);
+        const empty=document.createElement('small');empty.textContent=uiLanguage==='en'?'None yet':'まだなし';chips.appendChild(empty);
       }
       row.appendChild(chips);return row;
     };
-    wrap.append(makeRow('最近',readRecentTextColors()),makeRow('固定',readPinnedTextColors()));
+    wrap.append(makeRow(uiLanguage==='en'?'Recent':'最近',readRecentTextColors()),makeRow(uiLanguage==='en'?'Pinned':'固定',readPinnedTextColors()));
     const actions=document.createElement('div');actions.className='text-color-palette-actions';
     const pin=document.createElement('button');pin.type='button';pin.className='text-color-pin';
     const current=normalizeTextColor(currentColor);
     const pinned=current && readPinnedTextColors().includes(current);
-    pin.textContent=pinned?'★ 固定を外す':'☆ この色を固定';pin.disabled=!current;
+    pin.textContent=pinned?(uiLanguage==='en'?'★ Unpin':'★ 固定を外す'):(uiLanguage==='en'?'☆ Pin this color':'☆ この色を固定');pin.disabled=!current;
     pin.addEventListener('click',()=>{if(!current)return;togglePinnedTextColor(current);const fresh=makeTextColorPalette(current,onApply);wrap.replaceWith(fresh);});
     actions.appendChild(pin);wrap.appendChild(actions);return wrap;
   }
@@ -1304,7 +1336,7 @@
   function renderEndingRecents(type){
     if(!endingQuickRecentList)return;endingQuickRecentList.replaceChildren();
     const rows=readEndingRecents().filter(x=>x?.type===type);
-    if(!rows.length){const e=document.createElement('small');e.className='ending-quick-empty';e.textContent='まだありません';endingQuickRecentList.appendChild(e);return;}
+    if(!rows.length){const e=document.createElement('small');e.className='ending-quick-empty';e.textContent=uiLanguage==='en'?'Nothing yet':'まだありません';endingQuickRecentList.appendChild(e);return;}
     rows.slice(0,6).forEach(item=>{const b=document.createElement('button');b.type='button';b.className='ending-quick-recent-chip';b.textContent=item.type==='center'?item.text:(item.kicker?`${item.kicker} / ${item.label}`:item.label);b.onclick=()=>{if(item.type==='center'){endingQuickCenterText.value=item.text||'';}else{endingQuickKicker.value=item.kicker||'';endingQuickLabel.value=item.label||'';endingQuickUrl.value=item.url||'';}syncQuickEndingToMain();};endingQuickRecentList.appendChild(b);});
   }
   function refreshLivePlayerDocumentChrome(){
@@ -1331,7 +1363,7 @@
     if(liveEditEnabled)bringEndingQuickDialogToFront();
     endingQuickTarget=target;const center=target==='center';
     endingQuickCenterFields.hidden=!center;endingQuickSlotFields.hidden=center;
-    endingQuickTitle.textContent=center?'中央の文':target==='left'?'左ボタン':'右ボタン';
+    endingQuickTitle.textContent=center?t('ending.center'):target==='left'?t('ending.leftButton'):t('ending.rightButton');
     if(center){
       endingQuickCenterText.value=endingLabelInput?.value||'';
       if(endingQuickFont)endingQuickFont.value=endingFontFamily;
@@ -3157,7 +3189,7 @@
     // In authoring screens the slot is always present; availability is shown by tone.
     if(compact){compact.hidden=false;compact.disabled=!undoSnapshot;}
   }
-  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; const returnButton=$('#editReturnButton'); if(returnButton)returnButton.hidden=!open; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); const modeLabel=$('#studioModeLabel'); if(modeLabel) modeLabel.textContent=name==='advanced'?'道具箱':'Easy Studio'; syncUndoVisibilityForScreen(name); }
+  function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; const returnButton=$('#editReturnButton'); if(returnButton)returnButton.hidden=!open; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); const modeLabel=$('#studioModeLabel'); if(modeLabel) modeLabel.textContent=name==='advanced'?(uiLanguage==='en'?'Toolbox':'道具箱'):'Easy Studio'; syncUndoVisibilityForScreen(name); }
   // v0.2.97: the shared authoring header stays the same size while scrolling.
   const sharedHeader=$('#studioSharedHeader');
   sharedHeader?.classList.remove('is-compact');
@@ -3270,8 +3302,8 @@
       modeFab.hidden=false;
       modeFab.disabled=false;
       modeFab.querySelector('span').textContent='✎';
-      modeFab.setAttribute('aria-label','Easyへ戻る');
-      modeFab.title='Easyへ戻る';
+      modeFab.setAttribute('aria-label',uiLanguage==='en'?'Back to Easy':'Easyへ戻る');
+      modeFab.title=uiLanguage==='en'?'Back to Easy':'Easyへ戻る';
     }
     scrollScreenToTop(advancedScreen);
   }
@@ -3284,7 +3316,7 @@
     const modeFab=$('#floatingAdvancedButton');
     if(modeFab){
       modeFab.querySelector('span').textContent='▦';
-      modeFab.setAttribute('aria-label','道具箱を開く');
+      modeFab.setAttribute('aria-label',uiLanguage==='en'?'Open Toolbox':'道具箱を開く');
       modeFab.title='道具箱';
       updateEasyFileActions();
     }
@@ -3781,16 +3813,16 @@
     extras=document.createElement('details');
     extras.className='toolbox-extras';
     extras.innerHTML=`
-      <summary>作品全体・その他</summary>
+      <summary>${t('toolbox.other')}</summary>
       <div class="toolbox-extras-body">
         <section class="toolbox-global-slot toolbox-global-navigation">
-          <h3>読者ナビゲーション</h3>
+          <h3>${t('toolbox.readerNav')}</h3>
         </section>
         <section class="toolbox-global-slot toolbox-global-ending">
-          <h3>読了ページ</h3>
+          <h3>${t('ending.heading')}</h3>
         </section>
         <section class="toolbox-global-slot toolbox-global-meta">
-          <h3>作品情報・表紙</h3>
+          <h3>${t('toolbox.workInfo')}</h3>
         </section>
       </div>`;
     layout.after(extras);
@@ -3802,12 +3834,12 @@
     if(policy)extras.querySelector('.toolbox-global-navigation').appendChild(policy);
     if(ending){
       ending.open=false;
-      ending.querySelector(':scope > summary')?.replaceChildren(document.createTextNode('読了ページを編集'));
+      ending.querySelector(':scope > summary')?.replaceChildren(document.createTextNode(t('toolbox.editEnding')));
       extras.querySelector('.toolbox-global-ending').appendChild(ending);
     }
     if(meta){
       meta.open=false;
-      meta.querySelector(':scope > summary')?.replaceChildren(document.createTextNode('作品情報・表紙を編集'));
+      meta.querySelector(':scope > summary')?.replaceChildren(document.createTextNode(t('toolbox.editWorkInfo')));
       extras.querySelector('.toolbox-global-meta').appendChild(meta);
     }
 
@@ -4200,7 +4232,7 @@
     const done=document.createElement('button');
     done.type='button';
     done.className='cover-visibility-dialog-done';
-    done.textContent='完了';
+    done.textContent=t('common.done');
 
     const dismiss=()=>{
       overlay.hidden=true;
@@ -5751,16 +5783,16 @@ function openDesktopEffectDetail(){
     const modal=document.createElement('section');modal.className='desktop-text-detail-modal desktop-effect-detail-modal';
     const head=document.createElement('header');head.className='desktop-text-detail-head';
     const titleWrap=document.createElement('div');const kicker=document.createElement('small');kicker.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
-    const title=document.createElement('h2');title.textContent='演出の詳細設定';titleWrap.append(kicker,title);
+    const title=document.createElement('h2');title.textContent=t('detail.effect');titleWrap.append(kicker,title);
     const x=document.createElement('button');x.type='button';x.className='desktop-text-detail-close';x.textContent='×';head.append(titleWrap,x);
     const body=document.createElement('div');body.className='desktop-text-detail-body';
     const section=(name)=>{const s=document.createElement('section');s.className='desktop-text-detail-section';const h=document.createElement('h3');h.textContent=name;s.appendChild(h);body.appendChild(s);return s;};
     const two=(s)=>{const d=document.createElement('div');d.className='desktop-text-detail-two';s.appendChild(d);return d;};
 
-    const basic=section('基本');
+    const basic=section(u('基本','Basic'));
     const basicGrid=two(basic);
     const currentEffect=p.typing?.enabled?'typewriter':(p.effect||'auto');
-    const effectSelect=desktopDetailSelect('出かた',[
+    const effectSelect=desktopDetailSelect(u('出かた','Entrance'),[
       ['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']
     ],currentEffect,v=>{
       ensureDesktopEffectVisibleDefaults(scene,{save:false});
@@ -5777,54 +5809,54 @@ function openDesktopEffectDetail(){
     });
     basicGrid.append(
       effectSelect,
-      desktopDetailSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;apply();}),
-      desktopDetailSelect('表示モード',[['world','通常'],['console','コンソール'],['system','システム'],['warning','警告'],['void','虚無']],p.view||'world',v=>{p.view=v;apply();}),
-      desktopDetailSelect('位置の動き',[['flow','流れて着地'],['still','その場']],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();})
+      desktopDetailSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')]],p.display||'stack',v=>{p.display=v;apply();}),
+      desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')]],p.view||'world',v=>{p.view=v;apply();}),
+      desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();})
     );
 
-    const timing=section('タイミング');
+    const timing=section(u('タイミング','Timing'));
     const timingGrid=two(timing);
     p.effectTiming ||= {};
     timingGrid.append(
-      desktopDetailRange('演出時間',{min:.15,max:3,step:.05,value:Number(p.effectTiming.duration)||0.8,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{p.effectTiming.duration=v;apply();}}),
-      desktopDetailRange('開始遅延',{min:0,max:3,step:.05,value:Number(p.effectTiming.delay)||0,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{if(v<=0)delete p.effectTiming.delay;else p.effectTiming.delay=v;apply();}}),
-      desktopDetailRange('消えるまで',{min:0,max:12,step:.1,value:(Number(p.disappear?.after)||0)/1000,unit:' 秒',format:v=>v.toFixed(1),oninput:v=>{
+      desktopDetailRange(u('演出時間','Effect duration'),{min:.15,max:3,step:.05,value:Number(p.effectTiming.duration)||0.8,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{p.effectTiming.duration=v;apply();}}),
+      desktopDetailRange(u('開始遅延','Start delay'),{min:0,max:3,step:.05,value:Number(p.effectTiming.delay)||0,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{if(v<=0)delete p.effectTiming.delay;else p.effectTiming.delay=v;apply();}}),
+      desktopDetailRange(u('消えるまで','Time until exit'),{min:0,max:12,step:.1,value:(Number(p.disappear?.after)||0)/1000,unit:' 秒',format:v=>v.toFixed(1),oninput:v=>{
         const motion=p.disappear?.motion||'stay';
         p.disappear={...(p.disappear||{}),after:Math.round(v*1000),motion};
         if(v<=0)delete p.disappear;
         apply();
       }}),
-      desktopDetailRange('消える時のフェード',{min:.1,max:4,step:.05,value:(Number(p.disappear?.fade)||700)/1000,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{
+      desktopDetailRange(u('消える時のフェード','Exit fade'),{min:.1,max:4,step:.05,value:(Number(p.disappear?.fade)||700)/1000,unit:' 秒',format:v=>v.toFixed(2),oninput:v=>{
         p.disappear={...(p.disappear||{}),after:Number(p.disappear?.after)||2500,fade:Math.round(v*1000),motion:p.disappear?.motion||'stay'};
         apply();
       }}),
-      desktopDetailSelect('消え方',[['stay','その場で消える'],['up','上に抜ける']],p.disappear?.motion||'stay',v=>{
+      desktopDetailSelect(u('消え方','Exit motion'),[['stay',u('その場で消える','Fade in place')],['up',u('上に抜ける','Exit upward')]],p.disappear?.motion||'stay',v=>{
         p.disappear={...(p.disappear||{}),motion:v};
         apply();
       })
     );
 
-    const typingSec=section('タイプライター');
+    const typingSec=section(u('タイプライター','Typewriter'));
     const typingOn=!!p.typing?.enabled;
     typingSec.classList.toggle('is-disabled',!typingOn);
     const typingGrid=two(typingSec);
-    const speed=desktopDetailRange('1文字の速度',{min:.01,max:.25,step:.005,value:(Number(p.typing?.speed)||55)/1000,unit:' 秒/文字',format:v=>v.toFixed(3),oninput:v=>{if(!p.typing?.enabled)return;p.typing.speed=Math.round(v*1000);apply();}});
-    const cursor=desktopDetailSelect('カーソル',[['on','表示する'],['off','表示しない']],p.typing?.cursor===false?'off':'on',v=>{if(!p.typing?.enabled)return;p.typing.cursor=v!=='off';apply();});
+    const speed=desktopDetailRange(u('1文字の速度','Per-character speed'),{min:.01,max:.25,step:.005,value:(Number(p.typing?.speed)||55)/1000,unit:' 秒/文字',format:v=>v.toFixed(3),oninput:v=>{if(!p.typing?.enabled)return;p.typing.speed=Math.round(v*1000);apply();}});
+    const cursor=desktopDetailSelect(u('カーソル','Cursor'),[['on',u('表示する','Show')],['off',u('表示しない','Hide')]],p.typing?.cursor===false?'off':'on',v=>{if(!p.typing?.enabled)return;p.typing.cursor=v!=='off';apply();});
     if(!typingOn){speed.querySelectorAll('input').forEach(el=>el.disabled=true);cursor.querySelector('select').disabled=true;}
     typingGrid.append(speed,cursor);
-    const typingNote=document.createElement('p');typingNote.className='desktop-text-detail-note';typingNote.textContent=typingOn?'左のLive Previewで文字送りを確認できます。':'「出かた」をタイプライターにすると設定できます。';typingSec.appendChild(typingNote);
+    const typingNote=document.createElement('p');typingNote.className='desktop-text-detail-note';typingNote.textContent=typingOn?u('左のLive Previewで文字送りを確認できます。','Check the typewriter effect in the Live Preview on the left.'):u('「出かた」をタイプライターにすると設定できます。','Choose Typewriter as the entrance to enable these settings.');typingSec.appendChild(typingNote);
 
     if(advancedScreen?.hidden){
-      const preview=section('プレビュー');
+      const preview=section(u('プレビュー','Preview'));
       const note=document.createElement('p');
       note.className='desktop-text-detail-note';
-      note.textContent='変更はLive Previewへ即時反映され、自動保存されます。';
+      note.textContent=u('変更はLive Previewへ即時反映され、自動保存されます。','Changes appear in Live Preview immediately and are autosaved.');
       preview.appendChild(note);
     }
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
-    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'演出設定を初期化';
-    const spacer=document.createElement('span');const cancel=document.createElement('button');cancel.type='button';cancel.textContent='キャンセル';const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';foot.append(reset,spacer,cancel,save);
+    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?u('リセット','Reset'):u('演出設定を初期化','Reset effect settings');
+    const spacer=document.createElement('span');const cancel=document.createElement('button');cancel.type='button';cancel.textContent=t('common.cancel');const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent=t('common.save');foot.append(reset,spacer,cancel,save);
     modal.append(head,body,foot);overlay.appendChild(modal);liveDetailHost().appendChild(overlay);
     const closeOnly=()=>{closeDesktopEffectDetail();};
     x.addEventListener('click',closeOnly);cancel.addEventListener('click',closeOnly);overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
@@ -6189,7 +6221,7 @@ function openDesktopAudioDetail(){
     head.className='desktop-text-detail-head';
     const titleWrap=document.createElement('div');
     const kicker=document.createElement('small');kicker.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
-    const title=document.createElement('h2');title.textContent='音の詳細設定';
+    const title=document.createElement('h2');title.textContent=t('detail.audio');
     titleWrap.append(kicker,title);
     const x=document.createElement('button');x.type='button';x.className='desktop-text-detail-close';x.textContent='×';
     head.append(titleWrap,x);
@@ -6229,17 +6261,17 @@ function openDesktopAudioDetail(){
 
       const controlSec=document.createElement('section');
       controlSec.className='desktop-text-detail-section';
-      const ch=document.createElement('h3');ch.textContent='再生';
+      const ch=document.createElement('h3');ch.textContent=u('再生','Playback');
       controlSec.appendChild(ch);
       const controlGrid=document.createElement('div');controlGrid.className='desktop-text-detail-two';
       controlSec.appendChild(controlGrid);
 
       const actionValues = kind==='se'
-        ? [['none','なし'],['play','このSceneで鳴らす']]
-        : [['continue','前Sceneを継続'],['start','このSceneで開始'],['volume','このSceneで音量変更'],['stop','このSceneで停止']];
+        ? [['none',u('なし','None')],['play',u('このSceneで鳴らす','Play in this Scene')]]
+        : [['continue',u('前Sceneを継続','Continue previous Scene')],['start',u('このSceneで開始','Start in this Scene')],['volume',u('このSceneで音量変更','Change volume in this Scene')],['stop',u('このSceneで停止','Stop in this Scene')]];
 
       controlGrid.append(
-        desktopDetailSelect('動作',actionValues,track.action,v=>{
+        desktopDetailSelect(u('動作','Action'),actionValues,track.action,v=>{
           if(v==='volume'&&track.action!=='volume'){
             const inherited=inheritedPersistentState(kind);
             if(inherited)track.volume=inherited.volume;
@@ -6387,10 +6419,10 @@ function openDesktopAudioDetail(){
 
     const foot=document.createElement('footer');
     foot.className='desktop-text-detail-foot';
-    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'演出設定を初期化';
+    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?u('リセット','Reset'):u('演出設定を初期化','Reset effect settings');
     const spacer=document.createElement('span');
     const close=document.createElement('button');close.type='button';close.textContent='閉じる';
-    const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';
+    const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent=t('common.save');
     foot.append(reset,spacer,close,save);
 
     modal.append(head,body,foot);
@@ -6497,7 +6529,7 @@ function openDesktopBackgroundDetail(){
     const kicker=document.createElement('small');
     kicker.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     const title=document.createElement('h2');
-    title.textContent='背景の詳細設定';
+    title.textContent=t('detail.background');
     titleWrap.append(kicker,title);
     const x=document.createElement('button');
     x.type='button';x.className='desktop-text-detail-close';x.textContent='×';
@@ -6519,11 +6551,11 @@ function openDesktopBackgroundDetail(){
     };
 
     // SOURCE --------------------------------------------------------------
-    const sourceSec=section('背景');
+    const sourceSec=section(u('背景','Background'));
     const sourceGrid=two(sourceSec);
     const mode=!p.background?'inherit':(p.background.src===''?'clear':'image');
     sourceGrid.append(
-      desktopDetailSelect('このSceneの背景',[
+      desktopDetailSelect(u('このSceneの背景','Background for this Scene'),[
         ['inherit','前Sceneから継続'],
         ['image','画像を使う'],
         ['clear','背景なし']
@@ -6555,11 +6587,11 @@ function openDesktopBackgroundDetail(){
       thumb.style.backgroundImage=`url("${explicit().src}")`;
       thumb.classList.add('has-image');
     }else{
-      thumb.textContent=mode==='inherit'?'前Sceneを継続':mode==='clear'?'背景なし':'画像未選択';
+      thumb.textContent=mode==='inherit'?u('前Sceneを継続','Continue previous Scene'):mode==='clear'?u('背景なし','No background'):u('画像未選択','No image selected');
     }
     const assetActions=document.createElement('div');
     assetActions.className='desktop-background-detail-asset-actions';
-    const choose=desktopAction(explicit()?.src?'画像を変更':'画像を選択',()=>{
+    const choose=desktopAction(explicit()?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>{
       desktopPickFile('image/*',(url,name)=>{
         const bg=ensureImageState();
         bg.src=url;bg._editorFileName=name;bg._editorManaged=true;
@@ -6574,13 +6606,13 @@ function openDesktopBackgroundDetail(){
         });
       });
     },'is-primary');
-    const clear=desktopAction('画像を外す',()=>{
+    const clear=desktopAction(u('画像を外す','Remove image'),()=>{
       p.background={src:'',transition:'fade',_editorManaged:true};
       apply();closeDesktopBackgroundDetail();openDesktopBackgroundDetail();
     });
 
     const sourceBg=explicit()||{};
-    const sourcePositionAdjust=desktopAction('表示位置を調整',()=>{
+    const sourcePositionAdjust=desktopAction(t('cover.positionAdjust'),()=>{
       const bg=explicit();
       if(!bg?.src)return;
       openSceneBackgroundPositionEditor(scene,()=>{
@@ -6599,24 +6631,24 @@ function openDesktopBackgroundDetail(){
     sourcePositionGrid.classList.add('desktop-background-position-row');
     const positionField=document.createElement('label');
     positionField.className='desktop-text-detail-field desktop-background-position-field';
-    const positionCap=document.createElement('span');positionCap.textContent='表示位置';
+    const positionCap=document.createElement('span');positionCap.textContent=u('表示位置','Position');
     sourcePositionAdjust.classList.add('desktop-background-position-action');
     positionField.append(positionCap,sourcePositionAdjust);
     sourcePositionGrid.append(
       positionField,
-      desktopDetailSelect('背景サイズ',[
+      desktopDetailSelect(u('背景サイズ','Background fit'),[
         ['cover','画面いっぱい（cover）'],
         ['contain','画像全体（contain）']
       ],sourceBg.fit||'cover',v=>{const bg=ensureImageState();bg.fit=v;apply();})
     );
 
     // LIGHT ---------------------------------------------------------------
-    const lightSec=section('明るさ・質感');
+    const lightSec=section(u('明るさ・質感','Brightness & texture'));
     const lightGrid=two(lightSec);
     const bg0=explicit()||{};
     if(bg0.motion && /^pan/.test(bg0.motion.type||''))ensurePanCoverage(bg0.motion);
     lightGrid.append(
-      desktopDetailSelect('ベール',[
+      desktopDetailSelect(u('ベール','Veil'),[
         ['dark','暗く'],
         ['light','明るく']
       ],bg0.tone==='light'?'light':'dark',v=>{
@@ -6624,19 +6656,19 @@ function openDesktopBackgroundDetail(){
         if(!Number.isFinite(Number(bg.dim)))bg.dim=v==='light'?.64:.38;
         apply();
       }),
-      desktopDetailRange('ベール強度',{
+      desktopDetailRange(u('ベール強度','Veil strength'),{
         min:0,max:1,step:.02,
         value:Number.isFinite(Number(bg0.dim))?Number(bg0.dim):(bg0.tone==='light'?.64:.38),
         unit:' %',
         format:v=>Math.round(v*100),
         oninput:v=>{const bg=ensureImageState();bg.dim=v;apply();}
       }),
-      desktopDetailRange('背景ぼかし',{
+      desktopDetailRange(u('背景ぼかし','Background blur'),{
         min:0,max:24,step:.5,value:Number(bg0.blur)||0,unit:' px',
         format:v=>v.toFixed(1),
         oninput:v=>{const bg=ensureImageState();if(v<=0)delete bg.blur;else bg.blur=v;apply();}
       }),
-      desktopDetailRange('ビネット',{
+      desktopDetailRange(u('ビネット','Vignette'),{
         min:0,max:1,step:.05,value:Number(bg0.textures?.vignette)||0,unit:' %',
         format:v=>Math.round(v*100),
         oninput:v=>{
@@ -6644,7 +6676,7 @@ function openDesktopBackgroundDetail(){
           if(v<=0)delete bg.textures.vignette;else bg.textures.vignette=v;apply();
         }
       }),
-      desktopDetailRange('粒子',{
+      desktopDetailRange(u('粒子','Grain'),{
         min:0,max:1,step:.05,value:Number(bg0.textures?.grain)||0,unit:' %',
         format:v=>Math.round(v*100),
         oninput:v=>{
@@ -6652,7 +6684,7 @@ function openDesktopBackgroundDetail(){
           if(v<=0)delete bg.textures.grain;else bg.textures.grain=v;apply();
         }
       }),
-      desktopDetailRange('モノクロ',{
+      desktopDetailRange(u('モノクロ','Monochrome'),{
         min:0,max:1,step:.05,value:Number(bg0.textures?.monochrome)||0,unit:' %',
         format:v=>Math.round(v*100),
         oninput:v=>{
@@ -6773,7 +6805,7 @@ function openDesktopBackgroundDetail(){
     }
     renderMotionControls();
 
-    const previewSec=section('プレビュー');
+    const previewSec=section(u('プレビュー','Preview'));
     const previewNote=document.createElement('p');
     previewNote.className='desktop-text-detail-note';
     previewNote.textContent=desktopLiveActive()
@@ -6789,7 +6821,7 @@ function openDesktopBackgroundDetail(){
     const close=document.createElement('button');
     close.type='button';close.textContent='閉じる';
     const save=document.createElement('button');
-    save.type='button';save.className='is-primary';save.textContent='保存';
+    save.type='button';save.className='is-primary';save.textContent=t('common.save');
     foot.append(reset,spacer,close,save);
 
     modal.append(head,body,foot);
@@ -6839,51 +6871,51 @@ function openDesktopTextDetail(){
     const overlay=document.createElement('div');overlay.className='desktop-text-detail-overlay';
     const modal=document.createElement('section');modal.className='desktop-text-detail-modal';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','文字の詳細設定');
     const head=document.createElement('header');head.className='desktop-text-detail-head';
-    const title=document.createElement('div');const sceneNo=document.createElement('small');sceneNo.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;const h=document.createElement('h2');h.textContent='文字の詳細設定';title.append(sceneNo,h);
-    const x=document.createElement('button');x.type='button';x.className='desktop-text-detail-close';x.textContent='×';x.setAttribute('aria-label','閉じる');
+    const title=document.createElement('div');const sceneNo=document.createElement('small');sceneNo.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;const h=document.createElement('h2');h.textContent=t('detail.text');title.append(sceneNo,h);
+    const x=document.createElement('button');x.type='button';x.className='desktop-text-detail-close';x.textContent='×';x.setAttribute('aria-label',t('common.close'));
     head.append(title,x);
     const body=document.createElement('div');body.className='desktop-text-detail-body';
 
     const section=(name)=>{const s=document.createElement('section');s.className='desktop-text-detail-section';const hh=document.createElement('h3');hh.textContent=name;s.appendChild(hh);body.appendChild(s);return s;};
     const two=(parent)=>{const g=document.createElement('div');g.className='desktop-text-detail-two';parent.appendChild(g);return g;};
 
-    const typography=section('基本');
+    const typography=section(u('基本','Basic'));
     const basic=two(typography);
     basic.append(
-      desktopDetailSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;apply();}),
-      desktopDetailSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],p.text.size||'auto',v=>{p.text.size=v;apply();}),
-      desktopDetailSelect('文字色',[['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom')),v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;apply();}),
-      desktopDetailSelect('文字影',[['auto','おまかせ'],['none','なし'],['soft','弱'],['strong','強']],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
+      desktopDetailSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;apply();}),
+      desktopDetailSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;apply();}),
+      desktopDetailSelect(u('文字色','Text color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom')),v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;apply();}),
+      desktopDetailSelect(u('文字影','Text shadow'),[['auto',t('effect.auto')],['none',t('shadow.none')],['soft',t('shadow.soft')],['strong',t('shadow.strong')]],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
     );
-    const colorRow=document.createElement('div');colorRow.className='desktop-text-detail-color';const colorLabel=document.createElement('span');colorLabel.textContent='任意色';const colorCode=document.createElement('code');const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';colorCode.textContent=initialColor;const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{colorCode.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;colorCode.textContent=c;apply();}});colorRow.append(colorLabel,colorPicker.root,colorCode);typography.appendChild(colorRow);
+    const colorRow=document.createElement('div');colorRow.className='desktop-text-detail-color';const colorLabel=document.createElement('span');colorLabel.textContent=t('color.custom');const colorCode=document.createElement('code');const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';colorCode.textContent=initialColor;const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{colorCode.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;colorCode.textContent=c;apply();}});colorRow.append(colorLabel,colorPicker.root,colorCode);typography.appendChild(colorRow);
     typography.appendChild(makeTextColorPalette(p.text.color,hex=>{
       p.text.color=hex;
       colorCode.textContent=hex;
       apply();
     }));
 
-    const layout=section('レイアウト');
+    const layout=section(u('レイアウト','Layout'));
     const ranges=two(layout);
     ranges.append(
-      desktopDetailRange('行間',{min:1.2,max:2.5,step:.05,value:Number(p.text.lineHeight)||1.85,format:v=>v.toFixed(2),oninput:v=>{p.text.lineHeight=v;apply();}}),
-      desktopDetailRange('字間',{min:-.05,max:.20,step:.005,value:Number(p.text.letterSpacing)||.035,unit:' em',format:v=>v.toFixed(3),oninput:v=>{p.text.letterSpacing=v;apply();}}),
-      desktopDetailRange('左右の余白',{min:0,max:28,step:1,value:Number(p.text.sideMargin)||0,unit:' %',format:v=>Math.round(v),oninput:v=>{if(v<=0)delete p.text.sideMargin;else p.text.sideMargin=v;apply();}}),
-      desktopDetailRange('透明度',{min:.35,max:1,step:.05,value:Number(p.text.opacity)||1,unit:' %',format:v=>Math.round(v*100),oninput:v=>{if(v>=.999)delete p.text.opacity;else p.text.opacity=v;apply();}})
+      desktopDetailRange(u('行間','Line height'),{min:1.2,max:2.5,step:.05,value:Number(p.text.lineHeight)||1.85,format:v=>v.toFixed(2),oninput:v=>{p.text.lineHeight=v;apply();}}),
+      desktopDetailRange(u('字間','Letter spacing'),{min:-.05,max:.20,step:.005,value:Number(p.text.letterSpacing)||.035,unit:' em',format:v=>v.toFixed(3),oninput:v=>{p.text.letterSpacing=v;apply();}}),
+      desktopDetailRange(u('左右の余白','Side margins'),{min:0,max:28,step:1,value:Number(p.text.sideMargin)||0,unit:' %',format:v=>Math.round(v),oninput:v=>{if(v<=0)delete p.text.sideMargin;else p.text.sideMargin=v;apply();}}),
+      desktopDetailRange(u('透明度','Opacity'),{min:.35,max:1,step:.05,value:Number(p.text.opacity)||1,unit:' %',format:v=>Math.round(v*100),oninput:v=>{if(v>=.999)delete p.text.opacity;else p.text.opacity=v;apply();}})
     );
     const layoutSelects=two(layout);
     layoutSelects.append(
-      desktopDetailSelect('文字配置',[['auto','Sceneに合わせる'],['left','左'],['center','中央'],['right','右']],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;apply();}),
-      desktopDetailSelect('折り返し',[['auto','自動（推奨）'],['nowrap','折り返さない']],p.text.wrap||'auto',v=>{if(v==='auto')delete p.text.wrap;else p.text.wrap=v;apply();})
+      desktopDetailSelect(u('文字配置','Alignment'),[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;apply();}),
+      desktopDetailSelect(u('折り返し','Wrapping'),[['auto',u('自動（推奨）','Automatic (recommended)')],['nowrap',u('折り返さない','No wrap')]],p.text.wrap||'auto',v=>{if(v==='auto')delete p.text.wrap;else p.text.wrap=v;apply();})
     );
 
-    const note=section('プレビュー');
-    const noteP=document.createElement('p');noteP.className='desktop-text-detail-note';noteP.textContent='変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。';note.appendChild(noteP);
+    const note=section(u('プレビュー','Preview'));
+    const noteP=document.createElement('p');noteP.className='desktop-text-detail-note';noteP.textContent=u('変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。','Changes appear in the Live Preview immediately and are autosaved. These settings stay with this Scene when you move away and return.');note.appendChild(noteP);
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
-    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?'リセット':'音設定を初期化';
+    const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?u('リセット','Reset'):u('文字設定を初期化','Reset text settings');
     const spacer=document.createElement('span');
-    const cancel=document.createElement('button');cancel.type='button';cancel.textContent='キャンセル';
-    const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent='保存';
+    const cancel=document.createElement('button');cancel.type='button';cancel.textContent=t('common.cancel');
+    const save=document.createElement('button');save.type='button';save.className='is-primary';save.textContent=t('common.save');
     foot.append(reset,spacer,cancel,save);
     modal.append(head,body,foot);overlay.appendChild(modal);liveDetailHost().appendChild(overlay);
 
@@ -6983,7 +7015,7 @@ function openDesktopTextDetail(){
     wrap.append(
       desktopMakeSelect(
         '書体',
-        [['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],
+        [['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],
         initial.fontFamily||'inherit',
         v=>{
           const st=store();
@@ -6993,7 +7025,7 @@ function openDesktopTextDetail(){
       ),
       desktopMakeSelect(
         'サイズ',
-        [['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
         initial.size||'auto',
         v=>{
           const st=store();
@@ -7118,7 +7150,7 @@ function openDesktopTextDetail(){
     sub.append(cap,sta);body.appendChild(sub);
     const cards=document.createElement('div');cards.className='desktop-live-three';
     ['文字（Aa）','演出（✦）','背景（▣）','音（♪）'].forEach(t=>cards.appendChild(desktopCard(t)));
-    const ops=desktopCard('Scene操作（•••）','desktop-live-scene-card');
+    const ops=desktopCard(uiLanguage==='en'?'Scene actions (•••)':'Scene操作（•••）','desktop-live-scene-card');
     shell.append(body,cards,ops);
     return shell;
   }
@@ -7132,8 +7164,9 @@ function openDesktopTextDetail(){
     const shade=document.createElement('div');shade.className='desktop-live-special-shade';
     const modal=document.createElement('section');modal.className='desktop-live-special-modal';
     const head=document.createElement('div');head.className='desktop-live-special-modal-head';
-    const kicker=document.createElement('small');kicker.textContent=title==='表紙'?'COVER':'ENDING';
-    const h=document.createElement('strong');h.textContent=title==='表紙'?'表紙を編集':'読了ページを編集';
+    const isCover=title==='表紙'||title==='Cover';
+    const kicker=document.createElement('small');kicker.textContent=isCover?'COVER':'ENDING';
+    const h=document.createElement('strong');h.textContent=isCover?t('cover.edit'):t('toolbox.editEnding');
     head.append(kicker,h);modal.appendChild(head);
     nodes.forEach(n=>modal.appendChild(n));
     desktopLivePanelBody.append(underlay,shade,modal);
@@ -7141,12 +7174,12 @@ function openDesktopTextDetail(){
   }
 
   function renderDesktopCoverPanel(){
-    desktopSceneLabel.textContent='表紙';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
+    desktopSceneLabel.textContent=t('cover.label');desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
 
-    const textCard=desktopCard('作品情報・表紙表示');
+    const textCard=desktopCard(t('toolbox.workInfo'));
     const textNote=document.createElement('p');
-    textNote.textContent='左はプレビュー兼直接編集です。文字内容はEasy Studioと共通。チェックで表紙への表示だけ切り替えます。';
+    textNote.textContent=uiLanguage==='en'?'The left side is both preview and direct editor. Text is shared with Easy Studio; checkboxes only control cover visibility.':'左はプレビュー兼直接編集です。文字内容はEasy Studioと共通。チェックで表紙への表示だけ切り替えます。';
     Object.assign(textNote.style,{margin:'0 0 10px',fontSize:'12px',lineHeight:'1.55',color:'#737984'});
     textCard.appendChild(textNote);
 
@@ -7159,7 +7192,7 @@ function openDesktopTextDetail(){
       const cap=document.createElement('span');cap.textContent=label;
       const showLabel=document.createElement('label');showLabel.className='desktop-cover-visible-check';
       const check=document.createElement('input');check.type='checkbox';check.checked=visible[target]!==false;check.dataset.coverVisibilityTarget=target;
-      const checkText=document.createElement('span');checkText.textContent='表紙に表示';
+      const checkText=document.createElement('span');checkText.textContent=t('cover.show');
       showLabel.append(check,checkText);head.append(cap,showLabel);
 
       const input=document.createElement('input');
@@ -7196,8 +7229,8 @@ function openDesktopTextDetail(){
     desktopSceneLabel.textContent='読了ページ';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
     const textCard=desktopCard('中央の文');const ta=document.createElement('textarea');ta.className='desktop-live-ending-text';ta.value=endingLabelInput?.value||'';ta.placeholder='読了';ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
-    const styleCard=desktopCard('文字（Aa）');styleCard.append(shellStyleControls(()=>{workingDocument.ending||={};workingDocument.ending.style||={};return workingDocument.ending.style;},()=>{refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
-    const linksCard=desktopCard('下部ボタン');const ops=document.createElement('div');ops.className='desktop-live-scene-ops';ops.append(desktopAction('左ボタンを編集',()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('left');}),desktopAction('右ボタンを編集',()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('right');}));linksCard.appendChild(ops);
+    const styleCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');styleCard.append(shellStyleControls(()=>{workingDocument.ending||={};workingDocument.ending.style||={};return workingDocument.ending.style;},()=>{refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
+    const linksCard=desktopCard(u('下部ボタン','Bottom buttons'));const ops=document.createElement('div');ops.className='desktop-live-scene-ops';ops.append(desktopAction(u('左ボタンを編集','Edit left button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('left');}),desktopAction(u('右ボタンを編集','Edit right button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('right');}));linksCard.appendChild(ops);
     mountDesktopSpecialModal('読了ページ',[textCard,styleCard,linksCard]);
   }
 
@@ -7335,14 +7368,14 @@ function openDesktopTextDetail(){
     bodyCard.appendChild(writingActions);
 
     const three=document.createElement('div');three.className='desktop-live-three';
-    const textCard=desktopCard('文字（Aa）');
+    const textCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');
     const textGrid=document.createElement('div');textGrid.className='desktop-live-grid';
     const colorValue=!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom'));
     textGrid.append(
-      desktopMakeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
-      desktopMakeSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
-      desktopMakeSelect('色',[['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;refresh();}),
-      desktopMakeSelect('文字配置',[['auto','Sceneに合わせる'],['left','左'],['center','中央'],['right','右']],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;refresh();})
+      desktopMakeSelect('書体',[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
+      desktopMakeSelect('サイズ',[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
+      desktopMakeSelect('色',[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;refresh();}),
+      desktopMakeSelect('文字配置',[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;refresh();})
     );
     textCard.append(textGrid);
     if(colorValue==='custom'){
@@ -7351,13 +7384,13 @@ function openDesktopTextDetail(){
       textCard.append(colorPicker.root);
     }
     textCard.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}));
-    textCard.append(desktopDetail('文字の詳細設定','text'));
+    textCard.append(desktopDetail(t('detail.text'),'text'));
 
-    const effectCard=desktopCard('演出（✦）');
+    const effectCard=desktopCard(uiLanguage==='en'?'Effects (✦)':'演出（✦）');
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
-      desktopMakeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']],effectValue,v=>{
+      desktopMakeSelect('出かた',[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
         ensureDesktopEffectVisibleDefaults(scene,{save:false});
         if(v==='typewriter'){
           p.effect='none';
@@ -7370,13 +7403,13 @@ function openDesktopTextDetail(){
         replayCurrentDesktopEffect();
         renderDesktopLivePanel();
       }),
-      desktopMakeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;refresh();}),
-      desktopMakeSelect('表示モード',[['world','通常'],['console','コンソール'],['system','システム'],['warning','警告'],['void','虚無']],p.view||'world',v=>{p.view=v;refresh();}),
-      desktopMakeSelect('位置の動き',[['flow','流れて着地'],['still','その場']],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();})
+      desktopMakeSelect('表示',[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')]],p.display||'stack',v=>{p.display=v;refresh();}),
+      desktopMakeSelect('表示モード',[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')]],p.view||'world',v=>{p.view=v;refresh();}),
+      desktopMakeSelect('位置の動き',[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();})
     );
-    effectCard.append(effectGrid,desktopDetail('演出の詳細設定','effect'));
+    effectCard.append(effectGrid,desktopDetail(t('detail.effect'),'effect'));
 
-    const bgCard=desktopCard('背景（▣）','desktop-live-bg-card');
+    const bgCard=desktopCard(uiLanguage==='en'?'Background (▣)':'背景（▣）','desktop-live-bg-card');
     const bg=p.background;
     const bgTop=document.createElement('div');bgTop.className='desktop-live-bg-top';
     if(bg?.src){const img=document.createElement('img');img.src=bg.src;img.alt='背景';bgTop.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent='背景';bgTop.appendChild(ph);}
@@ -7400,7 +7433,7 @@ function openDesktopTextDetail(){
       },bg?.src===''?'is-selected':'')
     );
     bgTop.appendChild(bgBtns);bgCard.appendChild(bgTop);
-    const bgPositionAction=desktopAction('表示位置を調整',()=>{
+    const bgPositionAction=desktopAction(t('cover.positionAdjust'),()=>{
       if(!p.background?.src)return;
       openSceneBackgroundPositionEditor(scene,()=>{
         scheduleDraftSave(40);
@@ -7413,9 +7446,9 @@ function openDesktopTextDetail(){
     bgCard.appendChild(bgPositionAction);
     const tone=document.createElement('div');tone.className='desktop-live-choice';
     tone.append(desktopAction('暗く',()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction('明るく',()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
-    bgCard.append(tone,desktopDetail('背景の詳細設定','background'));
+    bgCard.append(tone,desktopDetail(t('detail.background'),'background'));
 
-    const audioCard=desktopCard('音（♪）','desktop-live-audio-card');
+    const audioCard=desktopCard(uiLanguage==='en'?'Audio (♪)':'音（♪）','desktop-live-audio-card');
     const audioGrid=document.createElement('div');audioGrid.className='desktop-live-audio-grid';
     const bgmRow=document.createElement('div');bgmRow.className='desktop-live-audio-col';
     const bgmHead=document.createElement('strong');bgmHead.textContent='BGM';bgmRow.appendChild(bgmHead);
@@ -7429,22 +7462,22 @@ function openDesktopTextDetail(){
       desktopAction(bgmCmd?.action==='start'?'ファイルを変更':'ファイルを選択',()=>desktopPickFile('audio/*',(url,name)=>setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:name})),'is-primary')
     );
     audioGrid.append(bgmRow);
-    const audioQuickNote=document.createElement('p');audioQuickNote.className='live-edit-note desktop-live-audio-note';audioQuickNote.textContent='Ambient / SE は詳細設定';
-    audioCard.append(audioGrid,audioQuickNote,desktopDetail('音の詳細設定','audio'));
+    const audioQuickNote=document.createElement('p');audioQuickNote.className='live-edit-note desktop-live-audio-note';audioQuickNote.textContent=t('audio.ambientSeDetail');
+    audioCard.append(audioGrid,audioQuickNote,desktopDetail(t('detail.audio'),'audio'));
     three.append(textCard,effectCard,bgCard,audioCard);
 
-    const sceneCard=desktopCard('Scene操作（•••）','desktop-live-scene-card');
+    const sceneCard=desktopCard(uiLanguage==='en'?'Scene actions (•••)':'Scene操作（•••）','desktop-live-scene-card');
     const ops=document.createElement('div');ops.className='desktop-live-scene-ops';
     const addOp=(label,fn,disabled=false,cls='')=>{const b=desktopAction(label,fn,cls);b.disabled=disabled;ops.appendChild(b);};
-    addOp('↑ 上へ移動',()=>liveEditMoveScene(-1),index===0);
-    addOp('↓ 下へ移動',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1);
-    addOp('前Sceneと結合',liveEditMergePrevious,index===0);
-    addOp('複製',liveEditDuplicateScene);
-    addOp('削除',liveEditDeleteScene,workingDocument.scenes.length<=1,'is-danger');
+    addOp(t('scene.moveUp'),()=>liveEditMoveScene(-1),index===0);
+    addOp(t('scene.moveDown'),()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1);
+    addOp(t('edit.merge'),liveEditMergePrevious,index===0);
+    addOp(t('scene.duplicate'),liveEditDuplicateScene);
+    addOp(t('edit.delete'),liveEditDeleteScene,workingDocument.scenes.length<=1,'is-danger');
     sceneCard.appendChild(ops);
 
     const nav=document.createElement('div');nav.className='desktop-live-nav';
-    const navText=document.createElement('div');navText.innerHTML='<strong>読者が過去Sceneへ戻れる</strong><small>公開Playerの戻る操作を許可</small>';
+    const navText=document.createElement('div');navText.innerHTML=`<strong>${t('nav.previous.policy')}</strong><small>${t('nav.previous.shortNote')}</small>`;
     const switchLabel=document.createElement('label');switchLabel.className='desktop-live-switch';
     const switchInput=document.createElement('input');switchInput.type='checkbox';switchInput.checked=workingDocument.player?.navigation?.allowPrevious!==false;
     const switchTrack=document.createElement('span');switchTrack.className='desktop-live-switch-track';
@@ -7715,7 +7748,7 @@ function openDesktopTextDetail(){
     modalHead.className='desktop-text-detail-head';
     const titleWrap=document.createElement('div');
     const small=document.createElement('small');small.textContent=ctx.detailLabel;
-    const title=document.createElement('h2');title.textContent='文字の詳細設定';
+    const title=document.createElement('h2');title.textContent=t('detail.text');
     titleWrap.append(small,title);
     const close=document.createElement('button');
     close.type='button';close.className='desktop-text-detail-close';close.textContent='×';
@@ -7731,18 +7764,18 @@ function openDesktopTextDetail(){
     const st=ctx.style;
     const apply=()=>ctx.apply();
     grid.append(
-      desktopDetailSelect('書体',
-        [['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],
+      desktopDetailSelect(u('書体','Typeface'),
+        [['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],
         st.fontFamily||'inherit',
         v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;apply();}
       ),
-      desktopDetailSelect('サイズ',
-        [['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],
+      desktopDetailSelect(u('サイズ','Size'),
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
         st.size||'auto',
         v=>{st.size=v;apply();}
       ),
-      desktopDetailSelect('文字色',
-        [['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],
+      desktopDetailSelect(u('文字色','Text color'),
+        [['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],
         !st.color?'auto':(String(st.color).toLowerCase()==='#ffffff'?'white':(String(st.color).toLowerCase()==='#000000'?'black':'custom')),
         v=>{
           if(v==='white')st.color='#ffffff';
@@ -7759,7 +7792,7 @@ function openDesktopTextDetail(){
 
     const colorRow=document.createElement('div');
     colorRow.className='desktop-text-detail-color';
-    const colorLabel=document.createElement('span');colorLabel.textContent='任意色';
+    const colorLabel=document.createElement('span');colorLabel.textContent=t('color.custom');
     const colorCode=document.createElement('code');
     const initialColor=normalizeTextColor(st.color)||'#4A4A4A';
     colorCode.textContent=initialColor;
@@ -7777,7 +7810,7 @@ function openDesktopTextDetail(){
 
     const foot=document.createElement('footer');
     foot.className='desktop-text-detail-foot';
-    const done=document.createElement('button');done.type='button';done.textContent='完了';
+    const done=document.createElement('button');done.type='button';done.textContent=t('common.done');
     done.className='desktop-text-detail-save';
     foot.appendChild(done);
 
@@ -7807,7 +7840,7 @@ function openDesktopTextDetail(){
     document.body.classList.remove('mobile-live-detail-open');
     const head=liveEditSheet.querySelector('.live-edit-sheet-head');
     if(head)head.hidden=false;
-    liveEditSheetTitle.textContent='文字';
+    liveEditSheetTitle.textContent=uiLanguage==='en'?'Text':'文字';
     liveEditSheetBody.innerHTML='';
 
     const st=ctx.style;
@@ -7835,7 +7868,7 @@ function openDesktopTextDetail(){
 
     const colorField=makeSelect(
       '色',
-      [['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],
+      [['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],
       colorValue,
       v=>{
         if(v==='white')st.color='#ffffff';
@@ -7850,12 +7883,12 @@ function openDesktopTextDetail(){
 
     grid.append(
       makeSelect('書体',
-        [['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],
+        [['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],
         st.fontFamily||'inherit',
         v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;rerender();}
       ),
       makeSelect('サイズ',
-        [['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
         st.size||'auto',
         v=>{st.size=v;rerender();}
       ),
@@ -7919,7 +7952,7 @@ function openDesktopTextDetail(){
 
     if(kind==='text'){
       finishInlineTextEdit();
-      liveEditSheetTitle.textContent='文字';
+      liveEditSheetTitle.textContent=uiLanguage==='en'?'Text':'文字';
       const grid=document.createElement('div');grid.className='live-edit-grid';
       const makeSelect=(label,values,current,onchange)=>{
         const wrap=document.createElement('label');wrap.className='live-edit-field';wrap.append(label);
@@ -7930,7 +7963,7 @@ function openDesktopTextDetail(){
       const p=ensurePresentation(scene);p.text ||= {};
       const rerender=()=>{scheduleDraftSave(80);refreshLivePlayer();};
       let colorValue=!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom'));
-      const colorField=makeSelect('色',[['auto','おまかせ'],['white','白'],['black','黒'],['custom','任意色']],colorValue,v=>{
+      const colorField=makeSelect('色',[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],colorValue,v=>{
         if(v==='white')p.text.color='#ffffff';
         else if(v==='black')p.text.color='#000000';
         else if(v==='custom'){
@@ -7940,10 +7973,10 @@ function openDesktopTextDetail(){
         renderLiveEditSheet('text');
       });
       grid.append(
-        makeSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
-        makeSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
+        makeSelect('書体',[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
+        makeSelect('サイズ',[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
         colorField,
-        makeSelect('文字配置',[['auto','Sceneに合わせる'],['left','左'],['center','中央'],['right','右']],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();})
+        makeSelect('文字配置',[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();})
       );
       if(colorValue==='custom'){
         const custom=document.createElement('div');custom.className='live-edit-color-custom';
@@ -7957,12 +7990,12 @@ function openDesktopTextDetail(){
         liveEditSheetBody.append(grid);
       }
       liveEditSheetBody.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;rerender();renderLiveEditSheet('text');}));
-      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='文字の詳細設定';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('text');});
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=t('detail.text');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('text');});
       liveEditSheetBody.append(detail);return;
     }
 
     if(kind==='effect'){
-      liveEditSheetTitle.textContent='演出';
+      liveEditSheetTitle.textContent=uiLanguage==='en'?'Effects':'演出';
       const grid=document.createElement('div');grid.className='live-edit-grid';
       const makeSelect=(label,values,current,onchange)=>{
         const wrap=document.createElement('label');wrap.className='live-edit-field';wrap.append(label);
@@ -7973,7 +8006,7 @@ function openDesktopTextDetail(){
       const p=ensurePresentation(scene);
       const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
       grid.append(
-        makeSelect('出かた',[['auto','おまかせ'],['fade','フェード'],['pop','ポンと出る'],['blur','ぼやける'],['whisper','そっと'],['loud','強く'],['pulse','脈打つ'],['shake','揺れる'],['tilt','傾く'],['typewriter','タイプライター'],['none','なし']],effectValue,v=>{
+        makeSelect('出かた',[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
           if(v==='typewriter'){
             p.effect='none';
             p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
@@ -7983,11 +8016,11 @@ function openDesktopTextDetail(){
           }
           scheduleDraftSave(80);refreshLivePlayer();
         }),
-        makeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
-        makeSelect('表示モード',[['world','通常'],['console','コンソール'],['system','システム'],['warning','警告'],['void','虚無']],p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();}),
-        makeSelect('位置の動き',[['flow','流れて着地'],['still','その場']],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();})
+        makeSelect('表示',[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')]],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
+        makeSelect('表示モード',[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')]],p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();}),
+        makeSelect('位置の動き',[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();})
       );
-      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='演出の詳細設定';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=t('detail.effect');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
       liveEditSheetBody.append(grid,detail);return;
     }
 
@@ -8021,7 +8054,7 @@ function openDesktopTextDetail(){
     };
 
     if(kind==='background'){
-      liveEditSheetTitle.textContent='背景';
+      liveEditSheetTitle.textContent=uiLanguage==='en'?'Background':'背景';
       const p=ensurePresentation(scene),bg=p.background;
       const actions=document.createElement('div');actions.className='live-edit-choice-row';
       const inherit=makeActionButton('前Sceneを継続',!bg?'is-selected':'');
@@ -8039,7 +8072,7 @@ function openDesktopTextDetail(){
           refreshLivePlayer({preserveSheet:true});
         });
       });
-      const positionAdjust=makeActionButton('表示位置を調整');
+      const positionAdjust=makeActionButton(t('cover.positionAdjust'));
       positionAdjust.disabled=!bg?.src;
       positionAdjust.onclick=()=>{
         if(!p.background?.src)return;
@@ -8065,7 +8098,7 @@ function openDesktopTextDetail(){
       liveEditSheetBody.append(actions,pick,positionAdjust,toneRow,status,detail);return;
     }
 
-    liveEditSheetTitle.textContent='音';
+    liveEditSheetTitle.textContent=uiLanguage==='en'?'Audio':'音';
     const audioWrap=document.createElement('div');audioWrap.className='live-edit-audio-list';
     const bgmCmd=managedAudio(scene,'bgm');const bgmRow=document.createElement('section');bgmRow.className='live-edit-audio-row';
     const bgmHead=document.createElement('div');bgmHead.className='live-edit-audio-head';const bgmName=document.createElement('strong');bgmName.textContent='BGM';const bgmState=document.createElement('small');
@@ -8076,8 +8109,8 @@ function openDesktopTextDetail(){
     bgmStop.onclick=()=>{setManagedAudio(scene,'bgm',{channel:'bgm',action:'stop',fadeOut:600});scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
     bgmPick.onclick=()=>pickLiveFile('audio/*',(url,fileName)=>setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:fileName}));
     bgmButtons.append(bgmInherit,bgmStop,bgmPick);bgmRow.append(bgmHead,bgmButtons);audioWrap.append(bgmRow);
-    const presetNote=document.createElement('p');presetNote.className='live-edit-note';presetNote.textContent='Ambient と SE は「音の詳細設定」で調整します。';
-    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='音の詳細設定';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('audio');});
+    const presetNote=document.createElement('p');presetNote.className='live-edit-note';presetNote.textContent=uiLanguage==='en'?'Adjust Ambient and SE in Audio details.':'Ambient と SE は「音の詳細設定」で調整します。';
+    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=t('detail.audio');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('audio');});
     liveEditSheetBody.append(audioWrap,presetNote,detail);
   }
 
@@ -8846,8 +8879,8 @@ function openDesktopTextDetail(){
       items.forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);});
       sel.value=value;wrap.append(span,sel);return {wrap,sel};
     };
-    const font=mkSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],st.fontFamily||'inherit');
-    const size=mkSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],typeof st.size==='string'?st.size:'auto');
+    const font=mkSelect('書体',[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],st.fontFamily||'inherit');
+    const size=mkSelect('サイズ',[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof st.size==='string'?st.size:'auto');
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');colorTitle.textContent='文字色';Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
@@ -8862,7 +8895,7 @@ function openDesktopTextDetail(){
     colors.appendChild(picker);card.append(colorTitle,colors);
 
     const foot=document.createElement('div');Object.assign(foot.style,{display:'flex',justifyContent:'flex-end',marginTop:'18px'});
-    const done=document.createElement('button');done.type='button';done.textContent='完了';Object.assign(done.style,{width:'120px',height:'48px',border:'0',borderRadius:'24px',background:'#17181b',color:'#fff',font:'800 15px/1 system-ui'});
+    const done=document.createElement('button');done.type='button';done.textContent=t('common.done');Object.assign(done.style,{width:'120px',height:'48px',border:'0',borderRadius:'24px',background:'#17181b',color:'#fff',font:'800 15px/1 system-ui'});
     foot.appendChild(done);card.appendChild(foot);overlay.appendChild(card);
 
     const apply=()=>{
@@ -9203,8 +9236,8 @@ function openDesktopTextDetail(){
       items.forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);});
       sel.value=value;wrap.append(span,sel);return {wrap,sel};
     };
-    const font=mkSelect('書体',[['inherit','作品設定'],['serif','明朝'],['sans','ゴシック'],['mono','等幅']],style.fontFamily||'inherit');
-    const size=mkSelect('サイズ',[['auto','おまかせ'],['small','小'],['normal','標準'],['large','大'],['xl','特大']],typeof style.size==='string'?style.size:'auto');
+    const font=mkSelect('書体',[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],style.fontFamily||'inherit');
+    const size=mkSelect('サイズ',[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof style.size==='string'?style.size:'auto');
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');
@@ -9286,7 +9319,7 @@ function openDesktopTextDetail(){
     syncColorMode();
 
     const foot=document.createElement('div');Object.assign(foot.style,{display:'flex',justifyContent:'flex-end',marginTop:'18px'});
-    const done=document.createElement('button');done.type='button';done.textContent='完了';Object.assign(done.style,{width:'120px',height:'48px',border:'0',borderRadius:'24px',background:'#17181b',color:'#fff',font:'800 15px/1 system-ui'});
+    const done=document.createElement('button');done.type='button';done.textContent=t('common.done');Object.assign(done.style,{width:'120px',height:'48px',border:'0',borderRadius:'24px',background:'#17181b',color:'#fff',font:'800 15px/1 system-ui'});
     foot.appendChild(done);card.appendChild(foot);overlay.appendChild(card);
 
     const apply=()=>{
