@@ -301,6 +301,69 @@
     $$('.adv-section').forEach(section=>{section.dataset.openLabel=t('common.open');section.dataset.closeLabel=t('common.close');});
     const bgPreviewOverlay=$('#sceneBackgroundPreview'); if(bgPreviewOverlay)bgPreviewOverlay.dataset.overlayLabel=t('background.changeOverlay');
 
+    // Third-pass fallback for legacy/dynamically-rendered controls that still carry
+    // Japanese literals. Exact-match only: never touches author text in inputs/textareas.
+    if(uiLanguage==='en'){
+      const legacyEn=new Map([
+        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['制作中一覧','Works'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
+        ['タイトルと本文をサンプルに置き換えました','Title and text replaced with the sample.'],['「表紙に戻る」は固定です','“Back to cover” is fixed.'],
+        ['表紙に表示する情報','Show on cover'],['作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。','Keep the work info; choose only what appears on the cover. Turn all off for an image-only cover.'],
+        ['作品タイトル','Work title'],['サブタイトル','Subtitle'],['作者名','Author'],['話数','Episode label'],['今回のタイトル','Episode title'],['選択中の文字（Aa）','Selected text (Aa)'],['選択中の文字 (Aa)','Selected text (Aa)'],['対象','Target'],['書体','Typeface'],['サイズ','Size'],['色','Color'],['おまかせ','Automatic'],['任意色','Custom color'],
+        ['キーボードだけでも書けます','Write with the keyboard'],['改行','New line'],['カーソル位置で分割','Split at cursor'],['次に空Scene','Add empty Scene'],['先頭行から前Sceneを編集','From first line: edit previous Scene'],['最終行から次Sceneを編集','From last line: edit next Scene'],['分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。','To undo a split, use “Merge with previous” below the text field.'],
+        ['← 前のScene','← Previous Scene'],['前のScene','Previous Scene'],['次のScene →','Next Scene →'],['次のScene','Next Scene'],['⌛ 時間','⌛ Time'],
+        ['本文','Text'],['サブテキスト','Subtext'],['前Sceneと結合','Merge with previous'],['前のSceneと結合','Merge with previous'],['Scene操作','Scene actions'],['道具箱','Toolbox'],['← Easyへ戻る','← Back to Easy'],['Scene全体を見渡し、画像・音・設定の入り方を確認できます。','Review all Scenes and check images, audio, and settings.'],['作品全体・その他','Work-wide & other'],
+        ['中央の文','Center text'],['下部ボタン','Bottom buttons'],['左ボタンを編集','Edit left button'],['右ボタンを編集','Edit right button'],
+        ['続いていた時間','Time that kept flowing'],['その時そこにあった音','Sound that existed there'],['その時起きた音','Sound that happened then'],['再生','Playback'],['操作','Action'],['前Sceneを継続','Continue previous Scene'],['現在BGM / Ambientなし','No current BGM / Ambient'],['音量・フェード','Volume & fade'],['音量','Volume'],['フェードイン','Fade in'],['フェードアウト','Fade out'],['ループ','Loop'],['再生遅延','Playback delay'],['再生回数','Repeat count'],['音源未選択','No audio selected'],['ファイルを選択してください','Choose an audio file'],['ファイルを選択','Choose file'],['音源を外す','Remove audio'],['閉じる','Close'],['リセット','Reset'],['プレビュー','Preview'],
+        ['背景','Background'],['このSceneの背景','Background for this Scene'],['前Sceneから継続','Continue previous Scene'],['画像を使う','Use image'],['背景なし','No background'],['画像を選択','Choose image'],['画像を外す','Remove image'],['表示位置','Position'],['表示位置を調整','Adjust position'],['背景サイズ','Background fit'],['画面いっぱい（cover）','Fill screen (cover)'],['画像全体（contain）','Fit whole image (contain)'],['画面いっぱい (cover)','Fill screen (cover)'],['画像全体 (contain)','Fit whole image (contain)'],['明るさ・質感','Brightness & texture'],['ベール','Veil'],['ベール強度','Veil strength'],['暗く','Dark'],['明るく','Light'],['背景ぼかし','Background blur'],['ビネット','Vignette'],['粒子','Grain'],['モノクロ','Monochrome'],['Scene切替','Scene transition'],['切替演出','Transition'],['切替時間','Transition duration'],['フェード','Fade'],['カット','Cut'],['フラッシュ','Flash'],['グリッチ','Glitch'],['背景の動き','Background motion'],['動き','Motion'],['なし','None'],['ゆっくりズーム','Slow zoom'],['呼吸','Breath'],['左へパン','Pan left'],['右へパン','Pan right'],['上へパン','Pan up'],['下へパン','Pan down'],['「動き」を選ぶと時間・倍率・移動量を細かく設定できます。','Choose a motion to fine-tune duration, scale, and movement.'],
+        ['基本','Basic'],['出かた','Entrance'],['表示','Display'],['表示モード','Display mode'],['位置の動き','Position motion'],['開始遅延','Start delay'],['消えるまで','Time until exit'],['消える時のフェード','Exit fade'],['消え方','Exit motion'],['その場で消える','Fade in place'],['タイプライター','Typewriter'],['1文字の速度','Per-character speed'],['カーソル','Cursor'],['表示する','Show'],
+        ['読了ページ','Ending page'],['読了','Finished'],['文字（Aa）','Text (Aa)'],['文字 (Aa)','Text (Aa)'],['演出（✦）','Effects (✦)'],['背景（▣）','Background (▣)'],['音（♪）','Audio (♪)'],['文字の詳細設定','Text details'],['演出の詳細設定','Effect details'],['背景の詳細設定','Background details'],['音の詳細設定','Audio details']
+      ]);
+      document.querySelectorAll('button,option,label>span,label>strong,h1,h2,h3,h4,strong,small,p,summary,legend').forEach(el=>{
+        if(el.closest('textarea,input,[contenteditable="true"]'))return;
+        const raw=(el.textContent||'').trim();
+        if(legacyEn.has(raw))el.textContent=legacyEn.get(raw);
+      });
+      document.querySelectorAll('input,textarea').forEach(el=>{
+        const ph=(el.getAttribute('placeholder')||'').trim();
+        const phMap=new Map([['本文を入力','Enter text'],['補足が必要なSceneだけ','Only when a Scene needs extra context'],['例：窯の前で','e.g. Before the Kiln']]);
+        if(phMap.has(ph))el.setAttribute('placeholder',phMap.get(ph));
+      });
+      const legacyPrev=document.querySelector('#desktopPrevScene'); if(legacyPrev)legacyPrev.textContent='← Previous Scene';
+      const legacyNext=document.querySelector('#desktopNextScene'); if(legacyNext)legacyNext.textContent='Next Scene →';
+    }
+
+    // Third-pass fallback for legacy/dynamically-rendered controls that still carry
+    // Japanese literals. Exact-match only: never touches author text in inputs/textareas.
+    if(uiLanguage==='en'){
+      const legacyEn=new Map([
+        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['制作中一覧','Works'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
+        ['タイトルと本文をサンプルに置き換えました','Title and text replaced with the sample.'],['「表紙に戻る」は固定です','“Back to cover” is fixed.'],
+        ['表紙に表示する情報','Show on cover'],['作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。','Keep the work info; choose only what appears on the cover. Turn all off for an image-only cover.'],
+        ['作品タイトル','Work title'],['サブタイトル','Subtitle'],['作者名','Author'],['話数','Episode label'],['今回のタイトル','Episode title'],['選択中の文字（Aa）','Selected text (Aa)'],['選択中の文字 (Aa)','Selected text (Aa)'],['対象','Target'],['書体','Typeface'],['サイズ','Size'],['色','Color'],['おまかせ','Automatic'],['任意色','Custom color'],
+        ['キーボードだけでも書けます','Write with the keyboard'],['改行','New line'],['カーソル位置で分割','Split at cursor'],['次に空Scene','Add empty Scene'],['先頭行から前Sceneを編集','From first line: edit previous Scene'],['最終行から次Sceneを編集','From last line: edit next Scene'],['分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。','To undo a split, use “Merge with previous” below the text field.'],
+        ['← 前のScene','← Previous Scene'],['前のScene','Previous Scene'],['次のScene →','Next Scene →'],['次のScene','Next Scene'],['⌛ 時間','⌛ Time'],
+        ['本文','Text'],['サブテキスト','Subtext'],['前Sceneと結合','Merge with previous'],['前のSceneと結合','Merge with previous'],['Scene操作','Scene actions'],['道具箱','Toolbox'],['← Easyへ戻る','← Back to Easy'],['Scene全体を見渡し、画像・音・設定の入り方を確認できます。','Review all Scenes and check images, audio, and settings.'],['作品全体・その他','Work-wide & other'],
+        ['中央の文','Center text'],['下部ボタン','Bottom buttons'],['左ボタンを編集','Edit left button'],['右ボタンを編集','Edit right button'],
+        ['続いていた時間','Time that kept flowing'],['その時そこにあった音','Sound that existed there'],['その時起きた音','Sound that happened then'],['再生','Playback'],['操作','Action'],['前Sceneを継続','Continue previous Scene'],['現在BGM / Ambientなし','No current BGM / Ambient'],['音量・フェード','Volume & fade'],['音量','Volume'],['フェードイン','Fade in'],['フェードアウト','Fade out'],['ループ','Loop'],['再生遅延','Playback delay'],['再生回数','Repeat count'],['音源未選択','No audio selected'],['ファイルを選択してください','Choose an audio file'],['ファイルを選択','Choose file'],['音源を外す','Remove audio'],['閉じる','Close'],['リセット','Reset'],['プレビュー','Preview'],
+        ['背景','Background'],['このSceneの背景','Background for this Scene'],['前Sceneから継続','Continue previous Scene'],['画像を使う','Use image'],['背景なし','No background'],['画像を選択','Choose image'],['画像を外す','Remove image'],['表示位置','Position'],['表示位置を調整','Adjust position'],['背景サイズ','Background fit'],['画面いっぱい（cover）','Fill screen (cover)'],['画像全体（contain）','Fit whole image (contain)'],['画面いっぱい (cover)','Fill screen (cover)'],['画像全体 (contain)','Fit whole image (contain)'],['明るさ・質感','Brightness & texture'],['ベール','Veil'],['ベール強度','Veil strength'],['暗く','Dark'],['明るく','Light'],['背景ぼかし','Background blur'],['ビネット','Vignette'],['粒子','Grain'],['モノクロ','Monochrome'],['Scene切替','Scene transition'],['切替演出','Transition'],['切替時間','Transition duration'],['フェード','Fade'],['カット','Cut'],['フラッシュ','Flash'],['グリッチ','Glitch'],['背景の動き','Background motion'],['動き','Motion'],['なし','None'],['ゆっくりズーム','Slow zoom'],['呼吸','Breath'],['左へパン','Pan left'],['右へパン','Pan right'],['上へパン','Pan up'],['下へパン','Pan down'],['「動き」を選ぶと時間・倍率・移動量を細かく設定できます。','Choose a motion to fine-tune duration, scale, and movement.'],
+        ['基本','Basic'],['出かた','Entrance'],['表示','Display'],['表示モード','Display mode'],['位置の動き','Position motion'],['開始遅延','Start delay'],['消えるまで','Time until exit'],['消える時のフェード','Exit fade'],['消え方','Exit motion'],['その場で消える','Fade in place'],['タイプライター','Typewriter'],['1文字の速度','Per-character speed'],['カーソル','Cursor'],['表示する','Show'],
+        ['読了ページ','Ending page'],['読了','Finished'],['文字（Aa）','Text (Aa)'],['文字 (Aa)','Text (Aa)'],['演出（✦）','Effects (✦)'],['背景（▣）','Background (▣)'],['音（♪）','Audio (♪)'],['文字の詳細設定','Text details'],['演出の詳細設定','Effect details'],['背景の詳細設定','Background details'],['音の詳細設定','Audio details']
+      ]);
+      document.querySelectorAll('button,option,label>span,label>strong,h1,h2,h3,h4,strong,small,p,summary,legend').forEach(el=>{
+        if(el.closest('textarea,input,[contenteditable="true"]'))return;
+        const raw=(el.textContent||'').trim();
+        if(legacyEn.has(raw))el.textContent=legacyEn.get(raw);
+      });
+      // Placeholders and common dynamic navigation controls.
+      document.querySelectorAll('input,textarea').forEach(el=>{
+        const ph=(el.getAttribute('placeholder')||'').trim();
+        const phMap=new Map([['本文を入力','Enter text'],['補足が必要なSceneだけ','Only when a Scene needs extra context'],['例：窯の前で','e.g. Before the Kiln']]);
+        if(phMap.has(ph))el.setAttribute('placeholder',phMap.get(ph));
+      });
+      if(desktopPrevScene)desktopPrevScene.textContent='← Previous Scene';
+      if(desktopNextScene)desktopNextScene.textContent='Next Scene →';
+    }
+
     // Labels that repeat and are safer to bind by semantic parent.
     document.querySelectorAll('.adv-grid > .adv-field').forEach(label=>{
       const sel=label.querySelector('select');
@@ -4625,7 +4688,7 @@
     updateCoverPreview();
     updateEasyFileActions();
    
-    showUndo('タイトルと本文をサンプルに置き換えました');
+    showUndo(u('タイトルと本文をサンプルに置き換えました','Title and text replaced with the sample.'));
   }
 
   document.addEventListener('input',(event)=>{
@@ -4694,7 +4757,7 @@
     }
     const dialog=$('#sampleReplaceDialog');
     if(typeof dialog?.showModal==='function') dialog.showModal();
-    else if(confirm('入力中のタイトルと本文をサンプルに置き換えますか？')) applySample();
+    else if(confirm(u('入力中のタイトルと本文をサンプルに置き換えますか？','Replace the current title and text with the sample?'))) applySample();
   });
   $$('.theme-card').forEach(card=>card.addEventListener('click',()=>applyTheme(card.dataset.theme)));
   $$('.work-font-card').forEach(card=>card.addEventListener('click',()=>applyWorkFont(card.dataset.font)));
@@ -7016,7 +7079,7 @@ function openDesktopTextDetail(){
 
     wrap.append(
       desktopMakeSelect(
-        '書体',
+        u('書体','Typeface'),
         [['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],
         initial.fontFamily||'inherit',
         v=>{
@@ -7026,7 +7089,7 @@ function openDesktopTextDetail(){
         }
       ),
       desktopMakeSelect(
-        'サイズ',
+        u('サイズ','Size'),
         [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
         initial.size||'auto',
         v=>{
@@ -7042,7 +7105,7 @@ function openDesktopTextDetail(){
     const colorField=document.createElement('div');
     colorField.className='desktop-live-field';
     const colorLabel=document.createElement('span');
-    colorLabel.textContent='色';
+    colorLabel.textContent=u('色','Color');
 
     const colorSelect=document.createElement('select');
     const currentColor=normalizeTextColor(initial.color);
@@ -7884,12 +7947,12 @@ function openDesktopTextDetail(){
     );
 
     grid.append(
-      makeSelect('書体',
+      makeSelect(u('書体','Typeface'),
         [['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],
         st.fontFamily||'inherit',
         v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;rerender();}
       ),
-      makeSelect('サイズ',
+      makeSelect(u('サイズ','Size'),
         [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
         st.size||'auto',
         v=>{st.size=v;rerender();}
@@ -7902,7 +7965,7 @@ function openDesktopTextDetail(){
     if(colorValue==='custom'){
       const custom=document.createElement('div');
       custom.className='live-edit-color-custom';
-      const label=document.createElement('span');label.textContent='任意色';
+      const label=document.createElement('span');label.textContent=u('任意色','Custom color');
       const initialColor=normalizeTextColor(st.color)||'#4A4A4A';
       const value=document.createElement('code');value.textContent=initialColor;
       const colorPicker=makeCommittedTextColorPicker(initialColor,{
@@ -7965,7 +8028,7 @@ function openDesktopTextDetail(){
       const p=ensurePresentation(scene);p.text ||= {};
       const rerender=()=>{scheduleDraftSave(80);refreshLivePlayer();};
       let colorValue=!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom'));
-      const colorField=makeSelect('色',[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],colorValue,v=>{
+      const colorField=makeSelect(u('色','Color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],colorValue,v=>{
         if(v==='white')p.text.color='#ffffff';
         else if(v==='black')p.text.color='#000000';
         else if(v==='custom'){
@@ -7975,14 +8038,14 @@ function openDesktopTextDetail(){
         renderLiveEditSheet('text');
       });
       grid.append(
-        makeSelect('書体',[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
-        makeSelect('サイズ',[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
+        makeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
+        makeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
         colorField,
         makeSelect('文字配置',[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();})
       );
       if(colorValue==='custom'){
         const custom=document.createElement('div');custom.className='live-edit-color-custom';
-        const label=document.createElement('span');label.textContent='任意色';
+        const label=document.createElement('span');label.textContent=u('任意色','Custom color');
         const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';
         const value=document.createElement('code');value.textContent=initialColor;
         const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{value.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;value.textContent=c;rerender();}});
@@ -8042,7 +8105,7 @@ function openDesktopTextDetail(){
             const name=(file.name||'').toLowerCase();
             const audioLike=(file.type||'').startsWith('audio/') || /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(name);
             if(!audioLike){
-              alert('音声ファイルを選択してください。');
+              alert(t('alert.audio'));
               input.remove();
               return;
             }
@@ -8263,7 +8326,7 @@ function openDesktopTextDetail(){
   }
   function liveEditDeleteScene(){
     const {index}=liveEditScene();if(workingDocument.scenes.length<=1)return;
-    if(!confirm(`Scene ${index+1} を削除しますか？`))return;
+    if(!confirm(uiLanguage==='en'?`Delete Scene ${index+1}?`:`Scene ${index+1} を削除しますか？`))return;
     captureUndo('Scene削除を元に戻せます');
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(Math.min(index,workingDocument.scenes.length-1));showUndo('Sceneを削除しました');
@@ -8792,7 +8855,7 @@ function openDesktopTextDetail(){
     if(title){
       title.classList.add('live-ending-center-editable');
       title.setAttribute('role','textbox');
-      title.setAttribute('aria-label','読了ページ中央の文を編集');
+      title.setAttribute('aria-label',u('読了ページ中央の文を編集','Edit ending page center text'));
       title.style.cursor='text';
       title.style.webkitTapHighlightColor='transparent';
     }
@@ -8881,8 +8944,8 @@ function openDesktopTextDetail(){
       items.forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);});
       sel.value=value;wrap.append(span,sel);return {wrap,sel};
     };
-    const font=mkSelect('書体',[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],st.fontFamily||'inherit');
-    const size=mkSelect('サイズ',[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof st.size==='string'?st.size:'auto');
+    const font=mkSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],st.fontFamily||'inherit');
+    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof st.size==='string'?st.size:'auto');
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');colorTitle.textContent=u('文字色','Text color');Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
@@ -8948,7 +9011,7 @@ function openDesktopTextDetail(){
     updateCoverToolbarState();
     el.setAttribute('contenteditable','true');
     el.setAttribute('role','textbox');
-    el.setAttribute('aria-label','読了ページ中央の文を編集');
+    el.setAttribute('aria-label',u('読了ページ中央の文を編集','Edit ending page center text'));
     el.classList.add('live-ending-inline-editing');
     el.style.outline='none';
     el.style.cursor='text';
@@ -9238,8 +9301,8 @@ function openDesktopTextDetail(){
       items.forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);});
       sel.value=value;wrap.append(span,sel);return {wrap,sel};
     };
-    const font=mkSelect('書体',[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],style.fontFamily||'inherit');
-    const size=mkSelect('サイズ',[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof style.size==='string'?style.size:'auto');
+    const font=mkSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],style.fontFamily||'inherit');
+    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof style.size==='string'?style.size:'auto');
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');
