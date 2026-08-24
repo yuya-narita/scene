@@ -7210,26 +7210,26 @@ function openDesktopTextDetail(){
       document.body.classList.remove('desktop-live-edit');
       return;
     }
-    // Cover / ending are explicit editor modes.  Keep the right inspector in
-    // sync with the action the author just took instead of relying only on
-    // ScenePlayer's transient DOM/ended state during the same frame.
-    if(desktopSpecialIntent==='cover'){
+    // Prefer what is actually visible on the left pane. A stale cover intent /
+    // fading cover DOM must never make Scene 1 show the Cover inspector.
+    const sceneActuallyVisible=desktopSceneIsActuallyVisible();
+    if(sceneActuallyVisible && desktopSpecialIntent!=='ending')desktopSpecialIntent='scene';
+
+    if(desktopSpecialIntent==='cover' && !sceneActuallyVisible && liveCoverIsVisible()){
       renderDesktopCoverPanel();
       return;
     }
-    if(desktopSpecialIntent==='ending'){
+    if(desktopSpecialIntent==='ending' && !sceneActuallyVisible){
       renderDesktopEndingPanel();
       return;
     }
-    // During Cover -> Scene 1 and Ending -> Scene transitions, ScenePlayer's
-    // cover/ending DOM can remain visible for a frame.  Once a real Scene
-    // change has fired, trust that explicit editor mode instead of the stale
-    // shell DOM so Scene 1 immediately gets the normal Scene inspector.
-    if(desktopSpecialIntent!=='scene' && liveCoverIsVisible()){
+    if(!sceneActuallyVisible && desktopSpecialIntent!=='scene' && liveCoverIsVisible()){
+      desktopSpecialIntent='cover';
       renderDesktopCoverPanel();
       return;
     }
-    if(desktopSpecialIntent!=='scene' && (player?.ended || !playerHost.querySelector('.sp-ending')?.hidden)){
+    if(!sceneActuallyVisible && desktopSpecialIntent!=='scene' && (player?.ended || !playerHost.querySelector('.sp-ending')?.hidden)){
+      desktopSpecialIntent='ending';
       renderDesktopEndingPanel();
       return;
     }
@@ -7348,7 +7348,7 @@ function openDesktopTextDetail(){
     textCard.append(textGrid);
     if(colorValue==='custom'){
       const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';
-      const colorPicker=makeCommittedTextColorPicker(initialColor,{onPreview:c=>{previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}});
+      const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}});
       textCard.append(colorPicker.root);
     }
     textCard.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}));
@@ -8263,6 +8263,9 @@ function openDesktopTextDetail(){
 
   function enableLiveEdit(){
     liveEditEnabled=true;
+    // Re-entering Live Editor must not inherit a stale Cover/Ending inspector
+    // from the previous session. Seed the mode from the pane that is visible now.
+    desktopSpecialIntent=desktopSceneIsActuallyVisible()?'scene':(player?.ended?'ending':(liveCoverIsVisible()?'cover':'scene'));
     if(player)player.options.historyAllScenes=true;
     setLiveToolbarVisible(false);
     playerHost.classList.add('live-edit-enabled');
@@ -8355,6 +8358,14 @@ function openDesktopTextDetail(){
     if(!cover)return false;
     const cs=getComputedStyle(cover);
     return !cover.hidden && cs.display!=='none' && cs.visibility!=='hidden' && Number(cs.opacity||1)!==0;
+  }
+
+  function desktopSceneIsActuallyVisible(){
+    const sceneEl=playerHost?.querySelector?.('.sp-scene.is-active');
+    if(!sceneEl)return false;
+    const cs=getComputedStyle(sceneEl);
+    const r=sceneEl.getBoundingClientRect();
+    return !sceneEl.hidden && cs.display!=='none' && cs.visibility!=='hidden' && Number(cs.opacity||1)!==0 && r.width>2 && r.height>2;
   }
 
   liveEditToolbar?.addEventListener('pointerdown',(e)=>{

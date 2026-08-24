@@ -9494,3 +9494,55 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     bottom:11px;
   }
 }
+
+/* =========================================================
+   Desktop Live Editor compact equal cards v9 — PC only
+   Keep the 2x2 quick controls inside one viewport. Custom color uses the
+   compact swatch trigger; detail routes keep a protected footer lane.
+   ========================================================= */
+@media (min-width:1100px){
+  .desktop-live-three{
+    grid-auto-rows:204px!important;
+    gap:8px!important;
+  }
+  .desktop-live-three > .desktop-live-card{
+    height:204px!important;
+    min-height:204px!important;
+    padding-bottom:36px!important;
+    overflow:visible;
+  }
+  .desktop-live-three > .desktop-live-card > .desktop-live-detail{
+    bottom:7px!important;
+  }
+  .desktop-live-three .studio-color-picker.is-compact{
+    width:46px!important;
+    min-width:46px!important;
+    justify-self:center;
+    margin:2px auto 0;
+  }
+  .desktop-live-three .studio-color-picker.is-compact .studio-color-trigger{
+    width:46px!important;
+    min-width:46px!important;
+    height:30px!important;
+    min-height:30px!important;
+    border-radius:9px!important;
+  }
+  .desktop-live-three .text-color-palette{
+    margin-top:2px!important;
+    padding-top:0!important;
+  }
+  .desktop-live-three .text-color-palette-row{
+    gap:5px!important;
+  }
+  .desktop-live-three .text-color-chip{
+    width:20px!important;
+    height:20px!important;
+    flex-basis:20px!important;
+  }
+  .desktop-live-three .desktop-live-bg-top{
+    margin-top:0!important;
+  }
+  .desktop-live-three .desktop-live-audio-note{
+    margin:2px auto 0!important;
+  }
+}
