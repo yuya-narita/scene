@@ -7387,7 +7387,12 @@ function openDesktopTextDetail(){
         refresh();
       },!bg?'is-selected':''),
       desktopAction(bg?.src?'画像を変更':'画像を選択',()=>desktopPickFile('image/*',(url,name)=>{
-        p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
+        p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:p.background?.position||'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
+        openSceneBackgroundPositionEditor(scene,()=>{
+          scheduleDraftSave(40);
+          refreshLivePlayer({preserveSheet:true});
+          if(desktopLiveActive())renderDesktopLivePanel();
+        });
       }),'is-primary'),
       desktopAction('背景なし',()=>{
         p.background={src:'',transition:'fade',_editorManaged:true};
@@ -7395,6 +7400,17 @@ function openDesktopTextDetail(){
       },bg?.src===''?'is-selected':'')
     );
     bgTop.appendChild(bgBtns);bgCard.appendChild(bgTop);
+    const bgPositionAction=desktopAction('表示位置を調整',()=>{
+      if(!p.background?.src)return;
+      openSceneBackgroundPositionEditor(scene,()=>{
+        scheduleDraftSave(40);
+        refreshLivePlayer({preserveSheet:true});
+        if(desktopLiveActive())renderDesktopLivePanel();
+      });
+    });
+    bgPositionAction.disabled=!bg?.src;
+    bgPositionAction.classList.add('desktop-live-bg-position');
+    bgCard.appendChild(bgPositionAction);
     const tone=document.createElement('div');tone.className='desktop-live-choice';
     tone.append(desktopAction('暗く',()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction('明るく',()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
     bgCard.append(tone,desktopDetail('背景の詳細設定','background'));
@@ -7968,6 +7984,7 @@ function openDesktopTextDetail(){
           scheduleDraftSave(80);refreshLivePlayer();
         }),
         makeSelect('表示',[['stack','前の文章を残す'],['solo','この文章だけ']],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
+        makeSelect('表示モード',[['world','通常'],['console','コンソール'],['system','システム'],['warning','警告'],['void','虚無']],p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();}),
         makeSelect('位置の動き',[['flow','流れて着地'],['still','その場']],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();})
       );
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent='演出の詳細設定';detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
@@ -8244,8 +8261,8 @@ function openDesktopTextDetail(){
     const grid=document.createElement('div');grid.className='live-edit-scene-actions';
     const action=(label,fn,disabled=false,danger=false)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.disabled=disabled;if(danger)b.classList.add('is-danger');b.addEventListener('click',fn);return b;};
     grid.append(
-      action('← 前へ移動',()=>liveEditMoveScene(-1),index===0),
-      action('次へ移動 →',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1),
+      action('↑ 上へ移動',()=>liveEditMoveScene(-1),index===0),
+      action('↓ 下へ移動',()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1),
       action('前のSceneと結合',liveEditMergePrevious,index===0),
       action('複製',liveEditDuplicateScene),
       action('削除',liveEditDeleteScene,workingDocument.scenes.length<=1,true)
