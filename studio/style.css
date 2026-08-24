@@ -9454,3 +9454,22 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     white-space:nowrap;
   }
 }
+
+/* =========================================================
+   Desktop Live Editor card breathing room v7 — PC only
+   Give the four quick-setting cards enough vertical room so the
+   blue detail routes never collide with controls.
+   ========================================================= */
+@media (min-width:1100px){
+  .desktop-live-three{
+    grid-auto-rows:224px;
+  }
+  .desktop-live-three > .desktop-live-card{
+    height:224px;
+    min-height:224px;
+    padding-bottom:44px;
+  }
+  .desktop-live-three > .desktop-live-card > .desktop-live-detail{
+    bottom:10px;
+  }
+}

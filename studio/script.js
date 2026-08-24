@@ -7201,6 +7201,8 @@ function openDesktopTextDetail(){
     mountDesktopSpecialModal('読了ページ',[textCard,styleCard,linksCard]);
   }
 
+  let desktopSpecialIntent=null;
+
   function renderDesktopLivePanel(){
     if(!desktopLivePanel)return;
     if(!desktopLiveActive()){
@@ -7208,11 +7210,14 @@ function openDesktopTextDetail(){
       document.body.classList.remove('desktop-live-edit');
       return;
     }
-    if(liveCoverIsVisible()){
+    // Cover / ending are explicit editor modes.  Keep the right inspector in
+    // sync with the action the author just took instead of relying only on
+    // ScenePlayer's transient DOM/ended state during the same frame.
+    if(desktopSpecialIntent==='cover' || liveCoverIsVisible()){
       renderDesktopCoverPanel();
       return;
     }
-    if(player?.ended || !playerHost.querySelector('.sp-ending')?.hidden){
+    if(desktopSpecialIntent==='ending' || player?.ended || !playerHost.querySelector('.sp-ending')?.hidden){
       renderDesktopEndingPanel();
       return;
     }
@@ -8883,6 +8888,7 @@ function openDesktopTextDetail(){
   }
 
   playerHost.addEventListener('sceneplayer:end',()=>{
+    desktopSpecialIntent='ending';
     requestAnimationFrame(prepareLiveEndingEditor);
     requestAnimationFrame(renderDesktopLivePanel);
   });
@@ -9389,8 +9395,13 @@ function openDesktopTextDetail(){
       return;
     }
     if(e.target.closest?.('.sp-ending-cover')){
-      // Fixed action, but still live: let ScenePlayerCore handle this click
-      // so the author can return to the cover and run another preview pass.
+      // ScenePlayer switches the left pane back to the cover after this capture
+      // handler.  Remember that intent immediately so the right pane cannot
+      // remain stuck on the Ending editor while `player.ended` is still true
+      // for a frame.
+      desktopSpecialIntent='cover';
+      requestAnimationFrame(()=>requestAnimationFrame(renderDesktopLivePanel));
+      setTimeout(()=>{ if(liveEditEnabled)renderDesktopLivePanel(); },60);
       return;
     }
   },true);
@@ -9412,9 +9423,10 @@ function openDesktopTextDetail(){
     setLiveToolbarVisible(true);
     startInlineTextEdit(activeSubText?'subText':'text');
   },true);
-  playerHost.addEventListener('sceneplayer:coverstart',()=>{finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});liveCoverTextDraft=coverTextStateFromDocument();pushLiveCoverTextDraftToEasy();closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(renderDesktopLivePanel);});
+  playerHost.addEventListener('sceneplayer:coverstart',()=>{desktopSpecialIntent='cover';finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});liveCoverTextDraft=coverTextStateFromDocument();pushLiveCoverTextDraftToEasy();closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(()=>requestAnimationFrame(renderDesktopLivePanel));});
   playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
+    desktopSpecialIntent=null;
     const detailKind=currentDesktopDetailKind();
     finishInlineTextEdit();
     closeLiveEditSheet();
