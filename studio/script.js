@@ -7210,29 +7210,28 @@ function openDesktopTextDetail(){
       document.body.classList.remove('desktop-live-edit');
       return;
     }
-    // Prefer what is actually visible on the left pane. A stale cover intent /
-    // fading cover DOM must never make Scene 1 show the Cover inspector.
-    const sceneActuallyVisible=desktopSceneIsActuallyVisible();
-    if(sceneActuallyVisible && desktopSpecialIntent!=='ending')desktopSpecialIntent='scene';
+    // Shell-page mode must be decided by the Player's authoritative state, not
+    // by whether a Scene DOM is still visible underneath it. The Player keeps
+    // Scene 1 mounted below the Cover and keeps the last Scene mounted below
+    // Ending; using that DOM as the mode test is what made Cover/Ending modals
+    // disappear or made Scene 1 inherit the Cover editor.
+    const coverOpenNow=!!playerHost?.classList?.contains('sp-cover-open');
+    const endingOpenNow=!coverOpenNow && !!player?.ended;
 
-    if(desktopSpecialIntent==='cover' && !sceneActuallyVisible && liveCoverIsVisible()){
-      renderDesktopCoverPanel();
-      return;
-    }
-    if(desktopSpecialIntent==='ending' && !sceneActuallyVisible){
-      renderDesktopEndingPanel();
-      return;
-    }
-    if(!sceneActuallyVisible && desktopSpecialIntent!=='scene' && liveCoverIsVisible()){
+    if(coverOpenNow){
       desktopSpecialIntent='cover';
       renderDesktopCoverPanel();
       return;
     }
-    if(!sceneActuallyVisible && desktopSpecialIntent!=='scene' && (player?.ended || !playerHost.querySelector('.sp-ending')?.hidden)){
+    if(endingOpenNow){
       desktopSpecialIntent='ending';
       renderDesktopEndingPanel();
       return;
     }
+
+    // If neither shell page is active, we are editing a real Scene. This also
+    // clears stale intent immediately when Start / Previous / Next enters Scene 1.
+    desktopSpecialIntent='scene';
     document.body.classList.remove('desktop-live-special-open');
     if(desktopTimingButton)desktopTimingButton.disabled=false;
     const {scene,index}=liveEditScene();if(!scene)return;

@@ -9546,3 +9546,71 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     margin:2px auto 0!important;
   }
 }
+
+/* =========================================================
+   Desktop Live Editor shell-state + balanced cards v10 — PC only
+   - Card controls get enough real vertical room.
+   - The blue detail route owns a protected footer lane.
+   - Keep all four cards the same size without returning to the oversized v8.
+   ========================================================= */
+@media (min-width:1100px){
+  .desktop-live-three{
+    grid-auto-rows:240px!important;
+    gap:7px!important;
+  }
+  .desktop-live-three > .desktop-live-card{
+    height:240px!important;
+    min-height:240px!important;
+    padding:9px 10px 46px!important;
+    gap:6px!important;
+    overflow:hidden!important;
+    align-content:start!important;
+  }
+  .desktop-live-three > .desktop-live-card > h3{
+    width:100%!important;
+    margin:0!important;
+    text-align:left!important;
+  }
+  .desktop-live-three > .desktop-live-card > .desktop-live-detail{
+    position:absolute!important;
+    left:50%!important;
+    bottom:8px!important;
+    transform:translateX(-50%)!important;
+    min-width:142px!important;
+    max-width:190px!important;
+    margin:0!important;
+    z-index:3!important;
+    white-space:nowrap!important;
+  }
+
+  /* Custom color is the tallest Text-card state. Keep it compact, but leave
+     genuine space between its controls and the detail footer. */
+  .desktop-live-three .studio-color-picker.is-compact{
+    margin:0 auto!important;
+  }
+  .desktop-live-three .text-color-palette{
+    margin:0 auto!important;
+    padding:0 0 2px!important;
+  }
+  .desktop-live-three .text-color-palette-row{
+    gap:5px!important;
+  }
+  .desktop-live-three .text-color-chip{
+    width:20px!important;
+    height:20px!important;
+    flex-basis:20px!important;
+  }
+
+  /* Keep the shorter cards visually balanced while preserving the shared
+     240px footprint. */
+  .desktop-live-three .desktop-live-bg-top,
+  .desktop-live-three .desktop-live-audio-grid{
+    margin-top:3px!important;
+  }
+
+  /* Scene controls should remain reachable without a large extra scroll. */
+  .desktop-live-scene-card{
+    padding-top:8px!important;
+    padding-bottom:8px!important;
+  }
+}
