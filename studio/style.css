@@ -9316,3 +9316,118 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     box-sizing:border-box;
   }
 }
+
+/* =========================================================
+   Desktop Live Editor visual balance v5 — PC only
+   Keep writing generous, controls centered inside equal cards.
+   ========================================================= */
+@media (min-width:1100px){
+  /* Give the main manuscript a little more breathing room. */
+  .desktop-live-body-card textarea:not(.desktop-live-subtext){
+    min-height:96px;
+    max-height:150px;
+  }
+  .desktop-live-body-card textarea.desktop-live-subtext{
+    min-height:40px;
+    max-height:64px;
+  }
+
+  /* 2 x 2 control cards: equal footprint, titles stay left aligned. */
+  .desktop-live-three{
+    grid-auto-rows:200px;
+  }
+  .desktop-live-three > .desktop-live-card{
+    height:200px;
+    min-height:200px;
+    justify-items:center;
+    align-content:start;
+  }
+  .desktop-live-three > .desktop-live-card > h3{
+    width:100%;
+    justify-self:start;
+    text-align:left;
+  }
+
+  /* Center the actual controls, rather than stretching them edge-to-edge. */
+  .desktop-live-three .desktop-live-grid{
+    width:min(88%,430px);
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    justify-content:center;
+  }
+  .desktop-live-three .desktop-live-field{
+    width:100%;
+    max-width:200px;
+  }
+  .desktop-live-three .desktop-live-field select{
+    width:100%;
+    max-width:200px;
+  }
+  .desktop-live-three .text-color-palette{
+    width:min(88%,430px);
+    margin-inline:auto;
+  }
+  .desktop-live-three .desktop-live-detail{
+    justify-self:center;
+  }
+
+  .desktop-live-three .desktop-live-bg-top{
+    width:min(88%,430px);
+    grid-template-columns:78px minmax(0,220px);
+    justify-content:center;
+  }
+  .desktop-live-three .desktop-live-bg-top .desktop-live-stack{
+    width:220px;
+  }
+  .desktop-live-three .desktop-live-bg-top .desktop-live-action{
+    width:100%;
+    max-width:220px;
+  }
+  .desktop-live-three .desktop-live-choice{
+    width:min(74%,300px);
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    justify-content:center;
+  }
+  .desktop-live-three .desktop-live-choice .desktop-live-action{
+    width:100%;
+    max-width:none;
+  }
+
+  .desktop-live-three .desktop-live-audio-grid{
+    width:min(88%,430px);
+    margin-inline:auto;
+  }
+  .desktop-live-three .desktop-live-audio-col{
+    grid-template-columns:auto auto;
+    justify-content:center;
+    justify-items:center;
+    column-gap:10px;
+  }
+  .desktop-live-three .desktop-live-audio-col strong,
+  .desktop-live-three .desktop-live-audio-col small{
+    justify-self:center;
+  }
+  .desktop-live-three .desktop-live-audio-col .desktop-live-action{
+    min-width:96px;
+    max-width:128px;
+  }
+  .desktop-live-three .desktop-live-audio-note{
+    width:min(88%,430px);
+    text-align:center;
+  }
+
+  /* Ending only needs a short central sentence; do not waste modal height. */
+  .desktop-live-special-modal textarea.desktop-live-ending-text{
+    width:100%;
+    min-height:92px;
+    height:92px;
+    max-height:140px;
+    resize:vertical;
+    box-sizing:border-box;
+    border:1px solid #d7dade;
+    border-radius:10px;
+    padding:12px;
+    font:15px/1.65 system-ui;
+    color:#17181b;
+    background:#fff;
+  }
+}

@@ -7195,7 +7195,7 @@ function openDesktopTextDetail(){
   function renderDesktopEndingPanel(){
     desktopSceneLabel.textContent='読了ページ';desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
-    const textCard=desktopCard('中央の文');const ta=document.createElement('textarea');ta.value=endingLabelInput?.value||'';ta.placeholder='読了';ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
+    const textCard=desktopCard('中央の文');const ta=document.createElement('textarea');ta.className='desktop-live-ending-text';ta.value=endingLabelInput?.value||'';ta.placeholder='読了';ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
     const styleCard=desktopCard('文字（Aa）');styleCard.append(shellStyleControls(()=>{workingDocument.ending||={};workingDocument.ending.style||={};return workingDocument.ending.style;},()=>{refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
     const linksCard=desktopCard('下部ボタン');const ops=document.createElement('div');ops.className='desktop-live-scene-ops';ops.append(desktopAction('左ボタンを編集',()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('left');}),desktopAction('右ボタンを編集',()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('right');}));linksCard.appendChild(ops);
     mountDesktopSpecialModal('読了ページ',[textCard,styleCard,linksCard]);
