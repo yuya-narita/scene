@@ -9154,3 +9154,84 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   .desktop-live-three>.desktop-live-card:last-child{grid-column:auto}
   .desktop-live-scene-ops{grid-template-columns:repeat(5,minmax(0,1fr))}
 }
+
+/* =========================================================
+   Desktop Live Editor cockpit v3 — calmer writing + equal cards
+   ========================================================= */
+@media (min-width:1100px){
+  /* Four current-Scene cards are a true 2 x 2 grid with one shared size. */
+  .desktop-live-three{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-auto-rows:214px;
+    gap:10px;
+    align-items:stretch;
+  }
+  .desktop-live-three>.desktop-live-card{
+    height:214px;
+    min-height:214px;
+    overflow:hidden;
+    align-content:start;
+  }
+
+  /* Controls should read as controls, not full-width horizontal bars. */
+  .desktop-live-grid{
+    grid-template-columns:repeat(2,minmax(150px,210px));
+    justify-content:start;
+    align-items:start;
+    column-gap:10px;
+    row-gap:7px;
+  }
+  .desktop-live-field{width:min(100%,210px)}
+  .desktop-live-field select{
+    width:100%;
+    max-width:210px;
+  }
+  .desktop-live-action{
+    width:auto;
+    min-width:112px;
+    max-width:220px;
+    padding-inline:12px;
+  }
+  .desktop-live-detail{
+    width:auto;
+    min-width:150px;
+    max-width:210px;
+    align-self:start;
+  }
+
+  /* Background: thumbnail + compact action column. */
+  .desktop-live-bg-top{
+    grid-template-columns:82px minmax(0,220px);
+    justify-content:start;
+    align-items:start;
+  }
+  .desktop-live-bg-top img,.desktop-live-bg-placeholder{
+    width:82px;
+    height:66px;
+  }
+  .desktop-live-bg-top .desktop-live-stack{width:220px;max-width:100%}
+  .desktop-live-bg-top .desktop-live-action{width:100%;max-width:220px}
+  .desktop-live-choice{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(100px,150px));
+    justify-content:start;
+  }
+  .desktop-live-choice .desktop-live-action{width:100%;min-width:0;max-width:150px}
+
+  /* Audio keeps the same card footprint without stretching three buttons. */
+  .desktop-live-audio-col{
+    grid-template-columns:auto 1fr;
+    justify-content:start;
+    align-items:center;
+    gap:7px 10px;
+  }
+  .desktop-live-audio-col strong{grid-column:1/2}
+  .desktop-live-audio-col small{grid-column:2/3;text-align:left}
+  .desktop-live-audio-col .desktop-live-action{
+    min-width:96px;
+    width:auto;
+    max-width:150px;
+  }
+  .desktop-live-audio-grid{display:block}
+  .desktop-live-audio-note{max-width:260px}
+}

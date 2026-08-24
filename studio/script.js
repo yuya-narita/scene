@@ -7203,7 +7203,18 @@ function openDesktopTextDetail(){
 
     const bodyCard=desktopCard('本文','desktop-live-body-card');
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder='本文を入力';
-    ta.addEventListener('input',()=>{scene.text=ta.value;scheduleDraftSave(100);refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});});
+    // Do not rebuild the preview on every keystroke. A short debounce keeps
+    // continuous writing visually calm while still updating shortly after the
+    // author pauses. The right editor DOM stays intact, so the caret is kept.
+    const scheduleCalmTextPreview=()=>{
+      clearTimeout(window.__desktopLiveTextPreviewTimer);
+      window.__desktopLiveTextPreviewTimer=setTimeout(()=>{
+        if(!desktopLiveActive())return;
+        refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});
+      },320);
+    };
+    ta.addEventListener('input',()=>{scene.text=ta.value;scheduleDraftSave(100);scheduleCalmTextPreview();});
+    ta.addEventListener('blur',()=>{clearTimeout(window.__desktopLiveTextPreviewTimer);refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});});
     ta.addEventListener('keydown',e=>{
       if(e.isComposing||e.key!=='Enter')return;
       if(e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey){
@@ -7224,8 +7235,9 @@ function openDesktopTextDetail(){
     subTa.addEventListener('input',()=>{
       if(subTa.value)scene.subText=subTa.value;else delete scene.subText;
       scheduleDraftSave(100);
-      refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});
+      scheduleCalmTextPreview();
     });
+    subTa.addEventListener('blur',()=>{clearTimeout(window.__desktopLiveTextPreviewTimer);refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});});
     subField.append(subLabel,subTa);
     bodyCard.appendChild(subField);
 
