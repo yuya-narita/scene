@@ -9431,3 +9431,26 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     background:#fff;
   }
 }
+
+/* =========================================================
+   Desktop Live Editor detail-link visibility v6 — PC only
+   Keep the small blue detail routes visible at the foot of every card.
+   ========================================================= */
+@media (min-width:1100px){
+  .desktop-live-three > .desktop-live-card{
+    position:relative;
+    padding-bottom:38px;
+  }
+  .desktop-live-three > .desktop-live-card > .desktop-live-detail{
+    position:absolute;
+    left:50%;
+    bottom:7px;
+    transform:translateX(-50%);
+    width:auto;
+    min-width:140px;
+    max-width:220px;
+    margin:0;
+    z-index:2;
+    white-space:nowrap;
+  }
+}
