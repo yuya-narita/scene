@@ -9,12 +9,16 @@
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="stylesheet" href="./scene-player-core.css">
   <link rel="stylesheet" href="./style.css">
+  <style>
+    .ahako-brand-row{display:flex;align-items:center;justify-content:center;gap:.38rem;line-height:1}
+    .ahako-beta{display:inline-flex;align-items:center;padding:.18em .42em;border:1px solid currentColor;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:.12em;line-height:1;opacity:.62}
+  </style>
 </head>
 <body>
 <main id="app">
   <header id="studioSharedHeader" class="studio-shared-header">
     <div class="studio-shared-center">
-      <strong class="ahako-brand" aria-label="あ箱"><span class="ahako-a">あ</span><span class="ahako-box" aria-hidden="true">□</span></strong>
+      <div class="ahako-brand-row"><strong class="ahako-brand" aria-label="あ箱"><span class="ahako-a">あ</span><span class="ahako-box" aria-hidden="true">□</span></strong><span class="ahako-beta" aria-label="Beta version">BETA</span></div>
       <small id="studioModeLabel">Easy Studio</small>
     </div>
     <div class="easy-menu-corner">
