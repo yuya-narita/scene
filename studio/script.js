@@ -1245,37 +1245,47 @@
     const placePopover=()=>{
       if(!open)return;
       if(matchMedia('(max-width:640px)').matches){
+        // Mobile keeps the popover inside the sheet so its existing scroll
+        // behaviour remains unchanged.
+        if(pop.parentNode!==root)root.appendChild(pop);
         fitMobilePopover();
         return;
       }
-      // Desktop: keep the picker anchored to its own swatch.
-      // Using position:fixed together with visualViewport coordinates caused
-      // the popover to drift to the far right when Chrome zoom / split layout
-      // or a horizontally scrolled editor was involved.  The picker lives in
-      // a positioned .studio-color-picker already, so local absolute
-      // coordinates are both simpler and stable.
+
+      // Desktop: render the picker in document.body as a viewport overlay.
+      // Keeping it inside the Text card lets card overflow / stacking contexts
+      // clip the lower half of the picker. getBoundingClientRect() is already in
+      // viewport CSS pixels, so fixed positioning stays aligned even when Chrome
+      // zoom or the split editor is used.
+      if(pop.parentNode!==document.body)document.body.appendChild(pop);
+      const vw=window.innerWidth||document.documentElement.clientWidth||1200;
       const vh=window.innerHeight||document.documentElement.clientHeight||800;
       const r=trigger.getBoundingClientRect();
-      const preferredWidth=Math.min(286,Math.max(220,window.innerWidth-24));
-      const estimatedHeight=Math.min(pop.scrollHeight||260,Math.max(180,vh-24));
+      const gap=8;
+      const edge=12;
+      const preferredWidth=Math.min(286,Math.max(220,vw-edge*2));
+      const estimatedHeight=Math.min(pop.scrollHeight||260,Math.max(180,vh-edge*2));
       const roomBelow=vh-r.bottom;
       const roomAbove=r.top;
+      const openUp=roomBelow < Math.min(estimatedHeight+gap,260) && roomAbove > roomBelow;
+      const center=r.left+r.width/2;
+      const left=Math.max(edge,Math.min(vw-preferredWidth-edge,center-preferredWidth/2));
 
-      pop.style.position='absolute';
+      pop.style.position='fixed';
+      pop.style.zIndex='2147483000';
       pop.style.width=`${preferredWidth}px`;
       pop.style.boxSizing='border-box';
-      pop.style.left='50%';
+      pop.style.left=`${Math.round(left)}px`;
       pop.style.right='auto';
-      pop.style.transform='translateX(-50%)';
-      pop.style.bottom='auto';
-      pop.style.top='calc(100% + 6px)';
-      pop.style.maxHeight=`${Math.max(180,Math.min(360,vh-24))}px`;
+      pop.style.transform='none';
+      pop.style.maxHeight=`${Math.max(180,Math.min(360,vh-edge*2))}px`;
       pop.style.overflow='auto';
-
-      // If the trigger is very close to the bottom edge, open upward instead.
-      if(roomBelow < Math.min(estimatedHeight+16,260) && roomAbove > roomBelow){
+      if(openUp){
         pop.style.top='auto';
-        pop.style.bottom='calc(100% + 6px)';
+        pop.style.bottom=`${Math.max(edge,Math.round(vh-r.top+gap))}px`;
+      }else{
+        pop.style.bottom='auto';
+        pop.style.top=`${Math.max(edge,Math.round(r.bottom+gap))}px`;
       }
     };
     const close=(revert=true)=>{
@@ -1288,9 +1298,11 @@
       window.visualViewport?.removeEventListener('resize',placePopover);
       window.visualViewport?.removeEventListener('scroll',placePopover);
       window.removeEventListener('resize',placePopover);
+      window.removeEventListener('scroll',placePopover,true);
+      if(pop.parentNode!==root)root.appendChild(pop);
       if(revert){preview=committed;hsv=hexToHsv(committed);hue.value=String(Math.round(hsv.h));paint();if(typeof onPreview==='function')onPreview(committed);}
     };
-    const outside=e=>{if(!root.contains(e.target))close(true);};
+    const outside=e=>{if(!root.contains(e.target)&&!pop.contains(e.target))close(true);};
     const keyClose=e=>{if(e.key==='Escape'){e.preventDefault();close(true);}};
     const togglePicker=e=>{
       e.preventDefault();e.stopPropagation();
@@ -1304,6 +1316,7 @@
           window.visualViewport?.addEventListener('resize',placePopover);
           window.visualViewport?.addEventListener('scroll',placePopover);
           window.addEventListener('resize',placePopover);
+          window.addEventListener('scroll',placePopover,true);
           if(matchMedia('(max-width:640px)').matches){
             requestAnimationFrame(fitMobilePopover);
             setTimeout(fitMobilePopover,80);
