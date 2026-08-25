@@ -84,6 +84,8 @@
       this.maxVisitedIndex = -1;
       this.historyOpen = false;
       this.historyScrollRaf = 0;
+      this.historyMetrics = null;
+      this.historyDepthItems = new Set();
       this.destroyed = false;
       this._bound = [];
       this.presentationTimers = [];
@@ -1347,6 +1349,10 @@
         fragment.appendChild(item);
       }
       this.els.historyList.appendChild(fragment);
+      // Measure the drum once after rebuilding it. Scroll-time depth updates can
+      // then use cached centers instead of forcing layout for every Scene.
+      this.historyMetrics = null;
+      this.historyDepthItems.clear();
     }
 
     _scheduleHistoryDepth() {
@@ -1359,25 +1365,54 @@
 
     _updateHistoryDepth() {
       if (!this.historyOpen) return;
-      const viewport = this.els.historyScroll.getBoundingClientRect();
-      const center = viewport.top + viewport.height / 2;
-      let nearest = null;
-      let nearestDistance = Infinity;
+      const scroll = this.els.historyScroll;
+      const items = Array.from(this.els.historyList.querySelectorAll('.sp-history-item'));
+      if (!items.length) return;
 
-      this.els.historyList.querySelectorAll('.sp-history-item').forEach((item) => {
-        const rect = item.getBoundingClientRect();
-        const itemCenter = rect.top + rect.height / 2;
-        const distance = Math.abs(itemCenter - center);
-        const normalized = clamp(distance / Math.max(1, viewport.height * 0.58), 0, 1);
-        item.style.setProperty('--sp-history-depth', String(normalized));
-        if (distance < nearestDistance) {
-          nearestDistance = distance;
-          nearest = item;
-        }
+      // Building this cache may read layout once, when History opens/rebuilds.
+      // The hot scroll path below does not call getBoundingClientRect() per Scene.
+      if (!this.historyMetrics || this.historyMetrics.length !== items.length) {
+        this.historyMetrics = items.map((item) => ({
+          item,
+          center: item.offsetTop + item.offsetHeight / 2
+        }));
+      }
+
+      const metrics = this.historyMetrics;
+      const center = scroll.scrollTop + scroll.clientHeight / 2;
+
+      // Binary-search the nearest cached Scene center.
+      let lo = 0, hi = metrics.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (metrics[mid].center < center) lo = mid + 1;
+        else hi = mid;
+      }
+      let nearestIndex = lo;
+      if (nearestIndex > 0 && Math.abs(metrics[nearestIndex - 1].center - center) <= Math.abs(metrics[nearestIndex].center - center)) {
+        nearestIndex -= 1;
+      }
+
+      // Only the small visible neighbourhood needs the drum depth effect.
+      // Clear the previously touched nodes, then update roughly ±6 Scenes.
+      this.historyDepthItems.forEach((item) => {
+        item.style.removeProperty('--sp-history-depth');
+        item.classList.remove('is-nearest');
       });
+      this.historyDepthItems.clear();
 
-      this.els.historyList.querySelectorAll('.is-nearest').forEach((el) => el.classList.remove('is-nearest'));
-      if (nearest) nearest.classList.add('is-nearest');
+      const radius = 6;
+      const start = Math.max(0, nearestIndex - radius);
+      const end = Math.min(metrics.length - 1, nearestIndex + radius);
+      const depthRange = Math.max(1, scroll.clientHeight * 0.58);
+      for (let i = start; i <= end; i += 1) {
+        const entry = metrics[i];
+        const distance = Math.abs(entry.center - center);
+        const normalized = clamp(distance / depthRange, 0, 1);
+        entry.item.style.setProperty('--sp-history-depth', String(normalized));
+        if (i === nearestIndex) entry.item.classList.add('is-nearest');
+        this.historyDepthItems.add(entry.item);
+      }
     }
 
     refreshCurrent(options = {}) {
