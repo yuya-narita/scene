@@ -1390,3 +1390,16 @@ html.sp-scene-image-open body{
   cursor:pointer;
   backdrop-filter:blur(10px);
 }
+
+
+/* Local prototype v0.13 — active Scene image must be an actual hit target.
+   The Scene canvas intentionally has pointer-events:none so taps normally fall
+   through to the Stage. Interactive foreground content must opt back in. */
+.sp-scene.is-active .sp-scene-image.is-zoomable{
+  pointer-events:auto!important;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+.sp-scene.is-active .sp-scene-image.is-zoomable img{
+  pointer-events:auto!important;
+}
