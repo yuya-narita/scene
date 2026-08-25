@@ -404,21 +404,45 @@
       return /^https?:\/\//i.test(String(src || '').trim());
     }
 
+    _isCorsWebAudioAsset(src) {
+      const value = String(src || '').trim();
+      if (!this._isExternalHttpAudio(value)) return false;
+      try {
+        const url = new URL(value, global.location?.href || undefined);
+        // Scene Studio's R2 asset endpoint explicitly returns
+        // Access-Control-Allow-Origin: *. These files can therefore be routed
+        // through Web Audio safely, which is required for programmable volume
+        // and fades on iPhone/iPad Safari (HTMLMediaElement.volume is effectively
+        // system-controlled there). Keep arbitrary external URLs on the native
+        // path so a third-party server without CORS never turns silent.
+        return url.hostname === 'scene-studio-api.a-hako.workers.dev'
+          && url.pathname.startsWith('/asset/');
+      } catch (_) {
+        return false;
+      }
+    }
+
     _prepareAudioTransport(audio, src) {
       if (!audio) return;
-      // Absolute HTTP(S) assets are intentionally played through the native
-      // HTMLMediaElement path. Routing them into MediaElementSource can become
-      // silent when the remote server/browser CORS combination is not suitable
-      // for Web Audio, even though the media element itself is perfectly able
-      // to play the file.
-      audio.__spNativeOnly = this._isExternalHttpAudio(src);
+      const externalHttp = this._isExternalHttpAudio(src);
+      const corsWebAudioAsset = this._isCorsWebAudioAsset(src);
+
+      // Arbitrary absolute HTTP(S) audio stays on the native media path because
+      // cross-origin MediaElementSource may be silenced without CORS. Assets
+      // hosted by Scene Studio are served with permissive CORS, so use Web Audio
+      // for them. This is especially important on iOS: native media playback does
+      // not provide reliable script-controlled volume/fades, while GainNode does.
+      audio.__spNativeOnly = externalHttp && !corsWebAudioAsset;
       audio.__spTransportSrc = src || '';
-      if (audio.__spNativeOnly) {
+      if (corsWebAudioAsset) {
+        try { audio.crossOrigin = 'anonymous'; } catch (_) {}
+      } else if (audio.__spNativeOnly) {
         try { audio.crossOrigin = null; } catch (_) {}
       }
       emit(this.host, 'sceneplayer:audiotransport', {
         src: src || '',
-        transport: audio.__spNativeOnly ? 'native-media' : 'web-audio'
+        transport: audio.__spNativeOnly ? 'native-media' : 'web-audio',
+        corsWebAudioAsset
       });
     }
 
