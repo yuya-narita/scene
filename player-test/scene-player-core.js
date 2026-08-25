@@ -330,20 +330,6 @@
 
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
-
-        // Foreground Scene images are interactive content, not the stage's
-        // generic "next Scene" tap surface. Handle them here at the same level
-        // as navigation so Studio and the public Player behave identically.
-        const imageTarget = e.target.closest('.sp-scene-image.is-zoomable');
-        if (imageTarget) {
-          e.preventDefault();
-          e.stopPropagation();
-          const currentScene = this.document?.scenes?.[this.index];
-          const sceneImage = currentScene?.presentation?.image;
-          if (sceneImage?.src) this._openSceneImage(sceneImage.src, sceneImage.alt || '');
-          return;
-        }
-
         if (this.host.classList.contains('live-edit-enabled')
             && e.target.closest('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext')) {
           return;
