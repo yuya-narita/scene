@@ -1403,3 +1403,24 @@ html.sp-scene-image-open body{
 .sp-scene.is-active .sp-scene-image.is-zoomable img{
   pointer-events:auto!important;
 }
+
+
+/* Local prototype v0.14 — fullscreen image pinch + pan */
+.sp-scene-image-viewer-frame{
+  touch-action:none!important;
+  cursor:default;
+}
+.sp-scene-image-viewer-frame.is-zoomed{
+  cursor:grab;
+}
+.sp-scene-image-viewer-frame.is-zoomed:active{
+  cursor:grabbing;
+}
+.sp-scene-image-viewer-img{
+  transform-origin:center center;
+  will-change:transform;
+  transition:none!important;
+  touch-action:none!important;
+  max-width:100%;
+  max-height:100%;
+}

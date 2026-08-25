@@ -2304,6 +2304,147 @@
         img.className = 'sp-scene-image-viewer-img';
         img.alt = '';
 
+        // Custom image pan / pinch zoom.
+        // Native pinch was able to enlarge the image, but the enlarged image
+        // stayed visually pinned.  We keep our own transform so a zoomed image
+        // can be dragged left/right/up/down on iPhone as well.
+        const viewState = {
+          scale: 1,
+          x: 0,
+          y: 0,
+          startScale: 1,
+          startX: 0,
+          startY: 0,
+          startDistance: 0,
+          startCenterX: 0,
+          startCenterY: 0,
+          dragging: false,
+          lastX: 0,
+          lastY: 0
+        };
+
+        const applyView = () => {
+          img.style.transform =
+            `translate3d(${viewState.x}px, ${viewState.y}px, 0) scale(${viewState.scale})`;
+          frame.classList.toggle('is-zoomed', viewState.scale > 1.01);
+        };
+
+        const resetView = () => {
+          viewState.scale = 1;
+          viewState.x = 0;
+          viewState.y = 0;
+          viewState.dragging = false;
+          applyView();
+        };
+
+        const distance = (a,b) => Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
+        const center = (a,b) => ({
+          x:(a.clientX+b.clientX)/2,
+          y:(a.clientY+b.clientY)/2
+        });
+
+        const clampScale = (s) => Math.max(1, Math.min(5, s));
+
+        frame.addEventListener('touchstart',(event)=>{
+          if(event.touches.length===2){
+            event.preventDefault();
+            const c=center(event.touches[0],event.touches[1]);
+            viewState.startDistance=distance(event.touches[0],event.touches[1]);
+            viewState.startScale=viewState.scale;
+            viewState.startX=viewState.x;
+            viewState.startY=viewState.y;
+            viewState.startCenterX=c.x;
+            viewState.startCenterY=c.y;
+            viewState.dragging=false;
+          }else if(event.touches.length===1 && viewState.scale>1.01){
+            event.preventDefault();
+            viewState.dragging=true;
+            viewState.lastX=event.touches[0].clientX;
+            viewState.lastY=event.touches[0].clientY;
+          }
+        },{passive:false});
+
+        frame.addEventListener('touchmove',(event)=>{
+          if(event.touches.length===2){
+            event.preventDefault();
+            const nowDistance=distance(event.touches[0],event.touches[1]);
+            const c=center(event.touches[0],event.touches[1]);
+            const nextScale=clampScale(
+              viewState.startScale * (nowDistance / Math.max(1,viewState.startDistance))
+            );
+
+            // Let the image follow the moving pinch center instead of staying
+            // nailed to the middle of the screen.
+            viewState.scale=nextScale;
+            viewState.x=viewState.startX + (c.x-viewState.startCenterX);
+            viewState.y=viewState.startY + (c.y-viewState.startCenterY);
+            applyView();
+          }else if(event.touches.length===1 && viewState.scale>1.01){
+            event.preventDefault();
+            const t=event.touches[0];
+            viewState.x += t.clientX-viewState.lastX;
+            viewState.y += t.clientY-viewState.lastY;
+            viewState.lastX=t.clientX;
+            viewState.lastY=t.clientY;
+            applyView();
+          }
+        },{passive:false});
+
+        frame.addEventListener('touchend',(event)=>{
+          if(event.touches.length===0){
+            viewState.dragging=false;
+            if(viewState.scale<=1.01) resetView();
+          }else if(event.touches.length===1 && viewState.scale>1.01){
+            viewState.dragging=true;
+            viewState.lastX=event.touches[0].clientX;
+            viewState.lastY=event.touches[0].clientY;
+          }
+        },{passive:false});
+
+        // Desktop convenience: wheel to zoom, drag to pan while zoomed.
+        frame.addEventListener('wheel',(event)=>{
+          event.preventDefault();
+          const before=viewState.scale;
+          viewState.scale=clampScale(viewState.scale * (event.deltaY<0 ? 1.12 : 0.89));
+          if(viewState.scale<=1.01) resetView();
+          else if(before!==viewState.scale) applyView();
+        },{passive:false});
+
+        frame.addEventListener('pointerdown',(event)=>{
+          if(event.pointerType==='touch' || viewState.scale<=1.01) return;
+          viewState.dragging=true;
+          viewState.lastX=event.clientX;
+          viewState.lastY=event.clientY;
+          frame.setPointerCapture?.(event.pointerId);
+          event.preventDefault();
+        });
+        frame.addEventListener('pointermove',(event)=>{
+          if(!viewState.dragging || event.pointerType==='touch' || viewState.scale<=1.01) return;
+          viewState.x += event.clientX-viewState.lastX;
+          viewState.y += event.clientY-viewState.lastY;
+          viewState.lastX=event.clientX;
+          viewState.lastY=event.clientY;
+          applyView();
+          event.preventDefault();
+        });
+        const endPointer=(event)=>{
+          if(event.pointerType!=='touch') viewState.dragging=false;
+        };
+        frame.addEventListener('pointerup',endPointer);
+        frame.addEventListener('pointercancel',endPointer);
+
+        img.addEventListener('dblclick',(event)=>{
+          event.preventDefault();
+          event.stopPropagation();
+          if(viewState.scale>1.01) resetView();
+          else {
+            viewState.scale=2;
+            applyView();
+          }
+        });
+
+        frame._sceneImageReset = resetView;
+
         frame.append(close,img);
         viewer.append(shade,frame);
         document.body.appendChild(viewer);
@@ -2325,6 +2466,8 @@
       }
 
       const img = viewer.querySelector('.sp-scene-image-viewer-img');
+      const frame = viewer.querySelector('.sp-scene-image-viewer-frame');
+      frame?._sceneImageReset?.();
       img.src = src;
       img.alt = alt || '';
       viewer.hidden = false;
