@@ -1346,7 +1346,59 @@
         const body = document.createElement('span');
         body.className = 'sp-history-body';
 
-        if (scene.type === 'sound' && !scene.text) {
+        const historyPresentation = scene.presentation || {};
+        if (historyPresentation.view === 'chat' && (scene.text || scene.subText)) {
+          item.classList.add('sp-history-chat');
+          const align = historyPresentation.text?.align === 'right' ? 'right' : 'left';
+          item.dataset.chatSide = align;
+
+          const chatRow = document.createElement('span');
+          chatRow.className = 'sp-history-chat-row';
+
+          const icon = document.createElement('span');
+          icon.className = 'sp-history-chat-icon';
+          const iconSrc = historyPresentation.chat?.icon || '';
+          if (iconSrc) {
+            const img = document.createElement('img');
+            img.src = iconSrc;
+            img.alt = '';
+            icon.appendChild(img);
+          } else {
+            icon.textContent = historyPresentation.chat?.iconText || '●';
+          }
+
+          const chatBody = document.createElement('span');
+          chatBody.className = 'sp-history-chat-body';
+
+          if (scene.subText) {
+            const speaker = document.createElement('span');
+            speaker.className = 'sp-history-chat-speaker';
+            speaker.textContent = scene.subText;
+            this._applyTextStyle(speaker, historyPresentation.subText || {}, true);
+            chatBody.appendChild(speaker);
+          }
+
+          if (scene.text) {
+            const bubble = document.createElement('span');
+            bubble.className = 'sp-history-chat-bubble';
+            if (historyPresentation.chat?.bubbleColor) {
+              bubble.style.background = historyPresentation.chat.bubbleColor;
+            }
+
+            const text = document.createElement('span');
+            text.className = 'sp-history-chat-text';
+            text.textContent = scene.text;
+            this._applyTextStyle(text, historyPresentation.text || {}, false);
+            if (historyPresentation.chat?.bubbleTextColor) {
+              text.style.setProperty('color', String(historyPresentation.chat.bubbleTextColor), 'important');
+            }
+            bubble.appendChild(text);
+            chatBody.appendChild(bubble);
+          }
+
+          chatRow.append(icon, chatBody);
+          body.appendChild(chatRow);
+        } else if (scene.type === 'sound' && !scene.text) {
           const mark = document.createElement('span');
           mark.className = 'sp-history-text';
           mark.textContent = '♪';
@@ -1359,15 +1411,17 @@
           // actual Scene the author is reviewing.
           this._applyTextStyle(text, scene.presentation?.text || {}, false);
           body.appendChild(text);
+
+          if (scene.subText) {
+            const sub = document.createElement('span');
+            sub.className = 'sp-history-subtext';
+            sub.textContent = scene.subText;
+            this._applyTextStyle(sub, scene.presentation?.subText || {}, true);
+            body.appendChild(sub);
+          }
         }
 
-        if (scene.subText) {
-          const sub = document.createElement('span');
-          sub.className = 'sp-history-subtext';
-          sub.textContent = scene.subText;
-          this._applyTextStyle(sub, scene.presentation?.subText || {}, true);
-          body.appendChild(sub);
-        }
+        this._appendSceneImage(body, scene, historyPresentation, { history:true });
 
         item.append(num, body);
         fragment.appendChild(item);
@@ -2208,6 +2262,96 @@
       }
     }
 
+    _openSceneImage(src, alt='') {
+      if (!src) return;
+      let viewer = document.querySelector('.sp-scene-image-viewer');
+      if (!viewer) {
+        viewer = document.createElement('div');
+        viewer.className = 'sp-scene-image-viewer';
+        viewer.hidden = true;
+        viewer.setAttribute('role','dialog');
+        viewer.setAttribute('aria-modal','true');
+
+        const shade = document.createElement('button');
+        shade.type = 'button';
+        shade.className = 'sp-scene-image-viewer-shade';
+        shade.setAttribute('aria-label','Close image');
+
+        const frame = document.createElement('div');
+        frame.className = 'sp-scene-image-viewer-frame';
+
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'sp-scene-image-viewer-close';
+        close.setAttribute('aria-label','Close image');
+        close.textContent = '×';
+
+        const img = document.createElement('img');
+        img.className = 'sp-scene-image-viewer-img';
+        img.alt = '';
+
+        frame.append(close,img);
+        viewer.append(shade,frame);
+        document.body.appendChild(viewer);
+
+        const shut = (event) => {
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+          viewer.hidden = true;
+          document.documentElement.classList.remove('sp-scene-image-open');
+        };
+        shade.addEventListener('click',shut);
+        close.addEventListener('click',shut);
+        viewer.addEventListener('click',(event)=>{
+          if(event.target===viewer)shut(event);
+        });
+        document.addEventListener('keydown',(event)=>{
+          if(event.key==='Escape' && !viewer.hidden)shut(event);
+        });
+      }
+
+      const img = viewer.querySelector('.sp-scene-image-viewer-img');
+      img.src = src;
+      img.alt = alt || '';
+      viewer.hidden = false;
+      document.documentElement.classList.add('sp-scene-image-open');
+      viewer.querySelector('.sp-scene-image-viewer-close')?.focus({preventScroll:true});
+    }
+
+    _appendSceneImage(container, scene, presentation, { history=false } = {}) {
+      const image = presentation?.image;
+      if (!image?.src || !container) return;
+
+      const wrap = document.createElement(history ? 'span' : 'div');
+      wrap.className = history ? 'sp-history-scene-image' : 'sp-scene-image';
+      wrap.dataset.imageSize = ['medium','large','full'].includes(image.size) ? image.size : 'large';
+
+      const img = document.createElement('img');
+      img.src = image.src;
+      img.alt = image.alt || '';
+      img.loading = history ? 'lazy' : 'eager';
+      img.decoding = 'async';
+      wrap.appendChild(img);
+
+      if (image.fullscreen !== false) {
+        wrap.classList.add('is-zoomable');
+        wrap.setAttribute('role','button');
+        wrap.setAttribute('tabindex','0');
+        wrap.setAttribute('aria-label', image.alt ? `Open image: ${image.alt}` : 'Open image fullscreen');
+        const open = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this._openSceneImage(image.src, image.alt || '');
+        };
+        wrap.addEventListener('click',open);
+        wrap.addEventListener('keydown',(event)=>{
+          if(event.key==='Enter' || event.key===' '){ open(event); }
+        });
+      }
+
+      container.appendChild(wrap);
+    }
+
     _sceneNode(scene, active, age) {
       const article = document.createElement('article');
       article.className = `sp-scene sp-type-${scene.type}`;
@@ -2292,6 +2436,8 @@
           article.appendChild(sub);
         }
       }
+
+      this._appendSceneImage(article, scene, presentation);
 
       if (scene.type === 'sound' && !scene.text && !scene.subText) {
         const mark = document.createElement('span');
