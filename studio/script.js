@@ -1248,27 +1248,35 @@
         fitMobilePopover();
         return;
       }
-      const vv=window.visualViewport;
-      const vw=vv?.width||window.innerWidth;
-      const vh=vv?.height||window.innerHeight;
-      const vo=vv?.offsetTop||0;
+      // Desktop: keep the picker anchored to its own swatch.
+      // Using position:fixed together with visualViewport coordinates caused
+      // the popover to drift to the far right when Chrome zoom / split layout
+      // or a horizontally scrolled editor was involved.  The picker lives in
+      // a positioned .studio-color-picker already, so local absolute
+      // coordinates are both simpler and stable.
+      const vh=window.innerHeight||document.documentElement.clientHeight||800;
       const r=trigger.getBoundingClientRect();
-      const width=Math.min(286,Math.max(220,vw-24));
-      pop.style.position='fixed';
-      pop.style.width=`${width}px`;
-      pop.style.boxSizing='border-box';
-      pop.style.transform='none';
-      const left=Math.max(12,Math.min(vw-width-12,r.left+(r.width/2)-(width/2)));
-      pop.style.left=`${left}px`;
-      pop.style.right='auto';
+      const preferredWidth=Math.min(286,Math.max(220,window.innerWidth-24));
+      const estimatedHeight=Math.min(pop.scrollHeight||260,Math.max(180,vh-24));
+      const roomBelow=vh-r.bottom;
+      const roomAbove=r.top;
 
-      const ph=Math.min(pop.scrollHeight||260,Math.max(220,vh-24));
-      const below=r.bottom+8;
-      const above=r.top-ph-8;
-      const top=(below+ph<=vo+vh-8)?below:Math.max(vo+8,above);
-      pop.style.top=`${top}px`;
-      pop.style.maxHeight=`${Math.max(180,vh-16)}px`;
+      pop.style.position='absolute';
+      pop.style.width=`${preferredWidth}px`;
+      pop.style.boxSizing='border-box';
+      pop.style.left='50%';
+      pop.style.right='auto';
+      pop.style.transform='translateX(-50%)';
+      pop.style.bottom='auto';
+      pop.style.top='calc(100% + 6px)';
+      pop.style.maxHeight=`${Math.max(180,Math.min(360,vh-24))}px`;
       pop.style.overflow='auto';
+
+      // If the trigger is very close to the bottom edge, open upward instead.
+      if(roomBelow < Math.min(estimatedHeight+16,260) && roomAbove > roomBelow){
+        pop.style.top='auto';
+        pop.style.bottom='calc(100% + 6px)';
+      }
     };
     const close=(revert=true)=>{
       if(!open)return;
