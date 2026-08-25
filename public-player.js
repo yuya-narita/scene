@@ -125,7 +125,12 @@
   }
 
   function setTheme(doc) {
-    const light = doc.theme === 'light';
+    // Public chrome / ending must follow the same visual theme contract as
+    // Scene Player Core. CINEMA can be authored with a light tone; treating
+    // every CINEMA document as dark makes only the public ending flip to the
+    // dark palette even while the work itself is visibly light.
+    const light = doc.theme === 'light'
+      || (doc.theme === 'cinema' && doc.appearance?.cinemaTone === 'light');
     const bg = light ? '#f7f6f1' : '#0b1016';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
     document.documentElement.style.setProperty('--public-bg', bg);
