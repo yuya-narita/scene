@@ -330,6 +330,20 @@
 
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
+
+        // Foreground Scene images are interactive content, not the stage's
+        // generic "next Scene" tap surface. Handle them here at the same level
+        // as navigation so Studio and the public Player behave identically.
+        const imageTarget = e.target.closest('.sp-scene-image.is-zoomable');
+        if (imageTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+          const currentScene = this.document?.scenes?.[this.index];
+          const sceneImage = currentScene?.presentation?.image;
+          if (sceneImage?.src) this._openSceneImage(sceneImage.src, sceneImage.alt || '');
+          return;
+        }
+
         if (this.host.classList.contains('live-edit-enabled')
             && e.target.closest('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext')) {
           return;
@@ -2343,34 +2357,10 @@
           event.stopPropagation();
           this._openSceneImage(image.src, image.alt || '');
         };
-        // History is outside the active Scene advance surface, so the normal
-        // bubble-phase handler is sufficient there.
-        if (history) wrap.addEventListener('click',open);
+        wrap.addEventListener('click',open);
         wrap.addEventListener('keydown',(event)=>{
           if(event.key==='Enter' || event.key===' '){ open(event); }
         });
-      }
-
-      // Active Scene images live inside the Player's global tap-to-advance
-      // surface.  Intercept at capture phase so iOS cannot advance the Scene
-      // before the image's normal click handler gets a chance to run.
-      if (!history && image.fullscreen !== false) {
-        const guardAndOpen = (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          event.stopImmediatePropagation?.();
-          this._openSceneImage(image.src, image.alt || '');
-        };
-        wrap.addEventListener('pointerdown',(event)=>{
-          event.preventDefault();
-          event.stopPropagation();
-          event.stopImmediatePropagation?.();
-        }, true);
-        wrap.addEventListener('touchstart',(event)=>{
-          event.stopPropagation();
-          event.stopImmediatePropagation?.();
-        }, {capture:true, passive:true});
-        wrap.addEventListener('click',guardAndOpen,true);
       }
 
       container.appendChild(wrap);
