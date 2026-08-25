@@ -1490,3 +1490,42 @@ html.sp-scene-image-open body{
   font:300 42px/1 system-ui,-apple-system,sans-serif!important;
   text-shadow:0 1px 3px rgba(0,0,0,.35);
 }
+
+
+/* Local prototype v0.16 — edge coverage + bounded pan */
+.sp-scene-image-viewer{
+  position:fixed!important;
+  top:-2px!important;
+  right:-2px!important;
+  bottom:-2px!important;
+  left:-2px!important;
+  width:auto!important;
+  height:auto!important;
+  min-width:calc(100vw + 4px)!important;
+  min-height:calc(100dvh + 4px)!important;
+  background:#000!important;
+}
+.sp-scene-image-viewer-shade{
+  inset:-2px!important;
+  background:#000!important;
+}
+.sp-scene-image-viewer-frame{
+  position:absolute!important;
+  inset:0!important;
+  width:auto!important;
+  height:auto!important;
+  padding:0!important;
+  background:#000!important;
+  border:0!important;
+  outline:0!important;
+  overflow:hidden!important;
+}
+.sp-scene-image-viewer-img{
+  max-width:calc(100vw - 28px)!important;
+  max-height:calc(100dvh - 36px)!important;
+  transform-origin:center center!important;
+}
+.sp-scene-image-viewer-close{
+  top:max(12px,calc(env(safe-area-inset-top) + 6px))!important;
+  right:max(12px,calc(env(safe-area-inset-right) + 6px))!important;
+}

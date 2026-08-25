@@ -2319,11 +2319,44 @@
           startCenterX: 0,
           startCenterY: 0,
           dragging: false,
+          moved: false,
           lastX: 0,
-          lastY: 0
+          lastY: 0,
+          touchStartX: 0,
+          touchStartY: 0,
+          touchStartTime: 0,
+          lastTapTime: 0,
+          lastTapX: 0,
+          lastTapY: 0
+        };
+
+        const viewportSize = () => ({
+          w: Math.max(1, frame.clientWidth),
+          h: Math.max(1, frame.clientHeight)
+        });
+
+        const panBounds = () => {
+          const vp = viewportSize();
+          const baseW = Math.max(1, img.clientWidth);
+          const baseH = Math.max(1, img.clientHeight);
+          const scaledW = baseW * viewState.scale;
+          const scaledH = baseH * viewState.scale;
+
+          // Keep at least one edge of the image visible at all times and never
+          // allow a zoomed image to be thrown completely off-screen.
+          const maxX = Math.max(0, (scaledW - vp.w) / 2);
+          const maxY = Math.max(0, (scaledH - vp.h) / 2);
+          return { maxX, maxY };
+        };
+
+        const clampPan = () => {
+          const { maxX, maxY } = panBounds();
+          viewState.x = Math.max(-maxX, Math.min(maxX, viewState.x));
+          viewState.y = Math.max(-maxY, Math.min(maxY, viewState.y));
         };
 
         const applyView = () => {
+          clampPan();
           img.style.transform =
             `translate3d(${viewState.x}px, ${viewState.y}px, 0) scale(${viewState.scale})`;
           frame.classList.toggle('is-zoomed', viewState.scale > 1.01);
@@ -2334,6 +2367,7 @@
           viewState.x = 0;
           viewState.y = 0;
           viewState.dragging = false;
+          viewState.moved = false;
           applyView();
         };
 
@@ -2344,6 +2378,22 @@
         });
 
         const clampScale = (s) => Math.max(1, Math.min(5, s));
+
+        const zoomAt = (clientX, clientY, nextScale) => {
+          const vp = viewportSize();
+          const oldScale = viewState.scale;
+          const scale = clampScale(nextScale);
+          if (Math.abs(scale - oldScale) < 0.001) return;
+
+          // Preserve the image point under the finger while zooming.
+          const dx = clientX - vp.w / 2;
+          const dy = clientY - vp.h / 2;
+          const ratio = scale / oldScale;
+          viewState.x = dx - (dx - viewState.x) * ratio;
+          viewState.y = dy - (dy - viewState.y) * ratio;
+          viewState.scale = scale;
+          applyView();
+        };
 
         frame.addEventListener('touchstart',(event)=>{
           if(event.touches.length===2){
@@ -2356,11 +2406,19 @@
             viewState.startCenterX=c.x;
             viewState.startCenterY=c.y;
             viewState.dragging=false;
-          }else if(event.touches.length===1 && viewState.scale>1.01){
-            event.preventDefault();
-            viewState.dragging=true;
-            viewState.lastX=event.touches[0].clientX;
-            viewState.lastY=event.touches[0].clientY;
+            viewState.moved=true;
+          }else if(event.touches.length===1){
+            const t=event.touches[0];
+            viewState.touchStartX=t.clientX;
+            viewState.touchStartY=t.clientY;
+            viewState.touchStartTime=performance.now();
+            viewState.moved=false;
+            if(viewState.scale>1.01){
+              event.preventDefault();
+              viewState.dragging=true;
+              viewState.lastX=t.clientX;
+              viewState.lastY=t.clientY;
+            }
           }
         },{passive:false});
 
@@ -2372,27 +2430,65 @@
             const nextScale=clampScale(
               viewState.startScale * (nowDistance / Math.max(1,viewState.startDistance))
             );
-
-            // Let the image follow the moving pinch center instead of staying
-            // nailed to the middle of the screen.
             viewState.scale=nextScale;
             viewState.x=viewState.startX + (c.x-viewState.startCenterX);
             viewState.y=viewState.startY + (c.y-viewState.startCenterY);
+            viewState.moved=true;
             applyView();
-          }else if(event.touches.length===1 && viewState.scale>1.01){
-            event.preventDefault();
+          }else if(event.touches.length===1){
             const t=event.touches[0];
-            viewState.x += t.clientX-viewState.lastX;
-            viewState.y += t.clientY-viewState.lastY;
-            viewState.lastX=t.clientX;
-            viewState.lastY=t.clientY;
-            applyView();
+            const totalDx=t.clientX-viewState.touchStartX;
+            const totalDy=t.clientY-viewState.touchStartY;
+            if(Math.hypot(totalDx,totalDy)>6)viewState.moved=true;
+
+            if(viewState.scale>1.01){
+              event.preventDefault();
+              viewState.x += t.clientX-viewState.lastX;
+              viewState.y += t.clientY-viewState.lastY;
+              viewState.lastX=t.clientX;
+              viewState.lastY=t.clientY;
+              applyView();
+            }
           }
         },{passive:false});
 
         frame.addEventListener('touchend',(event)=>{
           if(event.touches.length===0){
+            const now=performance.now();
+            const duration=now-viewState.touchStartTime;
+            const wasMoved=viewState.moved;
+            const endTouch=event.changedTouches?.[0];
+            const x=endTouch?.clientX ?? viewState.touchStartX;
+            const y=endTouch?.clientY ?? viewState.touchStartY;
+            const vertical=y-viewState.touchStartY;
+
             viewState.dragging=false;
+
+            // Downward flick closes only at 1×, so it never fights with image panning.
+            if(viewState.scale<=1.01 && !wasMoved && false){
+              // reserved
+            } else if(viewState.scale<=1.01 && vertical>90 && duration<700){
+              const closeButton=viewer.querySelector('.sp-scene-image-viewer-close');
+              closeButton?.click();
+              return;
+            }
+
+            // Touch double-tap: zoom around the tapped point; second double-tap resets.
+            if(!wasMoved && duration<320){
+              const dt=now-viewState.lastTapTime;
+              const near=Math.hypot(x-viewState.lastTapX,y-viewState.lastTapY)<42;
+              if(dt<340 && near){
+                event.preventDefault();
+                if(viewState.scale>1.01) resetView();
+                else zoomAt(x,y,2.5);
+                viewState.lastTapTime=0;
+                return;
+              }
+              viewState.lastTapTime=now;
+              viewState.lastTapX=x;
+              viewState.lastTapY=y;
+            }
+
             if(viewState.scale<=1.01) resetView();
           }else if(event.touches.length===1 && viewState.scale>1.01){
             viewState.dragging=true;
@@ -2404,15 +2500,15 @@
         // Desktop convenience: wheel to zoom, drag to pan while zoomed.
         frame.addEventListener('wheel',(event)=>{
           event.preventDefault();
-          const before=viewState.scale;
-          viewState.scale=clampScale(viewState.scale * (event.deltaY<0 ? 1.12 : 0.89));
+          const next=viewState.scale * (event.deltaY<0 ? 1.12 : 0.89);
+          zoomAt(event.clientX,event.clientY,next);
           if(viewState.scale<=1.01) resetView();
-          else if(before!==viewState.scale) applyView();
         },{passive:false});
 
         frame.addEventListener('pointerdown',(event)=>{
           if(event.pointerType==='touch' || viewState.scale<=1.01) return;
           viewState.dragging=true;
+          viewState.moved=false;
           viewState.lastX=event.clientX;
           viewState.lastY=event.clientY;
           frame.setPointerCapture?.(event.pointerId);
@@ -2420,8 +2516,11 @@
         });
         frame.addEventListener('pointermove',(event)=>{
           if(!viewState.dragging || event.pointerType==='touch' || viewState.scale<=1.01) return;
-          viewState.x += event.clientX-viewState.lastX;
-          viewState.y += event.clientY-viewState.lastY;
+          const dx=event.clientX-viewState.lastX;
+          const dy=event.clientY-viewState.lastY;
+          if(Math.hypot(dx,dy)>1)viewState.moved=true;
+          viewState.x += dx;
+          viewState.y += dy;
           viewState.lastX=event.clientX;
           viewState.lastY=event.clientY;
           applyView();
@@ -2437,11 +2536,20 @@
           event.preventDefault();
           event.stopPropagation();
           if(viewState.scale>1.01) resetView();
-          else {
-            viewState.scale=2;
-            applyView();
+          else zoomAt(event.clientX,event.clientY,2.5);
+        });
+
+        // Tap empty black area to close at 1×. At zoom > 1 the same gesture is
+        // reserved for panning, avoiding accidental dismissal.
+        frame.addEventListener('click',(event)=>{
+          if(event.target===frame && viewState.scale<=1.01){
+            event.preventDefault();
+            event.stopPropagation();
+            viewer.querySelector('.sp-scene-image-viewer-close')?.click();
           }
         });
+
+        window.addEventListener('resize',()=>{ if(!viewer.hidden) applyView(); });
 
         frame._sceneImageReset = resetView;
 
