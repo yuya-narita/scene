@@ -2343,10 +2343,34 @@
           event.stopPropagation();
           this._openSceneImage(image.src, image.alt || '');
         };
-        wrap.addEventListener('click',open);
+        // History is outside the active Scene advance surface, so the normal
+        // bubble-phase handler is sufficient there.
+        if (history) wrap.addEventListener('click',open);
         wrap.addEventListener('keydown',(event)=>{
           if(event.key==='Enter' || event.key===' '){ open(event); }
         });
+      }
+
+      // Active Scene images live inside the Player's global tap-to-advance
+      // surface.  Intercept at capture phase so iOS cannot advance the Scene
+      // before the image's normal click handler gets a chance to run.
+      if (!history && image.fullscreen !== false) {
+        const guardAndOpen = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          this._openSceneImage(image.src, image.alt || '');
+        };
+        wrap.addEventListener('pointerdown',(event)=>{
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+        }, true);
+        wrap.addEventListener('touchstart',(event)=>{
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+        }, {capture:true, passive:true});
+        wrap.addEventListener('click',guardAndOpen,true);
       }
 
       container.appendChild(wrap);
