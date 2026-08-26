@@ -2615,12 +2615,46 @@
       media.className = history ? 'sp-history-scene-image-media' : 'sp-scene-image-media';
 
       const img = document.createElement('img');
-      img.src = image.src;
       img.alt = image.alt || '';
       img.loading = history ? 'lazy' : 'eager';
       img.decoding = 'async';
+
+      // On the first visit an uncached image has no intrinsic height when the
+      // Scene stack is initially measured. The Player therefore centers the
+      // text-only height, then the image expands downward after loading.
+      // Re-measure the current stack as soon as the foreground image becomes
+      // measurable. Cached/revisited Scenes already have the correct geometry.
+      const relayoutAfterImageLoad = () => {
+        if (history) return;
+        const activeNode = wrap.closest('.sp-scene');
+        if (!activeNode || !activeNode.isConnected || !activeNode.classList.contains('is-active')) return;
+
+        const run = () => {
+          const activeScene = this.document?.scenes?.[this.index];
+          if (!activeScene || activeScene.id !== scene.id) return;
+          const display = activeScene.presentation?.display || 'stack';
+          const visible = this._visibleScenes(display);
+          const nodeMap = new Map(
+            [...this.els.scenes.querySelectorAll('.sp-scene')]
+              .filter(node => !node.classList.contains('sp-layout-leaving'))
+              .map(node => [node.dataset.sceneId, node])
+          );
+          const nodes = visible.map(entry => nodeMap.get(entry.scene.id)).filter(Boolean);
+          if (nodes.length === visible.length) this._positionSceneNodes(nodes, visible, 0);
+        };
+
+        // Give Safari one painted frame to apply the decoded image dimensions.
+        requestAnimationFrame(() => requestAnimationFrame(run));
+      };
+
+      img.addEventListener('load', relayoutAfterImageLoad, {once:true});
+      img.src = image.src;
       media.appendChild(img);
       wrap.appendChild(media);
+
+      // Data/blob images can already be complete before the load listener is
+      // observed by a later render pass.
+      if (img.complete && img.naturalWidth > 0) relayoutAfterImageLoad();
 
       if (image.fullscreen !== false) {
         wrap.classList.add('is-zoomable');
