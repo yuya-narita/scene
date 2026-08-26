@@ -1529,3 +1529,17 @@ html.sp-scene-image-open body{
   top:max(12px,calc(env(safe-area-inset-top) + 6px))!important;
   right:max(12px,calc(env(safe-area-inset-right) + 6px))!important;
 }
+
+
+/* Local prototype v0.17 — smooth double-tap zoom */
+.sp-scene-image-viewer-img{
+  transition:none!important;
+}
+.sp-scene-image-viewer-img.is-animating{
+  transition:transform 260ms cubic-bezier(.22,.74,.18,1)!important;
+}
+@media (prefers-reduced-motion: reduce){
+  .sp-scene-image-viewer-img.is-animating{
+    transition:none!important;
+  }
+}

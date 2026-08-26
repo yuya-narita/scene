@@ -2355,20 +2355,31 @@
           viewState.y = Math.max(-maxY, Math.min(maxY, viewState.y));
         };
 
-        const applyView = () => {
+        let viewAnimTimer = 0;
+
+        const applyView = ({animate=false} = {}) => {
           clampPan();
+          clearTimeout(viewAnimTimer);
+          img.classList.toggle('is-animating', animate);
+
           img.style.transform =
             `translate3d(${viewState.x}px, ${viewState.y}px, 0) scale(${viewState.scale})`;
           frame.classList.toggle('is-zoomed', viewState.scale > 1.01);
+
+          if (animate) {
+            viewAnimTimer = setTimeout(() => {
+              img.classList.remove('is-animating');
+            }, 280);
+          }
         };
 
-        const resetView = () => {
+        const resetView = ({animate=false} = {}) => {
           viewState.scale = 1;
           viewState.x = 0;
           viewState.y = 0;
           viewState.dragging = false;
           viewState.moved = false;
-          applyView();
+          applyView({animate});
         };
 
         const distance = (a,b) => Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
@@ -2379,7 +2390,7 @@
 
         const clampScale = (s) => Math.max(1, Math.min(5, s));
 
-        const zoomAt = (clientX, clientY, nextScale) => {
+        const zoomAt = (clientX, clientY, nextScale, {animate=false} = {}) => {
           const vp = viewportSize();
           const oldScale = viewState.scale;
           const scale = clampScale(nextScale);
@@ -2392,7 +2403,7 @@
           viewState.x = dx - (dx - viewState.x) * ratio;
           viewState.y = dy - (dy - viewState.y) * ratio;
           viewState.scale = scale;
-          applyView();
+          applyView({animate});
         };
 
         frame.addEventListener('touchstart',(event)=>{
@@ -2479,8 +2490,8 @@
               const near=Math.hypot(x-viewState.lastTapX,y-viewState.lastTapY)<42;
               if(dt<340 && near){
                 event.preventDefault();
-                if(viewState.scale>1.01) resetView();
-                else zoomAt(x,y,2.5);
+                if(viewState.scale>1.01) resetView({animate:true});
+                else zoomAt(x,y,2.5,{animate:true});
                 viewState.lastTapTime=0;
                 return;
               }
@@ -2535,8 +2546,8 @@
         img.addEventListener('dblclick',(event)=>{
           event.preventDefault();
           event.stopPropagation();
-          if(viewState.scale>1.01) resetView();
-          else zoomAt(event.clientX,event.clientY,2.5);
+          if(viewState.scale>1.01) resetView({animate:true});
+          else zoomAt(event.clientX,event.clientY,2.5,{animate:true});
         });
 
         // Tap empty black area to close at 1×. At zoom > 1 the same gesture is
