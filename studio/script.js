@@ -716,7 +716,8 @@
     coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';setCoverPositionFromValue(row.document?.cover?.position||row.cover?.position||'center center');
     coverLogoUrl=map.get(row.cover?.logoUrl)||row.cover?.logoUrl||row.document?.cover?.logo?.src||'';coverLogoFileName=row.cover?.logoName||row.document?.cover?.logo?._editorFileName||'';
     coverFontFamily=['serif','sans','mono'].includes(workingDocument?.cover?.fontFamily)?workingDocument.cover.fontFamily:'serif';
-    endingFontFamily=['serif','sans','mono'].includes(workingDocument?.ending?.fontFamily)?workingDocument.ending.fontFamily:'serif';
+    endingFontFamily=effectiveEndingFontFamily(workingDocument);
+    syncEndingFontFamily(endingFontFamily,{syncStyle:true});
     if(endingLabelInput)endingLabelInput.value=row.ending?.label||workingDocument?.ending?.label||'';
     endingLinkInputs.forEach((pair,index)=>{const pos=index===0?'left':'right';const links=row.ending?.links||workingDocument?.ending?.links||[];const hasPositions=links.some(x=>x?.position==='left'||x?.position==='right');const item=hasPositions?(links.find(x=>x?.position===pos)||{}):(links[index]||{});if(pair.kicker)pair.kicker.value=item.kicker||'';if(pair.label)pair.label.value=item.label||'';if(pair.url)pair.url.value=item.url||'';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateProtectedResplitPreview();
@@ -1450,8 +1451,32 @@
     if(subtitleInput && !subtitleInput.value)value.subtitle && (subtitleInput.value=value.subtitle);
     if(authorInput && !authorInput.value)value.author && (authorInput.value=value.author);
   }
+  function normalizeEndingFontFamily(value){
+    return ['serif','sans','mono'].includes(value) ? value : 'serif';
+  }
+  function effectiveEndingFontFamily(doc=workingDocument){
+    const styleFont=doc?.ending?.style?.fontFamily;
+    if(['serif','sans','mono'].includes(styleFont))return styleFont;
+    return normalizeEndingFontFamily(doc?.ending?.fontFamily);
+  }
+  function syncEndingFontFamily(value,{syncStyle=true}={}){
+    const next=normalizeEndingFontFamily(value);
+    endingFontFamily=next;
+    if(workingDocument){
+      workingDocument.ending ||= {};
+      workingDocument.ending.fontFamily=next;
+      if(syncStyle){
+        workingDocument.ending.style ||= {};
+        workingDocument.ending.style.fontFamily=next;
+      }
+    }
+    if(endingQuickFont)endingQuickFont.value=next;
+    return next;
+  }
+
   function endingFromEasy(){
     const preservedStyle=clone(workingDocument?.ending?.style||{});
+    preservedStyle.fontFamily=endingFontFamily;
     return {
       label:String(endingLabelInput?.value||'').trim(),
       fontFamily:endingFontFamily,
@@ -1466,7 +1491,9 @@
       endingPreviewLabel.textContent=endingText;
       endingPreviewLabel.classList.toggle('has-authored-break',/\r?\n/.test(endingText));
       const families={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
-      endingPreviewLabel.style.setProperty('font-family',families[endingFontFamily]||families.serif,'important');
+      const endingPreviewFont=effectiveEndingFontFamily(workingDocument);
+      endingFontFamily=endingPreviewFont;
+      endingPreviewLabel.style.setProperty('font-family',families[endingPreviewFont]||families.serif,'important');
     }
     endingPreviewLinks.forEach((button,index)=>{
       const row=endingLinkInputs[index];
@@ -1544,7 +1571,7 @@
   }
 
   function syncQuickEndingToMain(){
-    if(endingQuickTarget==='center'){if(endingLabelInput)endingLabelInput.value=endingQuickCenterText?.value||'';if(endingQuickFont)endingFontFamily=endingQuickFont.value||'serif';}
+    if(endingQuickTarget==='center'){if(endingLabelInput)endingLabelInput.value=endingQuickCenterText?.value||'';if(endingQuickFont)syncEndingFontFamily(endingQuickFont.value||'serif',{syncStyle:true});}
     else{const row=endingLinkInputs[endingQuickTarget==='left'?0:1];if(row?.kicker)row.kicker.value=endingQuickKicker?.value||'';if(row?.label)row.label.value=endingQuickLabel?.value||'';if(row?.url)row.url.value=endingQuickUrl?.value||'';}
     updateEndingPreview();syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();syncEasyPublishButton();scheduleDraftSave(100);
     if(liveEditEnabled&&player?.ended)requestAnimationFrame(prepareLiveEndingEditor);
@@ -2833,7 +2860,8 @@
     coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';setCoverPositionFromValue(doc.cover?.position||'center center');
     coverLogoUrl=doc.cover?.logo?.src||'';coverLogoFileName=doc.cover?.logo?._editorFileName||'';
     coverFontFamily=['serif','sans','mono'].includes(doc.cover?.fontFamily)?doc.cover.fontFamily:'serif';
-    endingFontFamily=['serif','sans','mono'].includes(doc.ending?.fontFamily)?doc.ending.fontFamily:'serif';
+    endingFontFamily=effectiveEndingFontFamily(doc);
+    if(doc===workingDocument)syncEndingFontFamily(endingFontFamily,{syncStyle:true});
     if(endingLabelInput)endingLabelInput.value=doc.ending?.label||doc.ending?.title||'';
     {
       const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
@@ -4821,7 +4849,7 @@
   [endingQuickKicker,endingQuickLabel,endingQuickUrl].forEach(el=>el?.addEventListener('input',syncQuickEndingToMain));
   endingQuickClear?.addEventListener('click',()=>{endingQuickKicker.value='';endingQuickLabel.value='';endingQuickUrl.value='';syncQuickEndingToMain();});
   endingQuickDone?.addEventListener('click',()=>closeEndingQuickEditor(true));
-  endingQuickFont?.addEventListener('change',()=>{endingFontFamily=endingQuickFont.value||'serif';syncQuickEndingToMain();});
+  endingQuickFont?.addEventListener('change',()=>{syncEndingFontFamily(endingQuickFont.value||'serif',{syncStyle:true});syncQuickEndingToMain();});
   endingQuickClose?.addEventListener('click',()=>closeEndingQuickEditor(true));
   endingQuickDialog?.addEventListener('click',(event)=>{if(event.target===endingQuickDialog)closeEndingQuickEditor(true);});
   endingLabelInput?.addEventListener('change',()=>saveEndingRecent({type:'center',text:endingLabelInput.value}));
@@ -7538,7 +7566,7 @@ function openDesktopTextDetail(){
     desktopSceneLabel.textContent=u('読了ページ','Ending page');desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
     const textCard=desktopCard(u('中央の文','Center text'));const ta=document.createElement('textarea');ta.className='desktop-live-ending-text';ta.value=endingLabelInput?.value||'';ta.placeholder=u('読了','Finished');ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
-    const styleCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');styleCard.append(shellStyleControls(()=>{workingDocument.ending||={};workingDocument.ending.style||={};return workingDocument.ending.style;},()=>{refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
+    const styleCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');styleCard.append(shellStyleControls(()=>ensureEndingStyleStore(),()=>{const st=ensureEndingStyleStore();if(['serif','sans','mono'].includes(st.fontFamily))syncEndingFontFamily(st.fontFamily,{syncStyle:true});refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
     const linksCard=desktopCard(u('下部ボタン','Bottom buttons'));const ops=document.createElement('div');ops.className='desktop-live-scene-ops';ops.append(desktopAction(u('左ボタンを編集','Edit left button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('left');}),desktopAction(u('右ボタンを編集','Edit right button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('right');}));linksCard.appendChild(ops);
     mountDesktopSpecialModal(u('読了ページ','Ending page'),[textCard,styleCard,linksCard]);
   }
@@ -8214,6 +8242,7 @@ function openDesktopTextDetail(){
         apply(){
           workingDocument.ending ||= {};
           workingDocument.ending.style=clone(style);
+          if(['serif','sans','mono'].includes(style.fontFamily))syncEndingFontFamily(style.fontFamily,{syncStyle:true});
           refreshLivePlayerDocumentChrome();
           applyEndingStyleToLiveElement(workingDocument.ending.style);
           updateEndingPreview();
@@ -9496,6 +9525,9 @@ function openDesktopTextDetail(){
   function ensureEndingStyleStore(){
     workingDocument.ending ||= {};
     workingDocument.ending.style ||= {};
+    if(!['serif','sans','mono'].includes(workingDocument.ending.style.fontFamily)){
+      workingDocument.ending.style.fontFamily=normalizeEndingFontFamily(endingFontFamily||workingDocument.ending.fontFamily);
+    }
     return workingDocument.ending.style;
   }
   function closeLiveEndingStylePanel(){
@@ -9568,7 +9600,12 @@ function openDesktopTextDetail(){
     foot.appendChild(done);card.appendChild(foot);overlay.appendChild(card);
 
     const apply=()=>{
-      if(font.sel.value==='inherit')delete st.fontFamily;else st.fontFamily=font.sel.value;
+      if(font.sel.value==='inherit'){
+        st.fontFamily=normalizeEndingFontFamily(endingFontFamily);
+      }else{
+        st.fontFamily=font.sel.value;
+        syncEndingFontFamily(st.fontFamily,{syncStyle:true});
+      }
       st.size=size.sel.value;
       syncEasyShellToWorkingDocument();
       refreshLivePlayerDocumentChrome();
