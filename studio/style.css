@@ -9694,3 +9694,651 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     bottom:6px!important;
   }
 }
+
+
+/* Local Chat Scene editor v0.2 */
+.desktop-chat-tools{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line,#ddd)}
+.desktop-chat-icon-preview,.live-chat-icon-preview{width:52px;height:52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;border:1px solid #d9d9d9;background:#f5f5f5;color:#777;font-weight:800}
+.desktop-chat-icon-preview img,.live-chat-icon-preview img{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:cover!important;display:block!important}
+.desktop-chat-note{grid-column:1/-1;font-size:11px;color:#777;line-height:1.45}
+.live-chat-tools{display:grid;grid-template-columns:56px 1fr;gap:8px;align-items:center;padding:10px 0}
+.live-chat-tools .live-edit-action{margin:0}
+.live-chat-tools .live-chat-note{grid-column:1/-1;font-size:11px;color:#777}
+
+/* Local prototype — Chat authoring v0.3 */
+.desktop-chat-preset-bar,.live-chat-preset-bar{
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  margin:0 0 10px;padding:10px;border:1px solid var(--line,#ddd);border-radius:12px;
+  background:rgba(127,127,127,.05)
+}
+.desktop-chat-speaker-select,.live-chat-speaker-select{
+  min-width:150px;flex:1 1 160px;padding:9px 10px;border:1px solid var(--line,#d8d8d8);border-radius:10px;background:var(--surface,#fff);color:inherit
+}
+.desktop-chat-colors{display:flex;align-items:center;gap:8px}
+.desktop-chat-colors label,.live-chat-color{display:flex;align-items:center;gap:8px;font-size:12px;color:#777}
+.desktop-chat-colors input[type="color"],.live-chat-color input[type="color"]{width:38px;height:30px;padding:2px;border:1px solid #d8d8d8;border-radius:8px;background:transparent}
+
+
+/* Local prototype — Chat authoring v0.4: wide, one-tap speaker panel */
+.desktop-chat-authoring-panel{
+  display:grid;gap:12px;padding:14px;
+  border:1px solid #d8dde2;border-radius:14px;
+  background:linear-gradient(180deg,#fbfcfd 0%,#f6f8fa 100%);
+}
+.desktop-chat-authoring-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.desktop-chat-authoring-head strong{font:850 13px/1.2 system-ui;color:#20242a}
+.desktop-chat-authoring-head span{font:650 10px/1.2 system-ui;color:#7b8189}
+.desktop-chat-speaker-chips{display:flex;gap:8px;overflow-x:auto;padding:2px 1px 5px;scrollbar-width:thin}
+.desktop-chat-speaker-chip{
+  flex:0 0 auto;min-height:42px;display:flex;align-items:center;gap:7px;
+  border:1px solid #d8dde2;border-radius:999px;background:#fff;color:#24282e;
+  padding:5px 11px 5px 6px;font:800 12px system-ui;
+}
+.desktop-chat-speaker-chip:hover{background:#f2f5f7}
+.desktop-chat-speaker-chip.is-active{background:#1d2024;color:#fff;border-color:#1d2024}
+.desktop-chat-speaker-chip.is-add{padding:0 14px;color:#0786e8;border-style:dashed;background:#fff}
+.desktop-chat-speaker-chip-avatar{
+  width:30px;height:30px;border-radius:50%;overflow:hidden;display:grid;place-items:center;
+  background:#eef1f4;color:#666;font-size:11px;border:1px solid rgba(127,127,127,.18)
+}
+.desktop-chat-speaker-chip-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.desktop-chat-speaker-chip-name{white-space:nowrap}
+.desktop-chat-speaker-chip-side{font-size:12px;opacity:.65}
+.desktop-chat-current-grid{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:10px;align-items:stretch}
+.desktop-chat-current-speaker{
+  min-width:0;display:flex;align-items:center;gap:11px;padding:10px 12px;
+  border:1px solid #d8dde2;border-radius:12px;background:#fff
+}
+.desktop-chat-icon-preview.is-large{width:50px;height:50px;flex:0 0 50px}
+.desktop-chat-current-meta{min-width:0;display:grid;gap:4px}
+.desktop-chat-current-meta strong{font:850 14px/1.2 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.desktop-chat-current-meta span{font:650 10px/1.2 system-ui;color:#7c8289}
+.desktop-chat-side-toggle{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.desktop-chat-side-toggle .desktop-live-action{min-height:100%;font-size:13px}
+.desktop-chat-quick-grid,.desktop-chat-manage-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.desktop-chat-quick-grid .desktop-live-action{min-height:40px}
+.desktop-chat-color-row{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  padding-top:2px
+}
+.desktop-chat-color-row label{
+  min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border:1px solid #d8dde2;border-radius:10px;background:#fff;padding:6px 9px;
+  font:750 11px system-ui;color:#575d65
+}
+.desktop-chat-color-row input[type="color"]{width:42px;height:28px;padding:2px;border:1px solid #d8dde2;border-radius:8px;background:#fff}
+@media(max-width:1250px){
+  .desktop-chat-current-grid{grid-template-columns:1fr}
+  .desktop-chat-side-toggle .desktop-live-action{min-height:38px}
+}
+
+/* Local prototype — Chat authoring v0.5: dedicated full-width chat card */
+.desktop-chat-settings-card{
+  width:100%;
+  min-width:0;
+}
+.desktop-chat-settings-card .desktop-chat-authoring-panel{
+  padding:18px;
+  gap:14px;
+  border:0;
+  background:transparent;
+}
+.desktop-chat-settings-card .desktop-chat-authoring-head strong{font-size:14px}
+.desktop-chat-settings-card .desktop-chat-speaker-chips{padding-bottom:7px}
+.desktop-chat-settings-card .desktop-chat-speaker-chip{min-height:48px;padding:7px 14px 7px 7px;font-size:13px}
+.desktop-chat-settings-card .desktop-chat-speaker-chip-avatar{width:34px;height:34px}
+.desktop-chat-settings-card .desktop-chat-current-grid{grid-template-columns:minmax(260px,1fr) minmax(240px,.8fr);gap:12px}
+.desktop-chat-settings-card .desktop-chat-current-speaker{min-height:72px;padding:12px 14px}
+.desktop-chat-settings-card .desktop-chat-icon-preview.is-large{width:56px;height:56px;flex-basis:56px}
+.desktop-chat-settings-card .desktop-chat-side-toggle .desktop-live-action{min-height:52px;font-size:14px}
+.desktop-chat-settings-card .desktop-chat-quick-grid .desktop-live-action,
+.desktop-chat-settings-card .desktop-chat-manage-row .desktop-live-action{min-height:44px}
+.desktop-chat-settings-card .desktop-chat-color-row label{min-height:44px;font-size:12px}
+@media(max-width:1100px){
+  .desktop-chat-settings-card .desktop-chat-current-grid{grid-template-columns:1fr}
+}
+
+/* Local chat authoring v0.6 */
+.desktop-chat-quick-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))!important;}
+
+
+/* Local prototype v0.8 — reuse the existing committed Aa text-color picker for chat colors */
+.desktop-chat-color-field{
+  min-height:48px;
+  display:grid;
+  grid-template-columns:auto 46px minmax(68px,auto);
+  align-items:center;
+  gap:9px;
+  border:1px solid #d8dde2;
+  border-radius:10px;
+  background:#fff;
+  padding:6px 9px;
+}
+.desktop-chat-color-label{font:750 11px system-ui;color:#575d65}
+.desktop-chat-color-code{font:700 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:#717780;background:#f5f6f7;border-radius:6px;padding:5px 6px}
+.desktop-chat-color-field .studio-color-picker.is-compact{width:46px;min-width:46px}
+.live-chat-color.shared-picker{
+  width:100%;
+  display:grid;
+  grid-template-columns:auto 46px minmax(68px,auto);
+  align-items:center;
+  gap:8px;
+  border:1px solid #d8dde2;
+  border-radius:10px;
+  background:#fff;
+  padding:7px 9px;
+}
+.live-chat-color.shared-picker code{
+  font:700 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:#717780;background:#f5f6f7;border-radius:6px;padding:5px 6px
+}
+@media(max-width:720px){
+  .live-chat-color.shared-picker{
+    grid-template-columns:minmax(72px,auto) 46px minmax(64px,1fr);
+  }
+}
+
+
+/* Local prototype v0.9 — calm/near chat color picker */
+.desktop-chat-color-field .studio-color-popover{
+  box-shadow:0 12px 28px rgba(20,24,30,.18);
+}
+/* The shared picker is still the same Aa picker; only chat hover preview is now
+   DOM-only, so the editor/player is not rebuilt on every mouse movement. */
+
+
+/* Local prototype v0.11 — Scene image content card */
+.desktop-scene-image-card{
+  grid-column:1/-1;
+}
+.desktop-scene-image-top{
+  display:grid;
+  grid-template-columns:minmax(220px,1fr) minmax(180px,.55fr);
+  gap:14px;
+  align-items:stretch;
+}
+.desktop-scene-image-preview{
+  min-height:118px;
+  max-height:240px;
+  border:1px solid #d8dde2;
+  border-radius:12px;
+  background:#f7f7f5;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+.desktop-scene-image-preview img{
+  display:block;
+  max-width:100%;
+  max-height:230px;
+  width:auto;
+  height:auto;
+  object-fit:contain;
+}
+.desktop-scene-image-placeholder{
+  color:#969b9f;
+  font:700 12px system-ui;
+}
+.desktop-scene-image-options{
+  display:grid;
+  grid-template-columns:minmax(180px,.6fr) minmax(180px,.5fr) minmax(260px,1fr);
+  gap:10px;
+  align-items:end;
+  margin-top:12px;
+}
+.desktop-scene-image-check,
+.desktop-scene-image-alt{
+  min-height:48px;
+  border:1px solid #d8dde2;
+  border-radius:10px;
+  background:#fff;
+  padding:8px 10px;
+}
+.desktop-scene-image-check{
+  display:flex;
+  gap:9px;
+  align-items:center;
+  font:700 12px system-ui;
+}
+.desktop-scene-image-alt{
+  display:grid;
+  gap:5px;
+}
+.desktop-scene-image-alt span{
+  font:700 11px system-ui;
+  color:#575d65;
+}
+.desktop-scene-image-alt input{
+  width:100%;
+  border:0;
+  outline:0;
+  background:#f5f6f7;
+  border-radius:7px;
+  padding:7px 8px;
+  font:12px system-ui;
+}
+.desktop-scene-image-note{
+  display:block;
+  margin-top:8px;
+  color:#777d83;
+  line-height:1.5;
+}
+@media(max-width:900px){
+  .desktop-scene-image-top{grid-template-columns:1fr}
+  .desktop-scene-image-options{grid-template-columns:1fr}
+}
+
+
+/* Local prototype v0.18 — Scene image small/large + speaker alignment */
+.desktop-scene-image-options{
+  grid-template-columns:minmax(150px,.45fr) minmax(170px,.5fr) minmax(180px,.5fr) minmax(260px,1fr)!important;
+}
+@media(max-width:1100px){
+  .desktop-scene-image-options{grid-template-columns:1fr 1fr!important}
+}
+@media(max-width:720px){
+  .desktop-scene-image-options{grid-template-columns:1fr!important}
+}
+
+/* Mobile visual tabs + chat authoring v0.20 */
+.live-visual-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;padding:4px;background:#eef0f3;border-radius:14px}
+.live-visual-tabs .live-edit-action{margin:0;min-height:44px}
+.live-chat-side-row,.live-chat-quick-actions{grid-column:1/-1}
+.live-chat-quick-actions{display:grid;grid-template-columns:1fr;gap:8px;margin-top:4px}
+.live-scene-image-mobile-preview{width:100%;min-height:120px;max-height:260px;display:grid;place-items:center;overflow:hidden;border:1px solid #dde1e6;border-radius:14px;background:#f7f8f9;color:#8a8f96;margin-bottom:10px}
+.live-scene-image-mobile-preview img{display:block;max-width:100%;max-height:260px;width:auto;height:auto;object-fit:contain}
+.live-scene-image-check{display:flex;align-items:center;gap:10px;padding:12px 4px;font-weight:700}
+.live-scene-image-check input{width:22px;height:22px}
+.live-scene-image-alt input{width:100%;margin-top:6px;min-height:44px;border:1px solid #d8dde3;border-radius:10px;padding:8px 10px}
+
+
+/* Local prototype v0.22 — mobile visual clarity + dedicated Chat UI */
+.live-visual-label{
+  margin:2px 2px 8px;
+  color:#6f757b;
+  font:700 11px/1.4 system-ui,-apple-system,sans-serif;
+}
+.live-visual-tabs-clear{
+  gap:8px;
+}
+.live-visual-tabs-clear .live-edit-action{
+  min-height:48px;
+  font-weight:800;
+}
+.live-chat-mode-box{
+  margin-bottom:8px;
+}
+.live-chat-mode-box .live-edit-field{
+  width:100%;
+}
+.live-chat-section-title{
+  margin:5px 2px 7px;
+  font:800 12px/1.4 system-ui,-apple-system,sans-serif;
+  color:#272b30;
+}
+.live-chat-speaker-chips{
+  display:flex;
+  gap:7px;
+  overflow-x:auto;
+  padding:2px 1px 8px;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.live-chat-speaker-chips::-webkit-scrollbar{display:none}
+.live-chat-speaker-chip{
+  flex:0 0 auto;
+  min-height:40px;
+  border:1px solid #d8dde2;
+  border-radius:999px;
+  background:#fff;
+  padding:5px 10px 5px 6px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font:750 12px system-ui,-apple-system,sans-serif;
+  color:#25292e;
+}
+.live-chat-speaker-chip.is-selected{
+  background:#202327;
+  color:#fff;
+  border-color:#202327;
+}
+.live-chat-speaker-chip img{
+  width:30px;height:30px;border-radius:50%;object-fit:cover;display:block;
+}
+.live-chat-speaker-chips .live-edit-action.is-dashed{
+  flex:0 0 auto;
+  width:auto;
+  min-height:40px;
+  border-style:dashed;
+  border-radius:999px;
+  padding:0 13px;
+  color:#0878d8;
+  background:#fff;
+}
+.live-chat-current-speaker{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  border:1px solid #d8dde2;
+  border-radius:12px;
+  background:#fff;
+  padding:9px 10px;
+  margin-bottom:9px;
+}
+.live-chat-current-icon{
+  width:44px;height:44px;flex:0 0 44px;border-radius:50%;overflow:hidden;
+  display:grid;place-items:center;background:#f2f3f4;border:1px solid #d8dde2;
+}
+.live-chat-current-icon img{width:100%;height:100%;object-fit:cover;display:block}
+.live-chat-current-text{min-width:0;display:grid;gap:2px}
+.live-chat-current-text strong{font:800 13px/1.3 system-ui,-apple-system,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live-chat-current-text small{font:600 10px/1.3 system-ui,-apple-system,sans-serif;color:#777d83}
+.live-chat-icon-actions{margin-top:8px}
+.live-chat-colors-grid{display:grid;grid-template-columns:1fr;gap:7px;margin-top:8px}
+.live-chat-management-actions{display:grid;grid-template-columns:1fr;gap:7px;margin-top:9px}
+.live-chat-management-actions .live-edit-action{min-height:46px}
+
+
+/* Local prototype v0.23 — mobile Chat sheet height + Visual header tabs */
+
+/* Chat authoring has substantially more controls than the compact effect sheet.
+   Give it nearly the full usable viewport, while keeping the bottom toolbar visible. */
+@media (max-width:899px){
+  .live-edit-sheet.live-edit-sheet-chat{
+    top:max(76px, env(safe-area-inset-top));
+    bottom:calc(82px + env(safe-area-inset-bottom));
+    max-height:none;
+    overflow:auto;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-edit-sheet-head{
+    position:sticky;
+    top:0;
+    z-index:5;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-edit-sheet-body{
+    padding-bottom:28px;
+  }
+}
+
+/* Visual mode switch belongs to the modal header, not beside content actions. */
+.live-edit-sheet-head>div{
+  min-width:0;
+}
+.live-edit-head-tabs{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  width:max-content;
+  max-width:100%;
+  margin-top:7px;
+  padding:2px;
+  border-radius:9px;
+  background:rgba(30,34,40,.07);
+}
+.live-edit-head-tab{
+  appearance:none;
+  -webkit-appearance:none;
+  border:0;
+  border-radius:7px!important;
+  width:auto!important;
+  height:28px!important;
+  min-width:0;
+  padding:0 10px!important;
+  background:transparent!important;
+  color:#666d75!important;
+  font:750 11px/1 system-ui,-apple-system,sans-serif!important;
+  white-space:nowrap;
+}
+.live-edit-head-tab.is-selected{
+  background:#fff!important;
+  color:#17191c!important;
+  box-shadow:0 1px 4px rgba(0,0,0,.13)!important;
+}
+.live-edit-head-tab:active{
+  transform:none!important;
+}
+
+
+/* Local prototype v0.24 — compact mobile Chat + complete Scene image controls */
+@media (max-width:899px){
+  .live-edit-sheet.live-edit-sheet-chat{
+    top:max(68px, env(safe-area-inset-top))!important;
+    bottom:calc(48px + env(safe-area-inset-bottom))!important;
+    max-height:none!important;
+    height:auto!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-edit-sheet-head{
+    padding:12px 16px 9px;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-edit-sheet-body{
+    padding:11px 16px 18px;
+    gap:9px;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-mode-box{
+    margin-bottom:0;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-section-title{
+    margin:2px 2px 3px;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-speaker-chips{
+    padding-bottom:3px;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-icon-actions,
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-colors-grid,
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-management-actions{
+    margin-top:0;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-edit-action{
+    min-height:42px;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-management-actions .live-edit-action{
+    min-height:42px;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-edit-detail{
+    min-height:42px;
+  }
+
+  /* Scene-image options are a compact continuation of the image panel. */
+  .live-scene-image-mobile-preview{
+    min-height:96px;
+    max-height:190px;
+    margin-bottom:4px;
+  }
+  .live-scene-image-mobile-preview img{
+    max-height:190px;
+  }
+  .live-scene-image-check{
+    min-height:44px;
+    padding:8px 4px;
+  }
+}
+
+
+/* Local prototype v0.25 — compact Chat management + fixed Scene-image controls */
+@media (max-width:899px){
+  .live-edit-sheet.live-edit-sheet-chat{
+    top:auto!important;
+    bottom:calc(48px + env(safe-area-inset-bottom))!important;
+    height:auto!important;
+    max-height:min(76dvh,650px)!important;
+    overflow:hidden!important;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-edit-sheet-body{
+    max-height:calc(min(76dvh,650px) - 67px);
+    overflow-y:auto!important;
+    padding:10px 16px 16px!important;
+    gap:8px!important;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-speaker-manage-row{
+    gap:8px;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-speaker-manage-row>.live-edit-action{
+    min-height:40px!important;
+    padding:7px 6px;
+    font-size:12px;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-bubble-color{
+    margin-top:0!important;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-bubble-color>span{
+    font-size:12px;
+  }
+}
+
+/* The chat bubble picker now uses the exact Aa custom-color layout. */
+.live-chat-bubble-color{
+  width:100%;
+  box-sizing:border-box;
+}
+
+/* Keep Scene-image controls compact and visible after selection. */
+@media (max-width:640px){
+  .live-scene-image-options{
+    grid-template-columns:1fr 1fr!important;
+    gap:8px!important;
+  }
+  .live-scene-image-check{
+    min-height:40px!important;
+    padding:7px 4px!important;
+    font-size:12px;
+  }
+  .live-scene-image-alt{
+    margin-top:0!important;
+  }
+  .live-scene-image-alt input{
+    min-height:40px!important;
+  }
+}
+
+
+/* Local prototype v0.26 — iPhone color controls + Scene image reachability */
+@media (max-width:899px){
+  /* Chat: compact enough to expose preview while still allowing scroll when needed. */
+  .live-edit-sheet.live-edit-sheet-chat{
+    bottom:calc(48px + env(safe-area-inset-bottom))!important;
+    max-height:min(72dvh,610px)!important;
+    overflow:hidden!important;
+  }
+  .live-edit-sheet.live-edit-sheet-chat .live-edit-sheet-body{
+    max-height:calc(min(72dvh,610px) - 64px)!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+  }
+
+  /* Scene Image: the header stays fixed and every option below the preview is scrollable. */
+  .live-edit-sheet.live-edit-sheet-scene-image{
+    bottom:calc(48px + env(safe-area-inset-bottom))!important;
+    max-height:min(78dvh,660px)!important;
+    overflow:hidden!important;
+  }
+  .live-edit-sheet.live-edit-sheet-scene-image .live-edit-sheet-head{
+    position:sticky;
+    top:0;
+    z-index:6;
+  }
+  .live-edit-sheet.live-edit-sheet-scene-image .live-edit-sheet-body{
+    max-height:calc(min(78dvh,660px) - 74px)!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    padding-bottom:24px!important;
+  }
+
+  /* Reduce preview height so Size / Alignment are visible sooner. */
+  .live-edit-sheet.live-edit-sheet-scene-image .live-scene-image-mobile-preview{
+    min-height:82px!important;
+    max-height:160px!important;
+  }
+  .live-edit-sheet.live-edit-sheet-scene-image .live-scene-image-mobile-preview img{
+    max-height:160px!important;
+  }
+
+  /* iPhone custom-color rows must remain horizontal like Aa. */
+  .live-chat-bubble-color.live-edit-color-custom{
+    display:grid!important;
+    grid-template-columns:auto 46px minmax(68px,1fr)!important;
+    align-items:center!important;
+    gap:8px!important;
+    min-height:50px!important;
+  }
+  .live-chat-bubble-color .studio-color-picker.is-compact{
+    width:46px!important;
+    min-width:46px!important;
+  }
+}
+
+
+/* Local prototype v0.27 — mobile picker attached to swatch */
+@media (max-width:640px){
+  body > .studio-color-popover{
+    margin:0!important;
+    box-shadow:0 12px 30px rgba(16,20,28,.22)!important;
+  }
+}
+
+
+/* Local prototype v0.28 — PC fullscreen option sizing + mobile destructive action */
+
+/* PC Scene Image:
+   make "Tap for fullscreen" the same visual footprint as Display size / Alignment. */
+@media (min-width:900px){
+  .desktop-scene-image-options .desktop-scene-image-check{
+    box-sizing:border-box!important;
+    min-height:48px!important;
+    height:48px!important;
+    padding:0 12px!important;
+    margin:0!important;
+    border:1px solid #d8dde2!important;
+    border-radius:10px!important;
+    background:#fff!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:8px!important;
+    font:700 12px/1.2 system-ui,-apple-system,sans-serif!important;
+  }
+  .desktop-scene-image-options .desktop-scene-image-check input[type="checkbox"]{
+    appearance:auto!important;
+    -webkit-appearance:auto!important;
+    width:18px!important;
+    height:18px!important;
+    min-width:18px!important;
+    max-width:18px!important;
+    margin:0!important;
+    padding:0!important;
+    accent-color:auto!important;
+  }
+  .desktop-scene-image-options .desktop-scene-image-check span{
+    display:inline!important;
+    white-space:nowrap!important;
+  }
+}
+
+/* iPhone Chat:
+   destructive saved-speaker deletion must read as destructive, matching desktop. */
+@media (max-width:899px){
+  .live-chat-speaker-manage-row .live-edit-action.is-danger{
+    color:#d93025!important;
+    border-color:#efc8c4!important;
+    background:#fff8f7!important;
+    font-weight:750!important;
+  }
+  .live-chat-speaker-manage-row .live-edit-action.is-danger:active{
+    background:#fdebea!important;
+  }
+}
+
+
+/* Local prototype v0.29 — iPhone chat bubble-color label alignment only */
+@media (max-width:899px){
+  .live-edit-sheet.live-edit-sheet-chat .live-chat-bubble-color > span:first-child{
+    padding-left:10px!important;
+    box-sizing:border-box;
+  }
+}

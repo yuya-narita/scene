@@ -1182,6 +1182,18 @@
     const text=player?.els?.scenes?.querySelector('.sp-scene.is-active .sp-text');
     if(text)text.style.setProperty('color',c,'important');
   }
+  function previewCurrentChatColor(kind,value){
+    const c=normalizeTextColor(value);if(!c)return;
+    const active=player?.els?.scenes?.querySelector('.sp-scene.is-active.sp-chat-scene');
+    if(!active)return;
+    if(kind==='bubble'){
+      const bubble=active.querySelector('.sp-chat-bubble');
+      if(bubble)bubble.style.setProperty('background',c,'important');
+      return;
+    }
+    const text=active.querySelector('.sp-chat-bubble .sp-text');
+    if(text)text.style.setProperty('color',c,'important');
+  }
   function hsvToHex(h,s,v){
     h=((Number(h)||0)%360+360)%360;s=Math.max(0,Math.min(1,Number(s)||0));v=Math.max(0,Math.min(1,Number(v)||0));
     const c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c;let r=0,g=0,b=0;
@@ -1223,31 +1235,54 @@
     };
     const fitMobilePopover=()=>{
       if(!open||!matchMedia('(max-width:640px)').matches)return;
-      for(const prop of ['position','left','right','top','bottom','width','maxHeight','overflow','transform']){
-        pop.style.removeProperty(prop);
+
+      // Mobile uses a viewport overlay as well. This avoids the picker becoming
+      // part of the sheet's normal flow (which could push it far away from the
+      // swatch or force the modal to scroll unexpectedly).
+      if(pop.parentNode!==document.body)document.body.appendChild(pop);
+
+      const vv=window.visualViewport;
+      const vw=vv?.width||window.innerWidth||document.documentElement.clientWidth||390;
+      const vh=vv?.height||window.innerHeight||document.documentElement.clientHeight||700;
+      const offsetLeft=vv?.offsetLeft||0;
+      const offsetTop=vv?.offsetTop||0;
+      const r=trigger.getBoundingClientRect();
+
+      const gap=8;
+      const edge=10;
+      const preferredWidth=Math.min(260,Math.max(220,vw-edge*2));
+      const estimatedHeight=Math.min(pop.scrollHeight||236,250);
+      const roomBelow=(offsetTop+vh)-r.bottom;
+      const roomAbove=r.top-offsetTop;
+      const openUp=roomBelow < estimatedHeight+gap && roomAbove > roomBelow;
+
+      // Keep the palette attached to the color swatch. Prefer centering on the
+      // swatch, then clamp to the visible viewport.
+      let left=r.left+r.width/2-preferredWidth/2;
+      left=Math.max(offsetLeft+edge,Math.min(offsetLeft+vw-preferredWidth-edge,left));
+
+      pop.style.position='fixed';
+      pop.style.zIndex='2147483000';
+      pop.style.width=`${preferredWidth}px`;
+      pop.style.boxSizing='border-box';
+      pop.style.left=`${Math.round(left)}px`;
+      pop.style.right='auto';
+      pop.style.transform='none';
+      pop.style.maxHeight=`${Math.max(180,Math.min(280,vh-edge*2))}px`;
+      pop.style.overflow='auto';
+
+      if(openUp){
+        pop.style.top='auto';
+        pop.style.bottom=`${Math.max(edge,Math.round((offsetTop+vh)-r.top+gap))}px`;
+      }else{
+        pop.style.bottom='auto';
+        pop.style.top=`${Math.max(offsetTop+edge,Math.round(r.bottom+gap))}px`;
       }
-      requestAnimationFrame(()=>{
-        const body=pop.closest('.live-edit-sheet-body');
-        if(!body)return;
-        const bodyRect=body.getBoundingClientRect();
-        const popRect=pop.getBoundingClientRect();
-        const safeBottom=Math.min(bodyRect.bottom,window.innerHeight-86);
-        const clipped=popRect.bottom-safeBottom;
-        if(clipped>0){
-          body.scrollTo({
-            top:body.scrollTop+clipped+18,
-            behavior:'smooth'
-          });
-        }
-      });
     };
 
     const placePopover=()=>{
       if(!open)return;
       if(matchMedia('(max-width:640px)').matches){
-        // Mobile keeps the popover inside the sheet so its existing scroll
-        // behaviour remains unchanged.
-        if(pop.parentNode!==root)root.appendChild(pop);
         fitMobilePopover();
         return;
       }
@@ -1268,8 +1303,12 @@
       const roomBelow=vh-r.bottom;
       const roomAbove=r.top;
       const openUp=roomBelow < Math.min(estimatedHeight+gap,260) && roomAbove > roomBelow;
-      const center=r.left+r.width/2;
-      const left=Math.max(edge,Math.min(vw-preferredWidth-edge,center-preferredWidth/2));
+      // Keep the palette visually attached to the swatch that opened it.
+      // Prefer aligning its right edge to the trigger on desktop; fall back to
+      // left alignment near the viewport edge.
+      let left=r.right-preferredWidth;
+      if(left<edge)left=r.left;
+      left=Math.max(edge,Math.min(vw-preferredWidth-edge,left));
 
       pop.style.position='fixed';
       pop.style.zIndex='2147483000';
@@ -1318,7 +1357,6 @@
           window.addEventListener('resize',placePopover);
           window.addEventListener('scroll',placePopover,true);
           if(matchMedia('(max-width:640px)').matches){
-            requestAnimationFrame(fitMobilePopover);
             setTimeout(fitMobilePopover,80);
           }
         });
@@ -1326,7 +1364,22 @@
     };
     trigger.addEventListener('pointerdown',togglePicker);
     trigger.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();});
+    // Keep preview tied to the actual cursor position on desktop. Some Chromium
+    // builds can stop delivering pointermove here after the popover is moved to
+    // document.body, so mousemove is kept as an explicit fallback.
+    // Follow the real cursor position even when Chromium/Safari routes movement
+    // through an ancestor after the popover is re-parented. This makes the
+    // preview cursor + HEX readout track the mouse continuously before commit.
+    const trackDesktopPointer=e=>{
+      if(!open || matchMedia('(max-width:640px)').matches)return;
+      const r=square.getBoundingClientRect();
+      if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)return;
+      previewAt(e);
+    };
     square.addEventListener('pointermove',previewAt);
+    square.addEventListener('mousemove',previewAt);
+    document.addEventListener('mousemove',trackDesktopPointer,true);
+    square.addEventListener('pointerdown',e=>{previewAt(e);try{square.setPointerCapture?.(e.pointerId);}catch(_){}});
     square.addEventListener('click',e=>{previewAt(e);committed=preview;rememberTextColor(committed);trigger.style.backgroundColor=committed;if(typeof onCommit==='function')onCommit(committed);close(false);});
     hue.addEventListener('input',()=>{hsv.h=Number(hue.value)||0;preview=hsvToHex(hsv.h,hsv.s,hsv.v);paint();if(typeof onPreview==='function')onPreview(preview);});
     // Hue itself is only a preview control; the saturation/value square click is the commit gesture.
@@ -1771,6 +1824,7 @@
 
     const p=scene.presentation||{};
     if(p.background && Object.keys(p.background).length)return true;
+    if(p.image?.src)return true;
     if(p.display && p.display!=='stack')return true;
     if(p.effect && p.effect!=='auto')return true;
 
@@ -2176,6 +2230,101 @@
     workingDocument.ending=endingFromEasy();
   }
 
+  // Local prototype — Chat authoring helpers v0.3
+  // Speaker presets live at work level so one tap can apply name/icon/side/colors.
+  function ensureChatSpeakerStore(){
+    if(!workingDocument)ensureWorkingDocumentFromEasy();
+    workingDocument.metadata ||= {};
+    if(!Array.isArray(workingDocument.metadata.chatSpeakers))workingDocument.metadata.chatSpeakers=[];
+    return workingDocument.metadata.chatSpeakers;
+  }
+  function chatSpeakerStore(){
+    return Array.isArray(workingDocument?.metadata?.chatSpeakers) ? workingDocument.metadata.chatSpeakers : [];
+  }
+  function chatSpeakerId(name='speaker'){
+    const base=String(name||'speaker').trim().toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+/g,'-').replace(/^-+|-+$/g,'')||'speaker';
+    return `${base}-${Math.random().toString(36).slice(2,7)}`;
+  }
+  function applyChatSpeakerPreset(scene,preset){
+    if(!scene||!preset)return;
+    const p=ensurePresentation(scene);
+    p.view='chat';
+    p.display=p.display||'stack';
+    p.text ||= {};
+    p.text.align=preset.side==='right'?'right':'left';
+    if(preset.textColor)p.text.color=preset.textColor; else delete p.text.color;
+    p.chat={...(p.chat||{}),speakerId:preset.id||'',icon:preset.icon||'',iconText:preset.iconText||'●',bubbleColor:preset.bubbleColor||'',bubbleTextColor:preset.bubbleTextColor||''};
+    if(preset._editorFileName)p.chat._editorFileName=preset._editorFileName;
+    if(preset.icon && /^blob:/i.test(preset.icon))p.chat._editorManaged=true;
+    scene.subText=String(preset.name||'');
+  }
+  function saveCurrentChatSpeakerPreset(scene,{forceNew=false}={}){
+    if(!scene)return null;
+    const p=ensurePresentation(scene); p.chat ||= {}; p.text ||= {};
+    const suggested=forceNew?'':String(scene.subText||'').trim();
+    const name=(prompt(forceNew?u('新しい話者名を入力','New speaker name'):u('話者名を入力','Speaker name'),suggested)||'').trim();
+    if(!name)return null;
+    const store=ensureChatSpeakerStore();
+    const existingId=forceNew?'':String(p.chat.speakerId||'');
+    let preset=existingId?store.find(x=>x?.id===existingId):null;
+    if(!preset && !forceNew)preset=store.find(x=>String(x?.name||'')===name);
+    if(!preset){preset={id:chatSpeakerId(name)};store.push(preset);}
+    Object.assign(preset,{
+      name,
+      icon:p.chat.icon||'',
+      iconText:p.chat.iconText||'●',
+      side:p.text.align==='right'?'right':'left',
+      textColor:p.text.color||'',
+      bubbleColor:p.chat.bubbleColor||'',
+      bubbleTextColor:p.chat.bubbleTextColor||'',
+      _editorFileName:p.chat._editorFileName||''
+    });
+    p.chat.speakerId=preset.id;
+    scene.subText=name;
+    scheduleDraftSave(40);
+    return preset;
+  }
+  function removeChatSpeakerPreset(id){
+    const store=ensureChatSpeakerStore();
+    const i=store.findIndex(x=>x?.id===id);
+    if(i>=0)store.splice(i,1);
+    scheduleDraftSave(40);
+  }
+  function applyChatModeForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;
+    let changed=0;
+    for(let i=Math.max(0,Number(fromIndex)||0);i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i];
+      if(!sc || sc.type==='sound')continue;
+      const pr=ensurePresentation(sc);
+      // Do not overwrite intentionally special presentation modes.
+      if(pr.view && !['world','chat'].includes(pr.view))continue;
+      if(pr.view!=='chat'){pr.view='chat';changed++;}
+      pr.display=pr.display||'stack';
+      pr.entryMotion=pr.entryMotion||'flow';
+      pr.text ||= {};
+      if(!pr.text.align || pr.text.align==='auto')pr.text.align='left';
+      pr.chat ||= {};
+    }
+    scheduleDraftSave(40);
+    return changed;
+  }
+  function makeChatSceneShellFrom(scene){
+    const base={id:nextUniqueId(),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}};
+    if(scene?.presentation?.view!=='chat')return base;
+    const prior=scene.presentation;
+    base.subText=scene.subText||'';
+    base.presentation.view='chat';
+    base.presentation.display=prior.display||'stack';
+    base.presentation.entryMotion=prior.entryMotion||'flow';
+    base.presentation.text={size:prior.text?.size||'auto',align:prior.text?.align==='right'?'right':'left'};
+    if(prior.text?.color)base.presentation.text.color=prior.text.color;
+    base.presentation.chat=clone(prior.chat||{});
+    // Never inherit background/audio when rapidly authoring the next chat message.
+    delete base.presentation.background;
+    return base;
+  }
+
   function sceneDocumentForExport(){
     // If Advanced has been opened, its Scene document is authoritative.
     // Otherwise build directly from Easy Studio so a first export needs no extra step.
@@ -2391,12 +2540,34 @@
     const cover=doc?.cover;
     if(cover?.src)callback({kind:'cover',sceneIndex:-1,holder:cover,key:'src',src:cover.src,fileName:cover._editorFileName||coverImageFileName||''});
     if(cover?.logo?.src)callback({kind:'logo',sceneIndex:-1,holder:cover.logo,key:'src',src:cover.logo.src,fileName:cover.logo._editorFileName||coverLogoFileName||''});
+    (doc?.metadata?.chatSpeakers||[]).forEach((speaker,speakerIndex)=>{
+      if(speaker?.icon)callback({
+        kind:'chatSpeaker',sceneIndex:-1,speakerIndex,
+        holder:speaker,key:'icon',src:speaker.icon,
+        fileName:speaker._editorFileName||''
+      });
+    });
+
     (doc.scenes||[]).forEach((scene,sceneIndex)=>{
       const bg=scene?.presentation?.background;
       if(bg?.src)callback({
         kind:'background',sceneIndex,
         holder:bg,key:'src',src:bg.src,
         fileName:bg._editorFileName||''
+      });
+
+      const chat=scene?.presentation?.chat;
+      if(chat?.icon)callback({
+        kind:'chatIcon',sceneIndex,
+        holder:chat,key:'icon',src:chat.icon,
+        fileName:chat._editorFileName||''
+      });
+
+      const sceneImage=scene?.presentation?.image;
+      if(sceneImage?.src)callback({
+        kind:'sceneImage',sceneIndex,
+        holder:sceneImage,key:'src',src:sceneImage.src,
+        fileName:sceneImage._editorFileName||''
       });
 
       (scene?.audio||[]).forEach((cmd,audioIndex)=>{
@@ -4171,7 +4342,7 @@
   function addScene(){
     syncAdvancedFieldsToScene();
     captureUndo('Scene追加を元に戻せます');
-    const scene={id:nextUniqueId(),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}};
+    const scene=makeChatSceneShellFrom(currentScene());
     workingDocument.scenes.splice(selectedSceneIndex+1,0,scene);
     selectedSceneIndex+=1;
     renderAdvanced();
@@ -5948,7 +6119,7 @@ function openDesktopEffectDetail(){
     basicGrid.append(
       effectSelect,
       desktopDetailSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')]],p.display||'stack',v=>{p.display=v;apply();}),
-      desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')]],p.view||'world',v=>{p.view=v;apply();}),
+      desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;apply();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();})
     );
 
@@ -7525,6 +7696,199 @@ function openDesktopTextDetail(){
     textCard.append(desktopDetail(t('detail.text'),'text'));
 
     const effectCard=desktopCard(uiLanguage==='en'?'Effects (✦)':'演出（✦）');
+
+    // Scene Image ---------------------------------------------------------
+    // This is content, not a background: aspect ratio is always preserved
+    // and the public Player can open it fullscreen.
+    const sceneImageCard=desktopCard(u('Scene画像','Scene image'),'desktop-scene-image-card');
+    const sceneImage=p.image && typeof p.image==='object' ? p.image : null;
+    const sceneImageTop=document.createElement('div');sceneImageTop.className='desktop-scene-image-top';
+    const sceneImagePreview=document.createElement('div');sceneImagePreview.className='desktop-scene-image-preview';
+    if(sceneImage?.src){
+      const img=document.createElement('img');img.src=sceneImage.src;img.alt=sceneImage.alt||'';
+      sceneImagePreview.appendChild(img);
+    }else{
+      const ph=document.createElement('div');ph.className='desktop-scene-image-placeholder';
+      ph.textContent=u('画像なし','No image');sceneImagePreview.appendChild(ph);
+    }
+
+    const sceneImageActions=document.createElement('div');sceneImageActions.className='desktop-live-stack';
+    const sceneImagePick=desktopAction(
+      sceneImage?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),
+      ()=>desktopPickFile('image/*',(url,name)=>{
+        p.image={
+          ...(p.image||{}),
+          src:url,
+          fit:'contain',
+          size:p.image?.size||((p.view==='chat')?'small':'large'),
+          align:p.image?.align||((p.view==='chat')?'speaker':'center'),
+          fullscreen:p.image?.fullscreen!==false,
+          alt:p.image?.alt||'',
+          _editorFileName:name,
+          _editorManaged:true
+        };
+        scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();
+      }),
+      'is-primary'
+    );
+    const sceneImageRemove=desktopAction(u('画像を外す','Remove image'),()=>{
+      if(p.image?.src && assetRegistry.has(p.image.src))unregisterAsset(p.image.src);
+      delete p.image;
+      scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();
+    });
+    sceneImageRemove.disabled=!sceneImage?.src;
+    sceneImageActions.append(sceneImagePick,sceneImageRemove);
+    sceneImageTop.append(sceneImagePreview,sceneImageActions);
+    sceneImageCard.append(sceneImageTop);
+
+    if(sceneImage?.src){
+      const sceneImageOptions=document.createElement('div');sceneImageOptions.className='desktop-scene-image-options';
+      const sizeField=desktopMakeSelect(
+        u('表示サイズ','Display size'),
+        [['small',u('小','Small')],['large',u('大','Large')]],
+        sceneImage.size||((p.view==='chat')?'small':'large'),
+        v=>{p.image.size=v;p.image.fit='contain';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}
+      );
+
+      const imageAlignDefault=(p.view==='chat')?'speaker':'center';
+      const alignField=desktopMakeSelect(
+        u('配置','Alignment'),
+        [['speaker',u('話者に合わせる','Follow speaker')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],
+        sceneImage.align||imageAlignDefault,
+        v=>{p.image.align=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}
+      );
+
+      const fullscreenField=document.createElement('label');fullscreenField.className='desktop-scene-image-check';
+      const fullscreenInput=document.createElement('input');fullscreenInput.type='checkbox';fullscreenInput.checked=sceneImage.fullscreen!==false;
+      const fullscreenText=document.createElement('span');fullscreenText.textContent=u('タップで全画面','Tap for fullscreen');
+      fullscreenInput.addEventListener('change',()=>{
+        p.image.fullscreen=fullscreenInput.checked;
+        scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});
+      });
+      fullscreenField.append(fullscreenInput,fullscreenText);
+
+      const altField=document.createElement('label');altField.className='desktop-scene-image-alt';
+      const altTitle=document.createElement('span');altTitle.textContent=u('画像の説明（読み上げ用・任意）','Image description (for screen readers, optional)');
+      const altInput=document.createElement('input');altInput.type='text';altInput.value=sceneImage.alt||'';altInput.placeholder=u('例：面積2cm²の正方形','e.g. A square with area 2 cm²');
+      altInput.addEventListener('change',()=>{p.image.alt=altInput.value.trim();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
+      altField.append(altTitle,altInput);
+      sceneImageOptions.append(sizeField,alignField,fullscreenField,altField);
+      sceneImageCard.append(sceneImageOptions);
+
+      const sceneImageNote=document.createElement('small');sceneImageNote.className='desktop-scene-image-note';
+      sceneImageNote.textContent=u('背景と違い、画像全体を切らずに表示します。16:9もスマホで全体表示されます。','Unlike backgrounds, the whole image is shown without cropping, including 16:9 on phones.');
+      sceneImageCard.append(sceneImageNote);
+    }
+
+    let chatCard=null;
+
+    // Chat mode gets its own full-width card, separate from the compact Effects card.
+    // Keeping speaker authoring inside Effects made the controls too cramped.
+    if((p.view||'world')==='chat'){
+      chatCard=desktopCard(u('チャット設定','Chat settings'),'desktop-chat-settings-card');
+      p.chat ||= {};
+      const chatPanel=document.createElement('div');chatPanel.className='desktop-chat-authoring-panel';
+
+      const chatHead=document.createElement('div');chatHead.className='desktop-chat-authoring-head';
+      const chatHeadTitle=document.createElement('strong');chatHeadTitle.textContent=u('💬 チャット話者','💬 Chat speaker');
+      const chatHeadNote=document.createElement('span');chatHeadNote.textContent=u('登録済み話者はワンタップで切替','Tap a saved speaker to switch');
+      chatHead.append(chatHeadTitle,chatHeadNote);
+      chatPanel.append(chatHead);
+
+      const chips=document.createElement('div');chips.className='desktop-chat-speaker-chips';
+      const speakerPresets=chatSpeakerStore();
+      speakerPresets.forEach(sp=>{
+        const chip=document.createElement('button');chip.type='button';chip.className='desktop-chat-speaker-chip'+(p.chat?.speakerId===sp.id?' is-active':'');
+        const avatar=document.createElement('span');avatar.className='desktop-chat-speaker-chip-avatar';
+        if(sp.icon){const img=document.createElement('img');img.src=sp.icon;img.alt='';avatar.appendChild(img);} else avatar.textContent=sp.iconText||'●';
+        const name=document.createElement('span');name.className='desktop-chat-speaker-chip-name';name.textContent=sp.name||u('話者','Speaker');
+        const side=document.createElement('span');side.className='desktop-chat-speaker-chip-side';side.textContent=sp.side==='right'?'→':'←';
+        chip.append(avatar,name,side);
+        chip.addEventListener('click',()=>{
+          applyChatSpeakerPreset(scene,sp);scheduleDraftSave(40);refresh();renderDesktopLivePanel();
+        });
+        chips.append(chip);
+      });
+      const addChip=document.createElement('button');addChip.type='button';addChip.className='desktop-chat-speaker-chip is-add';
+      addChip.textContent=u('＋ 話者を登録','＋ Add speaker');
+      addChip.addEventListener('click',()=>{const saved=saveCurrentChatSpeakerPreset(scene,{forceNew:true});if(saved){refresh();renderDesktopLivePanel();}});
+      chips.append(addChip);
+      chatPanel.append(chips);
+
+      const current=document.createElement('div');current.className='desktop-chat-current-grid';
+
+      const speakerBox=document.createElement('div');speakerBox.className='desktop-chat-current-speaker';
+      const preview=document.createElement('div');preview.className='desktop-chat-icon-preview is-large';
+      if(p.chat.icon){const img=document.createElement('img');img.src=p.chat.icon;img.alt='';preview.appendChild(img);} else preview.textContent=p.chat.iconText||'●';
+      const speakerMeta=document.createElement('div');speakerMeta.className='desktop-chat-current-meta';
+      const currentName=document.createElement('strong');currentName.textContent=String(scene.subText||u('話者未設定','No speaker'));
+      const currentSub=document.createElement('span');currentSub.textContent=p.text?.align==='right'?u('右側の吹き出し','Right bubble'):u('左側の吹き出し','Left bubble');
+      speakerMeta.append(currentName,currentSub);
+      speakerBox.append(preview,speakerMeta);
+
+      const sideBox=document.createElement('div');sideBox.className='desktop-chat-side-toggle';
+      const leftBtn=desktopAction(u('← 左','← Left'),()=>{p.text ||= {};p.text.align='left';scheduleDraftSave(40);refresh();renderDesktopLivePanel();},p.text?.align!=='right'?'is-selected':'');
+      const rightBtn=desktopAction(u('右 →','Right →'),()=>{p.text ||= {};p.text.align='right';scheduleDraftSave(40);refresh();renderDesktopLivePanel();},p.text?.align==='right'?'is-selected':'');
+      sideBox.append(leftBtn,rightBtn);
+
+      current.append(speakerBox,sideBox);
+      chatPanel.append(current);
+
+      const quick=document.createElement('div');quick.className='desktop-chat-quick-grid';
+      const iconBtn=desktopAction(p.chat.icon?u('アイコンを変更','Change icon'):u('アイコン画像を選択','Choose icon'),()=>desktopPickFile('image/*',(url,name)=>{
+        p.chat.icon=url;p.chat._editorFileName=name;p.chat._editorManaged=true;refresh();renderDesktopLivePanel();
+      }),'is-primary');
+      const updateBtn=desktopAction(u('現在の設定で話者を更新','Update saved speaker'),()=>{const saved=saveCurrentChatSpeakerPreset(scene);if(saved){refresh();renderDesktopLivePanel();}},'');
+      const forwardBtn=desktopAction(u('このScene以降をチャット化','Chat mode from this Scene onward'),()=>{
+        const count=applyChatModeForward(index);
+        if(count){refresh();renderDesktopLivePanel();showUndo(`${count} Sceneをチャット表示にしました`);}
+      },'');
+      quick.append(iconBtn,updateBtn,forwardBtn);
+      chatPanel.append(quick);
+
+      const colors=document.createElement('div');colors.className='desktop-chat-color-row';
+
+      const makeChatSharedColorField=(labelText,initial,onPreview,onCommit)=>{
+        const field=document.createElement('div');field.className='desktop-chat-color-field';
+        const label=document.createElement('span');label.className='desktop-chat-color-label';label.textContent=labelText;
+        const code=document.createElement('code');code.className='desktop-chat-color-code';code.textContent=initial.toUpperCase();
+        const picker=makeCommittedTextColorPicker(initial,{
+          compact:true,
+          onPreview:c=>{code.textContent=c;onPreview?.(c);},
+          onCommit:c=>{code.textContent=c;onCommit?.(c);}
+        });
+        field.append(label,picker.root,code);
+        return field;
+      };
+
+      const bubbleInitial=/^#[0-9a-f]{6}$/i.test(p.chat.bubbleColor||'')?String(p.chat.bubbleColor).toUpperCase():'#FFFFFF';
+      const bubbleField=makeChatSharedColorField(
+        u('吹き出し','Bubble'),
+        bubbleInitial,
+        c=>{previewCurrentChatColor('bubble',c);},
+        c=>{p.chat.bubbleColor=c;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}
+      );
+
+      const textInitial=/^#[0-9a-f]{6}$/i.test(p.chat.bubbleTextColor||'')?String(p.chat.bubbleTextColor).toUpperCase():'#202226';
+      const textField=makeChatSharedColorField(
+        u('文字','Text'),
+        textInitial,
+        c=>{previewCurrentChatColor('text',c);},
+        c=>{p.chat.bubbleTextColor=c;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}
+      );
+
+      colors.append(bubbleField,textField);
+      chatPanel.append(colors);
+
+      if(p.chat?.speakerId){
+        const manage=document.createElement('div');manage.className='desktop-chat-manage-row';
+        const removeIcon=desktopAction(u('アイコンを外す','Remove icon'),()=>{delete p.chat.icon;delete p.chat._editorFileName;refresh();renderDesktopLivePanel();},'');
+        const deletePreset=desktopAction(u('この話者登録を削除','Delete this speaker'),()=>{const id=p.chat?.speakerId||'';if(!id)return;removeChatSpeakerPreset(id);delete p.chat.speakerId;renderDesktopLivePanel();},'is-danger');
+        manage.append(removeIcon,deletePreset);chatPanel.append(manage);
+      }
+      chatCard.append(chatPanel);
+    }
+
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
@@ -7542,10 +7906,11 @@ function openDesktopTextDetail(){
         renderDesktopLivePanel();
       }),
       desktopMakeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')]],p.display||'stack',v=>{p.display=v;refresh();}),
-      desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')]],p.view||'world',v=>{p.view=v;refresh();}),
+      desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();})
     );
-    effectCard.append(effectGrid,desktopDetail(t('detail.effect'),'effect'));
+    effectCard.append(effectGrid);
+    effectCard.append(desktopDetail(t('detail.effect'),'effect'));
 
     const bgCard=desktopCard(uiLanguage==='en'?'Background (▣)':'背景（▣）','desktop-live-bg-card');
     const bg=p.background;
@@ -7630,7 +7995,8 @@ function openDesktopTextDetail(){
     switchLabel.append(switchInput,switchTrack,switchState);
     nav.append(navText,switchLabel);sceneCard.appendChild(nav);
 
-    desktopLivePanelBody.append(bodyCard,three,sceneCard);
+    if(chatCard)desktopLivePanelBody.append(bodyCard,chatCard,sceneImageCard,three,sceneCard);
+    else desktopLivePanelBody.append(bodyCard,sceneImageCard,three,sceneCard);
     desktopSceneUnderlaySnapshot=desktopLivePanelBody.cloneNode(true);
     if(desktopShortcutButton)desktopShortcutButton.hidden=false;
     maybeShowDesktopWritingGuide();
@@ -8080,6 +8446,8 @@ function openDesktopTextDetail(){
     document.body.classList.add('live-edit-sheet-open');
     liveEditSheet.classList.toggle('live-edit-sheet-audio',kind==='audio');
     liveEditSheet.classList.toggle('live-edit-sheet-timing',kind==='timing');
+    liveEditSheet.classList.remove('live-edit-sheet-chat','live-edit-sheet-scene-image');
+    liveEditSheet.querySelector('.live-edit-head-tabs')?.remove();
     liveEditSheetBody.innerHTML='';
 
     if(kind==='timing'){
@@ -8133,37 +8501,137 @@ function openDesktopTextDetail(){
     }
 
     if(kind==='effect'){
-      liveEditSheetTitle.textContent=uiLanguage==='en'?'Effects':'演出';
-      const grid=document.createElement('div');grid.className='live-edit-grid';
+      const p=ensurePresentation(scene);p.text ||= {};
       const makeSelect=(label,values,current,onchange)=>{
         const wrap=document.createElement('label');wrap.className='live-edit-field';wrap.append(label);
         const select=document.createElement('select');
         values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
         select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
       };
-      const p=ensurePresentation(scene);
-      const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
-      grid.append(
-        makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
-          if(v==='typewriter'){
-            p.effect='none';
-            p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
-          }else{
-            if(p.typing)delete p.typing;
-            p.effect=v;
-          }
-          scheduleDraftSave(80);refreshLivePlayer();
-        }),
-        makeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')]],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
-        makeSelect(u('表示モード','Display mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')]],p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();}),
-        makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();})
-      );
-      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=t('detail.effect');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
-      liveEditSheetBody.append(grid,detail);return;
+      const makeEffectAction=(label,cls='')=>{const b=document.createElement('button');b.type='button';b.className=`live-edit-action ${cls}`.trim();b.textContent=label;return b;};
+      const viewValues=[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]];
+
+      // Normal effect UI stays intentionally compact. Chat-only controls must
+      // never leak into this state.
+      if((p.view||'world')!=='chat'){
+        liveEditSheetTitle.textContent=uiLanguage==='en'?'Effects':'演出';
+        const grid=document.createElement('div');grid.className='live-edit-grid';
+        const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
+        grid.append(
+          makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+            if(v==='typewriter'){
+              p.effect='none';
+              p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
+            }else{
+              if(p.typing)delete p.typing;
+              p.effect=v;
+            }
+            scheduleDraftSave(80);refreshLivePlayer();
+          }),
+          makeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')]],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
+          makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
+          makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();})
+        );
+        liveEditSheetBody.append(grid);
+        const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=t('detail.effect');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
+        liveEditSheetBody.append(detail);return;
+      }
+
+      // Chat mode gets its own editing surface instead of stacking chat tools
+      // underneath the generic effects form.
+      liveEditSheetTitle.textContent=u('チャット設定','Chat settings');
+      liveEditSheet.classList.add('live-edit-sheet-chat');
+      p.chat ||= {};
+
+      const modeBox=document.createElement('div');modeBox.className='live-chat-mode-box';
+      modeBox.append(makeSelect(u('表示モード','Display mode'),viewValues,'chat',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}));
+      liveEditSheetBody.append(modeBox);
+
+      const speakersTitle=document.createElement('div');speakersTitle.className='live-chat-section-title';speakersTitle.textContent=u('💬 チャット話者','💬 Chat speakers');
+      const speakerChips=document.createElement('div');speakerChips.className='live-chat-speaker-chips';
+      const presets=chatSpeakerStore();
+      presets.forEach(sp=>{
+        const chip=document.createElement('button');chip.type='button';chip.className=`live-chat-speaker-chip ${p.chat?.speakerId===sp.id?'is-selected':''}`;
+        if(sp.icon){const img=document.createElement('img');img.src=sp.icon;img.alt='';chip.appendChild(img);}
+        const label=document.createElement('span');label.textContent=sp.name;chip.appendChild(label);
+        chip.onclick=()=>{applyChatSpeakerPreset(scene,sp);scheduleDraftSave(50);refreshLivePlayer();renderLiveEditSheet('effect');};
+        speakerChips.appendChild(chip);
+      });
+      const addSpeaker=makeEffectAction(u('＋ 話者','＋ Speaker'),'is-dashed');
+      addSpeaker.onclick=()=>{const saved=saveCurrentChatSpeakerPreset(scene,{forceNew:true});if(saved){refreshLivePlayer();renderLiveEditSheet('effect');}};
+      speakerChips.appendChild(addSpeaker);
+      liveEditSheetBody.append(speakersTitle,speakerChips);
+
+      const sideRow=document.createElement('div');sideRow.className='live-edit-choice-row live-chat-side-row';
+      const left=makeEffectAction(u('← 左','← Left'),p.text.align!=='right'?'is-selected':'');
+      const right=makeEffectAction(u('右 →','Right →'),p.text.align==='right'?'is-selected':'');
+      left.onclick=()=>{p.text.align='left';scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');};
+      right.onclick=()=>{p.text.align='right';scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');};
+      sideRow.append(left,right);liveEditSheetBody.append(sideRow);
+
+      const iconActions=document.createElement('div');iconActions.className='live-edit-choice-row live-chat-icon-actions';
+      const choose=makeEffectAction(p.chat.icon?u('アイコンを変更','Change icon'):u('アイコン画像を選択','Choose icon'),'is-primary');
+      choose.onclick=()=>{
+        const input=document.createElement('input');input.type='file';input.accept='image/*';input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
+        input.addEventListener('change',async()=>{
+          const file=input.files?.[0];
+          if(file){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);p.chat.icon=url;p.chat._editorFileName=snap.name;p.chat._editorManaged=true;scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('effect');}
+          input.remove();
+        },{once:true});
+        input.click();
+      };
+      const clear=makeEffectAction(u('アイコンを外す','Remove icon'));clear.disabled=!p.chat.icon;clear.onclick=()=>{delete p.chat.icon;delete p.chat._editorFileName;scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('effect');};
+      iconActions.append(choose,clear);liveEditSheetBody.append(iconActions);
+
+      const bubbleInitial=/^#[0-9a-f]{6}$/i.test(p.chat.bubbleColor||'')?String(p.chat.bubbleColor).toUpperCase():'#FFFFFF';
+      const bubbleCustom=document.createElement('div');bubbleCustom.className='live-edit-color-custom live-chat-bubble-color';
+      const bubbleLabel=document.createElement('span');bubbleLabel.textContent=u('吹き出し色','Bubble color');
+      const bubbleCode=document.createElement('code');bubbleCode.textContent=bubbleInitial;
+      const applyMobileBubbleColor=(c,{save=false}={})=>{
+        bubbleCode.textContent=c;
+        p.chat.bubbleColor=c;
+        previewCurrentChatColor('bubble',c);
+        if(save)scheduleDraftSave(50);
+      };
+      const bubblePicker=makeCommittedTextColorPicker(bubbleInitial,{
+        compact:true,
+        onPreview:c=>applyMobileBubbleColor(c,{save:false}),
+        onCommit:c=>{applyMobileBubbleColor(c,{save:true});refreshLivePlayer();}
+      });
+      bubbleCustom.append(bubbleLabel,bubblePicker.root,bubbleCode);
+      liveEditSheetBody.append(bubbleCustom);
+
+      const speakerManageRow=document.createElement('div');speakerManageRow.className='live-edit-choice-row live-chat-speaker-manage-row';
+      const updateSpeaker=makeEffectAction(u('話者を更新','Update speaker'));
+      updateSpeaker.disabled=!p.chat.speakerId;
+      updateSpeaker.onclick=()=>{const saved=saveCurrentChatSpeakerPreset(scene);if(saved){refreshLivePlayer();renderLiveEditSheet('effect');}};
+      speakerManageRow.append(updateSpeaker);
+
+      if(p.chat.speakerId){
+        const removeSpeaker=makeEffectAction(u('話者登録を削除','Delete speaker'),'is-danger');
+        removeSpeaker.onclick=()=>{
+          const id=p.chat.speakerId||'';if(!id)return;
+          const ok=confirm(u('この話者登録を削除しますか？\n作品内の既存Sceneは削除されません。','Delete this saved speaker?\nExisting Scenes in the work will not be deleted.'));
+          if(!ok)return;
+          removeChatSpeakerPreset(id);
+          delete p.chat.speakerId;
+          scheduleDraftSave(40);
+          renderLiveEditSheet('effect');
+        };
+        speakerManageRow.append(removeSpeaker);
+      }
+      liveEditSheetBody.append(speakerManageRow);
+
+      const forward=makeEffectAction(u('このScene以降をチャット化','Chat mode from this Scene onward'),'is-primary');
+      forward.onclick=()=>{const count=applyChatModeForward(index);if(count){scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');showUndo(`${count} Sceneをチャット表示にしました`);}};
+      liveEditSheetBody.append(forward);
+
+      const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=u('その他の演出設定','Other effect settings');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
+      liveEditSheetBody.append(detail);return;
     }
 
     const makeActionButton=(label,cls='')=>{const b=document.createElement('button');b.type='button';b.className=`live-edit-action ${cls}`.trim();b.textContent=label;return b;};
-    const pickLiveFile=async(accept,onPicked)=>{
+    const pickLiveFile=async(accept,onPicked,{keepPanel=false}={})=>{
       const input=document.createElement('input');input.type='file';
       const wantsAudio=String(accept||'').startsWith('audio/');
       const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -8184,7 +8652,8 @@ function openDesktopTextDetail(){
             }
           }
           const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);onPicked(url,snap.name,file);
-          scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet(kind);
+          scheduleDraftSave(60);refreshLivePlayer();
+          if(!keepPanel)renderLiveEditSheet(kind);
         }
         input.remove();
       },{once:true});
@@ -8192,8 +8661,70 @@ function openDesktopTextDetail(){
     };
 
     if(kind==='background'){
-      liveEditSheetTitle.textContent=uiLanguage==='en'?'Background':'背景';
+      liveEditSheetTitle.textContent=u('ビジュアル','Visual');
+      liveEditSheet.classList.remove('live-edit-sheet-scene-image');
       const p=ensurePresentation(scene),bg=p.background;
+
+      const installVisualHeaderTabs=(selected='background')=>{
+        liveEditSheet.querySelector('.live-edit-head-tabs')?.remove();
+        const titleBox=liveEditSheet.querySelector('.live-edit-sheet-head>div');
+        if(!titleBox)return;
+        const tabs=document.createElement('div');
+        tabs.className='live-edit-head-tabs';
+        const b=document.createElement('button');
+        b.type='button';
+        b.className='live-edit-head-tab'+(selected==='background'?' is-selected':'');
+        b.textContent=u('画面背景','Background');
+        const im=document.createElement('button');
+        im.type='button';
+        im.className='live-edit-head-tab'+(selected==='image'?' is-selected':'');
+        im.textContent=u('Scene内画像','Scene image');
+        b.onclick=()=>renderLiveEditSheet('background');
+        im.onclick=()=>renderMobileSceneImagePanel();
+        tabs.append(b,im);
+        titleBox.appendChild(tabs);
+      };
+
+      const renderMobileSceneImagePanel=()=>{
+        liveEditSheetTitle.textContent=u('ビジュアル','Visual');
+        liveEditSheet.classList.add('live-edit-sheet-scene-image');
+        liveEditSheetBody.innerHTML='';
+        installVisualHeaderTabs('image');
+
+        const makeSceneImageSelect=(label,values,currentValue,onchange)=>{
+          const wrap=document.createElement('label');wrap.className='live-edit-field';
+          wrap.append(label);
+          const select=document.createElement('select');
+          values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
+          select.value=currentValue;
+          select.addEventListener('change',()=>onchange(select.value));
+          wrap.appendChild(select);
+          return wrap;
+        };
+
+        const current=p.image&&typeof p.image==='object'?p.image:null;
+        const status=document.createElement('div');status.className='live-scene-image-mobile-preview';
+        if(current?.src){const img=document.createElement('img');img.src=current.src;img.alt=current.alt||'';status.appendChild(img);}else status.textContent=u('Scene画像なし','No Scene image');
+        const pick=makeActionButton(current?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),'is-primary');
+        pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{
+          p.image={...(p.image||{}),src:url,fit:'contain',size:p.image?.size||((p.view==='chat')?'small':'large'),align:p.image?.align||((p.view==='chat')?'speaker':'center'),fullscreen:p.image?.fullscreen!==false,alt:p.image?.alt||'',_editorFileName:name,_editorManaged:true};
+          scheduleDraftSave(40);refreshLivePlayer();
+          requestAnimationFrame(()=>renderMobileSceneImagePanel());
+        },{keepPanel:true});
+        const remove=makeActionButton(u('画像を外す','Remove image'));remove.disabled=!current?.src;remove.onclick=()=>{if(p.image?.src&&assetRegistry.has(p.image.src))unregisterAsset(p.image.src);delete p.image;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();};
+        liveEditSheetBody.append(status,pick,remove);
+        if(current?.src){
+          const opts=document.createElement('div');opts.className='live-edit-grid live-scene-image-options';
+          opts.append(
+            makeSceneImageSelect(u('表示サイズ','Display size'),[['small',u('小','Small')],['large',u('大','Large')]],current.size||((p.view==='chat')?'small':'large'),v=>{p.image.size=v;scheduleDraftSave(40);refreshLivePlayer();}),
+            makeSceneImageSelect(u('配置','Alignment'),[['speaker',u('話者に合わせる','Follow speaker')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],current.align||((p.view==='chat')?'speaker':'center'),v=>{p.image.align=v;scheduleDraftSave(40);refreshLivePlayer();})
+          );
+          const fs=document.createElement('label');fs.className='live-scene-image-check';const cb=document.createElement('input');cb.type='checkbox';cb.checked=current.fullscreen!==false;cb.onchange=()=>{p.image.fullscreen=cb.checked;scheduleDraftSave(40);refreshLivePlayer();};fs.append(cb,document.createTextNode(u('タップで全画面','Tap for fullscreen')));
+          const alt=document.createElement('label');alt.className='live-edit-field live-scene-image-alt';alt.append(u('画像の説明（任意）','Image description (optional)'));const inp=document.createElement('input');inp.type='text';inp.value=current.alt||'';inp.placeholder=u('例：面積2cm²の正方形','e.g. A square with area 2 cm²');inp.onchange=()=>{p.image.alt=inp.value.trim();scheduleDraftSave(40);refreshLivePlayer();};alt.append(inp);
+          liveEditSheetBody.append(opts,fs,alt);
+        }
+      };
+      installVisualHeaderTabs('background');
       const actions=document.createElement('div');actions.className='live-edit-choice-row';
       const inherit=makeActionButton(u('前Sceneを継続','Continue previous Scene'),!bg?'is-selected':'');
       const clear=makeActionButton(u('背景なし','No background'),bg?.src===''?'is-selected':'');
@@ -8263,7 +8794,7 @@ function openDesktopTextDetail(){
   function liveEditAddScene(){
     const {index}=liveEditScene();
     captureUndo('Scene追加を元に戻せます');
-    const scene={id:nextUniqueId(),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}};
+    const scene=makeChatSceneShellFrom(workingDocument.scenes[index]);
     workingDocument.scenes.splice(index+1,0,scene);
     liveEditReloadAt(index+1);
     showUndo('Sceneを追加しました');
@@ -8284,7 +8815,7 @@ function openDesktopTextDetail(){
   function desktopAddSceneAndFocus(){
     const {index}=liveEditScene();
     captureUndo('Scene追加を元に戻せます');
-    const scene={id:nextUniqueId(),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}};
+    const scene=makeChatSceneShellFrom(workingDocument.scenes[index]);
     workingDocument.scenes.splice(index+1,0,scene);
     liveEditReloadAt(index+1);
     showUndo('Sceneを追加しました');
