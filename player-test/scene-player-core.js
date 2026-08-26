@@ -2648,13 +2648,30 @@
       };
 
       img.addEventListener('load', relayoutAfterImageLoad, {once:true});
+
+      // History drum centers are cached for scroll performance. Foreground
+      // images can change a history item's height after that cache is built,
+      // which makes the visual "focus" point drift to the wrong Scene.
+      // Invalidate/rebuild the drum geometry whenever a history image resolves.
+      const refreshHistoryGeometryAfterImageLoad = () => {
+        if (!history) return;
+        this.historyMetrics = null;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => this._scheduleHistoryDepth());
+        });
+      };
+      img.addEventListener('load', refreshHistoryGeometryAfterImageLoad, {once:true});
+
       img.src = image.src;
       media.appendChild(img);
       wrap.appendChild(media);
 
-      // Data/blob images can already be complete before the load listener is
-      // observed by a later render pass.
-      if (img.complete && img.naturalWidth > 0) relayoutAfterImageLoad();
+      // Data/blob/cached images can already be complete before the load event
+      // is observed by this render pass.
+      if (img.complete && img.naturalWidth > 0) {
+        relayoutAfterImageLoad();
+        refreshHistoryGeometryAfterImageLoad();
+      }
 
       if (image.fullscreen !== false) {
         wrap.classList.add('is-zoomable');
