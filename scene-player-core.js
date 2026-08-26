@@ -330,6 +330,20 @@
 
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
+
+        // Foreground Scene images are interactive content, not the stage's
+        // generic "next Scene" tap surface. Handle them here at the same level
+        // as navigation so Studio and the public Player behave identically.
+        const imageTarget = e.target.closest('.sp-scene-image.is-zoomable');
+        if (imageTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+          const currentScene = this.document?.scenes?.[this.index];
+          const sceneImage = currentScene?.presentation?.image;
+          if (sceneImage?.src) this._openSceneImage(sceneImage.src, sceneImage.alt || '');
+          return;
+        }
+
         if (this.host.classList.contains('live-edit-enabled')
             && e.target.closest('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext')) {
           return;
@@ -1346,7 +1360,59 @@
         const body = document.createElement('span');
         body.className = 'sp-history-body';
 
-        if (scene.type === 'sound' && !scene.text) {
+        const historyPresentation = scene.presentation || {};
+        if (historyPresentation.view === 'chat' && (scene.text || scene.subText)) {
+          item.classList.add('sp-history-chat');
+          const align = historyPresentation.text?.align === 'right' ? 'right' : 'left';
+          item.dataset.chatSide = align;
+
+          const chatRow = document.createElement('span');
+          chatRow.className = 'sp-history-chat-row';
+
+          const icon = document.createElement('span');
+          icon.className = 'sp-history-chat-icon';
+          const iconSrc = historyPresentation.chat?.icon || '';
+          if (iconSrc) {
+            const img = document.createElement('img');
+            img.src = iconSrc;
+            img.alt = '';
+            icon.appendChild(img);
+          } else {
+            icon.textContent = historyPresentation.chat?.iconText || '●';
+          }
+
+          const chatBody = document.createElement('span');
+          chatBody.className = 'sp-history-chat-body';
+
+          if (scene.subText) {
+            const speaker = document.createElement('span');
+            speaker.className = 'sp-history-chat-speaker';
+            speaker.textContent = scene.subText;
+            this._applyTextStyle(speaker, historyPresentation.subText || {}, true);
+            chatBody.appendChild(speaker);
+          }
+
+          if (scene.text) {
+            const bubble = document.createElement('span');
+            bubble.className = 'sp-history-chat-bubble';
+            if (historyPresentation.chat?.bubbleColor) {
+              bubble.style.background = historyPresentation.chat.bubbleColor;
+            }
+
+            const text = document.createElement('span');
+            text.className = 'sp-history-chat-text';
+            text.textContent = scene.text;
+            this._applyTextStyle(text, historyPresentation.text || {}, false);
+            if (historyPresentation.chat?.bubbleTextColor) {
+              text.style.setProperty('color', String(historyPresentation.chat.bubbleTextColor), 'important');
+            }
+            bubble.appendChild(text);
+            chatBody.appendChild(bubble);
+          }
+
+          chatRow.append(icon, chatBody);
+          body.appendChild(chatRow);
+        } else if (scene.type === 'sound' && !scene.text) {
           const mark = document.createElement('span');
           mark.className = 'sp-history-text';
           mark.textContent = '♪';
@@ -1359,15 +1425,17 @@
           // actual Scene the author is reviewing.
           this._applyTextStyle(text, scene.presentation?.text || {}, false);
           body.appendChild(text);
+
+          if (scene.subText) {
+            const sub = document.createElement('span');
+            sub.className = 'sp-history-subtext';
+            sub.textContent = scene.subText;
+            this._applyTextStyle(sub, scene.presentation?.subText || {}, true);
+            body.appendChild(sub);
+          }
         }
 
-        if (scene.subText) {
-          const sub = document.createElement('span');
-          sub.className = 'sp-history-subtext';
-          sub.textContent = scene.subText;
-          this._applyTextStyle(sub, scene.presentation?.subText || {}, true);
-          body.appendChild(sub);
-        }
+        this._appendSceneImage(body, scene, historyPresentation, { history:true });
 
         item.append(num, body);
         fragment.appendChild(item);
@@ -2208,6 +2276,422 @@
       }
     }
 
+    _openSceneImage(src, alt='') {
+      if (!src) return;
+      let viewer = document.querySelector('.sp-scene-image-viewer');
+      if (!viewer) {
+        viewer = document.createElement('div');
+        viewer.className = 'sp-scene-image-viewer';
+        viewer.hidden = true;
+        viewer.setAttribute('role','dialog');
+        viewer.setAttribute('aria-modal','true');
+
+        const shade = document.createElement('button');
+        shade.type = 'button';
+        shade.className = 'sp-scene-image-viewer-shade';
+        shade.setAttribute('aria-label','Close image');
+
+        const frame = document.createElement('div');
+        frame.className = 'sp-scene-image-viewer-frame';
+
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'sp-scene-image-viewer-close';
+        close.setAttribute('aria-label','Close image');
+        close.textContent = '×';
+
+        const img = document.createElement('img');
+        img.className = 'sp-scene-image-viewer-img';
+        img.alt = '';
+
+        // Custom image pan / pinch zoom.
+        // Native pinch was able to enlarge the image, but the enlarged image
+        // stayed visually pinned.  We keep our own transform so a zoomed image
+        // can be dragged left/right/up/down on iPhone as well.
+        const viewState = {
+          scale: 1,
+          x: 0,
+          y: 0,
+          startScale: 1,
+          startX: 0,
+          startY: 0,
+          startDistance: 0,
+          startCenterX: 0,
+          startCenterY: 0,
+          dragging: false,
+          moved: false,
+          lastX: 0,
+          lastY: 0,
+          touchStartX: 0,
+          touchStartY: 0,
+          touchStartTime: 0,
+          lastTapTime: 0,
+          lastTapX: 0,
+          lastTapY: 0
+        };
+
+        const viewportSize = () => ({
+          w: Math.max(1, frame.clientWidth),
+          h: Math.max(1, frame.clientHeight)
+        });
+
+        const panBounds = () => {
+          const vp = viewportSize();
+          const baseW = Math.max(1, img.clientWidth);
+          const baseH = Math.max(1, img.clientHeight);
+          const scaledW = baseW * viewState.scale;
+          const scaledH = baseH * viewState.scale;
+
+          // Keep at least one edge of the image visible at all times and never
+          // allow a zoomed image to be thrown completely off-screen.
+          const maxX = Math.max(0, (scaledW - vp.w) / 2);
+          const maxY = Math.max(0, (scaledH - vp.h) / 2);
+          return { maxX, maxY };
+        };
+
+        const clampPan = () => {
+          const { maxX, maxY } = panBounds();
+          viewState.x = Math.max(-maxX, Math.min(maxX, viewState.x));
+          viewState.y = Math.max(-maxY, Math.min(maxY, viewState.y));
+        };
+
+        let viewAnimTimer = 0;
+
+        const applyView = ({animate=false} = {}) => {
+          clampPan();
+          clearTimeout(viewAnimTimer);
+          img.classList.toggle('is-animating', animate);
+
+          img.style.transform =
+            `translate3d(${viewState.x}px, ${viewState.y}px, 0) scale(${viewState.scale})`;
+          frame.classList.toggle('is-zoomed', viewState.scale > 1.01);
+
+          if (animate) {
+            viewAnimTimer = setTimeout(() => {
+              img.classList.remove('is-animating');
+            }, 280);
+          }
+        };
+
+        const resetView = ({animate=false} = {}) => {
+          viewState.scale = 1;
+          viewState.x = 0;
+          viewState.y = 0;
+          viewState.dragging = false;
+          viewState.moved = false;
+          applyView({animate});
+        };
+
+        const distance = (a,b) => Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
+        const center = (a,b) => ({
+          x:(a.clientX+b.clientX)/2,
+          y:(a.clientY+b.clientY)/2
+        });
+
+        const clampScale = (s) => Math.max(1, Math.min(5, s));
+
+        const zoomAt = (clientX, clientY, nextScale, {animate=false} = {}) => {
+          const vp = viewportSize();
+          const oldScale = viewState.scale;
+          const scale = clampScale(nextScale);
+          if (Math.abs(scale - oldScale) < 0.001) return;
+
+          // Preserve the image point under the finger while zooming.
+          const dx = clientX - vp.w / 2;
+          const dy = clientY - vp.h / 2;
+          const ratio = scale / oldScale;
+          viewState.x = dx - (dx - viewState.x) * ratio;
+          viewState.y = dy - (dy - viewState.y) * ratio;
+          viewState.scale = scale;
+          applyView({animate});
+        };
+
+        frame.addEventListener('touchstart',(event)=>{
+          if(event.touches.length===2){
+            event.preventDefault();
+            const c=center(event.touches[0],event.touches[1]);
+            viewState.startDistance=distance(event.touches[0],event.touches[1]);
+            viewState.startScale=viewState.scale;
+            viewState.startX=viewState.x;
+            viewState.startY=viewState.y;
+            viewState.startCenterX=c.x;
+            viewState.startCenterY=c.y;
+            viewState.dragging=false;
+            viewState.moved=true;
+          }else if(event.touches.length===1){
+            const t=event.touches[0];
+            viewState.touchStartX=t.clientX;
+            viewState.touchStartY=t.clientY;
+            viewState.touchStartTime=performance.now();
+            viewState.moved=false;
+            if(viewState.scale>1.01){
+              event.preventDefault();
+              viewState.dragging=true;
+              viewState.lastX=t.clientX;
+              viewState.lastY=t.clientY;
+            }
+          }
+        },{passive:false});
+
+        frame.addEventListener('touchmove',(event)=>{
+          if(event.touches.length===2){
+            event.preventDefault();
+            const nowDistance=distance(event.touches[0],event.touches[1]);
+            const c=center(event.touches[0],event.touches[1]);
+            const nextScale=clampScale(
+              viewState.startScale * (nowDistance / Math.max(1,viewState.startDistance))
+            );
+            viewState.scale=nextScale;
+            viewState.x=viewState.startX + (c.x-viewState.startCenterX);
+            viewState.y=viewState.startY + (c.y-viewState.startCenterY);
+            viewState.moved=true;
+            applyView();
+          }else if(event.touches.length===1){
+            const t=event.touches[0];
+            const totalDx=t.clientX-viewState.touchStartX;
+            const totalDy=t.clientY-viewState.touchStartY;
+            if(Math.hypot(totalDx,totalDy)>6)viewState.moved=true;
+
+            if(viewState.scale>1.01){
+              event.preventDefault();
+              viewState.x += t.clientX-viewState.lastX;
+              viewState.y += t.clientY-viewState.lastY;
+              viewState.lastX=t.clientX;
+              viewState.lastY=t.clientY;
+              applyView();
+            }
+          }
+        },{passive:false});
+
+        frame.addEventListener('touchend',(event)=>{
+          if(event.touches.length===0){
+            const now=performance.now();
+            const duration=now-viewState.touchStartTime;
+            const wasMoved=viewState.moved;
+            const endTouch=event.changedTouches?.[0];
+            const x=endTouch?.clientX ?? viewState.touchStartX;
+            const y=endTouch?.clientY ?? viewState.touchStartY;
+            const vertical=y-viewState.touchStartY;
+
+            viewState.dragging=false;
+
+            // Downward flick closes only at 1×, so it never fights with image panning.
+            if(viewState.scale<=1.01 && !wasMoved && false){
+              // reserved
+            } else if(viewState.scale<=1.01 && vertical>90 && duration<700){
+              const closeButton=viewer.querySelector('.sp-scene-image-viewer-close');
+              closeButton?.click();
+              return;
+            }
+
+            // Touch double-tap: zoom around the tapped point; second double-tap resets.
+            if(!wasMoved && duration<320){
+              const dt=now-viewState.lastTapTime;
+              const near=Math.hypot(x-viewState.lastTapX,y-viewState.lastTapY)<42;
+              if(dt<340 && near){
+                event.preventDefault();
+                if(viewState.scale>1.01) resetView({animate:true});
+                else zoomAt(x,y,2.5,{animate:true});
+                viewState.lastTapTime=0;
+                return;
+              }
+              viewState.lastTapTime=now;
+              viewState.lastTapX=x;
+              viewState.lastTapY=y;
+            }
+
+            if(viewState.scale<=1.01) resetView();
+          }else if(event.touches.length===1 && viewState.scale>1.01){
+            viewState.dragging=true;
+            viewState.lastX=event.touches[0].clientX;
+            viewState.lastY=event.touches[0].clientY;
+          }
+        },{passive:false});
+
+        // Desktop convenience: wheel to zoom, drag to pan while zoomed.
+        frame.addEventListener('wheel',(event)=>{
+          event.preventDefault();
+          const next=viewState.scale * (event.deltaY<0 ? 1.12 : 0.89);
+          zoomAt(event.clientX,event.clientY,next);
+          if(viewState.scale<=1.01) resetView();
+        },{passive:false});
+
+        frame.addEventListener('pointerdown',(event)=>{
+          if(event.pointerType==='touch' || viewState.scale<=1.01) return;
+          viewState.dragging=true;
+          viewState.moved=false;
+          viewState.lastX=event.clientX;
+          viewState.lastY=event.clientY;
+          frame.setPointerCapture?.(event.pointerId);
+          event.preventDefault();
+        });
+        frame.addEventListener('pointermove',(event)=>{
+          if(!viewState.dragging || event.pointerType==='touch' || viewState.scale<=1.01) return;
+          const dx=event.clientX-viewState.lastX;
+          const dy=event.clientY-viewState.lastY;
+          if(Math.hypot(dx,dy)>1)viewState.moved=true;
+          viewState.x += dx;
+          viewState.y += dy;
+          viewState.lastX=event.clientX;
+          viewState.lastY=event.clientY;
+          applyView();
+          event.preventDefault();
+        });
+        const endPointer=(event)=>{
+          if(event.pointerType!=='touch') viewState.dragging=false;
+        };
+        frame.addEventListener('pointerup',endPointer);
+        frame.addEventListener('pointercancel',endPointer);
+
+        img.addEventListener('dblclick',(event)=>{
+          event.preventDefault();
+          event.stopPropagation();
+          if(viewState.scale>1.01) resetView({animate:true});
+          else zoomAt(event.clientX,event.clientY,2.5,{animate:true});
+        });
+
+        // Tap empty black area to close at 1×. At zoom > 1 the same gesture is
+        // reserved for panning, avoiding accidental dismissal.
+        frame.addEventListener('click',(event)=>{
+          if(event.target===frame && viewState.scale<=1.01){
+            event.preventDefault();
+            event.stopPropagation();
+            viewer.querySelector('.sp-scene-image-viewer-close')?.click();
+          }
+        });
+
+        window.addEventListener('resize',()=>{ if(!viewer.hidden) applyView(); });
+
+        frame._sceneImageReset = resetView;
+
+        frame.append(close,img);
+        viewer.append(shade,frame);
+        document.body.appendChild(viewer);
+
+        const shut = (event) => {
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+          viewer.hidden = true;
+          document.documentElement.classList.remove('sp-scene-image-open');
+        };
+        shade.addEventListener('click',shut);
+        close.addEventListener('click',shut);
+        viewer.addEventListener('click',(event)=>{
+          if(event.target===viewer)shut(event);
+        });
+        document.addEventListener('keydown',(event)=>{
+          if(event.key==='Escape' && !viewer.hidden)shut(event);
+        });
+      }
+
+      const img = viewer.querySelector('.sp-scene-image-viewer-img');
+      const frame = viewer.querySelector('.sp-scene-image-viewer-frame');
+      frame?._sceneImageReset?.();
+      img.src = src;
+      img.alt = alt || '';
+      viewer.hidden = false;
+      document.documentElement.classList.add('sp-scene-image-open');
+      viewer.querySelector('.sp-scene-image-viewer-close')?.focus({preventScroll:true});
+    }
+
+    _appendSceneImage(container, scene, presentation, { history=false } = {}) {
+      const image = presentation?.image;
+      if (!image?.src || !container) return;
+
+      const wrap = document.createElement(history ? 'span' : 'div');
+      wrap.className = history ? 'sp-history-scene-image' : 'sp-scene-image';
+      wrap.dataset.imageSize = ['small','large'].includes(image.size)
+        ? image.size
+        : ((presentation?.view==='chat') ? 'small' : 'large');
+
+      let imageAlign=image.align||((presentation?.view==='chat')?'speaker':'center');
+      if(imageAlign==='speaker'){
+        const speakerSide=(presentation?.text?.align==='right')?'right':'left';
+        imageAlign=speakerSide;
+      }
+      wrap.dataset.imageAlign=['left','center','right'].includes(imageAlign)?imageAlign:'center';
+
+      const media = document.createElement(history ? 'span' : 'div');
+      media.className = history ? 'sp-history-scene-image-media' : 'sp-scene-image-media';
+
+      const img = document.createElement('img');
+      img.alt = image.alt || '';
+      img.loading = history ? 'lazy' : 'eager';
+      img.decoding = 'async';
+
+      // On the first visit an uncached image has no intrinsic height when the
+      // Scene stack is initially measured. The Player therefore centers the
+      // text-only height, then the image expands downward after loading.
+      // Re-measure the current stack as soon as the foreground image becomes
+      // measurable. Cached/revisited Scenes already have the correct geometry.
+      const relayoutAfterImageLoad = () => {
+        if (history) return;
+        const activeNode = wrap.closest('.sp-scene');
+        if (!activeNode || !activeNode.isConnected || !activeNode.classList.contains('is-active')) return;
+
+        const run = () => {
+          const activeScene = this.document?.scenes?.[this.index];
+          if (!activeScene || activeScene.id !== scene.id) return;
+          const display = activeScene.presentation?.display || 'stack';
+          const visible = this._visibleScenes(display);
+          const nodeMap = new Map(
+            [...this.els.scenes.querySelectorAll('.sp-scene')]
+              .filter(node => !node.classList.contains('sp-layout-leaving'))
+              .map(node => [node.dataset.sceneId, node])
+          );
+          const nodes = visible.map(entry => nodeMap.get(entry.scene.id)).filter(Boolean);
+          if (nodes.length === visible.length) this._positionSceneNodes(nodes, visible, 0);
+        };
+
+        // Give Safari one painted frame to apply the decoded image dimensions.
+        requestAnimationFrame(() => requestAnimationFrame(run));
+      };
+
+      img.addEventListener('load', relayoutAfterImageLoad, {once:true});
+
+      // History drum centers are cached for scroll performance. Foreground
+      // images can change a history item's height after that cache is built,
+      // which makes the visual "focus" point drift to the wrong Scene.
+      // Invalidate/rebuild the drum geometry whenever a history image resolves.
+      const refreshHistoryGeometryAfterImageLoad = () => {
+        if (!history) return;
+        this.historyMetrics = null;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => this._scheduleHistoryDepth());
+        });
+      };
+      img.addEventListener('load', refreshHistoryGeometryAfterImageLoad, {once:true});
+
+      img.src = image.src;
+      media.appendChild(img);
+      wrap.appendChild(media);
+
+      // Data/blob/cached images can already be complete before the load event
+      // is observed by this render pass.
+      if (img.complete && img.naturalWidth > 0) {
+        relayoutAfterImageLoad();
+        refreshHistoryGeometryAfterImageLoad();
+      }
+
+      if (image.fullscreen !== false) {
+        wrap.classList.add('is-zoomable');
+        wrap.setAttribute('role','button');
+        wrap.setAttribute('tabindex','0');
+        wrap.setAttribute('aria-label', image.alt ? `Open image: ${image.alt}` : 'Open image fullscreen');
+        const open = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this._openSceneImage(image.src, image.alt || '');
+        };
+        wrap.addEventListener('click',open);
+        wrap.addEventListener('keydown',(event)=>{
+          if(event.key==='Enter' || event.key===' '){ open(event); }
+        });
+      }
+
+      container.appendChild(wrap);
+    }
+
     _sceneNode(scene, active, age) {
       const article = document.createElement('article');
       article.className = `sp-scene sp-type-${scene.type}`;
@@ -2234,21 +2718,66 @@
       article.dataset.entryMotion = entryMotion;
       article.dataset.fit = this._resolveAutoFit(scene, presentation.text || {});
 
-      if (typeof scene.text === 'string' && scene.text.length) {
-        const text = document.createElement('div');
-        text.className = 'sp-text';
-        text.textContent = scene.text;
-        this._applyTextStyle(text, presentation.text || {}, false);
-        article.appendChild(text);
+      if (presentation.view === 'chat' && (scene.text || scene.subText)) {
+        article.classList.add('sp-chat-scene');
+        const align = presentation.text?.align === 'right' ? 'right' : 'left';
+        article.dataset.chatSide = align;
+        const row = document.createElement('div');
+        row.className = 'sp-chat-row';
+
+        const icon = document.createElement('div');
+        icon.className = 'sp-chat-icon';
+        const iconSrc = presentation.chat?.icon || '';
+        if (iconSrc) {
+          const img = document.createElement('img');
+          img.src = iconSrc; img.alt = '';
+          icon.appendChild(img);
+        } else {
+          icon.textContent = presentation.chat?.iconText || '●';
+        }
+
+        const body = document.createElement('div');
+        body.className = 'sp-chat-body';
+        if (typeof scene.subText === 'string' && scene.subText.length) {
+          const speaker = document.createElement('div');
+          speaker.className = 'sp-chat-speaker sp-subtext';
+          speaker.textContent = scene.subText;
+          this._applyTextStyle(speaker, presentation.subText || {}, true);
+          body.appendChild(speaker);
+        }
+        if (typeof scene.text === 'string' && scene.text.length) {
+          const bubble = document.createElement('div');
+          bubble.className = 'sp-chat-bubble';
+          if (presentation.chat?.bubbleColor) bubble.style.background = presentation.chat.bubbleColor;
+          const text = document.createElement('div');
+          text.className = 'sp-text';
+          text.textContent = scene.text;
+          this._applyTextStyle(text, presentation.text || {}, false);
+          if (presentation.chat?.bubbleTextColor) text.style.setProperty('color', String(presentation.chat.bubbleTextColor), 'important');
+          bubble.appendChild(text);
+          body.appendChild(bubble);
+        }
+        row.append(icon, body);
+        article.appendChild(row);
+      } else {
+        if (typeof scene.text === 'string' && scene.text.length) {
+          const text = document.createElement('div');
+          text.className = 'sp-text';
+          text.textContent = scene.text;
+          this._applyTextStyle(text, presentation.text || {}, false);
+          article.appendChild(text);
+        }
+
+        if (typeof scene.subText === 'string' && scene.subText.length) {
+          const sub = document.createElement('div');
+          sub.className = 'sp-subtext';
+          sub.textContent = scene.subText;
+          this._applyTextStyle(sub, presentation.subText || {}, true);
+          article.appendChild(sub);
+        }
       }
 
-      if (typeof scene.subText === 'string' && scene.subText.length) {
-        const sub = document.createElement('div');
-        sub.className = 'sp-subtext';
-        sub.textContent = scene.subText;
-        this._applyTextStyle(sub, presentation.subText || {}, true);
-        article.appendChild(sub);
-      }
+      this._appendSceneImage(article, scene, presentation);
 
       if (scene.type === 'sound' && !scene.text && !scene.subText) {
         const mark = document.createElement('span');
