@@ -2336,6 +2336,24 @@
     scheduleDraftSave(40);
     return changed;
   }
+  function applyNormalModeForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;
+    let changed=0;
+    for(let i=Math.max(0,Number(fromIndex)||0);i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i];
+      if(!sc || sc.type==='sound')continue;
+      const pr=ensurePresentation(sc);
+      // Keep intentionally special non-world/non-chat modes untouched.
+      if(pr.view && !['world','chat'].includes(pr.view))continue;
+      if(pr.view!=='world'){pr.view='world';changed++;}
+      pr.display=pr.display||'stack';
+      pr.entryMotion=pr.entryMotion||'flow';
+      pr.text ||= {};
+      // Chat metadata is intentionally preserved so the author can switch back.
+    }
+    scheduleDraftSave(40);
+    return changed;
+  }
   function makeChatSceneShellFrom(scene){
     const base={id:nextUniqueId(),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}};
     if(scene?.presentation?.view!=='chat')return base;
@@ -7871,7 +7889,11 @@ function openDesktopTextDetail(){
         const count=applyChatModeForward(index);
         if(count){refresh();renderDesktopLivePanel();showUndo(`${count} Sceneをチャット表示にしました`);}
       },'');
-      quick.append(iconBtn,updateBtn,forwardBtn);
+      const normalForwardBtn=desktopAction(u('このScene以降を通常に戻す','Normal mode from this Scene onward'),()=>{
+        const count=applyNormalModeForward(index);
+        if(count){refresh();renderDesktopLivePanel();showUndo(`${count} Sceneを通常表示に戻しました`);}
+      },'');
+      quick.append(iconBtn,updateBtn,forwardBtn,normalForwardBtn);
       chatPanel.append(quick);
 
       const colors=document.createElement('div');colors.className='desktop-chat-color-row';
@@ -8653,7 +8675,9 @@ function openDesktopTextDetail(){
 
       const forward=makeEffectAction(u('このScene以降をチャット化','Chat mode from this Scene onward'),'is-primary');
       forward.onclick=()=>{const count=applyChatModeForward(index);if(count){scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');showUndo(`${count} Sceneをチャット表示にしました`);}};
-      liveEditSheetBody.append(forward);
+      const normalForward=makeEffectAction(u('このScene以降を通常に戻す','Normal mode from this Scene onward'));
+      normalForward.onclick=()=>{const count=applyNormalModeForward(index);if(count){scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');showUndo(`${count} Sceneを通常表示に戻しました`);}};
+      liveEditSheetBody.append(forward,normalForward);
 
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=u('その他の演出設定','Other effect settings');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
       liveEditSheetBody.append(detail);return;
