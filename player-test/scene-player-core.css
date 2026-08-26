@@ -1543,3 +1543,155 @@ html.sp-scene-image-open body{
     transition:none!important;
   }
 }
+
+
+/* Local prototype v0.18 — Scene image sizing/alignment */
+.sp-scene-image{
+  width:100%;
+  display:flex;
+  margin:clamp(10px,2vh,20px) auto;
+}
+.sp-scene-image[data-image-size="small"]{
+  max-width:100%;
+}
+.sp-scene-image[data-image-size="small"] img{
+  max-width:min(48vw,360px);
+  max-height:min(38vh,520px);
+}
+.sp-scene-image[data-image-size="large"]{
+  max-width:min(92vw,900px);
+}
+.sp-scene-image[data-image-size="large"] img{
+  max-width:100%;
+  max-height:min(62vh,760px);
+}
+.sp-scene-image[data-image-align="left"]{justify-content:flex-start}
+.sp-scene-image[data-image-align="center"]{justify-content:center}
+.sp-scene-image[data-image-align="right"]{justify-content:flex-end}
+
+.sp-history-scene-image[data-image-size="small"] img{
+  max-width:min(42vw,300px);
+  max-height:24vh;
+}
+.sp-history-scene-image[data-image-size="large"] img{
+  max-width:min(72vw,520px);
+  max-height:28vh;
+}
+.sp-history-scene-image[data-image-align="left"]{justify-content:flex-start}
+.sp-history-scene-image[data-image-align="center"]{justify-content:center}
+.sp-history-scene-image[data-image-align="right"]{justify-content:flex-end}
+
+@media(max-width:520px){
+  .sp-scene-image[data-image-size="small"] img{
+    max-width:46vw;
+    max-height:36vh;
+  }
+  .sp-scene-image[data-image-size="large"] img{
+    max-width:90vw;
+    max-height:58vh;
+  }
+}
+
+
+/* Local prototype v0.19 — keep expand badge attached to the actual image */
+.sp-scene-image-media,
+.sp-history-scene-image-media{
+  position:relative;
+  display:block;
+  width:max-content;
+  max-width:100%;
+  max-height:100%;
+}
+.sp-scene-image-media img,
+.sp-history-scene-image-media img{
+  display:block;
+}
+
+/* Move the ↗ badge from the full Scene-image row onto the image media box. */
+.sp-scene-image.is-zoomable::after,
+.sp-history-scene-image.is-zoomable::after{
+  content:none!important;
+}
+.sp-scene-image.is-zoomable .sp-scene-image-media::after,
+.sp-history-scene-image.is-zoomable .sp-history-scene-image-media::after{
+  content:"↗";
+  position:absolute;
+  right:8px;
+  bottom:8px;
+  width:28px;
+  height:28px;
+  border-radius:999px;
+  display:grid;
+  place-items:center;
+  background:rgba(12,14,18,.62);
+  color:#fff;
+  font:700 14px/1 system-ui;
+  pointer-events:none;
+  z-index:2;
+}
+
+/* v0.18 player-side layout parity */
+.sp-scene-image[data-image-align="left"]{
+  justify-content:flex-start!important;
+}
+.sp-scene-image[data-image-align="center"]{
+  justify-content:center!important;
+}
+.sp-scene-image[data-image-align="right"]{
+  justify-content:flex-end!important;
+}
+.sp-scene-image[data-image-size="small"] .sp-scene-image-media{
+  max-width:min(48vw,360px);
+  max-height:min(38vh,520px);
+}
+.sp-scene-image[data-image-size="small"] .sp-scene-image-media img{
+  max-width:100%!important;
+  max-height:min(38vh,520px)!important;
+}
+.sp-scene-image[data-image-size="large"] .sp-scene-image-media{
+  max-width:min(92vw,900px);
+  max-height:min(62vh,760px);
+}
+.sp-scene-image[data-image-size="large"] .sp-scene-image-media img{
+  max-width:100%!important;
+  max-height:min(62vh,760px)!important;
+}
+
+.sp-history-scene-image[data-image-align="left"]{justify-content:flex-start!important}
+.sp-history-scene-image[data-image-align="center"]{justify-content:center!important}
+.sp-history-scene-image[data-image-align="right"]{justify-content:flex-end!important}
+.sp-history-scene-image[data-image-size="small"] .sp-history-scene-image-media{
+  max-width:min(42vw,300px);
+  max-height:24vh;
+}
+.sp-history-scene-image[data-image-size="small"] .sp-history-scene-image-media img{
+  max-width:100%!important;
+  max-height:24vh!important;
+}
+.sp-history-scene-image[data-image-size="large"] .sp-history-scene-image-media{
+  max-width:min(72vw,520px);
+  max-height:28vh;
+}
+.sp-history-scene-image[data-image-size="large"] .sp-history-scene-image-media img{
+  max-width:100%!important;
+  max-height:28vh!important;
+}
+
+@media(max-width:520px){
+  .sp-scene-image[data-image-size="small"] .sp-scene-image-media{
+    max-width:46vw;
+    max-height:36vh;
+  }
+  .sp-scene-image[data-image-size="small"] .sp-scene-image-media img{
+    max-width:100%!important;
+    max-height:36vh!important;
+  }
+  .sp-scene-image[data-image-size="large"] .sp-scene-image-media{
+    max-width:90vw;
+    max-height:58vh;
+  }
+  .sp-scene-image[data-image-size="large"] .sp-scene-image-media img{
+    max-width:100%!important;
+    max-height:58vh!important;
+  }
+}

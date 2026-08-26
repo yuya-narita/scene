@@ -2600,14 +2600,27 @@
 
       const wrap = document.createElement(history ? 'span' : 'div');
       wrap.className = history ? 'sp-history-scene-image' : 'sp-scene-image';
-      wrap.dataset.imageSize = ['medium','large','full'].includes(image.size) ? image.size : 'large';
+      wrap.dataset.imageSize = ['small','large'].includes(image.size)
+        ? image.size
+        : ((presentation?.view==='chat') ? 'small' : 'large');
+
+      let imageAlign=image.align||((presentation?.view==='chat')?'speaker':'center');
+      if(imageAlign==='speaker'){
+        const speakerSide=(presentation?.text?.align==='right')?'right':'left';
+        imageAlign=speakerSide;
+      }
+      wrap.dataset.imageAlign=['left','center','right'].includes(imageAlign)?imageAlign:'center';
+
+      const media = document.createElement(history ? 'span' : 'div');
+      media.className = history ? 'sp-history-scene-image-media' : 'sp-scene-image-media';
 
       const img = document.createElement('img');
       img.src = image.src;
       img.alt = image.alt || '';
       img.loading = history ? 'lazy' : 'eager';
       img.decoding = 'async';
-      wrap.appendChild(img);
+      media.appendChild(img);
+      wrap.appendChild(media);
 
       if (image.fullscreen !== false) {
         wrap.classList.add('is-zoomable');
