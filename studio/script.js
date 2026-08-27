@@ -792,6 +792,7 @@
   }
   async function restoreDraftRecord(row){
     if(!row)return;
+    const rowHadMasterIdentity=Boolean(row?.document?.studio?.identity?.workId && row?.document?.studio?.identity?.ownerKey);
     assetRegistry.forEach((_,url)=>{if(/^blob:/i.test(url)){try{URL.revokeObjectURL(url);}catch(_){}}});
     assetRegistry.clear();
     const map=new Map();
@@ -800,6 +801,7 @@
       const url=URL.createObjectURL(item.blob);map.set(item.url,url);registerAsset(url,item.blob,item.name||'asset');
     }
     workingDocument=row.document?replaceAssetRefs(clone(row.document),map):null;
+    if(workingDocument)ensureMasterIdentity(workingDocument);
     currentDraftId=row.id;localStorage.setItem(DRAFT_LAST_KEY,row.id);
     selectedSceneIndex=Math.max(0,Number(row.selectedSceneIndex)||0);
     easySourceDirty=Boolean(row.easySourceDirty);
@@ -828,6 +830,19 @@
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateProtectedResplitPreview();
     if(workingDocument?.scenes?.length){normalizeSceneIds();refreshDocumentLanguages();renderAdvanced();}
     setScreen('easy');scrollScreenToTop(editorScreen);updateAutoRecStartLabel();
+
+    // Master-aware local shelf:
+    // - modern rows query the server and learn current revision/public URL
+    // - legacy published rows keep their old publication id so the next publish
+    //   can perform the one-time migration to Master Scene identity.
+    if(workingDocument?.scenes?.length && rowHadMasterIdentity){
+      await hydrateMasterPublicationState(workingDocument,{warnStale:true});
+      await saveDraftNow({force:true});
+    }else if(workingDocument?.scenes?.length){
+      // Persist the newly-created master identity locally without erasing an
+      // existing legacy publication id.
+      await saveDraftNow({force:true});
+    }
   }
   function stableDraftPublishValue(value,assetMap){
     if(value===null || value===undefined)return value;
@@ -853,10 +868,41 @@
         const blob=item.blob;
         assetMap.set(item.url,`asset:${item.name||'asset'}:${blob?.size||0}:${blob?.type||''}`);
       }
-      return JSON.stringify(stableDraftPublishValue(row.document,assetMap));
+      // ownerKey exists only in the author's master .scene. It must not make
+      // every local draft look "changed" compared with the public copy.
+      const comparable=stripPrivateMasterIdentity(row.document);
+      return JSON.stringify(stableDraftPublishValue(comparable,assetMap));
     }catch(_){
       return '';
     }
+  }
+
+  function draftMasterWorkId(row){
+    return String(row?.document?.studio?.identity?.workId||'').trim();
+  }
+  function draftMasterRevision(row){
+    return Math.max(0,Math.floor(Number(row?.document?.studio?.identity?.revision)||0));
+  }
+  async function pruneSiblingDraftsForCurrentMaster(){
+    if(!currentDraftId||!workingDocument)return 0;
+    const workId=String(workingDocument?.studio?.identity?.workId||'').trim();
+    const publicationId=String(latestPublishedId||'').trim();
+    if(!workId && !publicationId)return 0;
+
+    const rows=await listDraftRecords();
+    let removed=0;
+    for(const row of rows){
+      if(row.id===currentDraftId)continue;
+      const sameMaster=workId && draftMasterWorkId(row)===workId;
+      const samePublication=publicationId && String(row?.publication?.id||'')===publicationId;
+      if(!sameMaster && !samePublication)continue;
+
+      // One logical Master Scene = one shelf row per device. Keep the current
+      // working row and remove older local duplicates only.
+      await removeDraftRecord(row.id);
+      removed++;
+    }
+    return removed;
   }
 
   function draftPublicationUrl(row){
@@ -2790,8 +2836,9 @@
     selectedSceneIndex=Math.max(0,Math.min(selected,Math.max(0,total-1)));
   }
 
-  async function buildScenePackage(){
-    const doc=sceneDocumentForExport();
+  async function buildScenePackage(documentOverride=null){
+    const doc=documentOverride ? clone(documentOverride) : sceneDocumentForExport();
+    ensureMasterIdentity(doc);
     const packaged=clone(doc);
     const entries=[];
     const bySource=new Map();
@@ -2845,6 +2892,30 @@
 
     const blob=await makeStoreZip(entries);
     return {doc:packaged,manifest,studioState,blob,assetCount:packageAssetCount};
+  }
+
+  async function downloadLatestMasterSceneAfterPublish(masterDocument){
+    if(!masterDocument?.scenes?.length)return false;
+    try{
+      const result=await buildScenePackage(masterDocument);
+      const name=`${safeFileStem(result.doc.title)}.scene`;
+      downloadBlobFile(name,result.blob);
+      setProjectIoStatus(
+        uiLanguage==='ja'
+          ? `最新版 ${name} を保存しました（revision ${result.doc?.studio?.identity?.revision||0}）`
+          : `Saved latest ${name} (revision ${result.doc?.studio?.identity?.revision||0})`
+      );
+      return true;
+    }catch(error){
+      console.warn('Latest master .scene auto-save failed',error);
+      setProjectIoStatus(
+        uiLanguage==='ja'
+          ? '公開は完了しましたが、最新版.sceneの自動保存に失敗しました。メニューから.sceneを書き出してください。'
+          : 'Published, but the latest .scene could not be saved automatically. Export it from the menu.',
+        {error:true}
+      );
+      return false;
+    }
   }
 
   async function exportScenePackage(){
@@ -3341,6 +3412,18 @@
       const finalId=payload.id;
       const nextRevision=Math.max(0,Number(payload.revision)||Number(ident.revision)||0);
 
+      // Keep a master snapshot with the original local asset references so the
+      // automatic post-publish .scene export can still package its binaries.
+      const masterDocument=clone(sourceDocument);
+      masterDocument.studio ||= {};
+      masterDocument.studio.identity ||= {};
+      Object.assign(masterDocument.studio.identity,{
+        workId:ident.workId,
+        ownerKey:ident.ownerKey,
+        revision:nextRevision,
+        createdAt:ident.createdAt||new Date().toISOString()
+      });
+
       // Rebuild the editor document from the exact hosted version, but put the
       // private ownerKey back before it returns to Studio.
       const editorDocument=clone(hostedDocument);
@@ -3357,6 +3440,7 @@
         id:finalId,
         revision:nextRevision,
         document:editorDocument,
+        masterDocument,
         url:payload.url||`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(finalId)}`
       };
     }
@@ -3537,6 +3621,15 @@
       // Publication state is more important than the soft 10-work shelf limit.
       // Never leave a hosted work detached from its local record.
       await saveDraftNow({force:true});
+
+      // A Master Scene is one logical work per device. Clean duplicate shelf
+      // rows that point at this same master/publication, then refresh the shelf.
+      await pruneSiblingDraftsForCurrentMaster();
+      await refreshDraftUI(false);
+
+      // Do not rely on the author remembering a second export step after
+      // publish. Save the exact new revision as a portable .scene immediately.
+      await downloadLatestMasterSceneAfterPublish(result.masterDocument||workingDocument);
 
     }catch(error){
       console.warn('Publish failed',error);
