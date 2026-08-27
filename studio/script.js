@@ -611,6 +611,111 @@
     db.close();
   }
   function createDraftId(){return globalThis.crypto?.randomUUID?.()||`draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;}
+
+  // ---------------------------------------------------------
+  // Master .scene identity v1
+  // A .scene always knows "which work am I?" before publication.
+  // Publication location remains server-side. ownerKey never goes to public R2 scene data.
+  // ---------------------------------------------------------
+  function randomHex(bytes=24){
+    const a=new Uint8Array(bytes);
+    globalThis.crypto.getRandomValues(a);
+    return [...a].map(x=>x.toString(16).padStart(2,'0')).join('');
+  }
+  function ensureMasterIdentity(doc){
+    if(!doc || typeof doc!=='object')return null;
+    doc.studio ||= {};
+    doc.studio.identity ||= {};
+    const ident=doc.studio.identity;
+    if(!/^[A-Za-z0-9_-]{12,80}$/.test(String(ident.workId||''))){
+      ident.workId=`scene_${randomHex(16)}`;
+    }
+    if(!/^[A-Za-z0-9_-]{32,128}$/.test(String(ident.ownerKey||''))){
+      ident.ownerKey=randomHex(32);
+    }
+    ident.revision=Math.max(0,Math.floor(Number(ident.revision)||0));
+    ident.createdAt=ident.createdAt||new Date().toISOString();
+    return ident;
+  }
+  function masterIdentity(doc=workingDocument){
+    return ensureMasterIdentity(doc);
+  }
+  function stripPrivateMasterIdentity(doc){
+    const copy=clone(doc);
+    const ident=copy?.studio?.identity;
+    if(ident && typeof ident==='object')delete ident.ownerKey;
+    return copy;
+  }
+  function masterPublicationEndpoint(workId){
+    return `${SCENE_STUDIO_API_BASE}/publication/${encodeURIComponent(workId)}`;
+  }
+  async function fetchMasterPublicationStatus(doc=workingDocument){
+    const ident=ensureMasterIdentity(doc);
+    if(!ident)return null;
+    const response=await fetchWithTimeout(masterPublicationEndpoint(ident.workId),{
+      method:'GET',
+      headers:{'Accept':'application/json'}
+    },10000);
+    let payload=null;
+    try{payload=await response.json();}catch(_){}
+    if(!response.ok || !payload?.ok)throw new Error(payload?.error||`Publication lookup failed (${response.status})`);
+    return payload;
+  }
+  function fingerprintDocument(doc){
+    if(!doc)return '';
+    try{return JSON.stringify(stablePublishValue(stripPrivateMasterIdentity(doc)));}catch(_){return '';}
+  }
+  async function hydrateMasterPublicationState(doc=workingDocument,{warnStale=true}={}){
+    if(!doc)return null;
+    const ident=ensureMasterIdentity(doc);
+    let status=null;
+    try{
+      status=await fetchMasterPublicationStatus(doc);
+    }catch(error){
+      console.warn('Master publication lookup failed',error);
+      return null;
+    }
+    if(!status?.exists){
+      latestPublishedId='';
+      latestPublishedUrl='';
+      latestPublishedFingerprint='';
+      latestPublishedAt=0;
+      latestPublicationStoppedAt=0;
+      syncPublishCopyForStatus?.();
+      return status;
+    }
+
+    latestPublishedId=status.id||'';
+    latestPublishedUrl=status.url||'';
+    latestPublicationStoppedAt=status.state==='stopped'||status.state==='suspended' ? Date.now() : 0;
+
+    // Compare against the actual hosted scene so an imported master .scene can
+    // immediately show Published vs Changes instead of guessing.
+    try{
+      const raw=await fetchWithTimeout(`${latestPublishedUrl}?raw=1`,{
+        method:'GET',
+        headers:{'Accept':'application/json'}
+      },10000);
+      if(raw.ok){
+        const remoteDoc=await raw.json();
+        latestPublishedFingerprint=fingerprintDocument(remoteDoc);
+      }
+    }catch(error){
+      console.warn('Published scene fingerprint lookup failed',error);
+      latestPublishedFingerprint='';
+    }
+
+    const localRevision=Math.max(0,Number(ident.revision)||0);
+    const remoteRevision=Math.max(0,Number(status.revision)||0);
+    if(warnStale && remoteRevision>localRevision){
+      const msg=uiLanguage==='ja'
+        ? `この.sceneは公開版より古いです。\n\nこのファイル: revision ${localRevision}\n公開版: revision ${remoteRevision}\n\n古い.sceneからの上書き公開は停止します。新しい.sceneを使用してください。`
+        : `This .scene is older than the published version.\n\nThis file: revision ${localRevision}\nPublished: revision ${remoteRevision}\n\nPublishing from this stale file is blocked. Use a newer .scene file.`;
+      alert(msg);
+    }
+    syncPublishCopyForStatus?.();
+    return status;
+  }
   function replaceAssetRefs(value,map){
     if(!value)return value;
     if(typeof value==='string')return map.get(value)||value;
@@ -1804,7 +1909,7 @@
     if (selectedTheme === 'cinema' && cinemaBackgroundUrl && scenes[0]) {
       scenes[0].presentation.background = { src: cinemaBackgroundUrl, transition: 'fade', dim: cinemaTone === 'dark' ? 0.48 : 0.72, fit: 'cover', position: 'center center' };
     }
-    return {
+    const doc={
       format:'scene-format', version:'1.0', language:languageSummary.language,
       ...(languageSummary.languages?.length ? { languages: languageSummary.languages } : {}),
       title:titleInput.value.trim(), author:authorInput.value.trim(),
@@ -1835,6 +1940,8 @@
       ending:endingFromEasy(),
       scenes
     };
+    ensureMasterIdentity(doc);
+    return doc;
   }
 
 
@@ -2376,9 +2483,12 @@
     if(workingDocument){
       if(!advancedScreen.hidden) syncAdvancedFieldsToScene();
       syncEasyShellToWorkingDocument();
+      ensureMasterIdentity(workingDocument);
       return clone(workingDocument);
     }
-    return buildSceneDocument();
+    const doc=buildSceneDocument();
+    ensureMasterIdentity(doc);
+    return doc;
   }
   function safeFileStem(value){
     const stem=String(value||'untitled').trim()
@@ -2798,6 +2908,7 @@
       }
 
       workingDocument=doc;
+      ensureMasterIdentity(workingDocument);
       latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
       currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
       restoreStudioStateFromPackage(studioState,doc);
@@ -2825,6 +2936,7 @@
       } else {
         coverImageUrl=''; coverImageFileName=''; coverPositionX=50; coverPositionY=50; updateCoverPreview();
       }
+      await hydrateMasterPublicationState(workingDocument,{warnStale:true});
       await saveDraftNow();
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
     }catch(error){
@@ -2930,6 +3042,7 @@
       const parsed=JSON.parse(raw.replace(/^\uFEFF/,''));
       const doc=validateSceneFormatV1(parsed);
       workingDocument=doc;
+      ensureMasterIdentity(workingDocument);
       latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
       currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
       autoRecProgress={nextIndex:0,recordedCount:0};
@@ -2941,6 +3054,8 @@
       renderAdvanced();
       setScreen('advanced');
       scrollScreenToTop(advancedScreen);
+      await hydrateMasterPublicationState(workingDocument,{warnStale:true});
+      await saveDraftNow();
       const localRefs=countLocalAssetRefs(doc);
       let message=t('io.imported',{name:file.name||'scene.json',n:doc.scenes.length});
       if(localRefs) message+=` ${t('io.localAssets',{n:localRefs})}`;
@@ -3134,7 +3249,7 @@
   }
 
   async function prepareDocumentForPublish(sceneDocument){
-    const hosted=clone(sceneDocument);
+    const hosted=stripPrivateMasterIdentity(sceneDocument);
     const cache=new Map();
     const refs=[];
     walkAssetRefs(hosted,ref=>refs.push(ref));
@@ -3165,13 +3280,41 @@
 
   const publishAdapter={
     async publish(sceneDocument,{id=''}={}){
-      // Hosting v2: upload browser-local image/audio assets first, replace blob: URLs
-      // with permanent Worker/R2 URLs, then publish the portable Scene document.
-      const hostedDocument=await prepareDocumentForPublish(sceneDocument);
+      const sourceDocument=clone(sceneDocument);
+      const ident=ensureMasterIdentity(sourceDocument);
+      if(!ident)throw new Error('Master identity missing');
+
+      // Check server identity BEFORE uploading assets. A stale file is rejected
+      // here, avoiding orphan uploads and accidental overwrites.
+      const status=await fetchMasterPublicationStatus(sourceDocument);
+      if(status?.exists){
+        const remoteRevision=Math.max(0,Number(status.revision)||0);
+        const localRevision=Math.max(0,Number(ident.revision)||0);
+        if(remoteRevision!==localRevision){
+          const error=new Error(
+            uiLanguage==='ja'
+              ? `この.sceneは古い版です（このファイル: revision ${localRevision} / 公開版: revision ${remoteRevision}）。`
+              : `This .scene is stale (file revision ${localRevision} / published revision ${remoteRevision}).`
+          );
+          error.code='REVISION_CONFLICT';
+          error.currentRevision=remoteRevision;
+          throw error;
+        }
+        id=status.id||id||'';
+      }
+
+      // Hosting v3 master identity: local assets become permanent Worker URLs,
+      // while ownerKey stays only inside the author's .scene.
+      const hostedDocument=await prepareDocumentForPublish(sourceDocument);
       const baseEndpoint=id?`${SCENE_STUDIO_API_BASE}/publish?id=${encodeURIComponent(id)}`:`${SCENE_STUDIO_API_BASE}/publish`;
       const request={
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{
+          'Content-Type':'application/json',
+          'X-Scene-Work-Id':ident.workId,
+          'X-Scene-Owner-Key':ident.ownerKey,
+          'X-Scene-Revision':String(Math.max(0,Number(ident.revision)||0))
+        },
         body:JSON.stringify(hostedDocument)
       };
 
@@ -3179,28 +3322,42 @@
       try{
         response=await fetchWithTimeout(baseEndpoint,request,20000);
       }catch(error){
-        // Updating an existing publication is idempotent for the same work id.
-        // Safari can occasionally leave the first update request pending forever,
-        // so retry that path once with a cache-busting query. Never retry a new
-        // publication because that could create a second work id.
-        if(!id || error?.name!=='AbortError')throw error;
-        const retryEndpoint=`${baseEndpoint}&_=${Date.now()}`;
+        // With master identity the server deduplicates by workId, so retrying a
+        // timed-out first publish cannot create a second public URL.
+        if(error?.name!=='AbortError')throw error;
+        const retryEndpoint=`${baseEndpoint}${baseEndpoint.includes('?')?'&':'?'}_=${Date.now()}`;
         response=await fetchWithTimeout(retryEndpoint,request,15000);
       }
 
       let payload=null;
       try{ payload=await response.json(); }catch(_){ /* handled below */ }
       if(!response.ok || !payload?.ok || !payload?.id){
-        throw new Error(payload?.error || `Publish failed (${response.status})`);
+        const error=new Error(payload?.error || `Publish failed (${response.status})`);
+        error.code=payload?.code||'PUBLISH_FAILED';
+        error.currentRevision=payload?.currentRevision;
+        throw error;
       }
 
       const finalId=payload.id;
+      const nextRevision=Math.max(0,Number(payload.revision)||Number(ident.revision)||0);
+
+      // Rebuild the editor document from the exact hosted version, but put the
+      // private ownerKey back before it returns to Studio.
+      const editorDocument=clone(hostedDocument);
+      editorDocument.studio ||= {};
+      editorDocument.studio.identity ||= {};
+      Object.assign(editorDocument.studio.identity,{
+        workId:ident.workId,
+        ownerKey:ident.ownerKey,
+        revision:nextRevision,
+        createdAt:ident.createdAt||new Date().toISOString()
+      });
+
       return {
         id:finalId,
-        // Keep the exact hosted document that was accepted for publication so
-        // the editor can adopt permanent asset URLs after a successful publish.
-        document:hostedDocument,
-        url:`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(finalId)}`
+        revision:nextRevision,
+        document:editorDocument,
+        url:payload.url||`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(finalId)}`
       };
     }
   };
@@ -3233,11 +3390,7 @@
 
   function currentPublishFingerprint(){
     if(!workingDocument?.scenes?.length)return '';
-    try{
-      return JSON.stringify(stablePublishValue(getDocumentForPlayback()));
-    }catch(_){
-      return '';
-    }
+    return fingerprintDocument(getDocumentForPlayback());
   }
 
   function currentPublishStatus(){
@@ -3340,6 +3493,7 @@
 
   async function runPublish(){
     if(!workingDocument?.scenes?.length)return;
+    ensureMasterIdentity(workingDocument);
     const rights=$('#publishRightsConfirm');
     if(rights && !rights.checked){ rights.focus(); return; }
     const wasUpdate=currentPublishStatus()==='dirty';
@@ -3388,7 +3542,11 @@
       console.warn('Publish failed',error);
       setPublishState('error');
       const message=$('#publishStateError p');
-      if(message && error?.name==='AbortError'){
+      if(message && error?.code==='REVISION_CONFLICT'){
+        message.textContent=uiLanguage==='ja'
+          ? `この.sceneは公開版より古いため、上書きを停止しました。新しい.sceneを使用してください。${Number.isFinite(Number(error.currentRevision))?`（公開版 revision ${error.currentRevision}）`:''}`
+          : `Publishing was blocked because this .scene is older than the published version. Use a newer .scene file.`;
+      }else if(message && error?.name==='AbortError'){
         message.textContent=uiLanguage==='ja'
           ? '更新の応答がタイムアウトしました。通信状態を確認して、もう一度お試しください。'
           : 'The update timed out. Check your connection and try again.';
