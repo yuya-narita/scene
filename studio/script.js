@@ -2730,15 +2730,68 @@
     return safeFileStem(String(name||'asset').replace(/\.[^.]+$/,'')).replace(/\s+/g,'_').slice(0,48)||'asset';
   }
 
-  async function resolveAssetBlob(src){
+  function assetNameFromUrl(src,kind='asset'){
+    try{
+      const u=new URL(String(src||''),location.href);
+      const raw=decodeURIComponent((u.pathname.split('/').pop()||'').split('?')[0]||'');
+      if(raw && /\.[A-Za-z0-9]{1,8}$/.test(raw))return raw;
+    }catch(_){}
+    return `${kind||'asset'}`;
+  }
+
+  async function resolveAssetBlob(src,{kind='asset',fileName=''}={}){
     const registered=assetRegistry.get(src);
     if(registered)return registered;
-    if(/^blob:/i.test(src)){
-      const response=await fetch(src);
+
+    const value=String(src||'').trim();
+    if(!value)return null;
+
+    if(/^blob:/i.test(value)){
+      const response=await fetch(value);
       if(!response.ok)throw new Error('blob-fetch');
       const blob=await response.blob();
-      return {blob,name:'asset'+assetExtension('',blob.type)};
+      return {
+        blob,
+        name:fileName||`asset${assetExtension('',blob.type)}`
+      };
     }
+
+    if(/^https?:\/\//i.test(value)){
+      let response;
+      try{
+        response=await fetch(value,{method:'GET',mode:'cors',cache:'no-store'});
+      }catch(error){
+        const e=new Error(`asset-fetch-failed:${value}`);
+        e.code='MASTER_ASSET_FETCH_FAILED';
+        e.assetUrl=value;
+        e.cause=error;
+        throw e;
+      }
+      if(!response.ok){
+        const e=new Error(`asset-fetch-${response.status}:${value}`);
+        e.code='MASTER_ASSET_FETCH_FAILED';
+        e.assetUrl=value;
+        e.status=response.status;
+        throw e;
+      }
+      const blob=await response.blob();
+      if(!blob?.size){
+        const e=new Error(`asset-empty:${value}`);
+        e.code='MASTER_ASSET_FETCH_FAILED';
+        e.assetUrl=value;
+        throw e;
+      }
+      const guessed=assetNameFromUrl(value,kind);
+      return {
+        blob,
+        name:fileName||(
+          /\.[A-Za-z0-9]{1,8}$/.test(guessed)
+            ? guessed
+            : guessed+assetExtension('',blob.type)
+        )
+      };
+    }
+
     return null;
   }
 
@@ -2853,20 +2906,41 @@
     walkAssetRefs(packaged,ref=>refs.push(ref));
 
     for(const ref of refs){
-      if(!/^blob:/i.test(ref.src))continue;
-      let assetPath=bySource.get(ref.src);
+      const source=String(ref.src||'').trim();
+      if(!source)continue;
+
+      if(source.startsWith('assets/')){
+        const e=new Error(`Packaged asset binary is unavailable: ${source}`);
+        e.code='MASTER_ASSET_MISSING';
+        e.assetUrl=source;
+        throw e;
+      }
+
+      let assetPath=bySource.get(source);
       if(!assetPath){
-        const item=await resolveAssetBlob(ref.src);
-        if(!item)continue;
+        const item=await resolveAssetBlob(source,{
+          kind:ref.kind,
+          fileName:ref.fileName||''
+        });
+        if(!item){
+          const e=new Error(`Asset could not be embedded: ${source}`);
+          e.code='MASTER_ASSET_MISSING';
+          e.assetUrl=source;
+          throw e;
+        }
         assetCounter++;
         const ext=assetExtension(item.name||ref.fileName,item.blob.type);
         const base=safeAssetBase(ref.fileName||item.name||`${ref.kind}_${assetCounter}`);
         assetPath=`assets/${String(assetCounter).padStart(3,'0')}_${ref.kind}_${base}${ext}`;
-        bySource.set(ref.src,assetPath);
-        entries.push({name:assetPath,bytes:await blobBytes(item.blob,ref.src)});
+        bySource.set(source,assetPath);
+        entries.push({name:assetPath,bytes:await blobBytes(item.blob,source)});
       }
       ref.holder[ref.key]=assetPath;
-      ref.holder._editorFileName=ref.fileName || assetRegistry.get(ref.src)?.name || assetPath.split('/').pop();
+      ref.holder._editorFileName=
+        ref.fileName ||
+        assetRegistry.get(source)?.name ||
+        assetNameFromUrl(source,ref.kind) ||
+        assetPath.split('/').pop();
     }
 
     const coverPath=String(packaged.cover?.src||'').startsWith('assets/') ? String(packaged.cover.src) : '';
@@ -2914,12 +2988,24 @@
       return true;
     }catch(error){
       console.warn('Latest master .scene save failed',error);
+      const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
       setProjectIoStatus(
         uiLanguage==='ja'
-          ? '最新版.sceneを保存できませんでした。もう一度お試しください。'
-          : 'Could not save the latest .scene. Please try again.',
+          ? (assetFailure
+              ? '素材を.scene内へ回収できなかったため、保存を中止しました。壊れたMaster .sceneは作りません。'
+              : '最新版.sceneを保存できませんでした。もう一度お試しください。')
+          : (assetFailure
+              ? 'Saving was stopped because an asset could not be embedded. A broken Master .scene was not created.'
+              : 'Could not save the latest .scene. Please try again.'),
         {error:true}
       );
+      if(assetFailure){
+        alert(
+          uiLanguage==='ja'
+            ? `Master .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
+            : `The Master .scene must be self-contained.\n\nThis asset could not be retrieved, so export was stopped:\n${error?.assetUrl||''}`
+        );
+      }
       return false;
     }
   }
@@ -2991,9 +3077,24 @@
       setProjectIoStatus(t('io.packageExported',{name,n:result.assetCount}));
     }catch(error){
       console.error(error);
-      const detail=(error && (error.stack||error.message)) ? String(error.stack||error.message) : String(error);
-      setProjectIoStatus(`${t('io.packageFailed')} ${detail.split('\n')[0]}`,{error:true});
-      alert(`${t('io.packageFailed')}\n\n${detail}`);
+      const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
+      if(assetFailure){
+        setProjectIoStatus(
+          uiLanguage==='ja'
+            ? '素材を.scene内へ回収できなかったため、書き出しを中止しました。'
+            : 'Export stopped because an asset could not be embedded.',
+          {error:true}
+        );
+        alert(
+          uiLanguage==='ja'
+            ? `Master .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
+            : `The Master .scene must be self-contained.\n\nThis asset could not be retrieved:\n${error?.assetUrl||''}`
+        );
+      }else{
+        const detail=(error && (error.stack||error.message)) ? String(error.stack||error.message) : String(error);
+        setProjectIoStatus(`${t('io.packageFailed')} ${detail.split('\n')[0]}`,{error:true});
+        alert(`${t('io.packageFailed')}\n\n${detail}`);
+      }
     }
   }
 
