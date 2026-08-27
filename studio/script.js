@@ -2925,32 +2925,47 @@
       workingDocument?.studio?.identity?.revision
     )||0));
 
-    // Reuse the publish result modal when available. The button is created
-    // dynamically so no HTML/CSS file needs to be replaced.
-    const modal =
-      document.querySelector('#publishSuccessModal') ||
-      document.querySelector('[data-publish-success]') ||
-      document.querySelector('.publish-success-modal');
+    // The real publish UI is #publishStateSuccess inside #publishDialog.
+    // Insert directly into that state instead of guessing modal class names.
+    const successState=document.querySelector('#publishStateSuccess');
+    if(!successState)return;
 
-    const host = modal?.querySelector('.modal-card,.modal-content,.publish-card') || modal;
-    if(!host)return;
-
-    let box=host.querySelector('[data-master-scene-save]');
+    let box=successState.querySelector('[data-master-scene-save]');
     if(!box){
       box=document.createElement('div');
       box.dataset.masterSceneSave='1';
       box.style.marginTop='14px';
-      box.innerHTML=`
-        <button type="button" data-master-scene-save-button
-          style="width:100%;min-height:48px;border:0;border-radius:14px;background:#17191b;color:#fff;font:inherit;font-weight:700;cursor:pointer;">
-          ${uiLanguage==='ja'?'最新版.sceneを保存':'Save latest .scene'}
-        </button>
-        <div data-master-scene-save-note
-          style="margin-top:8px;font-size:12px;line-height:1.6;opacity:.62;text-align:center;"></div>`;
-      host.appendChild(box);
-      box.querySelector('[data-master-scene-save-button]').addEventListener('click',()=>{
-        saveLatestMasterSceneByUser();
-      });
+
+      const button=document.createElement('button');
+      button.type='button';
+      button.dataset.masterSceneSaveButton='1';
+      button.className='publish-secondary';
+      button.style.width='100%';
+      button.style.minHeight='50px';
+      button.textContent=uiLanguage==='ja'?'最新版.sceneを保存':'Save latest .scene';
+      button.addEventListener('click',()=>{ saveLatestMasterSceneByUser(); });
+
+      const note=document.createElement('small');
+      note.dataset.masterSceneSaveNote='1';
+      note.style.display='block';
+      note.style.marginTop='8px';
+      note.style.lineHeight='1.6';
+      note.style.opacity='.62';
+      note.style.textAlign='center';
+
+      box.appendChild(button);
+      box.appendChild(note);
+
+      // Put it before the existing small Hosting note so the save action is
+      // clearly part of the success actions.
+      const existingNote=successState.querySelector('.publish-mock-note');
+      if(existingNote)successState.insertBefore(box,existingNote);
+      else successState.appendChild(box);
+    }
+
+    const button=box.querySelector('[data-master-scene-save-button]');
+    if(button){
+      button.textContent=uiLanguage==='ja'?'最新版.sceneを保存':'Save latest .scene';
     }
     const note=box.querySelector('[data-master-scene-save-note]');
     if(note){
@@ -2960,6 +2975,7 @@
     }
     box.hidden=false;
   }
+
 
   async function exportScenePackage(){
     try{
@@ -3609,6 +3625,8 @@
       const text=$('#publishUrlText');
       if(text)text.textContent=latestPublishedUrl;
       setPublishState('success');
+      latestPublishedMasterDocument=clone(workingDocument);
+      showLatestMasterSceneSaveAction();
     }else{
       setPublishState('ready');
     }
