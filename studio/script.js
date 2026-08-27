@@ -2894,7 +2894,8 @@
     return {doc:packaged,manifest,studioState,blob,assetCount:packageAssetCount};
   }
 
-  async function downloadLatestMasterSceneAfterPublish(masterDocument){
+  async function saveLatestMasterSceneByUser(){
+    const masterDocument=latestPublishedMasterDocument||workingDocument;
     if(!masterDocument?.scenes?.length)return false;
     try{
       const result=await buildScenePackage(masterDocument);
@@ -2907,15 +2908,57 @@
       );
       return true;
     }catch(error){
-      console.warn('Latest master .scene auto-save failed',error);
+      console.warn('Latest master .scene save failed',error);
       setProjectIoStatus(
         uiLanguage==='ja'
-          ? '公開は完了しましたが、最新版.sceneの自動保存に失敗しました。メニューから.sceneを書き出してください。'
-          : 'Published, but the latest .scene could not be saved automatically. Export it from the menu.',
+          ? '最新版.sceneを保存できませんでした。もう一度お試しください。'
+          : 'Could not save the latest .scene. Please try again.',
         {error:true}
       );
       return false;
     }
+  }
+
+  function showLatestMasterSceneSaveAction(){
+    const revision=Math.max(0,Math.floor(Number(
+      latestPublishedMasterDocument?.studio?.identity?.revision||
+      workingDocument?.studio?.identity?.revision
+    )||0));
+
+    // Reuse the publish result modal when available. The button is created
+    // dynamically so no HTML/CSS file needs to be replaced.
+    const modal =
+      document.querySelector('#publishSuccessModal') ||
+      document.querySelector('[data-publish-success]') ||
+      document.querySelector('.publish-success-modal');
+
+    const host = modal?.querySelector('.modal-card,.modal-content,.publish-card') || modal;
+    if(!host)return;
+
+    let box=host.querySelector('[data-master-scene-save]');
+    if(!box){
+      box=document.createElement('div');
+      box.dataset.masterSceneSave='1';
+      box.style.marginTop='14px';
+      box.innerHTML=`
+        <button type="button" data-master-scene-save-button
+          style="width:100%;min-height:48px;border:0;border-radius:14px;background:#17191b;color:#fff;font:inherit;font-weight:700;cursor:pointer;">
+          ${uiLanguage==='ja'?'最新版.sceneを保存':'Save latest .scene'}
+        </button>
+        <div data-master-scene-save-note
+          style="margin-top:8px;font-size:12px;line-height:1.6;opacity:.62;text-align:center;"></div>`;
+      host.appendChild(box);
+      box.querySelector('[data-master-scene-save-button]').addEventListener('click',()=>{
+        saveLatestMasterSceneByUser();
+      });
+    }
+    const note=box.querySelector('[data-master-scene-save-note]');
+    if(note){
+      note.textContent=uiLanguage==='ja'
+        ? `revision ${revision}｜別端末で編集を続ける場合やバックアップ用に保存してください。`
+        : `revision ${revision} | Save this for another device or as a backup.`;
+    }
+    box.hidden=false;
   }
 
   async function exportScenePackage(){
@@ -3447,6 +3490,7 @@
   };
 
   let latestPublishedId='';
+  let latestPublishedMasterDocument=null;
   let latestPublishedUrl='';
   let latestPublishedFingerprint='';
   let latestPublishedAt=0;
@@ -3627,9 +3671,14 @@
       await pruneSiblingDraftsForCurrentMaster();
       await refreshDraftUI(false);
 
-      // Do not rely on the author remembering a second export step after
-      // publish. Save the exact new revision as a portable .scene immediately.
-      await downloadLatestMasterSceneAfterPublish(result.masterDocument||workingDocument);
+      // Keep the newest master snapshot ready for an explicit user action.
+      // Browsers (especially iOS Safari) may block automatic downloads after
+      // async publishing, and desktop users may not want a file every publish.
+      latestPublishedMasterDocument=clone(result.masterDocument||workingDocument);
+      showLatestMasterSceneSaveAction();
+      // Some publish-result UIs are mounted just after this function returns.
+      // Retry once after the DOM has had a chance to render.
+      setTimeout(showLatestMasterSceneSaveAction,0);
 
     }catch(error){
       console.warn('Publish failed',error);
