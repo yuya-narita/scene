@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
 
   function languageStats(text) {
     const s = String(text ?? '');
@@ -106,12 +106,16 @@
       return splitMultilingualDetailed(text, options);
     }
 
-    // Auto: use multilingual mode only when separate blocks/lines actually disagree.
+    // v1.2 Auto policy:
+    // Decide the prose language from the WHOLE document and delegate the whole
+    // document to one language splitter. Do not switch splitter just because a
+    // short paragraph/line contains English product names or technical tokens
+    // such as "Scene", "TAP", "Splitter", "BGM", etc.
+    //
+    // True multilingual authoring is still available explicitly with:
+    //   language: 'mul'  or  multilingual: true
     const normalized = String(text ?? '').replace(/\r\n?/g, '\n').trim();
     if (!normalized) return [];
-    const blocks = normalized.split(/(?:\n[ \t]*){2,}/).map(x => x.trim()).filter(Boolean);
-    const blockLanguages = [...new Set(blocks.map(detectLanguage))];
-    if (blockLanguages.length > 1) return splitMultilingualDetailed(normalized, options);
 
     const language = detectLanguage(normalized);
     return splitWith(language, normalized, options);
