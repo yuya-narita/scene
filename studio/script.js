@@ -707,11 +707,16 @@
 
     const localRevision=Math.max(0,Number(ident.revision)||0);
     const remoteRevision=Math.max(0,Number(status.revision)||0);
-    if(warnStale && remoteRevision>localRevision){
-      const msg=uiLanguage==='ja'
-        ? `この.sceneは公開版より古いです。\n\nこのファイル: revision ${localRevision}\n公開版: revision ${remoteRevision}\n\n古い.sceneからの上書き公開は停止します。新しい.sceneを使用してください。`
-        : `This .scene is older than the published version.\n\nThis file: revision ${localRevision}\nPublished: revision ${remoteRevision}\n\nPublishing from this stale file is blocked. Use a newer .scene file.`;
-      alert(msg);
+    if(remoteRevision>localRevision){
+      staleRestoreRemoteRevision=remoteRevision;
+      if(warnStale){
+        const msg=uiLanguage==='ja'
+          ? `この.sceneは公開版より古いです。\n\nこのファイル: revision ${localRevision}\n公開版: revision ${remoteRevision}\n\n通常の上書き公開は停止します。\nこの古い内容へ戻したい場合は、公開画面の「この版を元に最新版を作る」を使用できます。`
+          : `This .scene is older than the published version.\n\nThis file: revision ${localRevision}\nPublished: revision ${remoteRevision}\n\nNormal publishing is blocked.\nTo restore this older content, use “Create latest from this version” in the publish screen.`;
+        alert(msg);
+      }
+    }else{
+      staleRestoreRemoteRevision=0;
     }
     syncPublishCopyForStatus?.();
     return status;
@@ -3409,7 +3414,7 @@
   }
 
   const publishAdapter={
-    async publish(sceneDocument,{id=''}={}){
+    async publish(sceneDocument,{id='',restoreFromOld=false}={}){
       const sourceDocument=clone(sceneDocument);
       const ident=ensureMasterIdentity(sourceDocument);
       if(!ident)throw new Error('Master identity missing');
@@ -3417,18 +3422,28 @@
       // Check server identity BEFORE uploading assets. A stale file is rejected
       // here, avoiding orphan uploads and accidental overwrites.
       const status=await fetchMasterPublicationStatus(sourceDocument);
+      let requestRevision=Math.max(0,Number(ident.revision)||0);
       if(status?.exists){
         const remoteRevision=Math.max(0,Number(status.revision)||0);
         const localRevision=Math.max(0,Number(ident.revision)||0);
         if(remoteRevision!==localRevision){
-          const error=new Error(
-            uiLanguage==='ja'
-              ? `この.sceneは古い版です（このファイル: revision ${localRevision} / 公開版: revision ${remoteRevision}）。`
-              : `This .scene is stale (file revision ${localRevision} / published revision ${remoteRevision}).`
-          );
-          error.code='REVISION_CONFLICT';
-          error.currentRevision=remoteRevision;
-          throw error;
+          if(restoreFromOld && remoteRevision>localRevision){
+            // Explicit rollback: publish the old content as a NEW revision.
+            // The server still sees the current revision in the concurrency
+            // header, so no history number ever moves backwards.
+            requestRevision=remoteRevision;
+          }else{
+            const error=new Error(
+              uiLanguage==='ja'
+                ? `この.sceneは古い版です（このファイル: revision ${localRevision} / 公開版: revision ${remoteRevision}）。`
+                : `This .scene is stale (file revision ${localRevision} / published revision ${remoteRevision}).`
+            );
+            error.code='REVISION_CONFLICT';
+            error.currentRevision=remoteRevision;
+            throw error;
+          }
+        }else{
+          requestRevision=localRevision;
         }
         id=status.id||id||'';
       }
@@ -3443,7 +3458,7 @@
           'Content-Type':'application/json',
           'X-Scene-Work-Id':ident.workId,
           'X-Scene-Owner-Key':ident.ownerKey,
-          'X-Scene-Revision':String(Math.max(0,Number(ident.revision)||0))
+          'X-Scene-Revision':String(requestRevision)
         },
         body:JSON.stringify(hostedDocument)
       };
@@ -3507,6 +3522,7 @@
 
   let latestPublishedId='';
   let latestPublishedMasterDocument=null;
+  let staleRestoreRemoteRevision=0;
   let latestPublishedUrl='';
   let latestPublishedFingerprint='';
   let latestPublishedAt=0;
@@ -3622,11 +3638,24 @@
 
     resetPublishRightsConfirmation();
     if(status==='published'){
-      const text=$('#publishUrlText');
-      if(text)text.textContent=latestPublishedUrl;
-      setPublishState('success');
-      latestPublishedMasterDocument=clone(workingDocument);
-      showLatestMasterSceneSaveAction();
+      const localRevision=Math.max(0,Number(workingDocument?.studio?.identity?.revision)||0);
+      if(staleRestoreRemoteRevision>localRevision){
+        setPublishState('error');
+        const message=$('#publishStateError p');
+        if(message){
+          message.textContent=uiLanguage==='ja'
+            ? `この.sceneは公開版より古いです。（このファイル revision ${localRevision} / 公開版 revision ${staleRestoreRemoteRevision}）`
+            : `This .scene is older than the published version.`;
+        }
+        showRestoreFromOldAction(staleRestoreRemoteRevision);
+        setTimeout(()=>showRestoreFromOldAction(staleRestoreRemoteRevision),0);
+      }else{
+        const text=$('#publishUrlText');
+        if(text)text.textContent=latestPublishedUrl;
+        setPublishState('success');
+        latestPublishedMasterDocument=clone(workingDocument);
+        showLatestMasterSceneSaveAction();
+      }
     }else{
       setPublishState('ready');
     }
@@ -3637,7 +3666,67 @@
     $('#publishDialog')?.close();
   }
 
-  async function runPublish(){
+  function showRestoreFromOldAction(remoteRevision=staleRestoreRemoteRevision){
+    const errorState=document.querySelector('#publishStateError');
+    if(!errorState)return;
+    const remote=Math.max(0,Number(remoteRevision)||0);
+    const local=Math.max(0,Number(workingDocument?.studio?.identity?.revision)||0);
+    if(!remote || remote<=local)return;
+
+    let box=errorState.querySelector('[data-restore-old-version]');
+    if(!box){
+      box=document.createElement('div');
+      box.dataset.restoreOldVersion='1';
+      box.style.marginTop='14px';
+
+      const button=document.createElement('button');
+      button.type='button';
+      button.className='publish-secondary';
+      button.style.width='100%';
+      button.style.minHeight='50px';
+      button.dataset.restoreOldVersionButton='1';
+      button.addEventListener('click',async()=>{
+        const ok=confirm(
+          uiLanguage==='ja'
+            ? `revision ${local} の内容を元に、公開版 revision ${remote+1} を作ります。\\n\\n現在の公開版 revision ${remote} は上書きされますが、revision番号は戻りません。続けますか？`
+            : `Create published revision ${remote+1} from the content of revision ${local}?\\n\\nThe current published revision ${remote} will be replaced, but revision numbering will not move backward. Continue?`
+        );
+        if(!ok)return;
+        await runPublish({restoreFromOld:true});
+      });
+
+      const note=document.createElement('small');
+      note.dataset.restoreOldVersionNote='1';
+      note.style.display='block';
+      note.style.marginTop='8px';
+      note.style.lineHeight='1.6';
+      note.style.opacity='.62';
+      note.style.textAlign='center';
+
+      box.appendChild(button);
+      box.appendChild(note);
+
+      const retry=errorState.querySelector('button');
+      if(retry?.parentNode===errorState)errorState.insertBefore(box,retry);
+      else errorState.appendChild(box);
+    }
+
+    const button=box.querySelector('[data-restore-old-version-button]');
+    if(button){
+      button.textContent=uiLanguage==='ja'
+        ? 'この版を元に最新版を作る'
+        : 'Create latest from this version';
+    }
+    const note=box.querySelector('[data-restore-old-version-note]');
+    if(note){
+      note.textContent=uiLanguage==='ja'
+        ? `revision ${local} の内容 → revision ${remote+1} として公開`
+        : `Content of revision ${local} → publish as revision ${remote+1}`;
+    }
+    box.hidden=false;
+  }
+
+  async function runPublish({restoreFromOld=false}={}){
     if(!workingDocument?.scenes?.length)return;
     ensureMasterIdentity(workingDocument);
     const rights=$('#publishRightsConfirm');
@@ -3647,7 +3736,7 @@
     try{
       const result=await publishAdapter.publish(
         getDocumentForPlayback(),
-        {id:latestPublishedId||''}
+        {id:latestPublishedId||'',restoreFromOld}
       );
       if(!result?.url)throw new Error('Publish URL missing');
 
@@ -3675,6 +3764,7 @@
       latestPublishedFingerprint=currentPublishFingerprint();
       latestPublishedAt=Date.now();
       latestPublicationStoppedAt=0;
+      staleRestoreRemoteRevision=0;
 
       const text=$('#publishUrlText');
       if(text)text.textContent=latestPublishedUrl;
@@ -3703,9 +3793,13 @@
       setPublishState('error');
       const message=$('#publishStateError p');
       if(message && error?.code==='REVISION_CONFLICT'){
+        const remote=Math.max(0,Number(error.currentRevision)||0);
+        staleRestoreRemoteRevision=remote||staleRestoreRemoteRevision;
         message.textContent=uiLanguage==='ja'
-          ? `この.sceneは公開版より古いため、上書きを停止しました。新しい.sceneを使用してください。${Number.isFinite(Number(error.currentRevision))?`（公開版 revision ${error.currentRevision}）`:''}`
-          : `Publishing was blocked because this .scene is older than the published version. Use a newer .scene file.`;
+          ? `この.sceneは公開版より古いため、通常の上書きを停止しました。${remote?`（このファイル revision ${workingDocument?.studio?.identity?.revision||0} / 公開版 revision ${remote}）`:''}`
+          : `Normal publishing was blocked because this .scene is older than the published version.`;
+        showRestoreFromOldAction(staleRestoreRemoteRevision);
+        setTimeout(()=>showRestoreFromOldAction(staleRestoreRemoteRevision),0);
       }else if(message && error?.name==='AbortError'){
         message.textContent=uiLanguage==='ja'
           ? '更新の応答がタイムアウトしました。通信状態を確認して、もう一度お試しください。'
