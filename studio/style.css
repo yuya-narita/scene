@@ -10397,3 +10397,56 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     -webkit-overflow-scrolling:touch!important;
   }
 }
+
+
+/* =========================================================
+   Desktop Cover / Ending modal viewport-center fix
+   The right editor can be scrolled far down. Shell-page editors must stay
+   centered in the CURRENT visible right pane instead of at the top of the
+   long editor document. Keep the left Player visible.
+   ========================================================= */
+@media (min-width:1100px){
+  body.desktop-live-edit.desktop-live-special-open .desktop-live-special-shade{
+    position:fixed!important;
+    top:0!important;
+    right:0!important;
+    bottom:0!important;
+    left:46vw!important;
+    z-index:29990!important;
+    width:54vw!important;
+    height:100dvh!important;
+    margin:0!important;
+    box-sizing:border-box!important;
+  }
+
+  body.desktop-live-edit.desktop-live-special-open .desktop-live-special-modal{
+    position:fixed!important;
+    top:50dvh!important;
+    left:73vw!important;
+    right:auto!important;
+    bottom:auto!important;
+    transform:translate(-50%,-50%)!important;
+    z-index:30000!important;
+    width:min(720px,calc(54vw - 36px))!important;
+    max-width:720px!important;
+    max-height:calc(100dvh - 36px)!important;
+    margin:0!important;
+    box-sizing:border-box!important;
+    overflow:auto!important;
+    overscroll-behavior:contain!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+}
+
+/* The normal wide desktop split is 48 / 52 rather than 46 / 54. */
+@media (min-width:1321px){
+  body.desktop-live-edit.desktop-live-special-open .desktop-live-special-shade{
+    left:48vw!important;
+    width:52vw!important;
+  }
+
+  body.desktop-live-edit.desktop-live-special-open .desktop-live-special-modal{
+    left:74vw!important;
+    width:min(720px,calc(52vw - 36px))!important;
+  }
+}
