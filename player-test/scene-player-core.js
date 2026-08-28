@@ -319,9 +319,6 @@
         const nextIndex = Number(item.dataset.index);
         if (!Number.isInteger(nextIndex)) return;
         this.closeHistory({ keepVisualState: true });
-        // History selection is also a trusted user gesture. Re-arm before the
-        // jump so restored BGM/Ambient can start immediately on iOS/WebKit.
-        this.unlockAudio(true);
         this.goToVisited(nextIndex);
         // The swipe that opened History arms suppressNextClick so its synthetic
         // click cannot advance a Scene. Once the author explicitly selects a
@@ -355,10 +352,6 @@
           this.suppressNextClick = false;
           return;
         }
-        // Re-arm on the exact click that advances the Scene as well as on
-        // pointerdown/touchstart. This keeps HTMLMediaElement.play() inside a
-        // trusted gesture on iOS/WebKit when a later Scene introduces audio.
-        this.unlockAudio(true);
         this.next();
       });
 
@@ -797,12 +790,7 @@
       let audio = this.audioEls[channel];
       if (!audio || !command.src) return;
 
-      // Keep transport classification identical to _prepareAudioTransport().
-      // Scene Studio /asset/ URLs are CORS-enabled and must stay on Web Audio;
-      // treating every absolute URL as native-only caused the persistent element
-      // to be replaced unnecessarily right when a Scene first tried to start sound.
-      const desiredNativeOnly = this._isExternalHttpAudio(command.src)
-        && !this._isCorsWebAudioAsset(command.src);
+      const desiredNativeOnly = this._isExternalHttpAudio(command.src);
       const hasWebAudioGraph = this.audioSourceNodes.has(audio) || this.audioGainNodes.has(audio);
       const currentNativeOnly = audio.__spNativeOnly === true;
 
@@ -1686,6 +1674,12 @@
       this._render();
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index});
       return true;
+    }
+
+    // External shells (Public Player / future Local Player) can own their own
+    // cover UI while still starting Core from the same trusted user gesture.
+    begin() {
+      return this._beginFromCover();
     }
 
     restart() {
