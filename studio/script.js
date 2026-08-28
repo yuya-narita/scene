@@ -6485,7 +6485,16 @@ function startInlineTextEdit(field='text'){
     select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.append(cap,select);return wrap;
   }
   function liveDetailHost(){
-    return desktopLiveActive() && desktopLivePanel ? desktopLivePanel : document.body;
+    // Detail inspectors must belong to the viewport, not to the long
+    // right-side Live Editor scroll surface.  When they lived inside
+    // desktopLivePanel, opening a detail view after scrolling down positioned
+    // the overlay relative to the top of that panel, forcing the author to
+    // scroll back upward to reach it.
+    //
+    // Host the shared inspector at <body> for every desktop/live path.
+    // Mobile Live Detail still moves the generated modal into its dedicated
+    // sheet in openMobileLiveDetail(), so that behaviour is unchanged.
+    return document.body;
   }
   function liveDetailQuery(selector){
     return document.querySelector(selector);
