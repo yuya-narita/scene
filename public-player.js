@@ -598,15 +598,25 @@
     ending.hidden = true;
     ending.classList.remove('is-visible');
 
-    await openingBreath();
-
     /*
-      Make the host measurable BEFORE Core.load().
-      The opening overlay is gone only when Scene 1 is ready to begin, so the
-      first Scene keeps its own entrance animation instead of appearing already
-      settled.
+      Public Player owns the visible cover, but Core also has its own cover.
+      Previously we did:
+        openingBreath() -> Core.load() -> unlockAudio()
+      That had two side effects:
+      1) Core stayed in its internal cover state, so authored episode text leaked
+         into the reading surface as a large "第9話" at the upper-left.
+      2) The first Scene audio was never actually entered. On iPhone the later
+         unlock also happened after ~690ms of awaits, outside the trusted START
+         gesture. Scene 1 therefore became audible only after History restored it.
+
+      Build/load/begin Core synchronously, before the first await. This lets
+      Scene 1 audio receive the actual START/CONTINUE gesture and removes Core's
+      internal cover immediately. Keep the reading surface visually hidden while
+      the public opening breath plays, then replay presentation only.
     */
     host.hidden = false;
+    host.style.visibility = 'hidden';
+    host.style.pointerEvents = 'none';
 
     player = new ScenePlayerCore(host, {
       allowPrevious: true,
@@ -615,16 +625,31 @@
 
     bindPublicControls();
 
-    await new Promise(resolve => requestAnimationFrame(resolve));
-
     player.load(documentData, { startAt });
     const ep=String(documentData?.metadata?.episode||documentData?.episode||'').trim();
     const epTitle=String(documentData?.metadata?.episodeTitle||documentData?.episodeTitle||'').trim();
     if(player.els?.title)player.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || documentData.title || '';
     if(player.els?.author)player.els.author.textContent=documentData.author||'';
-    // START / CONTINUE is the trusted user gesture used to unlock iOS media.
-    player.unlockAudio(true);
+
+    // Critical: no await before this call.
+    // begin() unlocks audio and enters Scene 1/continue Scene from the same
+    // trusted user gesture that pressed START / CONTINUE.
+    player.begin();
+
+    await openingBreath();
+
+    // The Scene's audio has already started from the trusted gesture. Reveal the
+    // Player now and replay only its visual presentation so the entrance effect
+    // is not consumed while the host was invisible.
+    host.style.visibility = '';
+    host.style.pointerEvents = '';
+    if (player) {
+      player.refreshCurrent({ preserveAudio: true });
+      if(player.els?.title)player.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || documentData.title || '';
+      if(player.els?.author)player.els.author.textContent=documentData.author||'';
+    }
   }
+
 
   function showIntro() {
     ending.classList.remove('is-visible');
@@ -675,7 +700,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.20',
+    version: '0.3.21',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
