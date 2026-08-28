@@ -6548,50 +6548,6 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
 }
 
 
-/* ==========================================================
-   Live Editor detail modal — viewport centered
-   The right-side editor can be several screens tall.  Detail overlays are now
-   body children, so their position follows the visible browser viewport rather
-   than the scroll position of the editor document.
-   ========================================================== */
-@media (min-width:1100px){
-  body.desktop-live-edit > .desktop-text-detail-overlay{
-    display:flex!important;
-    position:fixed!important;
-    inset:0!important;
-    width:100vw!important;
-    height:100dvh!important;
-    z-index:30000!important;
-    box-sizing:border-box!important;
-    margin:0!important;
-    padding:20px!important;
-    align-items:center!important;
-    justify-content:center!important;
-    overflow:hidden!important;
-    background:rgba(20,21,22,.28)!important;
-    backdrop-filter:blur(7px)!important;
-    -webkit-backdrop-filter:blur(7px)!important;
-  }
-
-  body.desktop-live-edit > .desktop-text-detail-overlay > .desktop-text-detail-modal{
-    position:relative!important;
-    inset:auto!important;
-    margin:0!important;
-    width:min(760px,calc(100vw - 40px))!important;
-    max-width:760px!important;
-    height:auto!important;
-    max-height:calc(100dvh - 40px)!important;
-    overflow:hidden!important;
-  }
-
-  body.desktop-live-edit > .desktop-text-detail-overlay .desktop-text-detail-body{
-    min-height:0!important;
-    overflow-y:auto!important;
-    overscroll-behavior:contain!important;
-    -webkit-overflow-scrolling:touch!important;
-  }
-}
-
 /* Correctly named project-wide storage. */
 .toolbox-extras-body{
   display:grid!important;
@@ -10385,5 +10341,50 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   .live-edit-sheet.live-edit-sheet-chat .live-chat-bubble-color > span:first-child{
     padding-left:10px!important;
     box-sizing:border-box;
+  }
+}
+
+
+/* ==========================================================
+   Live Editor detail modal — viewport center FIX v2
+   Keep overlay inside .desktop-live-panel so Studio's existing inspector
+   detection/reopen logic keeps working. Only its positioning is promoted to
+   the browser viewport.
+   ========================================================== */
+@media (min-width:1100px){
+  body.desktop-live-edit .desktop-live-panel > .desktop-text-detail-overlay{
+    position:fixed!important;
+    inset:0!important;
+    z-index:30000!important;
+    width:100vw!important;
+    height:100dvh!important;
+    margin:0!important;
+    padding:20px!important;
+    box-sizing:border-box!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    overflow:hidden!important;
+    background:rgba(20,21,22,.28)!important;
+    backdrop-filter:blur(7px)!important;
+    -webkit-backdrop-filter:blur(7px)!important;
+  }
+
+  body.desktop-live-edit .desktop-live-panel > .desktop-text-detail-overlay > .desktop-text-detail-modal{
+    position:relative!important;
+    inset:auto!important;
+    margin:0!important;
+    width:min(760px,calc(100vw - 40px))!important;
+    max-width:760px!important;
+    height:auto!important;
+    max-height:calc(100dvh - 40px)!important;
+    overflow:hidden!important;
+  }
+
+  body.desktop-live-edit .desktop-live-panel > .desktop-text-detail-overlay .desktop-text-detail-body{
+    min-height:0!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain!important;
+    -webkit-overflow-scrolling:touch!important;
   }
 }
