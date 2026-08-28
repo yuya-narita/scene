@@ -10450,3 +10450,40 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     width:min(720px,calc(52vw - 36px))!important;
   }
 }
+
+
+/* =========================================================
+   PC Live Editor detail modal — internal scroll fix
+   Cause:
+   The viewport-centering patch made the modal overflow:hidden, while the
+   .desktop-text-detail-body had overflow-y:auto but no flex-constrained
+   height. Therefore the body never became a scroll container and the lower
+   controls were clipped behind the fixed footer.
+   ========================================================= */
+@media (min-width:1100px){
+  body.desktop-live-edit .desktop-live-panel > .desktop-text-detail-overlay > .desktop-text-detail-modal{
+    display:flex!important;
+    flex-direction:column!important;
+    max-height:calc(100dvh - 36px)!important;
+    overflow:hidden!important;
+  }
+
+  body.desktop-live-edit .desktop-live-panel > .desktop-text-detail-overlay > .desktop-text-detail-modal > .desktop-text-detail-head{
+    flex:0 0 auto!important;
+  }
+
+  body.desktop-live-edit .desktop-live-panel > .desktop-text-detail-overlay > .desktop-text-detail-modal > .desktop-text-detail-body{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    overscroll-behavior:contain!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+
+  body.desktop-live-edit .desktop-live-panel > .desktop-text-detail-overlay > .desktop-text-detail-modal > .desktop-text-detail-foot{
+    flex:0 0 auto!important;
+    position:relative!important;
+    bottom:auto!important;
+  }
+}
