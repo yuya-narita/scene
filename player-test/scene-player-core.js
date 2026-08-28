@@ -45,6 +45,28 @@
     host.dispatchEvent(new CustomEvent(name, { detail }));
   }
 
+  // Chat bubbles already communicate "this is speech", so an outer Japanese
+  // quotation pair is redundant. Keep the authored text untouched in .scene
+  // and remove only a matching pair that wraps the ENTIRE displayed message.
+  //
+  // 「もしもし」        -> もしもし
+  // 『聞こえる？』      -> 聞こえる？
+  // 彼は「知らない」と言った。 -> unchanged
+  function chatDisplayText(value) {
+    const source = String(value ?? '');
+    const match = source.match(/^(\s*)([「『])([\s\S]*)([」』])(\s*)$/);
+    if (!match) return source;
+
+    const open = match[2];
+    const close = match[4];
+    const matchingPair =
+      (open === '「' && close === '」') ||
+      (open === '『' && close === '』');
+
+    if (!matchingPair) return source;
+    return `${match[1]}${match[3]}${match[5]}`;
+  }
+
   function assertSceneDocument(doc) {
     if (!doc || typeof doc !== 'object') throw new TypeError('Scene document must be an object.');
     if (doc.format !== 'scene-format') throw new Error('Unsupported document: format must be "scene-format".');
@@ -1401,7 +1423,7 @@
 
             const text = document.createElement('span');
             text.className = 'sp-history-chat-text';
-            text.textContent = scene.text;
+            text.textContent = chatDisplayText(scene.text);
             this._applyTextStyle(text, historyPresentation.text || {}, false);
             if (historyPresentation.chat?.bubbleTextColor) {
               text.style.setProperty('color', String(historyPresentation.chat.bubbleTextColor), 'important');
@@ -2757,7 +2779,7 @@
           if (presentation.chat?.bubbleColor) bubble.style.background = presentation.chat.bubbleColor;
           const text = document.createElement('div');
           text.className = 'sp-text';
-          text.textContent = scene.text;
+          text.textContent = chatDisplayText(scene.text);
           this._applyTextStyle(text, presentation.text || {}, false);
           if (presentation.chat?.bubbleTextColor) text.style.setProperty('color', String(presentation.chat.bubbleTextColor), 'important');
           bubble.appendChild(text);
