@@ -10641,7 +10641,9 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
 .auto-rec-resonance-modal{
   position:fixed;
   inset:0;
-  z-index:2400;
+  /* Must sit above Live Editor / AUTO REC player layers.
+     Those intentionally use near-max z-index values. */
+  z-index:2147483647!important;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -10653,6 +10655,8 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
 .auto-rec-resonance-modal.is-open{opacity:1;}
 .auto-rec-resonance-modal.is-closing{opacity:0;}
 .auto-rec-resonance-sheet{
+  position:relative;
+  z-index:1;
   width:min(100%,560px);
   border:1px solid rgba(35,35,32,.08);
   border-radius:30px;
