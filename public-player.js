@@ -62,6 +62,53 @@
   let analyticsCompleted = false;
   let analyticsViewSent = false;
 
+  // Optional pacing resonance. Reader-facing feedback stays hidden until the ending.
+  let resonanceSession = null;
+
+  function resonanceIsEnabled(){
+    return documentData?.player?.resonance?.enabled===true;
+  }
+  function resonanceHasCompleteAuthorTiming(){
+    const scenes=documentData?.scenes;
+    return Array.isArray(scenes)&&scenes.length>0&&scenes.every(scene=>Number.isFinite(Number(scene?.pause))&&Number(scene.pause)>0);
+  }
+  function resetResonanceSession(startAt=0){
+    resonanceSession=(resonanceIsEnabled()&&resonanceHasCompleteAuthorTiming()&&Number(startAt)===0)
+      ? {valid:true,lastAt:0,samples:[]}
+      : null;
+    renderResonanceResult(null);
+  }
+  function beginResonanceClock(){if(resonanceSession?.valid)resonanceSession.lastAt=performance.now();}
+  function invalidateResonance(){if(resonanceSession)resonanceSession.valid=false;}
+  function recordResonanceBoundary(sceneIndex){
+    const session=resonanceSession;if(!session?.valid||!session.lastAt)return;
+    const expected=Number(documentData?.scenes?.[sceneIndex]?.pause);
+    if(!Number.isFinite(expected)||expected<=0){invalidateResonance();return;}
+    const now=performance.now();const actual=Math.max(0,now-session.lastAt);session.lastAt=now;
+    session.samples.push({sceneIndex,expected,actual});
+  }
+  function resonanceScore(){
+    const session=resonanceSession;
+    if(!session?.valid||session.samples.length!==(documentData?.scenes?.length||0))return null;
+    const values=session.samples.map(({expected,actual})=>{
+      const diff=Math.abs(actual-expected);const tolerance=Math.max(800,expected*.25);
+      return Math.exp(-Math.pow(diff/tolerance,2));
+    });
+    return Math.max(0,Math.min(100,(values.reduce((a,b)=>a+b,0)/values.length)*100));
+  }
+  function resonanceResultNode(){
+    let node=document.getElementById('publicResonanceResult');
+    if(node||!endingLabel?.parentElement)return node;
+    node=document.createElement('div');node.id='publicResonanceResult';node.className='public-resonance-result';node.hidden=true;
+    node.innerHTML='<small>RESONANCE</small><strong></strong><p>あなたと作者の「間」の共鳴率</p>';
+    endingLabel.insertAdjacentElement('afterend',node);return node;
+  }
+  function renderResonanceResult(score){
+    const node=resonanceResultNode();if(!node)return;const value=Number(score);
+    node.hidden=!Number.isFinite(value);
+    if(!node.hidden){const strong=node.querySelector('strong');if(strong)strong.textContent=`${value.toFixed(1)}%`;}
+  }
+
   function analyticsEndpoint(){
     try{
       const u=new URL(source(),location.href);
@@ -470,6 +517,8 @@
 
     host.addEventListener('sceneplayer:scenechange', onSceneChange);
     host.addEventListener('sceneplayer:end', onEnd);
+    host.addEventListener('sceneplayer:autochange', onResonanceAutoChange);
+    host.addEventListener('sceneplayer:historyopen', invalidateResonance);
   }
 
   function onSceneChange(e) {
@@ -480,6 +529,8 @@
     if(e.detail?.direction==='next'){
       analyticsSceneAdvances += 1;
       sendAnalytics('progress',{index});
+      if(player?.auto)invalidateResonance();
+      else if(Number.isInteger(index)&&index>0)recordResonanceBoundary(index-1);
     }
 
     // Core disables Previous on Scene 1 / when author history is disabled.
@@ -492,6 +543,11 @@
 
   function onEnd() {
     localStorage.removeItem(storageKey());
+    if(resonanceSession?.valid){
+      if(player?.auto)invalidateResonance();
+      else recordResonanceBoundary((documentData?.scenes?.length||1)-1);
+    }
+    renderResonanceResult(resonanceScore());
     if(!analyticsCompleted){
       analyticsCompleted=true;
       sendAnalytics('complete',{index:Array.isArray(documentData?.scenes)?documentData.scenes.length-1:0});
@@ -507,9 +563,13 @@
     });
   }
 
+  function onResonanceAutoChange(e){if(e.detail?.auto)invalidateResonance();}
+
   function removeShellListeners() {
     host.removeEventListener('sceneplayer:scenechange', onSceneChange);
     host.removeEventListener('sceneplayer:end', onEnd);
+    host.removeEventListener('sceneplayer:autochange', onResonanceAutoChange);
+    host.removeEventListener('sceneplayer:historyopen', invalidateResonance);
   }
 
   const PUBLIC_EXIT_FADE_MS = 1600;
@@ -597,6 +657,7 @@
 
     ending.hidden = true;
     ending.classList.remove('is-visible');
+    resetResonanceSession(startAt);
 
     /*
       Public Player owns the visible cover, but Core also has its own cover.
@@ -648,6 +709,8 @@
       if(player.els?.title)player.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || documentData.title || '';
       if(player.els?.author)player.els.author.textContent=documentData.author||'';
     }
+    // Public opening breath is shell chrome, not part of the author's Scene dwell time.
+    beginResonanceClock();
   }
 
 

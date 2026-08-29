@@ -625,6 +625,21 @@
             }
           },
           "additionalProperties": true
+        },
+        "resonance": {
+          "type": "object",
+          "description": "Optional author/reader pacing comparison. Disabled by default. AUTO REC scene.pause values remain the author reference timing.",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "mode": {
+              "enum": [
+                "absolute"
+              ]
+            }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true
