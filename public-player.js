@@ -99,7 +99,9 @@
     // tolerance is at least 1s, or half of the author's Scene dwell time.
     const values=session.samples.map(({expected,actual})=>{
       const diff=Math.abs(actual-expected);
-      const tolerance=Math.max(1000,expected*.5);
+      // v1.2: no visible notes = readers are playing by ear.
+      // Give a wider window while keeping 100% reserved for an exact match.
+      const tolerance=Math.max(1500,expected*.75);
       const ratio=diff/tolerance;
       return 1/(1+ratio*ratio);
     });
