@@ -6403,7 +6403,11 @@ function startInlineTextEdit(field='text'){
     const displayMax=Number(max)*displayScale;
     const displayStep=Number(step)*displayScale;
 
-    const mobileWheel=window.matchMedia('(max-width:899px)').matches && !desktopLiveActive();
+    // Native iOS wheel is useful for compact ranges, but very long timing
+    // ranges (e.g. a 1-minute+ song intro) would require thousands of options.
+    // Use direct numeric entry for those instead so the full authored value remains reachable.
+    const optionCount=Math.floor((displayMax-displayMin)/displayStep+0.5)+1;
+    const mobileWheel=window.matchMedia('(max-width:899px)').matches && !desktopLiveActive() && optionCount<=2000;
     const numeric=document.createElement(mobileWheel?'select':'input');
     numeric.className='desktop-text-detail-number';
     if(mobileWheel)numeric.classList.add('desktop-mobile-wheel-number');
@@ -6690,7 +6694,7 @@ function openDesktopEffectDetail(){
     p.effectTiming ||= {};
     timingGrid.append(
       desktopDetailRange(u('演出時間','Effect duration'),{min:.15,max:3,step:.05,value:Number(p.effectTiming.duration)||0.8,unit:u(' 秒',' sec'),format:v=>v.toFixed(2),oninput:v=>{p.effectTiming.duration=v;apply();}}),
-      desktopDetailRange(u('開始遅延','Start delay'),{min:0,max:3,step:.05,value:Number(p.effectTiming.delay)||0,unit:u(' 秒',' sec'),format:v=>v.toFixed(2),oninput:v=>{if(v<=0)delete p.effectTiming.delay;else p.effectTiming.delay=v;apply();}}),
+      desktopDetailRange(u('開始遅延','Start delay'),{min:0,max:600,step:.1,value:Number(p.effectTiming.delay)||0,unit:u(' 秒',' sec'),format:v=>v.toFixed(1),oninput:v=>{if(v<=0)delete p.effectTiming.delay;else p.effectTiming.delay=v;apply();}}),
       desktopDetailRange(u('消えるまで','Time until exit'),{min:0,max:12,step:.1,value:(Number(p.disappear?.after)||0)/1000,unit:u(' 秒',' sec'),format:v=>v.toFixed(1),oninput:v=>{
         const motion=p.disappear?.motion||'stay';
         p.disappear={...(p.disappear||{}),after:Math.round(v*1000),motion};
@@ -7809,6 +7813,52 @@ function openDesktopTextDetail(){
     });
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
   }
+  function resonanceEnabled(){
+    return workingDocument?.player?.resonance?.enabled===true;
+  }
+
+  function setResonanceEnabled(enabled){
+    if(!workingDocument)return;
+    workingDocument.player ||= {};
+    if(enabled){
+      workingDocument.player.resonance={...(workingDocument.player.resonance||{}),enabled:true,mode:'absolute'};
+    }else if(workingDocument.player.resonance){
+      workingDocument.player.resonance.enabled=false;
+    }
+    scheduleDraftSave(50);
+  }
+
+  function resonanceRecordedCount(){
+    return Array.isArray(workingDocument?.scenes)
+      ? workingDocument.scenes.filter(scene=>Number.isFinite(Number(scene?.pause))&&Number(scene.pause)>0).length
+      : 0;
+  }
+
+  function buildResonanceSetting({desktop=false}={}){
+    const wrap=document.createElement('section');
+    wrap.className=desktop?'desktop-resonance-setting':'live-resonance-setting';
+    const copy=document.createElement('div');
+    const title=document.createElement('strong');title.textContent=u('読者との共鳴率','Reader resonance');
+    const recorded=resonanceRecordedCount();
+    const total=workingDocument?.scenes?.length||0;
+    const note=document.createElement('small');
+    note.textContent=recorded===total&&total>0
+      ? u('AUTO RECの「間」と読者の手動タップを読了時に比較します。',"Compare AUTO REC pacing with the reader's manual taps at the ending.")
+      : u(`AUTO REC記録 ${recorded}/${total} Scene。未記録Sceneがある場合は結果を表示しません。`,`AUTO REC recorded ${recorded}/${total} Scenes. No result is shown while timings are incomplete.`);
+    copy.append(title,note);
+    const label=document.createElement('label');label.className='resonance-switch';
+    const input=document.createElement('input');input.type='checkbox';input.checked=resonanceEnabled();
+    const ui=document.createElement('span');ui.setAttribute('aria-hidden','true');
+    const state=document.createElement('b');state.textContent=input.checked?'ON':'OFF';
+    input.addEventListener('change',()=>{
+      setResonanceEnabled(input.checked);
+      state.textContent=input.checked?'ON':'OFF';
+    });
+    label.append(input,ui,state);
+    wrap.append(copy,label);
+    return wrap;
+  }
+
   function renderDesktopTimingPanel(){
     if(!desktopLivePanel || !workingDocument?.scenes?.length)return;
     const {index}=liveEditScene();
@@ -7872,7 +7922,7 @@ function openDesktopTextDetail(){
     controls.append(makeNudge(-.5),makeNudge(-.1),value,makeNudge(.1),makeNudge(.5));
     const note=document.createElement('p');note.textContent=u('AUTO RECの記録値を微調整できます。秒数は直接入力もできます。','Fine-tune AUTO REC timing. You can also enter seconds directly.');
     editor.append(top,controls,note);
-    wrap.append(railWrap,editor);
+    wrap.append(railWrap,editor,buildResonanceSetting({desktop:true}));
     desktopLivePanelBody.append(wrap);
     requestAnimationFrame(()=>rail.querySelector('.is-selected')?.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}));
   }
@@ -8730,7 +8780,7 @@ function openDesktopTextDetail(){
     note.textContent=u('AUTO RECの記録値を微調整できます。秒数を直接入力して手動設定することもできます。','Fine-tune AUTO REC timing, or enter seconds directly.');
 
     editor.append(head,valueRow,nudges,note);
-    liveEditSheetBody.append(railWrap,editor);
+    liveEditSheetBody.append(railWrap,editor,buildResonanceSetting());
 
     requestAnimationFrame(()=>{
       liveEditSheetBody.querySelector('.live-timing-scene-card.is-selected')
