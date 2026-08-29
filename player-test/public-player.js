@@ -68,10 +68,12 @@
 
   function resonanceIsEnabled(){
     const resonance=documentData?.player?.resonance;
-    // Backward-safe opt-in:
-    // Older works (or documents touched before the opt-in UI was finalized)
-    // may not have an authorOptIn marker. Never show Resonance for them.
-    return resonance?.enabled===true && resonance?.authorOptIn===true;
+    // Strict, versioned opt-in.
+    // Earlier development builds may already contain enabled/authorOptIn,
+    // so only a fresh author action in the finalized v2 opt-in UI counts.
+    return resonance?.enabled===true
+      && resonance?.authorOptIn===true
+      && Number(resonance?.authorOptInVersion)===2;
   }
   function resonanceHasCompleteAuthorTiming(){
     const scenes=documentData?.scenes;
