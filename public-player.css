@@ -940,3 +940,38 @@ body{
     font-size:clamp(30px,8.5vw,38px)!important;
   }
 }
+
+
+/* =========================================================
+   Resonance v1.6 — vertical rhythm / slightly higher placement
+   ========================================================= */
+.public-ending.has-resonance .public-resonance-result{
+  gap:0!important;
+  margin:0 auto 24px!important;
+  transform:translateY(-12px)!important;
+}
+
+.public-ending.has-resonance .public-resonance-result small{
+  margin:0 0 10px!important;
+}
+
+.public-ending.has-resonance .public-resonance-result strong{
+  margin:0 0 10px!important;
+}
+
+.public-ending.has-resonance .public-resonance-result p{
+  margin:0!important;
+}
+
+@media(max-width:520px){
+  .public-ending.has-resonance .public-resonance-result{
+    margin-bottom:22px!important;
+    transform:translateY(-14px)!important;
+  }
+  .public-ending.has-resonance .public-resonance-result small{
+    margin-bottom:9px!important;
+  }
+  .public-ending.has-resonance .public-resonance-result strong{
+    margin-bottom:9px!important;
+  }
+}
