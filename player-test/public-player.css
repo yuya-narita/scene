@@ -782,4 +782,117 @@ body{
   z-index:20!important;
 }
 .public-report-card{isolation:isolate}
-\n\n/* =========================================================\n   Resonance v1.3 — ending-only result, without disturbing the\n   known-good chat/core Player styling.\n   ========================================================= */\n.public-resonance-result{\n  margin:8px auto 12px;\n  text-align:center;\n  display:flex;\n  flex-direction:column;\n  align-items:center;\n  gap:4px;\n  color:var(--public-text);\n  opacity:0;\n  transform:translateY(8px);\n  transition:opacity .8s ease 1.1s,transform .8s ease 1.1s;\n}\n.public-ending.is-visible .public-resonance-result{opacity:1;transform:translateY(0)}\n.public-resonance-result[hidden]{display:none!important}\n.public-resonance-result small{font-size:9px;letter-spacing:.24em;color:var(--public-sub)}\n.public-resonance-result strong{font:500 clamp(28px,7vw,44px)/1.05 var(--public-cover-font,Georgia,"Times New Roman",serif)}\n.public-resonance-result p{margin:3px 0 0;font-size:11px;color:var(--public-sub)}\n\n/* Resonance adds one block to the ending. Compress only the authored-copy slot\n   when that block exists, and keep the re-read button inside the viewport. */\n.public-ending.has-resonance .public-ending-inner{\n  min-height:100dvh!important;\n  max-height:100dvh;\n  overflow-y:auto;\n  overscroll-behavior:contain;\n  -webkit-overflow-scrolling:touch;\n  padding-bottom:max(18px,env(safe-area-inset-bottom))!important;\n}\n.public-ending.has-resonance .public-ending-label,\n.public-ending.has-resonance .public-ending-label[hidden]{\n  min-height:38vh!important;\n  padding-top:3vh!important;\n}\n.public-ending.has-resonance .public-reread{\n  flex:0 0 auto;\n  margin-top:14px!important;\n  margin-bottom:max(8px,env(safe-area-inset-bottom))!important;\n}\n@media(max-width:520px){\n  .public-ending.has-resonance .public-ending-label,\n  .public-ending.has-resonance .public-ending-label[hidden]{min-height:35vh!important}\n  .public-ending.has-resonance .public-resonance-result{margin:4px auto 10px}\n}\n
+\n\n/* =========================================================
+   Resonance v1.4 — ending result / mobile layout fix
+   ========================================================= */
+.public-resonance-result{
+  margin:0 auto 18px;
+  text-align:center;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  color:var(--public-text);
+  opacity:0;
+  transform:translateY(8px);
+  transition:opacity .8s ease 1.1s,transform .8s ease 1.1s;
+}
+.public-ending.is-visible .public-resonance-result{
+  opacity:1;
+  transform:translateY(0);
+}
+.public-resonance-result[hidden]{display:none!important}
+.public-resonance-result small{
+  display:block;
+  margin:0;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:10px;
+  font-weight:700;
+  line-height:1;
+  letter-spacing:.28em;
+  color:var(--public-sub);
+}
+.public-resonance-result strong{
+  display:block;
+  margin:0;
+  font-family:Georgia,"Times New Roman","Yu Mincho","Hiragino Mincho ProN",serif;
+  font-size:clamp(38px,11vw,58px);
+  font-weight:400;
+  line-height:1.05;
+  letter-spacing:.01em;
+  color:var(--public-text);
+}
+.public-resonance-result p{
+  display:block;
+  margin:2px 0 0;
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro",serif;
+  font-size:12px;
+  font-weight:400;
+  line-height:1.5;
+  letter-spacing:.02em;
+  color:var(--public-sub);
+}
+
+/* With Resonance enabled, rebalance the existing ending instead of adding
+   extra document height. This keeps the authored ending sentence, action row,
+   and 「もう一度読む」 inside one phone viewport. */
+.public-ending.has-resonance .public-ending-inner{
+  min-height:100dvh!important;
+  height:100dvh!important;
+  max-height:100dvh!important;
+  overflow:hidden!important;
+  justify-content:flex-start!important;
+  padding-top:max(42px,calc(env(safe-area-inset-top) + 18px))!important;
+  padding-bottom:max(18px,calc(env(safe-area-inset-bottom) + 8px))!important;
+  gap:0!important;
+}
+.public-ending.has-resonance .public-ending-label,
+.public-ending.has-resonance .public-ending-label[hidden]{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:3vh 0 10px!important;
+  display:grid!important;
+  place-items:center!important;
+}
+.public-ending.has-resonance .public-resonance-result{
+  flex:0 0 auto!important;
+}
+.public-ending.has-resonance .public-ending-actions.public-ending-three{
+  flex:0 0 auto!important;
+  margin:0 auto!important;
+}
+.public-ending.has-resonance .public-reread{
+  flex:0 0 auto!important;
+  display:block!important;
+  margin:14px auto 0!important;
+  padding:8px 10px!important;
+}
+
+@media(max-width:520px){
+  .public-ending.has-resonance .public-ending-inner{
+    padding-left:18px!important;
+    padding-right:18px!important;
+  }
+  .public-ending.has-resonance .public-ending-label,
+  .public-ending.has-resonance .public-ending-label[hidden]{
+    padding-top:1.5vh!important;
+    padding-bottom:8px!important;
+  }
+  .public-ending.has-resonance .public-resonance-result{
+    margin-bottom:14px!important;
+    gap:6px!important;
+  }
+  .public-ending.has-resonance .public-resonance-result small{font-size:9px!important}
+  .public-ending.has-resonance .public-resonance-result strong{font-size:clamp(36px,12vw,50px)!important}
+  .public-ending.has-resonance .public-resonance-result p{font-size:11px!important}
+  .public-ending.has-resonance .public-ending-box,
+  .public-ending.has-resonance .public-ending-cover{
+    min-height:86px!important;
+  }
+  .public-ending.has-resonance .public-reread{
+    margin-top:10px!important;
+    margin-bottom:0!important;
+  }
+}
