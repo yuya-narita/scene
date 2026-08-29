@@ -10502,3 +10502,23 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
 .resonance-switch input:checked+span::after{left:21px}
 .resonance-switch b{font-size:11px;min-width:24px}
 @media(max-width:700px){.live-resonance-setting{align-items:flex-start}}
+
+
+/* v1.1 — resonance switch stays discoverable in the mobile Time sheet */
+@media (max-width:700px){
+  .live-edit-sheet.live-edit-sheet-timing .live-resonance-setting{
+    order:0;
+    margin-top:0!important;
+    padding:12px 13px!important;
+    border-radius:14px!important;
+    align-items:center!important;
+    gap:10px!important;
+  }
+  .live-edit-sheet.live-edit-sheet-timing .live-resonance-setting strong{
+    font-size:13px!important;
+  }
+  .live-edit-sheet.live-edit-sheet-timing .live-resonance-setting small{
+    font-size:10px!important;
+    line-height:1.4!important;
+  }
+}

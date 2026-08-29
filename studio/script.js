@@ -8780,7 +8780,9 @@ function openDesktopTextDetail(){
     note.textContent=u('AUTO RECの記録値を微調整できます。秒数を直接入力して手動設定することもできます。','Fine-tune AUTO REC timing, or enter seconds directly.');
 
     editor.append(head,valueRow,nudges,note);
-    liveEditSheetBody.append(railWrap,editor,buildResonanceSetting());
+    // Keep the work-level resonance switch visible without requiring the author
+    // to discover it below a tall mobile timing editor.
+    liveEditSheetBody.append(railWrap,buildResonanceSetting(),editor);
 
     requestAnimationFrame(()=>{
       liveEditSheetBody.querySelector('.live-timing-scene-card.is-selected')
