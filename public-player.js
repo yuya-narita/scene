@@ -67,7 +67,11 @@
   let resonanceSession = null;
 
   function resonanceIsEnabled(){
-    return documentData?.player?.resonance?.enabled===true;
+    const resonance=documentData?.player?.resonance;
+    // Backward-safe opt-in:
+    // Older works (or documents touched before the opt-in UI was finalized)
+    // may not have an authorOptIn marker. Never show Resonance for them.
+    return resonance?.enabled===true && resonance?.authorOptIn===true;
   }
   function resonanceHasCompleteAuthorTiming(){
     const scenes=documentData?.scenes;
