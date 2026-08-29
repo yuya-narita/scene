@@ -1,22 +1,22 @@
-あ箱 Chat吹き出し復旧パッチ
+あ箱 共鳴率・読了ページ v1.4 修正
 
 原因:
-渡してもらった「チャット吹き出しが正常だった最新版」を確認したところ、
-root の scene-player-core.js と studio/scene-player-core.js には
-.sp-chat-bubble を生成する処理が残っています。
+v1.3で追加した共鳴率CSSが、実改行ではなく文字列の「\n」のままCSSへ書き込まれていました。
+そのためSafariが共鳴率スタイルと読了ページ再配置ルールを正しく解釈できず、
+- RESONANCE と数値が横並びになる
+- 既存のフォント/余白が効かない
+- 共鳴率追加分だけ縦に伸び、「もう一度読む」が画面外へ押し出される
+という状態になっていました。
 
-しかし対応する live Chat Scene のCSS
-  .sp-scene[data-view="chat"] ...
-  .sp-chat-bubble ...
-が root と studio の scene-player-core.css から抜けていました。
+修正:
+- 共鳴率CSSを正しいCSSとして書き直し
+- RESONANCE / 数値 / 説明を縦に中央配置
+- 数値は既存読了ページに合う明朝系
+- 共鳴率ON時だけ既存読了ページを1画面内で再配分
+- 3アクション + 「もう一度読む」をiPhoneの1画面内に維持
 
-一方 player-test/scene-player-core.css には正常なChat CSS一式が残っています。
-つまり、今回の共鳴率修正で壊れたのではなく、渡してもらった土台の時点で
-public / Studio preview のChat CSSが欠落していた可能性が高いです。
+更新ファイル:
+- public-player.css
+- player-test/public-player.css
 
-このパッチは player-test に残っているChat CSSを、
-- scene-player-core.css（公開Player）
-- studio/scene-player-core.css（Studio preview）
-へ復旧したものです。
-
-JS・共鳴率・読了ページには触れていません。
+チャットCore、共鳴率計算、Studioには触れていません。
