@@ -7814,10 +7814,11 @@ function openDesktopTextDetail(){
   }
   function resonanceEnabled(){
     const resonance=workingDocument?.player?.resonance;
-    // Only an explicit author action in the finalized UI counts as opt-in.
-    // This keeps older works OFF even if they contain an incomplete/legacy
-    // resonance object from an earlier development build.
-    return resonance?.enabled===true && resonance?.authorOptIn===true;
+    // Strict versioned opt-in: legacy works are OFF even if an earlier
+    // development build wrote enabled:true / authorOptIn:true.
+    return resonance?.enabled===true
+      && resonance?.authorOptIn===true
+      && Number(resonance?.authorOptInVersion)===2;
   }
 
   function setResonanceEnabled(enabled){
@@ -7827,6 +7828,7 @@ function openDesktopTextDetail(){
       ...(workingDocument.player.resonance||{}),
       enabled:!!enabled,
       authorOptIn:true,
+      authorOptInVersion:2,
       mode:'absolute'
     };
     scheduleDraftSave(50);
