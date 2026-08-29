@@ -3428,6 +3428,37 @@
     updateAutoRecStartLabel();scheduleDraftSave(80);
   }
 
+  function askResonanceAfterAutoRec(){
+    if(!workingDocument)return;
+    workingDocument.player ||= {};
+    const resonance=workingDocument.player.resonance || {};
+
+    // A work that has already made an explicit v2 choice does not need
+    // the discovery prompt again. The Time panel remains the edit path.
+    if(Number(resonance.authorOptInVersion)===2)return;
+
+    const useResonance=window.confirm(
+      u(
+        'AUTO RECを保存しました。\n\n読者との「間」の共鳴率を使いますか？\n\nOKで共鳴率をONにします。',
+        'AUTO REC saved.\n\nUse reader resonance for this work?\n\nChoose OK to turn Resonance ON.'
+      )
+    );
+
+    // Both answers are explicit author choices, so stamp the current opt-in version.
+    if(useResonance){
+      setResonanceEnabled(true);
+    }else{
+      workingDocument.player.resonance={
+        ...resonance,
+        enabled:false,
+        authorOptIn:true,
+        authorOptInVersion:2,
+        mode:resonance.mode||'absolute'
+      };
+      scheduleDraftSave(50);
+    }
+  }
+
   function finishAutoRec(save=true){
     if(!autoRecActive)return;
     cancelAnimationFrame(autoRecRaf);
@@ -3449,6 +3480,9 @@
       if(summary)summary.textContent=`${autoRecDurations.length} Scene / ${formatAutoRecTime(total)}`;
       if(done)done.hidden=false;
       if(start)start.hidden=true;
+      // Ask only after a successful full AUTO REC save.
+      // Defer one frame so the existing completion UI is committed first.
+      requestAnimationFrame(()=>askResonanceAfterAutoRec());
     }else{
       if(done)done.hidden=true;
       if(start)start.hidden=false;
