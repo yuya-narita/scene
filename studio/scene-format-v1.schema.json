@@ -633,6 +633,10 @@
             "enabled": {
               "type": "boolean"
             },
+            "authorOptIn": {
+              "type": "boolean",
+              "description": "True only after the author explicitly enables Resonance in Studio. Missing means OFF for backward compatibility."
+            },
             "mode": {
               "enum": [
                 "absolute"

@@ -7813,17 +7813,22 @@ function openDesktopTextDetail(){
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeOnly();});
   }
   function resonanceEnabled(){
-    return workingDocument?.player?.resonance?.enabled===true;
+    const resonance=workingDocument?.player?.resonance;
+    // Only an explicit author action in the finalized UI counts as opt-in.
+    // This keeps older works OFF even if they contain an incomplete/legacy
+    // resonance object from an earlier development build.
+    return resonance?.enabled===true && resonance?.authorOptIn===true;
   }
 
   function setResonanceEnabled(enabled){
     if(!workingDocument)return;
     workingDocument.player ||= {};
-    if(enabled){
-      workingDocument.player.resonance={...(workingDocument.player.resonance||{}),enabled:true,mode:'absolute'};
-    }else if(workingDocument.player.resonance){
-      workingDocument.player.resonance.enabled=false;
-    }
+    workingDocument.player.resonance={
+      ...(workingDocument.player.resonance||{}),
+      enabled:!!enabled,
+      authorOptIn:true,
+      mode:'absolute'
+    };
     scheduleDraftSave(50);
   }
 
