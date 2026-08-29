@@ -896,3 +896,47 @@ body{
     margin-bottom:0!important;
   }
 }
+
+
+/* =========================================================
+   Resonance v1.5 — center alignment + restrained score size
+   Keep the whole resonance block visually centered while preserving
+   the v1.4 single-screen ending layout.
+   ========================================================= */
+.public-ending.has-resonance .public-resonance-result{
+  width:100%!important;
+  max-width:360px!important;
+  margin:0 auto 14px!important;
+  text-align:center!important;
+  align-items:center!important;
+  justify-content:center!important;
+}
+
+.public-ending.has-resonance .public-resonance-result small,
+.public-ending.has-resonance .public-resonance-result strong,
+.public-ending.has-resonance .public-resonance-result p{
+  width:100%!important;
+  text-align:center!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+
+.public-ending.has-resonance .public-resonance-result strong{
+  font-size:clamp(30px,8vw,40px)!important;
+  line-height:1!important;
+}
+
+.public-ending.has-resonance .public-resonance-result p{
+  font-size:11px!important;
+  line-height:1.45!important;
+}
+
+@media(max-width:520px){
+  .public-ending.has-resonance .public-resonance-result{
+    max-width:320px!important;
+    margin-bottom:12px!important;
+  }
+  .public-ending.has-resonance .public-resonance-result strong{
+    font-size:clamp(30px,8.5vw,38px)!important;
+  }
+}
