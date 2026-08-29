@@ -6403,9 +6403,8 @@ function startInlineTextEdit(field='text'){
     const displayMax=Number(max)*displayScale;
     const displayStep=Number(step)*displayScale;
 
-    // Native iOS wheel is useful for compact ranges, but very long timing
-    // ranges (e.g. a 1-minute+ song intro) would require thousands of options.
-    // Use direct numeric entry for those instead so the full authored value remains reachable.
+    // Keep iOS wheel controls for compact ranges. Long timing ranges (e.g.
+    // one-minute intros) use direct numeric input instead of thousands of options.
     const optionCount=Math.floor((displayMax-displayMin)/displayStep+0.5)+1;
     const mobileWheel=window.matchMedia('(max-width:899px)').matches && !desktopLiveActive() && optionCount<=2000;
     const numeric=document.createElement(mobileWheel?'select':'input');
@@ -7922,7 +7921,7 @@ function openDesktopTextDetail(){
     controls.append(makeNudge(-.5),makeNudge(-.1),value,makeNudge(.1),makeNudge(.5));
     const note=document.createElement('p');note.textContent=u('AUTO RECの記録値を微調整できます。秒数は直接入力もできます。','Fine-tune AUTO REC timing. You can also enter seconds directly.');
     editor.append(top,controls,note);
-    wrap.append(railWrap,editor,buildResonanceSetting({desktop:true}));
+    wrap.append(railWrap,buildResonanceSetting({desktop:true}),editor);
     desktopLivePanelBody.append(wrap);
     requestAnimationFrame(()=>rail.querySelector('.is-selected')?.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}));
   }
@@ -8780,8 +8779,7 @@ function openDesktopTextDetail(){
     note.textContent=u('AUTO RECの記録値を微調整できます。秒数を直接入力して手動設定することもできます。','Fine-tune AUTO REC timing, or enter seconds directly.');
 
     editor.append(head,valueRow,nudges,note);
-    // Keep the work-level resonance switch visible without requiring the author
-    // to discover it below a tall mobile timing editor.
+    // Keep the work-level switch visible before the tall timing editor on iPhone.
     liveEditSheetBody.append(railWrap,buildResonanceSetting(),editor);
 
     requestAnimationFrame(()=>{
