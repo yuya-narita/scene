@@ -90,9 +90,18 @@
   function resonanceScore(){
     const session=resonanceSession;
     if(!session?.valid||session.samples.length!==(documentData?.scenes?.length||0))return null;
+    // v1.1: "間"の一致度は音ゲーの厳密判定ではない。
+    // v1 used a Gaussian curve with a narrow tolerance, so 1–2秒程度のズレが
+    // 多いだけで各Sceneの値がほぼ0になり、全体が0.0%へ潰れやすかった。
+    // Here we use a gentler relative-error curve:
+    //   diff=0        -> 100%
+    //   diff=tolerance -> 50%
+    // tolerance is at least 1s, or half of the author's Scene dwell time.
     const values=session.samples.map(({expected,actual})=>{
-      const diff=Math.abs(actual-expected);const tolerance=Math.max(800,expected*.25);
-      return Math.exp(-Math.pow(diff/tolerance,2));
+      const diff=Math.abs(actual-expected);
+      const tolerance=Math.max(1000,expected*.5);
+      const ratio=diff/tolerance;
+      return 1/(1+ratio*ratio);
     });
     return Math.max(0,Math.min(100,(values.reduce((a,b)=>a+b,0)/values.length)*100));
   }
@@ -697,6 +706,11 @@
     // trusted user gesture that pressed START / CONTINUE.
     player.begin();
 
+    // Resonance must use the same zero point as the audible work.
+    // Scene 1 audio starts at player.begin(), so start the reader clock here too.
+    // Starting after openingBreath() introduced a shell-only offset.
+    beginResonanceClock();
+
     await openingBreath();
 
     // The Scene's audio has already started from the trusted gesture. Reveal the
@@ -709,8 +723,7 @@
       if(player.els?.title)player.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || documentData.title || '';
       if(player.els?.author)player.els.author.textContent=documentData.author||'';
     }
-    // Public opening breath is shell chrome, not part of the author's Scene dwell time.
-    beginResonanceClock();
+    // Resonance clock already started at the same moment as Scene 1 / audio.
   }
 
 
