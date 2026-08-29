@@ -62,7 +62,8 @@
   let analyticsCompleted = false;
   let analyticsViewSent = false;
 
-  // Optional pacing resonance. Reader-facing feedback stays hidden until the ending.
+  // Optional author/reader pacing resonance. No judgement is shown during reading;
+  // the comparison appears only on the ending screen.
   let resonanceSession = null;
 
   function resonanceIsEnabled(){
@@ -84,23 +85,18 @@
     const session=resonanceSession;if(!session?.valid||!session.lastAt)return;
     const expected=Number(documentData?.scenes?.[sceneIndex]?.pause);
     if(!Number.isFinite(expected)||expected<=0){invalidateResonance();return;}
-    const now=performance.now();const actual=Math.max(0,now-session.lastAt);session.lastAt=now;
+    const now=performance.now();
+    const actual=Math.max(0,now-session.lastAt);
+    session.lastAt=now;
     session.samples.push({sceneIndex,expected,actual});
   }
   function resonanceScore(){
     const session=resonanceSession;
     if(!session?.valid||session.samples.length!==(documentData?.scenes?.length||0))return null;
-    // v1.1: "間"の一致度は音ゲーの厳密判定ではない。
-    // v1 used a Gaussian curve with a narrow tolerance, so 1–2秒程度のズレが
-    // 多いだけで各Sceneの値がほぼ0になり、全体が0.0%へ潰れやすかった。
-    // Here we use a gentler relative-error curve:
-    //   diff=0        -> 100%
-    //   diff=tolerance -> 50%
-    // tolerance is at least 1s, or half of the author's Scene dwell time.
     const values=session.samples.map(({expected,actual})=>{
       const diff=Math.abs(actual-expected);
-      // v1.2: no visible notes = readers are playing by ear.
-      // Give a wider window while keeping 100% reserved for an exact match.
+      // No visible notes: this is a comparison of pacing, not a strict rhythm-game judgement.
+      // 100% remains possible only at exact coincidence, but nearby taps stay meaningful.
       const tolerance=Math.max(1500,expected*.75);
       const ratio=diff/tolerance;
       return 1/(1+ratio*ratio);
@@ -110,14 +106,24 @@
   function resonanceResultNode(){
     let node=document.getElementById('publicResonanceResult');
     if(node||!endingLabel?.parentElement)return node;
-    node=document.createElement('div');node.id='publicResonanceResult';node.className='public-resonance-result';node.hidden=true;
+    node=document.createElement('div');
+    node.id='publicResonanceResult';
+    node.className='public-resonance-result';
+    node.hidden=true;
     node.innerHTML='<small>RESONANCE</small><strong></strong><p>あなたと作者の「間」の共鳴率</p>';
-    endingLabel.insertAdjacentElement('afterend',node);return node;
+    endingLabel.insertAdjacentElement('afterend',node);
+    return node;
   }
   function renderResonanceResult(score){
-    const node=resonanceResultNode();if(!node)return;const value=Number(score);
+    const node=resonanceResultNode();
+    if(!node)return;
+    const value=Number(score);
     node.hidden=!Number.isFinite(value);
-    if(!node.hidden){const strong=node.querySelector('strong');if(strong)strong.textContent=`${value.toFixed(1)}%`;}
+    ending?.classList.toggle('has-resonance',!node.hidden);
+    if(!node.hidden){
+      const strong=node.querySelector('strong');
+      if(strong)strong.textContent=`${value.toFixed(1)}%`;
+    }
   }
 
   function analyticsEndpoint(){
@@ -668,6 +674,7 @@
 
     ending.hidden = true;
     ending.classList.remove('is-visible');
+    ending.classList.remove('has-resonance');
     resetResonanceSession(startAt);
 
     /*
@@ -708,9 +715,7 @@
     // trusted user gesture that pressed START / CONTINUE.
     player.begin();
 
-    // Resonance must use the same zero point as the audible work.
-    // Scene 1 audio starts at player.begin(), so start the reader clock here too.
-    // Starting after openingBreath() introduced a shell-only offset.
+    // Use the same zero point as Scene 1 / its audio.
     beginResonanceClock();
 
     await openingBreath();
@@ -725,7 +730,6 @@
       if(player.els?.title)player.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || documentData.title || '';
       if(player.els?.author)player.els.author.textContent=documentData.author||'';
     }
-    // Resonance clock already started at the same moment as Scene 1 / audio.
   }
 
 
