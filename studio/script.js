@@ -3428,24 +3428,11 @@
     updateAutoRecStartLabel();scheduleDraftSave(80);
   }
 
-  function askResonanceAfterAutoRec(){
+  function commitResonancePromptChoice(enabled){
     if(!workingDocument)return;
     workingDocument.player ||= {};
     const resonance=workingDocument.player.resonance || {};
-
-    // A work that has already made an explicit v2 choice does not need
-    // the discovery prompt again. The Time panel remains the edit path.
-    if(Number(resonance.authorOptInVersion)===2)return;
-
-    const useResonance=window.confirm(
-      u(
-        'AUTO RECを保存しました。\n\n読者との「間」の共鳴率を使いますか？\n\nOKで共鳴率をONにします。',
-        'AUTO REC saved.\n\nUse reader resonance for this work?\n\nChoose OK to turn Resonance ON.'
-      )
-    );
-
-    // Both answers are explicit author choices, so stamp the current opt-in version.
-    if(useResonance){
+    if(enabled){
       setResonanceEnabled(true);
     }else{
       workingDocument.player.resonance={
@@ -3457,6 +3444,97 @@
       };
       scheduleDraftSave(50);
     }
+  }
+
+  function askResonanceAfterAutoRec(){
+    if(!workingDocument)return;
+    workingDocument.player ||= {};
+    const resonance=workingDocument.player.resonance || {};
+
+    if(Number(resonance.authorOptInVersion)===2)return;
+    if(document.querySelector('.auto-rec-resonance-modal'))return;
+
+    const overlay=document.createElement('div');
+    overlay.className='auto-rec-resonance-modal';
+    overlay.setAttribute('role','dialog');
+    overlay.setAttribute('aria-modal','true');
+    overlay.setAttribute('aria-labelledby','autoRecResonanceTitle');
+
+    const sheet=document.createElement('section');
+    sheet.className='auto-rec-resonance-sheet';
+
+    const head=document.createElement('div');
+    head.className='auto-rec-resonance-head';
+
+    const copy=document.createElement('div');
+    const kicker=document.createElement('small');
+    kicker.textContent='AUTO REC';
+    const title=document.createElement('h2');
+    title.id='autoRecResonanceTitle';
+    title.textContent=u('読者との共鳴率','Reader resonance');
+    copy.append(kicker,title);
+
+    const closeX=document.createElement('button');
+    closeX.type='button';
+    closeX.className='auto-rec-resonance-close';
+    closeX.setAttribute('aria-label',u('閉じる','Close'));
+    closeX.textContent='×';
+    head.append(copy,closeX);
+
+    const lead=document.createElement('p');
+    lead.className='auto-rec-resonance-lead';
+    lead.textContent=u(
+      'AUTO RECを保存しました。作者の「間」と読者の手動タップを、読了時に比べますか？',
+      'AUTO REC was saved. Compare the author’s pacing with the reader’s manual taps at the ending?'
+    );
+
+    const setting=document.createElement('div');
+    setting.className='auto-rec-resonance-choice';
+
+    const settingCopy=document.createElement('div');
+    const settingTitle=document.createElement('strong');
+    settingTitle.textContent=u('読者との共鳴率を使う','Use reader resonance');
+    const settingNote=document.createElement('small');
+    settingNote.textContent=u(
+      'あとから⌛️「時間」でも変更できます。',
+      'You can change this later in Time settings.'
+    );
+    settingCopy.append(settingTitle,settingNote);
+
+    const label=document.createElement('label');
+    label.className='resonance-switch auto-rec-resonance-switch';
+    const input=document.createElement('input');
+    input.type='checkbox';
+    input.checked=false;
+    const ui=document.createElement('span');
+    ui.setAttribute('aria-hidden','true');
+    const state=document.createElement('b');
+    state.textContent='OFF';
+    input.addEventListener('change',()=>{state.textContent=input.checked?'ON':'OFF';});
+    label.append(input,ui,state);
+    setting.append(settingCopy,label);
+
+    const done=document.createElement('button');
+    done.type='button';
+    done.className='auto-rec-resonance-done';
+    done.textContent=u('閉じる','Close');
+
+    let closing=false;
+    const finish=()=>{
+      if(closing)return;
+      closing=true;
+      commitResonancePromptChoice(input.checked);
+      overlay.classList.add('is-closing');
+      window.setTimeout(()=>overlay.remove(),180);
+    };
+
+    closeX.addEventListener('click',finish);
+    done.addEventListener('click',finish);
+
+    sheet.append(head,lead,setting,done);
+    overlay.append(sheet);
+    document.body.append(overlay);
+    requestAnimationFrame(()=>overlay.classList.add('is-open'));
   }
 
   function finishAutoRec(save=true){

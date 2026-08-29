@@ -10636,3 +10636,109 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     flex:0 0 auto!important;
   }
 }
+
+/* AUTO REC -> Resonance discovery modal v2 */
+.auto-rec-resonance-modal{
+  position:fixed;
+  inset:0;
+  z-index:2400;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px 20px calc(24px + env(safe-area-inset-bottom));
+  background:rgba(20,20,18,.34);
+  opacity:0;
+  transition:opacity .18s ease;
+}
+.auto-rec-resonance-modal.is-open{opacity:1;}
+.auto-rec-resonance-modal.is-closing{opacity:0;}
+.auto-rec-resonance-sheet{
+  width:min(100%,560px);
+  border:1px solid rgba(35,35,32,.08);
+  border-radius:30px;
+  padding:26px 24px 22px;
+  background:rgba(249,249,247,.97);
+  box-shadow:0 22px 70px rgba(0,0,0,.18);
+  transform:translateY(12px) scale(.985);
+  transition:transform .18s ease;
+}
+.auto-rec-resonance-modal.is-open .auto-rec-resonance-sheet{transform:none;}
+.auto-rec-resonance-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:18px;
+}
+.auto-rec-resonance-head small{
+  display:block;
+  margin-bottom:5px;
+  color:#888983;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.14em;
+}
+.auto-rec-resonance-head h2{
+  margin:0;
+  font-size:24px;
+  line-height:1.25;
+  letter-spacing:-.02em;
+}
+.auto-rec-resonance-close{
+  flex:0 0 52px;
+  width:52px;
+  height:52px;
+  border:0;
+  border-radius:50%;
+  background:#ececeb;
+  color:#171715;
+  font:700 34px/1 system-ui,-apple-system,sans-serif;
+}
+.auto-rec-resonance-lead{
+  margin:26px 2px 20px;
+  color:#454540;
+  font-size:15px;
+  line-height:1.75;
+}
+.auto-rec-resonance-choice{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  padding:22px 20px;
+  border:1px solid rgba(35,35,32,.10);
+  border-radius:22px;
+  background:#fff;
+}
+.auto-rec-resonance-choice strong{display:block;font-size:17px;line-height:1.35;}
+.auto-rec-resonance-choice small{
+  display:block;
+  margin-top:6px;
+  color:#8a8a85;
+  font-size:12px;
+  line-height:1.45;
+}
+.auto-rec-resonance-switch{flex:0 0 auto;}
+.auto-rec-resonance-done{
+  width:100%;
+  min-height:54px;
+  margin-top:18px;
+  border:1px solid rgba(35,35,32,.12);
+  border-radius:18px;
+  background:#171715;
+  color:#fff;
+  font-size:16px;
+  font-weight:800;
+}
+@media (max-width:640px){
+  .auto-rec-resonance-modal{
+    align-items:flex-end;
+    padding:18px 14px calc(14px + env(safe-area-inset-bottom));
+  }
+  .auto-rec-resonance-sheet{
+    width:100%;
+    border-radius:30px;
+    padding:24px 20px 20px;
+  }
+  .auto-rec-resonance-choice{padding:20px 16px;}
+}
+
