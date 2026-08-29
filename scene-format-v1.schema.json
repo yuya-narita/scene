@@ -641,6 +641,10 @@
               "enum": [
                 "absolute"
               ]
+            },
+            "authorOptInVersion": {
+              "type": "integer",
+              "description": "Current explicit opt-in marker. Resonance is enabled only when this is 2."
             }
           },
           "additionalProperties": true
