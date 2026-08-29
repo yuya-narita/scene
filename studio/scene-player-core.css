@@ -1461,3 +1461,123 @@
 .sp-scene.sp-fx-play .sp-text{
   animation-fill-mode:both!important;
 }
+
+
+/* Restored Chat Scene live bubble styles from player-test */
+.sp-scene[data-view="chat"]{
+  text-align:left!important;
+}
+.sp-scene[data-view="chat"] .sp-chat-row{
+  display:flex;
+  align-items:flex-end;
+  gap:10px;
+  width:min(72%,560px);
+  margin-left:0;
+  margin-right:auto;
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-row{
+  flex-direction:row-reverse;
+  margin-left:auto;
+  margin-right:0;
+}
+.sp-scene[data-view="chat"] .sp-chat-icon{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  border-radius:50%;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  background:var(--sp-panel);
+  border:1px solid var(--sp-line);
+  font:700 15px/1 var(--sp-font-sans);
+  color:var(--sp-sub);
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+}
+.sp-scene[data-view="chat"] .sp-chat-icon img{
+  width:100%!important;
+  height:100%!important;
+  max-width:100%!important;
+  max-height:100%!important;
+  object-fit:cover!important;
+  display:block!important;
+}
+.sp-scene[data-view="chat"] .sp-chat-body{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  min-width:0;
+  max-width:calc(100% - 52px);
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-body{
+  align-items:flex-end;
+}
+.sp-scene[data-view="chat"] .sp-chat-speaker{
+  margin:0 8px 6px!important;
+  font-family:var(--sp-font-sans)!important;
+  font-size:12px!important;
+  line-height:1.25!important;
+  letter-spacing:.02em!important;
+  color:var(--sp-sub)!important;
+  text-align:left!important;
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-speaker{
+  text-align:right!important;
+}
+.sp-scene[data-view="chat"] .sp-chat-bubble{
+  position:relative;
+  display:inline-block;
+  max-width:100%;
+  padding:11px 15px;
+  border-radius:18px 18px 18px 6px;
+  background:var(--sp-panel);
+  border:1px solid var(--sp-line);
+  box-shadow:0 4px 14px rgba(0,0,0,.10);
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-bubble{
+  border-radius:18px 18px 6px 18px;
+  background:color-mix(in srgb,var(--sp-text) 12%,var(--sp-panel));
+}
+.sp-scene[data-view="chat"] .sp-chat-bubble::after{
+  content:"";
+  position:absolute;
+  left:-5px;
+  bottom:8px;
+  width:9px;
+  height:9px;
+  background:inherit;
+  border-left:1px solid var(--sp-line);
+  border-bottom:1px solid var(--sp-line);
+  transform:rotate(45deg);
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-bubble::after{
+  left:auto;
+  right:-5px;
+  transform:rotate(225deg);
+}
+.sp-scene[data-view="chat"] .sp-chat-bubble .sp-text{
+  position:relative;
+  z-index:1;
+  margin:0!important;
+  max-width:none!important;
+  text-align:left!important;
+  font-size:clamp(16px,3.4vw,21px)!important;
+  line-height:1.55!important;
+  letter-spacing:.015em!important;
+  font-family:var(--sp-font-sans)!important;
+  font-weight:500!important;
+}
+.sp-core[data-display="solo"] .sp-scene[data-view="chat"] .sp-chat-row{
+  width:min(76%,600px);
+}
+@media(max-width:520px){
+  .sp-scene[data-view="chat"] .sp-chat-row{width:84%;gap:8px}
+  .sp-scene[data-view="chat"] .sp-chat-icon{width:36px;height:36px;flex-basis:36px}
+  .sp-scene[data-view="chat"] .sp-chat-body{max-width:calc(100% - 44px)}
+  .sp-scene[data-view="chat"] .sp-chat-bubble{padding:9px 12px}
+  .sp-scene[data-view="chat"] .sp-chat-bubble .sp-text{font-size:clamp(15px,4.1vw,18px)!important}
+  .sp-core[data-display="solo"] .sp-scene[data-view="chat"] .sp-chat-row{width:88%}
+}
+\n\n/* Local prototype v0.7 — mobile/iPhone Chat Scene player parity */\n@media (max-width: 640px){\n  .sp-scene[data-view="chat"]{\n    width:100%!important;\n    max-width:none!important;\n    padding-left:max(12px,env(safe-area-inset-left))!important;\n    padding-right:max(12px,env(safe-area-inset-right))!important;\n    box-sizing:border-box!important;\n  }\n  .sp-scene[data-view="chat"] .sp-chat-row{\n    width:min(88%,520px)!important;\n    max-width:88%!important;\n  }\n  .sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-row{\n    margin-left:auto!important;\n    margin-right:0!important;\n  }\n  .sp-scene[data-view="chat"] .sp-chat-icon{\n    width:36px!important;height:36px!important;flex:0 0 36px!important;\n  }\n  .sp-scene[data-view="chat"] .sp-chat-icon img{\n    width:100%!important;height:100%!important;object-fit:cover!important;\n  }\n  .sp-scene[data-view="chat"] .sp-chat-body{\n    max-width:calc(100% - 44px)!important;min-width:0!important;\n  }\n  .sp-scene[data-view="chat"] .sp-chat-bubble{\n    max-width:100%!important;overflow-wrap:anywhere!important;word-break:break-word!important;\n  }\n  .sp-scene[data-view="chat"] .sp-chat-speaker{\n    max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;\n  }\n}\n
+
+/* Local prototype v0.10 — history drum keeps Chat Scene presentation */
