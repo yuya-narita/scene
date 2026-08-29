@@ -123,12 +123,21 @@
   function renderResonanceResult(score){
     const node=resonanceResultNode();
     if(!node)return;
-    const value=Number(score);
+
+    // IMPORTANT: Number(null) === 0.
+    // v1.8 converted null before checking validity, so disabled / legacy works
+    // were mistakenly rendered as RESONANCE 0.0%. Treat null/undefined as
+    // "no result" before numeric conversion.
+    const hasScore=score!==null && score!==undefined && score!=='';
+    const value=hasScore ? Number(score) : NaN;
     node.hidden=!Number.isFinite(value);
     ending?.classList.toggle('has-resonance',!node.hidden);
+
+    const strong=node.querySelector('strong');
     if(!node.hidden){
-      const strong=node.querySelector('strong');
       if(strong)strong.textContent=`${value.toFixed(1)}%`;
+    }else if(strong){
+      strong.textContent='';
     }
   }
 
