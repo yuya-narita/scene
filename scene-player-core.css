@@ -1788,3 +1788,60 @@ html.sp-scene-image-open body{
   .sp-scene.sp-fx-play[data-effect="glitchHit"] .sp-text,
   .sp-scene.sp-fx-play[data-effect="rush"] .sp-text{animation:spOriginalFade .18s linear 1!important}
 }
+
+
+/* =========================================================
+   A-Hako expressive text effects v2 — OVERDRIVE
+   Deliberately oversized: unreadable in the approach, readable at landing.
+   ========================================================= */
+.sp-core[data-display="overlay"] .sp-scene{opacity:.78}
+.sp-core[data-display="overlay"] .sp-scene.is-active{opacity:1}
+.sp-core[data-display="overlay"] .sp-scenes{perspective:900px;transform-style:preserve-3d}
+
+@keyframes spFxSlamV2{
+  0%{opacity:0;transform:perspective(700px) translate3d(0,-62vh,420px) rotateX(-18deg) scale(5.2);filter:blur(8px)}
+  52%{opacity:1;transform:perspective(700px) translate3d(0,16px,0) rotateX(0) scale(1.08,.72);filter:blur(0)}
+  62%{transform:perspective(700px) translate3d(0,-8px,0) scale(.96,1.10)}
+  76%{transform:translate3d(0,3px,0) scale(1.025,.97)}
+  100%{opacity:1;transform:none;filter:none}
+}
+@keyframes spFxBurstV2{
+  0%{opacity:0;transform:scale(.04) rotate(-7deg);filter:blur(14px)}
+  38%{opacity:1;transform:scale(2.35) rotate(2deg);filter:blur(0)}
+  58%{transform:scale(.78) rotate(-1deg)}
+  75%{transform:scale(1.22)}
+  100%{opacity:1;transform:scale(1)}
+}
+@keyframes spFxGlitchHitV2{
+  0%{opacity:0;transform:translate(-38vw,18px) scale(2.8) skewX(-28deg);filter:blur(7px)}
+  14%{opacity:1;transform:translate(26vw,-12px) scale(1.8) skewX(20deg)}
+  29%{transform:translate(-17vw,8px) scale(1.45) skewX(-14deg)}
+  46%{transform:translate(10vw,-5px) scale(1.18) skewX(9deg)}
+  66%{transform:translate(-4vw,2px) scale(1.06) skewX(-4deg)}
+  100%{opacity:1;transform:none;filter:none}
+}
+@keyframes spFxRushV2{
+  0%{opacity:0;transform:perspective(700px) translate3d(-110vw,0,340px) scale(3.2) skewX(-24deg);filter:blur(10px)}
+  58%{opacity:1;transform:translate3d(26px,0,0) scale(1.12) skewX(5deg);filter:blur(0)}
+  76%{transform:translate3d(-9px,0,0) scale(.98) skewX(-2deg)}
+  100%{opacity:1;transform:none;filter:none}
+}
+.sp-scene.sp-fx-play[data-effect="slam"] .sp-text{transform-origin:50% 100%;animation-name:spFxSlamV2!important;animation-timing-function:cubic-bezier(.08,.78,.13,1)!important}
+.sp-scene.sp-fx-play[data-effect="burst"] .sp-text{animation-name:spFxBurstV2!important;animation-timing-function:cubic-bezier(.1,.8,.14,1)!important}
+.sp-scene.sp-fx-play[data-effect="glitchHit"] .sp-text{animation-name:spFxGlitchHitV2!important;animation-timing-function:steps(8,end)!important}
+.sp-scene.sp-fx-play[data-effect="rush"] .sp-text{animation-name:spFxRushV2!important;animation-timing-function:cubic-bezier(.06,.78,.12,1)!important}
+
+@keyframes spDisappearShatter{
+  0%{opacity:1;transform:var(--sp-landed-transform,translate3d(0,0,0));filter:none}
+  18%{transform:translate3d(-8px,3px,0) skewX(-8deg);filter:contrast(1.8)}
+  36%{transform:translate3d(11px,-6px,0) skewX(11deg) scale(1.06);clip-path:polygon(0 0,100% 0,88% 32%,100% 47%,74% 62%,91% 100%,0 100%,13% 66%,0 48%,18% 31%)}
+  100%{opacity:0;transform:translate3d(0,26px,0) scale(1.45) rotate(4deg);filter:blur(9px);clip-path:polygon(0 0,17% 9%,8% 35%,28% 47%,12% 76%,0 100%,100% 100%,86% 73%,100% 48%,79% 31%,91% 7%)}
+}
+@keyframes spDisappearExplode{
+  0%{opacity:1;transform:scale(1);filter:none}
+  22%{transform:scale(.88);filter:brightness(1.7)}
+  48%{opacity:1;transform:scale(1.55);filter:blur(1px) brightness(2.2)}
+  100%{opacity:0;transform:scale(3.8) rotate(5deg);filter:blur(18px) brightness(1.4)}
+}
+.sp-scene.is-disappearing.is-disappear-shatter{animation:spDisappearShatter var(--sp-disappear-fade,700ms) cubic-bezier(.18,.7,.2,1) both!important;transition:none!important}
+.sp-scene.is-disappearing.is-disappear-explode{animation:spDisappearExplode var(--sp-disappear-fade,700ms) cubic-bezier(.12,.76,.14,1) both!important;transition:none!important}

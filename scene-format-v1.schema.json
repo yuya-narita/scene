@@ -283,6 +283,11 @@
             "center",
             "right"
           ]
+        },
+        "fontWeight": {
+          "type": "number",
+          "minimum": 100,
+          "maximum": 900
         }
       },
       "additionalProperties": true
@@ -293,7 +298,8 @@
         "display": {
           "enum": [
             "stack",
-            "solo"
+            "solo",
+            "overlay"
           ]
         },
         "view": {
@@ -365,7 +371,9 @@
             "motion": {
               "enum": [
                 "stay",
-                "up"
+                "up",
+                "shatter",
+                "explode"
               ]
             }
           },
