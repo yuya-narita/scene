@@ -4,7 +4,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
 let lastStats=null;
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
@@ -99,7 +99,35 @@ async function loadAnalytics(){
     if(els.popularWorks)els.popularWorks.innerHTML=`<div class="empty">閲覧情報を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
   }
 }
-async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadAnalytics()]);}
+
+const readerSiteLabel=s=>({note:'note',narou:'小説家になろう',kakuyomu:'カクヨム',alphapolis:'アルファポリス',pixiv:'pixiv',hameln:'ハーメルン',other:'その他'})[s]||s||'その他';
+const readerModeLabel=m=>({selection:'選択範囲',auto:'本文自動抽出','page-fallback':'ページ全文',other:'その他'})[m]||m||'その他';
+function renderReaderBreakdown(node,rows,labeler){
+  if(!node)return;
+  if(!rows?.length){node.innerHTML='<div class="empty">まだデータはありません。</div>';return;}
+  node.innerHTML=rows.map((row,i)=>`<div class="reader-stat-row"><span class="rank">${i+1}</span><strong>${escapeHtml(labeler(row.key))}</strong><span><b>${Number(row.views||0).toLocaleString('ja-JP')}</b><small>起動</small></span><span><b>${Number(row.completions||0).toLocaleString('ja-JP')}</b><small>読了</small></span><span><b>${escapeHtml(formatRate(row.completions,row.views))}</b><small>読了率</small></span></div>`).join('');
+}
+async function loadReaderAnalytics(){
+  if(els.readerSites)els.readerSites.innerHTML='<div class="empty">読み込み中…</div>';
+  if(els.readerModes)els.readerModes.innerHTML='<div class="empty">読み込み中…</div>';
+  try{
+    const d=await api('/admin/reader-analytics?days=7');
+    const t=d.today||{};
+    els.readerTodayViews.textContent=Number(t.views||0).toLocaleString('ja-JP');
+    els.readerTodayCompletions.textContent=Number(t.completions||0).toLocaleString('ja-JP');
+    els.readerTodaySceneAdvances.textContent=Number(t.sceneAdvances||0).toLocaleString('ja-JP');
+    els.readerTodayCompletionRate.textContent=formatRate(t.completions,t.views);
+    els.readerTodayStudio.textContent=Number(t.outbound?.studio||0).toLocaleString('ja-JP');
+    els.readerTodayOfficial.textContent=Number(t.outbound?.official||0).toLocaleString('ja-JP');
+    renderReaderBreakdown(els.readerSites,d.sites||[],readerSiteLabel);
+    renderReaderBreakdown(els.readerModes,d.modes||[],readerModeLabel);
+  }catch(e){
+    if(els.readerSites)els.readerSites.innerHTML=`<div class="empty">Reader情報を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
+    if(els.readerModes)els.readerModes.innerHTML='';
+  }
+}
+
+async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadAnalytics(),loadReaderAnalytics()]);}
 
 async function loadReports(){const status=els.filter.value;els.list.innerHTML='<div class="empty">読み込み中…</div>';try{const [shown,open]=await Promise.all([api(`/admin/reports?status=${encodeURIComponent(status)}`),api('/admin/reports?status=open')]);els.openCount.textContent=open.count;els.shownCount.textContent=shown.count;renderReports(shown.reports);}catch(e){els.list.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
