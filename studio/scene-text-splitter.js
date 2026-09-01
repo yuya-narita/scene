@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.1';
 
   function languageStats(text) {
     const s = String(text ?? '');
@@ -40,10 +40,138 @@
     return /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(value) ? value : fallback;
   }
 
+
+
+  /*
+   * v1.3 — viewport density guard
+   *
+   * The language splitters decide semantic / rhetorical boundaries first.
+   * This final pass only intervenes when one generated Scene becomes visually
+   * too tall for tap-reading, especially prose that contains many short lines.
+   * It cuts only at existing line boundaries and prefers the language
+   * splitter's own boundary score near the visual target.
+   */
+  function visualRows(text, language = 'ja') {
+    const wrap = language === 'en' ? 48 : 27;
+    return String(text ?? '').split('\n').reduce((sum, raw) => {
+      const line = raw.trim();
+      if (!line) return sum + 1;
+      return sum + Math.max(1, Math.ceil([...line].length / wrap));
+    }, 0);
+  }
+
+  function boundaryPreference(language, prev, next) {
+    let score = 28;
+    const a = String(prev ?? '').trim();
+    const b = String(next ?? '').trim();
+    if (language === 'ja' && window.JapaneseSceneSplitter) {
+      try {
+        const generic = window.JapaneseSceneSplitter.boundaryScore?.(
+          { text: prev }, { text: next }, { authorLineBreak: true }
+        );
+        if (Number.isFinite(generic?.score)) score = generic.score;
+        const role = window.JapaneseSceneSplitter.roleBoundaryScore?.(prev, next);
+        if (Number.isFinite(role?.score)) score += role.score * 0.55;
+        const dep = window.JapaneseSceneSplitter.dependencyValue?.(prev, next);
+        if (Number.isFinite(dep?.value)) score -= dep.value * 0.18;
+      } catch (_) {}
+    }
+    if (/^(?:だから|なので|そのため|つまり|というのも|なぜなら|そしてまた)/.test(b)) score -= 18;
+
+    if (language === 'ja') {
+      // Do not cut a syntactic continuation merely to satisfy viewport height.
+      // Examples: 「ニコニコしながら / 近づいてくる。」
+      //           「踊り出して、 / めちゃくちゃ楽しそう…」
+      if (/[、，,]$/.test(a)) score -= 82;
+      if (/(?:ながら|つつ|たり|たりして|て|で|ので|から|けど|けれど|のに|まま|ついでに)$/.test(a)) score -= 68;
+      if (/(?:という|っていう|みたいな|ような|ための|ことを|ものを|のを)$/.test(a)) score -= 54;
+
+      // A line without sentence-closing punctuation is usually one thought
+      // continuing onto the next source line. Keep it together unless a very
+      // strong rhetorical boundary outweighs this penalty.
+      if (!/[。！？!?…」』”’）)]$/.test(a) && a.length >= 5) score -= 34;
+
+      // Conversely, a complete sentence followed by a new sentence is a safe
+      // viewport boundary. This small bonus prevents balance alone from winning.
+      if (/[。！？!?」』”’]$/.test(a) && /^[^、，,]/.test(b)) score += 10;
+    }
+    return score;
+  }
+
+  function splitOversizeChunk(chunk, language, options = {}) {
+    const maxRows = Math.max(6, Number(options.maxVisualRows) || 8);
+    const targetRows = Math.max(4, Number(options.targetVisualRows) || Math.max(5, maxRows - 2));
+    const minRows = Math.max(2, Number(options.minVisualRows) || 3);
+    const rawLines = String(chunk?.text ?? '').split('\n');
+    const lines = rawLines.map(s => s.trim()).filter(Boolean);
+    if (lines.length < 2 || visualRows(chunk.text, language) <= maxRows) return [chunk];
+
+    const groups = [];
+    let start = 0;
+    while (start < lines.length) {
+      const remainingText = lines.slice(start).join('\n');
+      if (visualRows(remainingText, language) <= maxRows) {
+        groups.push(lines.slice(start));
+        break;
+      }
+
+      let best = null;
+      for (let cut = start + 1; cut < lines.length; cut++) {
+        const left = lines.slice(start, cut).join('\n');
+        const right = lines.slice(cut).join('\n');
+        const leftRows = visualRows(left, language);
+        const rightRows = visualRows(right, language);
+        if (leftRows < minRows) continue;
+        if (leftRows > maxRows + 1) break;
+
+        const closeness = 24 - Math.abs(leftRows - targetRows) * 4;
+        const boundary = boundaryPreference(language, lines[cut - 1], lines[cut]);
+        const avoidTinyTail = rightRows < minRows ? -26 : 0;
+        const score = closeness + boundary + avoidTinyTail;
+        if (!best || score > best.score) best = { cut, score };
+      }
+
+      if (!best) {
+        let cut = start + 1;
+        while (cut < lines.length && visualRows(lines.slice(start, cut + 1).join('\n'), language) <= maxRows) cut++;
+        best = { cut: Math.max(start + 1, cut - 1), score: 0 };
+      }
+
+      groups.push(lines.slice(start, best.cut));
+      start = best.cut;
+    }
+
+    if (groups.length <= 1) return [chunk];
+    return groups.filter(group => group.length).map((group, index) => {
+      const text = group.join('\n').trim();
+      return {
+        ...chunk,
+        text,
+        reason: index === groups.length - 1 ? (chunk.reason || 'viewport-density') : 'viewport-density',
+        debug: {
+          ...(chunk.debug || {}),
+          viewportDensity: true,
+          viewportPart: index + 1,
+          viewportParts: groups.length,
+          visualRows: visualRows(text, language),
+          maxVisualRows: maxRows
+        }
+      };
+    });
+  }
+
+  function refineViewportDensity(chunks, language, options = {}) {
+    if (options.viewportAware === false) return chunks;
+    const enabled = options.viewportAware === true || options.maxVisualRows != null;
+    if (!enabled) return chunks;
+    return (chunks || []).flatMap(chunk => splitOversizeChunk(chunk, language, options));
+  }
+
   function splitWith(language, text, options) {
     const splitter = getSplitter(language);
     if (!splitter?.splitDetailed) throw new Error(`No Scene splitter available for ${language}`);
-    return splitter.splitDetailed(text, { ...options, language }).map(chunk => ({ ...chunk, language }));
+    const chunks = splitter.splitDetailed(text, { ...options, language }).map(chunk => ({ ...chunk, language }));
+    return refineViewportDensity(chunks, language, options);
   }
 
   function splitBlock(block, options) {
@@ -132,6 +260,8 @@
     split,
     splitDetailed,
     splitMultilingualDetailed,
+    visualRows,
+    refineViewportDensity,
     getSplitter
   });
 })();

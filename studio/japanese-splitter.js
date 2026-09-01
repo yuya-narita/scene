@@ -15,7 +15,7 @@
    * Exposed as window.JapaneseSceneSplitter for Scene Studio compatibility.
    */
 
-  const VERSION = '2.0.0';
+  const VERSION = '2.0.1';
 
   const OPENERS = new Set(['「','『','（','(','【','［','[','〈','《','“','‘']);
   const CLOSERS = new Set(['」','』','）',')','】','］',']','〉','》','”','’']);
@@ -151,9 +151,18 @@
 
       if (!SENTENCE_END.has(ch)) continue;
 
+      // Treat a consecutive punctuation run as one sentence ending.
+      // Example: 「集合！！！！！」 must stay one token instead of creating
+      // punctuation-only tokens/scenes for every extra exclamation mark.
+      let j = i + 1;
+      while (j < chars.length && SENTENCE_END.has(chars[j])) {
+        buffer += chars[j];
+        j++;
+      }
+      i = j - 1;
+
       // If punctuation is inside a quote, allow the quote closer(s) to trail
       // and end the token when the punctuation closes the outermost quote run.
-      let j = i + 1;
       let tmpStack = stack.slice();
       let suffix = '';
       while (j < chars.length && TRAILING_CLOSERS.has(chars[j])) {
