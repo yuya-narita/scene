@@ -1878,6 +1878,19 @@
       return measured;
     }
 
+    _positionOverlayNodes(nodes, sceneEntries) {
+      if (!nodes.length) return [];
+      const stageRect = this.els.stage.getBoundingClientRect();
+      const focusY = stageRect.height * (stageRect.width <= 520 ? .48 : .46);
+      return nodes.map((node, i) => {
+        const h = Math.max(1, node.getBoundingClientRect().height);
+        const y = focusY - h / 2;
+        node.style.transform = `translate3d(0,${Math.round(y)}px,0)`;
+        node.style.zIndex = String(20 + i);
+        return { node, scene: sceneEntries[i]?.scene, y, height: h };
+      });
+    }
+
     _updateSceneAges(nodes, sceneEntries) {
       nodes.forEach((node, i) => {
         const distance = sceneEntries.length - 1 - i;
@@ -1965,7 +1978,8 @@
         this.host.classList.add('sp-whitespace-inhale');
 
         // Phase 1: move existing Scenes toward the expanded whitespace layout.
-        this._positionSceneNodes(nodes, visible, this.options.whitespaceBreath);
+        if ((active?.presentation?.display || 'stack') === 'overlay') this._positionOverlayNodes(nodes, visible);
+        else this._positionSceneNodes(nodes, visible, this.options.whitespaceBreath);
 
         // Jump/Shino wait two frames before retargeting to the final geometry.
         requestAnimationFrame(() => {
@@ -1974,7 +1988,8 @@
             this.host.classList.add('sp-whitespace-exhale');
 
             // Same transform clock for both previous and current text.
-            this._positionSceneNodes(nodes, visible, 0);
+            if ((active?.presentation?.display || 'stack') === 'overlay') this._positionOverlayNodes(nodes, visible);
+            else this._positionSceneNodes(nodes, visible, 0);
 
             const newest = newestCreated || nodes[nodes.length - 1];
             if (newest) {
@@ -2000,7 +2015,7 @@
       const active = scenes[this.index];
       const display = active?.presentation?.display || 'stack';
       const visible = this._visibleScenes(display);
-      const isForwardStack = this._audioRenderMode === 'advance' && display === 'stack';
+      const isForwardStack = this._audioRenderMode === 'advance' && (display === 'stack' || display === 'overlay');
 
       if (isForwardStack) {
         this._renderStackWithBreathing(visible, active);
@@ -2025,7 +2040,8 @@
           nodes.push(node);
         });
         this._updateSceneAges(nodes, visible);
-        this._positionSceneNodes(nodes, visible, 0);
+        if (display === 'overlay') this._positionOverlayNodes(nodes, visible);
+        else this._positionSceneNodes(nodes, visible, 0);
         const newest = nodes[nodes.length - 1];
         if (newest) this._activatePresentation(active, newest);
         if (stillNodes.length) {
@@ -2067,6 +2083,15 @@
     _visibleScenes(display) {
       const scenes = this.document.scenes;
       if (display === 'solo') return [{ scene: scenes[this.index], index: this.index }];
+
+      if (display === 'overlay') {
+        let start = this.index;
+        while (start > 0 && (scenes[start - 1].presentation?.display || 'stack') === 'overlay') start -= 1;
+        // Keep one preceding Scene as the visual base, then accumulate overlay Scenes on it.
+        if (start > 0) start -= 1;
+        start = Math.max(start, this.index - this.options.maxStackVisible + 1);
+        return scenes.slice(start, this.index + 1).map((scene, offset) => ({ scene, index: start + offset }));
+      }
 
       // A previous solo scene resets the visual stack, but that solo Scene itself
       // becomes the new base. Later `stack` Scenes must build on top of it.
@@ -2852,6 +2877,7 @@
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
       if (style.color) node.style.color = String(style.color);
+      if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       const shadows={
         none:'none',
         soft:'0 1px 4px rgba(0,0,0,.48)',
@@ -2948,10 +2974,12 @@
       const after = asNumber(disappear?.after, 0);
       if (after > 0) {
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
-        const motion = disappear?.motion === 'up' ? 'up' : 'stay';
+        const motion = ['up','shatter','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
         article.style.setProperty('--sp-disappear-fade', `${fade}ms`);
         article.classList.toggle('is-disappear-up', motion === 'up');
-        article.classList.toggle('is-disappear-stay', motion !== 'up');
+        article.classList.toggle('is-disappear-shatter', motion === 'shatter');
+        article.classList.toggle('is-disappear-explode', motion === 'explode');
+        article.classList.toggle('is-disappear-stay', motion === 'stay');
         this._presentationTimeout(() => {
           if (!article.isConnected) return;
           article.classList.add('is-disappearing');
