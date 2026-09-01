@@ -199,7 +199,7 @@
     ['#sceneViewSelect option[value="world"]','scene.view.world'],['#sceneViewSelect option[value="console"]','scene.view.console'],['#sceneViewSelect option[value="system"]','scene.view.system'],['#sceneViewSelect option[value="warning"]','scene.view.warning'],['#sceneViewSelect option[value="void"]','scene.view.void'],
     ['#sceneEntryMotionSelect option[value="flow"]','scene.entry.flow'],['#sceneEntryMotionSelect option[value="still"]','scene.entry.still'],
     ['#sceneEffectSelect option[value="auto"]','effect.auto'],['#sceneEffectSelect option[value="fade"]','effect.fade'],['#sceneEffectSelect option[value="pop"]','effect.pop'],['#sceneEffectSelect option[value="blur"]','effect.blur'],
-    ['#sceneEffectSelect option[value="whisper"]','effect.whisper'],['#sceneEffectSelect option[value="loud"]','effect.loud'],['#sceneEffectSelect option[value="pulse"]','effect.pulse'],['#sceneEffectSelect option[value="shake"]','effect.shake'],['#sceneEffectSelect option[value="tilt"]','effect.tilt'],['#sceneEffectSelect option[value="slow"]','effect.slow'],['#sceneEffectSelect option[value="none"]','effect.none'],
+    ['#sceneEffectSelect option[value="whisper"]','effect.whisper'],['#sceneEffectSelect option[value="loud"]','effect.loud'],['#sceneEffectSelect option[value="pulse"]','effect.pulse'],['#sceneEffectSelect option[value="shake"]','effect.shake'],['#sceneEffectSelect option[value="tilt"]','effect.tilt'],['#sceneEffectSelect option[value="slow"]','effect.slow'],['#sceneEffectSelect option[value="slam"]','effect.slam'],['#sceneEffectSelect option[value="burst"]','effect.burst'],['#sceneEffectSelect option[value="glitchHit"]','effect.glitchHit'],['#sceneEffectSelect option[value="rush"]','effect.rush'],['#sceneEffectSelect option[value="none"]','effect.none'],
     ['#sceneSizeSelect option[value="auto"]','size.auto'],['#sceneSizeSelect option[value="small"]','size.small'],['#sceneSizeSelect option[value="normal"]','size.normal'],['#sceneSizeSelect option[value="large"]','size.large'],['#sceneSizeSelect option[value="xl"]','size.xl'],
     ['#sceneFontSelect option[value="inherit"]','font.inherit'],['#sceneFontSelect option[value="serif"]','font.serif'],['#sceneFontSelect option[value="sans"]','font.sans'],['#sceneFontSelect option[value="mono"]','font.mono'],
     ['#sceneLanguageSelect option[value="auto"]','scene.language.auto'],['#sceneLanguageSelect option[value="ja"]','scene.language.ja'],['#sceneLanguageSelect option[value="en"]','scene.language.en'],['#sceneLanguageSelect option[value="custom"]','scene.language.custom'],
@@ -4666,7 +4666,7 @@
       const typeLabel=emptyScene
         ? (sceneHasAdvancedMeaning(scene)?t('scene.effectOnly'):t('scene.empty'))
         : ({text:t('scene.type.text'),dialogue:t('scene.type.dialogue'),sound:t('scene.type.sound')}[scene.type]||scene.type);
-      const effectLabel=scene.presentation?.typing?.enabled?u('タイプライター','Typewriter'):({auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto'));
+      const effectLabel=scene.presentation?.typing?.enabled?u('タイプライター','Typewriter'):({auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),slam:t('effect.slam'),burst:t('effect.burst'),glitchHit:t('effect.glitchHit'),rush:t('effect.rush'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto'));
       const sceneLang=scene.language || (workingDocument.language==='mul'?'':workingDocument.language) || '';
       const timing=Number.isFinite(Number(scene.pause)) && Number(scene.pause)>0 ? ` · AUTO ${(Number(scene.pause)/1000).toFixed(2)}s` : '';
       b.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><div><strong>${scenePreviewText(scene)}</strong><small>${typeLabel} · ${effectLabel}${sceneLang?' · '+sceneLang.toUpperCase():''}${media.length?' · '+media.join('/') : ''}${timing}</small></div>`;
@@ -6779,7 +6779,7 @@ function openDesktopEffectDetail(){
     const basicGrid=two(basic);
     const currentEffect=p.typing?.enabled?'typewriter':(p.effect||'auto');
     const effectSelect=desktopDetailSelect(u('出かた','Entrance'),[
-      ['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]
+      ['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]
     ],currentEffect,v=>{
       ensureDesktopEffectVisibleDefaults(scene,{save:false});
       if(v==='typewriter'){
@@ -8626,7 +8626,7 @@ function openDesktopTextDetail(){
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
-      desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+      desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
         ensureDesktopEffectVisibleDefaults(scene,{save:false});
         if(v==='typewriter'){
           p.effect='none';
@@ -9254,7 +9254,7 @@ function openDesktopTextDetail(){
         const grid=document.createElement('div');grid.className='live-edit-grid';
         const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
         grid.append(
-          makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+          makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
             if(v==='typewriter'){
               p.effect='none';
               p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
