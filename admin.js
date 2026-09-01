@@ -8,6 +8,7 @@ const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInpu
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
+async function apiWithTimeout(path,options={},timeoutMs=12000){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);try{return await api(path,{...options,signal:controller.signal});}catch(e){if(e?.name==='AbortError')throw new Error('通信がタイムアウトしました');throw e;}finally{clearTimeout(timer);}}
 function toast(text){const n=document.createElement('div');n.className='toast';n.textContent=text;document.body.append(n);setTimeout(()=>n.remove(),1800);}
 const reasonLabel=r=>({copyright:'第三者の著作物・権利侵害',unauthorized:'自分の作品が無断で使用されている',other:'その他'})[r]||r;
 const subjectLabel=s=>({text:'本文・文章',cover:'表紙',image:'背景・画像',audio:'BGM・SE・音声',other:'その他'})[s]||s||'不明';
@@ -102,16 +103,31 @@ async function loadAnalytics(){
 
 const readerSiteLabel=s=>({note:'note',narou:'小説家になろう',kakuyomu:'カクヨム',alphapolis:'アルファポリス',pixiv:'pixiv',hameln:'ハーメルン',other:'その他'})[s]||s||'その他';
 const readerModeLabel=m=>({selection:'選択範囲',auto:'本文自動抽出','page-fallback':'ページ全文',other:'その他'})[m]||m||'その他';
-function renderReaderBreakdown(node,rows,labeler){
+function renderReaderBreakdown(node,rows,labeler,{otherHosts=[]}={}){
   if(!node)return;
   if(!rows?.length){node.innerHTML='<div class="empty">まだデータはありません。</div>';return;}
-  node.innerHTML=rows.map((row,i)=>`<div class="reader-stat-row"><span class="rank">${i+1}</span><strong>${escapeHtml(labeler(row.key))}</strong><span><b>${Number(row.views||0).toLocaleString('ja-JP')}</b><small>起動</small></span><span><b>${Number(row.completions||0).toLocaleString('ja-JP')}</b><small>読了</small></span><span><b>${escapeHtml(formatRate(row.completions,row.views))}</b><small>読了率</small></span></div>`).join('');
+  node.innerHTML=rows.map((row,i)=>{
+    const base=`<div class="reader-stat-row"><span class="rank">${i+1}</span><strong>${escapeHtml(labeler(row.key))}</strong><span><b>${Number(row.views||0).toLocaleString('ja-JP')}</b><small>起動</small></span><span><b>${Number(row.completions||0).toLocaleString('ja-JP')}</b><small>読了</small></span><span><b>${escapeHtml(formatRate(row.completions,row.views))}</b><small>読了率</small></span></div>`;
+    if(row.key!=='other'||!otherHosts?.length)return base;
+    const hosts=otherHosts.map(h=>`<div class="reader-host-row"><code>${escapeHtml(h.key||'')}</code><span><b>${Number(h.views||0).toLocaleString('ja-JP')}</b><small>起動</small></span><span><b>${Number(h.completions||0).toLocaleString('ja-JP')}</b><small>読了</small></span></div>`).join('');
+    return `${base}<details class="reader-other-hosts"><summary>その他の内訳 ${otherHosts.length.toLocaleString('ja-JP')}ドメイン</summary>${hosts}</details>`;
+  }).join('');
 }
 async function loadReaderAnalytics(){
   if(els.readerSites)els.readerSites.innerHTML='<div class="empty">読み込み中…</div>';
   if(els.readerModes)els.readerModes.innerHTML='<div class="empty">読み込み中…</div>';
+  const setSummary=v=>{
+    els.readerTodayViews.textContent=v;
+    els.readerTodayCompletions.textContent=v;
+    els.readerTodaySceneAdvances.textContent=v;
+    els.readerTodayCompletionRate.textContent=v;
+    els.readerTodayStudio.textContent=v;
+    els.readerTodayOfficial.textContent=v;
+  };
   try{
-    const d=await api('/admin/reader-analytics?days=7');
+    let d;
+    try{d=await apiWithTimeout(`/admin/reader-analytics?days=7&_=${Date.now()}`,{},12000);}
+    catch(first){d=await apiWithTimeout(`/admin/reader-analytics?days=7&_=${Date.now()}`,{},12000);}
     const t=d.today||{};
     els.readerTodayViews.textContent=Number(t.views||0).toLocaleString('ja-JP');
     els.readerTodayCompletions.textContent=Number(t.completions||0).toLocaleString('ja-JP');
@@ -119,11 +135,13 @@ async function loadReaderAnalytics(){
     els.readerTodayCompletionRate.textContent=formatRate(t.completions,t.views);
     els.readerTodayStudio.textContent=Number(t.outbound?.studio||0).toLocaleString('ja-JP');
     els.readerTodayOfficial.textContent=Number(t.outbound?.official||0).toLocaleString('ja-JP');
-    renderReaderBreakdown(els.readerSites,d.sites||[],readerSiteLabel);
+    renderReaderBreakdown(els.readerSites,d.sites||[],readerSiteLabel,{otherHosts:d.otherHosts||[]});
     renderReaderBreakdown(els.readerModes,d.modes||[],readerModeLabel);
   }catch(e){
-    if(els.readerSites)els.readerSites.innerHTML=`<div class="empty">Reader情報を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
+    setSummary('–');
+    if(els.readerSites)els.readerSites.innerHTML=`<div class="empty">Reader情報を読み込めませんでした: ${escapeHtml(e.message)}<br><button type="button" id="readerRetryButton">再読み込み</button></div>`;
     if(els.readerModes)els.readerModes.innerHTML='';
+    document.querySelector('#readerRetryButton')?.addEventListener('click',loadReaderAnalytics,{once:true});
   }
 }
 

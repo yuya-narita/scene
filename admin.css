@@ -35,3 +35,15 @@
 .reader-stat-row b{font-size:14px;}
 .reader-stat-row small{font-size:10px;opacity:.55;}
 @media(max-width:900px){.reader-analytics-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.reader-analytics-columns{grid-template-columns:1fr;}.reader-stat-row{grid-template-columns:28px minmax(100px,1fr) repeat(3,minmax(50px,auto));gap:8px;}}
+
+
+/* v0.3.66 Reader analytics PC fix + other-host detail */
+@media(min-width:901px){
+  .analytics-summary.reader-analytics-summary{grid-template-columns:repeat(6,minmax(0,1fr))!important;}
+  .reader-analytics-columns{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;}
+}
+.reader-other-hosts{margin:6px 0 2px 46px;padding:10px 12px;border:1px dashed #dfe2e7;border-radius:12px;background:#fafbfc;}
+.reader-other-hosts summary{cursor:pointer;font-size:11px;color:#666;user-select:none;}
+.reader-host-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #eceef1;}
+.reader-host-row:last-child{border-bottom:0}.reader-host-row code{font-size:11px;overflow-wrap:anywhere}.reader-host-row span{display:grid;text-align:right}.reader-host-row b{font-size:12px}.reader-host-row small{font-size:9px;color:#888}
+@media(max-width:900px){.reader-other-hosts{margin-left:36px}.reader-host-row{grid-template-columns:minmax(0,1fr) auto auto;gap:8px}}
