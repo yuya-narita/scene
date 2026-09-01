@@ -1737,3 +1737,54 @@ html.sp-scene-image-open body{
     font-size:clamp(14px,4.2vw,18px);
   }
 }
+
+
+/* =========================================================
+   A-Hako expressive text effects v1 — music / lyrics set
+   New effects remain one-shot entrance effects and preserve
+   the existing Scene layout / timing model.
+   ========================================================= */
+@keyframes spFxSlam{
+  0%{opacity:0;transform:translateY(-42px) scale(1.55);filter:blur(2px)}
+  58%{opacity:1;transform:translateY(5px) scale(.96);filter:blur(0)}
+  76%{transform:translateY(-2px) scale(1.025)}
+  100%{opacity:1;transform:none;filter:none}
+}
+@keyframes spFxBurst{
+  0%{opacity:0;transform:scale(.12);filter:blur(8px)}
+  48%{opacity:1;transform:scale(1.38);filter:blur(0)}
+  70%{transform:scale(.94)}
+  86%{transform:scale(1.045)}
+  100%{opacity:1;transform:scale(1)}
+}
+@keyframes spFxGlitchHit{
+  0%{opacity:0;transform:translate(-18px,5px) skewX(-14deg);filter:blur(3px)}
+  18%{opacity:1;transform:translate(12px,-3px) skewX(9deg)}
+  36%{transform:translate(-7px,2px) skewX(-5deg)}
+  54%{transform:translate(5px,-1px) skewX(3deg)}
+  72%{transform:translate(-2px,0) skewX(-1deg)}
+  100%{opacity:1;transform:none;filter:none}
+}
+@keyframes spFxRush{
+  0%{opacity:0;transform:translateX(-32vw) skewX(-12deg);filter:blur(5px)}
+  62%{opacity:1;transform:translateX(12px) skewX(2deg);filter:blur(0)}
+  80%{transform:translateX(-4px) skewX(-1deg)}
+  100%{opacity:1;transform:none;filter:none}
+}
+.sp-scene.sp-fx-play[data-effect="slam"] .sp-text{animation:spFxSlam var(--sp-effect-duration,.52s) cubic-bezier(.12,.82,.18,1) 1}
+.sp-scene.sp-fx-play[data-effect="burst"] .sp-text{animation:spFxBurst var(--sp-effect-duration,.62s) cubic-bezier(.12,.84,.16,1) 1}
+.sp-scene.sp-fx-play[data-effect="glitchHit"] .sp-text{animation:spFxGlitchHit var(--sp-effect-duration,.46s) steps(7,end) 1}
+.sp-scene.sp-fx-play[data-effect="rush"] .sp-text{animation:spFxRush var(--sp-effect-duration,.48s) cubic-bezier(.08,.78,.18,1) 1}
+
+/* Keep custom author delay compatible with the new effects. */
+.sp-scene.sp-fx-play[data-effect="slam"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="burst"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="glitchHit"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="rush"] .sp-text{animation-delay:var(--sp-effect-delay,0s)!important}
+
+@media (prefers-reduced-motion:reduce){
+  .sp-scene.sp-fx-play[data-effect="slam"] .sp-text,
+  .sp-scene.sp-fx-play[data-effect="burst"] .sp-text,
+  .sp-scene.sp-fx-play[data-effect="glitchHit"] .sp-text,
+  .sp-scene.sp-fx-play[data-effect="rush"] .sp-text{animation:spOriginalFade .18s linear 1!important}
+}
