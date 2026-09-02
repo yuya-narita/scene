@@ -6867,7 +6867,7 @@ function openDesktopEffectDetail(){
         p.disappear={...(p.disappear||{}),after:Number(p.disappear?.after)||2500,fade:Math.round(v*1000),motion:p.disappear?.motion||'stay'};
         apply();
       }}),
-      desktopDetailSelect(u('消え方','Exit motion'),[['stay',u('その場で消える','Fade in place')],['up',u('上に抜ける','Exit upward')],['shatter',u('ガラスのように砕ける','Shatter like glass')],['explode',u('爆発して消える','Explode away')]],p.disappear?.motion||'stay',v=>{
+      desktopDetailSelect(u('消え方','Exit motion'),[['stay',u('その場で消える','Fade in place')],['up',u('上に抜ける','Exit upward')],['shatter',u('ガラスのように砕ける','Shatter like glass')],['blockBreak',u('ブロック状に崩れる','Break into blocks')],['explode',u('爆発して消える','Explode away')]],p.disappear?.motion||'stay',v=>{
         p.disappear={...(p.disappear||{}),motion:v};
         // Choosing an exit motion with Time until exit still at 0 previously
         // produced no exit at all. Give the motion a visible default delay.
