@@ -158,17 +158,20 @@
       this.muted = false;
       this._audioRenderMode = 'restore';
 
-      // iOS V2.15: keep every real media source alive from the trusted START
-      // gesture. Later Scene/AUTO transitions only seek/unmute an already-playing
-      // HTMLMediaElement; they never ask Safari to authorize a new play().
-      this._iosStableMediaBank = this._isIOSWebKit();
+      // iOS V2.16: use one Web Audio graph for the whole work. WebKit treats
+      // Web Audio as an ambient audio session by default, which can be inaudible
+      // on an iPhone in Silent mode even while AudioContext.state is "running".
+      // Request media-playback semantics before the AudioContext is created.
+      this._iosWebAudioPlayback = this._isIOSWebKit();
+      this._configureIOSAudioSession();
+      this._iosStableMediaBank = false;
       this._iosAudioBank = new Map();
       this._iosBankPrimed = false;
       this._iosPersistentEntry = { bgm: null, ambient: null };
-      // V2.13 AudioBuffer transport is intentionally disabled on iOS. Device
-      // traces showed BufferSource.start() succeeding while hardware output stayed
-      // silent, whereas native HTMLMediaElement output was audible.
-      this._iosBufferAudio = false;
+      // All Scene audio on iOS uses decoded AudioBuffers after the playback
+      // audio-session has been selected. This gives BGM, Ambient, Scene SE and
+      // Ending SE the same already-unlocked AudioContext, including AUTO timers.
+      this._iosBufferAudio = this._iosWebAudioPlayback;
       this._bufferAudioCache = new Map();
       this._bufferAudioPromises = new Map();
       this._bufferPersistent = { bgm: null, ambient: null };
@@ -344,23 +347,9 @@
         this.host.classList.add('sp-paper-press');
         this._layoutTimeout(() => this.host.classList.remove('sp-paper-press'), 115);
       };
-      const armFromStageGesture = (e) => {
+      const armFromStageGesture = () => {
         pressPaper();
         this.unlockAudio(true);
-
-        // V2.19 iPhone ending SE: Scene SE is proven reliable when its already-
-        // running bank entry is opened directly from the physical pointerdown.
-        // Do the same for the final SE BEFORE click -> finish() performs any
-        // session/ending bookkeeping. finish() sees _endingAudioStarted and will
-        // not fire it twice. Ignore controls/images so merely pressing UI on the
-        // last Scene cannot trigger the ending sound.
-        const target = e?.target;
-        const isControl = target?.closest?.('button, a, .sp-scene-image.is-zoomable');
-        const isEditableText = this.host.classList.contains('live-edit-enabled')
-          && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
-        const atLastScene = !!this.document && !this.ended
-          && this.index >= Math.max(0, (this.document.scenes?.length || 1) - 1);
-        if (atLastScene && !isControl && !isEditableText) this._playEndingAudio();
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -546,6 +535,21 @@
       } catch (_) { return false; }
     }
 
+
+    _configureIOSAudioSession() {
+      if (!this._isIOSWebKit()) return false;
+      try {
+        if (navigator.audioSession && 'type' in navigator.audioSession) {
+          navigator.audioSession.type = 'playback';
+          emit(this.host, 'sceneplayer:audiosession', { type: navigator.audioSession.type || 'playback' });
+          return true;
+        }
+      } catch (error) {
+        emit(this.host, 'sceneplayer:audiosessionerror', { error });
+      }
+      return false;
+    }
+
     _allDocumentAudioSources() {
       const out = new Set();
       const push = (commands) => {
@@ -561,20 +565,11 @@
       return Array.from(out);
     }
 
-    _resolveCoreAudioSrc(src) {
-      let value = String(src || '').trim();
-      if (!value) return value;
-      if (/^[A-Za-z0-9_-]{20,}$/.test(value) && !value.includes('.') && !value.includes('/')) {
-        value = `https://scene-studio-api.a-hako.workers.dev/asset/${encodeURIComponent(value)}`;
-      }
-      return value;
-    }
-
     _collectIOSMediaBankSpecs() {
       const specs = new Map();
       if (!this.document) return specs;
       const add = (channel, src) => {
-        const value = this._resolveCoreAudioSrc(src);
+        const value = String(src || '').trim();
         if (!value || !(channel === 'bgm' || channel === 'ambient' || channel === 'oneshot')) return;
         const key = `${channel}:${value}`;
         if (!specs.has(key)) specs.set(key, { key, channel, src: value });
@@ -589,12 +584,6 @@
         });
       };
       (this.document.scenes || []).forEach((scene) => scan(scene?.audio));
-      // V2.18: Ending SE must use the SAME source-stable iOS one-shot bank as
-      // Scene SE. Scene one-shots are now proven audible on iPhone, while the
-      // old dedicated ending element could remain authorized yet still produce
-      // silence at finish(). Resolve and prime the ending source with the rest
-      // of the document so finish() only seeks/unmutes an already-running bank
-      // element and never depends on a special late transport.
       scan(this.document?.ending?.audio);
       return specs;
     }
@@ -606,39 +595,11 @@
         if (entry.timer) clearTimeout(entry.timer);
         entry.timer = null;
         try { entry.audio.pause(); } catch (_) {}
-        try { entry.sourceNode?.disconnect(); } catch (_) {}
-        try { entry.gainNode?.disconnect(); } catch (_) {}
-        entry.sourceNode = null; entry.gainNode = null; entry.useGain = false;
         try { entry.audio.removeAttribute('src'); entry.audio.load(); } catch (_) {}
       });
       this._iosAudioBank.clear();
       this._iosBankPrimed = false;
       this._iosPersistentEntry = { bgm: null, ambient: null };
-    }
-
-    _ensureIOSBankGain(entry) {
-      if (!entry?.audio || !(entry.channel === 'bgm' || entry.channel === 'ambient')) return null;
-      if (!this._isCorsWebAudioAsset(entry.src)) return null;
-      if (entry.gainNode) return entry.gainNode;
-      const ctx = this._ensureAudioContext();
-      if (!ctx) return null;
-      try {
-        const source = ctx.createMediaElementSource(entry.audio);
-        const gain = ctx.createGain();
-        gain.gain.value = 0;
-        source.connect(gain);
-        gain.connect(ctx.destination);
-        entry.sourceNode = source;
-        entry.gainNode = gain;
-        entry.useGain = true;
-        try { entry.audio.volume = 1; } catch (_) {}
-        emit(this.host, 'sceneplayer:iosmediabankgainready', { channel:entry.channel, src:entry.src, contextState:ctx.state });
-        return gain;
-      } catch (error) {
-        entry.useGain = false;
-        emit(this.host, 'sceneplayer:iosmediabankgainerror', { channel:entry.channel, src:entry.src, error });
-        return null;
-      }
     }
 
     _prepareIOSMediaBank() {
@@ -652,14 +613,7 @@
         audio.__spNativeOnly = true;
         audio.__spTransportSrc = spec.src;
         audio.__spLoadedSrc = spec.src;
-        // Stable A-Hako BGM/Ambient may use a GainNode for real fades on iPhone,
-        // where HTMLMediaElement.volume can be volume-locked. The source never
-        // changes after this point, avoiding the old WebKit src-swap silence bug.
-        if ((spec.channel === 'bgm' || spec.channel === 'ambient') && this._isCorsWebAudioAsset(spec.src)) {
-          try { audio.crossOrigin = 'anonymous'; } catch (_) {}
-        } else {
-          try { audio.crossOrigin = null; } catch (_) {}
-        }
+        try { audio.crossOrigin = null; } catch (_) {}
         try { audio.preload = 'auto'; audio.playsInline = true; audio.loop = true; } catch (_) {}
         try { audio.muted = true; audio.volume = 0; } catch (_) {}
         audio.src = spec.src;
@@ -670,13 +624,9 @@
           active: false,
           targetVolume: 1,
           timer: null,
-          primed: false,
-          sourceNode: null,
-          gainNode: null,
-          useGain: false
+          primed: false
         });
       });
-      this._iosAudioBank.forEach((entry) => this._ensureIOSBankGain(entry));
       emit(this.host, 'sceneplayer:iosmediabankready', { count: this._iosAudioBank.size });
       return true;
     }
@@ -686,32 +636,13 @@
       // IMPORTANT: every play() call is issued synchronously before the first
       // await/microtask, while START/AUTO still owns the trusted iOS gesture.
       const jobs = [];
-
-      // Prime the dedicated ending SE FIRST. Large works can contain many audio
-      // elements and iPhone may suspend later background media sessions. Keeping
-      // the final SE on its own element and authorizing it before the Scene bank
-      // makes manual and AUTO endings use the same already-running element.
-      if (this.endingAudio?.src) {
-        try {
-          this.endingAudio.loop = true;
-          this.endingAudio.muted = true;
-          this.endingAudio.volume = 1;
-          if (this.endingAudio.ended) this.endingAudio.currentTime = 0;
-          const endingPrime = this.endingAudio.paused ? this.endingAudio.play() : null;
-          if (endingPrime?.then) jobs.push(endingPrime.then(() => { this.endingAudio.__spPrimed = true; return true; }).catch((error) => { this.endingAudio.__spPrimed = false; emit(this.host,'sceneplayer:endingaudioprimeblocked',{src:this.endingAudio.src,error}); return false; }));
-          else this.endingAudio.__spPrimed = !this.endingAudio.paused;
-        } catch (error) { emit(this.host,'sceneplayer:endingaudioprimeblocked',{src:this.endingAudio.src,error}); }
-      }
       this._iosAudioBank.forEach((entry) => {
         const audio = entry.audio;
         if (!audio) return;
         // START calls this before Scene 1 is rendered. AUTO may call it later
         // while Scene audio is already active; never mute/reset an active source.
         if (!entry.active) {
-          try { audio.loop = true; audio.muted = true; audio.volume = entry.gainNode ? 1 : 0; } catch (_) {}
-          if (entry.gainNode && this.audioContext) {
-            try { entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
-          }
+          try { audio.loop = true; audio.muted = true; audio.volume = 0; } catch (_) {}
           try { if (audio.ended) audio.currentTime = 0; } catch (_) {}
         }
         let result;
@@ -740,42 +671,9 @@
       return Promise.allSettled(jobs).then(() => true);
     }
 
-    _iosAudioSrcAliases(src) {
-      const value = String(src || '').trim();
-      const out = new Set();
-      if (!value) return out;
-      out.add(value);
-      // Public Player normally hydrates bare R2 ids to /asset/<id>, but ending
-      // audio can pass through a different shell/update path. Treat the raw id
-      // and its public asset URL as the same source so the START-authorized bank
-      // is always reused at finish().
-      if (/^[A-Za-z0-9_-]{20,}$/.test(value) && !value.includes('.') && !value.includes('/')) {
-        out.add(`https://scene-studio-api.a-hako.workers.dev/asset/${encodeURIComponent(value)}`);
-      } else {
-        try {
-          const u = new URL(value, global.location?.href || undefined);
-          const m = u.pathname.match(/\/asset\/([^/?#]+)$/);
-          if (m?.[1]) out.add(decodeURIComponent(m[1]));
-        } catch (_) {}
-      }
-      return out;
-    }
-
     _iosBankEntry(channel, src) {
       if (!this._iosStableMediaBank) return null;
-      const aliases = this._iosAudioSrcAliases(src);
-      for (const alias of aliases) {
-        const hit = this._iosAudioBank?.get(`${channel}:${alias}`);
-        if (hit) return hit;
-      }
-      // Last-resort alias scan handles a bank built before/after public source
-      // hydration without creating a new late-playing HTMLAudioElement.
-      for (const entry of this._iosAudioBank?.values?.() || []) {
-        if (entry?.channel !== channel) continue;
-        const entryAliases = this._iosAudioSrcAliases(entry.src);
-        for (const alias of aliases) if (entryAliases.has(alias)) return entry;
-      }
-      return null;
+      return this._iosAudioBank?.get(`${channel}:${String(src || '').trim()}`) || null;
     }
 
     _setIOSBankEntryVolume(entry, target, duration = 0, done) {
@@ -783,28 +681,8 @@
       const audio = entry.audio;
       const to = clamp(asNumber(target, entry.targetVolume ?? 1), 0, 1);
       entry.targetVolume = to;
-      const ms = Math.max(0, asNumber(duration, 0));
-
-      // iPhone media elements can be :volume-locked. For stable A-Hako
-      // BGM/Ambient sources, route the already-authorized element through one
-      // persistent GainNode. This restores authored 10s+ fades without changing
-      // src or issuing a late play().
-      const gain = entry.gainNode;
-      const ctx = this.audioContext;
-      if (gain && ctx) {
-        const now = ctx.currentTime;
-        const from = Number.isFinite(gain.gain.value) ? gain.gain.value : 0;
-        try {
-          gain.gain.cancelScheduledValues(now);
-          gain.gain.setValueAtTime(from, now);
-          if (ms > 0) gain.gain.linearRampToValueAtTime(to, now + ms / 1000);
-          else gain.gain.setValueAtTime(to, now);
-        } catch (_) { gain.gain.value = to; }
-        if (done) { if (ms > 0) this._audioTimeout(done, ms); else done(); }
-        return;
-      }
-
       const from = clamp(asNumber(audio.volume, 0), 0, 1);
+      const ms = Math.max(0, asNumber(duration, 0));
       if (!ms) {
         try { audio.volume = to; } catch (_) {}
         if (done) done();
@@ -824,12 +702,7 @@
       if (!entry?.audio) return;
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
       entry.active = false;
-      if (entry.gainNode && this.audioContext) {
-        try { entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime); entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
-        try { entry.audio.volume = 1; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
-      } else {
-        try { entry.audio.volume = 0; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
-      }
+      try { entry.audio.volume = 0; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
       if (reset) { try { entry.audio.currentTime = 0; } catch (_) {} }
     }
 
@@ -857,62 +730,23 @@
       else entry.audio.addEventListener('loadedmetadata', schedule, { once: true });
     }
 
-    _activateIOSBankEntry(entry, options = {}) {
-      if (!entry?.audio) return false;
-      const audio = entry.audio;
-      const startAt = Math.max(0, asNumber(options.startAt, 0));
-      const target = this.muted ? 0 : clamp(asNumber(options.target, 1), 0, 1);
-      const fadeIn = Math.max(0, asNumber(options.fadeIn, 0));
-      const seek = options.seek !== false;
-
-      // V2.16: source-stable media is already PLAYING from START. The pop was
-      // produced by seek + unmute happening in the same instant. Keep it muted
-      // while seeking, establish zero gain first, then open the gate only after
-      // WebKit has settled the seek. On current iOS versions volume ramps are
-      // honoured when applied after this gate; on older versions this still
-      // removes the hard seek transient even if volume is system-controlled.
-      try { audio.loop = true; audio.muted = true; audio.volume = entry.gainNode ? 1 : 0; } catch (_) {}
-      if (entry.gainNode && this.audioContext) {
-        try { entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime); entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
-      }
-      if (seek) { try { audio.currentTime = startAt; } catch (_) {} }
-      entry.active = true;
-      entry.targetVolume = target;
-
-      if (audio.paused) {
-        try { const p = audio.play(); if (p?.catch) p.catch(() => {}); } catch (_) {}
-      }
-
-      let opened = false;
-      const openGate = () => {
-        if (opened || !entry.active) return;
-        opened = true;
-        try { audio.volume = entry.gainNode ? 1 : 0; audio.muted = this.muted; } catch (_) {}
-        if (this.muted) return;
-        if (fadeIn > 0) this._setIOSBankEntryVolume(entry, target, fadeIn);
-        else this._setIOSBankEntryVolume(entry, target, 0);
-      };
-
-      if (seek && typeof audio.addEventListener === 'function') {
-        const onSeeked = () => openGate();
-        audio.addEventListener('seeked', onSeeked, { once: true });
-        // Some cached MP3s do not emit seeked for a 0 -> 0 assignment. Keep a
-        // short fallback, still long enough to avoid exposing the seek click.
-        this._audioTimeout(openGate, 45);
-      } else {
-        this._audioTimeout(openGate, 16);
-      }
-      return true;
-    }
-
     _playIOSBankOneShot(command) {
       const entry = this._iosBankEntry('oneshot', command?.src);
       if (!entry?.audio) return false;
+      const audio = entry.audio;
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
       const startAt = Math.max(0, asNumber(command.startAt, 0));
       const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
       const fadeIn = Math.max(0, asNumber(command.fadeIn, 0));
-      this._activateIOSBankEntry(entry, { startAt, target, fadeIn, seek:true });
+      try { audio.loop = true; audio.currentTime = startAt; audio.muted = this.muted; audio.volume = fadeIn > 0 ? 0 : target; } catch (_) {}
+      entry.active = true;
+      entry.targetVolume = target;
+      // If priming was rejected for an individual element, retry only as a
+      // fallback. Normally this branch is never needed after START.
+      if (audio.paused) {
+        try { const p = audio.play(); if (p?.catch) p.catch(() => {}); } catch (_) {}
+      }
+      if (fadeIn > 0 && !this.muted) this._setIOSBankEntryVolume(entry, target, fadeIn);
       this._scheduleIOSOneShotSilence(entry, command, startAt);
       emit(this.host, 'sceneplayer:audioplaystarted', { channel:'oneshot', role:command.role || 'se', action:'play', src:command.src, transport:'ios-live-media-bank' });
       emit(this.host, 'sceneplayer:oneshot', { command, transport:'ios-live-media-bank' });
@@ -931,15 +765,17 @@
       const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
       const fadeIn = reconstruct ? 0 : Math.max(0, asNumber(command.fadeIn, 0));
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
+      try {
+        audio.loop = true; // authorization keeper; non-loop is emulated by muting.
+        if (shouldSeek) audio.currentTime = startAt;
+        audio.muted = this.muted;
+        audio.volume = fadeIn > 0 ? 0 : target;
+      } catch (_) {}
       entry.active = true;
       entry.targetVolume = target;
       this._iosPersistentEntry[channel] = entry;
-      this._activateIOSBankEntry(entry, {
-        startAt,
-        target,
-        fadeIn,
-        seek: shouldSeek
-      });
+      if (audio.paused) { try { const p = audio.play(); if (p?.catch) p.catch(() => {}); } catch (_) {} }
+      if (fadeIn > 0 && !this.muted) this._setIOSBankEntryVolume(entry, target, fadeIn);
       this.audioState[channel] = {
         src: command.src,
         volume: target,
@@ -1173,6 +1009,7 @@
 
     _ensureAudioContext() {
       if (this.audioContext) return this.audioContext;
+      if (this._iosWebAudioPlayback) this._configureIOSAudioSession();
       const AudioContextClass = global.AudioContext || global.webkitAudioContext;
       if (!AudioContextClass) return null;
       try {
@@ -1997,24 +1834,20 @@
       this.audioPlaybackArmed = false;
       this.document = assertSceneDocument(doc);
 
-      // iOS: build a source-stable native-media bank now. Actual play() calls
-      // happen together in the trusted START gesture in _beginFromCover().
-      if (this._iosStableMediaBank) this._prepareIOSMediaBank();
+      // iOS V2.16: start fetching/decoding every real work sound as soon as
+      // the document is loaded. Playback still waits for START; preloading itself
+      // does not require a user gesture. START only resumes the single context.
+      if (this._iosBufferAudio) this._preloadDocumentAudioBuffers();
 
-      // Preload Ending SE only. Playback waits for the final trusted press.
+      // Preload Ending SE only for the non-buffer fallback path.
       try {
         this.endingAudio.pause();
         this.endingAudio.removeAttribute('src');
         const endingCommand = (Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [])
           .find((command) => command?.channel === 'oneshot' && command?.src && ['play','start'].includes(command.action || 'play'));
         if (endingCommand?.src) {
-          const endingSrc = this._resolveCoreAudioSrc(endingCommand.src);
-          this.endingAudio.__spPrimed = false;
-          this.endingAudio.__spLoadedSrc = endingSrc;
-          this.endingAudio.src = endingSrc;
+          this.endingAudio.src = endingCommand.src;
           this.endingAudio.preload = 'auto';
-          this.endingAudio.loop = true;
-          this.endingAudio.muted = true;
           try { this.endingAudio.load(); } catch (_) {}
         }
       } catch (_) {}
@@ -2628,10 +2461,10 @@
       this.ended = false;
       this._endingAudioStarted = false;
       this.unlockAudio(true);
-      // V2.15 iOS: authorize EVERY real source synchronously from this START
-      // gesture and keep the elements silently playing. Scene changes merely
-      // seek/unmute those already-authorized elements.
-      if (this._iosStableMediaBank) this._primeIOSMediaBank();
+      // V2.16 iOS: START owns the trusted gesture that resumes the one Web
+      // Audio context. Buffers were already requested during load; retry any
+      // still-missing decode without changing the playback transport.
+      if (this._iosBufferAudio) this._preloadDocumentAudioBuffers();
       this.els.cover.hidden=true;
       this.host.classList.remove('sp-cover-open');
       // Treat the first render after the cover as a fresh load so Scene 1
@@ -2680,33 +2513,12 @@
       const commands = Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [];
       const playable = commands.filter((command) => command?.channel === 'oneshot' && command?.src && ['play','start'].includes(command.action || 'play'));
       if (!playable.length) return false;
+
+      // finish() is reached synchronously from the reader's final click in manual
+      // mode. AUTO has pre-authorized the same reusable one-shot bank before its
+      // timer starts. Use one path for both instead of a separate ending Audio.
       this._endingAudioStarted = true;
-
-      // V2.18 iOS: use exactly the same live-media one-shot bank that already
-      // works for Scene 1 / Scene 2 SE. The ending source was added to that bank
-      // during load() and primed in the trusted START/AUTO gesture, so finish()
-      // performs only seek + gate-open on an already-playing stable element.
-      if (this._iosStableMediaBank) {
-        const command = {
-          ...playable[0],
-          src: this._resolveCoreAudioSrc(playable[0].src),
-          action: 'play',
-          role: 'ending-se'
-        };
-        if (this._playIOSBankOneShot(command)) return true;
-
-        // Keep the dedicated element only as a diagnostic last resort. It is no
-        // longer the primary iPhone path because device testing showed that its
-        // muted long-running playback could stay silent when reopened at ending.
-        emit(this.host, 'sceneplayer:endingbankmiss', { src: command.src });
-      }
-
-      playable.forEach((item) => this._playOneShot({
-        ...item,
-        src: this._resolveCoreAudioSrc(item.src),
-        action: 'play',
-        role: 'ending-se'
-      }));
+      playable.forEach((item) => this._playOneShot({...item, action:'play', role:'ending-se'}));
       return true;
     }
 
@@ -2736,9 +2548,6 @@
         this._iosAudioBank?.forEach((entry) => {
           if (!entry?.audio) return;
           try { entry.audio.muted = this.muted || !entry.active; } catch (_) {}
-          if (entry.gainNode && this.audioContext && (this.muted || !entry.active)) {
-            try { entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
-          }
           if (!this.muted && entry.active) this._setIOSBankEntryVolume(entry, entry.targetVolume ?? 1, 0);
         });
       }
@@ -2813,12 +2622,8 @@
       const delay = Math.max(0, asNumber(this.currentScene.pause, this.options.autoDelay));
       this.autoTimer = setTimeout(() => {
         this.autoTimer = null;
-        if (this.index >= this.document.scenes.length - 1) {
-          // V2.19: open the already-primed ending-SE bank entry while AUTO's
-          // audio session is still fully active. finish() then only changes UI.
-          this._playEndingAudio();
-          this.finish();
-        } else this.next();
+        if (this.index >= this.document.scenes.length - 1) this.finish();
+        else this.next();
       }, delay);
     }
 
@@ -4076,7 +3881,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.4.8-ios-ending-pre-finish';
+  ScenePlayerCore.VERSION = '1.4.5-ios-live-media-bank';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
