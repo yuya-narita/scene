@@ -4738,7 +4738,7 @@
 
     const fx=p.typing?.enabled ? u('タイプライター','Typewriter') : (p.effect||u('おまかせ','Automatic'));
     const display=(p.display||'stack')==='solo' ? u('この文章だけ','Only this text') : u('前の文章を残す','Keep previous text');
-    const flow=p.flow==='horizontal'?u('左へ送る','Move left'):u('上へ送る','Move up');
+    const flow=p.flow==='horizontal'?u('ページ送り','Page flow'):u('上へ送る','Move up');
     $('#toolboxEffectSummary') && ($('#toolboxEffectSummary').textContent=`${fx} / ${display} / ${flow}`);
 
     let bg=u('前Sceneを継続','Continue previous Scene');
@@ -6849,7 +6849,7 @@ function openDesktopEffectDetail(){
     basicGrid.append(
       effectSelect,
       desktopDetailSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;apply();}),
-      desktopDetailSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（左へ送る）','Horizontal (move left)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;apply();}),
+      desktopDetailSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;apply();}),
       desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;apply();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
       desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;apply();})
@@ -8702,7 +8702,7 @@ function openDesktopTextDetail(){
         renderDesktopLivePanel();
       }),
       desktopMakeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;refresh();}),
-      desktopMakeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（左へ送る）','Horizontal (move left)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;refresh();}),
+      desktopMakeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;refresh();}),
       desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
       desktopMakeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;refresh();})
@@ -9330,7 +9330,7 @@ function openDesktopTextDetail(){
             scheduleDraftSave(80);refreshLivePlayer();
           }),
           makeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
-          makeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（左へ送る）','Horizontal (move left)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;scheduleDraftSave(80);refreshLivePlayer();}),
+          makeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;scheduleDraftSave(80);refreshLivePlayer();})
