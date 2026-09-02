@@ -283,6 +283,17 @@
             "center",
             "right"
           ]
+        },
+        "writingMode": {
+          "enum": [
+            "horizontal-tb",
+            "vertical-rl"
+          ]
+        },
+        "fontWeight": {
+          "type": "number",
+          "minimum": 100,
+          "maximum": 900
         }
       },
       "additionalProperties": true
@@ -293,7 +304,14 @@
         "display": {
           "enum": [
             "stack",
-            "solo"
+            "solo",
+            "overlay"
+          ]
+        },
+        "flow": {
+          "enum": [
+            "vertical",
+            "horizontal"
           ]
         },
         "view": {
@@ -317,6 +335,11 @@
             "slow",
             "tilt",
             "whisper",
+            "slam",
+            "burst",
+            "glitchHit",
+            "glitchHitRight",
+            "rush",
             "auto",
             "fadeRise",
             "softRise",
@@ -327,6 +350,17 @@
         },
         "text": {
           "$ref": "#/$defs/style"
+        },
+        "frame": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "handdrawn-voice"
+              ]
+            }
+          },
+          "additionalProperties": true
         },
         "subText": {
           "$ref": "#/$defs/style"
@@ -361,7 +395,9 @@
             "motion": {
               "enum": [
                 "stay",
-                "up"
+                "up",
+                "shatter",
+                "explode"
               ]
             }
           },
@@ -803,6 +839,13 @@
             "$ref": "#/$defs/endingLink"
           },
           "maxItems": 2
+        },
+        "audio": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/audioCommand"
+          },
+          "description": "Optional ending-page audio commands. Studio currently authors one-shot SE here."
         },
         "fontFamily": {
           "enum": [
