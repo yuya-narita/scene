@@ -195,7 +195,7 @@
 
 /* Presentation Engine v1.1 */
 .sp-text.is-typing::selection{background:transparent}
-.sp-scene.is-disappearing{
+.sp-scene.is-disappearing:not(.is-disappear-shatter):not(.is-disappear-explode){
   opacity:0!important;
   filter:blur(2px)!important;
   transition:opacity var(--sp-disappear-fade,700ms) ease,
@@ -1813,11 +1813,14 @@ html.sp-scene-image-open body{
   100%{opacity:1;transform:scale(1)}
 }
 @keyframes spFxGlitchHitV2{
-  0%{opacity:0;transform:translate(-38vw,18px) scale(2.8) skewX(-28deg);filter:blur(7px)}
-  14%{opacity:1;transform:translate(26vw,-12px) scale(1.8) skewX(20deg)}
-  29%{transform:translate(-17vw,8px) scale(1.45) skewX(-14deg)}
-  46%{transform:translate(10vw,-5px) scale(1.18) skewX(9deg)}
-  66%{transform:translate(-4vw,2px) scale(1.06) skewX(-4deg)}
+  0%{opacity:0;transform:translateX(-34vw) scale(2.8) skewX(-28deg);filter:blur(7px)}
+  12%{opacity:1;transform:translateX(34vw) scale(2.15) skewX(28deg);filter:blur(2px)}
+  25%{transform:translateX(-24vw) scale(1.75) skewX(-20deg);filter:none}
+  38%{transform:translateX(24vw) scale(1.48) skewX(20deg)}
+  52%{transform:translateX(-14vw) scale(1.28) skewX(-12deg)}
+  66%{transform:translateX(14vw) scale(1.18) skewX(12deg)}
+  80%{transform:translateX(-6vw) scale(1.08) skewX(-5deg)}
+  90%{transform:translateX(6vw) scale(1.04) skewX(5deg)}
   100%{opacity:1;transform:none;filter:none}
 }
 @keyframes spFxRushV2{
