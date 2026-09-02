@@ -975,3 +975,67 @@ body{
     margin-bottom:9px!important;
   }
 }
+
+/* =========================================================
+   Public Player iPhone viewport lock v2.5
+   The public shell must behave like one app viewport, not a scrollable page.
+   Fixed inset geometry avoids Safari dynamic-toolbar / 100dvh document growth
+   from exposing a second vertical page and hiding ending controls below chrome.
+   ========================================================= */
+html{
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  overflow:hidden!important;
+  overscroll-behavior:none!important;
+}
+body{
+  position:fixed!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  max-height:100%!important;
+  overflow:hidden!important;
+  overscroll-behavior:none!important;
+  touch-action:manipulation;
+}
+.public-player{
+  position:fixed!important;
+  inset:0!important;
+  width:auto!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:hidden!important;
+}
+.public-intro,
+.public-ending{
+  position:fixed!important;
+  inset:0!important;
+  width:auto!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:hidden!important;
+  overscroll-behavior:none!important;
+}
+.public-intro-frame,
+.public-ending-inner,
+.public-ending.has-resonance .public-ending-inner{
+  width:min(720px,100%)!important;
+  height:100%!important;
+  min-height:0!important;
+  max-height:100%!important;
+  overflow:hidden!important;
+}
+.public-ending.has-resonance .public-ending-inner{
+  width:min(680px,100%)!important;
+}
+@supports(height:100svh){
+  .public-player,
+  .public-intro,
+  .public-ending{
+    max-height:100svh!important;
+  }
+}
