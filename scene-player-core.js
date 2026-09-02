@@ -1743,6 +1743,13 @@
 
     _playEndingAudio() {
       const commands = Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [];
+      if (!commands.length) return;
+      // The final Scene -> ending transition is normally caused by the reader's
+      // tap. Re-arm playback here before starting the ending one-shot so iOS
+      // cannot inherit a stale/disarmed state from an earlier media play().
+      // AUTO still works after the initial playback unlock because the media
+      // session has already been activated by the reader.
+      this.unlockAudio(true);
       commands.forEach((command) => {
         if (!command || command.channel !== 'oneshot') return;
         const action = command.action || 'play';
@@ -3044,8 +3051,9 @@
       this.typingState = { timer, node, text: scene.text, sceneId: scene.id };
     }
 
-    destroy() {
+    destroy(options = {}) {
       if (this.destroyed) return;
+      const preserveHost = options?.preserveHost === true;
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
@@ -3055,10 +3063,16 @@
       }
       this.audioGainNodes.clear();
       this.audioSourceNodes.clear();
-      this._bound.forEach(([el, event, fn, options]) => el.removeEventListener(event, fn, options));
+      this._bound.forEach(([el, event, fn, listenerOptions]) => el.removeEventListener(event, fn, listenerOptions));
       this._bound.length = 0;
-      this.host.innerHTML = '';
-      this.host.classList.remove('sp-core');
+      // Public Player can cross-fade an old Core instance while a fresh Core
+      // instance is already mounted into the same host. In that case the old
+      // instance must release its own listeners/audio WITHOUT clearing the
+      // shared host, otherwise its delayed destroy wipes out the second read.
+      if (!preserveHost) {
+        this.host.innerHTML = '';
+        this.host.classList.remove('sp-core');
+      }
       this.destroyed = true;
     }
   }
