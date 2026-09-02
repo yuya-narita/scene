@@ -76,6 +76,7 @@
   const endingQuickDone=$('#endingQuickDone');
   const endingLegacyEditor=$('#endingLegacyEditor');
   const endingQuickRecentList=$('#endingQuickRecentList');
+  const endingSeEnabled=$('#endingSeEnabled'), endingSeFields=$('#endingSeFields'), endingSeInput=$('#endingSeInput'), endingSeFileLabel=$('#endingSeFileLabel'), endingSeUrlInput=$('#endingSeUrlInput'), endingSeUrlApply=$('#endingSeUrlApply'), endingSeVolume=$('#endingSeVolume'), endingSeVolumeOutput=$('#endingSeVolumeOutput');
   let endingQuickTarget='center';
   let coverImageUrl = '';
   let coverImageFileName = '';
@@ -199,7 +200,7 @@
     ['#sceneViewSelect option[value="world"]','scene.view.world'],['#sceneViewSelect option[value="console"]','scene.view.console'],['#sceneViewSelect option[value="system"]','scene.view.system'],['#sceneViewSelect option[value="warning"]','scene.view.warning'],['#sceneViewSelect option[value="void"]','scene.view.void'],
     ['#sceneEntryMotionSelect option[value="flow"]','scene.entry.flow'],['#sceneEntryMotionSelect option[value="still"]','scene.entry.still'],
     ['#sceneEffectSelect option[value="auto"]','effect.auto'],['#sceneEffectSelect option[value="fade"]','effect.fade'],['#sceneEffectSelect option[value="pop"]','effect.pop'],['#sceneEffectSelect option[value="blur"]','effect.blur'],
-    ['#sceneEffectSelect option[value="whisper"]','effect.whisper'],['#sceneEffectSelect option[value="loud"]','effect.loud'],['#sceneEffectSelect option[value="pulse"]','effect.pulse'],['#sceneEffectSelect option[value="shake"]','effect.shake'],['#sceneEffectSelect option[value="tilt"]','effect.tilt'],['#sceneEffectSelect option[value="slow"]','effect.slow'],['#sceneEffectSelect option[value="slam"]','effect.slam'],['#sceneEffectSelect option[value="burst"]','effect.burst'],['#sceneEffectSelect option[value="glitchHit"]','effect.glitchHit'],['#sceneEffectSelect option[value="rush"]','effect.rush'],['#sceneEffectSelect option[value="none"]','effect.none'],
+    ['#sceneEffectSelect option[value="whisper"]','effect.whisper'],['#sceneEffectSelect option[value="loud"]','effect.loud'],['#sceneEffectSelect option[value="pulse"]','effect.pulse'],['#sceneEffectSelect option[value="shake"]','effect.shake'],['#sceneEffectSelect option[value="tilt"]','effect.tilt'],['#sceneEffectSelect option[value="slow"]','effect.slow'],['#sceneEffectSelect option[value="slam"]','effect.slam'],['#sceneEffectSelect option[value="burst"]','effect.burst'],['#sceneEffectSelect option[value="glitchHit"]','effect.glitchHit'],['#sceneEffectSelect option[value="glitchHitRight"]','effect.glitchHitRight'],['#sceneEffectSelect option[value="rush"]','effect.rush'],['#sceneEffectSelect option[value="none"]','effect.none'],
     ['#sceneSizeSelect option[value="auto"]','size.auto'],['#sceneSizeSelect option[value="small"]','size.small'],['#sceneSizeSelect option[value="normal"]','size.normal'],['#sceneSizeSelect option[value="large"]','size.large'],['#sceneSizeSelect option[value="xl"]','size.xl'],
     ['#sceneFontSelect option[value="inherit"]','font.inherit'],['#sceneFontSelect option[value="serif"]','font.serif'],['#sceneFontSelect option[value="sans"]','font.sans'],['#sceneFontSelect option[value="mono"]','font.mono'],
     ['#sceneLanguageSelect option[value="auto"]','scene.language.auto'],['#sceneLanguageSelect option[value="ja"]','scene.language.ja'],['#sceneLanguageSelect option[value="en"]','scene.language.en'],['#sceneLanguageSelect option[value="custom"]','scene.language.custom'],
@@ -831,6 +832,7 @@
     endingFontFamily=effectiveEndingFontFamily(workingDocument);
     syncEndingFontFamily(endingFontFamily,{syncStyle:true});
     if(endingLabelInput)endingLabelInput.value=row.ending?.label||workingDocument?.ending?.label||'';
+    loadEndingSeFields(workingDocument);
     endingLinkInputs.forEach((pair,index)=>{const pos=index===0?'left':'right';const links=row.ending?.links||workingDocument?.ending?.links||[];const hasPositions=links.some(x=>x?.position==='left'||x?.position==='right');const item=hasPositions?(links.find(x=>x?.position===pos)||{}):(links[index]||{});if(pair.kicker)pair.kicker.value=item.kicker||'';if(pair.label)pair.label.value=item.label||'';if(pair.url)pair.url.value=item.url||'';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateProtectedResplitPreview();
     if(workingDocument?.scenes?.length){normalizeSceneIds();refreshDocumentLanguages();renderAdvanced();}
@@ -1165,7 +1167,7 @@
     if(densitySelect)densitySelect.value='normal';
     if(subtitleInput)subtitleInput.value='';applyRememberedWorkIdentity();if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';
     coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';
-    if(endingLabelInput)endingLabelInput.value='';endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
+    if(endingLabelInput)endingLabelInput.value=''; if(endingSeEnabled)endingSeEnabled.checked=false; setAssetField('endingSeInput','',''); if(endingSeUrlInput)endingSeUrlInput.value=''; if(endingSeFields)endingSeFields.hidden=true; endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateAutoRecStartLabel();
     setScreen('easy');scrollScreenToTop(editorScreen);
     return true;
@@ -1630,6 +1632,36 @@
     return next;
   }
 
+  function endingSeCommand(doc=workingDocument){
+    const list=Array.isArray(doc?.ending?.audio)?doc.ending.audio:[];
+    return list.find(c=>c && c.channel==='oneshot' && (c.role==='se'||!c.role)) || null;
+  }
+  function loadEndingSeFields(doc=workingDocument){
+    const cmd=endingSeCommand(doc);
+    if(endingSeEnabled)endingSeEnabled.checked=Boolean(cmd);
+    setAssetField('endingSeInput',cmd?.src||'',cmd?._editorFileName||'');
+    loadExternalUrlField('endingSeInput','endingSeUrlInput');
+    if(endingSeVolume)endingSeVolume.value=Math.round((cmd?.volume??.8)*100);
+    if(endingSeVolumeOutput)endingSeVolumeOutput.value=`${endingSeVolume?.value||80}%`;
+    if(endingSeFields)endingSeFields.hidden=!endingSeEnabled?.checked;
+    updateAssetLabel('endingSeFileLabel','endingSeInput');
+  }
+  function endingAudioFromFields(){
+    if(!endingSeEnabled?.checked)return [];
+    const asset=assetFrom('endingSeInput');
+    if(!asset.src)return [];
+    return [{channel:'oneshot',role:'se',action:'play',src:asset.src,volume:pct(endingSeVolume?.value,80),_editorFileName:asset.name||''}];
+  }
+  function syncEndingSeToWorkingDocument(){
+    if(!workingDocument)return;
+    workingDocument.ending ||= {};
+    const audio=endingAudioFromFields();
+    if(audio.length)workingDocument.ending.audio=audio; else delete workingDocument.ending.audio;
+    if(endingSeFields)endingSeFields.hidden=!endingSeEnabled?.checked;
+    if(endingSeVolumeOutput)endingSeVolumeOutput.value=`${endingSeVolume?.value||80}%`;
+    updateAssetLabel('endingSeFileLabel','endingSeInput');
+  }
+
   function endingFromEasy(){
     const preservedStyle=clone(workingDocument?.ending?.style||{});
     preservedStyle.fontFamily=endingFontFamily;
@@ -1637,6 +1669,7 @@
       label:String(endingLabelInput?.value||'').trim(),
       fontFamily:endingFontFamily,
       ...(Object.keys(preservedStyle).length?{style:preservedStyle}:{}),
+      ...(endingAudioFromFields().length?{audio:endingAudioFromFields()}:{}),
       coverButton:{kicker:'COVER',label:t('ending.cover')},
       links:endingLinkInputs.map((row,index)=>({position:index===0?'left':'right',kicker:String(row.kicker?.value||'').trim(),label:String(row.label?.value||'').trim(),url:String(row.url?.value||'').trim()})).filter(x=>x.label&&x.url)
     };
@@ -1741,6 +1774,7 @@
     if(center){
       endingQuickCenterText.value=endingLabelInput?.value||'';
       if(endingQuickFont)endingQuickFont.value=endingFontFamily;
+      loadEndingSeFields(workingDocument);
       renderEndingRecents('center');
     }else{
       const row=endingLinkInputs[target==='left'?0:1];
@@ -3229,6 +3263,7 @@
     endingFontFamily=effectiveEndingFontFamily(doc);
     if(doc===workingDocument)syncEndingFontFamily(endingFontFamily,{syncStyle:true});
     if(endingLabelInput)endingLabelInput.value=doc.ending?.label||doc.ending?.title||'';
+    loadEndingSeFields(doc);
     {
       const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
       const hasPositions=links.some(item=>item?.position==='left'||item?.position==='right');
@@ -4667,7 +4702,7 @@
       const typeLabel=emptyScene
         ? (sceneHasAdvancedMeaning(scene)?t('scene.effectOnly'):t('scene.empty'))
         : ({text:t('scene.type.text'),dialogue:t('scene.type.dialogue'),sound:t('scene.type.sound')}[scene.type]||scene.type);
-      const effectLabel=scene.presentation?.typing?.enabled?u('タイプライター','Typewriter'):({auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),slam:t('effect.slam'),burst:t('effect.burst'),glitchHit:t('effect.glitchHit'),rush:t('effect.rush'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto'));
+      const effectLabel=scene.presentation?.typing?.enabled?u('タイプライター','Typewriter'):({auto:t('effect.auto'),fade:t('effect.fade'),pop:t('effect.pop'),blur:t('effect.blur'),whisper:t('effect.whisper'),loud:t('effect.loud'),pulse:t('effect.pulse'),shake:t('effect.shake'),tilt:t('effect.tilt'),slam:t('effect.slam'),burst:t('effect.burst'),glitchHit:t('effect.glitchHit'),glitchHitRight:t('effect.glitchHitRight'),rush:t('effect.rush'),none:t('effect.none')}[scene.presentation?.effect||'auto'] || (scene.presentation?.effect||'auto'));
       const sceneLang=scene.language || (workingDocument.language==='mul'?'':workingDocument.language) || '';
       const timing=Number.isFinite(Number(scene.pause)) && Number(scene.pause)>0 ? ` · AUTO ${(Number(scene.pause)/1000).toFixed(2)}s` : '';
       b.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><div><strong>${scenePreviewText(scene)}</strong><small>${typeLabel} · ${effectLabel}${sceneLang?' · '+sceneLang.toUpperCase():''}${media.length?' · '+media.join('/') : ''}${timing}</small></div>`;
@@ -5494,6 +5529,8 @@
   endingQuickClear?.addEventListener('click',()=>{endingQuickKicker.value='';endingQuickLabel.value='';endingQuickUrl.value='';syncQuickEndingToMain();});
   endingQuickDone?.addEventListener('click',()=>closeEndingQuickEditor(true));
   endingQuickFont?.addEventListener('change',()=>{syncEndingFontFamily(endingQuickFont.value||'serif',{syncStyle:true});syncQuickEndingToMain();});
+  endingSeEnabled?.addEventListener('change',()=>{syncEndingSeToWorkingDocument();syncQuickEndingToMain();});
+  endingSeVolume?.addEventListener('input',()=>{syncEndingSeToWorkingDocument();syncQuickEndingToMain();});
   endingQuickClose?.addEventListener('click',()=>closeEndingQuickEditor(true));
   endingQuickDialog?.addEventListener('click',(event)=>{if(event.target===endingQuickDialog)closeEndingQuickEditor(true);});
   endingLabelInput?.addEventListener('change',()=>saveEndingRecent({type:'center',text:endingLabelInput.value}));
@@ -5777,7 +5814,7 @@
   function bindAssetInput(inputId,labelId,onPick){
     const input=$('#'+inputId); input.addEventListener('change',async()=>{
       const file=input.files?.[0];if(!file)return;
-      const isAudio=/^(sceneBgmInput|sceneAmbientInput|sceneSeInput)$/.test(inputId);
+      const isAudio=/^(sceneBgmInput|sceneAmbientInput|sceneSeInput|endingSeInput)$/.test(inputId);
       if(isAudio){
         const name=(file.name||'').toLowerCase();
         const audioLike=(file.type||'').startsWith('audio/') || /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(name);
@@ -5804,11 +5841,13 @@
   bindAssetInput('sceneBgmInput','sceneBgmFileLabel',()=>{$('#sceneBgmAction').value='start';});
   bindAssetInput('sceneAmbientInput','sceneAmbientFileLabel',()=>{$('#sceneAmbientAction').value='start';});
   bindAssetInput('sceneSeInput','sceneSeFileLabel',()=>{$('#sceneSeEnabled').checked=true;});
+  bindAssetInput('endingSeInput','endingSeFileLabel',()=>{if(endingSeEnabled)endingSeEnabled.checked=true;syncEndingSeToWorkingDocument();syncQuickEndingToMain();});
 
   bindExternalAssetUrl({inputId:'sceneBackgroundInput',urlInputId:'sceneBackgroundUrlInput',applyId:'sceneBackgroundUrlApply',onApply:()=>{$('#sceneBackgroundMode').value='image';}});
   bindExternalAssetUrl({inputId:'sceneBgmInput',urlInputId:'sceneBgmUrlInput',applyId:'sceneBgmUrlApply',onApply:()=>{$('#sceneBgmAction').value='start';}});
   bindExternalAssetUrl({inputId:'sceneAmbientInput',urlInputId:'sceneAmbientUrlInput',applyId:'sceneAmbientUrlApply',onApply:()=>{$('#sceneAmbientAction').value='start';}});
   bindExternalAssetUrl({inputId:'sceneSeInput',urlInputId:'sceneSeUrlInput',applyId:'sceneSeUrlApply',onApply:()=>{$('#sceneSeEnabled').checked=true;}});
+  bindExternalAssetUrl({inputId:'endingSeInput',urlInputId:'endingSeUrlInput',applyId:'endingSeUrlApply',onApply:()=>{if(endingSeEnabled)endingSeEnabled.checked=true;syncEndingSeToWorkingDocument();syncQuickEndingToMain();}});
   $('#sceneBackgroundRemoveFile').addEventListener('click',()=>{const oldUrl=assetFrom('sceneBackgroundInput').src;if(oldUrl&&assetRegistry.has(oldUrl))unregisterAsset(oldUrl);setAssetField('sceneBackgroundInput','','');$('#sceneBackgroundInput').value='';$('#sceneBackgroundUrlInput').value='';updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
 
   const cinemaInput=$('#cinemaBackgroundInput'), cinemaPreview=$('#cinemaBackgroundPreview'), cinemaClear=$('#cinemaBackgroundClear');
@@ -6780,7 +6819,7 @@ function openDesktopEffectDetail(){
     const basicGrid=two(basic);
     const currentEffect=p.typing?.enabled?'typewriter':(p.effect||'auto');
     const effectSelect=desktopDetailSelect(u('出かた','Entrance'),[
-      ['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]
+      ['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]
     ],currentEffect,v=>{
       ensureDesktopEffectVisibleDefaults(scene,{save:false});
       if(v==='typewriter'){
@@ -8275,8 +8314,9 @@ function openDesktopTextDetail(){
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
     const textCard=desktopCard(u('中央の文','Center text'));const ta=document.createElement('textarea');ta.className='desktop-live-ending-text';ta.value=endingLabelInput?.value||'';ta.placeholder=u('読了','Finished');ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
     const styleCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');styleCard.append(shellStyleControls(()=>ensureEndingStyleStore(),()=>{const st=ensureEndingStyleStore();if(['serif','sans','mono'].includes(st.fontFamily))syncEndingFontFamily(st.fontFamily,{syncStyle:true});refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
+    const seCard=desktopCard(u('読了SE','Ending SE')); const seCmd=endingSeCommand(workingDocument); const seInfo=document.createElement('div');seInfo.className='desktop-live-scene-ops'; const seBtn=desktopAction(seCmd?u('読了SEを変更','Change ending SE'):u('読了SEを追加','Add ending SE'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('center');}); seInfo.append(seBtn); seCard.appendChild(seInfo);
     const linksCard=desktopCard(u('下部ボタン','Bottom buttons'));const ops=document.createElement('div');ops.className='desktop-live-scene-ops';ops.append(desktopAction(u('左ボタンを編集','Edit left button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('left');}),desktopAction(u('右ボタンを編集','Edit right button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('right');}));linksCard.appendChild(ops);
-    mountDesktopSpecialModal(u('読了ページ','Ending page'),[textCard,styleCard,linksCard]);
+    mountDesktopSpecialModal(u('読了ページ','Ending page'),[textCard,styleCard,seCard,linksCard]);
   }
 
   let desktopSpecialIntent=null;
@@ -8632,7 +8672,7 @@ function openDesktopTextDetail(){
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
-      desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+      desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
         ensureDesktopEffectVisibleDefaults(scene,{save:false});
         if(v==='typewriter'){
           p.effect='none';
@@ -9261,7 +9301,7 @@ function openDesktopTextDetail(){
         const grid=document.createElement('div');grid.className='live-edit-grid';
         const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
         grid.append(
-          makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+          makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
             if(v==='typewriter'){
               p.effect='none';
               p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
