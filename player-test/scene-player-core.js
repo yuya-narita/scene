@@ -2851,9 +2851,16 @@
       const nodeRect=node.getBoundingClientRect();
       const boxHeight=Math.max(1,nodeRect.height);
       const text=node.querySelector('.sp-text');
+      const frame=node.querySelector('.sp-handdrawn-frame');
       const vertical=text?.dataset?.writingMode==='vertical-rl';
       let inkLeft=0,inkRight=Math.max(1,nodeRect.width),inkTop=0,inkBottom=boxHeight;
-      try{
+      if(frame){
+        const frameRect=frame.getBoundingClientRect();
+        inkLeft=frameRect.left-nodeRect.left;
+        inkRight=frameRect.right-nodeRect.left;
+        inkTop=frameRect.top-nodeRect.top;
+        inkBottom=frameRect.bottom-nodeRect.top;
+      }else try{
         const range=document.createRange();
         range.selectNodeContents(text||node);
         const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
@@ -3798,6 +3805,26 @@
       container.appendChild(wrap);
     }
 
+    _handdrawnSeed(source) {
+      let hash=2166136261;const value=String(source||'');
+      for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619);}
+      return hash>>>0;
+    }
+    _handdrawnRandom(seed) {let state=seed>>>0;return ()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};}
+    _handdrawnPath(width,height,seed,trace=0) {
+      const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0),inset=5.5+trace*.35,rx=Math.max(8,(width-inset*2)/2),ry=Math.max(8,(height-inset*2)/2),cx=width/2+(random()-.5)*1.8,cy=height/2+(random()-.5)*1.8,count=32,phase=random()*Math.PI*2,points=[];
+      for(let i=0;i<count;i++){const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=2.28,baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx,baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry,wobble=1+Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006+(random()-.5)*.018+(trace-1)*.0025;points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});}
+      let d=`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+      for(let i=0;i<count;i++){const p0=points[(i-1+count)%count],p1=points[i],p2=points[(i+1)%count],p3=points[(i+2)%count];d+=` C ${(p1.x+(p2.x-p0.x)/6).toFixed(2)} ${(p1.y+(p2.y-p0.y)/6).toFixed(2)} ${(p2.x-(p3.x-p1.x)/6).toFixed(2)} ${(p2.y-(p3.y-p1.y)/6).toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;}
+      return `${d} Z`;
+    }
+    _mountHanddrawnFrame(frame,scene,presentation) {
+      const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.classList.add('sp-handdrawn-frame-svg');svg.setAttribute('aria-hidden','true');svg.setAttribute('preserveAspectRatio','none');
+      const defs=document.createElementNS(ns,'defs'),filter=document.createElementNS(ns,'filter'),filterId=`sp-ink-bleed-${String(scene.id||'scene').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24)}-${this._handdrawnSeed(scene.text)&65535}`;filter.id=filterId;filter.setAttribute('x','-5%');filter.setAttribute('y','-5%');filter.setAttribute('width','110%');filter.setAttribute('height','110%');const blur=document.createElementNS(ns,'feGaussianBlur');blur.setAttribute('stdDeviation','.72');filter.appendChild(blur);defs.appendChild(filter);svg.appendChild(defs);
+      const makePath=className=>{const path=document.createElementNS(ns,'path');path.classList.add(className);svg.appendChild(path);return path;},fill=makePath('sp-handdrawn-fill'),bleed=makePath('sp-handdrawn-bleed'),ghost=makePath('sp-handdrawn-ghost'),ink=makePath('sp-handdrawn-ink'),scuff=makePath('sp-handdrawn-scuff');bleed.setAttribute('filter',`url(#${filterId})`);frame.prepend(svg);let lastWidth=0,lastHeight=0;
+      const draw=()=>{if(!frame.isConnected)return;const text=frame.querySelector(':scope > .sp-text');if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.verticalInkFitted){text.style.maxWidth='none';text.style.width='max-content';let inkWidth=0;try{const range=document.createRange();range.selectNodeContents(text);const rects=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);range.detach?.();if(rects.length)inkWidth=Math.max(...rects.map(item=>item.right))-Math.min(...rects.map(item=>item.left));}catch(_){}const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkWidth,text.getBoundingClientRect().width)+2);text.style.width=`${fittedWidth}px`;frame.dataset.verticalInkFitted='true';}const rect=frame.getBoundingClientRect(),width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;lastWidth=width;lastHeight=height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);const seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}`),primary=this._handdrawnPath(width,height,seed,0);fill.setAttribute('d',primary);ink.setAttribute('d',primary);bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1));ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2));scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3));const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);scuff.setAttribute('stroke-dashoffset',String(seed%29));};requestAnimationFrame(draw);if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();return;}draw();});observer.observe(frame);}
+    }
+
     _sceneNode(scene, active, age) {
       const article = document.createElement('article');
       article.className = `sp-scene sp-type-${scene.type}`;
@@ -3873,7 +3900,9 @@
           text.className = 'sp-text';
           text.textContent = scene.text;
           this._applyTextStyle(text, presentation.text || {}, false);
-          article.appendChild(text);
+          if(presentation.frame?.type==='handdrawn-voice'){
+            const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';const inkColor=String(presentation.text?.color||'').trim().toLowerCase();if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';frame.appendChild(text);article.appendChild(frame);article.dataset.frame='handdrawn-voice';this._mountHanddrawnFrame(frame,scene,presentation);
+          }else article.appendChild(text);
         }
 
         if (typeof scene.subText === 'string' && scene.subText.length) {

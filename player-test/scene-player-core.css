@@ -159,6 +159,24 @@
   line-height:1.75;
   letter-spacing:.08em;
 }
+/* Hand-drawn voice balloon. The generous inset is intentional: manga
+   lettering needs breathing room and the outline is part of the composition. */
+.sp-handdrawn-frame{position:relative;display:block;width:fit-content;max-width:100%;box-sizing:border-box;margin-inline:auto;padding:clamp(27px,5.8vw,46px) clamp(32px,7vw,60px);isolation:isolate}
+.sp-handdrawn-frame[data-writing-mode="vertical-rl"]{padding:clamp(34px,6.8vw,54px) clamp(29px,6.2vw,50px)}
+.sp-handdrawn-frame[data-frame-align="left"]{margin-left:0;margin-right:auto}
+.sp-handdrawn-frame[data-frame-align="right"]{margin-left:auto;margin-right:0}
+.sp-handdrawn-frame-svg{position:absolute;inset:0;z-index:-1;display:block;width:100%;height:100%;overflow:visible;pointer-events:none}
+.sp-handdrawn-fill{fill:#fffdf8;stroke:none}
+.sp-handdrawn-bleed{fill:none;stroke:#171512;stroke-width:3.8;stroke-linecap:round;stroke-linejoin:round;opacity:.16}
+.sp-handdrawn-ghost{fill:none;stroke:#171512;stroke-width:.82;stroke-linecap:round;stroke-linejoin:round;opacity:.26}
+.sp-handdrawn-ink{fill:none;stroke:#171512;stroke-width:1.85;stroke-linecap:round;stroke-linejoin:round;opacity:.92}
+.sp-handdrawn-scuff{fill:none;stroke:#fffdf8;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round;opacity:.88}
+.sp-handdrawn-frame>.sp-text{position:relative;z-index:1;max-width:100%;text-shadow:none}
+.sp-handdrawn-frame[data-writing-mode="vertical-rl"]>.sp-text{width:max-content;max-width:none}
+@media (max-width:600px){
+  .sp-handdrawn-frame{padding:clamp(25px,7vw,34px) clamp(28px,8vw,40px)}
+  .sp-handdrawn-frame[data-writing-mode="vertical-rl"]{padding:clamp(30px,8vw,42px) clamp(25px,7vw,36px)}
+}
 .sp-type-dialogue .sp-text{font-weight:500}
 .sp-subtext{margin-top:12px;color:var(--sp-sub);font-size:clamp(12px,2.7vw,15px);line-height:1.75;white-space:pre-wrap}
 .sp-sound-mark{display:block;color:var(--sp-sub);font-size:28px;text-align:center}
