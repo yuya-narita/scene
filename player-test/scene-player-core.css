@@ -1826,6 +1826,19 @@ html.sp-scene-image-open body{
 .sp-scene.sp-fx-play[data-effect="burst"] .sp-text{animation-name:spFxBurstV2!important;animation-timing-function:cubic-bezier(.1,.8,.14,1)!important}
 .sp-scene.sp-fx-play[data-effect="glitchHit"] .sp-text{animation-name:spFxGlitchHitV2!important;animation-timing-function:steps(8,end)!important}
 .sp-scene.sp-fx-play[data-effect="rush"] .sp-text{animation-name:spFxRushV2!important;animation-timing-function:cubic-bezier(.06,.78,.12,1)!important}
+@keyframes spFxGlitchHitRightV2{
+  0%{opacity:0;transform:translateX(34vw) scale(2.8) skewX(28deg);filter:blur(7px)}
+  12%{opacity:1;transform:translateX(-34vw) scale(2.15) skewX(-28deg);filter:blur(2px)}
+  25%{transform:translateX(24vw) scale(1.75) skewX(20deg);filter:none}
+  38%{transform:translateX(-24vw) scale(1.48) skewX(-20deg)}
+  52%{transform:translateX(14vw) scale(1.28) skewX(12deg)}
+  66%{transform:translateX(-14vw) scale(1.18) skewX(-12deg)}
+  80%{transform:translateX(6vw) scale(1.08) skewX(5deg)}
+  90%{transform:translateX(-6vw) scale(1.04) skewX(-5deg)}
+  100%{opacity:1;transform:none;filter:none}
+}
+.sp-scene.sp-fx-play[data-effect="glitchHitRight"] .sp-text{animation:spFxGlitchHitRightV2 var(--sp-effect-duration,.46s) steps(8,end) 1!important}
+
 
 @keyframes spDisappearShatter{
   0%{opacity:1;transform:var(--sp-landed-transform,translate3d(0,0,0));filter:none}
