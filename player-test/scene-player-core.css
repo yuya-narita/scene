@@ -111,6 +111,7 @@
   transform:translateY(13px);
   filter:blur(2px)!important;
 }
+.sp-scene.entering[data-scene-flow="horizontal"]{transform:translateX(13px)}
 /* Entry motion can be decoupled from the inner text effect.
    `still` means the Scene is born at its final reading position; blur/fade/typewriter
    can still run on .sp-text without the Scene travelling down from the stage origin. */

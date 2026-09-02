@@ -2847,26 +2847,28 @@
       return this.options.baseGap;
     }
 
-    _measureSceneHeight(node, stageHeight) {
-      const boxHeight=Math.max(1,node.getBoundingClientRect().height);
-      const vertical=node.querySelector('.sp-text[data-writing-mode="vertical-rl"]');
-      if(!vertical)return boxHeight;
+    _measureSceneGeometry(node, stageRect) {
+      const nodeRect=node.getBoundingClientRect();
+      const boxHeight=Math.max(1,nodeRect.height);
+      const text=node.querySelector('.sp-text');
+      const vertical=text?.dataset?.writingMode==='vertical-rl';
+      let inkLeft=0,inkRight=Math.max(1,nodeRect.width),inkTop=0,inkBottom=boxHeight;
       try{
         const range=document.createRange();
-        range.selectNodeContents(vertical);
+        range.selectNodeContents(text||node);
         const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
         range.detach?.();
-        if(!rects.length)return boxHeight;
-        const top=Math.min(...rects.map(rect=>rect.top));
-        const bottom=Math.max(...rects.map(rect=>rect.bottom));
-        const inkHeight=Math.max(1,bottom-top);
-        return Math.min(boxHeight,Math.max(48,Math.min(stageHeight*.52,inkHeight+8)));
-      }catch(_){return boxHeight;}
+        if(rects.length){inkLeft=Math.min(...rects.map(rect=>rect.left))-nodeRect.left;inkRight=Math.max(...rects.map(rect=>rect.right))-nodeRect.left;inkTop=Math.min(...rects.map(rect=>rect.top))-nodeRect.top;inkBottom=Math.max(...rects.map(rect=>rect.bottom))-nodeRect.top;}
+      }catch(_){}
+      const inkHeight=Math.max(1,inkBottom-inkTop);
+      const height=vertical?Math.min(boxHeight,Math.max(48,Math.min(stageRect.height*.52,inkHeight+8))):boxHeight;
+      return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
 
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
-      const stageHeight = this.els.stage.clientHeight;
+      const stageRect = this.els.stage.getBoundingClientRect();
+      const stageHeight = stageRect.height;
       const focusRatio = global.innerWidth <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
       const focusY = stageHeight * focusRatio;
 
@@ -2874,33 +2876,39 @@
         node,
         scene: sceneEntries[i].scene,
         index: sceneEntries[i].index,
-        height: this._measureSceneHeight(node,stageHeight)
+        ...this._measureSceneGeometry(node,stageRect)
       }));
 
       const newest = metrics[metrics.length - 1];
-      let newestTop = focusY - newest.height / 2;
+      let newestTop = focusY - newest.inkCenterY;
       if (newest.scene.type === 'dialogue') newestTop -= 12;
 
       const positions = new Array(metrics.length);
-      positions[metrics.length - 1] = newestTop;
+      positions[metrics.length - 1] = {x:0,y:newestTop};
 
       for (let i = metrics.length - 2; i >= 0; i -= 1) {
         const current = metrics[i];
         const next = metrics[i + 1];
-        positions[i] =
-          positions[i + 1]
-          - this._sceneGap(current.scene, next.scene)
-          - extraGap
-          - current.height;
+        const nextPosition=positions[i+1];
+        const flow=next.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
+        const eitherVertical=current.scene?.presentation?.text?.writingMode==='vertical-rl'||next.scene?.presentation?.text?.writingMode==='vertical-rl';
+        if(flow==='horizontal'){
+          const gap=Math.max(this._sceneGap(current.scene,next.scene),stageRect.width*.09)+extraGap;
+          positions[i]={x:nextPosition.x+next.inkLeft-gap-current.inkRight,y:nextPosition.y+next.inkCenterY-current.inkCenterY};
+        }else{
+          const verticalGap=eitherVertical?Math.max(52,stageHeight*.095):0;
+          const gap=this._sceneGap(current.scene,next.scene)+verticalGap+extraGap;
+          positions[i]={x:nextPosition.x,y:nextPosition.y+next.inkTop-gap-current.inkBottom};
+        }
       }
 
-      return metrics.map((item, i) => ({ ...item, y: positions[i] }));
+      return metrics.map((item, i) => ({ ...item, ...positions[i] }));
     }
 
     _positionSceneNodes(nodes, sceneEntries, extraGap = 0) {
       const measured = this._measureScenePositions(nodes, sceneEntries, extraGap);
-      measured.forEach(({ node, y }) => {
-        node.style.transform = `translate3d(0,${Math.round(y)}px,0)`;
+      measured.forEach(({ node, x, y }) => {
+        node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
       });
       return measured;
     }
@@ -2966,7 +2974,7 @@
         const newestMetric = final[final.length - 1];
         if (newestMetric) {
           newestCreated.style.transition = 'none';
-          newestCreated.style.transform = `translate3d(0,${Math.round(newestMetric.y)}px,0)`;
+          newestCreated.style.transform = `translate3d(${Math.round(newestMetric.x)}px,${Math.round(newestMetric.y)}px,0)`;
           newestCreated.style.opacity = '0';
           newestCreated.style.filter = 'none';
         }
@@ -2974,9 +2982,9 @@
         requestAnimationFrame(() => {
           // Previous text may still move into its new stack position. The incoming
           // still Scene is deliberately excluded from every geometry transition.
-          final.forEach(({node,y}) => {
+          final.forEach(({node,x,y}) => {
             if (node === newestCreated) return;
-            node.style.transform = `translate3d(0,${Math.round(y)}px,0)`;
+            node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
           });
 
           if (newestCreated) {
@@ -3790,6 +3798,7 @@
       if (!active) article.classList.add('is-visible');
 
       const presentation = scene.presentation || {};
+      article.dataset.sceneFlow=presentation.flow==='horizontal'?'horizontal':'vertical';
       const requestedEffect = presentation.effect || 'auto';
       const effect = this._resolveSceneEffect(scene, requestedEffect);
       if (effect && /^[a-zA-Z0-9_-]+$/.test(effect)) article.dataset.effect = effect;
