@@ -367,7 +367,7 @@
         ['中央の文','Center text'],['下部ボタン','Bottom buttons'],['左ボタンを編集','Edit left button'],['右ボタンを編集','Edit right button'],
         ['続いていた時間','Time that kept flowing'],['その時そこにあった音','Sound that existed there'],['その時起きた音','Sound that happened then'],['再生','Playback'],['操作','Action'],['前Sceneを継続','Continue previous Scene'],['現在BGM / Ambientなし','No current BGM / Ambient'],['音量・フェード','Volume & fade'],['音量','Volume'],['フェードイン','Fade in'],['フェードアウト','Fade out'],['ループ','Loop'],['再生遅延','Playback delay'],['再生回数','Repeat count'],['音源未選択','No audio selected'],['ファイルを選択してください','Choose an audio file'],['ファイルを選択','Choose file'],['音源を外す','Remove audio'],['閉じる','Close'],['リセット','Reset'],['プレビュー','Preview'],
         ['背景','Background'],['このSceneの背景','Background for this Scene'],['前Sceneから継続','Continue previous Scene'],['画像を使う','Use image'],['背景なし','No background'],['画像を選択','Choose image'],['画像を外す','Remove image'],['表示位置','Position'],['表示位置を調整','Adjust position'],['背景サイズ','Background fit'],['画面いっぱい（cover）','Fill screen (cover)'],['画像全体（contain）','Fit whole image (contain)'],['画面いっぱい (cover)','Fill screen (cover)'],['画像全体 (contain)','Fit whole image (contain)'],['明るさ・質感','Brightness & texture'],['ベール','Veil'],['ベール強度','Veil strength'],['暗く','Dark'],['明るく','Light'],['背景ぼかし','Background blur'],['ビネット','Vignette'],['粒子','Grain'],['モノクロ','Monochrome'],['Scene切替','Scene transition'],['切替演出','Transition'],['切替時間','Transition duration'],['フェード','Fade'],['カット','Cut'],['フラッシュ','Flash'],['グリッチ','Glitch'],['背景の動き','Background motion'],['動き','Motion'],['なし','None'],['ゆっくりズーム','Slow zoom'],['呼吸','Breath'],['左へパン','Pan left'],['右へパン','Pan right'],['上へパン','Pan up'],['下へパン','Pan down'],['「動き」を選ぶと時間・倍率・移動量を細かく設定できます。','Choose a motion to fine-tune duration, scale, and movement.'],
-        ['基本','Basic'],['出かた','Entrance'],['表示','Display'],['表示モード','Display mode'],['位置の動き','Position motion'],['開始遅延','Start delay'],['消えるまで','Time until exit'],['消える時のフェード','Exit fade'],['消え方','Exit motion'],['その場で消える','Fade in place'],['タイプライター','Typewriter'],['1文字の速度','Per-character speed'],['カーソル','Cursor'],['表示する','Show'],
+        ['基本','Basic'],['出かた','Entrance'],['表示','Display'],['Sceneの流れ','Scene flow'],['縦方向（上へ送る）','Vertical (move up)'],['横方向（左へ送る）','Horizontal (move left)'],['表示モード','Display mode'],['位置の動き','Position motion'],['開始遅延','Start delay'],['消えるまで','Time until exit'],['消える時のフェード','Exit fade'],['消え方','Exit motion'],['その場で消える','Fade in place'],['タイプライター','Typewriter'],['1文字の速度','Per-character speed'],['カーソル','Cursor'],['表示する','Show'],
         ['読了ページ','Ending page'],['読了','Finished'],['文字（Aa）','Text (Aa)'],['文字 (Aa)','Text (Aa)'],['演出（✦）','Effects (✦)'],['背景（▣）','Background (▣)'],['音（♪）','Audio (♪)'],['文字の詳細設定','Text details'],['演出の詳細設定','Effect details'],['背景の詳細設定','Background details'],['音の詳細設定','Audio details']
       ]);
       document.querySelectorAll('button,option,label>span,label>strong,h1,h2,h3,h4,strong,small,p,summary,legend').forEach(el=>{
@@ -398,7 +398,7 @@
         ['中央の文','Center text'],['下部ボタン','Bottom buttons'],['左ボタンを編集','Edit left button'],['右ボタンを編集','Edit right button'],
         ['続いていた時間','Time that kept flowing'],['その時そこにあった音','Sound that existed there'],['その時起きた音','Sound that happened then'],['再生','Playback'],['操作','Action'],['前Sceneを継続','Continue previous Scene'],['現在BGM / Ambientなし','No current BGM / Ambient'],['音量・フェード','Volume & fade'],['音量','Volume'],['フェードイン','Fade in'],['フェードアウト','Fade out'],['ループ','Loop'],['再生遅延','Playback delay'],['再生回数','Repeat count'],['音源未選択','No audio selected'],['ファイルを選択してください','Choose an audio file'],['ファイルを選択','Choose file'],['音源を外す','Remove audio'],['閉じる','Close'],['リセット','Reset'],['プレビュー','Preview'],
         ['背景','Background'],['このSceneの背景','Background for this Scene'],['前Sceneから継続','Continue previous Scene'],['画像を使う','Use image'],['背景なし','No background'],['画像を選択','Choose image'],['画像を外す','Remove image'],['表示位置','Position'],['表示位置を調整','Adjust position'],['背景サイズ','Background fit'],['画面いっぱい（cover）','Fill screen (cover)'],['画像全体（contain）','Fit whole image (contain)'],['画面いっぱい (cover)','Fill screen (cover)'],['画像全体 (contain)','Fit whole image (contain)'],['明るさ・質感','Brightness & texture'],['ベール','Veil'],['ベール強度','Veil strength'],['暗く','Dark'],['明るく','Light'],['背景ぼかし','Background blur'],['ビネット','Vignette'],['粒子','Grain'],['モノクロ','Monochrome'],['Scene切替','Scene transition'],['切替演出','Transition'],['切替時間','Transition duration'],['フェード','Fade'],['カット','Cut'],['フラッシュ','Flash'],['グリッチ','Glitch'],['背景の動き','Background motion'],['動き','Motion'],['なし','None'],['ゆっくりズーム','Slow zoom'],['呼吸','Breath'],['左へパン','Pan left'],['右へパン','Pan right'],['上へパン','Pan up'],['下へパン','Pan down'],['「動き」を選ぶと時間・倍率・移動量を細かく設定できます。','Choose a motion to fine-tune duration, scale, and movement.'],
-        ['基本','Basic'],['出かた','Entrance'],['表示','Display'],['表示モード','Display mode'],['位置の動き','Position motion'],['開始遅延','Start delay'],['消えるまで','Time until exit'],['消える時のフェード','Exit fade'],['消え方','Exit motion'],['その場で消える','Fade in place'],['タイプライター','Typewriter'],['1文字の速度','Per-character speed'],['カーソル','Cursor'],['表示する','Show'],
+        ['基本','Basic'],['出かた','Entrance'],['表示','Display'],['Sceneの流れ','Scene flow'],['縦方向（上へ送る）','Vertical (move up)'],['横方向（左へ送る）','Horizontal (move left)'],['表示モード','Display mode'],['位置の動き','Position motion'],['開始遅延','Start delay'],['消えるまで','Time until exit'],['消える時のフェード','Exit fade'],['消え方','Exit motion'],['その場で消える','Fade in place'],['タイプライター','Typewriter'],['1文字の速度','Per-character speed'],['カーソル','Cursor'],['表示する','Show'],
         ['読了ページ','Ending page'],['読了','Finished'],['文字（Aa）','Text (Aa)'],['文字 (Aa)','Text (Aa)'],['演出（✦）','Effects (✦)'],['背景（▣）','Background (▣)'],['音（♪）','Audio (♪)'],['文字の詳細設定','Text details'],['演出の詳細設定','Effect details'],['背景の詳細設定','Background details'],['音の詳細設定','Audio details']
       ]);
       document.querySelectorAll('button,option,label>span,label>strong,h1,h2,h3,h4,strong,small,p,summary,legend').forEach(el=>{
@@ -4638,7 +4638,7 @@
     scene.text=$('#sceneTextInput').value;
     const sub=$('#sceneSubTextInput').value; if(sub)scene.subText=sub; else delete scene.subText;
     scene.type=$('#sceneTypeSelect').value;
-    const p=ensurePresentation(scene); p.display=$('#sceneDisplaySelect').value; p.view=$('#sceneViewSelect')?.value || 'world'; p.entryMotion=$('#sceneEntryMotionSelect')?.value || 'flow';
+    const p=ensurePresentation(scene); p.display=$('#sceneDisplaySelect').value; p.flow=$('#sceneFlowSelect')?.value==='horizontal'?'horizontal':'vertical'; p.view=$('#sceneViewSelect')?.value || 'world'; p.entryMotion=$('#sceneEntryMotionSelect')?.value || 'flow';
     const advancedEffect=$('#sceneEffectSelect').value;
     if(advancedEffect==='typewriter'){
       p.effect='none';
@@ -4680,7 +4680,7 @@
     $('#selectedSceneNumber').textContent=`Scene ${selectedSceneIndex+1}`; $('#selectedSceneId').textContent=scene.id;
     $('#sceneTextInput').value=scene.text || ''; $('#sceneSubTextInput').value=scene.subText || '';
     requestAnimationFrame(autoGrowSubText);
-    $('#sceneTypeSelect').value=scene.type || 'text'; $('#sceneDisplaySelect').value=scene.presentation?.display || 'stack';
+    $('#sceneTypeSelect').value=scene.type || 'text'; $('#sceneDisplaySelect').value=scene.presentation?.display || 'stack'; if($('#sceneFlowSelect'))$('#sceneFlowSelect').value=scene.presentation?.flow==='horizontal'?'horizontal':'vertical';
     if($('#sceneViewSelect')) $('#sceneViewSelect').value=scene.presentation?.view || 'world';
     if($('#sceneEntryMotionSelect')) $('#sceneEntryMotionSelect').value=scene.presentation?.entryMotion || 'flow';
     $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto'; if($('#sceneWritingModeSelect')) $('#sceneWritingModeSelect').value=scene.presentation?.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb'; if($('#sceneWeightSelect')) $('#sceneWeightSelect').value=String(scene.presentation?.text?.fontWeight||0);
@@ -4738,7 +4738,8 @@
 
     const fx=p.typing?.enabled ? u('タイプライター','Typewriter') : (p.effect||u('おまかせ','Automatic'));
     const display=(p.display||'stack')==='solo' ? u('この文章だけ','Only this text') : u('前の文章を残す','Keep previous text');
-    $('#toolboxEffectSummary') && ($('#toolboxEffectSummary').textContent=`${fx} / ${display}`);
+    const flow=p.flow==='horizontal'?u('左へ送る','Move left'):u('上へ送る','Move up');
+    $('#toolboxEffectSummary') && ($('#toolboxEffectSummary').textContent=`${fx} / ${display} / ${flow}`);
 
     let bg=u('前Sceneを継続','Continue previous Scene');
     if(p.background && typeof p.background==='object'){
@@ -5815,7 +5816,7 @@
       }
     }
   }
-  ['sceneTextInput','sceneSubTextInput','sceneTypeSelect','sceneDisplaySelect','sceneViewSelect','sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect','sceneWritingModeSelect','sceneFontSelect','sceneLanguageSelect','sceneLanguageCustomInput'].forEach(id=>$('#'+id)?.addEventListener('change',()=>{
+  ['sceneTextInput','sceneSubTextInput','sceneTypeSelect','sceneDisplaySelect','sceneFlowSelect','sceneViewSelect','sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect','sceneWritingModeSelect','sceneFontSelect','sceneLanguageSelect','sceneLanguageCustomInput'].forEach(id=>$('#'+id)?.addEventListener('change',()=>{
     syncAdvancedFieldsToScene();
     renderSceneList();
     if(liveEditEnabled && player && !playerScreen?.hidden) refreshLivePlayer({preserveSheet:true});
@@ -6848,6 +6849,7 @@ function openDesktopEffectDetail(){
     basicGrid.append(
       effectSelect,
       desktopDetailSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;apply();}),
+      desktopDetailSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（左へ送る）','Horizontal (move left)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;apply();}),
       desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;apply();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
       desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;apply();})
@@ -8700,6 +8702,7 @@ function openDesktopTextDetail(){
         renderDesktopLivePanel();
       }),
       desktopMakeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;refresh();}),
+      desktopMakeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（左へ送る）','Horizontal (move left)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;refresh();}),
       desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
       desktopMakeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;refresh();})
@@ -9327,6 +9330,7 @@ function openDesktopTextDetail(){
             scheduleDraftSave(80);refreshLivePlayer();
           }),
           makeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
+          makeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（左へ送る）','Horizontal (move left)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;scheduleDraftSave(80);refreshLivePlayer();})
