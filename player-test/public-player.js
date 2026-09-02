@@ -604,7 +604,7 @@
     host.removeEventListener('sceneplayer:historyopen', invalidateResonance);
   }
 
-  const PUBLIC_EXIT_FADE_MS = 1600;
+  const PUBLIC_EXIT_FADE_MS = 850;
 
   function fadePublicAudio(duration = PUBLIC_EXIT_FADE_MS) {
     if (!player || typeof player.fadeOutAudio !== 'function') return 0;
@@ -797,7 +797,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.21',
+    version: '0.3.22-audio-resilience',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
