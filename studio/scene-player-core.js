@@ -801,6 +801,17 @@
         } else if (audio.__spNativeOnly) {
           try { audio.muted = false; } catch (_) {}
         }
+        emit(this.host, 'sceneplayer:audioplayattempt', {
+          ...detail,
+          auto: this.auto,
+          armed: this.audioPlaybackArmed,
+          unlocked: this.audioUnlocked,
+          paused: audio.paused,
+          readyState: audio.readyState,
+          networkState: audio.networkState,
+          currentSrc: audio.currentSrc || audio.src || '',
+          contextState: ctx?.state || 'unavailable'
+        });
         let promise;
         try { promise = audio.play(); }
         catch (error) {
@@ -820,7 +831,18 @@
           return;
         }
         if (promise && typeof promise.then === 'function') {
-          promise.then(finishStart).catch((error) => {
+          promise.then(() => {
+            emit(this.host, 'sceneplayer:audioplaystarted', {
+              ...detail,
+              auto: this.auto,
+              paused: audio.paused,
+              readyState: audio.readyState,
+              currentTime: audio.currentTime,
+              currentSrc: audio.currentSrc || audio.src || '',
+              contextState: ctx?.state || 'unavailable'
+            });
+            finishStart();
+          }).catch((error) => {
             const retryable = detail?.channel !== 'oneshot' && detail?.channel !== 'ending';
             if (!this.auto && retryable) {
               this.audioPlaybackArmed = false;
@@ -828,7 +850,18 @@
             }
             emit(this.host, 'sceneplayer:audioblocked', { ...detail, error, auto: this.auto });
           });
-        } else finishStart();
+        } else {
+          emit(this.host, 'sceneplayer:audioplaystarted', {
+            ...detail,
+            auto: this.auto,
+            paused: audio.paused,
+            readyState: audio.readyState,
+            currentTime: audio.currentTime,
+            currentSrc: audio.currentSrc || audio.src || '',
+            contextState: ctx?.state || 'unavailable'
+          });
+          finishStart();
+        }
       };
       this._queueAudio(play);
     }
