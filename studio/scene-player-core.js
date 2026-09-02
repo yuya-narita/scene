@@ -3984,12 +3984,12 @@
       const after = asNumber(disappear?.after, 0);
       if (after > 0) {
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
-        const motion = ['up','shatter','blockBreak','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
+        const motion = ['up','shatter','blockBreak','dust','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
         article.style.setProperty('--sp-disappear-fade', `${fade}ms`);
         // Shatter / explode animate the Scene at its CURRENT laid-out position.
         // Their keyframes add relative motion on top of this anchor instead of
         // replacing the stack translate and jumping to the stage origin first.
-        if (motion === 'shatter' || motion === 'blockBreak' || motion === 'explode') {
+        if (motion === 'shatter' || motion === 'blockBreak' || motion === 'dust' || motion === 'explode') {
           article.style.setProperty('--sp-disappear-anchor-transform', article.style.transform || 'translate3d(0,0,0)');
         } else {
           article.style.removeProperty('--sp-disappear-anchor-transform');
@@ -3997,11 +3997,13 @@
         article.classList.toggle('is-disappear-up', motion === 'up');
         article.classList.toggle('is-disappear-shatter', motion === 'shatter');
         article.classList.toggle('is-disappear-block', motion === 'blockBreak');
+        article.classList.toggle('is-disappear-dust', motion === 'dust');
         article.classList.toggle('is-disappear-explode', motion === 'explode');
         article.classList.toggle('is-disappear-stay', motion === 'stay');
         this._presentationTimeout(() => {
           if (!article.isConnected) return;
           if (motion === 'shatter' || motion === 'blockBreak') this._buildDisappearFragments(article, motion, fade);
+          if (motion === 'dust') this._buildDisappearDust(article, fade);
           article.classList.add('is-disappearing');
           emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion });
           this._presentationTimeout(() => {
@@ -4011,6 +4013,56 @@
           }, fade);
         }, after);
       }
+    }
+
+    _buildDisappearDust(article, fade) {
+      const text = article.querySelector('.sp-text');
+      if (!text || article.querySelector('.sp-disappear-dust')) return;
+      const articleRect = article.getBoundingClientRect();
+      const textRect = text.getBoundingClientRect();
+      if (!textRect.width || !textRect.height) return;
+      const layer = document.createElement('div');
+      layer.className = 'sp-disappear-fragments sp-disappear-dust';
+      layer.style.left = `${textRect.left - articleRect.left}px`;
+      layer.style.top = `${textRect.top - articleRect.top}px`;
+      layer.style.width = `${textRect.width}px`;
+      layer.style.height = `${textRect.height}px`;
+      layer.style.color = getComputedStyle(text).color;
+      layer.style.setProperty('--sp-dust-duration', `${Math.max(520, fade)}ms`);
+      layer.style.setProperty('--sp-dust-strip-duration', `${Math.max(240, fade * .42)}ms`);
+      layer.style.setProperty('--sp-dust-particle-duration', `${Math.max(280, fade * .48)}ms`);
+      const strips = 12;
+      for (let c = 0; c < strips; c++) {
+        const x0 = c * 100 / strips, x1 = (c + 1) * 100 / strips;
+        const strip = text.cloneNode(true);
+        strip.className = 'sp-disappear-dust-strip';
+        strip.removeAttribute('id');
+        Object.assign(strip.style,{position:'absolute',inset:'0',width:'100%',height:'100%',margin:'0',pointerEvents:'none'});
+        strip.style.clipPath = `inset(0 ${100 - x1}% 0 ${x0}%)`;
+        strip.style.setProperty('--sp-dust-delay', `${((strips - 1 - c) / strips * fade * .58).toFixed(0)}ms`);
+        layer.appendChild(strip);
+      }
+      const particles = 48;
+      for (let i = 0; i < particles; i++) {
+        const band = i % strips, size = 1 + ((i * 7) % 4) * .55;
+        const particle = document.createElement('i');
+        particle.className = 'sp-disappear-dust-particle';
+        particle.style.left = `${100 - ((band + .35 + ((i * 13) % 50) / 100) * 100 / strips)}%`;
+        particle.style.top = `${4 + ((i * 37) % 91)}%`;
+        particle.style.width = `${size}px`;
+        particle.style.height = `${Math.max(1, size * .72)}px`;
+        particle.style.setProperty('--sp-dust-delay', `${(band / strips * fade * .58 + (i % 4) * 9).toFixed(0)}ms`);
+        particle.style.setProperty('--sp-dust-x', `${26 + (i * 19) % 58}px`);
+        particle.style.setProperty('--sp-dust-y', `${-14 + (i * 23) % 29}px`);
+        particle.style.setProperty('--sp-dust-scale', `${(.25 + (i % 5) * .08).toFixed(2)}`);
+        layer.appendChild(particle);
+      }
+      article.appendChild(layer);
+      article.classList.add('has-disappear-fragments');
+      this._presentationTimeout(() => {
+        layer.remove();
+        if (article.isConnected) article.classList.remove('has-disappear-fragments');
+      }, Math.max(620, fade) + 180);
     }
 
     _buildDisappearFragments(article, motion, fade) {
