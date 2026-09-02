@@ -1599,6 +1599,9 @@
     showCover(options = {}) {
       if (!this.document || !this.els?.cover) return false;
       if (options.restart) {
+        // A completed reading can leave the swipe/click guard armed on iOS.
+        // Returning to Cover starts a genuinely fresh input session.
+        this.suppressNextClick = false;
         this._finishVisibleEntranceEffects();
         this._clearAutoTimer();
         this._resetPresentationRuntime();
@@ -1689,6 +1692,12 @@
 
     _beginFromCover() {
       if(!this.document || !this.els?.cover)return false;
+      // Cover -> Scene 1 must always re-arm navigation as well as audio.
+      // Without this reset a synthetic click suppressed at the end of the first
+      // read could consume the first input of the second read and leave the
+      // restarted Player apparently frozen while Scene 1 SE still played.
+      this.suppressNextClick = false;
+      this.ended = false;
       this.unlockAudio(true);
       this.els.cover.hidden=true;
       this.host.classList.remove('sp-cover-open');
@@ -2984,6 +2993,14 @@
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
         const motion = ['up','shatter','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
         article.style.setProperty('--sp-disappear-fade', `${fade}ms`);
+        // Shatter / explode animate the Scene at its CURRENT laid-out position.
+        // Their keyframes add relative motion on top of this anchor instead of
+        // replacing the stack translate and jumping to the stage origin first.
+        if (motion === 'shatter' || motion === 'explode') {
+          article.style.setProperty('--sp-disappear-anchor-transform', article.style.transform || 'translate3d(0,0,0)');
+        } else {
+          article.style.removeProperty('--sp-disappear-anchor-transform');
+        }
         article.classList.toggle('is-disappear-up', motion === 'up');
         article.classList.toggle('is-disappear-shatter', motion === 'shatter');
         article.classList.toggle('is-disappear-explode', motion === 'explode');
