@@ -351,6 +351,17 @@
         "text": {
           "$ref": "#/$defs/style"
         },
+        "frame": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "handdrawn-voice"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
         "subText": {
           "$ref": "#/$defs/style"
         },

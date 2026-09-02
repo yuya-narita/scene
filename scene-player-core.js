@@ -2851,9 +2851,16 @@
       const nodeRect=node.getBoundingClientRect();
       const boxHeight=Math.max(1,nodeRect.height);
       const text=node.querySelector('.sp-text');
+      const frame=node.querySelector('.sp-handdrawn-frame');
       const vertical=text?.dataset?.writingMode==='vertical-rl';
       let inkLeft=0,inkRight=Math.max(1,nodeRect.width),inkTop=0,inkBottom=boxHeight;
-      try{
+      if(frame){
+        const frameRect=frame.getBoundingClientRect();
+        inkLeft=frameRect.left-nodeRect.left;
+        inkRight=frameRect.right-nodeRect.left;
+        inkTop=frameRect.top-nodeRect.top;
+        inkBottom=frameRect.bottom-nodeRect.top;
+      }else try{
         const range=document.createRange();
         range.selectNodeContents(text||node);
         const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
@@ -3811,6 +3818,105 @@
       container.appendChild(wrap);
     }
 
+    _handdrawnSeed(source) {
+      let hash=2166136261;
+      const value=String(source||'');
+      for(let i=0;i<value.length;i++){
+        hash^=value.charCodeAt(i);
+        hash=Math.imul(hash,16777619);
+      }
+      return hash>>>0;
+    }
+
+    _handdrawnRandom(seed) {
+      let state=seed>>>0;
+      return ()=>{
+        state=(Math.imul(state,1664525)+1013904223)>>>0;
+        return state/4294967296;
+      };
+    }
+
+    _handdrawnPath(width,height,seed,trace=0) {
+      const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0);
+      const inset=5.5+trace*.35;
+      const rx=Math.max(8,(width-inset*2)/2);
+      const ry=Math.max(8,(height-inset*2)/2);
+      const cx=width/2+(random()-.5)*1.8;
+      const cy=height/2+(random()-.5)*1.8;
+      const count=32;
+      const phase=random()*Math.PI*2;
+      const points=[];
+      for(let i=0;i<count;i++){
+        const angle=(Math.PI*2*i/count)-Math.PI/2;
+        const ca=Math.cos(angle),sa=Math.sin(angle);
+        const n=2.28;
+        const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx;
+        const baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
+        const harmonic=Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006;
+        const grain=(random()-.5)*.018;
+        const wobble=1+harmonic+grain+(trace-1)*.0025;
+        points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});
+      }
+      let d=`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+      for(let i=0;i<count;i++){
+        const p0=points[(i-1+count)%count],p1=points[i],p2=points[(i+1)%count],p3=points[(i+2)%count];
+        const c1x=p1.x+(p2.x-p0.x)/6;
+        const c1y=p1.y+(p2.y-p0.y)/6;
+        const c2x=p2.x-(p3.x-p1.x)/6;
+        const c2y=p2.y-(p3.y-p1.y)/6;
+        d+=` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+      }
+      return `${d} Z`;
+    }
+
+    _mountHanddrawnFrame(frame,scene,presentation) {
+      const ns='http://www.w3.org/2000/svg';
+      const svg=document.createElementNS(ns,'svg');
+      svg.classList.add('sp-handdrawn-frame-svg');
+      svg.setAttribute('aria-hidden','true');
+      svg.setAttribute('preserveAspectRatio','none');
+      const defs=document.createElementNS(ns,'defs');
+      const filter=document.createElementNS(ns,'filter');
+      const filterId=`sp-ink-bleed-${String(scene.id||'scene').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24)}-${this._handdrawnSeed(scene.text)&65535}`;
+      filter.id=filterId;
+      filter.setAttribute('x','-5%');filter.setAttribute('y','-5%');filter.setAttribute('width','110%');filter.setAttribute('height','110%');
+      const blur=document.createElementNS(ns,'feGaussianBlur');blur.setAttribute('stdDeviation','.72');
+      filter.appendChild(blur);defs.appendChild(filter);svg.appendChild(defs);
+      const makePath=(className)=>{const path=document.createElementNS(ns,'path');path.classList.add(className);svg.appendChild(path);return path;};
+      const fill=makePath('sp-handdrawn-fill');
+      const bleed=makePath('sp-handdrawn-bleed');bleed.setAttribute('filter',`url(#${filterId})`);
+      const ghost=makePath('sp-handdrawn-ghost');
+      const ink=makePath('sp-handdrawn-ink');
+      const scuff=makePath('sp-handdrawn-scuff');
+      frame.prepend(svg);
+      let lastWidth=0,lastHeight=0;
+      const draw=()=>{
+        if(!frame.isConnected)return;
+        const rect=frame.getBoundingClientRect();
+        const width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
+        if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
+        lastWidth=width;lastHeight=height;
+        svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
+        const seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}`);
+        const primary=this._handdrawnPath(width,height,seed,0);
+        fill.setAttribute('d',primary);ink.setAttribute('d',primary);
+        bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1));
+        ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2));
+        scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3));
+        const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);
+        scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);
+        scuff.setAttribute('stroke-dashoffset',String(seed%29));
+      };
+      requestAnimationFrame(draw);
+      if(typeof ResizeObserver==='function'){
+        const observer=new ResizeObserver(()=>{
+          if(!frame.isConnected){observer.disconnect();return;}
+          draw();
+        });
+        observer.observe(frame);
+      }
+    }
+
     _sceneNode(scene, active, age) {
       const article = document.createElement('article');
       article.className = `sp-scene sp-type-${scene.type}`;
@@ -3886,7 +3992,19 @@
           text.className = 'sp-text';
           text.textContent = scene.text;
           this._applyTextStyle(text, presentation.text || {}, false);
-          article.appendChild(text);
+          if(presentation.frame?.type==='handdrawn-voice'){
+            const frame=document.createElement('div');
+            frame.className='sp-handdrawn-frame';
+            frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
+            const align=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';
+            frame.dataset.frameAlign=align;
+            const inkColor=String(presentation.text?.color||'').trim().toLowerCase();
+            if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';
+            frame.appendChild(text);
+            article.appendChild(frame);
+            article.dataset.frame='handdrawn-voice';
+            this._mountHanddrawnFrame(frame,scene,presentation);
+          }else article.appendChild(text);
         }
 
         if (typeof scene.subText === 'string' && scene.subText.length) {
