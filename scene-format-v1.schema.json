@@ -308,6 +308,12 @@
             "overlay"
           ]
         },
+        "flow": {
+          "enum": [
+            "vertical",
+            "horizontal"
+          ]
+        },
         "view": {
           "enum": [
             "world",
