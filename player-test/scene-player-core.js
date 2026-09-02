@@ -2894,7 +2894,8 @@
         const eitherVertical=current.scene?.presentation?.text?.writingMode==='vertical-rl'||next.scene?.presentation?.text?.writingMode==='vertical-rl';
         if(flow==='horizontal'){
           const gap=Math.max(this._sceneGap(current.scene,next.scene),stageRect.width*.09)+extraGap;
-          positions[i]={x:nextPosition.x+next.inkLeft-gap-current.inkRight,y:nextPosition.y+next.inkCenterY-current.inkCenterY};
+          const verticalReading=next.scene?.presentation?.text?.writingMode==='vertical-rl';
+          positions[i]={x:verticalReading?nextPosition.x+next.inkRight+gap-current.inkLeft:nextPosition.x+next.inkLeft-gap-current.inkRight,y:nextPosition.y+next.inkCenterY-current.inkCenterY};
         }else{
           const verticalGap=eitherVertical?Math.max(52,stageHeight*.095):0;
           const gap=this._sceneGap(current.scene,next.scene)+verticalGap+extraGap;
@@ -3094,6 +3095,8 @@
       this.host.dataset.display = display;
       this.host.dataset.sceneId = active.id;
       this.host.dataset.sceneType = active.type;
+      this.host.dataset.sceneFlow = active.presentation?.flow==='horizontal'?'horizontal':'vertical';
+      this.host.dataset.writingMode = active.presentation?.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
 
       this._applyCorePresentation(active);
       this._applyBackgroundForIndex(this.index);
@@ -3128,10 +3131,19 @@
         return scenes.slice(start, this.index + 1).map((scene, offset) => ({ scene, index: start + offset }));
       }
 
+      if (scenes[this.index]?.presentation?.flow === 'horizontal') {
+        const start=Math.max(0,this.index-1);
+        return scenes.slice(start,this.index+1).map((scene,offset)=>({scene,index:start+offset}));
+      }
+
       // A previous solo scene resets the visual stack, but that solo Scene itself
       // becomes the new base. Later `stack` Scenes must build on top of it.
       let start = 0;
       for (let i = this.index - 1; i >= 0; i -= 1) {
+        if (scenes[i].presentation?.flow === 'horizontal') {
+          start = i;
+          break;
+        }
         if ((scenes[i].presentation?.display || 'stack') === 'solo') {
           start = i;
           break;
@@ -3799,6 +3811,7 @@
 
       const presentation = scene.presentation || {};
       article.dataset.sceneFlow=presentation.flow==='horizontal'?'horizontal':'vertical';
+      article.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
       const requestedEffect = presentation.effect || 'auto';
       const effect = this._resolveSceneEffect(scene, requestedEffect);
       if (effect && /^[a-zA-Z0-9_-]+$/.test(effect)) article.dataset.effect = effect;
