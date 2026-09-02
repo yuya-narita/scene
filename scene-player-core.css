@@ -1068,6 +1068,20 @@
   }
 }
 
+/* V2.26 — SVG manga balloon renderer */
+.sp-balloon-svg{position:absolute;z-index:0;display:block;pointer-events:none;overflow:visible;contain:layout style}
+.sp-text.has-svg-balloon{position:relative;z-index:1;background:transparent!important;border:0!important;box-shadow:none!important;clip-path:none!important;outline:0!important}
+.sp-text.has-svg-balloon::before,.sp-text.has-svg-balloon::after{display:none!important}
+.sp-scene[data-balloon-positioned="true"] .sp-text.has-svg-balloon{display:block;width:100%;max-width:100%;margin:0!important}
+.sp-scene[data-balloon-positioned="true"]{isolation:isolate}
+
+.sp-scene.has-disappear-fragments>.sp-balloon-svg{opacity:0!important}
+.sp-scene.sp-fx-play[data-effect="slam"] .sp-balloon-svg{transform-origin:50% 100%;animation:spFxSlamV2 var(--sp-effect-duration,.52s) cubic-bezier(.08,.78,.13,1) var(--sp-effect-delay,0s) 1}
+.sp-scene.sp-fx-play[data-effect="burst"] .sp-balloon-svg{animation:spFxBurstV2 var(--sp-effect-duration,.62s) cubic-bezier(.1,.8,.14,1) var(--sp-effect-delay,0s) 1}
+.sp-scene.sp-fx-play[data-effect="glitchHit"] .sp-balloon-svg{animation:spFxGlitchHitV2 var(--sp-effect-duration,.46s) steps(8,end) var(--sp-effect-delay,0s) 1}
+.sp-scene.sp-fx-play[data-effect="glitchHitRight"] .sp-balloon-svg{animation:spFxGlitchHitRightV2 var(--sp-effect-duration,.46s) steps(8,end) var(--sp-effect-delay,0s) 1}
+.sp-scene.sp-fx-play[data-effect="rush"] .sp-balloon-svg{animation:spFxRushV2 var(--sp-effect-duration,.48s) cubic-bezier(.06,.78,.12,1) var(--sp-effect-delay,0s) 1}
+
 /* Image in the past-Scene drum */
 .sp-history-scene-image{
   display:flex;
