@@ -3984,22 +3984,24 @@
       const after = asNumber(disappear?.after, 0);
       if (after > 0) {
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
-        const motion = ['up','shatter','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
+        const motion = ['up','shatter','blockBreak','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
         article.style.setProperty('--sp-disappear-fade', `${fade}ms`);
         // Shatter / explode animate the Scene at its CURRENT laid-out position.
         // Their keyframes add relative motion on top of this anchor instead of
         // replacing the stack translate and jumping to the stage origin first.
-        if (motion === 'shatter' || motion === 'explode') {
+        if (motion === 'shatter' || motion === 'blockBreak' || motion === 'explode') {
           article.style.setProperty('--sp-disappear-anchor-transform', article.style.transform || 'translate3d(0,0,0)');
         } else {
           article.style.removeProperty('--sp-disappear-anchor-transform');
         }
         article.classList.toggle('is-disappear-up', motion === 'up');
         article.classList.toggle('is-disappear-shatter', motion === 'shatter');
+        article.classList.toggle('is-disappear-block', motion === 'blockBreak');
         article.classList.toggle('is-disappear-explode', motion === 'explode');
         article.classList.toggle('is-disappear-stay', motion === 'stay');
         this._presentationTimeout(() => {
           if (!article.isConnected) return;
+          if (motion === 'shatter' || motion === 'blockBreak') this._buildDisappearFragments(article, motion, fade);
           article.classList.add('is-disappearing');
           emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion });
           this._presentationTimeout(() => {
@@ -4009,6 +4011,73 @@
           }, fade);
         }, after);
       }
+    }
+
+    _buildDisappearFragments(article, motion, fade) {
+      const text = article.querySelector('.sp-text');
+      if (!text || article.querySelector('.sp-disappear-fragments')) return;
+      const articleRect = article.getBoundingClientRect();
+      const textRect = text.getBoundingClientRect();
+      if (!textRect.width || !textRect.height) return;
+
+      const layer = document.createElement('div');
+      layer.className = `sp-disappear-fragments is-${motion === 'blockBreak' ? 'block' : 'glass'}`;
+      layer.style.left = `${textRect.left - articleRect.left}px`;
+      layer.style.top = `${textRect.top - articleRect.top}px`;
+      layer.style.width = `${textRect.width}px`;
+      layer.style.height = `${textRect.height}px`;
+      layer.style.setProperty('--sp-fragment-duration', `${Math.max(320, fade)}ms`);
+
+      // Clone the already-styled text into clipped pieces. The original text is
+      // hidden only while the temporary fragment layer exists, so layout does not move.
+      const rows = motion === 'blockBreak' ? 4 : 4;
+      const cols = motion === 'blockBreak' ? 7 : 8;
+      const count = rows * cols;
+      for (let i = 0; i < count; i++) {
+        const r = Math.floor(i / cols), c = i % cols;
+        const x0 = c * 100 / cols, x1 = (c + 1) * 100 / cols;
+        const y0 = r * 100 / rows, y1 = (r + 1) * 100 / rows;
+        const piece = text.cloneNode(true);
+        piece.className = 'sp-disappear-fragment';
+        piece.removeAttribute('id');
+        piece.style.position = 'absolute';
+        piece.style.inset = '0';
+        piece.style.width = '100%';
+        piece.style.height = '100%';
+        piece.style.margin = '0';
+        piece.style.pointerEvents = 'none';
+        piece.style.animationDelay = `${(i % 5) * 12}ms`;
+        if (motion === 'blockBreak') {
+          piece.style.clipPath = `polygon(${x0}% ${y0}%,${x1}% ${y0}%,${x1}% ${y1}%,${x0}% ${y1}%)`;
+          const dx = (c - (cols - 1) / 2) * 4;
+          const dy = 34 + r * 13 + (i % 3) * 7;
+          const rot = ((i * 17) % 23) - 11;
+          piece.style.setProperty('--sp-frag-x', `${dx}px`);
+          piece.style.setProperty('--sp-frag-y', `${dy}px`);
+          piece.style.setProperty('--sp-frag-r', `${rot}deg`);
+        } else {
+          // Alternating diagonal cuts make the pieces read as irregular glass,
+          // while remaining cheap enough for iPhone Safari.
+          const skew = ((r + c) % 2) ? 18 : -18;
+          const mid = (x0 + x1) / 2;
+          piece.style.clipPath = ((r + c) % 2)
+            ? `polygon(${x0}% ${y0}%,${x1}% ${y0}%,${x1}% ${y1 - 8}%,${mid}% ${y1}%,${x0}% ${y1 - 16}%)`
+            : `polygon(${x0}% ${y0 + 10}%,${mid}% ${y0}%,${x1}% ${y0 + 16}%,${x1}% ${y1}%,${x0}% ${y1}%)`;
+          const dx = (c - (cols - 1) / 2) * 15 + skew;
+          const dy = (r - (rows - 1) / 2) * 18 + 18;
+          const rot = ((i * 29) % 80) - 40;
+          piece.style.setProperty('--sp-frag-x', `${dx}px`);
+          piece.style.setProperty('--sp-frag-y', `${dy}px`);
+          piece.style.setProperty('--sp-frag-r', `${rot}deg`);
+        }
+        layer.appendChild(piece);
+      }
+      article.appendChild(layer);
+      article.classList.add('has-disappear-fragments');
+      this._presentationTimeout(() => {
+        layer.remove();
+        if (article.isConnected) article.classList.remove('has-disappear-fragments');
+      }, Math.max(420, fade) + 180);
     }
 
     _startTyping(scene, node, typing) {
