@@ -54,6 +54,39 @@
   const source = () => requested || DEFAULT_SCENE;
   const storageKey = () => `scene-public-progress:${source()}`;
 
+  function publicAssetBase(){
+    try{
+      const u=new URL(source(),location.href);
+      return u.pathname.includes('/work/') ? u.origin : 'https://scene-studio-api.a-hako.workers.dev';
+    }catch(_){
+      return 'https://scene-studio-api.a-hako.workers.dev';
+    }
+  }
+  function resolvePublicAudioSrc(src){
+    const value=String(src||'').trim();
+    if(!value)return value;
+    // Published Scene audio is normally hydrated to /asset/<id>, but the
+    // ending-audio field could still arrive as the raw R2 asset id. Safari
+    // then receives e.g. "58d0..." as a relative URL and rejects it with
+    // NotSupportedError. Only hydrate bare asset ids; keep URLs/data/blob/local
+    // paths untouched for Local Player / packaged Scene compatibility.
+    if(/^[A-Za-z0-9_-]{20,}$/.test(value) && !value.includes('.') && !value.includes('/')){
+      return `${publicAssetBase()}/asset/${encodeURIComponent(value)}`;
+    }
+    return value;
+  }
+  function hydratePublicAudio(doc){
+    const fix=(commands)=>{
+      if(!Array.isArray(commands))return;
+      commands.forEach((command)=>{
+        if(command&&typeof command==='object'&&command.src)command.src=resolvePublicAudioSrc(command.src);
+      });
+    };
+    (Array.isArray(doc?.scenes)?doc.scenes:[]).forEach((scene)=>fix(scene?.audio));
+    fix(doc?.ending?.audio);
+    return doc;
+  }
+
   // v0.3.64 — anonymous, work-level analytics.
   // One small R2 session record is overwritten as reading progresses, so
   // Scene taps do not create one object per tap. No account / personal ID is used.
@@ -498,7 +531,7 @@
       throw error;
     }
 
-    const doc = await response.json();
+    const doc = hydratePublicAudio(await response.json());
     ScenePlayerCore.validate(doc);
     documentData = doc;
     applyDocumentMeta(doc);

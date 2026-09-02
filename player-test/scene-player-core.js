@@ -158,6 +158,15 @@
       this.muted = false;
       this._audioRenderMode = 'restore';
 
+      // iPhone/iPad: once a single AudioContext has been unlocked by START/AUTO,
+      // decoded AudioBuffers can be started later from Scene/AUTO timers without
+      // asking WebKit to authorize a new HTMLMediaElement for every sound.
+      this._iosBufferAudio = this._isIOSWebKit();
+      this._bufferAudioCache = new Map();
+      this._bufferAudioPromises = new Map();
+      this._bufferPersistent = { bgm: null, ambient: null };
+      this._bufferOneShots = new Set();
+
       this._buildShell();
       this._bindControls();
     }
@@ -507,6 +516,171 @@
       });
     }
 
+    _isIOSWebKit() {
+      try {
+        const ua = navigator.userAgent || '';
+        const platform = navigator.platform || '';
+        const touchMac = platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+        return /iP(hone|ad|od)/.test(ua) || touchMac;
+      } catch (_) { return false; }
+    }
+
+    _allDocumentAudioSources() {
+      const out = new Set();
+      const push = (commands) => {
+        if (!Array.isArray(commands)) return;
+        commands.forEach((c) => {
+          if (!c?.src) return;
+          const action = c.action || 'play';
+          if (action === 'play' || action === 'start') out.add(String(c.src));
+        });
+      };
+      (this.document?.scenes || []).forEach((scene) => push(scene?.audio));
+      push(this.document?.ending?.audio);
+      return Array.from(out);
+    }
+
+    _preloadAudioBuffer(src) {
+      const key = String(src || '').trim();
+      if (!key || !this._iosBufferAudio) return Promise.resolve(null);
+      if (this._bufferAudioCache.has(key)) return Promise.resolve(this._bufferAudioCache.get(key));
+      if (this._bufferAudioPromises.has(key)) return this._bufferAudioPromises.get(key);
+      const ctx = this._ensureAudioContext();
+      if (!ctx || typeof fetch !== 'function') return Promise.resolve(null);
+      const job = fetch(key, { mode: 'cors', credentials: 'omit' })
+        .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.arrayBuffer(); })
+        .then((bytes) => new Promise((resolve, reject) => {
+          try {
+            const cloned = bytes.slice(0);
+            const maybe = ctx.decodeAudioData(cloned, resolve, reject);
+            if (maybe && typeof maybe.then === 'function') maybe.then(resolve).catch(reject);
+          } catch (e) { reject(e); }
+        }))
+        .then((buffer) => {
+          this._bufferAudioCache.set(key, buffer);
+          emit(this.host, 'sceneplayer:audiobufferready', { src: key, duration: buffer?.duration || 0 });
+          return buffer;
+        })
+        .catch((error) => {
+          emit(this.host, 'sceneplayer:audiobuffererror', { src: key, error });
+          return null;
+        })
+        .finally(() => this._bufferAudioPromises.delete(key));
+      this._bufferAudioPromises.set(key, job);
+      return job;
+    }
+
+    _preloadDocumentAudioBuffers() {
+      if (!this._iosBufferAudio) return Promise.resolve(false);
+      const sources = this._allDocumentAudioSources();
+      if (!sources.length) return Promise.resolve(true);
+      return Promise.allSettled(sources.map((src) => this._preloadAudioBuffer(src))).then(() => true);
+    }
+
+    _fadeBufferGain(gainNode, target, duration = 0) {
+      const ctx = this.audioContext;
+      if (!ctx || !gainNode) return;
+      const t = ctx.currentTime;
+      const current = Number.isFinite(gainNode.gain.value) ? gainNode.gain.value : 1;
+      try {
+        gainNode.gain.cancelScheduledValues(t);
+        gainNode.gain.setValueAtTime(current, t);
+        if (duration > 0) gainNode.gain.linearRampToValueAtTime(target, t + duration / 1000);
+        else gainNode.gain.setValueAtTime(target, t);
+      } catch (_) { gainNode.gain.value = target; }
+    }
+
+    _playBufferedOneShot(command) {
+      if (!this._iosBufferAudio || !command?.src) return false;
+      const buffer = this._bufferAudioCache.get(String(command.src));
+      const ctx = this._ensureAudioContext();
+      if (!buffer || !ctx || ctx.state !== 'running') return false;
+      try {
+        const source = ctx.createBufferSource();
+        const gain = ctx.createGain();
+        source.buffer = buffer;
+        source.loop = command.loop === true;
+        const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
+        const fadeIn = Math.max(0, asNumber(command.fadeIn, 0));
+        gain.gain.value = fadeIn > 0 ? 0 : target;
+        source.connect(gain); gain.connect(ctx.destination);
+        const startAt = Math.max(0, asNumber(command.startAt, 0));
+        source.start(0, Math.min(startAt, Math.max(0, buffer.duration - 0.001)));
+        if (fadeIn > 0) this._fadeBufferGain(gain, target, fadeIn);
+        const record = { source, gain, command };
+        this._bufferOneShots.add(record);
+        const cleanup = () => { this._bufferOneShots.delete(record); try { source.disconnect(); gain.disconnect(); } catch (_) {} };
+        source.onended = cleanup;
+        const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
+        if (stopAfter > 0) this._audioTimeout(() => { try { source.stop(); } catch (_) {} }, stopAfter);
+        if (command.stopAt != null) {
+          const stopAt = Math.max(0, asNumber(command.stopAt, 0));
+          const remain = Math.max(0, stopAt - startAt) * 1000;
+          if (remain > 0) this._audioTimeout(() => { try { source.stop(); } catch (_) {} }, remain);
+        }
+        emit(this.host, 'sceneplayer:audioplaystarted', { channel:'oneshot', role:command.role || 'se', action:'play', src:command.src, transport:'audio-buffer' });
+        emit(this.host, 'sceneplayer:oneshot', { command });
+        return true;
+      } catch (error) {
+        emit(this.host, 'sceneplayer:audiobufferplayerror', { channel:'oneshot', src:command.src, error });
+        return false;
+      }
+    }
+
+    _stopBufferedPersistent(channel, fadeOut = 0) {
+      const rec = this._bufferPersistent?.[channel];
+      if (!rec) return false;
+      const stop = () => {
+        try { rec.source.stop(); } catch (_) {}
+        try { rec.source.disconnect(); rec.gain.disconnect(); } catch (_) {}
+        if (this._bufferPersistent[channel] === rec) this._bufferPersistent[channel] = null;
+      };
+      if (fadeOut > 0) { this._fadeBufferGain(rec.gain, 0, fadeOut); this._audioTimeout(stop, fadeOut + 20); }
+      else stop();
+      return true;
+    }
+
+    _startBufferedPersistent(channel, command, reconstruct = false, forceSeek = false) {
+      if (!this._iosBufferAudio || !command?.src) return false;
+      const buffer = this._bufferAudioCache.get(String(command.src));
+      const ctx = this._ensureAudioContext();
+      if (!buffer || !ctx || ctx.state !== 'running') return false;
+      const existing = this._bufferPersistent[channel];
+      const sameSrc = existing?.src === command.src;
+      if (sameSrc && reconstruct && channel === 'bgm' && !forceSeek) return true;
+      if (existing) this._stopBufferedPersistent(channel, 0);
+      try {
+        const source = ctx.createBufferSource();
+        const gain = ctx.createGain();
+        source.buffer = buffer;
+        source.loop = command.loop !== false;
+        const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
+        const fadeIn = reconstruct ? 0 : Math.max(0, asNumber(command.fadeIn, 0));
+        gain.gain.value = fadeIn > 0 ? 0 : target;
+        source.connect(gain); gain.connect(ctx.destination);
+        const startAt = Math.max(0, asNumber(command.startAt, 0));
+        source.start(0, Math.min(startAt, Math.max(0, buffer.duration - 0.001)));
+        if (fadeIn > 0) this._fadeBufferGain(gain, target, fadeIn);
+        const rec = { source, gain, src: command.src, volume: target, command };
+        this._bufferPersistent[channel] = rec;
+        source.onended = () => { if (this._bufferPersistent[channel] === rec) this._bufferPersistent[channel] = null; };
+        const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
+        if (stopAfter > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), stopAfter);
+        if (command.stopAt != null) {
+          const stopAt = Math.max(0, asNumber(command.stopAt, 0));
+          const remain = Math.max(0, stopAt - startAt) * 1000;
+          if (remain > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), remain);
+        }
+        this.audioState[channel] = { src:command.src, volume:target, loop:command.loop !== false, startAt, stopAt:command.stopAt ?? null, fadeOut:Math.max(0, asNumber(command.fadeOut,0)) };
+        emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'audio-buffer' });
+        emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct, transport:'audio-buffer' });
+        return true;
+      } catch (error) {
+        emit(this.host, 'sceneplayer:audiobufferplayerror', { channel, src:command.src, error });
+        return false;
+      }
+    }
+
     _createAudioElement(channel) {
       const audio = new Audio();
       audio.preload = 'auto';
@@ -668,13 +842,11 @@
           const resumed = ctx.resume();
           if (resumed && typeof resumed.then === 'function') {
             resumed.then(() => {
-              // Any media that started directly during the gesture is routed
-              // through GainNode only after Web Audio is genuinely running.
-              Object.values(this.audioEls || {}).forEach((audio) => {
-                const gain = this._ensureAudioNode(audio);
-                if (gain) this._setAudioVolume(audio, this._getAudioVolume(audio));
-                try { audio.muted = false; } catch (_) {}
-              });
+              // Do NOT pre-connect idle BGM/Ambient elements here.
+              // iOS/WebKit can successfully resolve media.play() after a later
+              // src swap while producing silence if that element was already
+              // bound to createMediaElementSource(). Let the REAL source start
+              // first in _safePlay(), then attach its GainNode there.
             }).catch(() => {});
           }
         } catch (_) {}
@@ -793,6 +965,10 @@
           }
         };
 
+        // AUTO priming leaves the element muted on purpose. Real playback must
+        // unmute synchronously before play(), otherwise WebKit may report
+        // "started" while the authorized element remains inaudible.
+        try { audio.muted = false; } catch (_) {}
         // On first iPhone playback, call media.play() before connecting the
         // element to a suspended Web Audio graph. This preserves the trusted
         // user activation that WebKit requires for media start.
@@ -864,13 +1040,16 @@
       return sources;
     }
 
-    _primeMediaElement(audio) {
+    _primeMediaElement(audio, src = '') {
       if (!audio || audio.__spInUse || audio.__spPriming || !audio.paused) return Promise.resolve(true);
 
-      // iPhone does not reliably honor HTMLMediaElement.volume for media-policy
-      // priming. Never prime with a real future BGM/SE source: it can become
-      // audible and its async pause can later kill the actual Scene playback.
-      // Prime the SAME reusable element with a physically silent WAV instead.
+      // AUTO on iPhone needs each future HTMLMediaElement to have been started
+      // once by the AUTO button gesture. Prime the ACTUAL source on the SAME
+      // stable element while muted, await the play(), then pause it BEFORE any
+      // AUTO timer is scheduled. Because we wait for every prime to settle,
+      // no delayed pause can race with the real Scene playback.
+      const targetSrc = String(src || audio.__spLoadedSrc || '').trim();
+      if (!targetSrc) return Promise.resolve(true);
       const token = (audio.__spPrimeToken || 0) + 1;
       audio.__spPrimeToken = token;
       audio.__spPriming = true;
@@ -878,9 +1057,20 @@
       try {
         audio.pause();
         audio.loop = false;
-        audio.muted = false;
-        audio.src = SILENT_AUDIO_DATA_URI;
-        try { audio.load(); } catch (_) {}
+        // Keep priming off the Web Audio graph. The real source is connected
+        // only after its audible play() succeeds.
+        if (this.audioSourceNodes.has(audio) || this.audioGainNodes.has(audio)) {
+          // A graph-bound element is source-stable; never repurpose it.
+          audio.__spPriming = false;
+          return Promise.resolve(audio.__spLoadedSrc === targetSrc);
+        }
+        this._prepareAudioTransport(audio, targetSrc);
+        if (audio.src !== targetSrc && audio.currentSrc !== targetSrc) {
+          audio.src = targetSrc;
+          try { audio.load(); } catch (_) {}
+        }
+        audio.__spLoadedSrc = targetSrc;
+        try { audio.muted = true; } catch (_) {}
         const promise = audio.play();
         return Promise.resolve(promise).then(() => {
           if (audio.__spPrimeToken !== token) return true;
@@ -888,18 +1078,40 @@
           try { audio.currentTime = 0; } catch (_) {}
           audio.__spPriming = false;
           audio.__spAuthorized = true;
-          emit(this.host, 'sceneplayer:audioprimed', { src: 'silent-unlock', channel: audio.dataset.scenePlayerChannel || '' });
+          emit(this.host, 'sceneplayer:audioprimed', { src: targetSrc, channel: audio.dataset.scenePlayerChannel || '' });
           return true;
         }).catch((error) => {
           if (audio.__spPrimeToken === token) audio.__spPriming = false;
-          emit(this.host, 'sceneplayer:audioprimeblocked', { src: 'silent-unlock', channel: audio.dataset.scenePlayerChannel || '', error });
+          emit(this.host, 'sceneplayer:audioprimeblocked', { src: targetSrc, channel: audio.dataset.scenePlayerChannel || '', error });
           return false;
         });
       } catch (error) {
         if (audio.__spPrimeToken === token) audio.__spPriming = false;
-        emit(this.host, 'sceneplayer:audioprimeblocked', { src: 'silent-unlock', channel: audio.dataset.scenePlayerChannel || '', error });
+        emit(this.host, 'sceneplayer:audioprimeblocked', { src: targetSrc, channel: audio.dataset.scenePlayerChannel || '', error });
         return Promise.resolve(false);
       }
+    }
+
+    _oneShotElementForSource(src) {
+      const targetSrc = String(src || '').trim();
+      if (!targetSrc) return null;
+      // Once an Audio element is routed through MediaElementSource on iOS,
+      // changing its src can yield play()=resolved but SILENT audio. Pin each
+      // reusable one-shot element to one source instead of recycling it across
+      // Scene SE / ending SE files.
+      let audio = this.oneshotPool.find((item) => item && item.__spLoadedSrc === targetSrc && !item.__spInUse && !item.__spPriming && item.paused);
+      if (!audio) {
+        audio = this.oneshotPool.find((item) => item && !item.__spLoadedSrc && !item.__spInUse && !item.__spPriming && item.paused);
+      }
+      if (!audio) {
+        audio = this._createAudioElement(`oneshot-${this.oneshotPool.length + 1}`);
+        audio.__spInUse = false;
+        audio.__spPriming = false;
+        audio.__spAuthorized = false;
+        this.oneshotPool.push(audio);
+      }
+      if (!audio.__spLoadedSrc) audio.__spLoadedSrc = targetSrc;
+      return audio;
     }
 
     _primeFutureAudioPlayback(options = {}) {
@@ -908,35 +1120,22 @@
       const sources = this._collectFutureAudioSources();
       const jobs = [];
 
-      // Only authorize channels that will actually be needed later. The silent
-      // unlock never loads/plays the future source itself, so Scene 2 cannot leak
-      // into Scene 1 and no delayed priming pause can stop real playback.
       if (primePersistent) {
-        if (sources.bgm && this.audioEls?.bgm?.paused) jobs.push(this._primeMediaElement(this.audioEls.bgm));
-        if (sources.ambient && this.audioEls?.ambient?.paused) jobs.push(this._primeMediaElement(this.audioEls.ambient));
+        if (sources.bgm && this.audioEls?.bgm?.paused) jobs.push(this._primeMediaElement(this.audioEls.bgm, sources.bgm));
+        if (sources.ambient && this.audioEls?.ambient?.paused) jobs.push(this._primeMediaElement(this.audioEls.ambient, sources.ambient));
       }
 
-      if (sources.oneshot.length) {
-        this.oneshotPool.forEach((audio) => {
-          if (!audio.__spInUse && !audio.__spPriming && audio.paused) jobs.push(this._primeMediaElement(audio));
-        });
+      for (const src of sources.oneshot) {
+        const audio = this._oneShotElementForSource(src);
+        if (audio && !audio.__spInUse && !audio.__spPriming && audio.paused) jobs.push(this._primeMediaElement(audio, src));
       }
 
       return Promise.allSettled(jobs).then(() => true);
     }
 
-    _acquireOneShotElement() {
-      // Reuse a stable bank on BOTH manual and AUTO playback. Creating a brand
-      // new Audio() for every Scene loses iPhone's per-element media permission
-      // and also leaves old elements around across rereads.
-      let audio = this.oneshotPool.find((item) => item && !item.__spInUse && !item.__spPriming && item.paused);
-      if (!audio) {
-        audio = this._createAudioElement(`oneshot-${this.oneshotPool.length + 1}`);
-        audio.__spInUse = false;
-        audio.__spPriming = false;
-        audio.__spAuthorized = false;
-        this.oneshotPool.push(audio);
-      }
+    _acquireOneShotElement(src = '') {
+      const audio = this._oneShotElementForSource(src);
+      if (!audio) return null;
       audio.__spPrimeToken = (audio.__spPrimeToken || 0) + 1;
       audio.__spPriming = false;
       audio.__spInUse = true;
@@ -944,6 +1143,7 @@
     }
 
     _stopPersistentChannel(channel, fadeOut = 0) {
+      if (this._bufferPersistent?.[channel]) { this._stopBufferedPersistent(channel, fadeOut); this.audioState[channel] = null; return; }
       const audio = this.audioEls[channel];
       if (!audio) return;
       const finish = () => {
@@ -957,12 +1157,13 @@
     }
 
     _startPersistentChannel(channel, command, reconstruct = false, forceSeek = false) {
+      if (this._startBufferedPersistent(channel, command, reconstruct, forceSeek)) return;
       let audio = this.audioEls[channel];
       if (!audio || !command.src) return;
       audio.__spPrimeToken = (audio.__spPrimeToken || 0) + 1;
       audio.__spPriming = false;
 
-      const desiredNativeOnly = this._isExternalHttpAudio(command.src);
+      const desiredNativeOnly = this._isExternalHttpAudio(command.src) && !this._isCorsWebAudioAsset(command.src);
       const hasWebAudioGraph = this.audioSourceNodes.has(audio) || this.audioGainNodes.has(audio);
       const currentNativeOnly = audio.__spNativeOnly === true;
 
@@ -1017,6 +1218,15 @@
     }
 
     _volumePersistentChannel(channel, command) {
+      const buffered = this._bufferPersistent?.[channel];
+      if (buffered) {
+        const target = this.muted ? 0 : clamp(asNumber(command.volume, buffered.volume ?? 1), 0, 1);
+        buffered.volume = target;
+        if (this.audioState[channel]) this.audioState[channel].volume = target;
+        this._fadeBufferGain(buffered.gain, target, Math.max(0, asNumber(command.fade, 0)));
+        emit(this.host, 'sceneplayer:audiovolume', { channel, volume: target, transport:'audio-buffer' });
+        return;
+      }
       const audio = this.audioEls[channel];
       if (!audio || !this.audioState[channel]) return;
       const target = clamp(asNumber(command.volume, this.audioState[channel].volume), 0, 1);
@@ -1026,6 +1236,17 @@
     }
 
     _duckPersistentChannel(channel, command) {
+      const buffered = this._bufferPersistent?.[channel];
+      if (buffered) {
+        const restore = buffered.volume ?? 1;
+        const target = clamp(asNumber(command.volume, 0.22), 0, 1);
+        const fade = Math.max(0, asNumber(command.fade, 250));
+        const hold = Math.max(0, asNumber(command.hold, 1200));
+        this._fadeBufferGain(buffered.gain, target, fade);
+        this._audioTimeout(() => this._fadeBufferGain(buffered.gain, restore, fade), fade + hold);
+        emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold, transport:'audio-buffer' });
+        return;
+      }
       const audio = this.audioEls[channel];
       const state = this.audioState[channel];
       if (!audio || !state) return;
@@ -1040,10 +1261,14 @@
 
     _playOneShot(command) {
       if (!command.src) return;
-      const audio = this._acquireOneShotElement();
+      if (this._playBufferedOneShot(command)) return;
+      const audio = this._acquireOneShotElement(command.src);
+      if (!audio) return;
       this._prepareAudioTransport(audio, command.src);
       if (audio.src !== command.src && audio.currentSrc !== command.src) {
+        // This should only happen on a fresh, not-yet-graph-bound element.
         audio.src = command.src;
+        audio.__spLoadedSrc = command.src;
         try { audio.load(); } catch (_) {}
       }
       audio.loop = command.loop === true;
@@ -1168,6 +1393,8 @@
     _stopAllAudio(resetPending = true) {
       this._clearAudioTimers();
       ['bgm', 'ambient'].forEach((channel) => this._stopPersistentChannel(channel, 0));
+      Array.from(this._bufferOneShots || []).forEach((rec) => { try { rec.source.stop(); } catch (_) {} });
+      if (this._bufferOneShots) this._bufferOneShots.clear();
       this.oneshots.forEach((audio) => {
         try { audio.pause(); } catch (_) {}
         audio.__spInUse = false;
@@ -1192,6 +1419,12 @@
       this._clearAudioTimers();
 
       ['bgm', 'ambient'].forEach((channel) => {
+        const buffered = this._bufferPersistent?.[channel];
+        if (buffered) {
+          this._fadeBufferGain(buffered.gain, 0, ms);
+          this._audioTimeout(() => this._stopBufferedPersistent(channel, 0), ms + 20);
+          return;
+        }
         const audio = this.audioEls[channel];
         if (!audio || audio.paused) return;
         const key = `exit:${channel}`;
@@ -1201,6 +1434,10 @@
         });
       });
 
+      Array.from(this._bufferOneShots || []).forEach((rec) => {
+        this._fadeBufferGain(rec.gain, 0, ms);
+        this._audioTimeout(() => { try { rec.source.stop(); } catch (_) {} }, ms + 20);
+      });
       Array.from(this.oneshots).forEach((audio, i) => {
         if (!audio || audio.paused) return;
         const key = `exit:oneshot:${i}:${Date.now()}`;
@@ -1290,6 +1527,16 @@
 
       this.audioPlaybackArmed = false;
       this.document = assertSceneDocument(doc);
+
+      // Start fetching/decoding the complete audio bank as soon as the work is
+      // loaded. decodeAudioData does not need playback permission, so on iOS
+      // most/all sounds are ready before the reader presses START. START only
+      // has to resume one AudioContext; later Scenes and AUTO then start buffers.
+      if (this._iosBufferAudio) {
+        this._bufferAudioCache.clear();
+        this._bufferAudioPromises.clear();
+        this._preloadDocumentAudioBuffers();
+      }
 
       // Preload Ending SE only. Playback waits for the final trusted press.
       try {
@@ -1913,6 +2160,10 @@
       this.ended = false;
       this._endingAudioStarted = false;
       this.unlockAudio(true);
+      // Begin decoding every later sound immediately from the first trusted
+      // START gesture. Scene 1 keeps its already-working media path if its
+      // buffer is not ready yet; later Scenes/ending use the decoded bank.
+      this._preloadDocumentAudioBuffers();
       this.els.cover.hidden=true;
       this.host.classList.remove('sp-cover-open');
       // Treat the first render after the cover as a fresh load so Scene 1
@@ -1998,6 +2249,13 @@
       this.oneshots.forEach((audio) => {
         try { audio.muted = this.muted; } catch (_) {}
       });
+      Object.values(this._bufferPersistent || {}).forEach((rec) => {
+        if (rec?.gain) this._fadeBufferGain(rec.gain, this.muted ? 0 : (rec.volume ?? 1), 0);
+      });
+      (this._bufferOneShots || []).forEach((rec) => {
+        const vol = clamp(asNumber(rec?.command?.volume, 1), 0, 1);
+        if (rec?.gain) this._fadeBufferGain(rec.gain, this.muted ? 0 : vol, 0);
+      });
       emit(this.host, 'sceneplayer:mutechange', { muted: this.muted });
       return this.muted;
     }
@@ -2021,7 +2279,9 @@
       // timers take over, silently authorize the stable BGM/Ambient/SE elements
       // that future Scenes will need. Do not schedule Scene advancement until
       // those synchronous-gesture play() attempts have settled.
-      const prime = this._primeFutureAudioPlayback();
+      const prime = this._iosBufferAudio
+        ? this._preloadDocumentAudioBuffers()
+        : this._primeFutureAudioPlayback();
       Promise.resolve(prime).finally(() => {
         if (!this.auto || this.ended) return;
         this._scheduleAuto();
@@ -3285,11 +3545,17 @@
         try { this.endingAudio.pause(); } catch (_) {}
         try { this.endingAudio.removeAttribute('src'); this.endingAudio.load(); } catch (_) {}
       }
+      this._stopBufferedPersistent('bgm', 0);
+      this._stopBufferedPersistent('ambient', 0);
+      Array.from(this._bufferOneShots || []).forEach((rec) => { try { rec.source.stop(); } catch (_) {} });
+      if (this._bufferOneShots) this._bufferOneShots.clear();
       if (this.audioContext && typeof this.audioContext.close === 'function') {
         try { this.audioContext.close(); } catch (_) {}
       }
       (this.oneshotPool || []).forEach((audio) => this._disposeAudioElement(audio));
       this.oneshotPool = [];
+      this._bufferAudioCache?.clear();
+      this._bufferAudioPromises?.clear();
       this.audioGainNodes.clear();
       this.audioSourceNodes.clear();
       this._bound.forEach(([el, event, fn, listenerOptions]) => el.removeEventListener(event, fn, listenerOptions));
