@@ -551,8 +551,15 @@
       const specs = new Map();
       if (!this.document) return specs;
       const add = (channel, src) => {
-        const value = String(src || '').trim();
+        let value = String(src || '').trim();
         if (!value || !(channel === 'bgm' || channel === 'ambient' || channel === 'oneshot')) return;
+        // Published ending SE has historically been able to reach Core as a bare
+        // R2 asset id even when Scene audio was already hydrated. Resolve it while
+        // the START bank is being built so Safari authorizes the REAL URL, not a
+        // broken relative UUID. _iosBankEntry() keeps raw-id aliases for lookup.
+        if (/^[A-Za-z0-9_-]{20,}$/.test(value) && !value.includes('.') && !value.includes('/')) {
+          value = `https://scene-studio-api.a-hako.workers.dev/asset/${encodeURIComponent(value)}`;
+        }
         const key = `${channel}:${value}`;
         if (!specs.has(key)) specs.set(key, { key, channel, src: value });
       };
@@ -653,9 +660,42 @@
       return Promise.allSettled(jobs).then(() => true);
     }
 
+    _iosAudioSrcAliases(src) {
+      const value = String(src || '').trim();
+      const out = new Set();
+      if (!value) return out;
+      out.add(value);
+      // Public Player normally hydrates bare R2 ids to /asset/<id>, but ending
+      // audio can pass through a different shell/update path. Treat the raw id
+      // and its public asset URL as the same source so the START-authorized bank
+      // is always reused at finish().
+      if (/^[A-Za-z0-9_-]{20,}$/.test(value) && !value.includes('.') && !value.includes('/')) {
+        out.add(`https://scene-studio-api.a-hako.workers.dev/asset/${encodeURIComponent(value)}`);
+      } else {
+        try {
+          const u = new URL(value, global.location?.href || undefined);
+          const m = u.pathname.match(/\/asset\/([^/?#]+)$/);
+          if (m?.[1]) out.add(decodeURIComponent(m[1]));
+        } catch (_) {}
+      }
+      return out;
+    }
+
     _iosBankEntry(channel, src) {
       if (!this._iosStableMediaBank) return null;
-      return this._iosAudioBank?.get(`${channel}:${String(src || '').trim()}`) || null;
+      const aliases = this._iosAudioSrcAliases(src);
+      for (const alias of aliases) {
+        const hit = this._iosAudioBank?.get(`${channel}:${alias}`);
+        if (hit) return hit;
+      }
+      // Last-resort alias scan handles a bank built before/after public source
+      // hydration without creating a new late-playing HTMLAudioElement.
+      for (const entry of this._iosAudioBank?.values?.() || []) {
+        if (entry?.channel !== channel) continue;
+        const entryAliases = this._iosAudioSrcAliases(entry.src);
+        for (const alias of aliases) if (entryAliases.has(alias)) return entry;
+      }
+      return null;
     }
 
     _setIOSBankEntryVolume(entry, target, duration = 0, done) {
@@ -712,23 +752,59 @@
       else entry.audio.addEventListener('loadedmetadata', schedule, { once: true });
     }
 
+    _activateIOSBankEntry(entry, options = {}) {
+      if (!entry?.audio) return false;
+      const audio = entry.audio;
+      const startAt = Math.max(0, asNumber(options.startAt, 0));
+      const target = this.muted ? 0 : clamp(asNumber(options.target, 1), 0, 1);
+      const fadeIn = Math.max(0, asNumber(options.fadeIn, 0));
+      const seek = options.seek !== false;
+
+      // V2.16: source-stable media is already PLAYING from START. The pop was
+      // produced by seek + unmute happening in the same instant. Keep it muted
+      // while seeking, establish zero gain first, then open the gate only after
+      // WebKit has settled the seek. On current iOS versions volume ramps are
+      // honoured when applied after this gate; on older versions this still
+      // removes the hard seek transient even if volume is system-controlled.
+      try { audio.loop = true; audio.muted = true; audio.volume = 0; } catch (_) {}
+      if (seek) { try { audio.currentTime = startAt; } catch (_) {} }
+      entry.active = true;
+      entry.targetVolume = target;
+
+      if (audio.paused) {
+        try { const p = audio.play(); if (p?.catch) p.catch(() => {}); } catch (_) {}
+      }
+
+      let opened = false;
+      const openGate = () => {
+        if (opened || !entry.active) return;
+        opened = true;
+        try { audio.volume = 0; audio.muted = this.muted; } catch (_) {}
+        if (this.muted) return;
+        if (fadeIn > 0) this._setIOSBankEntryVolume(entry, target, fadeIn);
+        else { try { audio.volume = target; } catch (_) {} }
+      };
+
+      if (seek && typeof audio.addEventListener === 'function') {
+        const onSeeked = () => openGate();
+        audio.addEventListener('seeked', onSeeked, { once: true });
+        // Some cached MP3s do not emit seeked for a 0 -> 0 assignment. Keep a
+        // short fallback, still long enough to avoid exposing the seek click.
+        this._audioTimeout(openGate, 45);
+      } else {
+        this._audioTimeout(openGate, 16);
+      }
+      return true;
+    }
+
     _playIOSBankOneShot(command) {
       const entry = this._iosBankEntry('oneshot', command?.src);
       if (!entry?.audio) return false;
-      const audio = entry.audio;
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
       const startAt = Math.max(0, asNumber(command.startAt, 0));
       const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
       const fadeIn = Math.max(0, asNumber(command.fadeIn, 0));
-      try { audio.loop = true; audio.currentTime = startAt; audio.muted = this.muted; audio.volume = fadeIn > 0 ? 0 : target; } catch (_) {}
-      entry.active = true;
-      entry.targetVolume = target;
-      // If priming was rejected for an individual element, retry only as a
-      // fallback. Normally this branch is never needed after START.
-      if (audio.paused) {
-        try { const p = audio.play(); if (p?.catch) p.catch(() => {}); } catch (_) {}
-      }
-      if (fadeIn > 0 && !this.muted) this._setIOSBankEntryVolume(entry, target, fadeIn);
+      this._activateIOSBankEntry(entry, { startAt, target, fadeIn, seek:true });
       this._scheduleIOSOneShotSilence(entry, command, startAt);
       emit(this.host, 'sceneplayer:audioplaystarted', { channel:'oneshot', role:command.role || 'se', action:'play', src:command.src, transport:'ios-live-media-bank' });
       emit(this.host, 'sceneplayer:oneshot', { command, transport:'ios-live-media-bank' });
@@ -747,17 +823,15 @@
       const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
       const fadeIn = reconstruct ? 0 : Math.max(0, asNumber(command.fadeIn, 0));
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
-      try {
-        audio.loop = true; // authorization keeper; non-loop is emulated by muting.
-        if (shouldSeek) audio.currentTime = startAt;
-        audio.muted = this.muted;
-        audio.volume = fadeIn > 0 ? 0 : target;
-      } catch (_) {}
       entry.active = true;
       entry.targetVolume = target;
       this._iosPersistentEntry[channel] = entry;
-      if (audio.paused) { try { const p = audio.play(); if (p?.catch) p.catch(() => {}); } catch (_) {} }
-      if (fadeIn > 0 && !this.muted) this._setIOSBankEntryVolume(entry, target, fadeIn);
+      this._activateIOSBankEntry(entry, {
+        startAt,
+        target,
+        fadeIn,
+        seek: shouldSeek
+      });
       this.audioState[channel] = {
         src: command.src,
         volume: target,
@@ -1826,7 +1900,11 @@
         const endingCommand = (Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [])
           .find((command) => command?.channel === 'oneshot' && command?.src && ['play','start'].includes(command.action || 'play'));
         if (endingCommand?.src) {
-          this.endingAudio.src = endingCommand.src;
+          let endingSrc = String(endingCommand.src || '').trim();
+          if (/^[A-Za-z0-9_-]{20,}$/.test(endingSrc) && !endingSrc.includes('.') && !endingSrc.includes('/')) {
+            endingSrc = `https://scene-studio-api.a-hako.workers.dev/asset/${encodeURIComponent(endingSrc)}`;
+          }
+          this.endingAudio.src = endingSrc;
           this.endingAudio.preload = 'auto';
           try { this.endingAudio.load(); } catch (_) {}
         }
