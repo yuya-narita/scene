@@ -2877,6 +2877,8 @@
           - current.height;
       }
 
+      metrics.forEach((item, i) => { const balloon=item.scene?.presentation?.balloon; if(balloon?.positioned)positions[i]=stageHeight*clamp(asNumber(balloon.y,48),5,95)/100-item.height/2; });
+
       return metrics.map((item, i) => ({ ...item, y: positions[i] }));
     }
 
@@ -2885,6 +2887,7 @@
       measured.forEach(({ node, y }) => {
         node.style.transform = `translate3d(0,${Math.round(y)}px,0)`;
       });
+      requestAnimationFrame(() => this._refreshBalloonSvgs());
       return measured;
     }
 
@@ -2894,7 +2897,8 @@
       const focusY = stageRect.height * (stageRect.width <= 520 ? .48 : .46);
       return nodes.map((node, i) => {
         const h = Math.max(1, node.getBoundingClientRect().height);
-        const y = focusY - h / 2;
+        const balloon=sceneEntries[i]?.scene?.presentation?.balloon;
+        const y = balloon?.positioned ? stageRect.height*clamp(asNumber(balloon.y,48),5,95)/100-h/2 : focusY-h/2;
         node.style.transform = `translate3d(0,${Math.round(y)}px,0)`;
         node.style.zIndex = String(20 + i);
         return { node, scene: sceneEntries[i]?.scene, y, height: h };
@@ -3773,6 +3777,13 @@
       if (!active) article.classList.add('is-visible');
 
       const presentation = scene.presentation || {};
+      const balloonConfig = presentation.balloon || {};
+      const hasMangaBalloon = presentation.view !== 'chat' && ['speech','cloud','burst','narration'].includes(balloonConfig.type);
+      if (hasMangaBalloon && balloonConfig.positioned) {
+        const width = clamp(asNumber(balloonConfig.width, 68), 24, 96);
+        const x = clamp(asNumber(balloonConfig.x, 50), width / 2, 100 - width / 2);
+        article.dataset.balloonPositioned = 'true'; article.style.width = `${width}%`; article.style.left = `${x - width / 2}%`;
+      }
       const requestedEffect = presentation.effect || 'auto';
       const effect = this._resolveSceneEffect(scene, requestedEffect);
       if (effect && /^[a-zA-Z0-9_-]+$/.test(effect)) article.dataset.effect = effect;
@@ -3787,6 +3798,7 @@
       article.dataset.entryMotion = entryMotion;
       article.dataset.fit = this._resolveAutoFit(scene, presentation.text || {});
 
+      let mangaBalloonText = null;
       if (presentation.view === 'chat' && (scene.text || scene.subText)) {
         article.classList.add('sp-chat-scene');
         const align = presentation.text?.align === 'right' ? 'right' : 'left';
@@ -3835,6 +3847,7 @@
           text.textContent = scene.text;
           this._applyTextStyle(text, presentation.text || {}, false);
           this._applyBalloon(text, presentation);
+          if (hasMangaBalloon) mangaBalloonText = text;
           article.appendChild(text);
         }
 
@@ -3846,6 +3859,8 @@
           article.appendChild(sub);
         }
       }
+
+      if (mangaBalloonText) this._mountBalloonSvg(article, mangaBalloonText, scene);
 
       this._appendSceneImage(article, scene, presentation);
 
@@ -3931,7 +3946,7 @@
     _applyBalloon(node, presentation = {}) {
       const type = presentation?.balloon?.type;
       if (!['speech','cloud','burst','narration'].includes(type)) return;
-      node.classList.add('sp-balloon', `sp-balloon-${type}`);
+      node.classList.add('sp-balloon', `sp-balloon-${type}`, 'has-svg-balloon');
       node.dataset.balloon = type;
       const align = presentation?.text?.align;
       if (align === 'right') {
@@ -3941,6 +3956,115 @@
       } else {
         node.style.marginLeft = 'auto'; node.style.marginRight = 'auto'; node.style.textAlign = 'center';
       }
+    }
+
+    _mountBalloonSvg(article, text, scene) {
+      const ns = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(ns, 'svg');
+      svg.classList.add('sp-balloon-svg');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.style.overflow = 'visible';
+      article.insertBefore(svg, text);
+      article.__spBalloonScene = scene;
+      if (!this._balloonResizeBound) { this._balloonResizeBound = true; this._on(global, 'resize', () => requestAnimationFrame(() => this._refreshBalloonSvgs())); }
+      requestAnimationFrame(() => {
+        this._renderBalloonSvg(article, text, scene);
+        requestAnimationFrame(() => this._renderBalloonSvg(article, text, scene));
+      });
+    }
+
+    _refreshBalloonSvgs() {
+      this.els?.scenes?.querySelectorAll('.sp-scene').forEach(article => {
+        const text = article.querySelector('.sp-text.sp-balloon');
+        const scene=article.__spBalloonScene,balloon=scene?.presentation?.balloon;
+        if(text&&scene){if(balloon?.positioned){const h=article.getBoundingClientRect().height;article.style.transform=`translate3d(0,${Math.round(this.els.stage.clientHeight*clamp(asNumber(balloon.y,48),5,95)/100-h/2)}px,0)`;}this._renderBalloonSvg(article,text,scene);}
+      });
+    }
+
+    _renderBalloonSvg(article, text, scene) {
+      const svg = article?.querySelector('.sp-balloon-svg');
+      const config = scene?.presentation?.balloon || {};
+      if (!svg || !text || !['speech','cloud','burst','narration'].includes(config.type)) return;
+      const articleRect = article.getBoundingClientRect();
+      const textRect = text.getBoundingClientRect();
+      const scenesRect = this.els.scenes.getBoundingClientRect();
+      const w = Math.max(1, textRect.width), h = Math.max(1, textRect.height);
+      svg.style.left = `${textRect.left - articleRect.left}px`;
+      svg.style.top = `${textRect.top - articleRect.top}px`;
+      svg.style.width = `${w}px`;
+      svg.style.height = `${h}px`;
+      svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      svg.replaceChildren();
+
+      const ns = 'http://www.w3.org/2000/svg';
+      const el = (name, attrs = {}) => {
+        const node = document.createElementNS(ns, name);
+        Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
+        return node;
+      };
+      const ink = '#17191d', paper = '#fff';
+      const fill = config.type === 'burst' ? ink : paper;
+      const stroke = ink;
+      const sw = config.type === 'narration' ? 1.7 : 2.2;
+      const cx = w / 2, cy = h / 2;
+      const tailX = scenesRect.width * clamp(asNumber(config.tailX, 24), -15, 115) / 100 + scenesRect.left - textRect.left;
+      const tailY = scenesRect.height * clamp(asNumber(config.tailY, 72), -10, 115) / 100 + scenesRect.top - textRect.top;
+      const dx = tailX - cx, dy = tailY - cy;
+      const denom = Math.sqrt((dx * dx) / Math.max(1, (w * .48) ** 2) + (dy * dy) / Math.max(1, (h * .46) ** 2)) || 1;
+      const bx = cx + dx / denom * .92, by = cy + dy / denom * .92;
+      const len = Math.hypot(dx, dy) || 1;
+      const px = -dy / len, py = dx / len;
+      const base = Math.max(7, Math.min(15, Math.min(w, h) * .11));
+
+      if (config.type === 'speech' || config.type === 'burst') {
+        const tail = el('path', {
+          d: `M ${bx + px * base} ${by + py * base} L ${tailX} ${tailY} L ${bx - px * base} ${by - py * base} Z`,
+          fill, stroke, 'stroke-width': sw, 'stroke-linejoin': 'round'
+        });
+        svg.appendChild(tail);
+      }
+
+      let body;
+      if (config.type === 'narration') {
+        body = el('rect', {x:sw,y:sw,width:Math.max(1,w-sw*2),height:Math.max(1,h-sw*2),rx:2,fill,stroke,'stroke-width':sw});
+      } else if (config.type === 'burst') {
+        const points = [];
+        const count = Math.max(22, Math.min(38, Math.round(w / 18) * 2));
+        for (let i=0;i<count;i++) {
+          const a = -Math.PI/2 + i * Math.PI * 2 / count;
+          const outer = i % 2 === 0 ? 1 : .78;
+          points.push(`${cx + Math.cos(a) * (w*.49*outer)},${cy + Math.sin(a) * (h*.49*outer)}`);
+        }
+        body = el('polygon',{points:points.join(' '),fill,stroke,'stroke-width':sw,'stroke-linejoin':'round'});
+      } else if (config.type === 'cloud') {
+        const points = [];
+        const count = Math.max(18, Math.min(30, Math.round(w / 24) * 2));
+        for (let i=0;i<count;i++) {
+          const a = -Math.PI/2 + i * Math.PI * 2 / count;
+          const pulse = .86 + ((i * 7) % 5) * .035;
+          points.push([cx + Math.cos(a) * w*.49*pulse, cy + Math.sin(a) * h*.49*pulse]);
+        }
+        let d = '';
+        points.forEach((p,i) => {
+          const n=points[(i+1)%points.length], mx=(p[0]+n[0])/2, my=(p[1]+n[1])/2;
+          d += i===0 ? `M ${mx} ${my} Q ${n[0]} ${n[1]} ` : `${mx} ${my} Q ${n[0]} ${n[1]} `;
+        });
+        body = el('path',{d:d+' Z',fill,stroke,'stroke-width':sw,'stroke-linejoin':'round'});
+      } else {
+        body = el('path',{
+          d:`M ${w*.12} ${sw} C ${w*.04} ${sw} ${sw} ${h*.22} ${sw} ${h*.5} C ${sw} ${h*.78} ${w*.05} ${h-sw} ${w*.15} ${h-sw} L ${w*.85} ${h-sw} C ${w*.95} ${h-sw} ${w-sw} ${h*.78} ${w-sw} ${h*.5} C ${w-sw} ${h*.22} ${w*.96} ${sw} ${w*.88} ${sw} Z`,
+          fill,stroke,'stroke-width':sw,'stroke-linejoin':'round'
+        });
+      }
+      svg.appendChild(body);
+
+      if (config.type === 'cloud') {
+        [0.34,0.62,0.86].forEach((t,i) => {
+          const x=bx+(tailX-bx)*t, y=by+(tailY-by)*t;
+          svg.appendChild(el('circle',{cx:x,cy:y,r:Math.max(3,base*(.62-i*.14)),fill:paper,stroke,'stroke-width':sw}));
+        });
+      }
+      text.classList.add('has-svg-balloon');
     }
 
     _applyCorePresentation(scene) {
