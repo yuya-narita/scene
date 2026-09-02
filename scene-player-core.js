@@ -139,6 +139,9 @@
         bgm: this._createAudioElement('bgm'),
         ambient: this._createAudioElement('ambient')
       };
+      // Dedicated preloaded ending SE. It is played directly from the final
+      // physical press on iPhone instead of relying on a later synthetic click.
+      this.endingAudio = this._createAudioElement('ending');
       this.oneshots = new Set();
       // iOS/WebKit can reject media started later by AUTO timers even after the
       // reader unlocked audio earlier. Keep a small bank of reusable one-shot
@@ -328,9 +331,13 @@
         pressPaper();
         this.unlockAudio(true);
 
-        // Ending SE is not started on pointerdown. The reusable one-shot bank
-        // was already authorized from START/AUTO; finish() can therefore fire it
-        // from the final click without racing an earlier rejected attempt.
+        // iPhone/WebKit: fire Ending SE inside the physical final press. Only do
+        // this when the press truly means finish, not a typing skip/image/button.
+        const interactive = e?.target?.closest?.('button, .sp-scene-image.is-zoomable');
+        const onLastScene = this.document && this.index >= this.document.scenes.length - 1;
+        if (!interactive && onLastScene && !this.ended && !this.typingState) {
+          this._playEndingAudio({ trustedGesture: true });
+        }
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -346,10 +353,7 @@
       this._on(this.els.auto, 'click', (e) => {
         e.stopPropagation();
         this.unlockAudio(true);
-        // AUTO advances happen from timers, not future trusted taps. Pre-authorize
-        // the persistent transports and reusable one-shot bank while this click
-        // still carries user activation.
-        this._primeFutureAudioPlayback();
+        // startAuto() owns the exact audio start/prime ordering.
         this.toggleAuto();
       });
 
@@ -812,16 +816,20 @@
           // would make every BGM / Ambient / SE after the first rejection silent.
           // In AUTO, skip only the blocked item and leave the transport armed so
           // later commands still get a chance to play.
-          if (!this.auto) {
+          const retryable = detail?.channel !== 'oneshot' && detail?.channel !== 'ending';
+          if (!this.auto && retryable) {
             this.audioPlaybackArmed = false;
             this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
           }
+          // SE is an event. Never replay a blocked Scene SE on the NEXT tap;
+          // doing so made Scene 1 SE overlap Scene 2's own SE.
           emit(this.host, 'sceneplayer:audioblocked', { ...detail, error, auto: this.auto });
           return;
         }
         if (promise && typeof promise.then === 'function') {
           promise.then(finishStart).catch((error) => {
-            if (!this.auto) {
+            const retryable = detail?.channel !== 'oneshot' && detail?.channel !== 'ending';
+            if (!this.auto && retryable) {
               this.audioPlaybackArmed = false;
               this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
             }
@@ -935,11 +943,17 @@
     }
 
     _acquireOneShotElement() {
+      // Manual reading has a trusted press for each Scene. Keep it isolated from
+      // AUTO's prewarmed pool so a primed/old SE can never leak into the next Scene.
+      if (!this.auto) {
+        const audio = this._createAudioElement(`oneshot-manual-${Date.now()}`);
+        audio.__spInUse = true;
+        audio.__spPriming = false;
+        return audio;
+      }
       let audio = this.oneshotPool.find((item) => item && !item.__spInUse && !item.__spPriming && item.paused);
       if (!audio) {
-        // Desktop and manual readers can safely fall back to a fresh element.
-        // AUTO on iPhone normally has enough pre-authorized pool entries.
-        audio = this._createAudioElement(`oneshot-${this.oneshotPool.length + 1}`);
+        audio = this._createAudioElement(`oneshot-auto-${this.oneshotPool.length + 1}`);
         audio.__spInUse = false;
         audio.__spPriming = false;
         this.oneshotPool.push(audio);
@@ -1286,6 +1300,20 @@
 
       this.audioPlaybackArmed = false;
       this.document = assertSceneDocument(doc);
+
+      // Preload Ending SE only. Playback waits for the final trusted press.
+      try {
+        this.endingAudio.pause();
+        this.endingAudio.removeAttribute('src');
+        const endingCommand = (Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [])
+          .find((command) => command?.channel === 'oneshot' && command?.src && ['play','start'].includes(command.action || 'play'));
+        if (endingCommand?.src) {
+          this.endingAudio.src = endingCommand.src;
+          this.endingAudio.preload = 'auto';
+          try { this.endingAudio.load(); } catch (_) {}
+        }
+      } catch (_) {}
+
       this._backgroundStateCache = [];
       this._backgroundStateCacheDocument = this.document;
 
@@ -1945,20 +1973,42 @@
     _playEndingAudio(options = {}) {
       if (this._endingAudioStarted) return false;
       const commands = Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [];
-      const playable = commands.filter((command) => {
-        if (!command || command.channel !== 'oneshot' || !command.src) return false;
-        const action = command.action || 'play';
-        return action === 'play' || action === 'start';
-      });
+      const playable = commands.filter((command) => command?.channel === 'oneshot' && command?.src && ['play','start'].includes(command.action || 'play'));
       if (!playable.length) return false;
 
-      // Mark before play() so a following click -> finish() in the same physical
-      // tap can never create a second copy of the SE. On iPhone this function is
-      // normally entered from pointerdown/touchstart (the trusted gesture); AUTO
-      // and keyboard completion still fall back to finish().
+      const command = playable[0];
       this._endingAudioStarted = true;
+
+      if (options.trustedGesture && this.endingAudio) {
+        const audio = this.endingAudio;
+        try {
+          if (audio.src !== command.src && audio.currentSrc !== command.src) {
+            audio.src = command.src;
+            try { audio.load(); } catch (_) {}
+          }
+          // Native media path on purpose: no WebAudio graph is inserted between
+          // the iPhone press and play().
+          audio.loop = false;
+          audio.muted = Boolean(this.muted);
+          audio.volume = clamp(asNumber(command.volume, 1), 0, 1);
+          try { audio.currentTime = Math.max(0, asNumber(command.startAt, 0)); } catch (_) {}
+          const promise = audio.play();
+          if (promise && typeof promise.catch === 'function') promise.catch((error) => {
+            emit(this.host, 'sceneplayer:audioblocked', { channel:'ending', role:'ending-se', src:command.src, error, auto:this.auto });
+          });
+          emit(this.host, 'sceneplayer:oneshot', { command:{...command, role:'ending-se'} });
+          playable.slice(1).forEach((extra) => this._playOneShot({...extra, action:'play', role:'ending-se'}));
+          return true;
+        } catch (error) {
+          emit(this.host, 'sceneplayer:audioblocked', { channel:'ending', role:'ending-se', src:command.src, error, auto:this.auto });
+          return false;
+        }
+      }
+
+      // AUTO/keyboard fallback. Manual iPhone completion has already fired on
+      // pointerdown and the guard prevents a duplicate here.
       this.unlockAudio(true);
-      playable.forEach((command) => this._playOneShot({...command, action:'play'}));
+      playable.forEach((item) => this._playOneShot({...item, action:'play', role:'ending-se'}));
       return true;
     }
 
@@ -2009,8 +2059,11 @@
       // AUTO starts use the same transport contract. Reconstruct the persistent
       // BGM/Ambient state for the current Scene before timers take over.
       this.unlockAudio(true);
-      this._primeFutureAudioPlayback();
+      // Start CURRENT BGM/Ambient first, while the AUTO button click is trusted.
+      // V2.8 primed first; its asynchronous cleanup then paused the real playback.
       this._restoreAudioForIndex(this.index, 'restore');
+      // Pre-authorize only future/paused transports after active audio has started.
+      this._primeFutureAudioPlayback();
       this.auto = true;
       this.els.auto.classList.add('is-on');
       this.els.auto.setAttribute('aria-pressed', 'true');
@@ -3270,6 +3323,10 @@
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this._stopAllAudio(true);
+      if (this.endingAudio) {
+        try { this.endingAudio.pause(); } catch (_) {}
+        try { this.endingAudio.removeAttribute('src'); this.endingAudio.load(); } catch (_) {}
+      }
       if (this.audioContext && typeof this.audioContext.close === 'function') {
         try { this.audioContext.close(); } catch (_) {}
       }
