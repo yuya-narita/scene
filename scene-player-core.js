@@ -344,9 +344,23 @@
         this.host.classList.add('sp-paper-press');
         this._layoutTimeout(() => this.host.classList.remove('sp-paper-press'), 115);
       };
-      const armFromStageGesture = () => {
+      const armFromStageGesture = (e) => {
         pressPaper();
         this.unlockAudio(true);
+
+        // V2.19 iPhone ending SE: Scene SE is proven reliable when its already-
+        // running bank entry is opened directly from the physical pointerdown.
+        // Do the same for the final SE BEFORE click -> finish() performs any
+        // session/ending bookkeeping. finish() sees _endingAudioStarted and will
+        // not fire it twice. Ignore controls/images so merely pressing UI on the
+        // last Scene cannot trigger the ending sound.
+        const target = e?.target;
+        const isControl = target?.closest?.('button, a, .sp-scene-image.is-zoomable');
+        const isEditableText = this.host.classList.contains('live-edit-enabled')
+          && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
+        const atLastScene = !!this.document && !this.ended
+          && this.index >= Math.max(0, (this.document.scenes?.length || 1) - 1);
+        if (atLastScene && !isControl && !isEditableText) this._playEndingAudio();
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -2799,8 +2813,12 @@
       const delay = Math.max(0, asNumber(this.currentScene.pause, this.options.autoDelay));
       this.autoTimer = setTimeout(() => {
         this.autoTimer = null;
-        if (this.index >= this.document.scenes.length - 1) this.finish();
-        else this.next();
+        if (this.index >= this.document.scenes.length - 1) {
+          // V2.19: open the already-primed ending-SE bank entry while AUTO's
+          // audio session is still fully active. finish() then only changes UI.
+          this._playEndingAudio();
+          this.finish();
+        } else this.next();
       }, delay);
     }
 
@@ -4058,7 +4076,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.4.7-ios-ending-live-bank';
+  ScenePlayerCore.VERSION = '1.4.8-ios-ending-pre-finish';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
