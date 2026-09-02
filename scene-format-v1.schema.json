@@ -284,6 +284,12 @@
             "right"
           ]
         },
+        "writingMode": {
+          "enum": [
+            "horizontal-tb",
+            "vertical-rl"
+          ]
+        },
         "fontWeight": {
           "type": "number",
           "minimum": 100,
@@ -310,48 +316,6 @@
             "warning",
             "void"
           ]
-        },
-        "balloon": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "enum": [
-                "speech",
-                "cloud",
-                "burst",
-                "narration"
-              ]
-            },
-            "positioned": {
-              "type": "boolean"
-            },
-            "x": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 100
-            },
-            "y": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 100
-            },
-            "width": {
-              "type": "number",
-              "minimum": 20,
-              "maximum": 100
-            },
-            "tailX": {
-              "type": "number",
-              "minimum": -15,
-              "maximum": 115
-            },
-            "tailY": {
-              "type": "number",
-              "minimum": -10,
-              "maximum": 115
-            }
-          },
-          "additionalProperties": true
         },
         "effect": {
           "enum": [
@@ -416,8 +380,6 @@
                 "stay",
                 "up",
                 "shatter",
-                "blockBreak",
-                "dust",
                 "explode"
               ]
             }
