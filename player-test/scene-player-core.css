@@ -149,8 +149,7 @@
 .sp-text[data-writing-mode="vertical-rl"]{
   display:block;
   width:max-content;
-  max-width:100%;
-  margin-inline:auto;
+  max-width:calc(100% - 2px);
   white-space:pre-wrap;
   overflow-wrap:normal;
   text-wrap:wrap;

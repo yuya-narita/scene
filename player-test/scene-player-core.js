@@ -2847,6 +2847,23 @@
       return this.options.baseGap;
     }
 
+    _measureSceneHeight(node, stageHeight) {
+      const boxHeight=Math.max(1,node.getBoundingClientRect().height);
+      const vertical=node.querySelector('.sp-text[data-writing-mode="vertical-rl"]');
+      if(!vertical)return boxHeight;
+      try{
+        const range=document.createRange();
+        range.selectNodeContents(vertical);
+        const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
+        range.detach?.();
+        if(!rects.length)return boxHeight;
+        const top=Math.min(...rects.map(rect=>rect.top));
+        const bottom=Math.max(...rects.map(rect=>rect.bottom));
+        const inkHeight=Math.max(1,bottom-top);
+        return Math.min(boxHeight,Math.max(48,Math.min(stageHeight*.52,inkHeight+8)));
+      }catch(_){return boxHeight;}
+    }
+
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageHeight = this.els.stage.clientHeight;
@@ -2857,7 +2874,7 @@
         node,
         scene: sceneEntries[i].scene,
         index: sceneEntries[i].index,
-        height: node.getBoundingClientRect().height
+        height: this._measureSceneHeight(node,stageHeight)
       }));
 
       const newest = metrics[metrics.length - 1];
@@ -3924,20 +3941,28 @@
         node.style.writingMode='vertical-rl';
         node.style.textOrientation='mixed';
         node.style.height=`min(52dvh, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
+        node.style.textAlign='start';
+        const blockAlign=style.align==='left'||style.align==='right'?style.align:'center';
+        node.dataset.verticalBlockAlign=blockAlign;
+        node.style.marginLeft=blockAlign==='left'?'0':'auto';
+        node.style.marginRight=blockAlign==='right'?'0':'auto';
       } else {
         delete node.dataset.writingMode;
         node.style.writingMode='';
         node.style.textOrientation='';
         node.style.height='';
+        delete node.dataset.verticalBlockAlign;
+        node.style.marginLeft='';
+        node.style.marginRight='';
       }
-      if (Number.isFinite(Number(style.sideMargin)) && Number(style.sideMargin) > 0) {
+      if (style.writingMode !== 'vertical-rl' && Number.isFinite(Number(style.sideMargin)) && Number(style.sideMargin) > 0) {
         const margin=Math.max(0,Math.min(40,Number(style.sideMargin)));
         node.style.width=`calc(100% - ${margin*2}%)`;
         node.style.maxWidth=`calc(100% - ${margin*2}%)`;
         node.style.marginLeft='auto';
         node.style.marginRight='auto';
       }
-      if (style.align === 'left' || style.align === 'center' || style.align === 'right') node.style.textAlign = style.align;
+      if (style.writingMode !== 'vertical-rl' && (style.align === 'left' || style.align === 'center' || style.align === 'right')) node.style.textAlign = style.align;
     }
 
     _applyCorePresentation(scene) {
