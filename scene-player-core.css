@@ -1882,3 +1882,20 @@ html.sp-scene-image-open body{
   16%{opacity:1;transform:translate3d(0,2px,0) rotate(0) scale(.99)}
   100%{opacity:0;transform:translate3d(var(--sp-frag-x,0),var(--sp-frag-y,60px),0) rotate(var(--sp-frag-r,8deg)) scale(.82);filter:blur(.7px)}
 }
+
+/* V2.24 — DUST: directional erosion with a temporary particle edge */
+.sp-scene.is-disappearing.is-disappear-dust{animation:none!important;transition:none!important}
+.sp-disappear-dust{overflow:visible;isolation:isolate}
+.sp-disappear-dust-strip{will-change:opacity,filter;animation:spDustStrip var(--sp-dust-strip-duration,420ms) steps(3,end) var(--sp-dust-delay,0ms) both}
+.sp-disappear-dust-particle{position:absolute;display:block;background:currentColor;border-radius:50%;opacity:0;box-shadow:0 0 2px currentColor;will-change:transform,opacity,filter;animation:spDustParticle var(--sp-dust-particle-duration,480ms) cubic-bezier(.18,.62,.28,1) var(--sp-dust-delay,0ms) both}
+@keyframes spDustStrip{
+  0%{opacity:1;filter:none}
+  42%{opacity:.88;filter:blur(.25px)}
+  72%{opacity:.38;filter:blur(.8px)}
+  100%{opacity:0;filter:blur(1.6px)}
+}
+@keyframes spDustParticle{
+  0%{opacity:0;transform:translate3d(-2px,0,0) scale(1);filter:none}
+  16%{opacity:.9}
+  100%{opacity:0;transform:translate3d(var(--sp-dust-x,48px),var(--sp-dust-y,-4px),0) scale(var(--sp-dust-scale,.35));filter:blur(1.1px)}
+}
