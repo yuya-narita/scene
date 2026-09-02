@@ -398,6 +398,12 @@
           this.suppressNextClick = false;
           return;
         }
+        // Keep the click itself as a second trusted audio-unlock point.
+        // On iPhone, a one-shot started from pointerdown can reject asynchronously
+        // (for example while the media element is still becoming ready). That
+        // rejection is queued before the synthetic click; re-arming here lets the
+        // same physical tap flush it instead of waiting for another user action.
+        this.unlockAudio(true);
         this.next();
       });
 
@@ -803,16 +809,25 @@
         let promise;
         try { promise = audio.play(); }
         catch (error) {
-          this.audioPlaybackArmed = false;
-          this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
-          emit(this.host, 'sceneplayer:audioblocked', { ...detail, error });
+          // Manual reading can retry a blocked sound on the next trusted tap.
+          // AUTO has no future trusted taps, so globally disarming playback here
+          // would make every BGM / Ambient / SE after the first rejection silent.
+          // In AUTO, skip only the blocked item and leave the transport armed so
+          // later commands still get a chance to play.
+          if (!this.auto) {
+            this.audioPlaybackArmed = false;
+            this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
+          }
+          emit(this.host, 'sceneplayer:audioblocked', { ...detail, error, auto: this.auto });
           return;
         }
         if (promise && typeof promise.then === 'function') {
           promise.then(finishStart).catch((error) => {
-            this.audioPlaybackArmed = false;
-            this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
-            emit(this.host, 'sceneplayer:audioblocked', { ...detail, error });
+            if (!this.auto) {
+              this.audioPlaybackArmed = false;
+              this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
+            }
+            emit(this.host, 'sceneplayer:audioblocked', { ...detail, error, auto: this.auto });
           });
         } else finishStart();
       };
@@ -1039,6 +1054,37 @@
       this.oneshots.forEach((audio) => { try { audio.pause(); } catch (_) {} });
       this.oneshots.clear();
       if (resetPending) this.audioPending.length = 0;
+    }
+
+    // Graceful shell/cover exit. Public Player calls this before replacing or
+    // hiding Core; previously that API did not exist, so audio stayed at full
+    // volume until destroy() and ended with an audible hard cut.
+    fadeOutAudio(duration = 700) {
+      const ms = Math.max(0, asNumber(duration, 700));
+      this._clearAudioTimers();
+
+      ['bgm', 'ambient'].forEach((channel) => {
+        const audio = this.audioEls[channel];
+        if (!audio || audio.paused) return;
+        const key = `exit:${channel}`;
+        this._fadeVolume(audio, 0, ms, key, () => {
+          try { audio.pause(); } catch (_) {}
+          this.audioState[channel] = null;
+        });
+      });
+
+      Array.from(this.oneshots).forEach((audio, i) => {
+        if (!audio || audio.paused) return;
+        const key = `exit:oneshot:${i}:${Date.now()}`;
+        this._fadeVolume(audio, 0, ms, key, () => {
+          try { audio.pause(); } catch (_) {}
+          this.oneshots.delete(audio);
+        });
+      });
+
+      if (!ms) this.audioPending.length = 0;
+      emit(this.host, 'sceneplayer:audiofadeout', { duration: ms });
+      return ms;
     }
 
     _clearPresentationTimers() {
@@ -1830,6 +1876,12 @@
 
     startAuto() {
       if (!this.document || this.ended || this.auto) return;
+      // AUTO is entered from the AUTO button's trusted click. Re-arm audio here
+      // as well (not only in the control handler) so programmatic/public-shell
+      // AUTO starts use the same transport contract. Reconstruct the persistent
+      // BGM/Ambient state for the current Scene before timers take over.
+      this.unlockAudio(true);
+      this._restoreAudioForIndex(this.index, 'restore');
       this.auto = true;
       this.els.auto.classList.add('is-on');
       this.els.auto.setAttribute('aria-pressed', 'true');
