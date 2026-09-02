@@ -1032,10 +1032,15 @@ body{
 .public-ending.has-resonance .public-ending-inner{
   width:min(680px,100%)!important;
 }
+/* v2.22 — Safari dynamic-toolbar fix
+   Do not cap fixed app layers to 100svh. 100svh is the *small* viewport, so
+   when Safari hides its toolbar the visual viewport becomes taller while the
+   cover remains short, exposing fixed controls underneath it. Fixed inset:0
+   already tracks the usable viewport correctly here. */
 @supports(height:100svh){
   .public-player,
   .public-intro,
   .public-ending{
-    max-height:100svh!important;
+    max-height:none!important;
   }
 }
