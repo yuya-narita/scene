@@ -360,7 +360,7 @@
           && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
         const atLastScene = !!this.document && !this.ended
           && this.index >= Math.max(0, (this.document.scenes?.length || 1) - 1);
-        if (atLastScene && !isControl && !isEditableText) this._playEndingAudio();
+        if (atLastScene && !isControl && !isEditableText) this._playEndingAudio({ trustedGesture: true });
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -687,21 +687,9 @@
       // await/microtask, while START/AUTO still owns the trusted iOS gesture.
       const jobs = [];
 
-      // Prime the dedicated ending SE FIRST. Large works can contain many audio
-      // elements and iPhone may suspend later background media sessions. Keeping
-      // the final SE on its own element and authorizing it before the Scene bank
-      // makes manual and AUTO endings use the same already-running element.
-      if (this.endingAudio?.src) {
-        try {
-          this.endingAudio.loop = true;
-          this.endingAudio.muted = true;
-          this.endingAudio.volume = 1;
-          if (this.endingAudio.ended) this.endingAudio.currentTime = 0;
-          const endingPrime = this.endingAudio.paused ? this.endingAudio.play() : null;
-          if (endingPrime?.then) jobs.push(endingPrime.then(() => { this.endingAudio.__spPrimed = true; return true; }).catch((error) => { this.endingAudio.__spPrimed = false; emit(this.host,'sceneplayer:endingaudioprimeblocked',{src:this.endingAudio.src,error}); return false; }));
-          else this.endingAudio.__spPrimed = !this.endingAudio.paused;
-        } catch (error) { emit(this.host,'sceneplayer:endingaudioprimeblocked',{src:this.endingAudio.src,error}); }
-      }
+      // V2.20: do NOT prime the dedicated ending element muted at START.
+      // Manual ending playback now happens audibly inside the final physical
+      // pointerdown. AUTO still uses the regular START-authorized one-shot bank.
       this._iosAudioBank.forEach((entry) => {
         const audio = entry.audio;
         if (!audio) return;
@@ -2675,41 +2663,61 @@
       emit(this.host, 'sceneplayer:restart', { scene: this.currentScene });
     }
 
-    _playEndingAudio() {
+    _playEndingAudio(options = {}) {
       if (this._endingAudioStarted) return false;
       const commands = Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [];
       const playable = commands.filter((command) => command?.channel === 'oneshot' && command?.src && ['play','start'].includes(command.action || 'play'));
       if (!playable.length) return false;
-      this._endingAudioStarted = true;
 
-      // V2.18 iOS: use exactly the same live-media one-shot bank that already
-      // works for Scene 1 / Scene 2 SE. The ending source was added to that bank
-      // during load() and primed in the trusted START/AUTO gesture, so finish()
-      // performs only seek + gate-open on an already-playing stable element.
-      if (this._iosStableMediaBank) {
-        const command = {
-          ...playable[0],
-          src: this._resolveCoreAudioSrc(playable[0].src),
-          action: 'play',
-          role: 'ending-se'
-        };
-        if (this._playIOSBankOneShot(command)) return true;
-
-        // Keep the dedicated element only as a diagnostic last resort. It is no
-        // longer the primary iPhone path because device testing showed that its
-        // muted long-running playback could stay silent when reopened at ending.
-        emit(this.host, 'sceneplayer:endingbankmiss', { src: command.src });
-      }
-
-      playable.forEach((item) => this._playOneShot({
-        ...item,
-        src: this._resolveCoreAudioSrc(item.src),
+      const command = {
+        ...playable[0],
+        src: this._resolveCoreAudioSrc(playable[0].src),
         action: 'play',
         role: 'ending-se'
-      }));
+      };
+
+      // V2.20 iPhone manual ending: do not reopen a long-running muted bank.
+      // The final Scene tap is itself a trusted physical gesture, so use the
+      // already-preloaded dedicated element and issue its audible play() inside
+      // that pointerdown. Earlier diagnostics showed the ending asset could be a
+      // bare id; _resolveCoreAudioSrc above guarantees the real /asset/<id> URL.
+      if (this._iosStableMediaBank && options.trustedGesture && this.endingAudio) {
+        const audio = this.endingAudio;
+        try {
+          if (audio.__spLoadedSrc !== command.src || !audio.src) {
+            audio.__spLoadedSrc = command.src;
+            audio.src = command.src;
+            audio.preload = 'auto';
+            try { audio.load(); } catch (_) {}
+          }
+          audio.loop = false;
+          audio.muted = this.muted;
+          audio.volume = clamp(asNumber(command.volume, 1), 0, 1);
+          try { audio.currentTime = Math.max(0, asNumber(command.startAt, 0)); } catch (_) {}
+          const result = audio.play();
+          this._endingAudioStarted = true;
+          if (result?.catch) result.catch((error) => {
+            this._endingAudioStarted = false;
+            emit(this.host, 'sceneplayer:endingaudioblocked', { src: command.src, error, transport:'ios-trusted-ending' });
+          });
+          emit(this.host, 'sceneplayer:audioplaystarted', { channel:'oneshot', role:'ending-se', action:'play', src:command.src, transport:'ios-trusted-ending' });
+          return true;
+        } catch (error) {
+          emit(this.host, 'sceneplayer:endingaudioblocked', { src: command.src, error, transport:'ios-trusted-ending' });
+        }
+      }
+
+      // AUTO has no physical gesture at the final boundary, so retain the
+      // START-authorized bank for that path. Non-iOS keeps the existing one-shot
+      // implementation.
+      this._endingAudioStarted = true;
+      if (this._iosStableMediaBank) {
+        if (this._playIOSBankOneShot(command)) return true;
+        emit(this.host, 'sceneplayer:endingbankmiss', { src: command.src });
+      }
+      this._playOneShot(command);
       return true;
     }
-
     finish() {
       if (!this.document || this.ended) return;
       this.stopAuto();
