@@ -3834,6 +3834,7 @@
           text.className = 'sp-text';
           text.textContent = scene.text;
           this._applyTextStyle(text, presentation.text || {}, false);
+          this._applyBalloon(text, presentation);
           article.appendChild(text);
         }
 
@@ -3925,6 +3926,25 @@
         node.style.marginRight='auto';
       }
       if (style.align === 'left' || style.align === 'center' || style.align === 'right') node.style.textAlign = style.align;
+    }
+
+    _applyBalloon(node, presentation = {}) {
+      const type = presentation?.balloon?.type;
+      if (!['speech','cloud','burst','narration'].includes(type)) return;
+      node.classList.add('sp-balloon', `sp-balloon-${type}`);
+      node.dataset.balloon = type;
+      const align = presentation?.text?.align;
+      if (align === 'right') {
+        node.style.marginLeft = 'auto';
+        node.style.marginRight = '0';
+      } else if (align === 'left') {
+        node.style.marginLeft = '0';
+        node.style.marginRight = 'auto';
+      } else {
+        node.style.marginLeft = 'auto';
+        node.style.marginRight = 'auto';
+        node.style.textAlign = 'center';
+      }
     }
 
     _applyCorePresentation(scene) {

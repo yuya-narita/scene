@@ -311,6 +311,20 @@
             "void"
           ]
         },
+        "balloon": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "speech",
+                "cloud",
+                "burst",
+                "narration"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
         "effect": {
           "enum": [
             "none",
