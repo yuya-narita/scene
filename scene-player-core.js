@@ -158,10 +158,17 @@
       this.muted = false;
       this._audioRenderMode = 'restore';
 
-      // iPhone/iPad: once a single AudioContext has been unlocked by START/AUTO,
-      // decoded AudioBuffers can be started later from Scene/AUTO timers without
-      // asking WebKit to authorize a new HTMLMediaElement for every sound.
-      this._iosBufferAudio = this._isIOSWebKit();
+      // iOS V2.15: keep every real media source alive from the trusted START
+      // gesture. Later Scene/AUTO transitions only seek/unmute an already-playing
+      // HTMLMediaElement; they never ask Safari to authorize a new play().
+      this._iosStableMediaBank = this._isIOSWebKit();
+      this._iosAudioBank = new Map();
+      this._iosBankPrimed = false;
+      this._iosPersistentEntry = { bgm: null, ambient: null };
+      // V2.13 AudioBuffer transport is intentionally disabled on iOS. Device
+      // traces showed BufferSource.start() succeeding while hardware output stayed
+      // silent, whereas native HTMLMediaElement output was audible.
+      this._iosBufferAudio = false;
       this._bufferAudioCache = new Map();
       this._bufferAudioPromises = new Map();
       this._bufferPersistent = { bgm: null, ambient: null };
@@ -540,14 +547,238 @@
       return Array.from(out);
     }
 
-    _audioTrace(label, detail = {}) {
-      emit(this.host, 'sceneplayer:audiotrace', {
-        label,
-        scene: this.index + 1,
-        auto: this.auto,
-        contextState: this.audioContext?.state || 'none',
-        ...detail
+    _collectIOSMediaBankSpecs() {
+      const specs = new Map();
+      if (!this.document) return specs;
+      const add = (channel, src) => {
+        const value = String(src || '').trim();
+        if (!value || !(channel === 'bgm' || channel === 'ambient' || channel === 'oneshot')) return;
+        const key = `${channel}:${value}`;
+        if (!specs.has(key)) specs.set(key, { key, channel, src: value });
+      };
+      const scan = (commands) => {
+        if (!Array.isArray(commands)) return;
+        commands.forEach((command) => {
+          if (!command?.src) return;
+          const action = command.action || 'play';
+          if (!(action === 'play' || action === 'start')) return;
+          add(command.channel, command.src);
+        });
+      };
+      (this.document.scenes || []).forEach((scene) => scan(scene?.audio));
+      scan(this.document?.ending?.audio);
+      return specs;
+    }
+
+    _disposeIOSMediaBank() {
+      if (!this._iosAudioBank) return;
+      this._iosAudioBank.forEach((entry) => {
+        if (!entry?.audio) return;
+        if (entry.timer) clearTimeout(entry.timer);
+        entry.timer = null;
+        try { entry.audio.pause(); } catch (_) {}
+        try { entry.audio.removeAttribute('src'); entry.audio.load(); } catch (_) {}
       });
+      this._iosAudioBank.clear();
+      this._iosBankPrimed = false;
+      this._iosPersistentEntry = { bgm: null, ambient: null };
+    }
+
+    _prepareIOSMediaBank() {
+      if (!this._iosStableMediaBank || !this.document) return false;
+      this._disposeIOSMediaBank();
+      const specs = this._collectIOSMediaBankSpecs();
+      specs.forEach((spec) => {
+        const audio = this._createAudioElement(`ios-bank-${spec.channel}-${this._iosAudioBank.size + 1}`);
+        // Never route this bank through createMediaElementSource on iOS. The
+        // native media path is the only path that device tracing proved audible.
+        audio.__spNativeOnly = true;
+        audio.__spTransportSrc = spec.src;
+        audio.__spLoadedSrc = spec.src;
+        try { audio.crossOrigin = null; } catch (_) {}
+        try { audio.preload = 'auto'; audio.playsInline = true; audio.loop = true; } catch (_) {}
+        try { audio.muted = true; audio.volume = 0; } catch (_) {}
+        audio.src = spec.src;
+        try { audio.load(); } catch (_) {}
+        this._iosAudioBank.set(spec.key, {
+          ...spec,
+          audio,
+          active: false,
+          targetVolume: 1,
+          timer: null,
+          primed: false
+        });
+      });
+      emit(this.host, 'sceneplayer:iosmediabankready', { count: this._iosAudioBank.size });
+      return true;
+    }
+
+    _primeIOSMediaBank() {
+      if (!this._iosStableMediaBank || !this._iosAudioBank?.size) return Promise.resolve(false);
+      // IMPORTANT: every play() call is issued synchronously before the first
+      // await/microtask, while START/AUTO still owns the trusted iOS gesture.
+      const jobs = [];
+      this._iosAudioBank.forEach((entry) => {
+        const audio = entry.audio;
+        if (!audio) return;
+        // START calls this before Scene 1 is rendered. AUTO may call it later
+        // while Scene audio is already active; never mute/reset an active source.
+        if (!entry.active) {
+          try { audio.loop = true; audio.muted = true; audio.volume = 0; } catch (_) {}
+          try { if (audio.ended) audio.currentTime = 0; } catch (_) {}
+        }
+        let result;
+        try { result = audio.paused ? audio.play() : null; }
+        catch (error) {
+          emit(this.host, 'sceneplayer:iosmediabankblocked', { channel: entry.channel, src: entry.src, error });
+          jobs.push(Promise.resolve(false));
+          return;
+        }
+        if (result && typeof result.then === 'function') {
+          jobs.push(result.then(() => {
+            entry.primed = true;
+            emit(this.host, 'sceneplayer:iosmediabankprimed', { channel: entry.channel, src: entry.src });
+            return true;
+          }).catch((error) => {
+            entry.primed = false;
+            emit(this.host, 'sceneplayer:iosmediabankblocked', { channel: entry.channel, src: entry.src, error });
+            return false;
+          }));
+        } else {
+          entry.primed = !audio.paused;
+          jobs.push(Promise.resolve(entry.primed));
+        }
+      });
+      this._iosBankPrimed = true;
+      return Promise.allSettled(jobs).then(() => true);
+    }
+
+    _iosBankEntry(channel, src) {
+      if (!this._iosStableMediaBank) return null;
+      return this._iosAudioBank?.get(`${channel}:${String(src || '').trim()}`) || null;
+    }
+
+    _setIOSBankEntryVolume(entry, target, duration = 0, done) {
+      if (!entry?.audio) { if (done) done(); return; }
+      const audio = entry.audio;
+      const to = clamp(asNumber(target, entry.targetVolume ?? 1), 0, 1);
+      entry.targetVolume = to;
+      const from = clamp(asNumber(audio.volume, 0), 0, 1);
+      const ms = Math.max(0, asNumber(duration, 0));
+      if (!ms) {
+        try { audio.volume = to; } catch (_) {}
+        if (done) done();
+        return;
+      }
+      const started = performance.now();
+      const step = (now) => {
+        const t = clamp((now - started) / ms, 0, 1);
+        try { audio.volume = from + (to - from) * t; } catch (_) {}
+        if (t < 1) requestAnimationFrame(step);
+        else if (done) done();
+      };
+      requestAnimationFrame(step);
+    }
+
+    _silenceIOSBankEntry(entry, reset = false) {
+      if (!entry?.audio) return;
+      if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
+      entry.active = false;
+      try { entry.audio.volume = 0; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
+      if (reset) { try { entry.audio.currentTime = 0; } catch (_) {} }
+    }
+
+    _scheduleIOSOneShotSilence(entry, command, startAt) {
+      if (!entry?.audio) return;
+      if (entry.timer) clearTimeout(entry.timer);
+      const schedule = () => {
+        const audio = entry.audio;
+        let ms = Math.max(0, asNumber(command.stopAfter, 0));
+        if (!(ms > 0) && command.stopAt != null) {
+          ms = Math.max(0, (Math.max(0, asNumber(command.stopAt, 0)) - startAt) * 1000);
+        }
+        if (!(ms > 0) && Number.isFinite(audio.duration) && audio.duration > startAt) {
+          ms = Math.max(30, (audio.duration - startAt) * 1000 - 20);
+        }
+        // Keep the authorized element PLAYING forever; only silence it. Pausing
+        // here would require a future Safari play() permission on a repeated SE.
+        if (!(ms > 0)) ms = 1500;
+        entry.timer = setTimeout(() => {
+          entry.timer = null;
+          this._silenceIOSBankEntry(entry, true);
+        }, ms);
+      };
+      if (Number.isFinite(entry.audio.duration) && entry.audio.duration > 0) schedule();
+      else entry.audio.addEventListener('loadedmetadata', schedule, { once: true });
+    }
+
+    _playIOSBankOneShot(command) {
+      const entry = this._iosBankEntry('oneshot', command?.src);
+      if (!entry?.audio) return false;
+      const audio = entry.audio;
+      if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
+      const startAt = Math.max(0, asNumber(command.startAt, 0));
+      const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
+      const fadeIn = Math.max(0, asNumber(command.fadeIn, 0));
+      try { audio.loop = true; audio.currentTime = startAt; audio.muted = this.muted; audio.volume = fadeIn > 0 ? 0 : target; } catch (_) {}
+      entry.active = true;
+      entry.targetVolume = target;
+      // If priming was rejected for an individual element, retry only as a
+      // fallback. Normally this branch is never needed after START.
+      if (audio.paused) {
+        try { const p = audio.play(); if (p?.catch) p.catch(() => {}); } catch (_) {}
+      }
+      if (fadeIn > 0 && !this.muted) this._setIOSBankEntryVolume(entry, target, fadeIn);
+      this._scheduleIOSOneShotSilence(entry, command, startAt);
+      emit(this.host, 'sceneplayer:audioplaystarted', { channel:'oneshot', role:command.role || 'se', action:'play', src:command.src, transport:'ios-live-media-bank' });
+      emit(this.host, 'sceneplayer:oneshot', { command, transport:'ios-live-media-bank' });
+      return true;
+    }
+
+    _startIOSBankPersistent(channel, command, reconstruct = false, forceSeek = false) {
+      const entry = this._iosBankEntry(channel, command?.src);
+      if (!entry?.audio) return false;
+      const previous = this._iosPersistentEntry?.[channel];
+      if (previous && previous !== entry) this._silenceIOSBankEntry(previous, false);
+      const audio = entry.audio;
+      const sameSrc = this.audioState[channel]?.src === command.src;
+      const shouldSeek = forceSeek || !sameSrc || (!reconstruct && command.restart === true);
+      const startAt = Math.max(0, asNumber(command.startAt, 0));
+      const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
+      const fadeIn = reconstruct ? 0 : Math.max(0, asNumber(command.fadeIn, 0));
+      if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
+      try {
+        audio.loop = true; // authorization keeper; non-loop is emulated by muting.
+        if (shouldSeek) audio.currentTime = startAt;
+        audio.muted = this.muted;
+        audio.volume = fadeIn > 0 ? 0 : target;
+      } catch (_) {}
+      entry.active = true;
+      entry.targetVolume = target;
+      this._iosPersistentEntry[channel] = entry;
+      if (audio.paused) { try { const p = audio.play(); if (p?.catch) p.catch(() => {}); } catch (_) {} }
+      if (fadeIn > 0 && !this.muted) this._setIOSBankEntryVolume(entry, target, fadeIn);
+      this.audioState[channel] = {
+        src: command.src,
+        volume: target,
+        loop: command.loop !== false,
+        startAt,
+        stopAt: command.stopAt == null ? null : Math.max(0, asNumber(command.stopAt, 0)),
+        fadeOut: Math.max(0, asNumber(command.fadeOut, 0))
+      };
+      const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
+      if (stopAfter > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
+      else if (command.loop === false) {
+        const schedule = () => {
+          const remain = Math.max(0, (audio.duration - Math.max(0, audio.currentTime || startAt)) * 1000 - 20);
+          if (remain > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), remain);
+        };
+        if (Number.isFinite(audio.duration) && audio.duration > 0) schedule();
+        else audio.addEventListener('loadedmetadata', schedule, { once:true });
+      }
+      emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'ios-live-media-bank' });
+      emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct, transport:'ios-live-media-bank' });
+      return true;
     }
 
     _preloadAudioBuffer(src) {
@@ -556,11 +787,7 @@
       if (this._bufferAudioCache.has(key)) return Promise.resolve(this._bufferAudioCache.get(key));
       if (this._bufferAudioPromises.has(key)) return this._bufferAudioPromises.get(key);
       const ctx = this._ensureAudioContext();
-      if (!ctx || typeof fetch !== 'function') {
-        this._audioTrace('buffer-preload-skip', { src:key, hasContext:!!ctx, hasFetch:typeof fetch === 'function' });
-        return Promise.resolve(null);
-      }
-      this._audioTrace('buffer-preload-start', { src:key });
+      if (!ctx || typeof fetch !== 'function') return Promise.resolve(null);
       const job = fetch(key, { mode: 'cors', credentials: 'omit' })
         .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.arrayBuffer(); })
         .then((bytes) => new Promise((resolve, reject) => {
@@ -573,12 +800,10 @@
         .then((buffer) => {
           this._bufferAudioCache.set(key, buffer);
           emit(this.host, 'sceneplayer:audiobufferready', { src: key, duration: buffer?.duration || 0 });
-          this._audioTrace('buffer-preload-ready', { src:key, duration:buffer?.duration || 0 });
           return buffer;
         })
         .catch((error) => {
           emit(this.host, 'sceneplayer:audiobuffererror', { src: key, error });
-          this._audioTrace('buffer-preload-error', { src:key, error:String(error?.name || error?.message || error) });
           return null;
         })
         .finally(() => this._bufferAudioPromises.delete(key));
@@ -590,12 +815,7 @@
       if (!this._iosBufferAudio) return Promise.resolve(false);
       const sources = this._allDocumentAudioSources();
       if (!sources.length) return Promise.resolve(true);
-      this._audioTrace('buffer-document-preload', { count:sources.length, cached:this._bufferAudioCache.size, pending:this._bufferAudioPromises.size });
-      return Promise.allSettled(sources.map((src) => this._preloadAudioBuffer(src))).then((results) => {
-        const ready = sources.filter((src) => this._bufferAudioCache.has(String(src))).length;
-        this._audioTrace('buffer-document-preload-done', { count:sources.length, ready, cached:this._bufferAudioCache.size });
-        return true;
-      });
+      return Promise.allSettled(sources.map((src) => this._preloadAudioBuffer(src))).then(() => true);
     }
 
     _fadeBufferGain(gainNode, target, duration = 0) {
@@ -615,11 +835,7 @@
       if (!this._iosBufferAudio || !command?.src) return false;
       const buffer = this._bufferAudioCache.get(String(command.src));
       const ctx = this._ensureAudioContext();
-      if (!buffer || !ctx || ctx.state !== 'running') {
-        this._audioTrace('buffer-oneshot-skip', { src:command.src, role:command.role || 'se', hasBuffer:!!buffer, hasContext:!!ctx, contextState:ctx?.state || 'none', cached:this._bufferAudioCache.size });
-        return false;
-      }
-      this._audioTrace('buffer-oneshot-start', { src:command.src, role:command.role || 'se', duration:buffer.duration || 0 });
+      if (!buffer || !ctx || ctx.state !== 'running') return false;
       try {
         const source = ctx.createBufferSource();
         const gain = ctx.createGain();
@@ -635,13 +851,13 @@
         const record = { source, gain, command };
         this._bufferOneShots.add(record);
         const cleanup = () => { this._bufferOneShots.delete(record); try { source.disconnect(); gain.disconnect(); } catch (_) {} };
-        source.onended = () => { this._audioTrace('buffer-oneshot-ended', { src:command.src, role:command.role || 'se' }); cleanup(); };
+        source.onended = cleanup;
         const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
-        if (stopAfter > 0) this._audioTimeout(() => { this._audioTrace('buffer-oneshot-stopAfter', { src:command.src, role:command.role || 'se', stopAfter }); try { source.stop(); } catch (_) {} }, stopAfter);
+        if (stopAfter > 0) this._audioTimeout(() => { try { source.stop(); } catch (_) {} }, stopAfter);
         if (command.stopAt != null) {
           const stopAt = Math.max(0, asNumber(command.stopAt, 0));
           const remain = Math.max(0, stopAt - startAt) * 1000;
-          if (remain > 0) this._audioTimeout(() => { this._audioTrace('buffer-oneshot-stopAt', { src:command.src, role:command.role || 'se', remain }); try { source.stop(); } catch (_) {} }, remain);
+          if (remain > 0) this._audioTimeout(() => { try { source.stop(); } catch (_) {} }, remain);
         }
         emit(this.host, 'sceneplayer:audioplaystarted', { channel:'oneshot', role:command.role || 'se', action:'play', src:command.src, transport:'audio-buffer' });
         emit(this.host, 'sceneplayer:oneshot', { command });
@@ -652,12 +868,10 @@
       }
     }
 
-    _stopBufferedPersistent(channel, fadeOut = 0, reason = 'unspecified') {
+    _stopBufferedPersistent(channel, fadeOut = 0) {
       const rec = this._bufferPersistent?.[channel];
       if (!rec) return false;
-      this._audioTrace('buffer-persistent-stop-request', { channel, src:rec.src, fadeOut, reason });
       const stop = () => {
-        this._audioTrace('buffer-persistent-stop-now', { channel, src:rec.src, reason });
         try { rec.source.stop(); } catch (_) {}
         try { rec.source.disconnect(); rec.gain.disconnect(); } catch (_) {}
         if (this._bufferPersistent[channel] === rec) this._bufferPersistent[channel] = null;
@@ -671,15 +885,11 @@
       if (!this._iosBufferAudio || !command?.src) return false;
       const buffer = this._bufferAudioCache.get(String(command.src));
       const ctx = this._ensureAudioContext();
-      if (!buffer || !ctx || ctx.state !== 'running') {
-        this._audioTrace('buffer-persistent-skip', { channel, src:command.src, hasBuffer:!!buffer, hasContext:!!ctx, contextState:ctx?.state || 'none', cached:this._bufferAudioCache.size });
-        return false;
-      }
-      this._audioTrace('buffer-persistent-start-request', { channel, src:command.src, reconstruct, forceSeek, duration:buffer.duration || 0 });
+      if (!buffer || !ctx || ctx.state !== 'running') return false;
       const existing = this._bufferPersistent[channel];
       const sameSrc = existing?.src === command.src;
       if (sameSrc && reconstruct && channel === 'bgm' && !forceSeek) return true;
-      if (existing) this._stopBufferedPersistent(channel, 0, 'replace-existing');
+      if (existing) this._stopBufferedPersistent(channel, 0);
       try {
         const source = ctx.createBufferSource();
         const gain = ctx.createGain();
@@ -694,16 +904,13 @@
         if (fadeIn > 0) this._fadeBufferGain(gain, target, fadeIn);
         const rec = { source, gain, src: command.src, volume: target, command };
         this._bufferPersistent[channel] = rec;
-        source.onended = () => {
-          this._audioTrace('buffer-persistent-ended', { channel, src:command.src });
-          if (this._bufferPersistent[channel] === rec) this._bufferPersistent[channel] = null;
-        };
+        source.onended = () => { if (this._bufferPersistent[channel] === rec) this._bufferPersistent[channel] = null; };
         const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
-        if (stopAfter > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0, 'stopAfter'), stopAfter);
+        if (stopAfter > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), stopAfter);
         if (command.stopAt != null) {
           const stopAt = Math.max(0, asNumber(command.stopAt, 0));
           const remain = Math.max(0, stopAt - startAt) * 1000;
-          if (remain > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0, 'stopAt'), remain);
+          if (remain > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), remain);
         }
         this.audioState[channel] = { src:command.src, volume:target, loop:command.loop !== false, startAt, stopAt:command.stopAt ?? null, fadeOut:Math.max(0, asNumber(command.fadeOut,0)) };
         emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'audio-buffer' });
@@ -1176,9 +1383,17 @@
       return audio;
     }
 
-    _stopPersistentChannel(channel, fadeOut = 0, reason = 'unspecified') {
-      this._audioTrace('persistent-stop-request', { channel, fadeOut, reason, hasBuffered:!!this._bufferPersistent?.[channel], htmlSrc:this.audioState?.[channel]?.src || '' });
-      if (this._bufferPersistent?.[channel]) { this._stopBufferedPersistent(channel, fadeOut, reason); this.audioState[channel] = null; return; }
+    _stopPersistentChannel(channel, fadeOut = 0) {
+      if (this._iosStableMediaBank) {
+        const entry = this._iosPersistentEntry?.[channel];
+        if (entry) {
+          const finish = () => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
+          if (fadeOut > 0 && entry.active) this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
+          else finish();
+        } else this.audioState[channel] = null;
+        return;
+      }
+      if (this._bufferPersistent?.[channel]) { this._stopBufferedPersistent(channel, fadeOut); this.audioState[channel] = null; return; }
       const audio = this.audioEls[channel];
       if (!audio) return;
       const finish = () => {
@@ -1192,8 +1407,8 @@
     }
 
     _startPersistentChannel(channel, command, reconstruct = false, forceSeek = false) {
+      if (this._iosStableMediaBank && this._startIOSBankPersistent(channel, command, reconstruct, forceSeek)) return;
       if (this._startBufferedPersistent(channel, command, reconstruct, forceSeek)) return;
-      this._audioTrace('persistent-html-fallback', { channel, src:command?.src || '', reconstruct, forceSeek });
       let audio = this.audioEls[channel];
       if (!audio || !command.src) return;
       audio.__spPrimeToken = (audio.__spPrimeToken || 0) + 1;
@@ -1254,6 +1469,15 @@
     }
 
     _volumePersistentChannel(channel, command) {
+      if (this._iosStableMediaBank) {
+        const entry = this._iosPersistentEntry?.[channel];
+        if (!entry || !this.audioState[channel]) return;
+        const target = this.muted ? 0 : clamp(asNumber(command.volume, this.audioState[channel].volume), 0, 1);
+        this.audioState[channel].volume = target; entry.targetVolume = target;
+        this._setIOSBankEntryVolume(entry, target, Math.max(0, asNumber(command.fade, 0)));
+        emit(this.host, 'sceneplayer:audiovolume', { channel, volume: target, transport:'ios-live-media-bank' });
+        return;
+      }
       const buffered = this._bufferPersistent?.[channel];
       if (buffered) {
         const target = this.muted ? 0 : clamp(asNumber(command.volume, buffered.volume ?? 1), 0, 1);
@@ -1272,6 +1496,19 @@
     }
 
     _duckPersistentChannel(channel, command) {
+      if (this._iosStableMediaBank) {
+        const entry = this._iosPersistentEntry?.[channel];
+        const state = this.audioState[channel];
+        if (!entry || !state) return;
+        const restore = state.volume;
+        const target = clamp(asNumber(command.volume, 0.22), 0, 1);
+        const fade = Math.max(0, asNumber(command.fade, 250));
+        const hold = Math.max(0, asNumber(command.hold, 1200));
+        this._setIOSBankEntryVolume(entry, target, fade);
+        this._audioTimeout(() => this._setIOSBankEntryVolume(entry, this.muted ? 0 : restore, fade), fade + hold);
+        emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold, transport:'ios-live-media-bank' });
+        return;
+      }
       const buffered = this._bufferPersistent?.[channel];
       if (buffered) {
         const restore = buffered.volume ?? 1;
@@ -1297,8 +1534,8 @@
 
     _playOneShot(command) {
       if (!command.src) return;
+      if (this._iosStableMediaBank && this._playIOSBankOneShot(command)) return;
       if (this._playBufferedOneShot(command)) return;
-      this._audioTrace('oneshot-html-fallback', { src:command.src, role:command.role || 'se' });
       const audio = this._acquireOneShotElement(command.src);
       if (!audio) return;
       this._prepareAudioTransport(audio, command.src);
@@ -1358,7 +1595,6 @@
 
     _applySceneAudio(scene, reconstruct = false) {
       if (!Array.isArray(scene?.audio)) return;
-      this._audioTrace('scene-audio-apply', { scene:this.index + 1, reconstruct, commands:scene.audio.map(c => ({channel:c?.channel, action:c?.action, role:c?.role || '', src:c?.src || ''})) });
       scene.audio.forEach((command) => this._applyAudioCommand(command, reconstruct));
     }
 
@@ -1429,9 +1665,13 @@
     }
 
     _stopAllAudio(resetPending = true) {
-      this._audioTrace('stop-all-audio', { resetPending });
       this._clearAudioTimers();
-      ['bgm', 'ambient'].forEach((channel) => this._stopPersistentChannel(channel, 0, 'stop-all-audio'));
+      if (this._iosStableMediaBank) {
+        this._iosAudioBank?.forEach((entry) => this._silenceIOSBankEntry(entry, true));
+        this._iosPersistentEntry = { bgm:null, ambient:null };
+        this.audioState = { bgm:null, ambient:null };
+      }
+      ['bgm', 'ambient'].forEach((channel) => this._stopPersistentChannel(channel, 0));
       Array.from(this._bufferOneShots || []).forEach((rec) => { try { rec.source.stop(); } catch (_) {} });
       if (this._bufferOneShots) this._bufferOneShots.clear();
       this.oneshots.forEach((audio) => {
@@ -1456,6 +1696,14 @@
     fadeOutAudio(duration = 700) {
       const ms = Math.max(0, asNumber(duration, 700));
       this._clearAudioTimers();
+
+      if (this._iosStableMediaBank) {
+        this._iosAudioBank?.forEach((entry) => {
+          if (!entry?.active || !entry.audio || entry.audio.muted) return;
+          this._setIOSBankEntryVolume(entry, 0, ms, () => this._silenceIOSBankEntry(entry, false));
+        });
+        return true;
+      }
 
       ['bgm', 'ambient'].forEach((channel) => {
         const buffered = this._bufferPersistent?.[channel];
@@ -1567,15 +1815,9 @@
       this.audioPlaybackArmed = false;
       this.document = assertSceneDocument(doc);
 
-      // Start fetching/decoding the complete audio bank as soon as the work is
-      // loaded. decodeAudioData does not need playback permission, so on iOS
-      // most/all sounds are ready before the reader presses START. START only
-      // has to resume one AudioContext; later Scenes and AUTO then start buffers.
-      if (this._iosBufferAudio) {
-        this._bufferAudioCache.clear();
-        this._bufferAudioPromises.clear();
-        this._preloadDocumentAudioBuffers();
-      }
+      // iOS: build a source-stable native-media bank now. Actual play() calls
+      // happen together in the trusted START gesture in _beginFromCover().
+      if (this._iosStableMediaBank) this._prepareIOSMediaBank();
 
       // Preload Ending SE only. Playback waits for the final trusted press.
       try {
@@ -2199,10 +2441,10 @@
       this.ended = false;
       this._endingAudioStarted = false;
       this.unlockAudio(true);
-      // Begin decoding every later sound immediately from the first trusted
-      // START gesture. Scene 1 keeps its already-working media path if its
-      // buffer is not ready yet; later Scenes/ending use the decoded bank.
-      this._preloadDocumentAudioBuffers();
+      // V2.15 iOS: authorize EVERY real source synchronously from this START
+      // gesture and keep the elements silently playing. Scene changes merely
+      // seek/unmute those already-authorized elements.
+      if (this._iosStableMediaBank) this._primeIOSMediaBank();
       this.els.cover.hidden=true;
       this.host.classList.remove('sp-cover-open');
       // Treat the first render after the cover as a fresh load so Scene 1
@@ -2256,14 +2498,12 @@
       // mode. AUTO has pre-authorized the same reusable one-shot bank before its
       // timer starts. Use one path for both instead of a separate ending Audio.
       this._endingAudioStarted = true;
-      this._audioTrace('ending-audio-play', { count:playable.length, items:playable.map(i => ({src:i.src, channel:i.channel, action:i.action})) });
       playable.forEach((item) => this._playOneShot({...item, action:'play', role:'ending-se'}));
       return true;
     }
 
     finish() {
       if (!this.document || this.ended) return;
-      this._audioTrace('finish-enter', { cached:this._bufferAudioCache.size, pending:this._bufferAudioPromises.size, endingAudio:(this.document?.ending?.audio || []).map(c => ({channel:c?.channel, action:c?.action, src:c?.src || ''})) });
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
@@ -2284,6 +2524,13 @@
 
     setMuted(muted = true) {
       this.muted = Boolean(muted);
+      if (this._iosStableMediaBank) {
+        this._iosAudioBank?.forEach((entry) => {
+          if (!entry?.audio) return;
+          try { entry.audio.muted = this.muted || !entry.active; } catch (_) {}
+          if (!this.muted && entry.active) this._setIOSBankEntryVolume(entry, entry.targetVolume ?? 1, 0);
+        });
+      }
       Object.values(this.audioEls || {}).forEach((audio) => {
         try { audio.muted = this.muted; } catch (_) {}
       });
@@ -2320,9 +2567,9 @@
       // timers take over, silently authorize the stable BGM/Ambient/SE elements
       // that future Scenes will need. Do not schedule Scene advancement until
       // those synchronous-gesture play() attempts have settled.
-      const prime = this._iosBufferAudio
-        ? this._preloadDocumentAudioBuffers()
-        : this._primeFutureAudioPlayback();
+      const prime = this._iosStableMediaBank
+        ? this._primeIOSMediaBank()
+        : (this._iosBufferAudio ? this._preloadDocumentAudioBuffers() : this._primeFutureAudioPlayback());
       Promise.resolve(prime).finally(() => {
         if (!this.auto || this.ended) return;
         this._scheduleAuto();
@@ -2611,7 +2858,6 @@
       this._applyCorePresentation(active);
       this._applyBackgroundForIndex(this.index);
 
-      this._audioTrace('render-audio-mode', { scene:this.index + 1, mode:this._audioRenderMode, cached:this._bufferAudioCache.size, pending:this._bufferAudioPromises.size, bgmBuffered:!!this._bufferPersistent?.bgm, ambientBuffered:!!this._bufferPersistent?.ambient });
       if (this._audioRenderMode === 'preview') {
         // Authoring refresh leaves the currently playing transport untouched.
       } else if (this._audioRenderMode === 'cover') {
@@ -3591,6 +3837,7 @@
       this._stopBufferedPersistent('ambient', 0);
       Array.from(this._bufferOneShots || []).forEach((rec) => { try { rec.source.stop(); } catch (_) {} });
       if (this._bufferOneShots) this._bufferOneShots.clear();
+      this._disposeIOSMediaBank();
       if (this.audioContext && typeof this.audioContext.close === 'function') {
         try { this.audioContext.close(); } catch (_) {}
       }
@@ -3614,7 +3861,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.4.4-ios-stable-audio-elements';
+  ScenePlayerCore.VERSION = '1.4.5-ios-live-media-bank';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
