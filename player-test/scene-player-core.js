@@ -126,6 +126,9 @@
       // when the AudioContext itself is already unlocked.
       this.audioPlaybackArmed = false;
       this.audioPending = [];
+      // Ending one-shot is started from the final trusted pointer/touch gesture
+      // on iOS. Keep a per-reading guard so finish() cannot fire it twice.
+      this._endingAudioStarted = false;
       this.audioContext = null;
       this.audioGainNodes = new Map();
       this.audioSourceNodes = new Map();
@@ -310,9 +313,30 @@
         this.host.classList.add('sp-paper-press');
         this._layoutTimeout(() => this.host.classList.remove('sp-paper-press'), 115);
       };
-      const armFromStageGesture = () => {
+      const armFromStageGesture = (e) => {
         pressPaper();
         this.unlockAudio(true);
+
+        // iOS/WebKit is strictest about starting a brand-new media element from
+        // the actual trusted press. The final Scene used to wait for the later
+        // synthetic `click`, which can lose media activation on Safari even
+        // though ordinary Scene SE still works. Start the authored ending SE
+        // here, on pointerdown/touchstart, only when this press really means
+        // "finish the final Scene". finish() is guarded against double play.
+        const target = e?.target;
+        const hitsButton = target?.closest?.('button');
+        const hitsImage = target?.closest?.('.sp-scene-image.is-zoomable');
+        const hitsLiveText = this.host.classList.contains('live-edit-enabled')
+          && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
+        const isFinalAdvance = !!this.document
+          && !this.ended
+          && !this.historyOpen
+          && !this.suppressNextClick
+          && !this.typingState
+          && this.index === this.document.scenes.length - 1;
+        if (isFinalAdvance && !hitsButton && !hitsImage && !hitsLiveText) {
+          this._playEndingAudio({ trustedGesture: true });
+        }
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -1076,6 +1100,7 @@
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this._stopAllAudio(true);
+      this._endingAudioStarted = false;
 
       // Documents can be repeatedly previewed/edited in the same Studio session.
       // Persistent media elements may retain an irreversible Web Audio routing
@@ -1698,6 +1723,7 @@
       // restarted Player apparently frozen while Scene 1 SE still played.
       this.suppressNextClick = false;
       this.ended = false;
+      this._endingAudioStarted = false;
       this.unlockAudio(true);
       this.els.cover.hidden=true;
       this.host.classList.remove('sp-cover-open');
@@ -1729,6 +1755,7 @@
       // scene-1 audio as pending until the reader taps the stage again.
       this._stopAllAudio(true);
       this.audioPlaybackArmed = false;
+      this._endingAudioStarted = false;
 
       this.index = 0;
       this.maxVisitedIndex = 0;
@@ -1741,20 +1768,24 @@
       emit(this.host, 'sceneplayer:restart', { scene: this.currentScene });
     }
 
-    _playEndingAudio() {
+    _playEndingAudio(options = {}) {
+      if (this._endingAudioStarted) return false;
       const commands = Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [];
-      if (!commands.length) return;
-      // The final Scene -> ending transition is normally caused by the reader's
-      // tap. Re-arm playback here before starting the ending one-shot so iOS
-      // cannot inherit a stale/disarmed state from an earlier media play().
-      // AUTO still works after the initial playback unlock because the media
-      // session has already been activated by the reader.
-      this.unlockAudio(true);
-      commands.forEach((command) => {
-        if (!command || command.channel !== 'oneshot') return;
+      const playable = commands.filter((command) => {
+        if (!command || command.channel !== 'oneshot' || !command.src) return false;
         const action = command.action || 'play';
-        if (action === 'play' || action === 'start') this._playOneShot({...command, action:'play'});
+        return action === 'play' || action === 'start';
       });
+      if (!playable.length) return false;
+
+      // Mark before play() so a following click -> finish() in the same physical
+      // tap can never create a second copy of the SE. On iPhone this function is
+      // normally entered from pointerdown/touchstart (the trusted gesture); AUTO
+      // and keyboard completion still fall back to finish().
+      this._endingAudioStarted = true;
+      this.unlockAudio(true);
+      playable.forEach((command) => this._playOneShot({...command, action:'play'}));
+      return true;
     }
 
     finish() {
