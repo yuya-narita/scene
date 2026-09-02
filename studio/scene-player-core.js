@@ -140,6 +140,17 @@
         ambient: this._createAudioElement('ambient')
       };
       this.oneshots = new Set();
+      // iOS/WebKit can reject media started later by AUTO timers even after the
+      // reader unlocked audio earlier. Keep a small bank of reusable one-shot
+      // elements and pre-authorize them from a trusted gesture. Reusing an
+      // already-authorized media element lets future Scene SE / ending SE start
+      // without requiring another tap.
+      this.oneshotPool = Array.from({ length: 8 }, (_, i) => {
+        const audio = this._createAudioElement(`oneshot-${i + 1}`);
+        audio.__spInUse = false;
+        audio.__spPriming = false;
+        return audio;
+      });
       this.muted = false;
       this._audioRenderMode = 'restore';
 
@@ -317,26 +328,9 @@
         pressPaper();
         this.unlockAudio(true);
 
-        // iOS/WebKit is strictest about starting a brand-new media element from
-        // the actual trusted press. The final Scene used to wait for the later
-        // synthetic `click`, which can lose media activation on Safari even
-        // though ordinary Scene SE still works. Start the authored ending SE
-        // here, on pointerdown/touchstart, only when this press really means
-        // "finish the final Scene". finish() is guarded against double play.
-        const target = e?.target;
-        const hitsButton = target?.closest?.('button');
-        const hitsImage = target?.closest?.('.sp-scene-image.is-zoomable');
-        const hitsLiveText = this.host.classList.contains('live-edit-enabled')
-          && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
-        const isFinalAdvance = !!this.document
-          && !this.ended
-          && !this.historyOpen
-          && !this.suppressNextClick
-          && !this.typingState
-          && this.index === this.document.scenes.length - 1;
-        if (isFinalAdvance && !hitsButton && !hitsImage && !hitsLiveText) {
-          this._playEndingAudio({ trustedGesture: true });
-        }
+        // Ending SE is not started on pointerdown. The reusable one-shot bank
+        // was already authorized from START/AUTO; finish() can therefore fire it
+        // from the final click without racing an earlier rejected attempt.
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -352,6 +346,10 @@
       this._on(this.els.auto, 'click', (e) => {
         e.stopPropagation();
         this.unlockAudio(true);
+        // AUTO advances happen from timers, not future trusted taps. Pre-authorize
+        // the persistent transports and reusable one-shot bank while this click
+        // still carries user activation.
+        this._primeFutureAudioPlayback();
         this.toggleAuto();
       });
 
@@ -365,9 +363,6 @@
         const nextIndex = Number(item.dataset.index);
         if (!Number.isInteger(nextIndex)) return;
         this.closeHistory({ keepVisualState: true });
-        // History selection is also a trusted user gesture. Re-arm before the
-        // jump so restored BGM/Ambient can start immediately on iOS/WebKit.
-        this.unlockAudio(true);
         this.goToVisited(nextIndex);
         // The swipe that opened History arms suppressNextClick so its synthetic
         // click cannot advance a Scene. Once the author explicitly selects a
@@ -401,9 +396,11 @@
           this.suppressNextClick = false;
           return;
         }
-        // Re-arm on the exact click that advances the Scene as well as on
-        // pointerdown/touchstart. This keeps HTMLMediaElement.play() inside a
-        // trusted gesture on iOS/WebKit when a later Scene introduces audio.
+        // Keep the click itself as a second trusted audio-unlock point.
+        // On iPhone, a one-shot started from pointerdown can reject asynchronously
+        // (for example while the media element is still becoming ready). That
+        // rejection is queued before the synthetic click; re-arming here lets the
+        // same physical tap flush it instead of waiting for another user action.
         this.unlockAudio(true);
         this.next();
       });
@@ -810,6 +807,11 @@
         let promise;
         try { promise = audio.play(); }
         catch (error) {
+          // Manual reading can retry a blocked sound on the next trusted tap.
+          // AUTO has no future trusted taps, so globally disarming playback here
+          // would make every BGM / Ambient / SE after the first rejection silent.
+          // In AUTO, skip only the blocked item and leave the transport armed so
+          // later commands still get a chance to play.
           if (!this.auto) {
             this.audioPlaybackArmed = false;
             this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
@@ -830,6 +832,122 @@
       this._queueAudio(play);
     }
 
+
+    _collectFutureAudioSources() {
+      const sources = { bgm: '', ambient: '', oneshot: [] };
+      if (!this.document) return sources;
+      const seen = new Set();
+      const scenes = Array.isArray(this.document.scenes) ? this.document.scenes : [];
+      for (let i = Math.max(0, this.index); i < scenes.length; i += 1) {
+        const commands = Array.isArray(scenes[i]?.audio) ? scenes[i].audio : [];
+        for (const command of commands) {
+          if (!command?.src) continue;
+          const action = command.action || 'play';
+          if (!(action === 'play' || action === 'start')) continue;
+          if (command.channel === 'bgm' && !sources.bgm) sources.bgm = command.src;
+          else if (command.channel === 'ambient' && !sources.ambient) sources.ambient = command.src;
+          else if (command.channel === 'oneshot' && !seen.has(command.src)) {
+            seen.add(command.src);
+            sources.oneshot.push(command.src);
+          }
+        }
+      }
+      const ending = Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [];
+      for (const command of ending) {
+        if (command?.channel !== 'oneshot' || !command.src || seen.has(command.src)) continue;
+        const action = command.action || 'play';
+        if (!(action === 'play' || action === 'start')) continue;
+        seen.add(command.src);
+        sources.oneshot.push(command.src);
+      }
+      return sources;
+    }
+
+    _primeMediaElement(audio, src) {
+      if (!audio || !src || audio.__spInUse || audio.__spPriming || !audio.paused) return false;
+      audio.__spPriming = true;
+      const restoreVolume = this._getAudioVolume(audio);
+      const restoreMuted = Boolean(audio.muted);
+      const restoreLoop = Boolean(audio.loop);
+      try {
+        this._prepareAudioTransport(audio, src);
+        if (audio.src !== src && audio.currentSrc !== src) {
+          audio.src = src;
+          try { audio.load(); } catch (_) {}
+        }
+        audio.loop = false;
+        // Volume zero, rather than muted autoplay, keeps this inside the normal
+        // media-playback permission path while remaining inaudible.
+        this._setAudioVolume(audio, 0);
+        try { audio.muted = false; } catch (_) {}
+        const promise = audio.play();
+        const finish = () => {
+          try { audio.pause(); } catch (_) {}
+          try { audio.currentTime = 0; } catch (_) {}
+          audio.__spPriming = false;
+          audio.loop = restoreLoop;
+          this._setAudioVolume(audio, restoreVolume);
+          try { audio.muted = restoreMuted || this.muted; } catch (_) {}
+          emit(this.host, 'sceneplayer:audioprimed', { src, channel: audio.dataset.scenePlayerChannel || '' });
+        };
+        const fail = (error) => {
+          audio.__spPriming = false;
+          this._setAudioVolume(audio, restoreVolume);
+          try { audio.muted = restoreMuted || this.muted; } catch (_) {}
+          emit(this.host, 'sceneplayer:audioprimeblocked', { src, channel: audio.dataset.scenePlayerChannel || '', error });
+        };
+        if (promise && typeof promise.then === 'function') promise.then(finish).catch(fail);
+        else finish();
+        return true;
+      } catch (error) {
+        audio.__spPriming = false;
+        this._setAudioVolume(audio, restoreVolume);
+        try { audio.muted = restoreMuted || this.muted; } catch (_) {}
+        emit(this.host, 'sceneplayer:audioprimeblocked', { src, channel: audio.dataset.scenePlayerChannel || '', error });
+        return false;
+      }
+    }
+
+    _primeFutureAudioPlayback(options = {}) {
+      if (!this.document || !this.audioUnlocked || !this.audioPlaybackArmed) return false;
+      const primePersistent = options.persistent !== false;
+      const sources = this._collectFutureAudioSources();
+
+      // Persistent BGM/Ambient use stable media elements. Authorizing those
+      // elements now allows a later AUTO timer to change src and call play().
+      if (primePersistent) {
+        if (sources.bgm && this.audioEls?.bgm?.paused) this._primeMediaElement(this.audioEls.bgm, sources.bgm);
+        if (sources.ambient && this.audioEls?.ambient?.paused) this._primeMediaElement(this.audioEls.ambient, sources.ambient);
+      }
+
+      // One-shots previously used `new Audio()` for every SE. That works on
+      // manual taps but fails in AUTO/ending because those elements have never
+      // been user-authorized. Prime reusable elements instead.
+      const candidates = sources.oneshot.length ? sources.oneshot : [sources.bgm || sources.ambient].filter(Boolean);
+      if (candidates.length) {
+        this.oneshotPool.forEach((audio, i) => {
+          if (!audio.__spInUse && !audio.__spPriming && audio.paused) {
+            this._primeMediaElement(audio, candidates[i % candidates.length]);
+          }
+        });
+      }
+      return true;
+    }
+
+    _acquireOneShotElement() {
+      let audio = this.oneshotPool.find((item) => item && !item.__spInUse && !item.__spPriming && item.paused);
+      if (!audio) {
+        // Desktop and manual readers can safely fall back to a fresh element.
+        // AUTO on iPhone normally has enough pre-authorized pool entries.
+        audio = this._createAudioElement(`oneshot-${this.oneshotPool.length + 1}`);
+        audio.__spInUse = false;
+        audio.__spPriming = false;
+        this.oneshotPool.push(audio);
+      }
+      audio.__spInUse = true;
+      return audio;
+    }
+
     _stopPersistentChannel(channel, fadeOut = 0) {
       const audio = this.audioEls[channel];
       if (!audio) return;
@@ -847,12 +965,7 @@
       let audio = this.audioEls[channel];
       if (!audio || !command.src) return;
 
-      // Keep transport classification identical to _prepareAudioTransport().
-      // Scene Studio /asset/ URLs are CORS-enabled and must stay on Web Audio;
-      // treating every absolute URL as native-only caused the persistent element
-      // to be replaced unnecessarily right when a Scene first tried to start sound.
-      const desiredNativeOnly = this._isExternalHttpAudio(command.src)
-        && !this._isCorsWebAudioAsset(command.src);
+      const desiredNativeOnly = this._isExternalHttpAudio(command.src);
       const hasWebAudioGraph = this.audioSourceNodes.has(audio) || this.audioGainNodes.has(audio);
       const currentNativeOnly = audio.__spNativeOnly === true;
 
@@ -930,12 +1043,12 @@
 
     _playOneShot(command) {
       if (!command.src) return;
-      const audio = new Audio();
-      audio.preload = 'auto';
-      audio.playsInline = true;
+      const audio = this._acquireOneShotElement();
       this._prepareAudioTransport(audio, command.src);
-      audio.src = command.src;
-      try { audio.load(); } catch (_) {}
+      if (audio.src !== command.src && audio.currentSrc !== command.src) {
+        audio.src = command.src;
+        try { audio.load(); } catch (_) {}
+      }
       audio.loop = command.loop === true;
       const targetVolume = clamp(asNumber(command.volume, 1), 0, 1);
       const fadeIn = Math.max(0, asNumber(command.fadeIn, 0));
@@ -947,6 +1060,8 @@
       const cleanup = () => {
         this.oneshots.delete(audio);
         audio.removeEventListener('ended', cleanup);
+        audio.__spInUse = false;
+        audio.loop = false;
       };
       audio.addEventListener('ended', cleanup);
       this.oneshots.add(audio);
@@ -997,7 +1112,11 @@
     }
 
     _stopOneShots() {
-      this.oneshots.forEach((audio) => { try { audio.pause(); } catch (_) {} });
+      this.oneshots.forEach((audio) => {
+        try { audio.pause(); } catch (_) {}
+        audio.__spInUse = false;
+        audio.loop = false;
+      });
       this.oneshots.clear();
     }
 
@@ -1052,29 +1171,41 @@
     _stopAllAudio(resetPending = true) {
       this._clearAudioTimers();
       ['bgm', 'ambient'].forEach((channel) => this._stopPersistentChannel(channel, 0));
-      this.oneshots.forEach((audio) => { try { audio.pause(); } catch (_) {} });
+      this.oneshots.forEach((audio) => {
+        try { audio.pause(); } catch (_) {}
+        audio.__spInUse = false;
+        audio.loop = false;
+      });
       this.oneshots.clear();
       if (resetPending) this.audioPending.length = 0;
     }
 
+    // Graceful shell/cover exit. Public Player calls this before replacing or
+    // hiding Core; previously that API did not exist, so audio stayed at full
+    // volume until destroy() and ended with an audible hard cut.
     fadeOutAudio(duration = 700) {
       const ms = Math.max(0, asNumber(duration, 700));
       this._clearAudioTimers();
+
       ['bgm', 'ambient'].forEach((channel) => {
         const audio = this.audioEls[channel];
         if (!audio || audio.paused) return;
-        this._fadeVolume(audio, 0, ms, `exit:${channel}`, () => {
+        const key = `exit:${channel}`;
+        this._fadeVolume(audio, 0, ms, key, () => {
           try { audio.pause(); } catch (_) {}
           this.audioState[channel] = null;
         });
       });
+
       Array.from(this.oneshots).forEach((audio, i) => {
         if (!audio || audio.paused) return;
-        this._fadeVolume(audio, 0, ms, `exit:oneshot:${i}:${Date.now()}`, () => {
+        const key = `exit:oneshot:${i}:${Date.now()}`;
+        this._fadeVolume(audio, 0, ms, key, () => {
           try { audio.pause(); } catch (_) {}
           this.oneshots.delete(audio);
         });
       });
+
       if (!ms) this.audioPending.length = 0;
       emit(this.host, 'sceneplayer:audiofadeout', { duration: ms });
       return ms;
@@ -1489,7 +1620,7 @@
             text.className = 'sp-history-chat-text';
             text.textContent = chatDisplayText(scene.text);
             this._applyTextStyle(text, historyPresentation.text || {}, false);
-            if (!historyPresentation.text?.color && historyPresentation.chat?.bubbleTextColor) {
+            if (historyPresentation.chat?.bubbleTextColor) {
               text.style.setProperty('color', String(historyPresentation.chat.bubbleTextColor), 'important');
             }
             bubble.appendChild(text);
@@ -1764,6 +1895,10 @@
       this.ended = false;
       this._endingAudioStarted = false;
       this.unlockAudio(true);
+      // Prime only reusable one-shot elements while START still owns a trusted
+      // gesture. Scene 1 BGM/Ambient are about to start immediately in _render(),
+      // so do not temporarily occupy those persistent elements here.
+      this._primeFutureAudioPlayback({ persistent: false });
       this.els.cover.hidden=true;
       this.host.classList.remove('sp-cover-open');
       // Treat the first render after the cover as a fresh load so Scene 1
@@ -1774,6 +1909,12 @@
       this._render();
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index});
       return true;
+    }
+
+    // External shells (Public Player / future Local Player) can own their own
+    // cover UI while still starting Core from the same trusted user gesture.
+    begin() {
+      return this._beginFromCover();
     }
 
     restart() {
@@ -1863,7 +2004,12 @@
 
     startAuto() {
       if (!this.document || this.ended || this.auto) return;
+      // AUTO is entered from the AUTO button's trusted click. Re-arm audio here
+      // as well (not only in the control handler) so programmatic/public-shell
+      // AUTO starts use the same transport contract. Reconstruct the persistent
+      // BGM/Ambient state for the current Scene before timers take over.
       this.unlockAudio(true);
+      this._primeFutureAudioPlayback();
       this._restoreAudioForIndex(this.index, 'restore');
       this.auto = true;
       this.els.auto.classList.add('is-on');
@@ -2902,7 +3048,7 @@
           text.className = 'sp-text';
           text.textContent = chatDisplayText(scene.text);
           this._applyTextStyle(text, presentation.text || {}, false);
-          if (!presentation.text?.color && presentation.chat?.bubbleTextColor) text.style.setProperty('color', String(presentation.chat.bubbleTextColor), 'important');
+          if (presentation.chat?.bubbleTextColor) text.style.setProperty('color', String(presentation.chat.bubbleTextColor), 'important');
           bubble.appendChild(text);
           body.appendChild(bubble);
         }
@@ -3127,6 +3273,8 @@
       if (this.audioContext && typeof this.audioContext.close === 'function') {
         try { this.audioContext.close(); } catch (_) {}
       }
+      (this.oneshotPool || []).forEach((audio) => this._disposeAudioElement(audio));
+      this.oneshotPool = [];
       this.audioGainNodes.clear();
       this.audioSourceNodes.clear();
       this._bound.forEach(([el, event, fn, listenerOptions]) => el.removeEventListener(event, fn, listenerOptions));
@@ -3143,7 +3291,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.4.2-entry-motion';
+  ScenePlayerCore.VERSION = '1.4.3-ios-audio-bank';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
