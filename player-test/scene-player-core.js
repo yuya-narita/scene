@@ -1692,7 +1692,11 @@
       this.unlockAudio(true);
       this.els.cover.hidden=true;
       this.host.classList.remove('sp-cover-open');
-      this._audioRenderMode='restore';
+      // Treat the first render after the cover as a fresh load so Scene 1
+      // one-shot SE is queued/played from the same trusted start gesture.
+      // `restore` only reconstructs persistent BGM/Ambient and intentionally
+      // skips one-shots, which made Scene 1 SE silent.
+      this._audioRenderMode='load';
       this._render();
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index});
       return true;
