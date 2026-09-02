@@ -46,54 +46,6 @@
     host.dispatchEvent(new CustomEvent(name, { detail }));
   }
 
-
-  // V2.19 ENDING-SE DIAGNOSTIC ONLY. No playback behavior is changed here.
-  // A small on-screen trace is used so the same evidence can be captured on
-  // PC Studio, PC Public Player and iPhone Safari without DevTools.
-  function endingTrace(label, detail = {}) {
-    try {
-      const simplify = (value) => {
-        if (value instanceof Error) return { name:value.name, message:value.message };
-        if (value && typeof value === 'object') {
-          const out = {};
-          Object.keys(value).slice(0, 24).forEach((key) => {
-            const v = value[key];
-            if (typeof v === 'function') return;
-            if (v instanceof Error) out[key] = { name:v.name, message:v.message };
-            else if (v && typeof v === 'object') {
-              try { out[key] = JSON.parse(JSON.stringify(v)); } catch (_) { out[key] = String(v); }
-            } else out[key] = v;
-          });
-          return out;
-        }
-        return value;
-      };
-      const row = `${new Date().toLocaleTimeString()} ${label} ${JSON.stringify(simplify(detail))}`;
-      global.__AHAKO_ENDING_TRACE = global.__AHAKO_ENDING_TRACE || [];
-      global.__AHAKO_ENDING_TRACE.push(row);
-      if (global.__AHAKO_ENDING_TRACE.length > 80) global.__AHAKO_ENDING_TRACE.shift();
-      const mount = () => {
-        if (!document?.body) return;
-        let box = document.getElementById('ahako-ending-se-trace');
-        if (!box) {
-          box = document.createElement('pre');
-          box.id = 'ahako-ending-se-trace';
-          box.setAttribute('aria-label','Ending SE diagnostic log');
-          Object.assign(box.style, {
-            position:'fixed', left:'6px', right:'6px', bottom:'6px', maxHeight:'42vh',
-            overflow:'auto', margin:'0', padding:'8px', zIndex:'2147483647',
-            background:'rgba(0,0,0,.88)', color:'#fff', font:'10px/1.35 ui-monospace,monospace',
-            whiteSpace:'pre-wrap', wordBreak:'break-all', pointerEvents:'none', borderRadius:'6px'
-          });
-          document.body.appendChild(box);
-        }
-        box.textContent = global.__AHAKO_ENDING_TRACE.join('\n');
-        box.scrollTop = box.scrollHeight;
-      };
-      if (document?.body) mount(); else setTimeout(mount, 0);
-    } catch (_) {}
-  }
-
   // Chat bubbles already communicate "this is speech", so an outer Japanese
   // quotation pair is redundant. Keep the authored text untouched in .scene
   // and remove only a matching pair that wraps the ENTIRE displayed message.
@@ -408,10 +360,7 @@
           && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
         const atLastScene = !!this.document && !this.ended
           && this.index >= Math.max(0, (this.document.scenes?.length || 1) - 1);
-        if (atLastScene && !isControl && !isEditableText) {
-          endingTrace('FINAL POINTERDOWN', { index:this.index, ended:this.ended, armed:this.audioPlaybackArmed, auto:this.auto });
-          this._playEndingAudio();
-        }
+        if (atLastScene && !isControl && !isEditableText) this._playEndingAudio();
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -958,14 +907,12 @@
 
     _playIOSBankOneShot(command) {
       const entry = this._iosBankEntry('oneshot', command?.src);
-      if (command?.role === 'ending-se') endingTrace('ENDING IOS BANK LOOKUP', { src:command?.src, found:Boolean(entry?.audio), primed:entry?.primed, active:entry?.active, paused:entry?.audio?.paused, muted:entry?.audio?.muted, volume:entry?.audio?.volume, readyState:entry?.audio?.readyState, currentSrc:entry?.audio?.currentSrc });
       if (!entry?.audio) return false;
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
       const startAt = Math.max(0, asNumber(command.startAt, 0));
       const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
       const fadeIn = Math.max(0, asNumber(command.fadeIn, 0));
       this._activateIOSBankEntry(entry, { startAt, target, fadeIn, seek:true });
-      if (command?.role === 'ending-se') endingTrace('ENDING IOS BANK ACTIVATE', { startAt, target, fadeIn, paused:entry.audio?.paused, muted:entry.audio?.muted, volume:entry.audio?.volume, currentTime:entry.audio?.currentTime, readyState:entry.audio?.readyState });
       this._scheduleIOSOneShotSilence(entry, command, startAt);
       emit(this.host, 'sceneplayer:audioplaystarted', { channel:'oneshot', role:command.role || 'se', action:'play', src:command.src, transport:'ios-live-media-bank' });
       emit(this.host, 'sceneplayer:oneshot', { command, transport:'ios-live-media-bank' });
@@ -1416,7 +1363,6 @@
 
     _safePlay(audio, detail, onStarted) {
       const play = () => {
-        if (detail?.role === 'ending-se') endingTrace('ENDING SAFEPLAY ATTEMPT', { src:detail?.src, armed:this.audioPlaybackArmed, unlocked:this.audioUnlocked, auto:this.auto, paused:audio?.paused, muted:audio?.muted, volume:audio?.volume, readyState:audio?.readyState, currentSrc:audio?.currentSrc });
         const ctx = this._ensureAudioContext();
         let startedCallbackDone = false;
         const finishStart = () => {
@@ -1430,7 +1376,6 @@
               try { audio.volume = this._getAudioVolume(audio); } catch (_) {}
             }
             try { audio.muted = false; } catch (_) {}
-            if (detail?.role === 'ending-se') endingTrace('ENDING SAFEPLAY STARTED', { src:detail?.src, paused:audio?.paused, muted:audio?.muted, volume:audio?.volume, readyState:audio?.readyState, currentSrc:audio?.currentSrc });
             if (onStarted) onStarted();
           };
           if (audio.__spNativeOnly || !ctx || ctx.state === 'running') attach();
@@ -1470,7 +1415,6 @@
           }
           // SE is an event. Never replay a blocked Scene SE on the NEXT tap;
           // doing so made Scene 1 SE overlap Scene 2's own SE.
-          if (detail?.role === 'ending-se') endingTrace('ENDING SAFEPLAY THROW', { src:detail?.src, error });
           emit(this.host, 'sceneplayer:audioblocked', { ...detail, error, auto: this.auto });
           return;
         }
@@ -1481,7 +1425,6 @@
               this.audioPlaybackArmed = false;
               this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
             }
-            if (detail?.role === 'ending-se') endingTrace('ENDING SAFEPLAY REJECTED', { src:detail?.src, error });
             emit(this.host, 'sceneplayer:audioblocked', { ...detail, error, auto: this.auto });
           });
         } else finishStart();
@@ -1772,7 +1715,6 @@
     }
 
     _playOneShot(command) {
-      if (command?.role === 'ending-se') endingTrace('ENDING PLAY ONESHOT', { src:command?.src, resolvedSrc:this._resolveCoreAudioSrc(command?.src), ios:this._iosStableMediaBank, armed:this.audioPlaybackArmed, auto:this.auto });
       if (!command.src) return;
       if (this._iosStableMediaBank && this._playIOSBankOneShot(command)) return;
       if (this._playBufferedOneShot(command)) return;
@@ -2054,14 +1996,6 @@
 
       this.audioPlaybackArmed = false;
       this.document = assertSceneDocument(doc);
-      {
-        const endingCommands = Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [];
-        endingTrace('ENDING DATA @ load', {
-          ios: this._iosStableMediaBank,
-          count: endingCommands.length,
-          commands: endingCommands.map((c) => ({ channel:c?.channel, action:c?.action, src:c?.src, resolvedSrc:this._resolveCoreAudioSrc(c?.src), volume:c?.volume }))
-        });
-      }
 
       // iOS: build a source-stable native-media bank now. Actual play() calls
       // happen together in the trusted START gesture in _beginFromCover().
@@ -2742,12 +2676,10 @@
     }
 
     _playEndingAudio() {
-      endingTrace('PLAY ENDING CALLED', { alreadyStarted:this._endingAudioStarted, index:this.index, ended:this.ended, auto:this.auto, armed:this.audioPlaybackArmed });
-      if (this._endingAudioStarted) { endingTrace('PLAY ENDING SKIP guard', {}); return false; }
+      if (this._endingAudioStarted) return false;
       const commands = Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [];
       const playable = commands.filter((command) => command?.channel === 'oneshot' && command?.src && ['play','start'].includes(command.action || 'play'));
-      endingTrace('ENDING PLAYABLE', { count:playable.length, commands:playable.map((c)=>({channel:c?.channel, action:c?.action, src:c?.src, resolvedSrc:this._resolveCoreAudioSrc(c?.src), volume:c?.volume})) });
-      if (!playable.length) { endingTrace('PLAY ENDING SKIP no-playable', {}); return false; }
+      if (!playable.length) return false;
       this._endingAudioStarted = true;
 
       // V2.18 iOS: use exactly the same live-media one-shot bank that already
@@ -2761,7 +2693,7 @@
           action: 'play',
           role: 'ending-se'
         };
-        if (this._playIOSBankOneShot(command)) { endingTrace('ENDING PATH ios-bank', { src:command.src }); return true; }
+        if (this._playIOSBankOneShot(command)) return true;
 
         // Keep the dedicated element only as a diagnostic last resort. It is no
         // longer the primary iPhone path because device testing showed that its
@@ -2769,7 +2701,6 @@
         emit(this.host, 'sceneplayer:endingbankmiss', { src: command.src });
       }
 
-      endingTrace('ENDING PATH fallback-oneshot', { count:playable.length });
       playable.forEach((item) => this._playOneShot({
         ...item,
         src: this._resolveCoreAudioSrc(item.src),
@@ -2780,7 +2711,6 @@
     }
 
     finish() {
-      endingTrace('FINISH CALLED', { hasDocument:Boolean(this.document), alreadyEnded:this.ended, index:this.index, auto:this.auto, endingStarted:this._endingAudioStarted });
       if (!this.document || this.ended) return;
       this.stopAuto();
       this._resetPresentationRuntime();
