@@ -4649,6 +4649,7 @@
     }
     p.text.size=$('#sceneSizeSelect').value;
     const weightChoice=Number($('#sceneWeightSelect')?.value||0); if(weightChoice) p.text.fontWeight=weightChoice; else delete p.text.fontWeight;
+    const balloonChoice=$('#sceneBalloonSelect')?.value||'none'; if(balloonChoice==='none')delete p.balloon;else p.balloon={...(p.balloon||{}),type:balloonChoice};
     const colorChoice=$('#sceneColorSelect')?.value || 'auto';
     if(colorChoice==='white') p.text.color='#ffffff';
     else if(colorChoice==='black') p.text.color='#000000';
@@ -4681,7 +4682,7 @@
     $('#sceneTypeSelect').value=scene.type || 'text'; $('#sceneDisplaySelect').value=scene.presentation?.display || 'stack';
     if($('#sceneViewSelect')) $('#sceneViewSelect').value=scene.presentation?.view || 'world';
     if($('#sceneEntryMotionSelect')) $('#sceneEntryMotionSelect').value=scene.presentation?.entryMotion || 'flow';
-    $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto'; if($('#sceneWeightSelect')) $('#sceneWeightSelect').value=String(scene.presentation?.text?.fontWeight||0);
+    $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto'; if($('#sceneWeightSelect')) $('#sceneWeightSelect').value=String(scene.presentation?.text?.fontWeight||0); if($('#sceneBalloonSelect')) $('#sceneBalloonSelect').value=scene.presentation?.balloon?.type||'none';
     const sceneColor=scene.presentation?.text?.color || '';
     $('#sceneColorSelect').value=!sceneColor?'auto':(sceneColor.toLowerCase()==='#ffffff'||sceneColor.toLowerCase()==='white'?'white':(sceneColor.toLowerCase()==='#000000'||sceneColor.toLowerCase()==='black'?'black':'custom'));
     $('#sceneColorCustomInput').value=/^#[0-9a-f]{6}$/i.test(sceneColor)?sceneColor:'#ffffff';
@@ -5813,7 +5814,7 @@
       }
     }
   }
-  ['sceneTextInput','sceneSubTextInput','sceneTypeSelect','sceneDisplaySelect','sceneViewSelect','sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect','sceneFontSelect','sceneLanguageSelect','sceneLanguageCustomInput'].forEach(id=>$('#'+id)?.addEventListener('change',()=>{
+  ['sceneTextInput','sceneSubTextInput','sceneTypeSelect','sceneDisplaySelect','sceneViewSelect','sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect','sceneBalloonSelect','sceneFontSelect','sceneLanguageSelect','sceneLanguageCustomInput'].forEach(id=>$('#'+id)?.addEventListener('change',()=>{
     syncAdvancedFieldsToScene();
     renderSceneList();
     if(liveEditEnabled && player && !playerScreen?.hidden) refreshLivePlayer({preserveSheet:true});
@@ -6848,6 +6849,7 @@ function openDesktopEffectDetail(){
       desktopDetailSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;apply();}),
       desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;apply();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
+      desktopDetailSelect(u('漫画吹き出し','Manga balloon'),[['none',u('なし','None')],['speech',u('通常','Speech')],['cloud',u('雲','Cloud')],['burst',u('ギザギザ','Burst')],['narration',u('ナレーション枠','Narration box')]],p.balloon?.type||'none',v=>{if(v==='none')delete p.balloon;else p.balloon={...(p.balloon||{}),type:v};apply();}),
       desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;apply();})
     );
 
@@ -8698,6 +8700,7 @@ function openDesktopTextDetail(){
       desktopMakeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;refresh();}),
       desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
+      desktopMakeSelect(u('漫画吹き出し','Manga balloon'),[['none',u('なし','None')],['speech',u('通常','Speech')],['cloud',u('雲','Cloud')],['burst',u('ギザギザ','Burst')],['narration',u('ナレーション枠','Narration box')]],p.balloon?.type||'none',v=>{if(v==='none')delete p.balloon;else p.balloon={...(p.balloon||{}),type:v};refresh();}),
       desktopMakeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;refresh();})
     );
     effectCard.append(effectGrid);
@@ -9324,6 +9327,7 @@ function openDesktopTextDetail(){
           makeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
+          makeSelect(u('漫画吹き出し','Manga balloon'),[['none',u('なし','None')],['speech',u('通常','Speech')],['cloud',u('雲','Cloud')],['burst',u('ギザギザ','Burst')],['narration',u('ナレーション枠','Narration box')]],p.balloon?.type||'none',v=>{if(v==='none')delete p.balloon;else p.balloon={...(p.balloon||{}),type:v};scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;scheduleDraftSave(80);refreshLivePlayer();})
         );
         liveEditSheetBody.append(grid);
