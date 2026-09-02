@@ -810,16 +810,20 @@
         let promise;
         try { promise = audio.play(); }
         catch (error) {
-          this.audioPlaybackArmed = false;
-          this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
-          emit(this.host, 'sceneplayer:audioblocked', { ...detail, error });
+          if (!this.auto) {
+            this.audioPlaybackArmed = false;
+            this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
+          }
+          emit(this.host, 'sceneplayer:audioblocked', { ...detail, error, auto: this.auto });
           return;
         }
         if (promise && typeof promise.then === 'function') {
           promise.then(finishStart).catch((error) => {
-            this.audioPlaybackArmed = false;
-            this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
-            emit(this.host, 'sceneplayer:audioblocked', { ...detail, error });
+            if (!this.auto) {
+              this.audioPlaybackArmed = false;
+              this.audioPending.push(() => this._safePlay(audio, detail, onStarted));
+            }
+            emit(this.host, 'sceneplayer:audioblocked', { ...detail, error, auto: this.auto });
           });
         } else finishStart();
       };
@@ -1051,6 +1055,29 @@
       this.oneshots.forEach((audio) => { try { audio.pause(); } catch (_) {} });
       this.oneshots.clear();
       if (resetPending) this.audioPending.length = 0;
+    }
+
+    fadeOutAudio(duration = 700) {
+      const ms = Math.max(0, asNumber(duration, 700));
+      this._clearAudioTimers();
+      ['bgm', 'ambient'].forEach((channel) => {
+        const audio = this.audioEls[channel];
+        if (!audio || audio.paused) return;
+        this._fadeVolume(audio, 0, ms, `exit:${channel}`, () => {
+          try { audio.pause(); } catch (_) {}
+          this.audioState[channel] = null;
+        });
+      });
+      Array.from(this.oneshots).forEach((audio, i) => {
+        if (!audio || audio.paused) return;
+        this._fadeVolume(audio, 0, ms, `exit:oneshot:${i}:${Date.now()}`, () => {
+          try { audio.pause(); } catch (_) {}
+          this.oneshots.delete(audio);
+        });
+      });
+      if (!ms) this.audioPending.length = 0;
+      emit(this.host, 'sceneplayer:audiofadeout', { duration: ms });
+      return ms;
     }
 
     _clearPresentationTimers() {
@@ -1836,6 +1863,8 @@
 
     startAuto() {
       if (!this.document || this.ended || this.auto) return;
+      this.unlockAudio(true);
+      this._restoreAudioForIndex(this.index, 'restore');
       this.auto = true;
       this.els.auto.classList.add('is-on');
       this.els.auto.setAttribute('aria-pressed', 'true');
