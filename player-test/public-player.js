@@ -679,6 +679,7 @@
   async function ensurePlayer(startAt = 0) {
     if (player) {
       const previousPlayer = player;
+      removeShellListeners();
       try { previousPlayer.fadeOutAudio(PUBLIC_EXIT_FADE_MS); } catch (_) {}
       destroyAfterFade(previousPlayer);
       player = null;
@@ -797,7 +798,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.22-audio-resilience',
+    version: '0.3.23-ios-stable-audio-elements',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
