@@ -30,6 +30,42 @@
   const retryButton = document.getElementById('publicRetry');
 
   let player = null;
+  // TEMP V2.14 diagnostic overlay: traces the iPhone AudioBuffer lifecycle.
+  const audioDebug = (() => {
+    const box = document.createElement('pre');
+    box.id = 'ahakoAudioDebug';
+    Object.assign(box.style, {
+      position:'fixed', left:'4px', right:'4px', top:'4px', zIndex:'2147483647',
+      maxHeight:'48dvh', overflow:'auto', margin:'0', padding:'6px 7px',
+      background:'rgba(0,0,0,.90)', color:'#fff', font:'9px/1.28 ui-monospace,monospace',
+      whiteSpace:'pre-wrap', pointerEvents:'none', borderRadius:'6px'
+    });
+    const lines = [];
+    const shortSrc = (src='') => {
+      const clean=String(src||'');
+      if(clean.startsWith('data:')) return 'data:…';
+      try { return decodeURIComponent(clean.split('/').pop().split('?')[0]).slice(-34); } catch (_) { return clean.slice(-34); }
+    };
+    const compactValue=(value)=>{
+      if(Array.isArray(value)) return value.map(v=>compactValue(v));
+      if(value&&typeof value==='object'){
+        const out={}; for(const [k,v] of Object.entries(value)){ out[k]=(k==='src'?shortSrc(v):compactValue(v)); } return out;
+      }
+      return value;
+    };
+    const write = (label, data={}) => {
+      const now=(performance.now()/1000).toFixed(2);
+      const compact=compactValue(data||{});
+      if(compact.error) compact.error=String(compact.error?.name||compact.error?.message||compact.error);
+      lines.push(`${now} ${label} ${JSON.stringify(compact)}`);
+      while(lines.length>30) lines.shift();
+      box.textContent=lines.join('\n');
+      box.scrollTop=box.scrollHeight;
+    };
+    document.documentElement.appendChild(box);
+    write('DEBUG',{version:'V2.14 BUFFER TRACE'});
+    return { write };
+  })();
   let documentData = null;
   let shellBound = false;
   let muted = false;
@@ -584,6 +620,37 @@
     host.addEventListener('sceneplayer:end', onEnd);
     host.addEventListener('sceneplayer:autochange', onResonanceAutoChange);
     host.addEventListener('sceneplayer:historyopen', invalidateResonance);
+    [
+      'sceneplayer:audiotrace',
+      'sceneplayer:audiobufferready',
+      'sceneplayer:audiobuffererror',
+      'sceneplayer:audiobufferplayerror',
+      'sceneplayer:audioplayattempt',
+      'sceneplayer:audioplaystarted',
+      'sceneplayer:audioblocked',
+      'sceneplayer:audiostart',
+      'sceneplayer:audiostop',
+      'sceneplayer:oneshot'
+    ].forEach(type => host.addEventListener(type, onAudioDebugEvent));
+  }
+
+  function onAudioDebugEvent(e) {
+    const d=e.detail||{};
+    audioDebug.write(e.type.replace('sceneplayer:',''), {
+      scene:d.scene ?? (player?.index != null ? player.index + 1 : null),
+      label:d.label || '',
+      channel:d.channel || d.command?.channel || '',
+      role:d.role || d.command?.role || '',
+      action:d.action || d.command?.action || '',
+      src:d.src || d.command?.src || '',
+      auto:d.auto,
+      contextState:d.contextState || player?.audioContext?.state || '',
+      hasBuffer:d.hasBuffer, hasContext:d.hasContext, cached:d.cached, pending:d.pending,
+      bgmBuffered:d.bgmBuffered, ambientBuffered:d.ambientBuffered,
+      reason:d.reason, fadeOut:d.fadeOut, duration:d.duration, count:d.count, ready:d.ready,
+      commands:d.commands, items:d.items, endingAudio:d.endingAudio,
+      error:d.error
+    });
   }
 
   function onSceneChange(e) {
@@ -635,6 +702,18 @@
     host.removeEventListener('sceneplayer:end', onEnd);
     host.removeEventListener('sceneplayer:autochange', onResonanceAutoChange);
     host.removeEventListener('sceneplayer:historyopen', invalidateResonance);
+    [
+      'sceneplayer:audiotrace',
+      'sceneplayer:audiobufferready',
+      'sceneplayer:audiobuffererror',
+      'sceneplayer:audiobufferplayerror',
+      'sceneplayer:audioplayattempt',
+      'sceneplayer:audioplaystarted',
+      'sceneplayer:audioblocked',
+      'sceneplayer:audiostart',
+      'sceneplayer:audiostop',
+      'sceneplayer:oneshot'
+    ].forEach(type => host.removeEventListener(type, onAudioDebugEvent));
   }
 
   const PUBLIC_EXIT_FADE_MS = 850;
