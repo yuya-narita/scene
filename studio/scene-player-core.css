@@ -2294,16 +2294,16 @@ html.sp-scene-image-open body{
 
 
 @keyframes spDisappearShatter{
-  0%{opacity:1;transform:var(--sp-landed-transform,translate3d(0,0,0));filter:none}
-  18%{transform:translate3d(-8px,3px,0) skewX(-8deg);filter:contrast(1.8)}
-  36%{transform:translate3d(11px,-6px,0) skewX(11deg) scale(1.06);clip-path:polygon(0 0,100% 0,88% 32%,100% 47%,74% 62%,91% 100%,0 100%,13% 66%,0 48%,18% 31%)}
-  100%{opacity:0;transform:translate3d(0,26px,0) scale(1.45) rotate(4deg);filter:blur(9px);clip-path:polygon(0 0,17% 9%,8% 35%,28% 47%,12% 76%,0 100%,100% 100%,86% 73%,100% 48%,79% 31%,91% 7%)}
+  0%{opacity:1;transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0));filter:none}
+  18%{transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(-8px,3px,0) skewX(-8deg);filter:contrast(1.8)}
+  36%{transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(11px,-6px,0) skewX(11deg) scale(1.06);clip-path:polygon(0 0,100% 0,88% 32%,100% 47%,74% 62%,91% 100%,0 100%,13% 66%,0 48%,18% 31%)}
+  100%{opacity:0;transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(0,26px,0) scale(1.45) rotate(4deg);filter:blur(9px);clip-path:polygon(0 0,17% 9%,8% 35%,28% 47%,12% 76%,0 100%,100% 100%,86% 73%,100% 48%,79% 31%,91% 7%)}
 }
 @keyframes spDisappearExplode{
-  0%{opacity:1;transform:scale(1);filter:none}
-  22%{transform:scale(.88);filter:brightness(1.7)}
-  48%{opacity:1;transform:scale(1.55);filter:blur(1px) brightness(2.2)}
-  100%{opacity:0;transform:scale(3.8) rotate(5deg);filter:blur(18px) brightness(1.4)}
+  0%{opacity:1;transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) scale(1);filter:none}
+  22%{transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) scale(.88);filter:brightness(1.7)}
+  48%{opacity:1;transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) scale(1.55);filter:blur(1px) brightness(2.2)}
+  100%{opacity:0;transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) scale(3.8) rotate(5deg);filter:blur(18px) brightness(1.4)}
 }
 .sp-scene.is-disappearing.is-disappear-shatter{animation:spDisappearShatter var(--sp-disappear-fade,700ms) cubic-bezier(.18,.7,.2,1) both!important;transition:none!important}
 .sp-scene.is-disappearing.is-disappear-explode{animation:spDisappearExplode var(--sp-disappear-fade,700ms) cubic-bezier(.12,.76,.14,1) both!important;transition:none!important}
