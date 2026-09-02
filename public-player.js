@@ -30,39 +30,6 @@
   const retryButton = document.getElementById('publicRetry');
 
   let player = null;
-  // TEMP V2.11 diagnostic overlay: captures the exact audio command/play path on iPhone.
-  // Remove after the remaining Scene2/ending audio issue is identified.
-  const audioDebug = (() => {
-    const box = document.createElement('pre');
-    box.id = 'ahakoAudioDebug';
-    Object.assign(box.style, {
-      position:'fixed', left:'6px', right:'6px', top:'6px', zIndex:'2147483647',
-      maxHeight:'42dvh', overflow:'auto', margin:'0', padding:'7px 8px',
-      background:'rgba(0,0,0,.86)', color:'#fff', font:'10px/1.35 ui-monospace,monospace',
-      whiteSpace:'pre-wrap', pointerEvents:'none', borderRadius:'8px'
-    });
-    const lines = [];
-    const shortSrc = (src='') => {
-      const clean=String(src||'');
-      if(clean.startsWith('data:')) return 'data:…';
-      try { return decodeURIComponent(clean.split('/').pop().split('?')[0]).slice(-42); } catch (_) { return clean.slice(-42); }
-    };
-    const write = (label, data={}) => {
-      const now=(performance.now()/1000).toFixed(2);
-      const compact={...data};
-      if(compact.src) compact.src=shortSrc(compact.src);
-      if(compact.currentSrc) compact.currentSrc=shortSrc(compact.currentSrc);
-      if(compact.error) compact.error=String(compact.error?.name||compact.error?.message||compact.error);
-      lines.push(`${now} ${label} ${JSON.stringify(compact)}`);
-      while(lines.length>18) lines.shift();
-      box.textContent=lines.join('\n');
-      box.scrollTop=box.scrollHeight;
-    };
-    document.documentElement.appendChild(box);
-    write('DEBUG','V2.11 AUDIO');
-    return { write };
-  })();
-
   let documentData = null;
   let shellBound = false;
   let muted = false;
@@ -86,6 +53,39 @@
   const DEFAULT_SCENE = './works/external-signal/scene.json';
   const source = () => requested || DEFAULT_SCENE;
   const storageKey = () => `scene-public-progress:${source()}`;
+
+  function publicAssetBase(){
+    try{
+      const u=new URL(source(),location.href);
+      return u.pathname.includes('/work/') ? u.origin : 'https://scene-studio-api.a-hako.workers.dev';
+    }catch(_){
+      return 'https://scene-studio-api.a-hako.workers.dev';
+    }
+  }
+  function resolvePublicAudioSrc(src){
+    const value=String(src||'').trim();
+    if(!value)return value;
+    // Published Scene audio is normally hydrated to /asset/<id>, but the
+    // ending-audio field could still arrive as the raw R2 asset id. Safari
+    // then receives e.g. "58d0..." as a relative URL and rejects it with
+    // NotSupportedError. Only hydrate bare asset ids; keep URLs/data/blob/local
+    // paths untouched for Local Player / packaged Scene compatibility.
+    if(/^[A-Za-z0-9_-]{20,}$/.test(value) && !value.includes('.') && !value.includes('/')){
+      return `${publicAssetBase()}/asset/${encodeURIComponent(value)}`;
+    }
+    return value;
+  }
+  function hydratePublicAudio(doc){
+    const fix=(commands)=>{
+      if(!Array.isArray(commands))return;
+      commands.forEach((command)=>{
+        if(command&&typeof command==='object'&&command.src)command.src=resolvePublicAudioSrc(command.src);
+      });
+    };
+    (Array.isArray(doc?.scenes)?doc.scenes:[]).forEach((scene)=>fix(scene?.audio));
+    fix(doc?.ending?.audio);
+    return doc;
+  }
 
   // v0.3.64 — anonymous, work-level analytics.
   // One small R2 session record is overwritten as reading progresses, so
@@ -531,14 +531,9 @@
       throw error;
     }
 
-    const doc = await response.json();
+    const doc = hydratePublicAudio(await response.json());
     ScenePlayerCore.validate(doc);
     documentData = doc;
-    audioDebug.write('DOC', {
-      scene1: Array.isArray(doc.scenes?.[0]?.audio) ? doc.scenes[0].audio.map(x=>({channel:x.channel,action:x.action,src:x.src})) : [],
-      scene2: Array.isArray(doc.scenes?.[1]?.audio) ? doc.scenes[1].audio.map(x=>({channel:x.channel,action:x.action,src:x.src})) : [],
-      ending: Array.isArray(doc.ending?.audio) ? doc.ending.audio.map(x=>({channel:x.channel,action:x.action,src:x.src})) : []
-    });
     applyDocumentMeta(doc);
     if(!analyticsViewSent && currentWorkId()){
       analyticsViewSent=true;
@@ -589,27 +584,6 @@
     host.addEventListener('sceneplayer:end', onEnd);
     host.addEventListener('sceneplayer:autochange', onResonanceAutoChange);
     host.addEventListener('sceneplayer:historyopen', invalidateResonance);
-    host.addEventListener('sceneplayer:audioplayattempt', onAudioDebugEvent);
-    host.addEventListener('sceneplayer:audioplaystarted', onAudioDebugEvent);
-    host.addEventListener('sceneplayer:audioblocked', onAudioDebugEvent);
-    host.addEventListener('sceneplayer:audiostart', onAudioDebugEvent);
-    host.addEventListener('sceneplayer:oneshot', onAudioDebugEvent);
-    host.addEventListener('sceneplayer:audioprimed', onAudioDebugEvent);
-    host.addEventListener('sceneplayer:audioprimeblocked', onAudioDebugEvent);
-  }
-
-  function onAudioDebugEvent(e) {
-    const d=e.detail||{};
-    audioDebug.write(e.type.replace('sceneplayer:',''), {
-      scene: player?.index != null ? player.index + 1 : null,
-      channel:d.channel || d.command?.channel || '',
-      role:d.role || d.command?.role || '',
-      action:d.action || d.command?.action || '',
-      src:d.src || d.command?.src || '',
-      auto:d.auto, armed:d.armed, unlocked:d.unlocked, paused:d.paused,
-      readyState:d.readyState, networkState:d.networkState, contextState:d.contextState,
-      error:d.error
-    });
   }
 
   function onSceneChange(e) {
@@ -661,13 +635,6 @@
     host.removeEventListener('sceneplayer:end', onEnd);
     host.removeEventListener('sceneplayer:autochange', onResonanceAutoChange);
     host.removeEventListener('sceneplayer:historyopen', invalidateResonance);
-    host.removeEventListener('sceneplayer:audioplayattempt', onAudioDebugEvent);
-    host.removeEventListener('sceneplayer:audioplaystarted', onAudioDebugEvent);
-    host.removeEventListener('sceneplayer:audioblocked', onAudioDebugEvent);
-    host.removeEventListener('sceneplayer:audiostart', onAudioDebugEvent);
-    host.removeEventListener('sceneplayer:oneshot', onAudioDebugEvent);
-    host.removeEventListener('sceneplayer:audioprimed', onAudioDebugEvent);
-    host.removeEventListener('sceneplayer:audioprimeblocked', onAudioDebugEvent);
   }
 
   const PUBLIC_EXIT_FADE_MS = 850;
