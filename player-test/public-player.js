@@ -54,6 +54,11 @@
   const source = () => requested || DEFAULT_SCENE;
   const storageKey = () => `scene-public-progress:${source()}`;
 
+  function setReportVisible(visible){
+    if(!reportButton)return;
+    reportButton.hidden=!visible;
+  }
+
   function publicAssetBase(){
     try{
       const u=new URL(source(),location.href);
@@ -543,6 +548,7 @@
     intro.hidden = false;
     host.hidden = true;
     ending.hidden = true;
+    setReportVisible(false);
   }
 
   function bindPublicControls() {
@@ -743,6 +749,7 @@
       the public opening breath plays, then replay presentation only.
     */
     host.hidden = false;
+    setReportVisible(true);
     host.style.visibility = 'hidden';
     host.style.pointerEvents = 'none';
 
@@ -798,6 +805,7 @@
     opening.classList.remove('is-visible');
     host.hidden = true;
     intro.hidden = false;
+    setReportVisible(false);
     applyDocumentMeta(documentData);
   }
 
