@@ -1892,3 +1892,45 @@ html.sp-scene-image-open body{
   16%{opacity:.9}
   100%{opacity:0;transform:translate3d(var(--sp-dust-x,48px),var(--sp-dust-y,-4px),0) scale(var(--sp-dust-scale,.35));filter:blur(1.1px)}
 }
+
+/* V2.25 — responsive manga balloons */
+.sp-text.sp-balloon{
+  position:relative;display:table;width:fit-content;max-width:min(88%,680px);
+  box-sizing:border-box;isolation:isolate;color:#17191d;
+  text-shadow:none;overflow:visible;overflow-wrap:anywhere;
+}
+.sp-balloon-speech{
+  padding:clamp(16px,3vw,24px) clamp(24px,5vw,42px);
+  background:#fff;border:2px solid #17191d;
+  border-radius:50% / 42%;
+}
+.sp-balloon-speech::after{
+  content:"";position:absolute;left:21%;bottom:-11px;width:18px;height:18px;
+  background:#fff;border-right:2px solid #17191d;border-bottom:2px solid #17191d;
+  transform:skew(-24deg) rotate(39deg);z-index:-1;
+}
+.sp-balloon-cloud{
+  padding:clamp(19px,3.6vw,29px) clamp(27px,5.5vw,46px);
+  background:#fff;border:2px solid #17191d;
+  border-radius:43% 57% 46% 54% / 55% 43% 57% 45%;
+  box-shadow:inset 0 0 0 3px #fff,0 0 0 1px rgba(23,25,29,.08);
+}
+.sp-balloon-cloud::before,.sp-balloon-cloud::after{
+  content:"";position:absolute;background:#fff;border:2px solid #17191d;border-radius:50%;z-index:-1;
+}
+.sp-balloon-cloud::before{right:18%;bottom:-17px;width:17px;height:17px}
+.sp-balloon-cloud::after{right:12%;bottom:-29px;width:9px;height:9px}
+.sp-balloon-burst{
+  padding:clamp(23px,4.5vw,38px) clamp(31px,6.5vw,55px);
+  background:#17191d;color:#fff!important;text-shadow:none!important;
+  clip-path:polygon(50% 0,57% 8%,66% 2%,71% 12%,82% 6%,84% 18%,96% 17%,91% 30%,100% 38%,91% 47%,99% 58%,88% 64%,93% 77%,80% 78%,78% 92%,66% 86%,58% 100%,50% 91%,41% 100%,35% 87%,21% 94%,20% 80%,6% 78%,12% 65%,0 57%,10% 47%,1% 37%,11% 30%,5% 18%,18% 17%,20% 5%,33% 12%,41% 2%);
+}
+.sp-balloon-narration{
+  padding:clamp(14px,2.8vw,22px) clamp(18px,4vw,32px);
+  background:#fff;color:#17191d;border:4px double #17191d;border-radius:2px;
+  box-shadow:5px 5px 0 rgba(23,25,29,.26);
+}
+@media(max-width:520px){
+  .sp-text.sp-balloon{max-width:94%;line-height:1.65}
+  .sp-balloon-speech{border-radius:46% / 38%}
+}
