@@ -575,8 +575,13 @@
         });
       };
       (this.document.scenes || []).forEach((scene) => scan(scene?.audio));
-      // Ending SE uses its own highest-priority element on iOS (V2.17), so do
-      // not consume a second live-media slot for the same final source.
+      // V2.18: Ending SE must use the SAME source-stable iOS one-shot bank as
+      // Scene SE. Scene one-shots are now proven audible on iPhone, while the
+      // old dedicated ending element could remain authorized yet still produce
+      // silence at finish(). Resolve and prime the ending source with the rest
+      // of the document so finish() only seeks/unmutes an already-running bank
+      // element and never depends on a special late transport.
+      scan(this.document?.ending?.audio);
       return specs;
     }
 
@@ -2663,43 +2668,31 @@
       if (!playable.length) return false;
       this._endingAudioStarted = true;
 
-      // iOS V2.17: ending SE owns a dedicated element that was primed FIRST in
-      // the START/AUTO gesture. Do not compete with the possibly large Scene SE
-      // bank at finish(), and never issue a late play() unless the current final
-      // manual tap gives us no primed element at all.
-      if (this._iosStableMediaBank && this.endingAudio?.src) {
-        const audio = this.endingAudio;
-        const command = playable[0];
-        const startAt = Math.max(0, asNumber(command.startAt, 0));
-        let opened = false;
-        const open = () => {
-          if (opened) return; opened = true;
-          try { audio.loop = command.loop === true; audio.volume = 1; audio.muted = this.muted; } catch (_) {}
-          emit(this.host,'sceneplayer:audioplaystarted',{channel:'oneshot',role:'ending-se',action:'play',src:command.src,transport:'ios-dedicated-ending'});
-          emit(this.host,'sceneplayer:oneshot',{command:{...command,role:'ending-se'},transport:'ios-dedicated-ending'});
-          if (command.loop !== true) {
-            const scheduleSilence = () => {
-              let ms = Math.max(0, asNumber(command.stopAfter,0));
-              if (!(ms>0) && command.stopAt != null) ms = Math.max(0,(Math.max(0,asNumber(command.stopAt,0))-startAt)*1000);
-              if (!(ms>0) && Number.isFinite(audio.duration) && audio.duration>startAt) ms = Math.max(30,(audio.duration-startAt)*1000-20);
-              if (!(ms>0)) ms = 2000;
-              this._audioTimeout(()=>{ try { audio.muted=true; audio.loop=true; audio.currentTime=0; } catch(_){} },ms);
-            };
-            if (Number.isFinite(audio.duration) && audio.duration>0) scheduleSilence();
-            else audio.addEventListener('loadedmetadata',scheduleSilence,{once:true});
-          }
+      // V2.18 iOS: use exactly the same live-media one-shot bank that already
+      // works for Scene 1 / Scene 2 SE. The ending source was added to that bank
+      // during load() and primed in the trusted START/AUTO gesture, so finish()
+      // performs only seek + gate-open on an already-playing stable element.
+      if (this._iosStableMediaBank) {
+        const command = {
+          ...playable[0],
+          src: this._resolveCoreAudioSrc(playable[0].src),
+          action: 'play',
+          role: 'ending-se'
         };
-        try { audio.muted = true; audio.volume = 1; audio.loop = true; audio.currentTime = startAt; } catch (_) {}
-        audio.addEventListener?.('seeked',open,{once:true});
-        this._audioTimeout(open,45);
-        if (audio.paused) {
-          // Manual finish is itself a trusted tap, so this is a valid last resort.
-          try { const p=audio.play(); if(p?.catch)p.catch((error)=>emit(this.host,'sceneplayer:audioblocked',{channel:'oneshot',role:'ending-se',src:command.src,error})); } catch(error) { emit(this.host,'sceneplayer:audioblocked',{channel:'oneshot',role:'ending-se',src:command.src,error}); }
-        }
-        return true;
+        if (this._playIOSBankOneShot(command)) return true;
+
+        // Keep the dedicated element only as a diagnostic last resort. It is no
+        // longer the primary iPhone path because device testing showed that its
+        // muted long-running playback could stay silent when reopened at ending.
+        emit(this.host, 'sceneplayer:endingbankmiss', { src: command.src });
       }
 
-      playable.forEach((item) => this._playOneShot({...item, action:'play', role:'ending-se'}));
+      playable.forEach((item) => this._playOneShot({
+        ...item,
+        src: this._resolveCoreAudioSrc(item.src),
+        action: 'play',
+        role: 'ending-se'
+      }));
       return true;
     }
 
@@ -4065,7 +4058,7 @@
     }
   }
 
-  ScenePlayerCore.VERSION = '1.4.6-ios-gain-ending-priority';
+  ScenePlayerCore.VERSION = '1.4.7-ios-ending-live-bank';
   ScenePlayerCore.FORMAT_VERSION = '1.0';
   ScenePlayerCore.validate = assertSceneDocument;
 
