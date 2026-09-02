@@ -374,6 +374,7 @@
                 "stay",
                 "up",
                 "shatter",
+                "blockBreak",
                 "explode"
               ]
             }
