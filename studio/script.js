@@ -76,7 +76,7 @@
   const endingQuickDone=$('#endingQuickDone');
   const endingLegacyEditor=$('#endingLegacyEditor');
   const endingQuickRecentList=$('#endingQuickRecentList');
-  const endingSeEnabled=$('#endingSeEnabled'), endingSeFields=$('#endingSeFields'), endingSeInput=$('#endingSeInput'), endingSeFileLabel=$('#endingSeFileLabel'), endingSeUrlInput=$('#endingSeUrlInput'), endingSeUrlApply=$('#endingSeUrlApply'), endingSeVolume=$('#endingSeVolume'), endingSeVolumeOutput=$('#endingSeVolumeOutput');
+  const endingSeEnabled=$('#endingSeEnabled'), endingSeFields=$('#endingSeFields'), endingSeInput=$('#endingSeInput'), endingSeFileLabel=$('#endingSeFileLabel'), endingSeVolume=$('#endingSeVolume'), endingSeVolumeOutput=$('#endingSeVolumeOutput');
   let endingQuickTarget='center';
   let coverImageUrl = '';
   let coverImageFileName = '';
@@ -1167,7 +1167,7 @@
     if(densitySelect)densitySelect.value='normal';
     if(subtitleInput)subtitleInput.value='';applyRememberedWorkIdentity();if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';
     coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';
-    if(endingLabelInput)endingLabelInput.value=''; if(endingSeEnabled)endingSeEnabled.checked=false; setAssetField('endingSeInput','',''); if(endingSeUrlInput)endingSeUrlInput.value=''; if(endingSeFields)endingSeFields.hidden=true; endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
+    if(endingLabelInput)endingLabelInput.value=''; if(endingSeEnabled)endingSeEnabled.checked=false; setAssetField('endingSeInput','',''); if(endingSeFields)endingSeFields.hidden=true; endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateAutoRecStartLabel();
     setScreen('easy');scrollScreenToTop(editorScreen);
     return true;
@@ -1640,7 +1640,6 @@
     const cmd=endingSeCommand(doc);
     if(endingSeEnabled)endingSeEnabled.checked=Boolean(cmd);
     setAssetField('endingSeInput',cmd?.src||'',cmd?._editorFileName||'');
-    loadExternalUrlField('endingSeInput','endingSeUrlInput');
     if(endingSeVolume)endingSeVolume.value=Math.round((cmd?.volume??.8)*100);
     if(endingSeVolumeOutput)endingSeVolumeOutput.value=`${endingSeVolume?.value||80}%`;
     if(endingSeFields)endingSeFields.hidden=!endingSeEnabled?.checked;
@@ -2838,6 +2837,18 @@
         kind:'chatSpeaker',sceneIndex:-1,speakerIndex,
         holder:speaker,key:'icon',src:speaker.icon,
         fileName:speaker._editorFileName||''
+      });
+    });
+
+    // Ending SE is a first-class packaged asset too. Keep it on the same
+    // self-contained asset path as Scene SE/BGM/Ambient so blob: URLs are
+    // never persisted into .scene packages or published documents.
+    (doc?.ending?.audio||[]).forEach((cmd,audioIndex)=>{
+      if(!cmd?.src)return;
+      callback({
+        kind:'endingSe',sceneIndex:-1,audioIndex,
+        holder:cmd,key:'src',src:cmd.src,
+        fileName:cmd._editorFileName||''
       });
     });
 
@@ -5847,7 +5858,6 @@
   bindExternalAssetUrl({inputId:'sceneBgmInput',urlInputId:'sceneBgmUrlInput',applyId:'sceneBgmUrlApply',onApply:()=>{$('#sceneBgmAction').value='start';}});
   bindExternalAssetUrl({inputId:'sceneAmbientInput',urlInputId:'sceneAmbientUrlInput',applyId:'sceneAmbientUrlApply',onApply:()=>{$('#sceneAmbientAction').value='start';}});
   bindExternalAssetUrl({inputId:'sceneSeInput',urlInputId:'sceneSeUrlInput',applyId:'sceneSeUrlApply',onApply:()=>{$('#sceneSeEnabled').checked=true;}});
-  bindExternalAssetUrl({inputId:'endingSeInput',urlInputId:'endingSeUrlInput',applyId:'endingSeUrlApply',onApply:()=>{if(endingSeEnabled)endingSeEnabled.checked=true;syncEndingSeToWorkingDocument();syncQuickEndingToMain();}});
   $('#sceneBackgroundRemoveFile').addEventListener('click',()=>{const oldUrl=assetFrom('sceneBackgroundInput').src;if(oldUrl&&assetRegistry.has(oldUrl))unregisterAsset(oldUrl);setAssetField('sceneBackgroundInput','','');$('#sceneBackgroundInput').value='';$('#sceneBackgroundUrlInput').value='';updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
 
   const cinemaInput=$('#cinemaBackgroundInput'), cinemaPreview=$('#cinemaBackgroundPreview'), cinemaClear=$('#cinemaBackgroundClear');
