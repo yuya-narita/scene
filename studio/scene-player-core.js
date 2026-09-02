@@ -540,13 +540,27 @@
       return Array.from(out);
     }
 
+    _audioTrace(label, detail = {}) {
+      emit(this.host, 'sceneplayer:audiotrace', {
+        label,
+        scene: this.index + 1,
+        auto: this.auto,
+        contextState: this.audioContext?.state || 'none',
+        ...detail
+      });
+    }
+
     _preloadAudioBuffer(src) {
       const key = String(src || '').trim();
       if (!key || !this._iosBufferAudio) return Promise.resolve(null);
       if (this._bufferAudioCache.has(key)) return Promise.resolve(this._bufferAudioCache.get(key));
       if (this._bufferAudioPromises.has(key)) return this._bufferAudioPromises.get(key);
       const ctx = this._ensureAudioContext();
-      if (!ctx || typeof fetch !== 'function') return Promise.resolve(null);
+      if (!ctx || typeof fetch !== 'function') {
+        this._audioTrace('buffer-preload-skip', { src:key, hasContext:!!ctx, hasFetch:typeof fetch === 'function' });
+        return Promise.resolve(null);
+      }
+      this._audioTrace('buffer-preload-start', { src:key });
       const job = fetch(key, { mode: 'cors', credentials: 'omit' })
         .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.arrayBuffer(); })
         .then((bytes) => new Promise((resolve, reject) => {
@@ -559,10 +573,12 @@
         .then((buffer) => {
           this._bufferAudioCache.set(key, buffer);
           emit(this.host, 'sceneplayer:audiobufferready', { src: key, duration: buffer?.duration || 0 });
+          this._audioTrace('buffer-preload-ready', { src:key, duration:buffer?.duration || 0 });
           return buffer;
         })
         .catch((error) => {
           emit(this.host, 'sceneplayer:audiobuffererror', { src: key, error });
+          this._audioTrace('buffer-preload-error', { src:key, error:String(error?.name || error?.message || error) });
           return null;
         })
         .finally(() => this._bufferAudioPromises.delete(key));
@@ -574,7 +590,12 @@
       if (!this._iosBufferAudio) return Promise.resolve(false);
       const sources = this._allDocumentAudioSources();
       if (!sources.length) return Promise.resolve(true);
-      return Promise.allSettled(sources.map((src) => this._preloadAudioBuffer(src))).then(() => true);
+      this._audioTrace('buffer-document-preload', { count:sources.length, cached:this._bufferAudioCache.size, pending:this._bufferAudioPromises.size });
+      return Promise.allSettled(sources.map((src) => this._preloadAudioBuffer(src))).then((results) => {
+        const ready = sources.filter((src) => this._bufferAudioCache.has(String(src))).length;
+        this._audioTrace('buffer-document-preload-done', { count:sources.length, ready, cached:this._bufferAudioCache.size });
+        return true;
+      });
     }
 
     _fadeBufferGain(gainNode, target, duration = 0) {
@@ -594,7 +615,11 @@
       if (!this._iosBufferAudio || !command?.src) return false;
       const buffer = this._bufferAudioCache.get(String(command.src));
       const ctx = this._ensureAudioContext();
-      if (!buffer || !ctx || ctx.state !== 'running') return false;
+      if (!buffer || !ctx || ctx.state !== 'running') {
+        this._audioTrace('buffer-oneshot-skip', { src:command.src, role:command.role || 'se', hasBuffer:!!buffer, hasContext:!!ctx, contextState:ctx?.state || 'none', cached:this._bufferAudioCache.size });
+        return false;
+      }
+      this._audioTrace('buffer-oneshot-start', { src:command.src, role:command.role || 'se', duration:buffer.duration || 0 });
       try {
         const source = ctx.createBufferSource();
         const gain = ctx.createGain();
@@ -610,13 +635,13 @@
         const record = { source, gain, command };
         this._bufferOneShots.add(record);
         const cleanup = () => { this._bufferOneShots.delete(record); try { source.disconnect(); gain.disconnect(); } catch (_) {} };
-        source.onended = cleanup;
+        source.onended = () => { this._audioTrace('buffer-oneshot-ended', { src:command.src, role:command.role || 'se' }); cleanup(); };
         const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
-        if (stopAfter > 0) this._audioTimeout(() => { try { source.stop(); } catch (_) {} }, stopAfter);
+        if (stopAfter > 0) this._audioTimeout(() => { this._audioTrace('buffer-oneshot-stopAfter', { src:command.src, role:command.role || 'se', stopAfter }); try { source.stop(); } catch (_) {} }, stopAfter);
         if (command.stopAt != null) {
           const stopAt = Math.max(0, asNumber(command.stopAt, 0));
           const remain = Math.max(0, stopAt - startAt) * 1000;
-          if (remain > 0) this._audioTimeout(() => { try { source.stop(); } catch (_) {} }, remain);
+          if (remain > 0) this._audioTimeout(() => { this._audioTrace('buffer-oneshot-stopAt', { src:command.src, role:command.role || 'se', remain }); try { source.stop(); } catch (_) {} }, remain);
         }
         emit(this.host, 'sceneplayer:audioplaystarted', { channel:'oneshot', role:command.role || 'se', action:'play', src:command.src, transport:'audio-buffer' });
         emit(this.host, 'sceneplayer:oneshot', { command });
@@ -627,10 +652,12 @@
       }
     }
 
-    _stopBufferedPersistent(channel, fadeOut = 0) {
+    _stopBufferedPersistent(channel, fadeOut = 0, reason = 'unspecified') {
       const rec = this._bufferPersistent?.[channel];
       if (!rec) return false;
+      this._audioTrace('buffer-persistent-stop-request', { channel, src:rec.src, fadeOut, reason });
       const stop = () => {
+        this._audioTrace('buffer-persistent-stop-now', { channel, src:rec.src, reason });
         try { rec.source.stop(); } catch (_) {}
         try { rec.source.disconnect(); rec.gain.disconnect(); } catch (_) {}
         if (this._bufferPersistent[channel] === rec) this._bufferPersistent[channel] = null;
@@ -644,11 +671,15 @@
       if (!this._iosBufferAudio || !command?.src) return false;
       const buffer = this._bufferAudioCache.get(String(command.src));
       const ctx = this._ensureAudioContext();
-      if (!buffer || !ctx || ctx.state !== 'running') return false;
+      if (!buffer || !ctx || ctx.state !== 'running') {
+        this._audioTrace('buffer-persistent-skip', { channel, src:command.src, hasBuffer:!!buffer, hasContext:!!ctx, contextState:ctx?.state || 'none', cached:this._bufferAudioCache.size });
+        return false;
+      }
+      this._audioTrace('buffer-persistent-start-request', { channel, src:command.src, reconstruct, forceSeek, duration:buffer.duration || 0 });
       const existing = this._bufferPersistent[channel];
       const sameSrc = existing?.src === command.src;
       if (sameSrc && reconstruct && channel === 'bgm' && !forceSeek) return true;
-      if (existing) this._stopBufferedPersistent(channel, 0);
+      if (existing) this._stopBufferedPersistent(channel, 0, 'replace-existing');
       try {
         const source = ctx.createBufferSource();
         const gain = ctx.createGain();
@@ -663,13 +694,16 @@
         if (fadeIn > 0) this._fadeBufferGain(gain, target, fadeIn);
         const rec = { source, gain, src: command.src, volume: target, command };
         this._bufferPersistent[channel] = rec;
-        source.onended = () => { if (this._bufferPersistent[channel] === rec) this._bufferPersistent[channel] = null; };
+        source.onended = () => {
+          this._audioTrace('buffer-persistent-ended', { channel, src:command.src });
+          if (this._bufferPersistent[channel] === rec) this._bufferPersistent[channel] = null;
+        };
         const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
-        if (stopAfter > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), stopAfter);
+        if (stopAfter > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0, 'stopAfter'), stopAfter);
         if (command.stopAt != null) {
           const stopAt = Math.max(0, asNumber(command.stopAt, 0));
           const remain = Math.max(0, stopAt - startAt) * 1000;
-          if (remain > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), remain);
+          if (remain > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0, 'stopAt'), remain);
         }
         this.audioState[channel] = { src:command.src, volume:target, loop:command.loop !== false, startAt, stopAt:command.stopAt ?? null, fadeOut:Math.max(0, asNumber(command.fadeOut,0)) };
         emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'audio-buffer' });
@@ -1142,8 +1176,9 @@
       return audio;
     }
 
-    _stopPersistentChannel(channel, fadeOut = 0) {
-      if (this._bufferPersistent?.[channel]) { this._stopBufferedPersistent(channel, fadeOut); this.audioState[channel] = null; return; }
+    _stopPersistentChannel(channel, fadeOut = 0, reason = 'unspecified') {
+      this._audioTrace('persistent-stop-request', { channel, fadeOut, reason, hasBuffered:!!this._bufferPersistent?.[channel], htmlSrc:this.audioState?.[channel]?.src || '' });
+      if (this._bufferPersistent?.[channel]) { this._stopBufferedPersistent(channel, fadeOut, reason); this.audioState[channel] = null; return; }
       const audio = this.audioEls[channel];
       if (!audio) return;
       const finish = () => {
@@ -1158,6 +1193,7 @@
 
     _startPersistentChannel(channel, command, reconstruct = false, forceSeek = false) {
       if (this._startBufferedPersistent(channel, command, reconstruct, forceSeek)) return;
+      this._audioTrace('persistent-html-fallback', { channel, src:command?.src || '', reconstruct, forceSeek });
       let audio = this.audioEls[channel];
       if (!audio || !command.src) return;
       audio.__spPrimeToken = (audio.__spPrimeToken || 0) + 1;
@@ -1262,6 +1298,7 @@
     _playOneShot(command) {
       if (!command.src) return;
       if (this._playBufferedOneShot(command)) return;
+      this._audioTrace('oneshot-html-fallback', { src:command.src, role:command.role || 'se' });
       const audio = this._acquireOneShotElement(command.src);
       if (!audio) return;
       this._prepareAudioTransport(audio, command.src);
@@ -1321,6 +1358,7 @@
 
     _applySceneAudio(scene, reconstruct = false) {
       if (!Array.isArray(scene?.audio)) return;
+      this._audioTrace('scene-audio-apply', { scene:this.index + 1, reconstruct, commands:scene.audio.map(c => ({channel:c?.channel, action:c?.action, role:c?.role || '', src:c?.src || ''})) });
       scene.audio.forEach((command) => this._applyAudioCommand(command, reconstruct));
     }
 
@@ -1391,8 +1429,9 @@
     }
 
     _stopAllAudio(resetPending = true) {
+      this._audioTrace('stop-all-audio', { resetPending });
       this._clearAudioTimers();
-      ['bgm', 'ambient'].forEach((channel) => this._stopPersistentChannel(channel, 0));
+      ['bgm', 'ambient'].forEach((channel) => this._stopPersistentChannel(channel, 0, 'stop-all-audio'));
       Array.from(this._bufferOneShots || []).forEach((rec) => { try { rec.source.stop(); } catch (_) {} });
       if (this._bufferOneShots) this._bufferOneShots.clear();
       this.oneshots.forEach((audio) => {
@@ -2217,12 +2256,14 @@
       // mode. AUTO has pre-authorized the same reusable one-shot bank before its
       // timer starts. Use one path for both instead of a separate ending Audio.
       this._endingAudioStarted = true;
+      this._audioTrace('ending-audio-play', { count:playable.length, items:playable.map(i => ({src:i.src, channel:i.channel, action:i.action})) });
       playable.forEach((item) => this._playOneShot({...item, action:'play', role:'ending-se'}));
       return true;
     }
 
     finish() {
       if (!this.document || this.ended) return;
+      this._audioTrace('finish-enter', { cached:this._bufferAudioCache.size, pending:this._bufferAudioPromises.size, endingAudio:(this.document?.ending?.audio || []).map(c => ({channel:c?.channel, action:c?.action, src:c?.src || ''})) });
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
@@ -2570,6 +2611,7 @@
       this._applyCorePresentation(active);
       this._applyBackgroundForIndex(this.index);
 
+      this._audioTrace('render-audio-mode', { scene:this.index + 1, mode:this._audioRenderMode, cached:this._bufferAudioCache.size, pending:this._bufferAudioPromises.size, bgmBuffered:!!this._bufferPersistent?.bgm, ambientBuffered:!!this._bufferPersistent?.ambient });
       if (this._audioRenderMode === 'preview') {
         // Authoring refresh leaves the currently playing transport untouched.
       } else if (this._audioRenderMode === 'cover') {
