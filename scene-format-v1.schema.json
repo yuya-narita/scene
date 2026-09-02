@@ -326,6 +326,7 @@
             "slam",
             "burst",
             "glitchHit",
+            "glitchHitRight",
             "rush",
             "auto",
             "fadeRise",
@@ -815,6 +816,13 @@
             "$ref": "#/$defs/endingLink"
           },
           "maxItems": 2
+        },
+        "audio": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/audioCommand"
+          },
+          "description": "Optional ending-page audio commands. Studio currently authors one-shot SE here."
         },
         "fontFamily": {
           "enum": [

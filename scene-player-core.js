@@ -1732,6 +1732,15 @@
       emit(this.host, 'sceneplayer:restart', { scene: this.currentScene });
     }
 
+    _playEndingAudio() {
+      const commands = Array.isArray(this.document?.ending?.audio) ? this.document.ending.audio : [];
+      commands.forEach((command) => {
+        if (!command || command.channel !== 'oneshot') return;
+        const action = command.action || 'play';
+        if (action === 'play' || action === 'start') this._playOneShot({...command, action:'play'});
+      });
+    }
+
     finish() {
       if (!this.document || this.ended) return;
       this.stopAuto();
@@ -1740,6 +1749,7 @@
       this.ended = true;
       this.els.ending.classList.remove('is-visible');
       this.els.ending.hidden = false;
+      this._playEndingAudio();
 
       // Match the Public Player ending timing:
       // - ending copy begins its own 280ms-delayed fade immediately
