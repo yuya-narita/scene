@@ -126,6 +126,11 @@
   const charCount = $('#charCount');
   const densitySelect = $('#densitySelect');
   const playerHost = $('#scenePlayer');
+  const studioPreviewDeviceToolbar=$('#studioPreviewDeviceToolbar');
+  const STUDIO_PREVIEW_DEVICE_KEY='sceneStudio.previewDevice.v1';
+  const STUDIO_PREVIEW_GUIDE_KEY='sceneStudio.previewSafeGuide.v1';
+  let studioPreviewDevice=['phone','tablet','pc'].includes(localStorage.getItem(STUDIO_PREVIEW_DEVICE_KEY))?localStorage.getItem(STUDIO_PREVIEW_DEVICE_KEY):'phone';
+  let studioPreviewGuide=localStorage.getItem(STUDIO_PREVIEW_GUIDE_KEY)==='true';
 
   // v0.3.25: Player-like intro without fighting iOS focus scrolling.
   // CSS owns the first Scene-style entrance from the very first paint.
@@ -4200,8 +4205,36 @@
       // 公開状態は保持したまま公開ボタンだけ非表示へ戻す。
       syncPublishPreviewButton(false);
     });
+    syncStudioPreviewDevice();
     return player;
   }
+
+  function mountStudioSafeGuide(){
+    const stage=player?.els?.stage||playerHost?.querySelector?.('.sp-stage');
+    if(!stage)return;
+    let guide=stage.querySelector(':scope > .studio-safe-guide');
+    if(studioPreviewGuide && !guide){guide=document.createElement('div');guide.className='studio-safe-guide';guide.setAttribute('aria-hidden','true');stage.appendChild(guide);}
+    if(!studioPreviewGuide)guide?.remove();
+  }
+  function syncStudioPreviewDevice(){
+    if(!playerScreen)return;
+    ['phone','tablet','pc'].forEach(mode=>playerScreen.classList.toggle(`preview-device-${mode}`,mode===studioPreviewDevice));
+    studioPreviewDeviceToolbar?.querySelectorAll?.('[data-preview-device]').forEach(button=>button.classList.toggle('is-active',button.dataset.previewDevice===studioPreviewDevice));
+    const guideButton=studioPreviewDeviceToolbar?.querySelector?.('[data-preview-guide]');
+    if(guideButton){guideButton.classList.toggle('is-active',studioPreviewGuide);guideButton.setAttribute('aria-pressed',String(studioPreviewGuide));}
+    mountStudioSafeGuide();
+    requestAnimationFrame(()=>{window.dispatchEvent(new Event('resize'));requestAnimationFrame(mountStudioSafeGuide);});
+  }
+  studioPreviewDeviceToolbar?.addEventListener('pointerdown',event=>event.stopPropagation());
+  studioPreviewDeviceToolbar?.addEventListener('click',event=>{
+    event.preventDefault();event.stopPropagation();
+    const deviceButton=event.target.closest?.('[data-preview-device]');
+    if(deviceButton){studioPreviewDevice=deviceButton.dataset.previewDevice;localStorage.setItem(STUDIO_PREVIEW_DEVICE_KEY,studioPreviewDevice);syncStudioPreviewDevice();return;}
+    if(event.target.closest?.('[data-preview-guide]')){studioPreviewGuide=!studioPreviewGuide;localStorage.setItem(STUDIO_PREVIEW_GUIDE_KEY,String(studioPreviewGuide));syncStudioPreviewDevice();}
+  });
+  playerHost?.addEventListener('sceneplayer:load',()=>requestAnimationFrame(syncStudioPreviewDevice));
+  playerHost?.addEventListener('sceneplayer:scenechange',()=>requestAnimationFrame(mountStudioSafeGuide));
+  window.addEventListener('resize',()=>requestAnimationFrame(mountStudioSafeGuide));
   function syncUndoVisibilityForScreen(name){
     const inPlayer=name==='player';
     const bar=$('#undoBar'), compact=$('#undoCompactButton');
