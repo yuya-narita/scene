@@ -6034,6 +6034,17 @@
   const desktopTimingButton=$('#desktopTimingButton');
   const desktopShortcutButton=$('#desktopShortcutButton');
   const desktopLiveMQ=window.matchMedia('(min-width:1100px)');
+  // The Player owns wheel gestures on the preview. Keep wheel input that starts
+  // inside the inspector on its own scroll container, even when an ancestor is
+  // fixed or the pointer happens to cross a scaled preview layer.
+  desktopLivePanel?.addEventListener('wheel',event=>{
+    if(!desktopLiveActive()||!desktopLivePanelBody)return;
+    const delta=Number(event.deltaY)||0;
+    if(!delta||desktopLivePanelBody.scrollHeight<=desktopLivePanelBody.clientHeight)return;
+    const before=desktopLivePanelBody.scrollTop;
+    desktopLivePanelBody.scrollTop+=delta;
+    if(desktopLivePanelBody.scrollTop!==before){event.preventDefault();event.stopPropagation();}
+  },{passive:false,capture:true});
   let desktopTimingOpen=false;
   let desktopSceneUnderlaySnapshot=null;
   let liveEditEnabled=false;
@@ -8695,12 +8706,23 @@ function openDesktopTextDetail(){
       syncTextColorPickerVisibility();refresh();
     });
     textColorControl.append(textColorMode,textColorPicker.root);textColorField.append(textColorLabel,textColorControl);syncTextColorPickerVisibility();
+    const textPositionField=document.createElement('label');textPositionField.className='desktop-live-position-field';
+    const textPositionLabel=document.createElement('span');textPositionLabel.textContent=u('テキスト位置','Text position');
+    const textPositionControl=document.createElement('div');textPositionControl.className='desktop-live-position-control';
+    const textPositionSelect=document.createElement('select');
+    FRAME_POSITION_OPTIONS.forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;textPositionSelect.appendChild(option);});
+    textPositionSelect.value=framePositionPreset(scene);
+    textPositionSelect.addEventListener('change',()=>{setFramePositionPreset(p,textPositionSelect.value);refresh();});
+    const textPositionAdjust=document.createElement('button');textPositionAdjust.type='button';textPositionAdjust.className='desktop-live-position-adjust';
+    textPositionAdjust.textContent=u('調整','Adjust');textPositionAdjust.disabled=typeof scene?.text!=='string'||!scene.text.length;
+    textPositionAdjust.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openFramePositionDragEditor(scene);});
+    textPositionControl.append(textPositionSelect,textPositionAdjust);textPositionField.append(textPositionLabel,textPositionControl);
     textGrid.append(
       desktopMakeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
       desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
       desktopMakeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;refresh();}),
       desktopMakeSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')]],p.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none',v=>{if(v==='handdrawn-voice')p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
-      desktopMakeSelect(u('テキスト位置','Text position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);refresh();}),
+      textPositionField,
       textColorField
     );
     const textDetailButton=desktopDetail(t('detail.text'),'text');

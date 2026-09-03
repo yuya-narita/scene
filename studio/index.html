@@ -25,7 +25,7 @@
 
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./scene-player-core.css">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20260903-15">
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -47,7 +47,8 @@
       .studio-safe-guide::before{content:"";position:absolute;inset:7% 7% 9%;border:1px dashed currentColor;border-radius:10px}
       .studio-safe-guide::after{content:"";position:absolute;inset:0;background:linear-gradient(to right,transparent calc(33.333% - .5px),currentColor calc(33.333% - .5px),currentColor calc(33.333% + .5px),transparent calc(33.333% + .5px),transparent calc(66.666% - .5px),currentColor calc(66.666% - .5px),currentColor calc(66.666% + .5px),transparent calc(66.666% + .5px)),linear-gradient(to bottom,transparent calc(33.333% - .5px),currentColor calc(33.333% - .5px),currentColor calc(33.333% + .5px),transparent calc(33.333% + .5px),transparent calc(66.666% - .5px),currentColor calc(66.666% - .5px),currentColor calc(66.666% + .5px),transparent calc(66.666% + .5px)),linear-gradient(to right,transparent calc(50% - .5px),currentColor calc(50% - .5px),currentColor calc(50% + .5px),transparent calc(50% + .5px)),linear-gradient(to bottom,transparent calc(50% - .5px),currentColor calc(50% - .5px),currentColor calc(50% + .5px),transparent calc(50% + .5px));opacity:.58}
       /* The compact Text card grew as position/writing controls were added. Let it size and scroll naturally. */
-      .desktop-live-panel-body{padding-bottom:72px!important;overflow-y:auto!important;overscroll-behavior:contain}
+      body.desktop-live-edit .desktop-live-panel{display:flex!important;flex-direction:column!important;height:100dvh!important;max-height:100dvh!important;overflow:hidden!important}
+      .desktop-live-panel-body{flex:1 1 auto!important;min-height:0!important;height:auto!important;padding-bottom:72px!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable}
       .desktop-live-three{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:auto auto!important;grid-auto-rows:auto!important;align-items:start!important;overflow:visible!important}
       .desktop-live-three>.desktop-live-card{height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important}
       .desktop-live-three>.desktop-live-card .desktop-live-grid{height:auto!important;max-height:none!important;overflow:visible!important}
@@ -59,6 +60,16 @@
       .desktop-live-text-color-control .studio-color-picker{position:relative;display:flex;justify-content:flex-end}
       .desktop-live-text-color-control .studio-color-trigger{width:38px;height:34px;border-radius:9px}
       .desktop-live-text-color-control .studio-color-popover{z-index:900}
+      .desktop-live-position-field{display:grid;gap:5px;min-width:0}
+      .desktop-live-position-field>span{font-size:10px;font-weight:700;color:var(--muted,#666)}
+      .desktop-live-position-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+      .desktop-live-position-control>select{width:100%;min-width:0}
+      .desktop-live-position-adjust{height:34px;padding:0 10px;border:1px solid #d7d9de;border-radius:9px;background:#fff;color:#17181b;font:700 11px/1 system-ui;white-space:nowrap;cursor:pointer}
+      .desktop-live-position-adjust:disabled{opacity:.38;cursor:default}
+      .sp-core[data-theme="light"] .studio-safe-guide,
+      .sp-core[data-theme="cinema"][data-cinema-tone="light"] .studio-safe-guide{color:rgba(22,27,32,.42);mix-blend-mode:multiply}
+      .sp-core[data-theme="dark"] .studio-safe-guide,
+      .sp-core[data-theme="cinema"]:not([data-cinema-tone="light"]) .studio-safe-guide{color:rgba(255,255,255,.45);mix-blend-mode:screen}
     }
     /* Keep the Ending SE checkbox a normal native-sized control, even when generic inputs are full width. */
     .ending-quick-se .check-row{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;min-height:32px!important;padding:0!important;border:0!important;background:transparent!important}
@@ -786,11 +797,11 @@
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
 <script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js"></script>
+<script src="./scene-player-core.js?v=20260903-15"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260903-14"></script>
+<script src="./script.js?v=20260903-15"></script>
 
 
 

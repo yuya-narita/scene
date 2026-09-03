@@ -2877,6 +2877,13 @@
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
 
+    _viewportWidth() {
+      // Studio can render the Player inside a fixed logical device viewport.
+      // clientWidth keeps JS layout decisions on that viewport instead of the
+      // outer desktop browser width; in the public Player both are identical.
+      return Math.max(1, Number(this.host?.clientWidth) || Number(global.innerWidth) || 1);
+    }
+
     _framePosition(scene) {
       const source=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
       const preset=String(source.preset||'auto');
@@ -2890,7 +2897,7 @@
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
       const stageHeight = stageRect.height;
-      const focusRatio = global.innerWidth <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
+      const focusRatio = this._viewportWidth() <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
       const focusY = stageHeight * focusRatio;
 
       const metrics = nodes.map((node, i) => ({
@@ -2930,15 +2937,15 @@
       if(currentFrame&&metrics.length>1&&this._framePosition(newest.scene).preset==='auto'){
         const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
         if(previousFrame){
-          const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical',gap=global.innerWidth<=600?14:24,currentWidth=newest.inkRight-newest.inkLeft,previousWidth=previous.inkRight-previous.inkLeft,currentHeight=newest.inkBottom-newest.inkTop,previousHeight=previous.inkBottom-previous.inkTop,availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),availableHeight=stageHeight*.86,margin=global.innerWidth<=600?10:16;
+          const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical',gap=this._viewportWidth()<=600?14:24,currentWidth=newest.inkRight-newest.inkLeft,previousWidth=previous.inkRight-previous.inkLeft,currentHeight=newest.inkBottom-newest.inkTop,previousHeight=previous.inkBottom-previous.inkTop,availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),availableHeight=stageHeight*.86,margin=this._viewportWidth()<=600?10:16;
           previous.node.style.visibility='';previous.node.style.zIndex='20';newest.node.style.zIndex='30';
           if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',fits=currentWidth+previousWidth+gap<=availableWidth-margin*2,groupWidth=currentWidth+previousWidth+gap,groupLeft=(availableWidth-groupWidth)/2,currentLeft=fits?(verticalReading?groupLeft:groupLeft+previousWidth+gap):(verticalReading?margin:availableWidth-margin-currentWidth),previousLeft=fits?(verticalReading?groupLeft+currentWidth+gap:groupLeft):(verticalReading?availableWidth-margin-previousWidth:margin),centerY=stageHeight*.48;positions[metrics.length-1]={x:currentLeft-newest.inkLeft,y:centerY-newest.inkCenterY};positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:centerY-previous.inkCenterY};}
           else{const fits=currentHeight+previousHeight+gap<=availableHeight,groupHeight=currentHeight+previousHeight+gap,groupTop=(stageHeight-groupHeight)/2,previousTop=fits?groupTop:margin,currentTop=fits?groupTop+previousHeight+gap:stageHeight-margin-currentHeight;positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:previousTop-previous.inkTop};positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:currentTop-newest.inkTop};}
         }
       }
 
-      metrics.forEach((item,i)=>{if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;const availableWidth=Math.max(1,item.node.getBoundingClientRect().width),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop,margin=global.innerWidth<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));positions[i]={x:centerX-item.inkCenterX,y:centerY-item.inkCenterY};});
-      if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){const availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),margin=global.innerWidth<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};}else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};}}
+      metrics.forEach((item,i)=>{if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;const availableWidth=Math.max(1,item.node.getBoundingClientRect().width),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop,margin=this._viewportWidth()<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));positions[i]={x:centerX-item.inkCenterX,y:centerY-item.inkCenterY};});
+      if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){const availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),margin=this._viewportWidth()<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};}else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};}}
 
       return metrics.map((item, i) => ({ ...item, ...positions[i] }));
     }
@@ -2958,7 +2965,7 @@
       return nodes.map((node, i) => {
         const geometry=this._measureSceneGeometry(node,stageRect),position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
         let x=0,y=focusY-Math.max(1,node.getBoundingClientRect().height)/2;
-        if(position.preset!=='auto'){const availableWidth=Math.max(1,node.getBoundingClientRect().width),width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=global.innerWidth<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageRect.height?stageRect.height/2:Math.max(height/2+margin,Math.min(stageRect.height-height/2-margin,stageRect.height*position.y));x=centerX-geometry.inkCenterX;y=centerY-geometry.inkCenterY;}
+        if(position.preset!=='auto'){const availableWidth=Math.max(1,node.getBoundingClientRect().width),width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=this._viewportWidth()<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageRect.height?stageRect.height/2:Math.max(height/2+margin,Math.min(stageRect.height-height/2-margin,stageRect.height*position.y));x=centerX-geometry.inkCenterX;y=centerY-geometry.inkCenterY;}
         node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
         node.style.zIndex = String(20 + i);
         return { node, scene: sceneEntries[i]?.scene, x, y, height: geometry.height };
@@ -3881,7 +3888,7 @@
         if(!frame.isConnected)return;
         const text=frame.querySelector(':scope > .sp-text');
         let fitted=false;
-        if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){text.style.maxWidth='none';text.style.width='max-content';const measureRects=()=>{try{const range=document.createRange();range.selectNodeContents(text);const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);range.detach?.();return measured;}catch(_){return [];}};let rects=measureRects();const initialTextRect=text.getBoundingClientRect();let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;rects=measureRects();const fittedTextRect=text.getBoundingClientRect();inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=global.innerWidth<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;}
+        if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){text.style.maxWidth='none';text.style.width='max-content';const measureRects=()=>{try{const range=document.createRange();range.selectNodeContents(text);const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);range.detach?.();return measured;}catch(_){return [];}};let rects=measureRects();const initialTextRect=text.getBoundingClientRect();let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;rects=measureRects();const fittedTextRect=text.getBoundingClientRect();inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=this._viewportWidth()<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;}
         const rect=frame.getBoundingClientRect(),width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
         if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
         lastWidth=width;lastHeight=height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
@@ -4006,6 +4013,17 @@
       const text = String(scene?.text || '');
       const chars = Array.from(text).length;
       const lines = text ? text.split('\n').length : 0;
+      const verticalFrame=textStyle?.writingMode==='vertical-rl' && scene?.presentation?.frame?.type==='handdrawn-voice';
+      // A vertical balloon has both a height and a column-width limit. Plain
+      // character thresholds made medium passages stay at the normal size and
+      // let their final columns escape the frame. Auto must become stricter
+      // for this geometry—the author can still explicitly choose any size.
+      if(verticalFrame){
+        if(chars>=74 || lines>=8)return 'tight';
+        if(chars>=44 || lines>=6)return 'compact';
+        if(chars>=30 || lines>=4)return 'medium';
+        if(chars>=22 || lines>=3)return 'soft';
+      }
       // Preserve v0.1's useful behavior: multi-line/list blocks shrink before they overflow.
       if (lines >= 8 || chars >= 190) return 'tight';
       if (lines >= 6 || chars >= 145) return 'compact';
@@ -4047,7 +4065,7 @@
       const size = style.size;
       const tokenSizes = isSubText
         ? { small: '11px', normal: '14px', large: '17px', xl: '20px' }
-        : { small: 'clamp(17px,3.8vw,24px)', normal: 'clamp(21px,4.8vw,34px)', large: 'clamp(26px,5.8vw,42px)', xl: 'clamp(32px,7vw,54px)' };
+        : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)' };
       if (typeof size === 'number' && Number.isFinite(size) && size > 0) node.style.fontSize = `${size}px`;
       else if (typeof size === 'string' && size !== 'auto' && tokenSizes[size]) node.style.fontSize = tokenSizes[size];
 
@@ -4064,7 +4082,7 @@
         node.dataset.writingMode='vertical-rl';
         node.style.writingMode='vertical-rl';
         node.style.textOrientation='mixed';
-        node.style.height=`min(52dvh, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
+        node.style.height=`min(52cqh, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
         node.style.textAlign='start';
         const blockAlign=style.align==='left'||style.align==='right'?style.align:'center';
         node.dataset.verticalBlockAlign=blockAlign;
