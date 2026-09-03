@@ -2848,6 +2848,7 @@
     }
 
     _measureSceneGeometry(node, stageRect) {
+      node.classList.add('sp-layout-measuring');
       const nodeRect=node.getBoundingClientRect();
       const boxHeight=Math.max(1,nodeRect.height);
       const text=node.querySelector('.sp-text');
@@ -2874,6 +2875,7 @@
       }catch(_){}
       const inkHeight=Math.max(1,inkBottom-inkTop);
       const height=vertical?Math.min(boxHeight,Math.max(48,Math.min(stageRect.height*.52,inkHeight+8))):boxHeight;
+      node.classList.remove('sp-layout-measuring');
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
 
@@ -2931,7 +2933,7 @@
             y:nextPosition.y+next.inkCenterY-current.inkCenterY
           };
         }else{
-          const verticalGap=eitherVertical?Math.max(52,stageHeight*.095):0;
+          const verticalGap=eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0;
           const gap=this._sceneGap(current.scene,next.scene)+verticalGap+extraGap;
           positions[i]={
             x:nextPosition.x,
@@ -3982,6 +3984,7 @@
         if(!frame.isConnected)return;
         const text=frame.querySelector(':scope > .sp-text');
         let fitted=false;
+        frame.classList.add('sp-frame-measuring');
         if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){
           text.style.maxWidth='none';
           text.style.width='max-content';
@@ -4023,6 +4026,7 @@
           frame.dataset.inkFitted='true';
           fitted=true;
         }
+        frame.classList.remove('sp-frame-measuring');
         const rect=frame.getBoundingClientRect();
         const width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
         if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
@@ -4179,6 +4183,13 @@
       const text = String(scene?.text || '');
       const chars = Array.from(text).length;
       const lines = text ? text.split('\n').length : 0;
+      const verticalFrame=textStyle?.writingMode==='vertical-rl' && scene?.presentation?.frame?.type==='handdrawn-voice';
+      if(verticalFrame){
+        if(chars>=74 || lines>=8)return 'tight';
+        if(chars>=44 || lines>=6)return 'compact';
+        if(chars>=30 || lines>=4)return 'medium';
+        if(chars>=22 || lines>=3)return 'soft';
+      }
       // Preserve v0.1's useful behavior: multi-line/list blocks shrink before they overflow.
       if (lines >= 8 || chars >= 190) return 'tight';
       if (lines >= 6 || chars >= 145) return 'compact';

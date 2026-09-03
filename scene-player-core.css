@@ -655,6 +655,20 @@
   letter-spacing:.15em;
 }
 
+/* Keep frame fitting independent from transient entrance transforms. */
+.sp-handdrawn-frame.sp-frame-measuring>.sp-text,
+.sp-scene.sp-layout-measuring .sp-text{
+  animation:none!important;
+  transform:none!important;
+  filter:none!important;
+  opacity:1!important;
+  transition:none!important;
+}
+.sp-handdrawn-frame[data-writing-mode="vertical-rl"]>.sp-text{
+  writing-mode:vertical-rl!important;
+  text-orientation:mixed!important;
+}
+
 /* Static character from the original Player. */
 .sp-scene[data-effect="loud"] .sp-text{
   font-size:1.24em!important;
