@@ -445,6 +445,12 @@
                 "shatter",
                 "explode"
               ]
+            },
+            "scope": {
+              "enum": [
+                "scene",
+                "visible"
+              ]
             }
           },
           "additionalProperties": true

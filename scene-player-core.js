@@ -2895,6 +2895,33 @@
       return {preset:'auto'};
     }
 
+    _measureCarriedOverlayPositions(metrics, sceneEntries, stageWidth, stageHeight, focusY, extraGap = 0) {
+      const margin=stageWidth<=600?10:16;
+      const positions=metrics.map(item=>{
+        const position=this._framePosition(item.scene);
+        let x=0,y=focusY-item.inkCenterY-(item.scene.type==='dialogue'?12:0);
+        if(position.preset!=='auto'){
+          const availableWidth=Math.max(1,item.node.clientWidth),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
+          const centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x));
+          const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
+          x=centerX-item.inkCenterX;y=centerY-item.inkCenterY;
+        }
+        return {x,y};
+      });
+      const groups=[];
+      metrics.forEach((item,i)=>{const attach=i>0&&(item.scene?.presentation?.display||'stack')==='overlay';if(attach&&groups.length)groups[groups.length-1].push(i);else groups.push([i]);});
+      const bounds=indices=>{const left=Math.min(...indices.map(i=>positions[i].x+metrics[i].inkLeft)),right=Math.max(...indices.map(i=>positions[i].x+metrics[i].inkRight)),top=Math.min(...indices.map(i=>positions[i].y+metrics[i].inkTop)),bottom=Math.max(...indices.map(i=>positions[i].y+metrics[i].inkBottom));return {left,right,top,bottom,centerX:(left+right)/2,centerY:(top+bottom)/2};};
+      for(let g=groups.length-2;g>=0;g-=1){
+        const current=groups[g],next=groups[g+1],currentBounds=bounds(current),nextBounds=bounds(next),currentLast=metrics[current[current.length-1]],nextFirst=metrics[next[0]],flow=nextFirst.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
+        let dx=0,dy=0;
+        if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap,verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
+        else{const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl',gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;dx=nextBounds.centerX-currentBounds.centerX;dy=nextBounds.top-gap-currentBounds.bottom;}
+        current.forEach(i=>{positions[i].x+=dx;positions[i].y+=dy;});
+      }
+      metrics.forEach((item,i)=>{item.node.style.visibility='';item.node.style.zIndex=String(20+i);});
+      return metrics.map((item,i)=>({...item,...positions[i]}));
+    }
+
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
@@ -2909,6 +2936,10 @@
         ...this._measureSceneGeometry(node,stageRect)
       }));
       metrics.forEach(item=>{item.node.style.visibility='';item.node.style.zIndex='';});
+
+      if(metrics.some((item,i)=>i>0&&(item.scene?.presentation?.display||'stack')==='overlay')){
+        return this._measureCarriedOverlayPositions(metrics,sceneEntries,Math.max(1,this.els.stage.clientWidth||stageRect.width),stageHeight,focusY,extraGap);
+      }
 
       const newest = metrics[metrics.length - 1];
       let newestTop = focusY - newest.inkCenterY;
@@ -2983,6 +3014,7 @@
       }
 
       metrics.forEach((item,i)=>{
+        if(i!==metrics.length-1)return;
         if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;
         const position=this._framePosition(item.scene);
         if(position.preset==='auto')return;
@@ -4331,27 +4363,33 @@
       if (after > 0) {
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
         const motion = ['up','shatter','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
-        article.style.setProperty('--sp-disappear-fade', `${fade}ms`);
+        const scope=disappear?.scope==='visible'?'visible':'scene';
+        const targets=scope==='visible'
+          ? [...this.els.scenes.querySelectorAll('.sp-scene')].filter(node=>node.isConnected&&!node.classList.contains('is-disappeared'))
+          : [article];
+        targets.forEach(target=>{
+        target.style.setProperty('--sp-disappear-fade', `${fade}ms`);
         // Shatter / explode animate the Scene at its CURRENT laid-out position.
         // Their keyframes add relative motion on top of this anchor instead of
         // replacing the stack translate and jumping to the stage origin first.
         if (motion === 'shatter' || motion === 'explode') {
-          article.style.setProperty('--sp-disappear-anchor-transform', article.style.transform || 'translate3d(0,0,0)');
+          target.style.setProperty('--sp-disappear-anchor-transform', target.style.transform || 'translate3d(0,0,0)');
         } else {
-          article.style.removeProperty('--sp-disappear-anchor-transform');
+          target.style.removeProperty('--sp-disappear-anchor-transform');
         }
-        article.classList.toggle('is-disappear-up', motion === 'up');
-        article.classList.toggle('is-disappear-shatter', motion === 'shatter');
-        article.classList.toggle('is-disappear-explode', motion === 'explode');
-        article.classList.toggle('is-disappear-stay', motion === 'stay');
+        target.classList.toggle('is-disappear-up', motion === 'up');
+        target.classList.toggle('is-disappear-shatter', motion === 'shatter');
+        target.classList.toggle('is-disappear-explode', motion === 'explode');
+        target.classList.toggle('is-disappear-stay', motion === 'stay');
+        });
         this._presentationTimeout(() => {
           if (!article.isConnected) return;
-          article.classList.add('is-disappearing');
-          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion });
+          targets.forEach(target=>{if(target.isConnected)target.classList.add('is-disappearing');});
+          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion, scope });
           this._presentationTimeout(() => {
             if (!article.isConnected) return;
-            article.classList.add('is-disappeared');
-            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion });
+            targets.forEach(target=>{if(target.isConnected)target.classList.add('is-disappeared');});
+            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion, scope });
           }, fade);
         }, after);
       }
