@@ -2877,6 +2877,15 @@
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
 
+    _framePosition(scene) {
+      const source=scene?.presentation?.frame?.position||{};
+      const preset=String(source.preset||'auto');
+      const presets={'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],left:[.18,.5],center:[.5,.5],right:[.82,.5],'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]};
+      if(preset==='custom'){const x=Number(source.x),y=Number(source.y);return {preset,x:Number.isFinite(x)?Math.max(0,Math.min(1,x)):.5,y:Number.isFinite(y)?Math.max(0,Math.min(1,y)):.5};}
+      if(presets[preset])return {preset,x:presets[preset][0],y:presets[preset][1]};
+      return {preset:'auto'};
+    }
+
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
@@ -2917,8 +2926,8 @@
       }
 
       const currentFrame=newest.node.querySelector('.sp-handdrawn-frame');
-      if(currentFrame&&metrics.length>1){
-        metrics.slice(0,-2).forEach(item=>{item.node.style.visibility='hidden';});
+      if(currentFrame&&metrics.length>1)metrics.slice(0,-2).forEach(item=>{item.node.style.visibility='hidden';});
+      if(currentFrame&&metrics.length>1&&this._framePosition(newest.scene).preset==='auto'){
         const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
         if(previousFrame){
           const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical',gap=global.innerWidth<=600?18:28,currentWidth=newest.inkRight-newest.inkLeft,previousWidth=previous.inkRight-previous.inkLeft,currentHeight=newest.inkBottom-newest.inkTop,previousHeight=previous.inkBottom-previous.inkTop,availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),availableHeight=stageHeight*.86,pairFits=flow==='horizontal'?currentWidth+previousWidth+gap<=availableWidth:currentHeight+previousHeight+gap<=availableHeight;
@@ -2929,6 +2938,9 @@
           }else previous.node.style.visibility='hidden';
         }
       }
+
+      metrics.forEach((item,i)=>{if(!item.node.querySelector('.sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;const availableWidth=Math.max(1,item.node.getBoundingClientRect().width),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop,margin=global.innerWidth<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));positions[i]={x:centerX-item.inkCenterX,y:centerY-item.inkCenterY};});
+      if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2];if(previous.node.querySelector('.sp-handdrawn-frame')&&previous.node.style.visibility!=='hidden'){const a=positions[metrics.length-1],b=positions[metrics.length-2],guard=global.innerWidth<=600?12:18,overlaps=!(a.x+newest.inkLeft>=b.x+previous.inkRight+guard||a.x+newest.inkRight+guard<=b.x+previous.inkLeft||a.y+newest.inkTop>=b.y+previous.inkBottom+guard||a.y+newest.inkBottom+guard<=b.y+previous.inkTop),availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),outside=b.x+previous.inkRight<0||b.x+previous.inkLeft>availableWidth||b.y+previous.inkBottom<0||b.y+previous.inkTop>stageHeight;if(overlaps||outside)previous.node.style.visibility='hidden';}}
 
       return metrics.map((item, i) => ({ ...item, ...positions[i] }));
     }
@@ -3870,7 +3882,7 @@
         if(!frame.isConnected)return;
         const text=frame.querySelector(':scope > .sp-text');
         let fitted=false;
-        if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){text.style.maxWidth='none';text.style.width='max-content';let rects=[];try{const range=document.createRange();range.selectNodeContents(text);rects=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);range.detach?.();}catch(_){}const initialTextRect=text.getBoundingClientRect(),inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right,inkTop=rects.length?Math.min(...rects.map(item=>item.top)):initialTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):initialTextRect.bottom,fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;const fittedTextRect=text.getBoundingClientRect(),columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=global.innerWidth<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;}
+        if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){text.style.maxWidth='none';text.style.width='max-content';const measureRects=()=>{try{const range=document.createRange();range.selectNodeContents(text);const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);range.detach?.();return measured;}catch(_){return [];}};let rects=measureRects();const initialTextRect=text.getBoundingClientRect();let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;rects=measureRects();const fittedTextRect=text.getBoundingClientRect();inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=global.innerWidth<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;}
         const rect=frame.getBoundingClientRect(),width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
         if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
         lastWidth=width;lastHeight=height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
