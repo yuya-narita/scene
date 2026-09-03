@@ -4217,7 +4217,7 @@
     if(studioPreviewGuide && !guide){guide=document.createElement('div');guide.className='studio-safe-guide';guide.setAttribute('aria-hidden','true');stage.appendChild(guide);}
     if(!studioPreviewGuide)guide?.remove();
   }
-  function syncStudioPreviewDevice(){
+  function syncStudioPreviewDevice({rerender=false}={}){
     if(!playerScreen)return;
     ['phone','tablet','pc'].forEach(mode=>playerScreen.classList.toggle(`preview-device-${mode}`,mode===studioPreviewDevice));
     studioPreviewDeviceToolbar?.querySelectorAll?.('[data-preview-device]').forEach(button=>button.classList.toggle('is-active',button.dataset.previewDevice===studioPreviewDevice));
@@ -4266,13 +4266,28 @@
       ['position','inset','left','top','transform','width','height','min-height','max-width','max-height'].forEach(name=>playerHost.style.removeProperty(name));
     }
     mountStudioSafeGuide();
-    requestAnimationFrame(()=>{window.dispatchEvent(new Event('resize'));requestAnimationFrame(mountStudioSafeGuide);});
+    requestAnimationFrame(()=>{
+      window.dispatchEvent(new Event('resize'));
+      requestAnimationFrame(()=>{
+        if(rerender && player?.document && typeof player.refreshCurrent==='function'){
+          player.refreshCurrent({document:getDocumentForPlayback(),index:player.index,preserveAudio:true});
+        }
+        mountStudioSafeGuide();
+      });
+    });
   }
   studioPreviewDeviceToolbar?.addEventListener('pointerdown',event=>event.stopPropagation());
   studioPreviewDeviceToolbar?.addEventListener('click',event=>{
     event.preventDefault();event.stopPropagation();
     const deviceButton=event.target.closest?.('[data-preview-device]');
-    if(deviceButton){studioPreviewDevice=deviceButton.dataset.previewDevice;localStorage.setItem(STUDIO_PREVIEW_DEVICE_KEY,studioPreviewDevice);syncStudioPreviewDevice();return;}
+    if(deviceButton){
+      const next=deviceButton.dataset.previewDevice;
+      if(next===studioPreviewDevice)return;
+      studioPreviewDevice=next;
+      localStorage.setItem(STUDIO_PREVIEW_DEVICE_KEY,studioPreviewDevice);
+      syncStudioPreviewDevice({rerender:true});
+      return;
+    }
     if(event.target.closest?.('[data-preview-guide]')){studioPreviewGuide=!studioPreviewGuide;localStorage.setItem(STUDIO_PREVIEW_GUIDE_KEY,String(studioPreviewGuide));syncStudioPreviewDevice();}
   });
   playerHost?.addEventListener('sceneplayer:load',()=>requestAnimationFrame(syncStudioPreviewDevice));
@@ -4716,7 +4731,8 @@
   const FRAME_POSITION_OPTIONS=[
     ['auto',u('おまかせ','Automatic')],['top-left',u('左上','Top left')],['top',u('上','Top')],['top-right',u('右上','Top right')],
     ['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')],
-    ['bottom-left',u('左下','Bottom left')],['bottom',u('下','Bottom')],['bottom-right',u('右下','Bottom right')],['custom',u('自由配置','Free placement')]
+    ['bottom-left',u('左下','Bottom left')],['bottom',u('下','Bottom')],['bottom-right',u('右下','Bottom right')],
+    ['custom',u('調整済み','Adjusted'),true]
   ];
   function framePositionPreset(scene){return scene?.presentation?.text?.position?.preset||scene?.presentation?.frame?.position?.preset||'auto';}
   function setFramePositionPreset(p,preset){
@@ -6651,7 +6667,7 @@ function startInlineTextEdit(field='text'){
     const wrap=document.createElement('label');wrap.className='desktop-live-field';
     const cap=document.createElement('span');cap.textContent=label;wrap.appendChild(cap);
     const select=document.createElement('select');
-    values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
+    values.forEach(([v,l,hidden])=>{const o=document.createElement('option');o.value=v;o.textContent=l;o.hidden=Boolean(hidden);select.appendChild(o);});
     select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
   }
   function desktopAction(label,fn,cls=''){
@@ -6770,7 +6786,7 @@ function startInlineTextEdit(field='text'){
     const wrap=document.createElement('label');wrap.className='desktop-text-detail-field';
     const cap=document.createElement('span');cap.textContent=label;
     const select=document.createElement('select');
-    values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
+    values.forEach(([v,l,hidden])=>{const o=document.createElement('option');o.value=v;o.textContent=l;o.hidden=Boolean(hidden);select.appendChild(o);});
     select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.append(cap,select);return wrap;
   }
   function liveDetailHost(){
@@ -8710,7 +8726,7 @@ function openDesktopTextDetail(){
     const textPositionLabel=document.createElement('span');textPositionLabel.textContent=u('テキスト位置','Text position');
     const textPositionControl=document.createElement('div');textPositionControl.className='desktop-live-position-control';
     const textPositionSelect=document.createElement('select');
-    FRAME_POSITION_OPTIONS.forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;textPositionSelect.appendChild(option);});
+    FRAME_POSITION_OPTIONS.forEach(([value,label,hidden])=>{const option=document.createElement('option');option.value=value;option.textContent=label;option.hidden=Boolean(hidden);textPositionSelect.appendChild(option);});
     textPositionSelect.value=framePositionPreset(scene);
     textPositionSelect.addEventListener('change',()=>{setFramePositionPreset(p,textPositionSelect.value);refresh();});
     const textPositionAdjust=document.createElement('button');textPositionAdjust.type='button';textPositionAdjust.className='desktop-live-position-adjust';
@@ -9505,7 +9521,7 @@ function openDesktopTextDetail(){
       const makeSelect=(label,values,current,onchange)=>{
         const wrap=document.createElement('label');wrap.className='live-edit-field';wrap.append(label);
         const select=document.createElement('select');
-        values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
+        values.forEach(([v,l,hidden])=>{const o=document.createElement('option');o.value=v;o.textContent=l;o.hidden=Boolean(hidden);select.appendChild(o);});
         select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
       };
       const p=ensurePresentation(scene);p.text ||= {};
