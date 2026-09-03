@@ -7116,6 +7116,13 @@ function openDesktopEffectDetail(){
         if(!(Number(p.disappear.after)>0)) p.disappear.after=2500;
         if(!(Number(p.disappear.fade)>0)) p.disappear.fade=700;
         apply();
+      }),
+      desktopDetailSelect(u('消える対象','Exit target'),[['scene',u('このSceneだけ','This Scene only')],['visible',u('画面に残っている文字すべて','All visible text')]],p.disappear?.scope==='visible'?'visible':'scene',v=>{
+        p.disappear={...(p.disappear||{}),scope:v};
+        if(!(Number(p.disappear.after)>0)) p.disappear.after=2500;
+        if(!(Number(p.disappear.fade)>0)) p.disappear.fade=700;
+        if(!p.disappear.motion)p.disappear.motion='stay';
+        apply();
       })
     );
 

@@ -4192,27 +4192,33 @@
       if (after > 0) {
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
         const motion = ['up','shatter','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
-        article.style.setProperty('--sp-disappear-fade', `${fade}ms`);
+        const scope=disappear?.scope==='visible'?'visible':'scene';
+        const targets=scope==='visible'
+          ? [...this.els.scenes.querySelectorAll('.sp-scene')].filter(node=>node.isConnected&&!node.classList.contains('is-disappeared'))
+          : [article];
+        targets.forEach(target=>{
+        target.style.setProperty('--sp-disappear-fade', `${fade}ms`);
         // Shatter / explode animate the Scene at its CURRENT laid-out position.
         // Their keyframes add relative motion on top of this anchor instead of
         // replacing the stack translate and jumping to the stage origin first.
         if (motion === 'shatter' || motion === 'explode') {
-          article.style.setProperty('--sp-disappear-anchor-transform', article.style.transform || 'translate3d(0,0,0)');
+          target.style.setProperty('--sp-disappear-anchor-transform', target.style.transform || 'translate3d(0,0,0)');
         } else {
-          article.style.removeProperty('--sp-disappear-anchor-transform');
+          target.style.removeProperty('--sp-disappear-anchor-transform');
         }
-        article.classList.toggle('is-disappear-up', motion === 'up');
-        article.classList.toggle('is-disappear-shatter', motion === 'shatter');
-        article.classList.toggle('is-disappear-explode', motion === 'explode');
-        article.classList.toggle('is-disappear-stay', motion === 'stay');
+        target.classList.toggle('is-disappear-up', motion === 'up');
+        target.classList.toggle('is-disappear-shatter', motion === 'shatter');
+        target.classList.toggle('is-disappear-explode', motion === 'explode');
+        target.classList.toggle('is-disappear-stay', motion === 'stay');
+        });
         this._presentationTimeout(() => {
           if (!article.isConnected) return;
-          article.classList.add('is-disappearing');
-          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion });
+          targets.forEach(target=>{if(target.isConnected)target.classList.add('is-disappearing');});
+          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion, scope });
           this._presentationTimeout(() => {
             if (!article.isConnected) return;
-            article.classList.add('is-disappeared');
-            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion });
+            targets.forEach(target=>{if(target.isConnected)target.classList.add('is-disappeared');});
+            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion, scope });
           }, fade);
         }, after);
       }
