@@ -29,13 +29,16 @@
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
+    #studioPreviewViewport{position:absolute;inset:0;width:100%;height:100%;overflow:hidden}
+    #studioPreviewViewport>#scenePlayer{width:100%;height:100%}
     .studio-preview-device-toolbar{display:none}
     @media (min-width:1100px){
       body.desktop-live-edit #playerScreen{--studio-preview-ratio:1;overflow:hidden}
-      body.desktop-live-edit #scenePlayer{position:absolute;inset:0;margin:auto;transition:width .2s ease,height .2s ease,border-radius .2s ease;overflow:hidden}
-      body.desktop-live-edit #playerScreen.preview-device-phone #scenePlayer{width:min(100%,46.21dvh);height:auto;max-height:100dvh;aspect-ratio:390/844;border-radius:18px;box-shadow:0 0 0 1px rgba(120,125,135,.35),0 16px 46px rgba(0,0,0,.24)}
-      body.desktop-live-edit #playerScreen.preview-device-tablet #scenePlayer{width:100%;height:100%;border-radius:0}
-      body.desktop-live-edit #playerScreen.preview-device-pc #scenePlayer{width:100%;height:auto;max-height:100%;aspect-ratio:16/9;border-radius:10px;box-shadow:0 0 0 1px rgba(120,125,135,.3),0 14px 40px rgba(0,0,0,.2)}
+      body.desktop-live-edit #studioPreviewViewport{position:absolute;z-index:1;left:50%;top:50%;transform:translate(-50%,-50%);overflow:hidden;background:#181d21;transition:width .2s ease,height .2s ease,border-radius .2s ease,box-shadow .2s ease}
+      body.desktop-live-edit #studioPreviewViewport #scenePlayer{position:relative!important;inset:auto!important;left:auto!important;top:auto!important;transform:none!important;width:100%!important;height:100%!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;overflow:hidden!important}
+      body.desktop-live-edit #playerScreen.preview-device-phone #studioPreviewViewport{border-radius:18px;box-shadow:0 0 0 2px rgba(255,255,255,.68),0 16px 46px rgba(0,0,0,.32)}
+      body.desktop-live-edit #playerScreen.preview-device-tablet #studioPreviewViewport{border-radius:12px;box-shadow:0 0 0 2px rgba(255,255,255,.45),0 14px 42px rgba(0,0,0,.26)}
+      body.desktop-live-edit #playerScreen.preview-device-pc #studioPreviewViewport{border-radius:8px;box-shadow:0 0 0 2px rgba(255,255,255,.45),0 14px 40px rgba(0,0,0,.24)}
       body.desktop-live-edit .studio-preview-device-toolbar{position:absolute;z-index:210;top:70px;left:10px;display:flex;align-items:center;gap:3px;padding:4px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(20,22,26,.74);box-shadow:0 6px 20px rgba(0,0,0,.2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
       .studio-preview-device-toolbar button{appearance:none;min-width:0;height:28px;padding:0 9px;border:0;border-radius:999px;background:transparent;color:#fff;font:700 10px/1 system-ui,sans-serif;white-space:nowrap;cursor:pointer}
       .studio-preview-device-toolbar button.is-active{background:#fff;color:#17181b}
@@ -515,7 +518,7 @@
   </section>
 
   <section id="playerScreen" class="easy-core-screen" hidden>
-    <div id="scenePlayer"></div>
+    <div id="studioPreviewViewport"><div id="scenePlayer"></div></div>
 
     <nav id="studioPreviewDeviceToolbar" class="studio-preview-device-toolbar" aria-label="プレビュー端末">
       <button type="button" data-preview-device="phone">iPhone</button>
@@ -784,7 +787,7 @@
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js"></script>
+<script src="./script.js?v=20260903-12"></script>
 
 
 

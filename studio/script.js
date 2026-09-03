@@ -126,6 +126,7 @@
   const charCount = $('#charCount');
   const densitySelect = $('#densitySelect');
   const playerHost = $('#scenePlayer');
+  const studioPreviewViewport=$('#studioPreviewViewport');
   const studioPreviewDeviceToolbar=$('#studioPreviewDeviceToolbar');
   const STUDIO_PREVIEW_DEVICE_KEY='sceneStudio.previewDevice.v1';
   const STUDIO_PREVIEW_GUIDE_KEY='sceneStudio.previewSafeGuide.v1';
@@ -4231,17 +4232,24 @@
       const ratio=studioPreviewDevice==='phone'?(390/844):(studioPreviewDevice==='tablet'?(3/4):(16/9));
       const width=Math.round(Math.min(availableWidth,availableHeight*ratio));
       const height=Math.round(width/ratio);
-      playerHost.style.setProperty('position','absolute','important');
+      studioPreviewViewport?.style.setProperty('width',`${width}px`,'important');
+      studioPreviewViewport?.style.setProperty('height',`${height}px`,'important');
+      // The Player host is .sp-core and carries min-height:100dvh. Constrain
+      // that actual element to the viewport wrapper, otherwise only the empty
+      // outer box changes while the visible Player stays tablet-sized.
+      playerHost.style.setProperty('position','relative','important');
       playerHost.style.setProperty('inset','auto','important');
-      playerHost.style.setProperty('left','50%','important');
-      playerHost.style.setProperty('top','50%','important');
-      playerHost.style.setProperty('transform','translate(-50%,-50%)','important');
-      playerHost.style.setProperty('width',`${width}px`,'important');
-      playerHost.style.setProperty('height',`${height}px`,'important');
+      playerHost.style.setProperty('left','auto','important');
+      playerHost.style.setProperty('top','auto','important');
+      playerHost.style.setProperty('transform','none','important');
+      playerHost.style.setProperty('width','100%','important');
+      playerHost.style.setProperty('height','100%','important');
+      playerHost.style.setProperty('min-height','0','important');
       playerHost.style.setProperty('max-width','none','important');
       playerHost.style.setProperty('max-height','none','important');
     }else{
-      ['position','inset','left','top','transform','width','height','max-width','max-height'].forEach(name=>playerHost.style.removeProperty(name));
+      ['width','height'].forEach(name=>studioPreviewViewport?.style.removeProperty(name));
+      ['position','inset','left','top','transform','width','height','min-height','max-width','max-height'].forEach(name=>playerHost.style.removeProperty(name));
     }
     mountStudioSafeGuide();
     requestAnimationFrame(()=>{window.dispatchEvent(new Event('resize'));requestAnimationFrame(mountStudioSafeGuide);});
