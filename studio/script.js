@@ -6875,11 +6875,17 @@ function startInlineTextEdit(field='text'){
       let dragging=false;
       const applyPoint=(clientX,clientY)=>{
         const sr=stage.getBoundingClientRect(),cr=scenes.getBoundingClientRect(),geometry=player._measureSceneGeometry(article,sr);
-        const width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=10,availableWidth=Math.max(1,cr.width);
-        let centerX=clientX-cr.left,centerY=clientY-sr.top;
+        // Device previews are logical reader viewports scaled into the Studio
+        // pane. Convert rendered pointer pixels back to that logical space
+        // before clamping, saving and assigning the Scene transform.
+        const scale=Math.max(.05,Number(player?._layoutScale?.())||1);
+        const width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=10;
+        const availableWidth=Math.max(1,scenes.clientWidth||cr.width/scale);
+        const availableHeight=Math.max(1,stage.clientHeight||sr.height/scale);
+        let centerX=(clientX-cr.left)/scale,centerY=(clientY-sr.top)/scale;
         centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,centerX));
-        centerY=height+margin*2>=sr.height?sr.height/2:Math.max(height/2+margin,Math.min(sr.height-height/2-margin,centerY));
-        p.text.position={preset:'custom',x:centerX/availableWidth,y:centerY/Math.max(1,sr.height)};
+        centerY=height+margin*2>=availableHeight?availableHeight/2:Math.max(height/2+margin,Math.min(availableHeight-height/2-margin,centerY));
+        p.text.position={preset:'custom',x:centerX/availableWidth,y:centerY/availableHeight};
         syncLivePosition(p.text.position);
         article.style.transform=`translate3d(${Math.round(centerX-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
       };
