@@ -2849,32 +2849,34 @@
 
     _measureSceneGeometry(node, stageRect) {
       node.classList.add('sp-layout-measuring');
+      const scale=this._layoutScale();
       const nodeRect=node.getBoundingClientRect();
-      const boxHeight=Math.max(1,nodeRect.height);
+      const boxHeight=Math.max(1,nodeRect.height/scale);
       const text=node.querySelector('.sp-text');
       const frame=node.querySelector('.sp-handdrawn-frame');
       const vertical=text?.dataset?.writingMode==='vertical-rl';
       let inkLeft=0,inkRight=Math.max(1,nodeRect.width),inkTop=0,inkBottom=boxHeight;
       if(frame){
         const frameRect=frame.getBoundingClientRect();
-        inkLeft=frameRect.left-nodeRect.left;
-        inkRight=frameRect.right-nodeRect.left;
-        inkTop=frameRect.top-nodeRect.top;
-        inkBottom=frameRect.bottom-nodeRect.top;
+        inkLeft=(frameRect.left-nodeRect.left)/scale;
+        inkRight=(frameRect.right-nodeRect.left)/scale;
+        inkTop=(frameRect.top-nodeRect.top)/scale;
+        inkBottom=(frameRect.bottom-nodeRect.top)/scale;
       }else try{
         const range=document.createRange();
         range.selectNodeContents(text||node);
         const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
         range.detach?.();
         if(rects.length){
-          inkLeft=Math.min(...rects.map(rect=>rect.left))-nodeRect.left;
-          inkRight=Math.max(...rects.map(rect=>rect.right))-nodeRect.left;
-          inkTop=Math.min(...rects.map(rect=>rect.top))-nodeRect.top;
-          inkBottom=Math.max(...rects.map(rect=>rect.bottom))-nodeRect.top;
+          inkLeft=(Math.min(...rects.map(rect=>rect.left))-nodeRect.left)/scale;
+          inkRight=(Math.max(...rects.map(rect=>rect.right))-nodeRect.left)/scale;
+          inkTop=(Math.min(...rects.map(rect=>rect.top))-nodeRect.top)/scale;
+          inkBottom=(Math.max(...rects.map(rect=>rect.bottom))-nodeRect.top)/scale;
         }
       }catch(_){}
       const inkHeight=Math.max(1,inkBottom-inkTop);
-      const height=vertical?Math.min(boxHeight,Math.max(48,Math.min(stageRect.height*.52,inkHeight+8))):boxHeight;
+      const stageHeight=Math.max(1,this.els.stage?.clientHeight||stageRect.height/scale);
+      const height=vertical?Math.min(boxHeight,Math.max(48,Math.min(stageHeight*.52,inkHeight+8))):boxHeight;
       node.classList.remove('sp-layout-measuring');
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
@@ -2884,6 +2886,12 @@
       // clientWidth keeps JS layout decisions on that viewport instead of the
       // outer desktop browser width; in the public Player both are identical.
       return Math.max(1, Number(this.host?.clientWidth) || Number(global.innerWidth) || 1);
+    }
+
+    _layoutScale() {
+      const width=Math.max(1,Number(this.host?.clientWidth)||1);
+      const rendered=Number(this.host?.getBoundingClientRect?.().width)||width;
+      return Math.max(.05,rendered/width);
     }
 
     _framePosition(scene) {
@@ -2898,7 +2906,8 @@
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
-      const stageHeight = stageRect.height;
+      const stageHeight = Math.max(1,this.els.stage.clientHeight);
+      const stageWidth = Math.max(1,this.els.stage.clientWidth);
       const focusRatio = this._viewportWidth() <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
       const focusY = stageHeight * focusRatio;
 
@@ -2924,7 +2933,7 @@
         const flow=next.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
         const eitherVertical=current.scene?.presentation?.text?.writingMode==='vertical-rl'||next.scene?.presentation?.text?.writingMode==='vertical-rl';
         if(flow==='horizontal'){
-          const gap=Math.max(this._sceneGap(current.scene,next.scene),stageRect.width*.09)+extraGap;
+          const gap=Math.max(this._sceneGap(current.scene,next.scene),stageWidth*.09)+extraGap;
           const verticalReading=next.scene?.presentation?.text?.writingMode==='vertical-rl';
           positions[i]={x:verticalReading?nextPosition.x+next.inkRight+gap-current.inkLeft:nextPosition.x+next.inkLeft-gap-current.inkRight,y:nextPosition.y+next.inkCenterY-current.inkCenterY};
         }else{
@@ -2939,15 +2948,15 @@
       if(currentFrame&&metrics.length>1&&this._framePosition(newest.scene).preset==='auto'){
         const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
         if(previousFrame){
-          const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical',gap=this._viewportWidth()<=600?14:24,currentWidth=newest.inkRight-newest.inkLeft,previousWidth=previous.inkRight-previous.inkLeft,currentHeight=newest.inkBottom-newest.inkTop,previousHeight=previous.inkBottom-previous.inkTop,availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),availableHeight=stageHeight*.86,margin=this._viewportWidth()<=600?10:16;
+          const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical',gap=this._viewportWidth()<=600?14:24,currentWidth=newest.inkRight-newest.inkLeft,previousWidth=previous.inkRight-previous.inkLeft,currentHeight=newest.inkBottom-newest.inkTop,previousHeight=previous.inkBottom-previous.inkTop,availableWidth=Math.max(1,newest.node.clientWidth),availableHeight=stageHeight*.86,margin=this._viewportWidth()<=600?10:16;
           previous.node.style.visibility='';previous.node.style.zIndex='20';newest.node.style.zIndex='30';
           if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',fits=currentWidth+previousWidth+gap<=availableWidth-margin*2,groupWidth=currentWidth+previousWidth+gap,groupLeft=(availableWidth-groupWidth)/2,currentLeft=fits?(verticalReading?groupLeft:groupLeft+previousWidth+gap):(verticalReading?margin:availableWidth-margin-currentWidth),previousLeft=fits?(verticalReading?groupLeft+currentWidth+gap:groupLeft):(verticalReading?availableWidth-margin-previousWidth:margin),centerY=stageHeight*.48;positions[metrics.length-1]={x:currentLeft-newest.inkLeft,y:centerY-newest.inkCenterY};positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:centerY-previous.inkCenterY};}
           else{const fits=currentHeight+previousHeight+gap<=availableHeight,groupHeight=currentHeight+previousHeight+gap,groupTop=(stageHeight-groupHeight)/2,previousTop=fits?groupTop:margin,currentTop=fits?groupTop+previousHeight+gap:stageHeight-margin-currentHeight;positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:previousTop-previous.inkTop};positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:currentTop-newest.inkTop};}
         }
       }
 
-      metrics.forEach((item,i)=>{if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;const availableWidth=Math.max(1,item.node.getBoundingClientRect().width),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop,margin=this._viewportWidth()<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));positions[i]={x:centerX-item.inkCenterX,y:centerY-item.inkCenterY};});
-      if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){const availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),margin=this._viewportWidth()<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};}else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};}}
+      metrics.forEach((item,i)=>{if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;const availableWidth=Math.max(1,item.node.clientWidth),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop,margin=this._viewportWidth()<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));positions[i]={x:centerX-item.inkCenterX,y:centerY-item.inkCenterY};});
+      if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){const availableWidth=Math.max(1,newest.node.clientWidth),margin=this._viewportWidth()<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};}else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};}}
 
       return metrics.map((item, i) => ({ ...item, ...positions[i] }));
     }
@@ -2963,11 +2972,12 @@
     _positionOverlayNodes(nodes, sceneEntries) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
-      const focusY = stageRect.height * (stageRect.width <= 520 ? .48 : .46);
+      const stageHeight=Math.max(1,this.els.stage.clientHeight),stageWidth=Math.max(1,this.els.stage.clientWidth);
+      const focusY = stageHeight * (stageWidth <= 520 ? .48 : .46);
       return nodes.map((node, i) => {
         const geometry=this._measureSceneGeometry(node,stageRect),position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
-        let x=0,y=focusY-Math.max(1,node.getBoundingClientRect().height)/2;
-        if(position.preset!=='auto'){const availableWidth=Math.max(1,node.getBoundingClientRect().width),width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=this._viewportWidth()<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageRect.height?stageRect.height/2:Math.max(height/2+margin,Math.min(stageRect.height-height/2-margin,stageRect.height*position.y));x=centerX-geometry.inkCenterX;y=centerY-geometry.inkCenterY;}
+        let x=0,y=focusY-Math.max(1,node.offsetHeight)/2;
+        if(position.preset!=='auto'){const availableWidth=Math.max(1,node.clientWidth),width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=this._viewportWidth()<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));x=centerX-geometry.inkCenterX;y=centerY-geometry.inkCenterY;}
         node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
         node.style.zIndex = String(20 + i);
         return { node, scene: sceneEntries[i]?.scene, x, y, height: geometry.height };
@@ -3891,9 +3901,22 @@
         const text=frame.querySelector(':scope > .sp-text');
         let fitted=false;
         frame.classList.add('sp-frame-measuring');
-        if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){text.style.maxWidth='none';text.style.width='max-content';const measureRects=()=>{try{const range=document.createRange();range.selectNodeContents(text);const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);range.detach?.();return measured;}catch(_){return [];}};let rects=measureRects();const initialTextRect=text.getBoundingClientRect();let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;rects=measureRects();const fittedTextRect=text.getBoundingClientRect();inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=this._viewportWidth()<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;}
+        if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){
+          const scale=this._layoutScale();
+          const logicalRect=element=>{const rect=element.getBoundingClientRect();return {left:rect.left/scale,right:rect.right/scale,top:rect.top/scale,bottom:rect.bottom/scale,width:rect.width/scale,height:rect.height/scale};};
+          text.style.maxWidth='none';text.style.width='max-content';
+          const measureRects=()=>{try{const range=document.createRange();range.selectNodeContents(text);const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0).map(item=>({left:item.left/scale,right:item.right/scale,top:item.top/scale,bottom:item.bottom/scale,width:item.width/scale,height:item.height/scale}));range.detach?.();return measured;}catch(_){return [];}};
+          let rects=measureRects();const initialTextRect=logicalRect(text);
+          let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;
+          const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;
+          rects=measureRects();const fittedTextRect=logicalRect(text);
+          inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;
+          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=this._viewportWidth()<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
+          text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;
+          frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;
+        }
         frame.classList.remove('sp-frame-measuring');
-        const rect=frame.getBoundingClientRect(),width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
+        const rect=frame.getBoundingClientRect(),scale=this._layoutScale(),width=Math.max(24,Math.round(rect.width/scale*10)/10),height=Math.max(24,Math.round(rect.height/scale*10)/10);
         if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
         lastWidth=width;lastHeight=height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
         const seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}`),shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0)),primary=this._handdrawnPath(width,height,seed,0,shapeLevel);
