@@ -25,7 +25,7 @@
 
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20260903-18">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20260903-19">
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -49,6 +49,8 @@
       /* The compact Text card grew as position/writing controls were added. Let it size and scroll naturally. */
       body.desktop-live-edit .desktop-live-panel{display:flex!important;flex-direction:column!important;height:100dvh!important;max-height:100dvh!important;overflow:hidden!important}
       .desktop-live-panel-body{flex:1 1 auto!important;min-height:0!important;height:auto!important;padding-bottom:72px!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable}
+      .desktop-text-detail-overlay,.desktop-text-detail-modal,.desktop-text-detail-body{overscroll-behavior:contain!important}
+      .desktop-text-detail-body{touch-action:pan-y}
       .desktop-live-three{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:auto auto!important;grid-auto-rows:auto!important;align-items:start!important;overflow:visible!important}
       .desktop-live-three>.desktop-live-card{height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important}
       .desktop-live-three>.desktop-live-card .desktop-live-grid{height:auto!important;max-height:none!important;overflow:visible!important}
@@ -798,11 +800,11 @@
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
 <script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js?v=20260903-18"></script>
+<script src="./scene-player-core.js?v=20260903-19"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260903-18"></script>
+<script src="./script.js?v=20260903-19"></script>
 
 
 

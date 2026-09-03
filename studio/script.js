@@ -6050,6 +6050,21 @@
   const desktopTimingButton=$('#desktopTimingButton');
   const desktopShortcutButton=$('#desktopShortcutButton');
   const desktopLiveMQ=window.matchMedia('(min-width:1100px)');
+  // A detail inspector is the only scroll owner while it is open. At either
+  // boundary, consume the wheel instead of chaining it to the panel below.
+  document.addEventListener('wheel',event=>{
+    const target=event.target instanceof Element?event.target:null;
+    const overlay=target?.closest('.desktop-text-detail-overlay');
+    if(!overlay)return;
+    const body=overlay.querySelector('.desktop-text-detail-body');
+    if(body){
+      const unit=event.deltaMode===1?16:(event.deltaMode===2?body.clientHeight:1);
+      body.scrollTop+=(Number(event.deltaY)||0)*unit;
+      body.scrollLeft+=(Number(event.deltaX)||0)*unit;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  },{passive:false,capture:true});
   // The Player owns wheel gestures on the preview. Keep wheel input that starts
   // inside the inspector on its own scroll container, even when an ancestor is
   // fixed or the pointer happens to cross a scaled preview layer.
