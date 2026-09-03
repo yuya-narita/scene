@@ -4471,9 +4471,9 @@
 
 
   function updateAdvancedConditionalUI(){
-    const frameEnabled=$('#sceneFrameSelect')?.value==='handdrawn-voice';
-    if($('#sceneFramePositionSelect'))$('#sceneFramePositionSelect').disabled=!frameEnabled;
-    if($('#sceneFramePositionAdjust'))$('#sceneFramePositionAdjust').disabled=!frameEnabled;
+    const positionEnabled=typeof currentScene()?.text==='string'&&currentScene().text.length>0;
+    if($('#sceneFramePositionSelect'))$('#sceneFramePositionSelect').disabled=!positionEnabled;
+    if($('#sceneFramePositionAdjust'))$('#sceneFramePositionAdjust').disabled=!positionEnabled;
     const bgMode=$('#sceneBackgroundMode')?.value || 'inherit';
     $('#sceneBackgroundControls').hidden=bgMode!=='image';
     const bgAsset=assetFrom('sceneBackgroundInput');
@@ -4636,12 +4636,14 @@
     ['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')],
     ['bottom-left',u('左下','Bottom left')],['bottom',u('下','Bottom')],['bottom-right',u('右下','Bottom right')],['custom',u('自由配置','Free placement')]
   ];
-  function framePositionPreset(scene){return scene?.presentation?.frame?.position?.preset||'auto';}
+  function framePositionPreset(scene){return scene?.presentation?.text?.position?.preset||scene?.presentation?.frame?.position?.preset||'auto';}
   function setFramePositionPreset(p,preset){
-    if(!p.frame||p.frame.type!=='handdrawn-voice')p.frame={...(p.frame||{}),type:'handdrawn-voice'};
-    if(preset==='auto'){delete p.frame.position;return;}
-    if(preset==='custom')p.frame.position={preset:'custom',x:Number(p.frame.position?.x)||.5,y:Number(p.frame.position?.y)||.5};
-    else p.frame.position={preset};
+    p.text||={};
+    const previous=p.text.position||p.frame?.position||{};
+    if(preset==='auto')delete p.text.position;
+    else if(preset==='custom')p.text.position={preset:'custom',x:Number(previous.x)||.5,y:Number(previous.y)||.5};
+    else p.text.position={preset};
+    if(p.frame)delete p.frame.position;
   }
 
   function syncAdvancedFieldsToScene(){
@@ -4667,10 +4669,8 @@
     const writingMode=$('#sceneWritingModeSelect')?.value || 'horizontal-tb';
     if(writingMode==='vertical-rl')p.text.writingMode='vertical-rl';else delete p.text.writingMode;
     const frameType=$('#sceneFrameSelect')?.value || 'none';
-    if(frameType==='handdrawn-voice'){
-      p.frame={...(p.frame||{}),type:'handdrawn-voice'};
-      setFramePositionPreset(p,$('#sceneFramePositionSelect')?.value||framePositionPreset(scene));
-    }else delete p.frame;
+    setFramePositionPreset(p,$('#sceneFramePositionSelect')?.value||framePositionPreset(scene));
+    if(frameType==='handdrawn-voice')p.frame={...(p.frame||{}),type:'handdrawn-voice'};else delete p.frame;
     const weightChoice=Number($('#sceneWeightSelect')?.value||0); if(weightChoice) p.text.fontWeight=weightChoice; else delete p.text.fontWeight;
     const colorChoice=$('#sceneColorSelect')?.value || 'auto';
     if(colorChoice==='white') p.text.color='#ffffff';
@@ -4704,7 +4704,7 @@
     $('#sceneTypeSelect').value=scene.type || 'text'; $('#sceneDisplaySelect').value=scene.presentation?.display || 'stack'; if($('#sceneFlowSelect'))$('#sceneFlowSelect').value=scene.presentation?.flow==='horizontal'?'horizontal':'vertical';
     if($('#sceneViewSelect')) $('#sceneViewSelect').value=scene.presentation?.view || 'world';
     if($('#sceneEntryMotionSelect')) $('#sceneEntryMotionSelect').value=scene.presentation?.entryMotion || 'flow';
-    $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto'; if($('#sceneWritingModeSelect')) $('#sceneWritingModeSelect').value=scene.presentation?.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb'; if($('#sceneFrameSelect'))$('#sceneFrameSelect').value=scene.presentation?.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none'; if($('#sceneFramePositionSelect'))$('#sceneFramePositionSelect').value=framePositionPreset(scene); if($('#sceneFramePositionAdjust'))$('#sceneFramePositionAdjust').disabled=scene.presentation?.frame?.type!=='handdrawn-voice'; if($('#sceneWeightSelect')) $('#sceneWeightSelect').value=String(scene.presentation?.text?.fontWeight||0);
+    $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto'; if($('#sceneWritingModeSelect')) $('#sceneWritingModeSelect').value=scene.presentation?.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb'; if($('#sceneFrameSelect'))$('#sceneFrameSelect').value=scene.presentation?.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none'; if($('#sceneFramePositionSelect'))$('#sceneFramePositionSelect').value=framePositionPreset(scene); if($('#sceneFramePositionAdjust'))$('#sceneFramePositionAdjust').disabled=typeof scene.text!=='string'||!scene.text.length; if($('#sceneWeightSelect')) $('#sceneWeightSelect').value=String(scene.presentation?.text?.fontWeight||0);
     const sceneColor=scene.presentation?.text?.color || '';
     $('#sceneColorSelect').value=!sceneColor?'auto':(sceneColor.toLowerCase()==='#ffffff'||sceneColor.toLowerCase()==='white'?'white':(sceneColor.toLowerCase()==='#000000'||sceneColor.toLowerCase()==='black'?'black':'custom'));
     $('#sceneColorCustomInput').value=/^#[0-9a-f]{6}$/i.test(sceneColor)?sceneColor:'#ffffff';
@@ -5823,7 +5823,7 @@
   $('#advancedPreviewButton')?.addEventListener('click',()=>{syncAdvancedFieldsToScene();openPlayer({from:'advanced',startAt:selectedSceneIndex});});
   $('#sceneFramePositionAdjust')?.addEventListener('click',()=>{
     syncAdvancedFieldsToScene();
-    const scene=currentScene();if(!scene||scene.presentation?.frame?.type!=='handdrawn-voice')return;
+    const scene=currentScene();if(!scene||typeof scene.text!=='string'||!scene.text.length)return;
     openPlayer({from:'advanced',startAt:selectedSceneIndex});
     setTimeout(()=>openFramePositionDragEditor(scene),180);
   });
@@ -6718,11 +6718,6 @@ function startInlineTextEdit(field='text'){
   function openFramePositionDragEditor(scene){
     if(!scene)return;
     const p=ensurePresentation(scene);p.text||={};
-    if(p.frame?.type!=='handdrawn-voice'){
-      p.frame={...(p.frame||{}),type:'handdrawn-voice'};
-      scheduleDraftSave(40);
-      refreshLivePlayer({preserveSheet:false});
-    }
     finishFramePositionDrag();
     closeDesktopTextDetail();
     if(liveEditSheet){liveEditSheet.hidden=true;document.body.classList.remove('live-edit-sheet-open','mobile-live-detail-open');}
@@ -6731,19 +6726,23 @@ function startInlineTextEdit(field='text'){
       const stage=player?.els?.stage,scenes=player?.els?.scenes;
       const article=playerHost?.querySelector('.sp-scene.is-active');
       const frame=article?.querySelector('.sp-handdrawn-frame');
-      if(!stage||!scenes||!article||!frame){alert(u('吹き出しを表示してから調整してください','Show the balloon before adjusting its position.'));return;}
-      const before=p.frame.position?clone(p.frame.position):null;
+      const target=frame||article?.querySelector(':scope > .sp-text');
+      if(!stage||!scenes||!article||!target){alert(u('配置できるテキストがありません','There is no text to position.'));return;}
+      const beforeText=p.text.position?clone(p.text.position):null;
+      const beforeFrame=p.frame?.position?clone(p.frame.position):null;
       const liveScene=player?.document?.scenes?.find(item=>item?.id===scene.id);
       const syncLivePosition=(position)=>{
         if(!liveScene)return;
-        liveScene.presentation||={};liveScene.presentation.frame={...(liveScene.presentation.frame||{}),type:'handdrawn-voice'};
-        if(position)liveScene.presentation.frame.position=clone(position);else delete liveScene.presentation.frame.position;
+        liveScene.presentation||={};liveScene.presentation.text||={};
+        if(position)liveScene.presentation.text.position=clone(position);else delete liveScene.presentation.text.position;
+        if(liveScene.presentation.frame)delete liveScene.presentation.frame.position;
       };
-      const stageRect=stage.getBoundingClientRect(),scenesRect=scenes.getBoundingClientRect(),frameRect=frame.getBoundingClientRect();
-      p.frame.position={preset:'custom',x:Math.max(0,Math.min(1,(frameRect.left+frameRect.width/2-scenesRect.left)/Math.max(1,scenesRect.width))),y:Math.max(0,Math.min(1,(frameRect.top+frameRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))};
-      syncLivePosition(p.frame.position);
+      const stageRect=stage.getBoundingClientRect(),scenesRect=scenes.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
+      p.text.position={preset:'custom',x:Math.max(0,Math.min(1,(targetRect.left+targetRect.width/2-scenesRect.left)/Math.max(1,scenesRect.width))),y:Math.max(0,Math.min(1,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))};
+      if(p.frame)delete p.frame.position;
+      syncLivePosition(p.text.position);
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
-      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('画面をタップ／ドラッグして配置','Tap or drag to place the balloon');
+      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('画面をタップ／ドラッグして配置','Tap or drag to position the text');
       const toolbar=document.createElement('div');toolbar.className='frame-position-drag-toolbar';
       const auto=document.createElement('button');auto.type='button';auto.textContent=u('自動','Auto');
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('取消','Cancel');
@@ -6756,8 +6755,8 @@ function startInlineTextEdit(field='text'){
         let centerX=clientX-cr.left,centerY=clientY-sr.top;
         centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,centerX));
         centerY=height+margin*2>=sr.height?sr.height/2:Math.max(height/2+margin,Math.min(sr.height-height/2-margin,centerY));
-        p.frame.position={preset:'custom',x:centerX/availableWidth,y:centerY/Math.max(1,sr.height)};
-        syncLivePosition(p.frame.position);
+        p.text.position={preset:'custom',x:centerX/availableWidth,y:centerY/Math.max(1,sr.height)};
+        syncLivePosition(p.text.position);
         article.style.transform=`translate3d(${Math.round(centerX-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
       };
       shield.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();dragging=true;shield.setPointerCapture?.(event.pointerId);applyPoint(event.clientX,event.clientY);});
@@ -6768,9 +6767,9 @@ function startInlineTextEdit(field='text'){
       [toolbar,auto,cancel,save].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false}={})=>{
         shield.remove();hint.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
-        if(reset)delete p.frame.position;
-        else if(!keep){if(before)p.frame.position=before;else delete p.frame.position;}
-        syncLivePosition(p.frame.position||null);
+        if(reset){delete p.text.position;if(p.frame)delete p.frame.position;}
+        else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
+        syncLivePosition(p.text.position||p.frame?.position||null);
         scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel?.();
       };
       auto.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();finishFramePositionDrag({save:true,reset:true});});
@@ -6780,7 +6779,7 @@ function startInlineTextEdit(field='text'){
   }
   function makeFramePositionDragButton(scene){
     const button=document.createElement('button');button.type='button';button.className='frame-position-adjust-button';
-    button.textContent=u('プレビュー上でドラッグ調整','Drag on preview to position');button.disabled=scene?.presentation?.frame?.type!=='handdrawn-voice';
+    button.textContent=u('プレビュー上でドラッグ調整','Drag on preview to position');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
     button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openFramePositionDragEditor(scene);});return button;
   }
 
@@ -8046,7 +8045,7 @@ function openDesktopTextDetail(){
       desktopDetailSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;apply();}),
       desktopDetailSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;apply();}),
       desktopDetailSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')]],p.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none',v=>{if(v==='handdrawn-voice')p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();}),
-      desktopDetailSelect(u('吹き出し位置','Balloon position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);apply();}),
+      desktopDetailSelect(u('テキスト位置','Text position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);apply();}),
       desktopDetailSelect(u('文字色','Text color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom')),v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;apply();}),
       desktopDetailSelect(u('文字影','Text shadow'),[['auto',t('effect.auto')],['none',t('shadow.none')],['soft',t('shadow.soft')],['strong',t('shadow.strong')]],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
     );
@@ -8595,7 +8594,7 @@ function openDesktopTextDetail(){
       desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
       desktopMakeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;refresh();}),
       desktopMakeSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')]],p.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none',v=>{if(v==='handdrawn-voice')p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
-      desktopMakeSelect(u('吹き出し位置','Balloon position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);refresh();}),
+      desktopMakeSelect(u('テキスト位置','Text position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);refresh();}),
       desktopMakeSelect(u('色','Color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;refresh();}),
       desktopMakeSelect(p.text.writingMode==='vertical-rl'?u('横位置','Horizontal position'):u('文字配置','Alignment'),p.text.writingMode==='vertical-rl'?[['auto',u('中央（おまかせ）','Center (automatic)')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]]:[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;refresh();})
     );
@@ -9405,7 +9404,7 @@ function openDesktopTextDetail(){
         makeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
         makeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;rerender();}),
         makeSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')]],p.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none',v=>{if(v==='handdrawn-voice')p.frame={...(p.frame||{}),type:v};else delete p.frame;rerender();}),
-        makeSelect(u('吹き出し位置','Balloon position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);rerender();}),
+        makeSelect(u('テキスト位置','Text position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);rerender();}),
         colorField,
         makeSelect(p.text.writingMode==='vertical-rl'?u('横位置','Horizontal position'):u('文字配置','Text alignment'),p.text.writingMode==='vertical-rl'?[['auto',u('中央（おまかせ）','Center (automatic)')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]]:[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();})
       );
