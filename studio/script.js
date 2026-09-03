@@ -4227,13 +4227,20 @@
     // Inline important dimensions make the selected author viewport decisive.
     const desktop=window.matchMedia('(min-width:1100px)').matches && document.body.classList.contains('desktop-live-edit');
     if(desktop){
-      const availableWidth=Math.max(1,playerScreen.clientWidth||Math.round(window.innerWidth/2));
+      const playerRect=playerScreen.getBoundingClientRect();
+      const panelRect=desktopLivePanel?.getBoundingClientRect?.();
+      const measuredPaneWidth=panelRect && panelRect.left>playerRect.left
+        ? panelRect.left-playerRect.left
+        : Math.min(playerScreen.clientWidth||window.innerWidth,window.innerWidth/2);
+      const availableWidth=Math.max(1,Math.round(measuredPaneWidth));
       const availableHeight=Math.max(1,playerScreen.clientHeight||window.innerHeight);
       const ratio=studioPreviewDevice==='phone'?(390/844):(studioPreviewDevice==='tablet'?(3/4):(16/9));
       const width=Math.round(Math.min(availableWidth,availableHeight*ratio));
       const height=Math.round(width/ratio);
       studioPreviewViewport?.style.setProperty('width',`${width}px`,'important');
       studioPreviewViewport?.style.setProperty('height',`${height}px`,'important');
+      studioPreviewViewport?.style.setProperty('left',`${Math.round(availableWidth/2)}px`,'important');
+      studioPreviewViewport?.style.setProperty('top',`${Math.round(availableHeight/2)}px`,'important');
       // The Player host is .sp-core and carries min-height:100dvh. Constrain
       // that actual element to the viewport wrapper, otherwise only the empty
       // outer box changes while the visible Player stays tablet-sized.
@@ -4248,7 +4255,7 @@
       playerHost.style.setProperty('max-width','none','important');
       playerHost.style.setProperty('max-height','none','important');
     }else{
-      ['width','height'].forEach(name=>studioPreviewViewport?.style.removeProperty(name));
+      ['width','height','left','top'].forEach(name=>studioPreviewViewport?.style.removeProperty(name));
       ['position','inset','left','top','transform','width','height','min-height','max-width','max-height'].forEach(name=>playerHost.style.removeProperty(name));
     }
     mountStudioSafeGuide();
@@ -8669,16 +8676,6 @@ function openDesktopTextDetail(){
     const textDetailButton=desktopDetail(t('detail.text'),'text');
     textDetailButton.classList.add('desktop-text-primary-detail');
     textCard.append(textDetailButton);
-    const quickTextDetails=document.createElement('details');quickTextDetails.className='desktop-text-quick-details';
-    const quickTextSummary=document.createElement('summary');quickTextSummary.textContent=u('よく使う設定を開く','Open quick settings');
-    quickTextDetails.append(quickTextSummary,textGrid,makeFramePositionDragButton(scene));
-    if(colorValue==='custom'){
-      const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';
-      const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}});
-      quickTextDetails.append(colorPicker.root);
-    }
-    quickTextDetails.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}));
-    textCard.append(quickTextDetails);
 
     const effectCard=desktopCard(uiLanguage==='en'?'Effects (✦)':'演出（✦）');
 

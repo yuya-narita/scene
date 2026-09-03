@@ -48,13 +48,9 @@
       .studio-safe-guide::after{content:"";position:absolute;inset:0;background:linear-gradient(to right,transparent calc(33.333% - .5px),currentColor calc(33.333% - .5px),currentColor calc(33.333% + .5px),transparent calc(33.333% + .5px),transparent calc(66.666% - .5px),currentColor calc(66.666% - .5px),currentColor calc(66.666% + .5px),transparent calc(66.666% + .5px)),linear-gradient(to bottom,transparent calc(33.333% - .5px),currentColor calc(33.333% - .5px),currentColor calc(33.333% + .5px),transparent calc(33.333% + .5px),transparent calc(66.666% - .5px),currentColor calc(66.666% - .5px),currentColor calc(66.666% + .5px),transparent calc(66.666% + .5px)),linear-gradient(to right,transparent calc(50% - .5px),currentColor calc(50% - .5px),currentColor calc(50% + .5px),transparent calc(50% + .5px)),linear-gradient(to bottom,transparent calc(50% - .5px),currentColor calc(50% - .5px),currentColor calc(50% + .5px),transparent calc(50% + .5px));opacity:.58}
       /* The compact Text card grew as position/writing controls were added. Let it size and scroll naturally. */
       .desktop-live-panel-body{padding-bottom:72px!important;overflow-y:auto!important;overscroll-behavior:contain}
-      .desktop-live-three{align-items:start!important;overflow:visible!important}
+      .desktop-live-three{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:auto auto!important;grid-auto-rows:auto!important;align-items:start!important;overflow:visible!important}
       .desktop-live-three>.desktop-live-card{height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important}
       .desktop-live-three>.desktop-live-card .desktop-live-grid{height:auto!important;max-height:none!important;overflow:visible!important}
-      .desktop-text-quick-details{display:block;width:100%;margin-top:8px}
-      .desktop-text-quick-details>summary{list-style:none;cursor:pointer;padding:9px 11px;border:1px solid rgba(100,105,115,.24);border-radius:9px;font-size:11px;font-weight:700;text-align:center}
-      .desktop-text-quick-details>summary::-webkit-details-marker{display:none}
-      .desktop-text-quick-details[open]>summary{margin-bottom:9px}
       .desktop-text-primary-detail{width:100%!important;margin:2px 0 0!important}
     }
     /* Keep the Ending SE checkbox a normal native-sized control, even when generic inputs are full width. */
@@ -787,7 +783,7 @@
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260903-12"></script>
+<script src="./script.js?v=20260903-13"></script>
 
 
 
