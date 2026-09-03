@@ -2877,6 +2877,22 @@
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
 
+    _framePosition(scene) {
+      const source=scene?.presentation?.frame?.position||{};
+      const preset=String(source.preset||'auto');
+      const presets={
+        'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],
+        left:[.18,.5],center:[.5,.5],right:[.82,.5],
+        'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]
+      };
+      if(preset==='custom'){
+        const x=Number(source.x),y=Number(source.y);
+        return {preset,x:Number.isFinite(x)?Math.max(0,Math.min(1,x)):.5,y:Number.isFinite(y)?Math.max(0,Math.min(1,y)):.5};
+      }
+      if(presets[preset])return {preset,x:presets[preset][0],y:presets[preset][1]};
+      return {preset:'auto'};
+    }
+
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
@@ -2925,8 +2941,8 @@
       }
 
       const currentFrame=newest.node.querySelector('.sp-handdrawn-frame');
-      if(currentFrame&&metrics.length>1){
-        metrics.slice(0,-2).forEach(item=>{item.node.style.visibility='hidden';});
+      if(currentFrame&&metrics.length>1)metrics.slice(0,-2).forEach(item=>{item.node.style.visibility='hidden';});
+      if(currentFrame&&metrics.length>1&&this._framePosition(newest.scene).preset==='auto'){
         const previous=metrics[metrics.length-2];
         const previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
         if(previousFrame){
@@ -2959,6 +2975,29 @@
               positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:groupTop+previousHeight+gap-newest.inkTop};
             }
           }else previous.node.style.visibility='hidden';
+        }
+      }
+
+      metrics.forEach((item,i)=>{
+        if(!item.node.querySelector('.sp-handdrawn-frame'))return;
+        const position=this._framePosition(item.scene);
+        if(position.preset==='auto')return;
+        const availableWidth=Math.max(1,item.node.getBoundingClientRect().width);
+        const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
+        const margin=global.innerWidth<=600?10:16;
+        const centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x));
+        const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
+        positions[i]={x:centerX-item.inkCenterX,y:centerY-item.inkCenterY};
+      });
+
+      if(currentFrame&&metrics.length>1){
+        const previous=metrics[metrics.length-2];
+        if(previous.node.querySelector('.sp-handdrawn-frame')&&previous.node.style.visibility!=='hidden'){
+          const a=positions[metrics.length-1],b=positions[metrics.length-2],guard=global.innerWidth<=600?12:18;
+          const overlaps=!(a.x+newest.inkLeft>=b.x+previous.inkRight+guard||a.x+newest.inkRight+guard<=b.x+previous.inkLeft||a.y+newest.inkTop>=b.y+previous.inkBottom+guard||a.y+newest.inkBottom+guard<=b.y+previous.inkTop);
+          const availableWidth=Math.max(1,newest.node.getBoundingClientRect().width);
+          const outside=b.x+previous.inkRight<0||b.x+previous.inkLeft>availableWidth||b.y+previous.inkBottom<0||b.y+previous.inkTop>stageHeight;
+          if(overlaps||outside)previous.node.style.visibility='hidden';
         }
       }
 
@@ -3936,21 +3975,25 @@
         if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){
           text.style.maxWidth='none';
           text.style.width='max-content';
-          let rects=[];
-          try{
+          const measureRects=()=>{try{
             const range=document.createRange();
             range.selectNodeContents(text);
-            rects=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);
+            const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);
             range.detach?.();
-          }catch(_){}
+            return measured;
+          }catch(_){return [];}};
+          let rects=measureRects();
           const initialTextRect=text.getBoundingClientRect();
-          const inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left;
-          const inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;
-          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):initialTextRect.top;
-          const inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):initialTextRect.bottom;
+          let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left;
+          let inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;
           const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);
           text.style.width=`${fittedWidth}px`;
+          rects=measureRects();
           const fittedTextRect=text.getBoundingClientRect();
+          inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;
+          inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;
+          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top;
+          const inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom;
           const columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1;
           const charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length;
           const shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58)));

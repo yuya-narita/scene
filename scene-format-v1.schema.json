@@ -358,6 +358,29 @@
               "enum": [
                 "handdrawn-voice"
               ]
+            },
+            "position": {
+              "type": "object",
+              "properties": {
+                "preset": {
+                  "enum": [
+                    "auto",
+                    "top-left",
+                    "top",
+                    "top-right",
+                    "left",
+                    "center",
+                    "right",
+                    "bottom-left",
+                    "bottom",
+                    "bottom-right",
+                    "custom"
+                  ]
+                },
+                "x": { "type": "number", "minimum": 0, "maximum": 1 },
+                "y": { "type": "number", "minimum": 0, "maximum": 1 }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": true
