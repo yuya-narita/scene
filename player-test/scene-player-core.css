@@ -114,6 +114,7 @@
 .sp-scene.entering[data-scene-flow="horizontal"]{transform:translateX(13px)}
 .sp-scene.entering[data-scene-flow="horizontal"][data-writing-mode="vertical-rl"]{transform:translateX(-13px)}
 .sp-core[data-scene-flow="horizontal"] .sp-scene:not(.is-active){opacity:.22}
+.sp-core[data-scene-flow="horizontal"] .sp-scene[data-frame="handdrawn-voice"][data-age="1"]{opacity:.38}
 /* Entry motion can be decoupled from the inner text effect.
    `still` means the Scene is born at its final reading position; blur/fade/typewriter
    can still run on .sp-text without the Scene travelling down from the stage origin. */
