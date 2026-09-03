@@ -2890,6 +2890,7 @@
         index: sceneEntries[i].index,
         ...this._measureSceneGeometry(node,stageRect)
       }));
+      metrics.forEach(item=>{item.node.style.visibility='';});
 
       const newest = metrics[metrics.length - 1];
       let newestTop = focusY - newest.inkCenterY;
@@ -2920,6 +2921,44 @@
             x:nextPosition.x,
             y:nextPosition.y+next.inkTop-gap-current.inkBottom
           };
+        }
+      }
+
+      const currentFrame=newest.node.querySelector('.sp-handdrawn-frame');
+      if(currentFrame&&metrics.length>1){
+        metrics.slice(0,-2).forEach(item=>{item.node.style.visibility='hidden';});
+        const previous=metrics[metrics.length-2];
+        const previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
+        if(previousFrame){
+          const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
+          const gap=global.innerWidth<=600?18:28;
+          const currentWidth=newest.inkRight-newest.inkLeft;
+          const previousWidth=previous.inkRight-previous.inkLeft;
+          const currentHeight=newest.inkBottom-newest.inkTop;
+          const previousHeight=previous.inkBottom-previous.inkTop;
+          const availableWidth=Math.max(1,newest.node.getBoundingClientRect().width);
+          const availableHeight=stageHeight*.86;
+          const pairFits=flow==='horizontal'
+            ? currentWidth+previousWidth+gap<=availableWidth
+            : currentHeight+previousHeight+gap<=availableHeight;
+          if(pairFits){
+            previous.node.style.visibility='';
+            if(flow==='horizontal'){
+              const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl';
+              const groupWidth=currentWidth+previousWidth+gap;
+              const groupLeft=(availableWidth-groupWidth)/2;
+              const currentLeft=verticalReading?groupLeft:groupLeft+previousWidth+gap;
+              const previousLeft=verticalReading?groupLeft+currentWidth+gap:groupLeft;
+              const centerY=stageHeight*.48;
+              positions[metrics.length-1]={x:currentLeft-newest.inkLeft,y:centerY-newest.inkCenterY};
+              positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:centerY-previous.inkCenterY};
+            }else{
+              const groupHeight=currentHeight+previousHeight+gap;
+              const groupTop=(stageHeight-groupHeight)/2;
+              positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:groupTop-previous.inkTop};
+              positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:groupTop+previousHeight+gap-newest.inkTop};
+            }
+          }else previous.node.style.visibility='hidden';
         }
       }
 
@@ -3836,7 +3875,7 @@
       };
     }
 
-    _handdrawnPath(width,height,seed,trace=0) {
+    _handdrawnPath(width,height,seed,trace=0,shapeLevel=0) {
       const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0);
       const inset=5.5+trace*.35;
       const rx=Math.max(8,(width-inset*2)/2);
@@ -3849,7 +3888,7 @@
       for(let i=0;i<count;i++){
         const angle=(Math.PI*2*i/count)-Math.PI/2;
         const ca=Math.cos(angle),sa=Math.sin(angle);
-        const n=2.28;
+        const n=2.05+Math.max(0,Math.min(1,shapeLevel))*2.35;
         const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx;
         const baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
         const harmonic=Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006;
@@ -3892,20 +3931,72 @@
       let lastWidth=0,lastHeight=0;
       const draw=()=>{
         if(!frame.isConnected)return;
+        const text=frame.querySelector(':scope > .sp-text');
+        let fitted=false;
+        if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){
+          text.style.maxWidth='none';
+          text.style.width='max-content';
+          let rects=[];
+          try{
+            const range=document.createRange();
+            range.selectNodeContents(text);
+            rects=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);
+            range.detach?.();
+          }catch(_){}
+          const initialTextRect=text.getBoundingClientRect();
+          const inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left;
+          const inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;
+          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):initialTextRect.top;
+          const inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):initialTextRect.bottom;
+          const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);
+          text.style.width=`${fittedWidth}px`;
+          const fittedTextRect=text.getBoundingClientRect();
+          const columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1;
+          const charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length;
+          const shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58)));
+          const mobile=global.innerWidth<=600;
+          const padX=(mobile?27:34)+shapeLevel*(mobile?8:12);
+          const padY=(mobile?30:38)+shapeLevel*(mobile?13:18);
+          const inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
+          text.style.position='absolute';
+          text.style.margin='0';
+          text.style.height=`${Math.ceil(fittedTextRect.height)}px`;
+          text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;
+          text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;
+          frame.style.padding='0';
+          frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;
+          frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;
+          frame.dataset.shapeLevel=String(shapeLevel);
+          frame.dataset.inkFitted='true';
+          fitted=true;
+        }
         const rect=frame.getBoundingClientRect();
         const width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
         if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
         lastWidth=width;lastHeight=height;
         svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
         const seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}`);
-        const primary=this._handdrawnPath(width,height,seed,0);
+        const shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0));
+        const primary=this._handdrawnPath(width,height,seed,0,shapeLevel);
         fill.setAttribute('d',primary);ink.setAttribute('d',primary);
-        bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1));
-        ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2));
-        scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3));
+        bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel));
+        ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel));
+        scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel));
         const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);
         scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);
         scuff.setAttribute('stroke-dashoffset',String(seed%29));
+        const article=frame.closest('.sp-scene');
+        if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{
+          if(!frame.isConnected||!this.document)return;
+          const active=this.document.scenes?.[this.index];
+          const display=active?.presentation?.display||'stack';
+          const entries=this._visibleScenes(display);
+          const byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node]));
+          const present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node);
+          const presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);
+          if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);
+          else this._positionSceneNodes(presentNodes,presentEntries,0);
+        });
       };
       requestAnimationFrame(draw);
       if(typeof ResizeObserver==='function'){
