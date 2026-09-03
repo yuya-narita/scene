@@ -6703,7 +6703,7 @@ function startInlineTextEdit(field='text'){
     const style=document.createElement('style');style.id='framePositionEditorStyle';style.textContent=`
       .frame-position-drag-shield{position:absolute;inset:0;z-index:90;touch-action:none;cursor:move;background:rgba(20,22,26,.035)}
       .frame-position-drag-shield::after{content:"";position:absolute;inset:12px;border:1px dashed rgba(80,84,92,.35);border-radius:16px;pointer-events:none}
-      .frame-position-drag-toolbar{position:absolute;z-index:92;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:7px;align-items:center;padding:8px;border-radius:999px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);white-space:nowrap}
+      .frame-position-drag-toolbar{position:absolute;z-index:92;left:50%;bottom:max(92px,calc(env(safe-area-inset-bottom) + 76px));transform:translateX(-50%);display:flex;gap:7px;align-items:center;padding:8px;border-radius:999px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);white-space:nowrap}
       .frame-position-drag-toolbar button{appearance:none;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:transparent;color:#fff;font:600 12px/1 sans-serif;padding:9px 12px}
       .frame-position-drag-toolbar button[data-save]{background:#fff;color:#17181b}
       .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}
@@ -6733,8 +6733,15 @@ function startInlineTextEdit(field='text'){
       const frame=article?.querySelector('.sp-handdrawn-frame');
       if(!stage||!scenes||!article||!frame){alert(u('吹き出しを表示してから調整してください','Show the balloon before adjusting its position.'));return;}
       const before=p.frame.position?clone(p.frame.position):null;
+      const liveScene=player?.document?.scenes?.find(item=>item?.id===scene.id);
+      const syncLivePosition=(position)=>{
+        if(!liveScene)return;
+        liveScene.presentation||={};liveScene.presentation.frame={...(liveScene.presentation.frame||{}),type:'handdrawn-voice'};
+        if(position)liveScene.presentation.frame.position=clone(position);else delete liveScene.presentation.frame.position;
+      };
       const stageRect=stage.getBoundingClientRect(),scenesRect=scenes.getBoundingClientRect(),frameRect=frame.getBoundingClientRect();
       p.frame.position={preset:'custom',x:Math.max(0,Math.min(1,(frameRect.left+frameRect.width/2-scenesRect.left)/Math.max(1,scenesRect.width))),y:Math.max(0,Math.min(1,(frameRect.top+frameRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))};
+      syncLivePosition(p.frame.position);
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
       const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('画面をタップ／ドラッグして配置','Tap or drag to place the balloon');
       const toolbar=document.createElement('div');toolbar.className='frame-position-drag-toolbar';
@@ -6750,16 +6757,20 @@ function startInlineTextEdit(field='text'){
         centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,centerX));
         centerY=height+margin*2>=sr.height?sr.height/2:Math.max(height/2+margin,Math.min(sr.height-height/2-margin,centerY));
         p.frame.position={preset:'custom',x:centerX/availableWidth,y:centerY/Math.max(1,sr.height)};
+        syncLivePosition(p.frame.position);
         article.style.transform=`translate3d(${Math.round(centerX-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
       };
       shield.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();dragging=true;shield.setPointerCapture?.(event.pointerId);applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointermove',event=>{if(!dragging)return;event.preventDefault();applyPoint(event.clientX,event.clientY);});
-      shield.addEventListener('pointerup',event=>{dragging=false;shield.releasePointerCapture?.(event.pointerId);});
+      shield.addEventListener('pointerup',event=>{event.preventDefault();event.stopPropagation();dragging=false;shield.releasePointerCapture?.(event.pointerId);});
+      shield.addEventListener('pointercancel',event=>{event.preventDefault();event.stopPropagation();dragging=false;});
+      shield.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
       [toolbar,auto,cancel,save].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false}={})=>{
         shield.remove();hint.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)delete p.frame.position;
         else if(!keep){if(before)p.frame.position=before;else delete p.frame.position;}
+        syncLivePosition(p.frame.position||null);
         scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel?.();
       };
       auto.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();finishFramePositionDrag({save:true,reset:true});});
