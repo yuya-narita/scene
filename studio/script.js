@@ -4234,13 +4234,20 @@
         : Math.min(playerScreen.clientWidth||window.innerWidth,window.innerWidth/2);
       const availableWidth=Math.max(1,Math.round(measuredPaneWidth));
       const availableHeight=Math.max(1,playerScreen.clientHeight||window.innerHeight);
-      const ratio=studioPreviewDevice==='phone'?(390/844):(studioPreviewDevice==='tablet'?(3/4):(16/9));
-      const width=Math.round(Math.min(availableWidth,availableHeight*ratio));
-      const height=Math.round(width/ratio);
+      // Keep a real logical viewport inside the preview. Only the finished
+      // surface is scaled to fit the left pane, so vw/media/container rules
+      // see the same dimensions as the selected reader device.
+      const logical=studioPreviewDevice==='phone'
+        ? {width:390,height:844}
+        : (studioPreviewDevice==='tablet'?{width:768,height:1024}:{width:1440,height:900});
+      const scale=Math.min(availableWidth/logical.width,availableHeight/logical.height);
+      const width=logical.width;
+      const height=logical.height;
       studioPreviewViewport?.style.setProperty('width',`${width}px`,'important');
       studioPreviewViewport?.style.setProperty('height',`${height}px`,'important');
       studioPreviewViewport?.style.setProperty('left',`${Math.round(availableWidth/2)}px`,'important');
       studioPreviewViewport?.style.setProperty('top',`${Math.round(availableHeight/2)}px`,'important');
+      studioPreviewViewport?.style.setProperty('transform',`translate(-50%,-50%) scale(${scale})`,'important');
       // The Player host is .sp-core and carries min-height:100dvh. Constrain
       // that actual element to the viewport wrapper, otherwise only the empty
       // outer box changes while the visible Player stays tablet-sized.
@@ -4255,7 +4262,7 @@
       playerHost.style.setProperty('max-width','none','important');
       playerHost.style.setProperty('max-height','none','important');
     }else{
-      ['width','height','left','top'].forEach(name=>studioPreviewViewport?.style.removeProperty(name));
+      ['width','height','left','top','transform'].forEach(name=>studioPreviewViewport?.style.removeProperty(name));
       ['position','inset','left','top','transform','width','height','min-height','max-width','max-height'].forEach(name=>playerHost.style.removeProperty(name));
     }
     mountStudioSafeGuide();
@@ -8664,18 +8671,41 @@ function openDesktopTextDetail(){
     const textCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');
     const textGrid=document.createElement('div');textGrid.className='desktop-live-grid';
     const colorValue=!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom'));
+    const textColorField=document.createElement('label');textColorField.className='desktop-live-text-color';
+    const textColorLabel=document.createElement('span');textColorLabel.textContent=u('色','Color');
+    const textColorControl=document.createElement('div');textColorControl.className='desktop-live-text-color-control';
+    const textColorMode=document.createElement('select');
+    [['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]].forEach(([value,label])=>{
+      const option=document.createElement('option');option.value=value;option.textContent=label;textColorMode.appendChild(option);
+    });
+    textColorMode.value=colorValue;
+    let textColorActive=normalizeTextColor(p.text.color)||'#4A4A4A';
+    const textColorPicker=makeCommittedTextColorPicker(textColorActive,{
+      compact:true,
+      onPreview:color=>previewCurrentSceneTextColor(color),
+      onCommit:color=>{p.text.color=color;textColorActive=color;textColorMode.value='custom';refresh();}
+    });
+    const syncTextColorPickerVisibility=()=>{textColorPicker.root.hidden=textColorMode.value!=='custom';};
+    textColorMode.addEventListener('change',()=>{
+      const value=textColorMode.value;
+      if(value==='white')p.text.color='#ffffff';
+      else if(value==='black')p.text.color='#000000';
+      else if(value==='custom')p.text.color=textColorActive;
+      else delete p.text.color;
+      syncTextColorPickerVisibility();refresh();
+    });
+    textColorControl.append(textColorMode,textColorPicker.root);textColorField.append(textColorLabel,textColorControl);syncTextColorPickerVisibility();
     textGrid.append(
       desktopMakeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
       desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
       desktopMakeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;refresh();}),
       desktopMakeSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')]],p.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none',v=>{if(v==='handdrawn-voice')p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
       desktopMakeSelect(u('テキスト位置','Text position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);refresh();}),
-      desktopMakeSelect(u('色','Color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;refresh();}),
-      desktopMakeSelect(p.text.writingMode==='vertical-rl'?u('横位置','Horizontal position'):u('文字配置','Alignment'),p.text.writingMode==='vertical-rl'?[['auto',u('中央（おまかせ）','Center (automatic)')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]]:[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;refresh();})
+      textColorField
     );
     const textDetailButton=desktopDetail(t('detail.text'),'text');
     textDetailButton.classList.add('desktop-text-primary-detail');
-    textCard.append(textDetailButton);
+    textCard.append(textGrid,textDetailButton);
 
     const effectCard=desktopCard(uiLanguage==='en'?'Effects (✦)':'演出（✦）');
 

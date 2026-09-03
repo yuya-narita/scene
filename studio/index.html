@@ -29,7 +29,7 @@
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
-    #studioPreviewViewport{position:absolute;inset:0;width:100%;height:100%;overflow:hidden}
+    #studioPreviewViewport{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;container-type:size;container-name:studio-preview}
     #studioPreviewViewport>#scenePlayer{width:100%;height:100%}
     .studio-preview-device-toolbar{display:none}
     @media (min-width:1100px){
@@ -52,6 +52,13 @@
       .desktop-live-three>.desktop-live-card{height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important}
       .desktop-live-three>.desktop-live-card .desktop-live-grid{height:auto!important;max-height:none!important;overflow:visible!important}
       .desktop-text-primary-detail{width:100%!important;margin:2px 0 0!important}
+      .desktop-live-text-color{display:grid;gap:5px;min-width:0}
+      .desktop-live-text-color>span{font-size:10px;font-weight:700;color:var(--muted,#666)}
+      .desktop-live-text-color-control{display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:7px;align-items:center}
+      .desktop-live-text-color-control>select{width:100%;min-width:0}
+      .desktop-live-text-color-control .studio-color-picker{position:relative;display:flex;justify-content:flex-end}
+      .desktop-live-text-color-control .studio-color-trigger{width:38px;height:34px;border-radius:9px}
+      .desktop-live-text-color-control .studio-color-popover{z-index:900}
     }
     /* Keep the Ending SE checkbox a normal native-sized control, even when generic inputs are full width. */
     .ending-quick-se .check-row{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;min-height:32px!important;padding:0!important;border:0!important;background:transparent!important}
@@ -783,7 +790,7 @@
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260903-13"></script>
+<script src="./script.js?v=20260903-14"></script>
 
 
 
