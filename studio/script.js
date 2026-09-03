@@ -4222,6 +4222,27 @@
     studioPreviewDeviceToolbar?.querySelectorAll?.('[data-preview-device]').forEach(button=>button.classList.toggle('is-active',button.dataset.previewDevice===studioPreviewDevice));
     const guideButton=studioPreviewDeviceToolbar?.querySelector?.('[data-preview-guide]');
     if(guideButton){guideButton.classList.toggle('is-active',studioPreviewGuide);guideButton.setAttribute('aria-pressed',String(studioPreviewGuide));}
+    // The legacy desktop layout fixes the Player to the entire left pane.
+    // Inline important dimensions make the selected author viewport decisive.
+    const desktop=window.matchMedia('(min-width:1100px)').matches && document.body.classList.contains('desktop-live-edit');
+    if(desktop){
+      const availableWidth=Math.max(1,playerScreen.clientWidth||Math.round(window.innerWidth/2));
+      const availableHeight=Math.max(1,playerScreen.clientHeight||window.innerHeight);
+      const ratio=studioPreviewDevice==='phone'?(390/844):(studioPreviewDevice==='tablet'?(3/4):(16/9));
+      const width=Math.round(Math.min(availableWidth,availableHeight*ratio));
+      const height=Math.round(width/ratio);
+      playerHost.style.setProperty('position','absolute','important');
+      playerHost.style.setProperty('inset','auto','important');
+      playerHost.style.setProperty('left','50%','important');
+      playerHost.style.setProperty('top','50%','important');
+      playerHost.style.setProperty('transform','translate(-50%,-50%)','important');
+      playerHost.style.setProperty('width',`${width}px`,'important');
+      playerHost.style.setProperty('height',`${height}px`,'important');
+      playerHost.style.setProperty('max-width','none','important');
+      playerHost.style.setProperty('max-height','none','important');
+    }else{
+      ['position','inset','left','top','transform','width','height','max-width','max-height'].forEach(name=>playerHost.style.removeProperty(name));
+    }
     mountStudioSafeGuide();
     requestAnimationFrame(()=>{window.dispatchEvent(new Event('resize'));requestAnimationFrame(mountStudioSafeGuide);});
   }
@@ -4235,6 +4256,12 @@
   playerHost?.addEventListener('sceneplayer:load',()=>requestAnimationFrame(syncStudioPreviewDevice));
   playerHost?.addEventListener('sceneplayer:scenechange',()=>requestAnimationFrame(mountStudioSafeGuide));
   window.addEventListener('resize',()=>requestAnimationFrame(mountStudioSafeGuide));
+  if(typeof ResizeObserver==='function' && playerScreen){
+    const studioPreviewResizeObserver=new ResizeObserver(()=>{
+      if(document.body.classList.contains('desktop-live-edit'))requestAnimationFrame(syncStudioPreviewDevice);
+    });
+    studioPreviewResizeObserver.observe(playerScreen);
+  }
   function syncUndoVisibilityForScreen(name){
     const inPlayer=name==='player';
     const bar=$('#undoBar'), compact=$('#undoCompactButton');
@@ -8631,15 +8658,19 @@ function openDesktopTextDetail(){
       desktopMakeSelect(u('色','Color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],colorValue,v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;refresh();}),
       desktopMakeSelect(p.text.writingMode==='vertical-rl'?u('横位置','Horizontal position'):u('文字配置','Alignment'),p.text.writingMode==='vertical-rl'?[['auto',u('中央（おまかせ）','Center (automatic)')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]]:[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;refresh();})
     );
-    textCard.append(textGrid);
-    textCard.append(makeFramePositionDragButton(scene));
+    const textDetailButton=desktopDetail(t('detail.text'),'text');
+    textDetailButton.classList.add('desktop-text-primary-detail');
+    textCard.append(textDetailButton);
+    const quickTextDetails=document.createElement('details');quickTextDetails.className='desktop-text-quick-details';
+    const quickTextSummary=document.createElement('summary');quickTextSummary.textContent=u('よく使う設定を開く','Open quick settings');
+    quickTextDetails.append(quickTextSummary,textGrid,makeFramePositionDragButton(scene));
     if(colorValue==='custom'){
       const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';
       const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}});
-      textCard.append(colorPicker.root);
+      quickTextDetails.append(colorPicker.root);
     }
-    textCard.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}));
-    textCard.append(desktopDetail(t('detail.text'),'text'));
+    quickTextDetails.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}));
+    textCard.append(quickTextDetails);
 
     const effectCard=desktopCard(uiLanguage==='en'?'Effects (✦)':'演出（✦）');
 
@@ -9962,7 +9993,7 @@ function openDesktopTextDetail(){
     bindLiveEditSoundControl();
     observeLiveEditPreviewChrome();
     syncLiveEditPreviewChrome();
-    requestAnimationFrame(()=>{ensureLiveEditEmptyTarget();renderDesktopLivePanel();});
+    requestAnimationFrame(()=>{ensureLiveEditEmptyTarget();renderDesktopLivePanel();syncStudioPreviewDevice();});
     const historyHelp=playerHost.querySelector('.sp-history-help');if(historyHelp)historyHelp.textContent=u('Sceneをスクロール','Scroll Scenes');
     const historyKicker=playerHost.querySelector('.sp-history-kicker');if(historyKicker)historyKicker.textContent='SCENES';
   }
@@ -9978,6 +10009,7 @@ function openDesktopTextDetail(){
     liveEditChromeObserver=null;
     playerHost.classList.remove('live-edit-enabled');
     if(desktopLivePanel)desktopLivePanel.hidden=true;document.body.classList.remove('desktop-live-edit');
+    syncStudioPreviewDevice();
     const recPanel=$('#autoRecPanel');if(recPanel)recPanel.hidden=false;
     if(player)player.options.historyAllScenes=false;
   }
