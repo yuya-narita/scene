@@ -2903,6 +2903,60 @@
       return {preset:'auto'};
     }
 
+    _measureCarriedOverlayPositions(metrics, sceneEntries, stageWidth, stageHeight, focusY, extraGap = 0) {
+      const margin=stageWidth<=600?10:16;
+      const positions=metrics.map(item=>{
+        const position=this._framePosition(item.scene);
+        let x=0;
+        let y=focusY-item.inkCenterY-(item.scene.type==='dialogue'?12:0);
+        if(position.preset!=='auto'){
+          const availableWidth=Math.max(1,item.node.clientWidth),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
+          const centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x));
+          const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
+          x=centerX-item.inkCenterX;
+          y=centerY-item.inkCenterY;
+        }
+        return {x,y};
+      });
+
+      // An overlay Scene is attached to the group immediately before it.  Its
+      // own adjusted coordinate remains relative to that group, so advancing to
+      // the next normal Scene moves every attached balloon as one piece.
+      const groups=[];
+      metrics.forEach((item,i)=>{
+        const attach=i>0&&(item.scene?.presentation?.display||'stack')==='overlay';
+        if(attach&&groups.length)groups[groups.length-1].push(i);
+        else groups.push([i]);
+      });
+      const bounds=indices=>{
+        const left=Math.min(...indices.map(i=>positions[i].x+metrics[i].inkLeft));
+        const right=Math.max(...indices.map(i=>positions[i].x+metrics[i].inkRight));
+        const top=Math.min(...indices.map(i=>positions[i].y+metrics[i].inkTop));
+        const bottom=Math.max(...indices.map(i=>positions[i].y+metrics[i].inkBottom));
+        return {left,right,top,bottom,centerX:(left+right)/2,centerY:(top+bottom)/2};
+      };
+      for(let g=groups.length-2;g>=0;g-=1){
+        const current=groups[g],next=groups[g+1],currentBounds=bounds(current),nextBounds=bounds(next);
+        const currentLast=metrics[current[current.length-1]],nextFirst=metrics[next[0]];
+        const flow=nextFirst.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
+        let dx=0,dy=0;
+        if(flow==='horizontal'){
+          const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap;
+          const verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';
+          dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;
+          dy=nextBounds.centerY-currentBounds.centerY;
+        }else{
+          const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';
+          const gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;
+          dx=nextBounds.centerX-currentBounds.centerX;
+          dy=nextBounds.top-gap-currentBounds.bottom;
+        }
+        current.forEach(i=>{positions[i].x+=dx;positions[i].y+=dy;});
+      }
+      metrics.forEach((item,i)=>{item.node.style.visibility='';item.node.style.zIndex=String(20+i);});
+      return metrics.map((item,i)=>({...item,...positions[i]}));
+    }
+
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
@@ -2918,6 +2972,13 @@
         ...this._measureSceneGeometry(node,stageRect)
       }));
       metrics.forEach(item=>{item.node.style.visibility='';item.node.style.zIndex='';});
+
+      // A completed overlay pair stays welded together when a later Scene
+      // resumes normal stack flow. This is what lets two adjusted speech
+      // balloons overlap, then leave upward without their overlap collapsing.
+      if(metrics.some((item,i)=>i>0&&(item.scene?.presentation?.display||'stack')==='overlay')){
+        return this._measureCarriedOverlayPositions(metrics,sceneEntries,stageWidth,stageHeight,focusY,extraGap);
+      }
 
       const newest = metrics[metrics.length - 1];
       let newestTop = focusY - newest.inkCenterY;

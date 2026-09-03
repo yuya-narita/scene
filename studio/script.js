@@ -7086,7 +7086,7 @@ function openDesktopEffectDetail(){
     });
     basicGrid.append(
       effectSelect,
-      desktopDetailSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;apply();}),
+      desktopDetailSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('前Sceneに重ねる','Overlap previous Scene')]],p.display||'stack',v=>{p.display=v;apply();}),
       desktopDetailSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;apply();}),
       desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;apply();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
@@ -8981,7 +8981,7 @@ function openDesktopTextDetail(){
         replayCurrentDesktopEffect();
         renderDesktopLivePanel();
       }),
-      desktopMakeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;refresh();}),
+      desktopMakeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('前Sceneに重ねる','Overlap previous Scene')]],p.display||'stack',v=>{p.display=v;refresh();}),
       desktopMakeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;refresh();}),
       desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
@@ -9612,7 +9612,7 @@ function openDesktopTextDetail(){
             }
             scheduleDraftSave(80);refreshLivePlayer();
           }),
-          makeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('同じ位置に重ねる','Overlay in place')]],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
+          makeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('前Sceneに重ねる','Overlap previous Scene')]],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
