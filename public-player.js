@@ -311,7 +311,10 @@
       bg?.fit === 'contain' ? 'contain' :
       bg?.fit === 'fill' ? '100% 100%' :
       'cover';
-    openingImage.style.backgroundPosition = 'center';
+    // The opening layer is visible for a few hundred milliseconds before the
+    // Player Core mounts Scene 1. Apply the authored crop here as well so the
+    // image never flashes at center and then jumps to its saved position.
+    openingImage.style.backgroundPosition = bg?.position || 'center center';
     openingImage.style.backgroundRepeat = 'no-repeat';
 
     const dim = Math.max(0, Math.min(1, Number(bg?.dim ?? 0)));
