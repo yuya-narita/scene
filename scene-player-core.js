@@ -2921,7 +2921,7 @@
         const current=groups[g],next=groups[g+1],currentBounds=bounds(current),nextBounds=bounds(next),currentLast=metrics[current[current.length-1]],nextFirst=metrics[next[0]],flow=nextFirst.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
         let dx=0,dy=0;
         if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap,verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
-        else{const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl',gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;dx=nextBounds.centerX-currentBounds.centerX;dy=nextBounds.top-gap-currentBounds.bottom;}
+        else{const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl',gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;dx=0;dy=nextBounds.top-gap-currentBounds.bottom;}
         current.forEach(i=>{positions[i].x+=dx;positions[i].y+=dy;});
       }
       metrics.forEach((item,i)=>{item.node.style.visibility='';item.node.style.zIndex=String(20+i);});
@@ -2973,10 +2973,9 @@
         }else{
           const verticalGap=eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0;
           const gap=this._sceneGap(current.scene,next.scene)+verticalGap+extraGap;
-          positions[i]={
-            x:nextPosition.x,
-            y:nextPosition.y+next.inkTop-gap-current.inkBottom
-          };
+          const ownPosition=this._framePosition(current.scene);
+          const ownX=ownPosition.preset==='auto'?0:this._customPositionTransform(current,ownPosition,stageWidth,stageHeight,global.innerWidth<=600?10:16).x;
+          positions[i]={x:ownX,y:nextPosition.y+next.inkTop-gap-current.inkBottom};
         }
       }
 
