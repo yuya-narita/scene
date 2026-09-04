@@ -2895,7 +2895,8 @@
     }
 
     _framePosition(scene) {
-      const source=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
+      const common=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
+      const source=this._viewportWidth()>=1100&&common?.pc&&typeof common.pc==='object'?common.pc:common;
       const preset=String(source.preset||'auto');
       const presets={'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],left:[.18,.5],center:[.5,.5],right:[.82,.5],'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]};
       if(preset==='custom'){const x=Number(source.x),y=Number(source.y);return {preset,x:Number.isFinite(x)?Math.max(0,Math.min(1,x)):.5,y:Number.isFinite(y)?Math.max(0,Math.min(1,y)):.5};}
