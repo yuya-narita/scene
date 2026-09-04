@@ -3540,7 +3540,7 @@
         enabled:false,
         authorOptIn:true,
         authorOptInVersion:2,
-        mode:'interval-v2'
+        mode:'standard-v3'
       };
       scheduleDraftSave(50);
     }
@@ -8453,7 +8453,7 @@ function openDesktopTextDetail(){
       enabled:!!enabled,
       authorOptIn:true,
       authorOptInVersion:2,
-      mode:'interval-v2'
+      mode:'standard-v3'
     };
     scheduleDraftSave(50);
   }
