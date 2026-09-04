@@ -2079,7 +2079,7 @@
     }
 
     // Unknown Scene-level fields may belong to future Format features.
-    const ordinary=new Set(['id','type','text','subText','language','pause','audio','presentation']);
+    const ordinary=new Set(['id','type','text','subText','language','pause','cueAt','audio','presentation']);
     for(const [key,value] of Object.entries(scene)){
       if(ordinary.has(key))continue;
       if(value!==undefined && value!==null && value!=='' && value!==false)return true;
@@ -2159,7 +2159,7 @@
       if(['background','display','effect','text'].includes(key))continue;
       if(value!==undefined && value!==null && value!=='' && value!==false)return true;
     }
-    const ordinary=new Set(['id','type','text','subText','language','pause','audio','presentation']);
+    const ordinary=new Set(['id','type','text','subText','language','pause','cueAt','audio','presentation']);
     for(const [key,value] of Object.entries(scene)){
       if(ordinary.has(key))continue;
       if(value!==undefined && value!==null && value!=='' && value!==false)return true;
@@ -2586,7 +2586,9 @@
       if(!advancedScreen.hidden) syncAdvancedFieldsToScene();
       syncEasyShellToWorkingDocument();
       ensureMasterIdentity(workingDocument);
-      return clone(workingDocument);
+      const exported=clone(workingDocument);
+      normalizeAbsoluteCues(exported);
+      return exported;
     }
     const doc=buildSceneDocument();
     ensureMasterIdentity(doc);
@@ -3397,6 +3399,28 @@
   let autoRecDurations=[];
   let autoRecRaf=0;
   let autoRecCurrentIndex=0;
+  let autoRecBaseCueAt=0;
+  let autoRecAwaitingStart=false;
+
+  function existingCueAt(sceneIndex){
+    const direct=Number(workingDocument?.scenes?.[sceneIndex]?.cueAt);
+    if(Number.isFinite(direct)&&direct>=0)return direct;
+    let total=0;
+    for(let i=0;i<sceneIndex;i++)total+=Math.max(0,Number(workingDocument?.scenes?.[i]?.pause)||DEFAULT_AUTO_SECONDS*1000);
+    return total;
+  }
+
+  function beginAutoRecClock(at=performance.now(),sceneIndex=autoRecCurrentIndex){
+    const zero=Number(at)||performance.now();
+    autoRecBaseCueAt=sceneIndex===0?0:existingCueAt(sceneIndex);
+    autoRecStartedAt=zero;
+    autoRecSceneStartedAt=zero;
+    autoRecCurrentIndex=sceneIndex;
+    autoRecAwaitingStart=false;
+    const scene=workingDocument?.scenes?.[sceneIndex];
+    if(scene)scene.cueAt=Math.max(0,Math.round(autoRecBaseCueAt));
+    if(player)player.playbackTimelineStartedAt=zero-autoRecBaseCueAt;
+  }
 
   function formatAutoRecTime(ms){
     const total=Math.max(0,Number(ms)||0)/1000;
@@ -3414,7 +3438,7 @@
     if(!autoRecActive)return;
     const now=performance.now();
     const clock=$('#autoRecClock'),count=$('#autoRecCount');
-    if(clock)clock.textContent=formatAutoRecTime(now-autoRecStartedAt);
+    if(clock)clock.textContent=formatAutoRecTime(autoRecAwaitingStart?0:now-autoRecStartedAt);
     if(count){
       const current=Math.min((player?.index ?? 0)+1,workingDocument?.scenes?.length||1);
       count.textContent=`${current} / ${workingDocument?.scenes?.length||1}`;
@@ -3472,21 +3496,33 @@
     syncPublishPreviewButton(false);
     autoRecDurations=[];
     autoRecCurrentIndex=startAt;
-    autoRecStartedAt=performance.now();
-    autoRecSceneStartedAt=autoRecStartedAt;
+    autoRecAwaitingStart=Boolean(p.host?.classList.contains('sp-cover-open'));
+    if(autoRecAwaitingStart){
+      autoRecStartedAt=0;
+      autoRecSceneStartedAt=0;
+    }else{
+      beginAutoRecClock(performance.now(),startAt);
+    }
     const done=$('#autoRecDone'); if(done)done.hidden=true;
     renderAutoRecUI();
     syncLiveEditPreviewChrome();
     if(desktopLiveActive())requestAnimationFrame(renderDesktopLivePanel);
   }
 
-  function recordAutoRecBoundary(){
-    if(!autoRecActive)return;
-    const now=performance.now();
+  function recordAutoRecBoundary(detail={}){
+    if(!autoRecActive||autoRecAwaitingStart||!autoRecStartedAt)return;
+    const now=Number(detail.at)||performance.now();
+    const boundaryIndex=Number.isInteger(Number(detail.index))?Number(detail.index):autoRecCurrentIndex;
+    if(boundaryIndex!==autoRecCurrentIndex)return;
     const duration=Math.max(150,Math.round(now-autoRecSceneStartedAt));
     autoRecDurations.push(duration);
     if(workingDocument?.scenes?.[autoRecCurrentIndex])workingDocument.scenes[autoRecCurrentIndex].pause=duration;
-    autoRecCurrentIndex=Math.min(autoRecCurrentIndex+1,(workingDocument?.scenes?.length||1)-1);
+    const total=workingDocument?.scenes?.length||0;
+    const nextIndex=autoRecCurrentIndex+1;
+    if(nextIndex<total){
+      workingDocument.scenes[nextIndex].cueAt=Math.max(0,Math.round(autoRecBaseCueAt+(now-autoRecStartedAt)));
+    }
+    autoRecCurrentIndex=Math.min(nextIndex,total);
     autoRecProgress={nextIndex:autoRecCurrentIndex,recordedCount:Math.max(autoRecProgress?.recordedCount||0,autoRecCurrentIndex)};
     autoRecSceneStartedAt=now;
     updateAutoRecStartLabel();scheduleDraftSave(80);
@@ -3504,7 +3540,7 @@
         enabled:false,
         authorOptIn:true,
         authorOptInVersion:2,
-        mode:resonance.mode||'absolute'
+        mode:'interval-v2'
       };
       scheduleDraftSave(50);
     }
@@ -3604,27 +3640,30 @@
   function finishAutoRec(save=true){
     if(!autoRecActive)return;
     cancelAnimationFrame(autoRecRaf);
-    if(save && autoRecDurations.length<(workingDocument?.scenes?.length||0)){
-      autoRecDurations.push(Math.max(150,Math.round(performance.now()-autoRecSceneStartedAt)));
+    const count=workingDocument?.scenes?.length||0;
+    if(save && !autoRecAwaitingStart && autoRecSceneStartedAt && autoRecCurrentIndex<count){
+      const finalDuration=Math.max(150,Math.round(performance.now()-autoRecSceneStartedAt));
+      autoRecDurations.push(finalDuration);
+      if(workingDocument?.scenes?.[autoRecCurrentIndex])workingDocument.scenes[autoRecCurrentIndex].pause=finalDuration;
+      autoRecCurrentIndex+=1;
     }
     autoRecActive=false;
+    autoRecAwaitingStart=false;
     if(liveEditEnabled&&liveEditToolbar)liveEditToolbar.hidden=false;
     const start=$('#autoRecStart'),live=$('#autoRecLive'),done=$('#autoRecDone');
     if(live)live.hidden=true;
     if(save){
-      const finalDuration=Math.max(150,Math.round(performance.now()-autoRecSceneStartedAt));
-      if(workingDocument?.scenes?.[autoRecCurrentIndex])workingDocument.scenes[autoRecCurrentIndex].pause=finalDuration;
-      const count=workingDocument?.scenes?.length||0;
-      autoRecProgress={nextIndex:count,recordedCount:count};
+      const recordedCount=Math.min(count,Math.max(autoRecProgress?.recordedCount||0,autoRecCurrentIndex));
+      autoRecProgress={nextIndex:recordedCount,recordedCount};
       updateAutoRecStartLabel();scheduleDraftSave(80);
-      const total=autoRecDurations.reduce((a,b)=>a+b,0)+finalDuration;
+      const total=autoRecDurations.reduce((a,b)=>a+b,0);
       const summary=$('#autoRecSummary');
       if(summary)summary.textContent=`${autoRecDurations.length} Scene / ${formatAutoRecTime(total)}`;
       if(done)done.hidden=false;
       if(start)start.hidden=true;
       // Ask only after a successful full AUTO REC save.
       // Defer one frame so the existing completion UI is committed first.
-      requestAnimationFrame(()=>askResonanceAfterAutoRec());
+      if(recordedCount===count)requestAnimationFrame(()=>askResonanceAfterAutoRec());
     }else{
       if(done)done.hidden=true;
       if(start)start.hidden=false;
@@ -4199,12 +4238,15 @@
   function ensurePlayer(){
     if(player)return player;
     player=new ScenePlayerCore(playerHost,{allowPrevious:true,keyboard:true,swipe:true,endOnNextAction:true,maxStackVisible:4,autoDelay:2600,uiLanguage});
+    playerHost.addEventListener('sceneplayer:advanceintent',(event)=>{
+      if(autoRecActive)recordAutoRecBoundary(event.detail||{});
+    });
     playerHost.addEventListener('sceneplayer:scenechange',(event)=>{
       syncPublishPreviewButton(false);
-      if(autoRecActive && event.detail?.direction==='next')recordAutoRecBoundary();
       syncLiveEditPreviewChrome();
     });
-    playerHost.addEventListener('sceneplayer:coverstart',()=>{
+    playerHost.addEventListener('sceneplayer:coverstart',(event)=>{
+      if(autoRecActive&&autoRecAwaitingStart)beginAutoRecClock(event.detail?.at||performance.now(),Number(event.detail?.index)||0);
       syncPublishPreviewButton(false);
       syncLiveEditPreviewChrome();
     });
@@ -4362,7 +4404,7 @@
       }
     }
   }
-  function getDocumentForPlayback(){ return clone(workingDocument || buildSceneDocument()); }
+  function getDocumentForPlayback(){ return normalizeAbsoluteCues(clone(workingDocument || buildSceneDocument())); }
   function openPlayer({from='easy', startAt=0}={}){
     if(from==='easy'){
       if(!bodyInput.value.trim() && !workingDocument){bodyInput.focus();return;}
@@ -4700,6 +4742,30 @@
   }
   const DEFAULT_AUTO_SECONDS=2.6;
 
+  function rebuildAbsoluteCues(){
+    const scenes=workingDocument?.scenes;
+    if(!Array.isArray(scenes)||!scenes.length)return;
+    let cue=0;
+    scenes.forEach((scene,index)=>{
+      scene.cueAt=Math.max(0,Math.round(cue));
+      if(index<scenes.length-1)cue+=Math.max(150,Number(scene.pause)||DEFAULT_AUTO_SECONDS*1000);
+    });
+  }
+
+  function normalizeAbsoluteCues(doc){
+    const scenes=doc?.scenes;
+    if(!Array.isArray(scenes)||!scenes.length)return doc;
+    // A document enters absolute mode only after a complete cue track exists.
+    // Old pause-only works therefore retain their original relative behavior.
+    if(!scenes.every(scene=>Number.isFinite(Number(scene?.cueAt))&&Number(scene.cueAt)>=0))return doc;
+    let cue=0;
+    scenes.forEach((scene,index)=>{
+      scene.cueAt=Math.max(0,Math.round(cue));
+      if(index<scenes.length-1)cue+=Math.max(150,Number(scene.pause)||DEFAULT_AUTO_SECONDS*1000);
+    });
+    return doc;
+  }
+
   function sceneAutoSeconds(scene=currentScene()){
     const pause=Number(scene?.pause);
     return Number.isFinite(pause) && pause>0 ? pause/1000 : DEFAULT_AUTO_SECONDS;
@@ -4725,6 +4791,7 @@
     if(!scene||!input)return;
     const seconds=Math.max(.15,Math.min(60,Number(input.value)||DEFAULT_AUTO_SECONDS));
     scene.pause=Math.round(seconds*1000);
+    rebuildAbsoluteCues();
     input.value=seconds.toFixed(2);
     updateAutoTimingFields();
     renderSceneList();
@@ -4735,6 +4802,7 @@
     if(!scene)return;
     const next=Math.max(.15,Math.min(60,sceneAutoSeconds(scene)+Number(delta||0)));
     scene.pause=Math.round(next*1000);
+    rebuildAbsoluteCues();
     updateAutoTimingFields();
     renderSceneList();
   }
@@ -4743,6 +4811,7 @@
     const scene=currentScene();
     if(!scene)return;
     delete scene.pause;
+    rebuildAbsoluteCues();
     updateAutoTimingFields();
     renderSceneList();
   }
@@ -4775,6 +4844,7 @@
     if(autoInput && document.activeElement===autoInput){
       const seconds=Math.max(.15,Math.min(60,Number(autoInput.value)||DEFAULT_AUTO_SECONDS));
       scene.pause=Math.round(seconds*1000);
+      rebuildAbsoluteCues();
     }
     scene.text=$('#sceneTextInput').value;
     const sub=$('#sceneSubTextInput').value; if(sub)scene.subText=sub; else delete scene.subText;
@@ -8383,7 +8453,7 @@ function openDesktopTextDetail(){
       enabled:!!enabled,
       authorOptIn:true,
       authorOptInVersion:2,
-      mode:'absolute'
+      mode:'interval-v2'
     };
     scheduleDraftSave(50);
   }
@@ -9245,6 +9315,7 @@ function openDesktopTextDetail(){
     if(!scene)return;
     const safe=Math.max(.15,Math.min(60,Number(seconds)||DEFAULT_AUTO_SECONDS));
     scene.pause=Math.round(safe*1000);
+    rebuildAbsoluteCues();
     scheduleDraftSave(50);
   }
 
@@ -9252,6 +9323,7 @@ function openDesktopTextDetail(){
     const scene=workingDocument?.scenes?.[index];
     if(!scene)return;
     delete scene.pause;
+    rebuildAbsoluteCues();
     scheduleDraftSave(50);
   }
 
