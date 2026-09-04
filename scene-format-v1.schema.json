@@ -314,7 +314,31 @@
               ]
             },
             "x": { "type": "number", "minimum": 0, "maximum": 1 },
-            "y": { "type": "number", "minimum": 0, "maximum": 1 }
+            "y": { "type": "number", "minimum": 0, "maximum": 1 },
+            "pc": {
+              "type": "object",
+              "description": "Optional wide-PC-only text/frame position. Phone and tablet use the common parent position.",
+              "properties": {
+                "preset": {
+                  "enum": [
+                    "auto",
+                    "top-left",
+                    "top",
+                    "top-right",
+                    "left",
+                    "center",
+                    "right",
+                    "bottom-left",
+                    "bottom",
+                    "bottom-right",
+                    "custom"
+                  ]
+                },
+                "x": { "type": "number", "minimum": 0, "maximum": 1 },
+                "y": { "type": "number", "minimum": 0, "maximum": 1 }
+              },
+              "additionalProperties": false
+            }
           },
           "additionalProperties": false
         }

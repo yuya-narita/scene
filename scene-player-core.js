@@ -2880,7 +2880,8 @@
     }
 
     _framePosition(scene) {
-      const source=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
+      const common=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
+      const source=this._viewportWidth()>=1100&&common?.pc&&typeof common.pc==='object'?common.pc:common;
       const preset=String(source.preset||'auto');
       const presets={
         'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],
