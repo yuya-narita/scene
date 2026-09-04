@@ -25,7 +25,7 @@
 
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20260904-31">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20260904-32">
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -75,8 +75,15 @@
       body.desktop-live-edit .desktop-live-card select{height:34px!important;min-height:34px!important;padding-top:0!important;padding-bottom:0!important;font-family:system-ui,-apple-system,"Segoe UI",sans-serif!important;font-size:12px!important;font-weight:600!important;line-height:1.2!important}
       .desktop-live-position-adjust{height:34px;padding:0 10px;border:1px solid #d7d9de;border-radius:9px;background:#fff;color:#17181b;font:700 11px/1 system-ui;white-space:nowrap;cursor:pointer}
       .desktop-live-position-adjust:disabled{opacity:.38;cursor:default}
-      .desktop-live-bg-position-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;width:100%}
-      .desktop-live-bg-position-row>.desktop-live-action{width:100%;min-width:0;height:34px;padding:0 7px;font-size:10px;line-height:1.15;white-space:normal}
+      .desktop-live-bg-top{display:grid!important;grid-template-columns:76px minmax(0,1fr)!important;gap:9px!important;align-items:stretch!important}
+      .desktop-live-bg-preview{width:76px;min-height:126px;overflow:hidden;border:1px solid #d7d9de;border-radius:9px;background:#f2f2f0}
+      .desktop-live-bg-preview>img,.desktop-live-bg-preview>.desktop-live-bg-placeholder{display:block;width:100%!important;height:100%!important;min-height:126px;object-fit:cover;border:0!important;border-radius:0!important}
+      .desktop-live-bg-preview>.desktop-live-bg-placeholder{display:grid;place-items:center;color:#8b8e94;font-size:10px}
+      .desktop-live-bg-controls{display:grid;grid-template-rows:30px 30px 30px 22px;gap:5px;min-width:0}
+      .desktop-live-bg-source-row{display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:5px;min-width:0}
+      .desktop-live-bg-position-row,.desktop-live-bg-tone-row{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:5px!important;width:100%;min-width:0}
+      .desktop-live-bg-controls .desktop-live-action{width:100%;min-width:0;height:30px!important;margin:0!important;padding:0 6px!important;font-size:10px!important;line-height:1.1!important;white-space:normal}
+      .desktop-live-bg-controls .desktop-live-bg-detail{height:22px!important;border:0!important;background:transparent!important;color:#0877df!important;font-size:10px!important;text-decoration:none}
       .sp-core[data-theme="light"] .studio-safe-guide,
       .sp-core[data-theme="cinema"][data-cinema-tone="light"] .studio-safe-guide{color:rgba(22,27,32,.42);mix-blend-mode:multiply}
       .sp-core[data-theme="dark"] .studio-safe-guide,
@@ -827,11 +834,11 @@
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
 <script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js?v=20260904-31"></script>
+<script src="./scene-player-core.js?v=20260904-32"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260904-31"></script>
+<script src="./script.js?v=20260904-32"></script>
 
 
 

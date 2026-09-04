@@ -9127,8 +9127,10 @@ function openDesktopTextDetail(){
     const bgCard=desktopCard(uiLanguage==='en'?'Background (▣)':'背景（▣）','desktop-live-bg-card');
     const bg=p.background;
     const bgTop=document.createElement('div');bgTop.className='desktop-live-bg-top';
-    if(bg?.src){const img=document.createElement('img');img.src=bg.src;img.alt=u('背景','Background');bgTop.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent=u('背景','Background');bgTop.appendChild(ph);}
-    const bgBtns=document.createElement('div');bgBtns.className='desktop-live-stack';
+    const bgPreview=document.createElement('div');bgPreview.className='desktop-live-bg-preview';
+    if(bg?.src){const img=document.createElement('img');img.src=bg.src;img.alt=u('背景','Background');bgPreview.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent=u('背景','Background');bgPreview.appendChild(ph);}
+    const bgControls=document.createElement('div');bgControls.className='desktop-live-bg-controls';
+    const bgBtns=document.createElement('div');bgBtns.className='desktop-live-bg-source-row';
     bgBtns.append(
       desktopAction(u('前Sceneから継続','Continue previous Scene'),()=>{
         delete p.background;
@@ -9147,7 +9149,6 @@ function openDesktopTextDetail(){
         refresh();
       },bg?.src===''?'is-selected':'')
     );
-    bgTop.appendChild(bgBtns);bgCard.appendChild(bgTop);
     const bgPositionAction=desktopAction(t('cover.positionAdjust'),()=>{
       if(!p.background?.src)return;
       openSceneBackgroundPositionEditor(scene,()=>{
@@ -9168,10 +9169,13 @@ function openDesktopTextDetail(){
     const bgPositionRow=document.createElement('div');
     bgPositionRow.className='desktop-live-bg-position-row';
     bgPositionRow.append(bgPositionAction,bgCopyPreviousAction);
-    bgCard.appendChild(bgPositionRow);
-    const tone=document.createElement('div');tone.className='desktop-live-choice';
+    const tone=document.createElement('div');tone.className='desktop-live-choice desktop-live-bg-tone-row';
     tone.append(desktopAction(u('暗く','Dark'),()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction(u('明るく','Light'),()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
-    bgCard.append(tone,desktopDetail(t('detail.background'),'background'));
+    const bgDetailAction=desktopDetail(t('detail.background'),'background');
+    bgDetailAction.classList.add('desktop-live-bg-detail');
+    bgControls.append(bgBtns,bgPositionRow,tone,bgDetailAction);
+    bgTop.append(bgPreview,bgControls);
+    bgCard.appendChild(bgTop);
 
     const audioCard=desktopCard(uiLanguage==='en'?'Audio (♪)':'音（♪）','desktop-live-audio-card');
     const audioGrid=document.createElement('div');audioGrid.className='desktop-live-audio-grid';
