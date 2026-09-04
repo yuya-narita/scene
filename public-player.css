@@ -232,6 +232,11 @@ body{
 }
 .public-opening-image{
   background-color:var(--public-bg);
+  /* Scene Player Core draws background layers 3% beyond every edge to avoid
+     gaps during effects. Use the identical canvas here so the opening handoff
+     cannot change crop/scale for a single frame. */
+  inset:-3%;
+  transform:scale(1.001);
 }
 
 
