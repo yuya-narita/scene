@@ -543,6 +543,16 @@
         "position": {
           "type": "string"
         },
+        "positions": {
+          "type": "object",
+          "description": "Optional device-specific cover crop positions. Legacy position remains the phone/common fallback.",
+          "properties": {
+            "phone": { "type": "string" },
+            "tablet": { "type": "string" },
+            "pc": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
         "reveal": {
           "type": "object",
           "properties": {
@@ -649,7 +659,8 @@
         },
         "transitionDuration": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 10000
         }
       },
       "additionalProperties": true

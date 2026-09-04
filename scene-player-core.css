@@ -955,7 +955,9 @@
 
 /* Background Scene transition duration. */
 .sp-bg-layer{
-  transition-duration:var(--sp-bg-transition-duration,700ms)!important;
+  transition-property:opacity,filter!important;
+  transition-duration:var(--sp-bg-transition-duration,700ms),.45s!important;
+  transition-timing-function:cubic-bezier(.37,0,.63,1),ease!important;
 }
 
 /* Disappear motion parity with the current Studio preview.
