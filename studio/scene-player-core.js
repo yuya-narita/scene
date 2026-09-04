@@ -2953,7 +2953,9 @@
         }else{
           const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';
           const gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;
-          dx=nextBounds.centerX-currentBounds.centerX;
+          // Vertical flow owns Y only. A newly placed Scene on the left/right
+          // must not drag older fixed text diagonally toward its own X.
+          dx=0;
           dy=nextBounds.top-gap-currentBounds.bottom;
         }
         current.forEach(i=>{positions[i].x+=dx;positions[i].y+=dy;});
@@ -3005,7 +3007,9 @@
         }else{
           const verticalGap=eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0;
           const gap=this._sceneGap(current.scene,next.scene)+verticalGap+extraGap;
-          positions[i]={x:nextPosition.x,y:nextPosition.y+next.inkTop-gap-current.inkBottom};
+          const ownPosition=this._framePosition(current.scene);
+          const ownX=ownPosition.preset==='auto'?0:this._customPositionTransform(current,ownPosition,stageWidth,stageHeight,this._viewportWidth()<=600?10:16).x;
+          positions[i]={x:ownX,y:nextPosition.y+next.inkTop-gap-current.inkBottom};
         }
       }
 
