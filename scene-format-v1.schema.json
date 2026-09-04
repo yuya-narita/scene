@@ -404,7 +404,12 @@
             "type": {
               "enum": [
                 "handdrawn-voice",
-                "handdrawn-narration"
+                "handdrawn-narration",
+                "handdrawn-rounded",
+                "handdrawn-double",
+                "handdrawn-dashed",
+                "handdrawn-dark",
+                "handdrawn-panel"
               ]
             },
             "position": {
