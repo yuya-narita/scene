@@ -2895,16 +2895,22 @@
       return {preset:'auto'};
     }
 
+    _customPositionTransform(item, position, stageWidth, stageHeight, margin) {
+      const contentWidth=Math.max(1,item.node.clientWidth||item.node.getBoundingClientRect().width);
+      const contentLeft=Math.max(0,(stageWidth-contentWidth)/2);
+      const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
+      const centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,stageWidth*position.x));
+      const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
+      return {x:centerX-contentLeft-item.inkCenterX,y:centerY-item.inkCenterY};
+    }
+
     _measureCarriedOverlayPositions(metrics, sceneEntries, stageWidth, stageHeight, focusY, extraGap = 0) {
       const margin=stageWidth<=600?10:16;
       const positions=metrics.map(item=>{
         const position=this._framePosition(item.scene);
         let x=0,y=focusY-item.inkCenterY-(item.scene.type==='dialogue'?12:0);
         if(position.preset!=='auto'){
-          const availableWidth=Math.max(1,item.node.clientWidth),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
-          const centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x));
-          const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
-          x=centerX-item.inkCenterX;y=centerY-item.inkCenterY;
+          ({x,y}=this._customPositionTransform(item,position,stageWidth,stageHeight,margin));
         }
         return {x,y};
       });
@@ -2926,6 +2932,7 @@
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
       const stageHeight = stageRect.height;
+      const stageWidth = Math.max(1,this.els.stage.clientWidth||stageRect.width);
       const focusRatio = global.innerWidth <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
       const focusY = stageHeight * focusRatio;
 
@@ -2938,7 +2945,7 @@
       metrics.forEach(item=>{item.node.style.visibility='';item.node.style.zIndex='';});
 
       if(metrics.some((item,i)=>i>0&&(item.scene?.presentation?.display||'stack')==='overlay')){
-        return this._measureCarriedOverlayPositions(metrics,sceneEntries,Math.max(1,this.els.stage.clientWidth||stageRect.width),stageHeight,focusY,extraGap);
+        return this._measureCarriedOverlayPositions(metrics,sceneEntries,stageWidth,stageHeight,focusY,extraGap);
       }
 
       const newest = metrics[metrics.length - 1];
@@ -3018,12 +3025,8 @@
         if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;
         const position=this._framePosition(item.scene);
         if(position.preset==='auto')return;
-        const availableWidth=Math.max(1,item.node.getBoundingClientRect().width);
-        const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
         const margin=global.innerWidth<=600?10:16;
-        const centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x));
-        const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
-        positions[i]={x:centerX-item.inkCenterX,y:centerY-item.inkCenterY};
+        positions[i]=this._customPositionTransform(item,position,stageWidth,stageHeight,margin);
       });
 
       if(currentFrame&&metrics.length>1){
@@ -3052,16 +3055,14 @@
     _positionOverlayNodes(nodes, sceneEntries) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
-      const focusY = stageRect.height * (stageRect.width <= 520 ? .48 : .46);
+      const stageWidth=Math.max(1,this.els.stage.clientWidth||stageRect.width),stageHeight=Math.max(1,this.els.stage.clientHeight||stageRect.height);
+      const focusY = stageHeight * (stageWidth <= 520 ? .48 : .46);
       return nodes.map((node, i) => {
         const geometry=this._measureSceneGeometry(node,stageRect);
         const position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
         let x=0,y=focusY-Math.max(1,node.getBoundingClientRect().height)/2;
         if(position.preset!=='auto'){
-          const availableWidth=Math.max(1,node.getBoundingClientRect().width),width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=global.innerWidth<=600?10:16;
-          const centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x));
-          const centerY=height+margin*2>=stageRect.height?stageRect.height/2:Math.max(height/2+margin,Math.min(stageRect.height-height/2-margin,stageRect.height*position.y));
-          x=centerX-geometry.inkCenterX;y=centerY-geometry.inkCenterY;
+          ({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,global.innerWidth<=600?10:16));
         }
         node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
         node.style.zIndex = String(20 + i);
