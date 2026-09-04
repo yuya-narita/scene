@@ -3943,7 +3943,7 @@
       const inset=5.5+trace*.35,rx=Math.max(8,(width-inset*2)/2),ry=Math.max(8,(height-inset*2)/2);
       const cx=width/2+(random()-.5)*1.8,cy=height/2+(random()-.5)*1.8,count=32,phase=random()*Math.PI*2,points=[];
       for(let i=0;i<count;i++){
-        const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=frameType==='handdrawn-narration'?8.5:2.05+Math.max(0,Math.min(1,shapeLevel))*2.35;
+        const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=frameType==='handdrawn-voice'?2.05+Math.max(0,Math.min(1,shapeLevel))*2.35:(['handdrawn-rounded','handdrawn-panel'].includes(frameType)?4.7:8.5);
         const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx,baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
         const wobble=1+Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006+(random()-.5)*.018+(trace-1)*.0025;
         points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});
@@ -4074,7 +4074,7 @@
           text.className = 'sp-text';
           text.textContent = scene.text;
           this._applyTextStyle(text, presentation.text || {}, false);
-          if(['handdrawn-voice','handdrawn-narration'].includes(presentation.frame?.type)){
+          if(String(presentation.frame?.type||'').startsWith('handdrawn-')){
             const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;
             frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
             frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';
@@ -4111,7 +4111,7 @@
       const text = String(scene?.text || '');
       const chars = Array.from(text).length;
       const lines = text ? text.split('\n').length : 0;
-      const verticalFrame=textStyle?.writingMode==='vertical-rl' && ['handdrawn-voice','handdrawn-narration'].includes(scene?.presentation?.frame?.type);
+      const verticalFrame=textStyle?.writingMode==='vertical-rl' && String(scene?.presentation?.frame?.type||'').startsWith('handdrawn-');
       // A vertical balloon has both a height and a column-width limit. Plain
       // character thresholds made medium passages stay at the normal size and
       // let their final columns escape the frame. Auto must become stricter

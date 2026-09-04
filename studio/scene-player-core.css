@@ -172,6 +172,16 @@
 .sp-handdrawn-ghost{fill:none;stroke:#171512;stroke-width:.82;stroke-linecap:round;stroke-linejoin:round;opacity:.26}
 .sp-handdrawn-ink{fill:none;stroke:#171512;stroke-width:1.85;stroke-linecap:round;stroke-linejoin:round;opacity:.92}
 .sp-handdrawn-scuff{fill:none;stroke:#fffdf8;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round;opacity:.88}
+.sp-handdrawn-frame[data-frame-type="handdrawn-double"] .sp-handdrawn-ghost{stroke:#171512;stroke-width:1.35;opacity:.78;transform:scale(.94,.92);transform-box:fill-box;transform-origin:center}
+.sp-handdrawn-frame[data-frame-type="handdrawn-double"] .sp-handdrawn-scuff{opacity:.42}
+.sp-handdrawn-frame[data-frame-type="handdrawn-dashed"] .sp-handdrawn-bleed,.sp-handdrawn-frame[data-frame-type="handdrawn-dashed"] .sp-handdrawn-ghost,.sp-handdrawn-frame[data-frame-type="handdrawn-dashed"] .sp-handdrawn-scuff{display:none}
+.sp-handdrawn-frame[data-frame-type="handdrawn-dashed"] .sp-handdrawn-ink{stroke-width:1.7;stroke-dasharray:9 7;opacity:.82}
+.sp-handdrawn-frame[data-frame-type="handdrawn-dark"] .sp-handdrawn-fill{fill:rgba(23,21,18,.9)}
+.sp-handdrawn-frame[data-frame-type="handdrawn-dark"] .sp-handdrawn-bleed,.sp-handdrawn-frame[data-frame-type="handdrawn-dark"] .sp-handdrawn-ghost,.sp-handdrawn-frame[data-frame-type="handdrawn-dark"] .sp-handdrawn-ink{stroke:#fffdf8}
+.sp-handdrawn-frame[data-frame-type="handdrawn-dark"]>.sp-text{color:#fffdf8!important}
+.sp-handdrawn-frame[data-frame-type="handdrawn-panel"] .sp-handdrawn-fill{fill:rgba(255,253,248,.7)}
+.sp-handdrawn-frame[data-frame-type="handdrawn-panel"] .sp-handdrawn-bleed,.sp-handdrawn-frame[data-frame-type="handdrawn-panel"] .sp-handdrawn-ghost,.sp-handdrawn-frame[data-frame-type="handdrawn-panel"] .sp-handdrawn-scuff{display:none}
+.sp-handdrawn-frame[data-frame-type="handdrawn-panel"] .sp-handdrawn-ink{stroke-width:1;opacity:.22}
 .sp-handdrawn-frame>.sp-text{position:relative;z-index:1;max-width:100%;text-shadow:none}
 .sp-handdrawn-frame[data-writing-mode="vertical-rl"]>.sp-text{width:max-content;max-width:none}
 @container studio-preview (max-width: 600px){
