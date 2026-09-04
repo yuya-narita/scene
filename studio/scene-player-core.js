@@ -2592,7 +2592,8 @@
       if(this.els.coverBg){
         this.els.coverBg.style.backgroundImage=src?`url("${src.replace(/"/g,'\\"')}")`:'none';
         this.els.coverBg.style.backgroundSize=cover.fit==='contain'?'contain':'cover';
-        this.els.coverBg.style.backgroundPosition=cover.position||'center center';
+        const viewportWidth=Math.max(1,Number(this.host?.clientWidth)||Number(global.innerWidth)||1),viewportHeight=Math.max(1,Number(this.host?.clientHeight)||Number(global.innerHeight)||1),coverDevice=Math.min(viewportWidth,viewportHeight)<=600?'phone':viewportWidth>=1100?'pc':'tablet';
+        this.els.coverBg.style.backgroundPosition=cover.positions?.[coverDevice]||cover.position||'center center';
       }
       const coverText=this.document.cover?.text||{}; // legacy fallback only
       const visibility=this.document.cover?.visibility||{};
@@ -3380,7 +3381,7 @@
     _swapBackground(state, transition) {
       const current = this._currentBackgroundLayer();
       const incoming = this._nextBackgroundLayer();
-      const transitionDuration=Math.max(0,asNumber(state.transitionDuration,700));
+      const transitionDuration=Math.min(10000,Math.max(0,asNumber(state.transitionDuration,700)));
       incoming.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
       current.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
       this._prepareBackgroundLayer(incoming, state);
@@ -3408,7 +3409,7 @@
       this._backgroundTimeout(() => {
         current.style.backgroundImage = '';
         current.className = current.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
-      }, mode === 'cut' ? 20 : 900);
+      }, mode === 'cut' ? 20 : transitionDuration+120);
     }
 
     _prepareBackgroundLayer(layer, state) {

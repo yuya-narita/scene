@@ -905,7 +905,7 @@
 }
 
 /* Background timing v2 */
-.sp-bg-layer{transition-duration:var(--sp-bg-transition-duration,700ms)!important}
+.sp-bg-layer{transition-property:opacity,filter!important;transition-duration:var(--sp-bg-transition-duration,700ms),.45s!important;transition-timing-function:cubic-bezier(.37,0,.63,1),ease!important}
 
 
 /* v0.2.64 Studio preview cover + 3s ending afterglow */

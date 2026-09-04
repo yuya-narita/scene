@@ -25,7 +25,7 @@
 
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20260904-28">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20260904-29">
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -90,6 +90,10 @@
       .cover-position-dialog.is-device-pc .cover-position-card{width:min(1120px,calc(100vw - 48px));max-width:none}
       .cover-position-dialog.is-device-tablet .cover-position-card{width:min(820px,calc(100vw - 48px));max-width:none}
     }
+    .cover-position-device-tabs{display:flex;align-items:center;justify-content:center;gap:4px;width:max-content;max-width:100%;margin:0 auto 12px;padding:4px;border-radius:999px;background:rgba(20,22,26,.08)}
+    .cover-position-device-tabs button{min-width:76px;height:34px;padding:0 14px;border:0;border-radius:999px;background:transparent;color:#4d5158;font:700 12px/1 system-ui;cursor:pointer}
+    .cover-position-device-tabs button.is-active{background:#17191d;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.16)}
+    .cover-position-dialog.is-background-mode .cover-position-device-tabs{display:none}
     /* Keep the Ending SE checkbox a normal native-sized control, even when generic inputs are full width. */
     .ending-quick-se .check-row{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;min-height:32px!important;padding:0!important;border:0!important;background:transparent!important}
     .ending-quick-se .check-row input[type="checkbox"]{appearance:auto!important;-webkit-appearance:checkbox!important;display:inline-block!important;flex:0 0 auto!important;width:18px!important;height:18px!important;min-width:18px!important;min-height:18px!important;margin:0!important;padding:0!important;border:initial!important;border-radius:3px!important;box-shadow:none!important}
@@ -496,7 +500,7 @@
                     <span id="sceneMotionPreviewLabel">CUT / COVER / なし / 34%</span>
                   </div>
                 </div>
-                <label class="adv-field range-field"><span>切替の速さ <output id="sceneBackgroundTransitionDurationOutput">700ms</output></span><input id="sceneBackgroundTransitionDuration" type="range" min="0" max="3000" step="50" value="700"></label>
+                <label class="adv-field range-field"><span>切替の速さ <output id="sceneBackgroundTransitionDurationOutput">700ms</output></span><input id="sceneBackgroundTransitionDuration" type="range" min="0" max="10000" step="50" value="700"></label>
                 <label class="adv-field range-field"><span>動きの速さ <output id="sceneBackgroundMotionDurationOutput">6500ms</output></span><input id="sceneBackgroundMotionDuration" type="range" min="1500" max="20000" step="250" value="6500"></label>
                 <label class="adv-field range-field"><span>動きの強さ <output id="sceneBackgroundMotionAmountOutput">9%</output></span><input id="sceneBackgroundMotionAmount" type="range" min="1" max="20" step="1" value="9"></label>
               </div>
@@ -773,6 +777,11 @@
         <button id="coverPositionSave" type="button">保存</button>
       </div>
       <div class="cover-position-help">画像をドラッグして、見せたい位置を合わせます</div>
+      <div id="coverPositionDeviceTabs" class="cover-position-device-tabs" role="group" aria-label="調整する端末">
+        <button type="button" data-cover-device="phone">iPhone</button>
+        <button type="button" data-cover-device="tablet">タブレット</button>
+        <button type="button" data-cover-device="pc">PC</button>
+      </div>
       <div id="coverPositionStage" class="cover-position-stage" aria-label="表紙画像の表示位置を調整"></div>
       <button id="coverPositionReset" class="cover-position-reset" type="button">中央に戻す</button>
     </div>
@@ -816,11 +825,11 @@
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
 <script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js?v=20260904-28"></script>
+<script src="./scene-player-core.js?v=20260904-29"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260904-28"></script>
+<script src="./script.js?v=20260904-29"></script>
 
 
 

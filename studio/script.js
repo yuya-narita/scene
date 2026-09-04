@@ -55,6 +55,7 @@
   const coverPositionCancel=$('#coverPositionCancel');
   const coverPositionSave=$('#coverPositionSave');
   const coverPositionReset=$('#coverPositionReset');
+  const coverPositionDeviceTabs=$('#coverPositionDeviceTabs');
 
   const authorHistoryList = $('#authorHistoryList');
   const endingLabelInput = $('#endingLabelInput');
@@ -87,6 +88,8 @@
   let coverPositionX = 50;
   let coverPositionY = 50;
   let coverPositionBeforeEdit = {x:50,y:50};
+  let coverPositionDevice='phone';
+  let coverPositions={phone:{x:50,y:50},tablet:{x:50,y:50},pc:{x:50,y:50}};
   let positionEditorMode='cover';
   let sceneBackgroundPositionContext=null;
   // The position editor is shared by Cover and Scene backgrounds. Keep it at
@@ -99,7 +102,8 @@
     if(coverPositionDialog && coverPositionDialog.parentNode!==document.body)document.body.appendChild(coverPositionDialog);
   }
   function restoreCoverPositionDialog(){ /* intentionally stays under body */ }
-  const coverPositionCss=()=>`${Math.round(coverPositionX*100)/100}% ${Math.round(coverPositionY*100)/100}%`;
+  const positionPairCss=pair=>`${Math.round((Number(pair?.x)||0)*100)/100}% ${Math.round((Number(pair?.y)||0)*100)/100}%`;
+  const coverPositionCss=device=>positionPairCss(device&&coverPositions[device]?coverPositions[device]:positionEditorMode==='background'?{x:coverPositionX,y:coverPositionY}:coverPositions.phone);
   function positionPairFromValue(value){
     const raw=String(value||'center center').trim().toLowerCase();
     const named={left:0,center:50,right:100,top:0,bottom:100};
@@ -118,10 +122,14 @@
       y:Math.max(0,Math.min(100,Number.isFinite(y)?y:50))
     };
   }
-  function setCoverPositionFromValue(value){
-    const pos=positionPairFromValue(value);
-    coverPositionX=pos.x;coverPositionY=pos.y;
+  function setCoverPositionFromValue(value,positions=null){
+    const fallback=positionPairFromValue(value);
+    coverPositions={phone:positionPairFromValue(positions?.phone||value),tablet:positionPairFromValue(positions?.tablet||value),pc:positionPairFromValue(positions?.pc||value)};
+    if(!positions)coverPositions={phone:{...fallback},tablet:{...fallback},pc:{...fallback}};
+    const active=coverPositions[coverPositionDevice]||fallback;
+    coverPositionX=active.x;coverPositionY=active.y;
   }
+  const coverPositionsForDocument=()=>({phone:coverPositionCss('phone'),tablet:coverPositionCss('tablet'),pc:coverPositionCss('pc')});
   let coverLogoUrl = '';
   let coverLogoFileName = '';
   let coverFontFamily = 'serif';
@@ -774,7 +782,7 @@
         stoppedAt:latestPublicationStoppedAt||0
       },
       recProgress:clone(autoRecProgress),
-      cover:{url:coverImageUrl||'',name:coverImageFileName||'',position:coverPositionCss(),logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||''},
+      cover:{url:coverImageUrl||'',name:coverImageFileName||'',position:coverPositionCss('phone'),positions:coverPositionsForDocument(),logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||''},
       assets:serializeDraftAssets()
     };
   }
@@ -836,7 +844,7 @@
     if(descriptionInput)descriptionInput.value=row.easy?.description||row.document?.metadata?.description||'';
     if(languageInput)languageInput.value=row.easy?.language||'auto';
     if(densitySelect)densitySelect.value='normal';
-    coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';setCoverPositionFromValue(row.document?.cover?.position||row.cover?.position||'center center');
+    coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';setCoverPositionFromValue(row.document?.cover?.position||row.cover?.position||'center center',row.document?.cover?.positions||row.cover?.positions);
     coverLogoUrl=map.get(row.cover?.logoUrl)||row.cover?.logoUrl||row.document?.cover?.logo?.src||'';coverLogoFileName=row.cover?.logoName||row.document?.cover?.logo?._editorFileName||'';
     coverFontFamily=['serif','sans','mono'].includes(workingDocument?.cover?.fontFamily)?workingDocument.cover.fontFamily:'serif';
     endingFontFamily=effectiveEndingFontFamily(workingDocument);
@@ -1852,7 +1860,7 @@
     if(bg){
       bg.style.backgroundImage=coverImageUrl ? `url("${coverImageUrl}")` : 'none';
       bg.style.backgroundSize='cover';
-      bg.style.backgroundPosition=coverPositionCss();
+      bg.style.backgroundPosition=coverPositionCss(studioPreviewDevice);
     }
     coverPreview.classList.toggle('has-image',Boolean(coverImageUrl));
     const coverFamilies={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
@@ -2021,7 +2029,7 @@
       },
       player:{ navigation:{ allowPrevious:true } },
       cover:{
-        ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss()}:{}),
+        ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
         fontFamily:coverFontFamily,
         ...(workingDocument?.cover?.styles && Object.keys(workingDocument.cover.styles).length
@@ -2454,7 +2462,7 @@
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
     const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
-    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
+    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -3015,7 +3023,7 @@
         title:packaged.title||'Untitled', author:packaged.author||'',
         language:packaged.language||'und', entry:'scene.json'
       };
-      if(coverPath)manifest.cover={image:coverPath,fit:'cover',position:coverPositionCss()};
+      if(coverPath)manifest.cover={image:coverPath,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()};
     }
 
     entries.unshift(
@@ -3221,11 +3229,11 @@
         coverImageUrl=URL.createObjectURL(blob);
         coverImageFileName=manifest.cover.image.split('/').pop()||'cover';
         assetRegistry.set(coverImageUrl,{blob,name:coverImageFileName});
-        setCoverPositionFromValue(manifest?.cover?.position||'center center');
-        doc.cover={src:coverImageUrl,fit:'cover',position:coverPositionCss()};
+        setCoverPositionFromValue(manifest?.cover?.position||'center center',manifest?.cover?.positions);
+        doc.cover={src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()};
         updateCoverPreview();
       } else {
-        coverImageUrl=''; coverImageFileName=''; coverPositionX=50; coverPositionY=50; updateCoverPreview();
+        coverImageUrl=''; coverImageFileName=''; setCoverPositionFromValue('center center'); updateCoverPreview();
       }
       await hydrateMasterPublicationState(workingDocument,{warnStale:true});
       await saveDraftNow();
@@ -3278,7 +3286,7 @@
     if(episodeInput)episodeInput.value=doc.metadata?.episode||'';
     if(episodeTitleInput)episodeTitleInput.value=doc.metadata?.episodeTitle||'';
     if(descriptionInput)descriptionInput.value=doc.metadata?.description||'';
-    coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';setCoverPositionFromValue(doc.cover?.position||'center center');
+    coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';setCoverPositionFromValue(doc.cover?.position||'center center',doc.cover?.positions);
     coverLogoUrl=doc.cover?.logo?.src||'';coverLogoFileName=doc.cover?.logo?._editorFileName||'';
     coverFontFamily=['serif','sans','mono'].includes(doc.cover?.fontFamily)?doc.cover.fontFamily:'serif';
     endingFontFamily=effectiveEndingFontFamily(doc);
@@ -4019,7 +4027,7 @@
       if(result.document){
         workingDocument=clone(result.document);
         coverImageUrl=workingDocument.cover?.src||'';
-        setCoverPositionFromValue(workingDocument.cover?.position||'center center');
+        setCoverPositionFromValue(workingDocument.cover?.position||'center center',workingDocument.cover?.positions);
         coverLogoUrl=workingDocument.cover?.logo?.src||'';
         refreshCoverPreviewLayout();
         updateEndingPreview();
@@ -4295,6 +4303,7 @@
       studioPreviewDevice=next;
       localStorage.setItem(STUDIO_PREVIEW_DEVICE_KEY,studioPreviewDevice);
       syncStudioPreviewDevice({rerender:true});
+      updateCoverPreview();
       renderDesktopLivePanel?.();
       return;
     }
@@ -4625,7 +4634,7 @@
       bg.transition=$('#sceneBackgroundTransition').value;
       bg.fit=$('#sceneBackgroundFit').value;
       bg.dim=pct($('#sceneBackgroundDim').value,34);
-      bg.transitionDuration=Math.max(0,Number($('#sceneBackgroundTransitionDuration')?.value||700));
+      bg.transitionDuration=Math.min(10000,Math.max(0,Number($('#sceneBackgroundTransitionDuration')?.value||700)));
       const motion=$('#sceneBackgroundMotion').value;
       if(motion==='none') delete bg.motion;
       else {
@@ -5257,7 +5266,7 @@
       coverImageUrl=URL.createObjectURL(snap.blob);
       coverImageFileName=snap.name||'cover';
       assetRegistry.set(coverImageUrl,{blob:snap.blob,name:coverImageFileName});
-      coverPositionX=50;coverPositionY=50;
+      setCoverPositionFromValue('center center');
       refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
       requestAnimationFrame(()=>openCoverPositionEditor());
     }catch(error){console.error(error);alert('画像を読み込めませんでした。もう一度選択してください。');coverImageInput.value='';}
@@ -5489,12 +5498,27 @@
     if(!coverPositionStage)return;
     const src=activePositionEditorImage();
     coverPositionStage.style.backgroundImage=src?`url("${src}")`:'none';
-    coverPositionStage.style.backgroundPosition=coverPositionCss();
+    coverPositionStage.style.backgroundPosition=positionPairCss({x:coverPositionX,y:coverPositionY});
     if(positionEditorMode==='background')coverPositionStage.style.backgroundSize=sceneBackgroundPositionContext?.scene?.presentation?.background?.fit||'cover';
+  }
+  function storeActiveCoverPosition(){
+    if(positionEditorMode==='cover')coverPositions[coverPositionDevice]={x:coverPositionX,y:coverPositionY};
+  }
+  function selectCoverPositionDevice(device,{store=true}={}){
+    if(!['phone','tablet','pc'].includes(device))return;
+    if(store)storeActiveCoverPosition();
+    coverPositionDevice=device;
+    const pair=coverPositions[device]||coverPositions.phone||{x:50,y:50};
+    coverPositionX=pair.x;coverPositionY=pair.y;
+    coverPositionDeviceTabs?.querySelectorAll('[data-cover-device]').forEach(button=>{
+      const active=button.dataset.coverDevice===device;button.classList.toggle('is-active',active);button.setAttribute('aria-pressed',String(active));
+    });
+    syncPositionEditorViewport();renderCoverPositionStage();
   }
   function syncPositionEditorViewport(){
     if(!coverPositionDialog||!coverPositionStage)return;
-    const device=positionEditorMode==='background'?studioPreviewDevice:'phone';
+    const device=positionEditorMode==='background'?studioPreviewDevice:coverPositionDevice;
+    coverPositionDialog.classList.toggle('is-background-mode',positionEditorMode==='background');
     const logical=device==='pc'?{width:1440,height:900}:device==='tablet'?{width:768,height:1024}:{width:390,height:844};
     coverPositionDialog.classList.remove('is-device-phone','is-device-tablet','is-device-pc');
     coverPositionDialog.classList.add(`is-device-${device}`);
@@ -5513,10 +5537,9 @@
     restoreCoverPositionDialog();
     positionEditorMode='cover';
     sceneBackgroundPositionContext=null;
-    coverPositionBeforeEdit={x:coverPositionX,y:coverPositionY};
+    coverPositionBeforeEdit={x:coverPositionX,y:coverPositionY,positions:clone(coverPositions)};
     if(coverPositionStage)coverPositionStage.setAttribute('aria-label','表紙画像の表示位置を調整');
-    syncPositionEditorViewport();
-    renderCoverPositionStage();
+    selectCoverPositionDevice(studioPreviewDevice,{store:false});
     coverPositionDialog.style.setProperty('z-index','2147483647','important');
     coverPositionDialog.hidden=false;
     document.documentElement.classList.add('cover-position-open');
@@ -5545,7 +5568,7 @@
       const ctx=sceneBackgroundPositionContext;
       if(save){
         const bg=ctx.scene?.presentation?.background;
-        if(bg?.src)bg.position=coverPositionCss();
+        if(bg?.src)bg.position=positionPairCss({x:coverPositionX,y:coverPositionY});
       }
       coverPositionX=ctx.restoreCover.x;coverPositionY=ctx.restoreCover.y;
       sceneBackgroundPositionContext=null;
@@ -5579,7 +5602,11 @@
       return;
     }
 
-    if(!save){coverPositionX=coverPositionBeforeEdit.x;coverPositionY=coverPositionBeforeEdit.y;}
+    if(save)storeActiveCoverPosition();
+    else{
+      if(coverPositionBeforeEdit.positions)coverPositions=clone(coverPositionBeforeEdit.positions);
+      coverPositionX=coverPositionBeforeEdit.x;coverPositionY=coverPositionBeforeEdit.y;
+    }
     coverPositionDialog.hidden=true;
         document.documentElement.classList.remove('cover-position-open');
 
@@ -5617,12 +5644,16 @@
     coverPositionStage.addEventListener('pointerup',endDrag);coverPositionStage.addEventListener('pointercancel',endDrag);
   }
   coverPositionReset?.addEventListener('click',()=>{
-    coverPositionX=50;coverPositionY=50;renderCoverPositionStage();
+    coverPositionX=50;coverPositionY=50;if(positionEditorMode==='cover')storeActiveCoverPosition();renderCoverPositionStage();
     if(positionEditorMode==='cover')refreshCoverPreviewLayout();
   });
   coverPositionSave?.addEventListener('click',()=>closeCoverPositionEditor(true));
   coverPositionCancel?.addEventListener('click',()=>closeCoverPositionEditor(false));
   coverPositionDialog?.addEventListener('click',(event)=>{if(event.target===coverPositionDialog)closeCoverPositionEditor(false);});
+  coverPositionDeviceTabs?.addEventListener('click',event=>{
+    const button=event.target.closest?.('[data-cover-device]');if(!button||positionEditorMode!=='cover')return;
+    event.preventDefault();selectCoverPositionDevice(button.dataset.coverDevice);
+  });
 
   function openCoverQuickEditor(focusTarget='title'){
     if(!coverQuickDialog)return;
@@ -8058,7 +8089,7 @@ function openDesktopBackgroundDetail(){
         ['fade',t('transition.fade')],['cut',t('transition.cut')],['flash',t('transition.flash')],['glitch',t('transition.glitch')]
       ],bg0.transition||'fade',v=>{const bg=ensureImageState();bg.transition=v;apply();}),
       desktopDetailRange(u('切替時間','Transition duration'),{
-        min:0,max:3,step:.05,
+        min:0,max:10,step:.05,
         value:(Number(bg0.transitionDuration)||700)/1000,
         unit:u(' 秒',' sec'),format:v=>v.toFixed(2),
         oninput:v=>{const bg=ensureImageState();bg.transitionDuration=Math.round(v*1000);apply();}
