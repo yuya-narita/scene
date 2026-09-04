@@ -101,6 +101,7 @@
       this.auto = false;
       this.ended = false;
       this.autoTimer = null;
+      this.playbackTimelineStartedAt = 0;
       this.touchStartY = null;
       this.touchStartX = null;
       this.suppressNextClick = false;
@@ -429,6 +430,7 @@
         // rejection is queued before the synthetic click; re-arming here lets the
         // same physical tap flush it instead of waiting for another user action.
         this.unlockAudio(true);
+        if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
         this.next();
       });
 
@@ -437,6 +439,7 @@
           if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             e.preventDefault();
             this.unlockAudio(true);
+            if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
             this.next();
           } else if (this.options.allowPrevious && (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Backspace')) {
             e.preventDefault();
@@ -482,10 +485,10 @@
           // only one unread Scene at a time.
           if (Math.abs(dy) >= Math.abs(dx)) {
             if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
-            else if (dy < 0) this.next();
+            else if (dy < 0) { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
           } else {
             if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
-            else this.next();
+            else { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
           }
         }, { passive: true });
       }
@@ -1995,6 +1998,7 @@
       });
 
       this.audioPlaybackArmed = false;
+      this.playbackTimelineStartedAt = 0;
       this.document = assertSceneDocument(doc);
 
       // iOS: build a source-stable native-media bank now. Actual play() calls
@@ -2640,8 +2644,9 @@
       // `restore` only reconstructs persistent BGM/Ambient and intentionally
       // skips one-shots, which made Scene 1 SE silent.
       this._audioRenderMode='load';
+      this.playbackTimelineStartedAt=performance.now();
       this._render();
-      emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index});
+      emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
       return true;
     }
 
@@ -2811,7 +2816,12 @@
     _scheduleAuto() {
       if (!this.auto || this.ended || !this.currentScene || this.typingState) return;
       this._clearAutoTimer();
-      const delay = Math.max(0, asNumber(this.currentScene.pause, this.options.autoDelay));
+      const cue=asNumber(this.currentScene.cueAt,NaN);
+      if(!this.playbackTimelineStartedAt)this.playbackTimelineStartedAt=performance.now()-(Number.isFinite(cue)?Math.max(0,cue):0);
+      const nextCue=asNumber(this.document?.scenes?.[this.index+1]?.cueAt,NaN);
+      const pause=Math.max(0,asNumber(this.currentScene.pause,this.options.autoDelay));
+      const targetElapsed=Number.isFinite(nextCue)?Math.max(0,nextCue):(Number.isFinite(cue)?Math.max(0,cue)+pause:NaN);
+      const delay=Number.isFinite(targetElapsed)?Math.max(0,(this.playbackTimelineStartedAt+targetElapsed)-performance.now()):pause;
       this.autoTimer = setTimeout(() => {
         this.autoTimer = null;
         if (this.index >= this.document.scenes.length - 1) {

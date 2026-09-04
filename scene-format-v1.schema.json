@@ -163,6 +163,11 @@
           "type": "number",
           "minimum": 0
         },
+        "cueAt": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Absolute Scene appearance cue in milliseconds from the Scene 1/audio zero point. New AUTO REC writes this alongside pause; legacy players may ignore it."
+        },
         "presentation": {
           "$ref": "#/$defs/presentation"
         },
@@ -768,7 +773,8 @@
             },
             "mode": {
               "enum": [
-                "absolute"
+                "absolute",
+                "interval-v2"
               ]
             },
             "authorOptInVersion": {
