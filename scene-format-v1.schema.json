@@ -403,7 +403,8 @@
           "properties": {
             "type": {
               "enum": [
-                "handdrawn-voice"
+                "handdrawn-voice",
+                "handdrawn-narration"
               ]
             },
             "position": {
