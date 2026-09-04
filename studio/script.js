@@ -2,6 +2,10 @@
   'use strict';
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
+  const initialFrameSelect=$('#sceneFrameSelect');
+  if(initialFrameSelect&&!initialFrameSelect.querySelector('[value="handdrawn-narration"]')){
+    const option=document.createElement('option');option.value='handdrawn-narration';option.textContent='手書きナレーション枠';initialFrameSelect.appendChild(option);
+  }
 
   const editorScreen = $('#editorScreen');
   const easyIntro = $('.intro');
@@ -4778,7 +4782,7 @@
     if(writingMode==='vertical-rl')p.text.writingMode='vertical-rl';else delete p.text.writingMode;
     const frameType=$('#sceneFrameSelect')?.value || 'none';
     setFramePositionPreset(p,$('#sceneFramePositionSelect')?.value||framePositionPreset(scene));
-    if(frameType==='handdrawn-voice')p.frame={...(p.frame||{}),type:'handdrawn-voice'};else delete p.frame;
+    if(['handdrawn-voice','handdrawn-narration'].includes(frameType))p.frame={...(p.frame||{}),type:frameType};else delete p.frame;
     const weightChoice=Number($('#sceneWeightSelect')?.value||0); if(weightChoice) p.text.fontWeight=weightChoice; else delete p.text.fontWeight;
     const colorChoice=$('#sceneColorSelect')?.value || 'auto';
     if(colorChoice==='white') p.text.color='#ffffff';
@@ -4813,6 +4817,7 @@
     if($('#sceneViewSelect')) $('#sceneViewSelect').value=scene.presentation?.view || 'world';
     if($('#sceneEntryMotionSelect')) $('#sceneEntryMotionSelect').value=scene.presentation?.entryMotion || 'flow';
     $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto'; if($('#sceneWritingModeSelect')) $('#sceneWritingModeSelect').value=scene.presentation?.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb'; if($('#sceneFrameSelect'))$('#sceneFrameSelect').value=scene.presentation?.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none'; if($('#sceneFramePositionSelect'))$('#sceneFramePositionSelect').value=framePositionPreset(scene); if($('#sceneFramePositionAdjust'))$('#sceneFramePositionAdjust').disabled=typeof scene.text!=='string'||!scene.text.length; if($('#sceneWeightSelect')) $('#sceneWeightSelect').value=String(scene.presentation?.text?.fontWeight||0);
+    if($('#sceneFrameSelect')&&scene.presentation?.frame?.type==='handdrawn-narration')$('#sceneFrameSelect').value='handdrawn-narration';
     const sceneColor=scene.presentation?.text?.color || '';
     $('#sceneColorSelect').value=!sceneColor?'auto':(sceneColor.toLowerCase()==='#ffffff'||sceneColor.toLowerCase()==='white'?'white':(sceneColor.toLowerCase()==='#000000'||sceneColor.toLowerCase()==='black'?'black':'custom'));
     $('#sceneColorCustomInput').value=/^#[0-9a-f]{6}$/i.test(sceneColor)?sceneColor:'#ffffff';
@@ -8235,7 +8240,7 @@ function openDesktopTextDetail(){
       desktopDetailSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;apply();}),
       desktopDetailSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;apply();}),
       desktopDetailSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;apply();}),
-      desktopDetailSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')]],p.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none',v=>{if(v==='handdrawn-voice')p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();}),
+      desktopDetailSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')]],['handdrawn-voice','handdrawn-narration'].includes(p.frame?.type)?p.frame.type:'none',v=>{if(['handdrawn-voice','handdrawn-narration'].includes(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();}),
       desktopDetailSelect(u('テキスト位置','Text position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);apply();}),
       desktopDetailSelect(u('文字色','Text color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom')),v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;apply();}),
       desktopDetailSelect(u('文字影','Text shadow'),[['auto',t('effect.auto')],['none',t('shadow.none')],['soft',t('shadow.soft')],['strong',t('shadow.strong')]],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
@@ -8820,7 +8825,7 @@ function openDesktopTextDetail(){
       desktopMakeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
       desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
       desktopMakeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;refresh();}),
-      desktopMakeSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')]],p.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none',v=>{if(v==='handdrawn-voice')p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
+      desktopMakeSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')]],['handdrawn-voice','handdrawn-narration'].includes(p.frame?.type)?p.frame.type:'none',v=>{if(['handdrawn-voice','handdrawn-narration'].includes(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
       textPositionField,
       textColorField
     );
@@ -9623,7 +9628,7 @@ function openDesktopTextDetail(){
         makeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
         makeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
         makeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;rerender();}),
-        makeSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')]],p.frame?.type==='handdrawn-voice'?'handdrawn-voice':'none',v=>{if(v==='handdrawn-voice')p.frame={...(p.frame||{}),type:v};else delete p.frame;rerender();}),
+        makeSelect(u('文字の枠','Text frame'),[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')]],['handdrawn-voice','handdrawn-narration'].includes(p.frame?.type)?p.frame.type:'none',v=>{if(['handdrawn-voice','handdrawn-narration'].includes(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;rerender();}),
         makeSelect(u('テキスト位置','Text position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);rerender();}),
         colorField,
         makeSelect(p.text.writingMode==='vertical-rl'?u('横位置','Horizontal position'):u('文字配置','Text alignment'),p.text.writingMode==='vertical-rl'?[['auto',u('中央（おまかせ）','Center (automatic)')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]]:[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();})

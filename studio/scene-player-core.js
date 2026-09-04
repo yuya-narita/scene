@@ -3938,12 +3938,12 @@
       return ()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};
     }
 
-    _handdrawnPath(width,height,seed,trace=0,shapeLevel=0) {
+    _handdrawnPath(width,height,seed,trace=0,shapeLevel=0,frameType='handdrawn-voice') {
       const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0);
       const inset=5.5+trace*.35,rx=Math.max(8,(width-inset*2)/2),ry=Math.max(8,(height-inset*2)/2);
       const cx=width/2+(random()-.5)*1.8,cy=height/2+(random()-.5)*1.8,count=32,phase=random()*Math.PI*2,points=[];
       for(let i=0;i<count;i++){
-        const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=2.05+Math.max(0,Math.min(1,shapeLevel))*2.35;
+        const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=frameType==='handdrawn-narration'?8.5:2.05+Math.max(0,Math.min(1,shapeLevel))*2.35;
         const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx,baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
         const wobble=1+Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006+(random()-.5)*.018+(trace-1)*.0025;
         points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});
@@ -3990,8 +3990,8 @@
         const rect=frame.getBoundingClientRect(),scale=this._layoutScale(),width=Math.max(24,Math.round(rect.width/scale*10)/10),height=Math.max(24,Math.round(rect.height/scale*10)/10);
         if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
         lastWidth=width;lastHeight=height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
-        const seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}`),shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0)),primary=this._handdrawnPath(width,height,seed,0,shapeLevel);
-        fill.setAttribute('d',primary);ink.setAttribute('d',primary);bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel));ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel));scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel));
+        const frameType=frame.dataset.frameType||'handdrawn-voice',seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}|${frameType}`),shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0)),primary=this._handdrawnPath(width,height,seed,0,shapeLevel,frameType);
+        fill.setAttribute('d',primary);ink.setAttribute('d',primary);bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel,frameType));ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel,frameType));scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel,frameType));
         const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);scuff.setAttribute('stroke-dashoffset',String(seed%29));
         const article=frame.closest('.sp-scene');if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{if(!frame.isConnected||!this.document)return;const active=this.document.scenes?.[this.index],display=active?.presentation?.display||'stack',entries=this._visibleScenes(display),byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node])),present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node),presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);else this._positionSceneNodes(presentNodes,presentEntries,0);});
       };
@@ -4074,12 +4074,12 @@
           text.className = 'sp-text';
           text.textContent = scene.text;
           this._applyTextStyle(text, presentation.text || {}, false);
-          if(presentation.frame?.type==='handdrawn-voice'){
-            const frame=document.createElement('div');frame.className='sp-handdrawn-frame';
+          if(['handdrawn-voice','handdrawn-narration'].includes(presentation.frame?.type)){
+            const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;
             frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
             frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';
             const inkColor=String(presentation.text?.color||'').trim().toLowerCase();if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';
-            frame.appendChild(text);article.appendChild(frame);article.dataset.frame='handdrawn-voice';this._mountHanddrawnFrame(frame,scene,presentation);
+            frame.appendChild(text);article.appendChild(frame);article.dataset.frame=presentation.frame.type;this._mountHanddrawnFrame(frame,scene,presentation);
           }else article.appendChild(text);
         }
 
@@ -4111,7 +4111,7 @@
       const text = String(scene?.text || '');
       const chars = Array.from(text).length;
       const lines = text ? text.split('\n').length : 0;
-      const verticalFrame=textStyle?.writingMode==='vertical-rl' && scene?.presentation?.frame?.type==='handdrawn-voice';
+      const verticalFrame=textStyle?.writingMode==='vertical-rl' && ['handdrawn-voice','handdrawn-narration'].includes(scene?.presentation?.frame?.type);
       // A vertical balloon has both a height and a column-width limit. Plain
       // character thresholds made medium passages stay at the normal size and
       // let their final columns escape the frame. Auto must become stricter
