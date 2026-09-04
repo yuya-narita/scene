@@ -774,7 +774,8 @@
             "mode": {
               "enum": [
                 "absolute",
-                "interval-v2"
+                "interval-v2",
+                "standard-v3"
               ]
             },
             "authorOptInVersion": {

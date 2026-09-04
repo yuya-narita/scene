@@ -119,11 +119,16 @@
   }
   function resetResonanceSession(startAt=0){
     resonanceSession=(resonanceIsEnabled()&&resonanceHasCompleteAuthorTiming()&&Number(startAt)===0)
-      ? {valid:true,lastAt:0,samples:[]}
+      ? {valid:true,startedAt:0,lastAt:0,samples:[]}
       : null;
     renderResonanceResult(null);
   }
-  function beginResonanceClock(at=performance.now()){if(resonanceSession?.valid)resonanceSession.lastAt=Number(at)||performance.now();}
+  function beginResonanceClock(at=performance.now()){
+    if(!resonanceSession?.valid)return;
+    const zero=Number(at)||performance.now();
+    resonanceSession.startedAt=zero;
+    resonanceSession.lastAt=zero;
+  }
   function invalidateResonance(){if(resonanceSession)resonanceSession.valid=false;}
   function recordResonanceBoundary(sceneIndex,at=performance.now()){
     const session=resonanceSession;if(!session?.valid||!session.lastAt)return;
@@ -131,21 +136,57 @@
     if(!Number.isFinite(expected)||expected<=0){invalidateResonance();return;}
     const now=Number(at)||performance.now();
     const actual=Math.max(0,now-session.lastAt);
+    const elapsed=Math.max(0,now-session.startedAt);
     session.lastAt=now;
-    session.samples.push({sceneIndex,expected,actual});
+    session.samples.push({sceneIndex,expected,actual,elapsed});
+  }
+  function resonanceCurve(diff,tolerance){
+    const ratio=Math.abs(Number(diff)||0)/Math.max(1,Number(tolerance)||1);
+    return 1/(1+ratio*ratio);
+  }
+  function expectedResonanceCue(sceneIndex){
+    const scenes=documentData?.scenes||[];
+    const nextCue=Number(scenes[sceneIndex+1]?.cueAt);
+    if(sceneIndex+1<scenes.length&&Number.isFinite(nextCue)&&nextCue>=0)return nextCue;
+    const currentCue=Number(scenes[sceneIndex]?.cueAt);
+    const currentPause=Number(scenes[sceneIndex]?.pause);
+    if(Number.isFinite(currentCue)&&currentCue>=0&&Number.isFinite(currentPause)&&currentPause>0)return currentCue+currentPause;
+    let total=0;
+    for(let i=0;i<=sceneIndex;i++)total+=Math.max(0,Number(scenes[i]?.pause)||0);
+    return total;
   }
   function resonanceScore(){
     const session=resonanceSession;
     if(!session?.valid||session.samples.length!==(documentData?.scenes?.length||0))return null;
-    const values=session.samples.map(({expected,actual})=>{
-      const diff=Math.abs(actual-expected);
-      // No visible notes: this is a comparison of pacing, not a strict rhythm-game judgement.
-      // 100% remains possible only at exact coincidence, but nearby taps stay meaningful.
-      const tolerance=Math.max(1500,expected*.75);
-      const ratio=diff/tolerance;
-      return 1/(1+ratio*ratio);
+    const values=session.samples.map(({sceneIndex,expected,actual,elapsed})=>{
+      // Standard resonance: preserve human reading variance while making the
+      // old 75% tolerance meaningfully more selective.
+      const intervalTolerance=Math.max(800,expected*.35);
+      const intervalScore=resonanceCurve(actual-expected,intervalTolerance);
+
+      // Interval-only scoring forgave a reader who slipped against the work's
+      // timeline once and then kept the same spacing. Include a restrained
+      // absolute-phase component so cumulative drift remains visible without
+      // turning reading into a rhythm game.
+      const expectedCue=expectedResonanceCue(sceneIndex);
+      const phaseTolerance=Math.max(1200,expected*.20);
+      const phaseScore=resonanceCurve(elapsed-expectedCue,phaseTolerance);
+      return intervalScore*.75+phaseScore*.25;
     });
-    return Math.max(0,Math.min(100,(values.reduce((a,b)=>a+b,0)/values.length)*100));
+    const mean=values.reduce((a,b)=>a+b,0)/values.length;
+    const bottomCount=Math.max(1,Math.ceil(values.length*.20));
+    const bottomMean=[...values].sort((a,b)=>a-b).slice(0,bottomCount).reduce((a,b)=>a+b,0)/bottomCount;
+    // The lower-tail component prevents a handful of major misses from being
+    // diluted into a near-perfect score in long works.
+    return Math.max(0,Math.min(100,(mean*.70+bottomMean*.30)*100));
+  }
+  function resonanceDepth(score){
+    const value=Number(score);
+    if(!Number.isFinite(value))return '';
+    if(value>=90)return '同期';
+    if(value>=78)return '共鳴';
+    if(value>=62)return '呼吸';
+    return '余白';
   }
   function resonanceResultNode(){
     let node=document.getElementById('publicResonanceResult');
@@ -154,7 +195,7 @@
     node.id='publicResonanceResult';
     node.className='public-resonance-result';
     node.hidden=true;
-    node.innerHTML='<small>RESONANCE</small><strong></strong><p>あなたと作者の「間」の共鳴率</p>';
+    node.innerHTML='<small>RESONANCE</small><strong></strong><span class="public-resonance-depth"></span><p>あなたと作者の「間」の共鳴率</p>';
     endingLabel.insertAdjacentElement('afterend',node);
     return node;
   }
@@ -172,10 +213,13 @@
     ending?.classList.toggle('has-resonance',!node.hidden);
 
     const strong=node.querySelector('strong');
+    const depth=node.querySelector('.public-resonance-depth');
     if(!node.hidden){
       if(strong)strong.textContent=`${value.toFixed(1)}%`;
+      if(depth)depth.textContent=`共鳴深度：${resonanceDepth(value)}`;
     }else if(strong){
       strong.textContent='';
+      if(depth)depth.textContent='';
     }
   }
 
@@ -781,9 +825,6 @@
     // trusted user gesture that pressed START / CONTINUE.
     player.begin();
 
-    // Use the same zero point as Scene 1 / its audio.
-    beginResonanceClock(player.playbackTimelineStartedAt||performance.now());
-
     await openingBreath();
 
     // The Scene's audio has already started from the trusted gesture. Reveal the
@@ -797,6 +838,10 @@
       if(player.els?.title)player.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || documentData.title || '';
       if(player.els?.author)player.els.author.textContent=documentData.author||'';
     }
+    // Resonance measures readable time. The public opening breath is not
+    // operable by the reader, so Scene 1 starts when the reading surface is
+    // actually revealed rather than ~690ms earlier at audio unlock.
+    beginResonanceClock(performance.now());
     host.style.visibility = '';
     host.style.pointerEvents = '';
   }

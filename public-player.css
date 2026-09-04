@@ -828,6 +828,16 @@ body{
   letter-spacing:.01em;
   color:var(--public-text);
 }
+.public-resonance-depth{
+  display:block;
+  margin:0;
+  font-family:"Yu Mincho","Hiragino Mincho ProN","Hiragino Mincho Pro",serif;
+  font-size:12px;
+  font-weight:600;
+  line-height:1.4;
+  letter-spacing:.08em;
+  color:var(--public-text);
+}
 .public-resonance-result p{
   display:block;
   margin:2px 0 0;
@@ -919,6 +929,7 @@ body{
 
 .public-ending.has-resonance .public-resonance-result small,
 .public-ending.has-resonance .public-resonance-result strong,
+.public-ending.has-resonance .public-resonance-depth,
 .public-ending.has-resonance .public-resonance-result p{
   width:100%!important;
   text-align:center!important;
@@ -962,6 +973,10 @@ body{
 
 .public-ending.has-resonance .public-resonance-result strong{
   margin:0 0 10px!important;
+}
+
+.public-ending.has-resonance .public-resonance-depth{
+  margin:0 0 5px!important;
 }
 
 .public-ending.has-resonance .public-resonance-result p{
