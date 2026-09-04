@@ -25,7 +25,7 @@
 
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20260904-24">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20260904-25">
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -46,8 +46,12 @@
       .studio-safe-guide{--studio-guide-inline:7%;--studio-guide-top:7%;--studio-guide-bottom:9%;position:absolute;inset:0;z-index:72;pointer-events:none;color:rgba(255,255,255,.42);mix-blend-mode:difference}
       #playerScreen.preview-device-tablet .studio-safe-guide{--studio-guide-inline:8%;--studio-guide-top:8%;--studio-guide-bottom:10%}
       #playerScreen.preview-device-pc .studio-safe-guide{--studio-guide-inline:max(8%,calc((100% - 960px)/2));--studio-guide-top:10%;--studio-guide-bottom:12%}
-      .studio-safe-guide::before{content:"";position:absolute;inset:var(--studio-guide-top) var(--studio-guide-inline) var(--studio-guide-bottom);border:1px dashed currentColor;border-radius:10px}
-      .studio-safe-guide::after{content:"";position:absolute;inset:var(--studio-guide-top) var(--studio-guide-inline) var(--studio-guide-bottom);background:linear-gradient(to right,transparent calc(33.333% - .5px),currentColor calc(33.333% - .5px),currentColor calc(33.333% + .5px),transparent calc(33.333% + .5px),transparent calc(66.666% - .5px),currentColor calc(66.666% - .5px),currentColor calc(66.666% + .5px),transparent calc(66.666% + .5px)),linear-gradient(to bottom,transparent calc(33.333% - .5px),currentColor calc(33.333% - .5px),currentColor calc(33.333% + .5px),transparent calc(33.333% + .5px),transparent calc(66.666% - .5px),currentColor calc(66.666% - .5px),currentColor calc(66.666% + .5px),transparent calc(66.666% + .5px));opacity:.58}
+      .studio-safe-guide-grid{position:absolute;inset:var(--studio-guide-top) var(--studio-guide-inline) var(--studio-guide-bottom);border:1px dashed currentColor;border-radius:10px}
+      .studio-safe-guide-line{position:absolute;display:block;background:currentColor;opacity:.66}
+      .studio-safe-guide-line.is-v1,.studio-safe-guide-line.is-v2{top:0;bottom:0;width:1px}
+      .studio-safe-guide-line.is-h1,.studio-safe-guide-line.is-h2{left:0;right:0;height:1px}
+      .studio-safe-guide-line.is-v1{left:33.333%}.studio-safe-guide-line.is-v2{left:66.666%}
+      .studio-safe-guide-line.is-h1{top:33.333%}.studio-safe-guide-line.is-h2{top:66.666%}
       /* The compact Text card grew as position/writing controls were added. Let it size and scroll naturally. */
       body.desktop-live-edit .desktop-live-panel{display:flex!important;flex-direction:column!important;height:100dvh!important;max-height:100dvh!important;overflow:hidden!important}
       .desktop-live-panel-body{flex:1 1 auto!important;min-height:0!important;height:auto!important;padding-bottom:72px!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable}
@@ -77,8 +81,14 @@
       .sp-core[data-theme="cinema"]:not([data-cinema-tone="light"]) .studio-safe-guide{color:rgba(255,255,255,.45);mix-blend-mode:screen}
       #playerScreen.preview-device-pc .sp-core[data-theme="light"] .studio-safe-guide,
       #playerScreen.preview-device-pc .sp-core[data-theme="cinema"][data-cinema-tone="light"] .studio-safe-guide{color:rgba(20,25,30,.72);mix-blend-mode:multiply}
-      #playerScreen.preview-device-pc .studio-safe-guide::before{border-width:2px}
-      #playerScreen.preview-device-pc .studio-safe-guide::after{opacity:.92;filter:drop-shadow(0 0 .75px currentColor)}
+      #playerScreen.preview-device-pc .studio-safe-guide-grid{border-width:2px}
+      #playerScreen.preview-device-pc .studio-safe-guide-line.is-v1,
+      #playerScreen.preview-device-pc .studio-safe-guide-line.is-v2{width:2px;transform:translateX(-1px)}
+      #playerScreen.preview-device-pc .studio-safe-guide-line.is-h1,
+      #playerScreen.preview-device-pc .studio-safe-guide-line.is-h2{height:2px;transform:translateY(-1px)}
+      #playerScreen.preview-device-pc .studio-safe-guide-line{opacity:.9}
+      .cover-position-dialog.is-device-pc .cover-position-card{width:min(1120px,calc(100vw - 48px));max-width:none}
+      .cover-position-dialog.is-device-tablet .cover-position-card{width:min(820px,calc(100vw - 48px));max-width:none}
     }
     /* Keep the Ending SE checkbox a normal native-sized control, even when generic inputs are full width. */
     .ending-quick-se .check-row{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;min-height:32px!important;padding:0!important;border:0!important;background:transparent!important}
@@ -806,11 +816,11 @@
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
 <script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js?v=20260904-24"></script>
+<script src="./scene-player-core.js?v=20260904-25"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260904-24"></script>
+<script src="./script.js?v=20260904-25"></script>
 
 
 

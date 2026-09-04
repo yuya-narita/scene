@@ -4214,7 +4214,12 @@
     const stage=player?.els?.stage||playerHost?.querySelector?.('.sp-stage');
     if(!stage)return;
     let guide=stage.querySelector(':scope > .studio-safe-guide');
-    if(studioPreviewGuide && !guide){guide=document.createElement('div');guide.className='studio-safe-guide';guide.setAttribute('aria-hidden','true');stage.appendChild(guide);}
+    if(studioPreviewGuide && !guide){
+      guide=document.createElement('div');guide.className='studio-safe-guide';guide.setAttribute('aria-hidden','true');
+      const grid=document.createElement('span');grid.className='studio-safe-guide-grid';
+      ['v1','v2','h1','h2'].forEach(kind=>{const line=document.createElement('i');line.className=`studio-safe-guide-line is-${kind}`;grid.appendChild(line);});
+      guide.appendChild(grid);stage.appendChild(guide);
+    }
     if(!studioPreviewGuide)guide?.remove();
   }
   function syncStudioPreviewDevice({rerender=false}={}){
@@ -5474,6 +5479,23 @@
     const src=activePositionEditorImage();
     coverPositionStage.style.backgroundImage=src?`url("${src}")`:'none';
     coverPositionStage.style.backgroundPosition=coverPositionCss();
+    if(positionEditorMode==='background')coverPositionStage.style.backgroundSize=sceneBackgroundPositionContext?.scene?.presentation?.background?.fit||'cover';
+  }
+  function syncPositionEditorViewport(){
+    if(!coverPositionDialog||!coverPositionStage)return;
+    const device=positionEditorMode==='background'?studioPreviewDevice:'phone';
+    const logical=device==='pc'?{width:1440,height:900}:device==='tablet'?{width:768,height:1024}:{width:390,height:844};
+    coverPositionDialog.classList.remove('is-device-phone','is-device-tablet','is-device-pc');
+    coverPositionDialog.classList.add(`is-device-${device}`);
+    const maxWidth=Math.max(280,Math.min(window.innerWidth-96,device==='pc'?1040:device==='tablet'?720:420));
+    const maxHeight=Math.max(320,window.innerHeight-230);
+    const scale=Math.min(maxWidth/logical.width,maxHeight/logical.height);
+    coverPositionStage.style.setProperty('aspect-ratio',`${logical.width} / ${logical.height}`);
+    coverPositionStage.style.setProperty('width',`${Math.round(logical.width*scale)}px`);
+    coverPositionStage.style.setProperty('height',`${Math.round(logical.height*scale)}px`);
+    coverPositionStage.style.setProperty('max-width','100%');
+    coverPositionStage.style.setProperty('margin-inline','auto');
+    coverPositionStage.dataset.previewDevice=device;
   }
   function openCoverPositionEditor(){
     if(!coverPositionDialog||!coverImageUrl)return;
@@ -5482,6 +5504,7 @@
     sceneBackgroundPositionContext=null;
     coverPositionBeforeEdit={x:coverPositionX,y:coverPositionY};
     if(coverPositionStage)coverPositionStage.setAttribute('aria-label','表紙画像の表示位置を調整');
+    syncPositionEditorViewport();
     renderCoverPositionStage();
     coverPositionDialog.style.setProperty('z-index','2147483647','important');
     coverPositionDialog.hidden=false;
@@ -5498,6 +5521,7 @@
     coverPositionX=pos.x;coverPositionY=pos.y;
     coverPositionBeforeEdit={x:pos.x,y:pos.y};
     if(coverPositionStage)coverPositionStage.setAttribute('aria-label','背景画像の表示位置を調整');
+    syncPositionEditorViewport();
     renderCoverPositionStage();
     coverPositionDialog.style.setProperty('z-index','2147483647','important');
     coverPositionDialog.hidden=false;
