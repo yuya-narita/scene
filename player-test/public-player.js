@@ -123,13 +123,13 @@
       : null;
     renderResonanceResult(null);
   }
-  function beginResonanceClock(){if(resonanceSession?.valid)resonanceSession.lastAt=performance.now();}
+  function beginResonanceClock(at=performance.now()){if(resonanceSession?.valid)resonanceSession.lastAt=Number(at)||performance.now();}
   function invalidateResonance(){if(resonanceSession)resonanceSession.valid=false;}
-  function recordResonanceBoundary(sceneIndex){
+  function recordResonanceBoundary(sceneIndex,at=performance.now()){
     const session=resonanceSession;if(!session?.valid||!session.lastAt)return;
     const expected=Number(documentData?.scenes?.[sceneIndex]?.pause);
     if(!Number.isFinite(expected)||expected<=0){invalidateResonance();return;}
-    const now=performance.now();
+    const now=Number(at)||performance.now();
     const actual=Math.max(0,now-session.lastAt);
     session.lastAt=now;
     session.samples.push({sceneIndex,expected,actual});
@@ -311,7 +311,8 @@
       bg?.fit === 'contain' ? 'contain' :
       bg?.fit === 'fill' ? '100% 100%' :
       'cover';
-    openingImage.style.backgroundPosition = 'center';
+    // Match the authored Scene 1 crop before the core Player becomes visible.
+    openingImage.style.backgroundPosition = bg?.position || 'center center';
     openingImage.style.backgroundRepeat = 'no-repeat';
 
     const dim = Math.max(0, Math.min(1, Number(bg?.dim ?? 0)));
@@ -587,6 +588,7 @@
     }
 
     host.addEventListener('sceneplayer:scenechange', onSceneChange);
+    host.addEventListener('sceneplayer:advanceintent', onAdvanceIntent);
     host.addEventListener('sceneplayer:end', onEnd);
     host.addEventListener('sceneplayer:autochange', onResonanceAutoChange);
     host.addEventListener('sceneplayer:historyopen', invalidateResonance);
@@ -601,7 +603,6 @@
       analyticsSceneAdvances += 1;
       sendAnalytics('progress',{index});
       if(player?.auto)invalidateResonance();
-      else if(Number.isInteger(index)&&index>0)recordResonanceBoundary(index-1);
     }
 
     // Core disables Previous on Scene 1 / when author history is disabled.
@@ -612,11 +613,17 @@
     }
   }
 
+  function onAdvanceIntent(e){
+    if(player?.auto){invalidateResonance();return;}
+    const index=Number(e.detail?.index);
+    if(Number.isInteger(index)&&index>=0)recordResonanceBoundary(index,e.detail?.at);
+  }
+
   function onEnd() {
     localStorage.removeItem(storageKey());
     if(resonanceSession?.valid){
       if(player?.auto)invalidateResonance();
-      else recordResonanceBoundary((documentData?.scenes?.length||1)-1);
+      else if(resonanceSession.samples.length===(documentData?.scenes?.length||1)-1)recordResonanceBoundary((documentData?.scenes?.length||1)-1);
     }
     renderResonanceResult(resonanceScore());
     if(!analyticsCompleted){
@@ -638,6 +645,7 @@
 
   function removeShellListeners() {
     host.removeEventListener('sceneplayer:scenechange', onSceneChange);
+    host.removeEventListener('sceneplayer:advanceintent', onAdvanceIntent);
     host.removeEventListener('sceneplayer:end', onEnd);
     host.removeEventListener('sceneplayer:autochange', onResonanceAutoChange);
     host.removeEventListener('sceneplayer:historyopen', invalidateResonance);
@@ -772,20 +780,22 @@
     player.begin();
 
     // Use the same zero point as Scene 1 / its audio.
-    beginResonanceClock();
+    beginResonanceClock(player.playbackTimelineStartedAt||performance.now());
 
     await openingBreath();
 
     // The Scene's audio has already started from the trusted gesture. Reveal the
     // Player now and replay only its visual presentation so the entrance effect
     // is not consumed while the host was invisible.
-    host.style.visibility = '';
-    host.style.pointerEvents = '';
     if (player) {
+      // Reset presentation before revealing the Core so no progressed
+      // background-motion frame can flash during the opening handoff.
       player.refreshCurrent({ preserveAudio: true });
       if(player.els?.title)player.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || documentData.title || '';
       if(player.els?.author)player.els.author.textContent=documentData.author||'';
     }
+    host.style.visibility = '';
+    host.style.pointerEvents = '';
   }
 
 

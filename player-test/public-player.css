@@ -232,6 +232,9 @@ body{
 }
 .public-opening-image{
   background-color:var(--public-bg);
+  /* Keep the opening crop identical to the Core background layer. */
+  inset:-3%;
+  transform:scale(1.001);
 }
 
 

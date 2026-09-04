@@ -101,6 +101,7 @@
       this.auto = false;
       this.ended = false;
       this.autoTimer = null;
+      this.playbackTimelineStartedAt = 0;
       this.touchStartY = null;
       this.touchStartX = null;
       this.suppressNextClick = false;
@@ -429,6 +430,7 @@
         // rejection is queued before the synthetic click; re-arming here lets the
         // same physical tap flush it instead of waiting for another user action.
         this.unlockAudio(true);
+        if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
         this.next();
       });
 
@@ -437,6 +439,7 @@
           if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             e.preventDefault();
             this.unlockAudio(true);
+            if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
             this.next();
           } else if (this.options.allowPrevious && (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Backspace')) {
             e.preventDefault();
@@ -482,10 +485,10 @@
           // only one unread Scene at a time.
           if (Math.abs(dy) >= Math.abs(dx)) {
             if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
-            else if (dy < 0) this.next();
+            else if (dy < 0) { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
           } else {
             if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
-            else this.next();
+            else { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
           }
         }, { passive: true });
       }
@@ -1995,6 +1998,7 @@
       });
 
       this.audioPlaybackArmed = false;
+      this.playbackTimelineStartedAt = 0;
       this.document = assertSceneDocument(doc);
 
       // iOS: build a source-stable native-media bank now. Actual play() calls
@@ -2592,7 +2596,8 @@
       if(this.els.coverBg){
         this.els.coverBg.style.backgroundImage=src?`url("${src.replace(/"/g,'\\"')}")`:'none';
         this.els.coverBg.style.backgroundSize=cover.fit==='contain'?'contain':'cover';
-        this.els.coverBg.style.backgroundPosition=cover.position||'center center';
+        const viewportWidth=Math.max(1,Number(this.host?.clientWidth)||Number(global.innerWidth)||1),viewportHeight=Math.max(1,Number(this.host?.clientHeight)||Number(global.innerHeight)||1),coverDevice=Math.min(viewportWidth,viewportHeight)<=600?'phone':viewportWidth>=1100?'pc':'tablet';
+        this.els.coverBg.style.backgroundPosition=cover.positions?.[coverDevice]||cover.position||'center center';
       }
       const coverText=this.document.cover?.text||{}; // legacy fallback only
       const visibility=this.document.cover?.visibility||{};
@@ -2639,8 +2644,9 @@
       // `restore` only reconstructs persistent BGM/Ambient and intentionally
       // skips one-shots, which made Scene 1 SE silent.
       this._audioRenderMode='load';
+      this.playbackTimelineStartedAt=performance.now();
       this._render();
-      emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index});
+      emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
       return true;
     }
 
@@ -2810,7 +2816,12 @@
     _scheduleAuto() {
       if (!this.auto || this.ended || !this.currentScene || this.typingState) return;
       this._clearAutoTimer();
-      const delay = Math.max(0, asNumber(this.currentScene.pause, this.options.autoDelay));
+      const cue=asNumber(this.currentScene.cueAt,NaN);
+      if(!this.playbackTimelineStartedAt)this.playbackTimelineStartedAt=performance.now()-(Number.isFinite(cue)?Math.max(0,cue):0);
+      const nextCue=asNumber(this.document?.scenes?.[this.index+1]?.cueAt,NaN);
+      const pause=Math.max(0,asNumber(this.currentScene.pause,this.options.autoDelay));
+      const targetElapsed=Number.isFinite(nextCue)?Math.max(0,nextCue):(Number.isFinite(cue)?Math.max(0,cue)+pause:NaN);
+      const delay=Number.isFinite(targetElapsed)?Math.max(0,(this.playbackTimelineStartedAt+targetElapsed)-performance.now()):pause;
       this.autoTimer = setTimeout(() => {
         this.autoTimer = null;
         if (this.index >= this.document.scenes.length - 1) {
@@ -2848,6 +2859,7 @@
     }
 
     _measureSceneGeometry(node, stageRect) {
+      node.classList.add('sp-layout-measuring');
       const nodeRect=node.getBoundingClientRect();
       const boxHeight=Math.max(1,nodeRect.height);
       const text=node.querySelector('.sp-text');
@@ -2869,18 +2881,50 @@
       }catch(_){}
       const inkHeight=Math.max(1,inkBottom-inkTop);
       const height=vertical?Math.min(boxHeight,Math.max(48,Math.min(stageRect.height*.52,inkHeight+8))):boxHeight;
+      node.classList.remove('sp-layout-measuring');
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
 
     _framePosition(scene) {
-      const source=scene?.presentation?.frame?.position||{},preset=String(source.preset||'auto'),presets={'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],left:[.18,.5],center:[.5,.5],right:[.82,.5],'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]};
+      const common=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{},viewportWidth=Math.max(1,Number(this.host?.clientWidth)||Number(global.innerWidth)||1),source=viewportWidth>=1100&&common?.pc&&typeof common.pc==='object'?common.pc:common,preset=String(source.preset||'auto'),presets={'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],left:[.18,.5],center:[.5,.5],right:[.82,.5],'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]};
       if(preset==='custom'){const x=Number(source.x),y=Number(source.y);return {preset,x:Number.isFinite(x)?Math.max(0,Math.min(1,x)):.5,y:Number.isFinite(y)?Math.max(0,Math.min(1,y)):.5};}if(presets[preset])return {preset,x:presets[preset][0],y:presets[preset][1]};return {preset:'auto'};
+    }
+
+    _customPositionTransform(item, position, stageWidth, stageHeight, margin) {
+      const contentWidth=Math.max(1,item.node.clientWidth||item.node.getBoundingClientRect().width),contentLeft=Math.max(0,(stageWidth-contentWidth)/2),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
+      const centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,stageWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
+      return {x:centerX-contentLeft-item.inkCenterX,y:centerY-item.inkCenterY};
+    }
+
+    _measureCarriedOverlayPositions(metrics, sceneEntries, stageWidth, stageHeight, focusY, extraGap = 0) {
+      const margin=stageWidth<=600?10:16;
+      const positions=metrics.map(item=>{
+        const position=this._framePosition(item.scene);
+        let x=0,y=focusY-item.inkCenterY-(item.scene.type==='dialogue'?12:0);
+        if(position.preset!=='auto'){
+          ({x,y}=this._customPositionTransform(item,position,stageWidth,stageHeight,margin));
+        }
+        return {x,y};
+      });
+      const groups=[];
+      metrics.forEach((item,i)=>{const attach=i>0&&(item.scene?.presentation?.display||'stack')==='overlay';if(attach&&groups.length)groups[groups.length-1].push(i);else groups.push([i]);});
+      const bounds=indices=>{const left=Math.min(...indices.map(i=>positions[i].x+metrics[i].inkLeft)),right=Math.max(...indices.map(i=>positions[i].x+metrics[i].inkRight)),top=Math.min(...indices.map(i=>positions[i].y+metrics[i].inkTop)),bottom=Math.max(...indices.map(i=>positions[i].y+metrics[i].inkBottom));return {left,right,top,bottom,centerX:(left+right)/2,centerY:(top+bottom)/2};};
+      for(let g=groups.length-2;g>=0;g-=1){
+        const current=groups[g],next=groups[g+1],currentBounds=bounds(current),nextBounds=bounds(next),currentLast=metrics[current[current.length-1]],nextFirst=metrics[next[0]],flow=nextFirst.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
+        let dx=0,dy=0;
+        if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap,verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
+        else{const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl',gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;dx=0;dy=nextBounds.top-gap-currentBounds.bottom;}
+        current.forEach(i=>{positions[i].x+=dx;positions[i].y+=dy;});
+      }
+      metrics.forEach((item,i)=>{item.node.style.visibility='';item.node.style.zIndex=String(20+i);});
+      return metrics.map((item,i)=>({...item,...positions[i]}));
     }
 
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
       const stageHeight = stageRect.height;
+      const stageWidth = Math.max(1,this.els.stage.clientWidth||stageRect.width);
       const focusRatio = global.innerWidth <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
       const focusY = stageHeight * focusRatio;
 
@@ -2890,7 +2934,11 @@
         index: sceneEntries[i].index,
         ...this._measureSceneGeometry(node,stageRect)
       }));
-      metrics.forEach(item=>{item.node.style.visibility='';});
+      metrics.forEach(item=>{item.node.style.visibility='';item.node.style.zIndex='';});
+
+      if(metrics.some((item,i)=>i>0&&(item.scene?.presentation?.display||'stack')==='overlay')){
+        return this._measureCarriedOverlayPositions(metrics,sceneEntries,stageWidth,stageHeight,focusY,extraGap);
+      }
 
       const newest = metrics[metrics.length - 1];
       let newestTop = focusY - newest.inkCenterY;
@@ -2910,16 +2958,17 @@
           const verticalReading=next.scene?.presentation?.text?.writingMode==='vertical-rl';
           positions[i]={x:verticalReading?nextPosition.x+next.inkRight+gap-current.inkLeft:nextPosition.x+next.inkLeft-gap-current.inkRight,y:nextPosition.y+next.inkCenterY-current.inkCenterY};
         }else{
-          const verticalGap=eitherVertical?Math.max(52,stageHeight*.095):0;
+          const verticalGap=eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0;
           const gap=this._sceneGap(current.scene,next.scene)+verticalGap+extraGap;
-          positions[i]={x:nextPosition.x,y:nextPosition.y+next.inkTop-gap-current.inkBottom};
+          const ownPosition=this._framePosition(current.scene),ownX=ownPosition.preset==='auto'?0:this._customPositionTransform(current,ownPosition,stageWidth,stageHeight,global.innerWidth<=600?10:16).x;
+          positions[i]={x:ownX,y:nextPosition.y+next.inkTop-gap-current.inkBottom};
         }
       }
 
       const currentFrame=newest.node.querySelector('.sp-handdrawn-frame');
       if(currentFrame&&metrics.length>1)metrics.slice(0,-2).forEach(item=>{item.node.style.visibility='hidden';});
-      if(currentFrame&&metrics.length>1&&this._framePosition(newest.scene).preset==='auto'){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');if(previousFrame){const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical',gap=global.innerWidth<=600?18:28,currentWidth=newest.inkRight-newest.inkLeft,previousWidth=previous.inkRight-previous.inkLeft,currentHeight=newest.inkBottom-newest.inkTop,previousHeight=previous.inkBottom-previous.inkTop,availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),availableHeight=stageHeight*.86,pairFits=flow==='horizontal'?currentWidth+previousWidth+gap<=availableWidth:currentHeight+previousHeight+gap<=availableHeight;if(pairFits){previous.node.style.visibility='';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',groupWidth=currentWidth+previousWidth+gap,groupLeft=(availableWidth-groupWidth)/2,currentLeft=verticalReading?groupLeft:groupLeft+previousWidth+gap,previousLeft=verticalReading?groupLeft+currentWidth+gap:groupLeft,centerY=stageHeight*.48;positions[metrics.length-1]={x:currentLeft-newest.inkLeft,y:centerY-newest.inkCenterY};positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:centerY-previous.inkCenterY};}else{const groupHeight=currentHeight+previousHeight+gap,groupTop=(stageHeight-groupHeight)/2;positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:groupTop-previous.inkTop};positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:groupTop+previousHeight+gap-newest.inkTop};}}else previous.node.style.visibility='hidden';}}
-      metrics.forEach((item,i)=>{if(!item.node.querySelector('.sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;const availableWidth=Math.max(1,item.node.getBoundingClientRect().width),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop,margin=global.innerWidth<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));positions[i]={x:centerX-item.inkCenterX,y:centerY-item.inkCenterY};});if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2];if(previous.node.querySelector('.sp-handdrawn-frame')&&previous.node.style.visibility!=='hidden'){const a=positions[metrics.length-1],b=positions[metrics.length-2],guard=global.innerWidth<=600?12:18,overlaps=!(a.x+newest.inkLeft>=b.x+previous.inkRight+guard||a.x+newest.inkRight+guard<=b.x+previous.inkLeft||a.y+newest.inkTop>=b.y+previous.inkBottom+guard||a.y+newest.inkBottom+guard<=b.y+previous.inkTop),availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),outside=b.x+previous.inkRight<0||b.x+previous.inkLeft>availableWidth||b.y+previous.inkBottom<0||b.y+previous.inkTop>stageHeight;if(overlaps||outside)previous.node.style.visibility='hidden';}}
+      if(currentFrame&&metrics.length>1&&this._framePosition(newest.scene).preset==='auto'){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');if(previousFrame){const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical',gap=global.innerWidth<=600?14:24,currentWidth=newest.inkRight-newest.inkLeft,previousWidth=previous.inkRight-previous.inkLeft,currentHeight=newest.inkBottom-newest.inkTop,previousHeight=previous.inkBottom-previous.inkTop,availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),availableHeight=stageHeight*.86,margin=global.innerWidth<=600?10:16;previous.node.style.visibility='';previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',fits=currentWidth+previousWidth+gap<=availableWidth-margin*2,groupWidth=currentWidth+previousWidth+gap,groupLeft=(availableWidth-groupWidth)/2,currentLeft=fits?(verticalReading?groupLeft:groupLeft+previousWidth+gap):(verticalReading?margin:availableWidth-margin-currentWidth),previousLeft=fits?(verticalReading?groupLeft+currentWidth+gap:groupLeft):(verticalReading?availableWidth-margin-previousWidth:margin),centerY=stageHeight*.48;positions[metrics.length-1]={x:currentLeft-newest.inkLeft,y:centerY-newest.inkCenterY};positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:centerY-previous.inkCenterY};}else{const fits=currentHeight+previousHeight+gap<=availableHeight,groupHeight=currentHeight+previousHeight+gap,groupTop=(stageHeight-groupHeight)/2,previousTop=fits?groupTop:margin,currentTop=fits?groupTop+previousHeight+gap:stageHeight-margin-currentHeight;positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:previousTop-previous.inkTop};positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:currentTop-newest.inkTop};}}}
+      metrics.forEach((item,i)=>{if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;positions[i]=this._customPositionTransform(item,position,stageWidth,stageHeight,global.innerWidth<=600?10:16);});if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){const availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),margin=global.innerWidth<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};}else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};}}
 
       return metrics.map((item, i) => ({ ...item, ...positions[i] }));
     }
@@ -2935,13 +2984,15 @@
     _positionOverlayNodes(nodes, sceneEntries) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
-      const focusY = stageRect.height * (stageRect.width <= 520 ? .48 : .46);
+      const stageWidth=Math.max(1,this.els.stage.clientWidth||stageRect.width),stageHeight=Math.max(1,this.els.stage.clientHeight||stageRect.height);
+      const focusY = stageHeight * (stageWidth <= 520 ? .48 : .46);
       return nodes.map((node, i) => {
-        const h = Math.max(1, node.getBoundingClientRect().height);
-        const y = focusY - h / 2;
-        node.style.transform = `translate3d(0,${Math.round(y)}px,0)`;
+        const geometry=this._measureSceneGeometry(node,stageRect),position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
+        let x=0,y=focusY-Math.max(1,node.getBoundingClientRect().height)/2;
+        if(position.preset!=='auto')({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,global.innerWidth<=600?10:16));
+        node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
         node.style.zIndex = String(20 + i);
-        return { node, scene: sceneEntries[i]?.scene, y, height: h };
+        return { node, scene: sceneEntries[i]?.scene, x, y, height: geometry.height };
       });
     }
 
@@ -3270,7 +3321,7 @@
     _swapBackground(state, transition) {
       const current = this._currentBackgroundLayer();
       const incoming = this._nextBackgroundLayer();
-      const transitionDuration=Math.max(0,asNumber(state.transitionDuration,700));
+      const transitionDuration=Math.min(10000,Math.max(0,asNumber(state.transitionDuration,700)));
       incoming.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
       current.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
       this._prepareBackgroundLayer(incoming, state);
@@ -3298,7 +3349,7 @@
       this._backgroundTimeout(() => {
         current.style.backgroundImage = '';
         current.className = current.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
-      }, mode === 'cut' ? 20 : 900);
+      }, mode === 'cut' ? 20 : transitionDuration+120);
     }
 
     _prepareBackgroundLayer(layer, state) {
@@ -3822,9 +3873,9 @@
       return hash>>>0;
     }
     _handdrawnRandom(seed) {let state=seed>>>0;return ()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};}
-    _handdrawnPath(width,height,seed,trace=0,shapeLevel=0) {
+    _handdrawnPath(width,height,seed,trace=0,shapeLevel=0,frameType='handdrawn-voice') {
       const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0),inset=5.5+trace*.35,rx=Math.max(8,(width-inset*2)/2),ry=Math.max(8,(height-inset*2)/2),cx=width/2+(random()-.5)*1.8,cy=height/2+(random()-.5)*1.8,count=32,phase=random()*Math.PI*2,points=[];
-      for(let i=0;i<count;i++){const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=2.05+Math.max(0,Math.min(1,shapeLevel))*2.35,baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx,baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry,wobble=1+Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006+(random()-.5)*.018+(trace-1)*.0025;points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});}
+      for(let i=0;i<count;i++){const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=frameType==='handdrawn-voice'?2.05+Math.max(0,Math.min(1,shapeLevel))*2.35:(['handdrawn-rounded','handdrawn-panel'].includes(frameType)?4.7:8.5),baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx,baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry,wobble=1+Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006+(random()-.5)*.018+(trace-1)*.0025;points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});}
       let d=`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
       for(let i=0;i<count;i++){const p0=points[(i-1+count)%count],p1=points[i],p2=points[(i+1)%count],p3=points[(i+2)%count];d+=` C ${(p1.x+(p2.x-p0.x)/6).toFixed(2)} ${(p1.y+(p2.y-p0.y)/6).toFixed(2)} ${(p2.x-(p3.x-p1.x)/6).toFixed(2)} ${(p2.y-(p3.y-p1.y)/6).toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;}
       return `${d} Z`;
@@ -3833,7 +3884,7 @@
       const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.classList.add('sp-handdrawn-frame-svg');svg.setAttribute('aria-hidden','true');svg.setAttribute('preserveAspectRatio','none');
       const defs=document.createElementNS(ns,'defs'),filter=document.createElementNS(ns,'filter'),filterId=`sp-ink-bleed-${String(scene.id||'scene').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24)}-${this._handdrawnSeed(scene.text)&65535}`;filter.id=filterId;filter.setAttribute('x','-5%');filter.setAttribute('y','-5%');filter.setAttribute('width','110%');filter.setAttribute('height','110%');const blur=document.createElementNS(ns,'feGaussianBlur');blur.setAttribute('stdDeviation','.72');filter.appendChild(blur);defs.appendChild(filter);svg.appendChild(defs);
       const makePath=className=>{const path=document.createElementNS(ns,'path');path.classList.add(className);svg.appendChild(path);return path;},fill=makePath('sp-handdrawn-fill'),bleed=makePath('sp-handdrawn-bleed'),ghost=makePath('sp-handdrawn-ghost'),ink=makePath('sp-handdrawn-ink'),scuff=makePath('sp-handdrawn-scuff');bleed.setAttribute('filter',`url(#${filterId})`);frame.prepend(svg);let lastWidth=0,lastHeight=0;
-      const draw=()=>{if(!frame.isConnected)return;const text=frame.querySelector(':scope > .sp-text');let fitted=false;if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){text.style.maxWidth='none';text.style.width='max-content';const measureRects=()=>{try{const range=document.createRange();range.selectNodeContents(text);const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);range.detach?.();return measured;}catch(_){return [];}};let rects=measureRects();const initialTextRect=text.getBoundingClientRect();let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;rects=measureRects();const fittedTextRect=text.getBoundingClientRect();inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=global.innerWidth<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;}const rect=frame.getBoundingClientRect(),width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;lastWidth=width;lastHeight=height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);const seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}`),shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0)),primary=this._handdrawnPath(width,height,seed,0,shapeLevel);fill.setAttribute('d',primary);ink.setAttribute('d',primary);bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel));ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel));scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel));const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);scuff.setAttribute('stroke-dashoffset',String(seed%29));const article=frame.closest('.sp-scene');if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{if(!frame.isConnected||!this.document)return;const active=this.document.scenes?.[this.index],display=active?.presentation?.display||'stack',entries=this._visibleScenes(display),byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node])),present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node),presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);else this._positionSceneNodes(presentNodes,presentEntries,0);});};requestAnimationFrame(draw);if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();return;}draw();});observer.observe(frame);}
+      const draw=()=>{if(!frame.isConnected)return;const text=frame.querySelector(':scope > .sp-text');let fitted=false;if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){text.style.maxWidth='none';text.style.width='max-content';const measureRects=()=>{try{const range=document.createRange();range.selectNodeContents(text);const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);range.detach?.();return measured;}catch(_){return [];}};let rects=measureRects();const initialTextRect=text.getBoundingClientRect();let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;rects=measureRects();const fittedTextRect=text.getBoundingClientRect();inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=global.innerWidth<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;}const rect=frame.getBoundingClientRect(),width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;lastWidth=width;lastHeight=height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);const frameType=frame.dataset.frameType||'handdrawn-voice',seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}|${frameType}`),shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0)),primary=this._handdrawnPath(width,height,seed,0,shapeLevel,frameType);fill.setAttribute('d',primary);ink.setAttribute('d',primary);bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel,frameType));ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel,frameType));scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel,frameType));const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);scuff.setAttribute('stroke-dashoffset',String(seed%29));const article=frame.closest('.sp-scene');if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{if(!frame.isConnected||!this.document)return;const active=this.document.scenes?.[this.index],display=active?.presentation?.display||'stack',entries=this._visibleScenes(display),byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node])),present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node),presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);else this._positionSceneNodes(presentNodes,presentEntries,0);});};requestAnimationFrame(draw);if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();return;}draw();});observer.observe(frame);}
     }
 
     _sceneNode(scene, active, age) {
@@ -3911,8 +3962,8 @@
           text.className = 'sp-text';
           text.textContent = scene.text;
           this._applyTextStyle(text, presentation.text || {}, false);
-          if(presentation.frame?.type==='handdrawn-voice'){
-            const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';const inkColor=String(presentation.text?.color||'').trim().toLowerCase();if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';frame.appendChild(text);article.appendChild(frame);article.dataset.frame='handdrawn-voice';this._mountHanddrawnFrame(frame,scene,presentation);
+          if(String(presentation.frame?.type||'').startsWith('handdrawn-')){
+            const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';const inkColor=String(presentation.text?.color||'').trim().toLowerCase();if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';frame.appendChild(text);article.appendChild(frame);article.dataset.frame=presentation.frame.type;this._mountHanddrawnFrame(frame,scene,presentation);
           }else article.appendChild(text);
         }
 
@@ -3944,6 +3995,13 @@
       const text = String(scene?.text || '');
       const chars = Array.from(text).length;
       const lines = text ? text.split('\n').length : 0;
+      const verticalFrame=textStyle?.writingMode==='vertical-rl' && String(scene?.presentation?.frame?.type||'').startsWith('handdrawn-');
+      if(verticalFrame){
+        if(chars>=74 || lines>=8)return 'tight';
+        if(chars>=44 || lines>=6)return 'compact';
+        if(chars>=30 || lines>=4)return 'medium';
+        if(chars>=22 || lines>=3)return 'soft';
+      }
       // Preserve v0.1's useful behavior: multi-line/list blocks shrink before they overflow.
       if (lines >= 8 || chars >= 190) return 'tight';
       if (lines >= 6 || chars >= 145) return 'compact';
@@ -4085,27 +4143,33 @@
       if (after > 0) {
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
         const motion = ['up','shatter','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
-        article.style.setProperty('--sp-disappear-fade', `${fade}ms`);
+        const scope=disappear?.scope==='visible'?'visible':'scene';
+        const targets=scope==='visible'
+          ? [...this.els.scenes.querySelectorAll('.sp-scene')].filter(node=>node.isConnected&&!node.classList.contains('is-disappeared'))
+          : [article];
+        targets.forEach(target=>{
+        target.style.setProperty('--sp-disappear-fade', `${fade}ms`);
         // Shatter / explode animate the Scene at its CURRENT laid-out position.
         // Their keyframes add relative motion on top of this anchor instead of
         // replacing the stack translate and jumping to the stage origin first.
         if (motion === 'shatter' || motion === 'explode') {
-          article.style.setProperty('--sp-disappear-anchor-transform', article.style.transform || 'translate3d(0,0,0)');
+          target.style.setProperty('--sp-disappear-anchor-transform', target.style.transform || 'translate3d(0,0,0)');
         } else {
-          article.style.removeProperty('--sp-disappear-anchor-transform');
+          target.style.removeProperty('--sp-disappear-anchor-transform');
         }
-        article.classList.toggle('is-disappear-up', motion === 'up');
-        article.classList.toggle('is-disappear-shatter', motion === 'shatter');
-        article.classList.toggle('is-disappear-explode', motion === 'explode');
-        article.classList.toggle('is-disappear-stay', motion === 'stay');
+        target.classList.toggle('is-disappear-up', motion === 'up');
+        target.classList.toggle('is-disappear-shatter', motion === 'shatter');
+        target.classList.toggle('is-disappear-explode', motion === 'explode');
+        target.classList.toggle('is-disappear-stay', motion === 'stay');
+        });
         this._presentationTimeout(() => {
           if (!article.isConnected) return;
-          article.classList.add('is-disappearing');
-          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion });
+          targets.forEach(target=>{if(target.isConnected)target.classList.add('is-disappearing');});
+          emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion, scope });
           this._presentationTimeout(() => {
             if (!article.isConnected) return;
-            article.classList.add('is-disappeared');
-            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion });
+            targets.forEach(target=>{if(target.isConnected)target.classList.add('is-disappeared');});
+            emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion, scope });
           }, fade);
         }, after);
       }
