@@ -9158,7 +9158,6 @@ function openDesktopTextDetail(){
     });
     bgPositionAction.disabled=!bg?.src;
     bgPositionAction.classList.add('desktop-live-bg-position');
-    bgCard.appendChild(bgPositionAction);
     const bgCopyPreviousAction=desktopAction(u('前Sceneの表示位置をコピー','Copy previous Scene position'),()=>{
       if(!copyPreviousBackgroundFraming(index))return;
       refresh();
@@ -9166,7 +9165,10 @@ function openDesktopTextDetail(){
     });
     bgCopyPreviousAction.disabled=!bg?.src||!previousEffectiveBackground(index)?.src;
     bgCopyPreviousAction.classList.add('desktop-live-bg-copy-position');
-    bgCard.appendChild(bgCopyPreviousAction);
+    const bgPositionRow=document.createElement('div');
+    bgPositionRow.className='desktop-live-bg-position-row';
+    bgPositionRow.append(bgPositionAction,bgCopyPreviousAction);
+    bgCard.appendChild(bgPositionRow);
     const tone=document.createElement('div');tone.className='desktop-live-choice';
     tone.append(desktopAction(u('暗く','Dark'),()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction(u('明るく','Light'),()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
     bgCard.append(tone,desktopDetail(t('detail.background'),'background'));
