@@ -782,13 +782,16 @@
     // The Scene's audio has already started from the trusted gesture. Reveal the
     // Player now and replay only its visual presentation so the entrance effect
     // is not consumed while the host was invisible.
-    host.style.visibility = '';
-    host.style.pointerEvents = '';
     if (player) {
+      // Reset presentation while the Core is still hidden. Revealing first
+      // exposed one frame of the background motion that had progressed during
+      // openingBreath(), then refreshCurrent snapped it back to its start.
       player.refreshCurrent({ preserveAudio: true });
       if(player.els?.title)player.els.title.textContent=[ep,epTitle].filter(Boolean).join(' ・ ') || documentData.title || '';
       if(player.els?.author)player.els.author.textContent=documentData.author||'';
     }
+    host.style.visibility = '';
+    host.style.pointerEvents = '';
   }
 
 
