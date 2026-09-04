@@ -2903,6 +2903,15 @@
       return {preset:'auto'};
     }
 
+    _customPositionTransform(item, position, stageWidth, stageHeight, margin) {
+      const contentWidth=Math.max(1,item.node.clientWidth);
+      const contentLeft=Math.max(0,(stageWidth-contentWidth)/2);
+      const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
+      const centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,stageWidth*position.x));
+      const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
+      return {x:centerX-contentLeft-item.inkCenterX,y:centerY-item.inkCenterY};
+    }
+
     _measureCarriedOverlayPositions(metrics, sceneEntries, stageWidth, stageHeight, focusY, extraGap = 0) {
       const margin=stageWidth<=600?10:16;
       const positions=metrics.map(item=>{
@@ -2910,11 +2919,7 @@
         let x=0;
         let y=focusY-item.inkCenterY-(item.scene.type==='dialogue'?12:0);
         if(position.preset!=='auto'){
-          const availableWidth=Math.max(1,item.node.clientWidth),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
-          const centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x));
-          const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
-          x=centerX-item.inkCenterX;
-          y=centerY-item.inkCenterY;
+          ({x,y}=this._customPositionTransform(item,position,stageWidth,stageHeight,margin));
         }
         return {x,y};
       });
@@ -3016,7 +3021,7 @@
         }
       }
 
-      metrics.forEach((item,i)=>{if(i!==metrics.length-1||!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;const availableWidth=Math.max(1,item.node.clientWidth),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop,margin=this._viewportWidth()<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));positions[i]={x:centerX-item.inkCenterX,y:centerY-item.inkCenterY};});
+      metrics.forEach((item,i)=>{if(i!==metrics.length-1||!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;positions[i]=this._customPositionTransform(item,position,stageWidth,stageHeight,this._viewportWidth()<=600?10:16);});
       if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){const availableWidth=Math.max(1,newest.node.clientWidth),margin=this._viewportWidth()<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};}else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};}}
 
       return metrics.map((item, i) => ({ ...item, ...positions[i] }));
@@ -3038,7 +3043,7 @@
       return nodes.map((node, i) => {
         const geometry=this._measureSceneGeometry(node,stageRect),position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
         let x=0,y=focusY-Math.max(1,node.offsetHeight)/2;
-        if(position.preset!=='auto'){const availableWidth=Math.max(1,node.clientWidth),width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=this._viewportWidth()<=600?10:16,centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,availableWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));x=centerX-geometry.inkCenterX;y=centerY-geometry.inkCenterY;}
+        if(position.preset!=='auto')({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,this._viewportWidth()<=600?10:16));
         node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
         node.style.zIndex = String(20 + i);
         return { node, scene: sceneEntries[i]?.scene, x, y, height: geometry.height };

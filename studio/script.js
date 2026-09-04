@@ -6862,7 +6862,7 @@ function startInlineTextEdit(field='text'){
         if(liveScene.presentation.frame)delete liveScene.presentation.frame.position;
       };
       const stageRect=stage.getBoundingClientRect(),scenesRect=scenes.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
-      p.text.position={preset:'custom',x:Math.max(0,Math.min(1,(targetRect.left+targetRect.width/2-scenesRect.left)/Math.max(1,scenesRect.width))),y:Math.max(0,Math.min(1,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))};
+      p.text.position={preset:'custom',x:Math.max(0,Math.min(1,(targetRect.left+targetRect.width/2-stageRect.left)/Math.max(1,stageRect.width))),y:Math.max(0,Math.min(1,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))};
       if(p.frame)delete p.frame.position;
       syncLivePosition(p.text.position);
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
@@ -6880,14 +6880,14 @@ function startInlineTextEdit(field='text'){
         // before clamping, saving and assigning the Scene transform.
         const scale=Math.max(.05,Number(player?._layoutScale?.())||1);
         const width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=10;
-        const availableWidth=Math.max(1,scenes.clientWidth||cr.width/scale);
-        const availableHeight=Math.max(1,stage.clientHeight||sr.height/scale);
-        let centerX=(clientX-cr.left)/scale,centerY=(clientY-sr.top)/scale;
-        centerX=width+margin*2>=availableWidth?availableWidth/2:Math.max(width/2+margin,Math.min(availableWidth-width/2-margin,centerX));
-        centerY=height+margin*2>=availableHeight?availableHeight/2:Math.max(height/2+margin,Math.min(availableHeight-height/2-margin,centerY));
-        p.text.position={preset:'custom',x:centerX/availableWidth,y:centerY/availableHeight};
+        const stageWidth=Math.max(1,stage.clientWidth||sr.width/scale),stageHeight=Math.max(1,stage.clientHeight||sr.height/scale);
+        const contentLeft=(cr.left-sr.left)/scale;
+        let centerX=(clientX-sr.left)/scale,centerY=(clientY-sr.top)/scale;
+        centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,centerX));
+        centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,centerY));
+        p.text.position={preset:'custom',x:centerX/stageWidth,y:centerY/stageHeight};
         syncLivePosition(p.text.position);
-        article.style.transform=`translate3d(${Math.round(centerX-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
+        article.style.transform=`translate3d(${Math.round(centerX-contentLeft-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
       };
       shield.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();dragging=true;shield.setPointerCapture?.(event.pointerId);applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointermove',event=>{if(!dragging)return;event.preventDefault();applyPoint(event.clientX,event.clientY);});

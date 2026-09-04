@@ -25,7 +25,7 @@
 
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20260903-22">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20260904-23">
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -75,6 +75,10 @@
       .sp-core[data-theme="cinema"][data-cinema-tone="light"] .studio-safe-guide{color:rgba(22,27,32,.42);mix-blend-mode:multiply}
       .sp-core[data-theme="dark"] .studio-safe-guide,
       .sp-core[data-theme="cinema"]:not([data-cinema-tone="light"]) .studio-safe-guide{color:rgba(255,255,255,.45);mix-blend-mode:screen}
+      #playerScreen.preview-device-pc .sp-core[data-theme="light"] .studio-safe-guide,
+      #playerScreen.preview-device-pc .sp-core[data-theme="cinema"][data-cinema-tone="light"] .studio-safe-guide{color:rgba(20,25,30,.72);mix-blend-mode:multiply}
+      #playerScreen.preview-device-pc .studio-safe-guide::before{border-width:2px}
+      #playerScreen.preview-device-pc .studio-safe-guide::after{opacity:.92;filter:drop-shadow(0 0 .75px currentColor)}
     }
     /* Keep the Ending SE checkbox a normal native-sized control, even when generic inputs are full width. */
     .ending-quick-se .check-row{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;min-height:32px!important;padding:0!important;border:0!important;background:transparent!important}
@@ -802,11 +806,11 @@
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
 <script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js?v=20260903-22"></script>
+<script src="./scene-player-core.js?v=20260904-23"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260903-22"></script>
+<script src="./script.js?v=20260904-23"></script>
 
 
 
