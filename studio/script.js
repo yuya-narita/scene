@@ -5561,6 +5561,32 @@
     coverPositionDialog.hidden=false;
     document.documentElement.classList.add('cover-position-open');
   }
+
+  // Return the background that is actually visible immediately before a
+  // Scene. Inherited Scenes are skipped; an explicit clear stops the search.
+  function previousEffectiveBackground(sceneIndex){
+    for(let i=Number(sceneIndex)-1;i>=0;i--){
+      const bg=workingDocument?.scenes?.[i]?.presentation?.background;
+      if(!bg)continue;
+      if(bg.src==='')return null;
+      if(bg.src)return bg;
+    }
+    return null;
+  }
+
+  // Keep the current image, effects and transition, and copy only the crop
+  // framing needed to align two same-composition images precisely.
+  function copyPreviousBackgroundFraming(sceneIndex){
+    const scene=workingDocument?.scenes?.[sceneIndex];
+    const current=scene?.presentation?.background;
+    const previous=previousEffectiveBackground(sceneIndex);
+    if(!current?.src||!previous?.src)return false;
+    current.position=previous.position||'center center';
+    current.fit=previous.fit==='contain'?'contain':'cover';
+    if(previous.positions&&typeof previous.positions==='object')current.positions=clone(previous.positions);
+    else delete current.positions;
+    return true;
+  }
   function closeCoverPositionEditor(save=true){
     if(!coverPositionDialog)return;
 
@@ -7868,6 +7894,7 @@ function openDesktopBackgroundDetail(){
     };
 
     const explicit=()=>p.background && typeof p.background==='object' ? p.background : null;
+    const previousFraming=()=>previousEffectiveBackground(index);
     const safePanScale=(pan)=>{
       const pct=Math.max(1,Math.min(30,Number(pan)||9))/100;
       // Exact no-gap scale for symmetric ±pan movement, plus a small safety
@@ -8028,6 +8055,15 @@ function openDesktopBackgroundDetail(){
         ['contain',u('画像全体（contain）','Fit whole image (contain)')]
       ],sourceBg.fit||'cover',v=>{const bg=ensureImageState();bg.fit=v;apply();})
     );
+    const copyPreviousPosition=desktopAction(u('前Sceneの表示位置をコピー','Copy previous Scene position'),()=>{
+      if(!copyPreviousBackgroundFraming(index))return;
+      apply();
+      closeDesktopBackgroundDetail();
+      openDesktopBackgroundDetail();
+    });
+    copyPreviousPosition.disabled=!sourceBg.src||!previousFraming()?.src;
+    copyPreviousPosition.classList.add('desktop-background-copy-position');
+    sourceSec.appendChild(copyPreviousPosition);
 
     // LIGHT ---------------------------------------------------------------
     const lightSec=section(u('明るさ・質感','Brightness & texture'));
@@ -9123,6 +9159,14 @@ function openDesktopTextDetail(){
     bgPositionAction.disabled=!bg?.src;
     bgPositionAction.classList.add('desktop-live-bg-position');
     bgCard.appendChild(bgPositionAction);
+    const bgCopyPreviousAction=desktopAction(u('前Sceneの表示位置をコピー','Copy previous Scene position'),()=>{
+      if(!copyPreviousBackgroundFraming(index))return;
+      refresh();
+      renderDesktopLivePanel();
+    });
+    bgCopyPreviousAction.disabled=!bg?.src||!previousEffectiveBackground(index)?.src;
+    bgCopyPreviousAction.classList.add('desktop-live-bg-copy-position');
+    bgCard.appendChild(bgCopyPreviousAction);
     const tone=document.createElement('div');tone.className='desktop-live-choice';
     tone.append(desktopAction(u('暗く','Dark'),()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction(u('明るく','Light'),()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
     bgCard.append(tone,desktopDetail(t('detail.background'),'background'));
@@ -9936,6 +9980,13 @@ function openDesktopTextDetail(){
           refreshLivePlayer({preserveSheet:true});
         });
       };
+      const copyPreviousPosition=makeActionButton(u('前Sceneの表示位置をコピー','Copy previous Scene position'));
+      copyPreviousPosition.disabled=!bg?.src||!previousEffectiveBackground(liveEditScene().index)?.src;
+      copyPreviousPosition.onclick=()=>{
+        const {index}=liveEditScene();
+        if(!copyPreviousBackgroundFraming(index))return;
+        scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');
+      };
       const toneRow=document.createElement('div');toneRow.className='live-edit-choice-row live-edit-tone-row';
       const tone=bg?.tone || ((workingDocument?.theme==='cinema'&&workingDocument?.appearance?.cinemaTone==='light')?'light':'dark');
       const dark=makeActionButton(u('暗く','Dark'),bg?.src&&tone==='dark'?'is-selected':'');
@@ -9950,7 +10001,7 @@ function openDesktopTextDetail(){
       if(!bg?.src){dark.disabled=true;light.disabled=true;}
       const status=document.createElement('div');status.className='live-edit-status';status.textContent=bg?.src?`${u('選択中：','Selected: ')}${bg._editorFileName||u('背景画像','background image')}`:(bg?.src===''?u('このSceneから背景なし','No background from this Scene'):u('前Sceneの背景を継続','Continue previous Scene background'));
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=u('暗さ・動き・切替を細かく調整','Adjust brightness, motion & transitions');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('background');});
-      liveEditSheetBody.append(actions,pick,positionAdjust,toneRow,status,detail);return;
+      liveEditSheetBody.append(actions,pick,positionAdjust,copyPreviousPosition,toneRow,status,detail);return;
     }
 
     liveEditSheetTitle.textContent=uiLanguage==='en'?'Audio':'音';
