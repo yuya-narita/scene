@@ -1,5 +1,5 @@
 /*
- * Scene Player Core v1.12.10
+ * Scene Player Core v1.12.11
  * Runtime for Scene Format v1.0
  * No splitter / studio authoring logic lives here.
  */
@@ -2866,24 +2866,41 @@
       const frame=node.querySelector('.sp-handdrawn-frame');
       const vertical=text?.dataset?.writingMode==='vertical-rl';
       let inkLeft=0,inkRight=Math.max(1,nodeRect.width),inkTop=0,inkBottom=boxHeight;
-      if(frame){
-        const frameRect=frame.getBoundingClientRect();
-        inkLeft=frameRect.left-nodeRect.left;
-        inkRight=frameRect.right-nodeRect.left;
-        inkTop=frameRect.top-nodeRect.top;
-        inkBottom=frameRect.bottom-nodeRect.top;
-      }else try{
-        const range=document.createRange();
-        range.selectNodeContents(text||node);
-        const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
-        range.detach?.();
-        if(rects.length){
-          inkLeft=Math.min(...rects.map(rect=>rect.left))-nodeRect.left;
-          inkRight=Math.max(...rects.map(rect=>rect.right))-nodeRect.left;
-          inkTop=Math.min(...rects.map(rect=>rect.top))-nodeRect.top;
-          inkBottom=Math.max(...rects.map(rect=>rect.bottom))-nodeRect.top;
-        }
-      }catch(_){}
+      const contentRects=[];
+      const addElementRect=(element)=>{
+        if(!element)return;
+        const rect=element.getBoundingClientRect();
+        if(rect.width>0&&rect.height>0)contentRects.push(rect);
+      };
+      const addTextRects=(element)=>{
+        if(!element)return;
+        try{
+          const range=document.createRange();
+          range.selectNodeContents(element);
+          const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
+          range.detach?.();
+          if(rects.length)contentRects.push(...rects);else addElementRect(element);
+        }catch(_){addElementRect(element);}
+      };
+
+      // Measure the complete painted Scene. Previously only the main text or
+      // frame participated in stack placement, so subtext and foreground
+      // images could occupy the landing space reserved for the next Scene.
+      const chatRow=node.querySelector(':scope > .sp-chat-row');
+      if(chatRow){
+        addElementRect(chatRow);
+      }else{
+        if(frame)addElementRect(frame);else addTextRects(text);
+        addTextRects(node.querySelector(':scope > .sp-subtext'));
+        addElementRect(node.querySelector(':scope > .sp-sound-mark'));
+      }
+      addElementRect(node.querySelector(':scope > .sp-scene-image > .sp-scene-image-media')||node.querySelector(':scope > .sp-scene-image'));
+      if(contentRects.length){
+        inkLeft=Math.min(...contentRects.map(rect=>rect.left))-nodeRect.left;
+        inkRight=Math.max(...contentRects.map(rect=>rect.right))-nodeRect.left;
+        inkTop=Math.min(...contentRects.map(rect=>rect.top))-nodeRect.top;
+        inkBottom=Math.max(...contentRects.map(rect=>rect.bottom))-nodeRect.top;
+      }
       const inkHeight=Math.max(1,inkBottom-inkTop);
       const height=vertical?Math.min(boxHeight,Math.max(48,Math.min(stageRect.height*.52,inkHeight+8))):boxHeight;
       node.classList.remove('sp-layout-measuring');
@@ -3901,7 +3918,10 @@
               .map(node => [node.dataset.sceneId, node])
           );
           const nodes = visible.map(entry => nodeMap.get(entry.scene.id)).filter(Boolean);
-          if (nodes.length === visible.length) this._positionSceneNodes(nodes, visible, 0);
+          if (nodes.length === visible.length) {
+            if(display==='overlay')this._positionOverlayNodes(nodes,visible);
+            else this._positionSceneNodes(nodes,visible,0);
+          }
         };
 
         // Give Safari one painted frame to apply the decoded image dimensions.
