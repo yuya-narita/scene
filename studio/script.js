@@ -11825,6 +11825,107 @@ function openDesktopTextDetail(){
     return core;
   }
 
+
+  // Local Bookshelf v1 ------------------------------------------------------
+  // Master files stay in IndexedDB on this origin. No work payload is sent
+  // to the A-Hako API by this integration.
+  const BOOKSHELF_DB_NAME='ahako-local-bookshelf';
+  const BOOKSHELF_DB_VERSION=1;
+  const BOOKSHELF_WORKS_STORE='works';
+  const BOOKSHELF_HANDOFF_STORE='handoff';
+  const openedFromBookshelf=new URLSearchParams(location.search).get('from')==='bookshelf';
+
+  function openBookshelfDb(){
+    return new Promise((resolve,reject)=>{
+      const req=indexedDB.open(BOOKSHELF_DB_NAME,BOOKSHELF_DB_VERSION);
+      req.onupgradeneeded=()=>{
+        const db=req.result;
+        if(!db.objectStoreNames.contains(BOOKSHELF_WORKS_STORE))db.createObjectStore(BOOKSHELF_WORKS_STORE,{keyPath:'workId'});
+        if(!db.objectStoreNames.contains(BOOKSHELF_HANDOFF_STORE))db.createObjectStore(BOOKSHELF_HANDOFF_STORE,{keyPath:'key'});
+      };
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error);
+    });
+  }
+
+  function bookshelfRequest(req){
+    return new Promise((resolve,reject)=>{
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error);
+    });
+  }
+
+  async function takeBookshelfHandoff(){
+    const db=await openBookshelfDb();
+    try{
+      const store=db.transaction(BOOKSHELF_HANDOFF_STORE,'readwrite').objectStore(BOOKSHELF_HANDOFF_STORE);
+      const handoff=await bookshelfRequest(store.get('studio'));
+      if(!handoff?.workId)return null;
+      await bookshelfRequest(store.delete('studio'));
+      const work=await bookshelfRequest(db.transaction(BOOKSHELF_WORKS_STORE,'readonly').objectStore(BOOKSHELF_WORKS_STORE).get(handoff.workId));
+      return work||null;
+    } finally { db.close(); }
+  }
+
+  async function openMasterFromBookshelf(){
+    if(!openedFromBookshelf)return;
+    try{
+      const work=await takeBookshelfHandoff();
+      if(!work?.blob)return;
+      const file=new File([work.blob],work.fileName||`${work.title||'master'}.scene`,{type:'application/octet-stream'});
+      await importScenePackage(file);
+      setProjectIoStatus(uiLanguage==='ja' ? '本棚のMasterを開きました。編集後は「本棚へ保存して戻る」で更新できます。' : 'Opened the Master from Local Bookshelf.');
+    }catch(error){
+      console.error('Local Bookshelf handoff failed',error);
+      setProjectIoStatus(uiLanguage==='ja' ? '本棚のMasterを開けませんでした。' : 'Could not open the Master from Local Bookshelf.',{error:true});
+    }
+  }
+
+  async function saveMasterBackToBookshelf(){
+    try{
+      const result=await buildScenePackage();
+      const workId=String(result?.doc?.studio?.identity?.workId||'').trim();
+      if(!workId)throw new Error('bookshelf-workid-missing');
+      const entries=await readZipEntries(result.blob);
+      const coverPath=String(result?.doc?.cover?.src||result?.manifest?.cover?.image||'').replace(/^\.\//,'');
+      let coverBlob=null;
+      if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:guessMime(coverPath)});
+      const db=await openBookshelfDb();
+      try{
+        const store=db.transaction(BOOKSHELF_WORKS_STORE,'readwrite').objectStore(BOOKSHELF_WORKS_STORE);
+        const old=await bookshelfRequest(store.get(workId));
+        const now=new Date().toISOString();
+        const title=String(result.doc?.title||result.manifest?.title||'Untitled');
+        await bookshelfRequest(store.put({
+          workId,
+          title,
+          author:String(result.doc?.author||result.manifest?.author||''),
+          sceneCount:Array.isArray(result.doc?.scenes)?result.doc.scenes.length:0,
+          revision:Number(result.doc?.studio?.identity?.revision||0)||0,
+          masterCreatedAt:String(result.doc?.studio?.identity?.createdAt||''),
+          coverBlob,
+          blob:result.blob,
+          fileName:old?.fileName||`${safeFileStem(title)}.scene`,
+          addedAt:old?.addedAt||now,
+          updatedAt:now
+        }));
+      } finally { db.close(); }
+      setProjectIoStatus(uiLanguage==='ja' ? 'MasterをLocal 本棚へ保存しました。' : 'Saved the Master to Local Bookshelf.');
+      location.href='../bookshelf/';
+    }catch(error){
+      console.error('Save to Local Bookshelf failed',error);
+      setProjectIoStatus(uiLanguage==='ja' ? '本棚へ保存できませんでした。Master .sceneを書き出してバックアップしてください。' : 'Could not save to Local Bookshelf. Export a Master .scene backup.',{error:true});
+      alert(uiLanguage==='ja' ? '本棚へ保存できませんでした。\n\n安全のため、Master .sceneを書き出してバックアップしてください。' : 'Could not save to Local Bookshelf.\n\nPlease export a Master .scene backup.');
+    }
+  }
+
+  const menuSaveBookshelfButton=document.querySelector('#menuSaveBookshelfButton');
+  if(menuSaveBookshelfButton){
+    menuSaveBookshelfButton.hidden=!openedFromBookshelf;
+    menuSaveBookshelfButton.addEventListener('click',()=>{closeEasyMenu();saveMasterBackToBookshelf();});
+  }
+  if(openedFromBookshelf)setTimeout(openMasterFromBookshelf,120);
+
   // Public, intentionally small integration surface.
   // Embed/API clients can pass a Scene Format object directly or fetch one.
   window.SceneStudioAPI={
