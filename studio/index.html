@@ -157,48 +157,34 @@
       body.live-edit-sheet-open .live-edit-sheet-body>.live-edit-detail:last-child{
         margin-bottom:4px!important;
       }
-      /* iPhone Live Detail: keep one native Safari scroll owner.
-         Nested scrolling inside the transplanted PC inspector can stop
-         responding on iOS, so the sheet body owns the vertical gesture. */
       body.mobile-live-detail-open .live-edit-sheet-body{
         position:relative!important;
         display:block!important;
         flex:1 1 auto!important;
         min-height:0!important;
         height:auto!important;
-        overflow-x:hidden!important;
-        overflow-y:auto!important;
-        overscroll-behavior:contain!important;
-        -webkit-overflow-scrolling:touch!important;
-        touch-action:pan-y!important;
+        overflow:hidden!important;
         padding:0!important;
       }
-      body.mobile-live-detail-open .mobile-live-detail-sheet .desktop-text-detail-modal[data-mobile-live-detail="true"]{
+      .mobile-live-detail-sheet .desktop-text-detail-modal[data-mobile-live-detail="true"]{
+        position:absolute!important;
+        inset:0!important;
+        display:grid!important;
+        grid-template-rows:auto minmax(0,1fr) auto!important;
+        min-width:0!important;
+        min-height:0!important;
+        width:100%!important;
+        height:100%!important;
+        max-height:100%!important;
+        overflow:hidden!important;
+      }
+      .mobile-live-detail-sheet .desktop-text-detail-head,
+      .mobile-live-detail-sheet .desktop-text-detail-foot{
         position:relative!important;
         inset:auto!important;
-        display:block!important;
-        min-width:0!important;
-        min-height:100%!important;
-        width:100%!important;
-        height:auto!important;
-        max-height:none!important;
-        overflow:visible!important;
+        min-height:0!important;
       }
-      body.mobile-live-detail-open .mobile-live-detail-sheet .desktop-text-detail-head{
-        position:sticky!important;
-        top:0!important;
-        bottom:auto!important;
-        z-index:20!important;
-      }
-      body.mobile-live-detail-open .mobile-live-detail-sheet .desktop-text-detail-foot{
-        position:sticky!important;
-        top:auto!important;
-        bottom:0!important;
-        left:auto!important;
-        right:auto!important;
-        z-index:30!important;
-      }
-      body.mobile-live-detail-open .mobile-live-detail-sheet .desktop-text-detail-body{
+      .mobile-live-detail-sheet .desktop-text-detail-body{
         position:relative!important;
         inset:auto!important;
         display:block!important;
@@ -206,8 +192,11 @@
         height:auto!important;
         width:100%!important;
         max-height:none!important;
-        overflow:visible!important;
-        touch-action:auto!important;
+        overflow-x:hidden!important;
+        overflow-y:auto!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch;
+        touch-action:pan-y;
       }
     }
   </style>

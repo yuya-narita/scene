@@ -6280,6 +6280,11 @@
       liveEditSheet.classList.remove('live-edit-sheet-timing','live-edit-sheet-audio','mobile-live-detail-sheet');
     }
     document.body.classList.remove('live-edit-sheet-open','mobile-live-detail-open');
+    if(liveEditSheetBody){
+      ['display','height','min-height','overflow','overflow-x','overflow-y','padding','touch-action','overscroll-behavior','-webkit-overflow-scrolling'].forEach(prop=>{
+        liveEditSheetBody.style.removeProperty(prop);
+      });
+    }
     liveShellTextContext=null;
     if(wasOpen && liveEditEnabled && player && !playerScreen?.hidden){
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
@@ -9872,7 +9877,14 @@ function openDesktopTextDetail(){
     const {scene,index}=liveEditScene(); if(!scene||!liveEditSheetBody)return;
 
     // Always normalize from a full-detail inspector back to the compact sheet.
-    // This prevents the top Scene / title / × header from staying hidden on reopen.
+    // The iPhone detail view temporarily pins sizing/overflow on the shared
+    // sheet body with inline !important styles. Remove ONLY those temporary
+    // host styles before rebuilding the compact panel, otherwise the compact
+    // Text / Effect / Background / Audio / Timing / Scene sheets inherit the
+    // detail-view geometry and their layout collapses.
+    ['display','height','min-height','overflow','overflow-x','overflow-y','padding','touch-action','overscroll-behavior','-webkit-overflow-scrolling'].forEach(prop=>{
+      liveEditSheetBody.style.removeProperty(prop);
+    });
     mobileLiveDetailOpening=false;
     mobileLiveDetailReturnSection='';
     document.body.classList.remove('mobile-live-detail-open');
