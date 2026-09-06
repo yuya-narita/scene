@@ -1,5 +1,5 @@
 /*
- * Scene Player Core v1.12.11
+ * Scene Player Core v1.13.0
  * Runtime for Scene Format v1.0
  * No splitter / studio authoring logic lives here.
  */
@@ -124,6 +124,7 @@
       this._backgroundStateCacheDocument = null;
       this.backgroundLayerIndex = 0;
       this.backgroundTimers = [];
+      this.backgroundMotionEpoch = 0;
       this.audioUnlocked = false;
       // AudioContext unlock and story playback are separate states.
       // A restarted story must wait for the reader's next stage gesture even
@@ -2068,6 +2069,7 @@
       this.els.ending.hidden = true;
       this.backgroundState = null;
       this.backgroundLayerIndex = 0;
+      this.backgroundMotionEpoch = 0;
       this._resetBackgroundLayers();
       // Studio loads Scene 1 underneath the cover for layout/background,
       // but Cover is not a Scene and must not execute Scene audio.
@@ -3390,14 +3392,22 @@
       const previous = this.backgroundState;
       const sceneBg = this.document?.scenes?.[index]?.presentation?.background || null;
       const transition = sceneBg?.transition || next.transition || 'fade';
+      const exit = sceneBg?.exit || 'auto';
       const srcChanged = !previous || previous.src !== next.src;
+      const nextMotion = next.motion;
+      const carryMotion = nextMotion?.continuity === 'carry'
+        && previous?.motion?.type === nextMotion?.type
+        && this.backgroundMotionEpoch > 0;
+      const motionPhase = carryMotion ? Math.max(0, performance.now() - this.backgroundMotionEpoch) : 0;
+      if (nextMotion?.type && nextMotion.type !== 'none' && !carryMotion) this.backgroundMotionEpoch = performance.now();
+      if (!nextMotion || nextMotion.type === 'none') this.backgroundMotionEpoch = 0;
 
       this._resetBackgroundRuntime();
       this.backgroundState = next;
       this.host.classList.toggle('sp-has-background', Boolean(next.src));
 
-      if (srcChanged) this._swapBackground(next, transition);
-      else this._styleCurrentBackground(next, Boolean(sceneBg?.motion));
+      if (srcChanged) this._swapBackground(next, transition, exit, motionPhase);
+      else this._styleCurrentBackground(next, Boolean(sceneBg?.motion), motionPhase);
 
       this._applyBackgroundOverlays(next);
       this._runBackgroundReveal(sceneBg?.reveal, transition);
@@ -3412,18 +3422,19 @@
       return this.backgroundLayerIndex === 0 ? this.els.bgB : this.els.bgA;
     }
 
-    _swapBackground(state, transition) {
+    _swapBackground(state, transition, exit = 'auto', motionPhase = 0) {
       const current = this._currentBackgroundLayer();
       const incoming = this._nextBackgroundLayer();
       const transitionDuration=Math.min(10000,Math.max(0,asNumber(state.transitionDuration,700)));
       incoming.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
       current.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
-      this._prepareBackgroundLayer(incoming, state);
+      this._prepareBackgroundLayer(incoming, state, motionPhase);
 
       const mode = ['fade','cut','flash','glitch'].includes(transition) ? transition : 'fade';
       this.host.dataset.bgTransition = mode;
       incoming.classList.add('is-current');
       current.classList.remove('is-current');
+      this._applyBackgroundExit(current, exit, transitionDuration);
 
       if (mode === 'cut') {
         incoming.classList.add('sp-bg-cut');
@@ -3439,14 +3450,16 @@
       }
 
       this.backgroundLayerIndex = this.backgroundLayerIndex === 0 ? 1 : 0;
-      this._styleCurrentBackground(state, true);
+      this._styleCurrentBackground(state, true, motionPhase);
+      const hasCustomExit=!['auto','fade'].includes(exit);
       this._backgroundTimeout(() => {
         current.style.backgroundImage = '';
         current.className = current.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
-      }, mode === 'cut' ? 20 : transitionDuration+120);
+      }, mode === 'cut' && !hasCustomExit ? 20 : transitionDuration+120);
     }
 
-    _prepareBackgroundLayer(layer, state) {
+    _prepareBackgroundLayer(layer, state, motionPhase = 0) {
+      layer.getAnimations?.().forEach(animation=>animation.cancel());
       layer.className = layer.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
       layer.style.backgroundImage = state.src ? `url("${String(state.src).replace(/"/g, '\"')}")` : 'none';
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
@@ -3459,10 +3472,10 @@
         if (monochrome > 0) filters.push(`grayscale(${monochrome})`);
         layer.style.filter = filters.join(' ');
       }
-      this._applyBackgroundMotion(layer, state.motion);
+      this._applyBackgroundMotion(layer, state.motion, motionPhase);
     }
 
-    _styleCurrentBackground(state, resetMotion) {
+    _styleCurrentBackground(state, resetMotion, motionPhase = 0) {
       const layer = this._currentBackgroundLayer();
       if (!layer) return;
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
@@ -3475,26 +3488,53 @@
         if (monochrome > 0) filters.push(`grayscale(${monochrome})`);
         layer.style.filter = filters.join(' ');
       }
-      if (resetMotion) this._applyBackgroundMotion(layer, state.motion);
+      if (resetMotion) this._applyBackgroundMotion(layer, state.motion, motionPhase);
     }
 
-    _applyBackgroundMotion(layer, motion) {
-      layer.classList.remove('sp-motion-parallax','sp-motion-breath','sp-motion-slowZoom','sp-motion-panLeft','sp-motion-panRight','sp-motion-panUp','sp-motion-panDown');
+    _applyBackgroundExit(layer, exit, duration) {
+      const type=['auto','fade','dark','light','blur','zoomOut','zoomIn','afterimage'].includes(exit)?exit:'auto';
+      if(type==='auto'||type==='fade'||duration<=0||!layer?.animate)return;
+      const computed=getComputedStyle(layer);
+      const transform=computed.transform==='none'?'scale(1.001)':computed.transform;
+      const filter=computed.filter==='none'?'':computed.filter;
+      const addFilter=value=>`${filter} ${value}`.trim();
+      let frames=[{opacity:computed.opacity||1,transform,filter:filter||'none'},{opacity:0,transform,filter:filter||'none'}];
+      if(type==='dark')frames[1]={opacity:0,transform,filter:addFilter('brightness(0)')};
+      if(type==='light')frames[1]={opacity:0,transform:`${transform} scale(1.015)`,filter:addFilter('brightness(2) blur(2px)')};
+      if(type==='blur')frames[1]={opacity:0,transform:`${transform} scale(1.025)`,filter:addFilter('blur(14px)')};
+      if(type==='zoomOut')frames[1]={opacity:0,transform:`${transform} scale(.94)`,filter:addFilter('blur(1px)')};
+      if(type==='zoomIn')frames[1]={opacity:0,transform:`${transform} scale(1.09)`,filter:addFilter('blur(1px)')};
+      if(type==='afterimage')frames=[
+        {offset:0,opacity:computed.opacity||1,transform,filter:filter||'none'},
+        {offset:.22,opacity:.92,transform:`${transform} scale(1.008)`,filter:addFilter('brightness(1.75) contrast(1.15)')},
+        {offset:1,opacity:0,transform:`${transform} scale(1.025)`,filter:addFilter('brightness(.55) blur(5px)')}
+      ];
+      layer.animate(frames,{duration:Math.max(120,duration),easing:'cubic-bezier(.37,0,.63,1)',fill:'forwards'});
+    }
+
+    _applyBackgroundMotion(layer, motion, motionPhase = 0) {
+      layer.classList.remove('sp-motion-parallax','sp-motion-breath','sp-motion-slowZoom','sp-motion-zoomOut','sp-motion-panLeft','sp-motion-panRight','sp-motion-panUp','sp-motion-panDown','sp-motion-panUpLeft','sp-motion-panUpRight','sp-motion-panDownLeft','sp-motion-panDownRight');
       layer.style.removeProperty('--sp-bg-duration');
       layer.style.removeProperty('--sp-bg-scale-from');
       layer.style.removeProperty('--sp-bg-scale-to');
       layer.style.removeProperty('--sp-bg-pan');
+      layer.style.removeProperty('--sp-bg-delay');
       if (!motion || !motion.type || motion.type === 'none') return;
-      const type = ['parallax','breath','slowZoom','panLeft','panRight','panUp','panDown'].includes(motion.type) ? motion.type : null;
+      const type = ['parallax','breath','slowZoom','zoomOut','panLeft','panRight','panUp','panDown','panUpLeft','panUpRight','panDownLeft','panDownRight'].includes(motion.type) ? motion.type : null;
       if (!type) return;
       layer.classList.add(`sp-motion-${type}`);
       const defaultDuration = type === 'breath' ? 4200 : 6500;
-      const defaultFrom = type === 'slowZoom' ? 1.0 : 1.06;
-      const defaultTo = type === 'slowZoom' ? 1.14 : (type === 'breath' ? 1.11 : 1.08);
-      layer.style.setProperty('--sp-bg-duration', `${Math.max(250, asNumber(motion.duration, defaultDuration))}ms`);
+      const defaultFrom = type === 'slowZoom' ? 1.0 : (type === 'zoomOut' ? 1.08 : 1.06);
+      const defaultTo = type === 'slowZoom' ? 1.14 : (type === 'zoomOut' ? 1 : (type === 'breath' ? 1.11 : 1.08));
+      const duration=Math.max(250,asNumber(motion.duration,defaultDuration));
+      layer.style.setProperty('--sp-bg-duration', `${duration}ms`);
       layer.style.setProperty('--sp-bg-scale-from', String(asNumber(motion.scaleFrom, defaultFrom)));
       layer.style.setProperty('--sp-bg-scale-to', String(asNumber(motion.scaleTo, defaultTo)));
       layer.style.setProperty('--sp-bg-pan', `${asNumber(motion.pan, 9)}%`);
+      if(motionPhase>0){
+        const phase=(type==='breath'||type==='parallax')?motionPhase%duration:Math.min(motionPhase,duration);
+        layer.style.setProperty('--sp-bg-delay',`${-phase}ms`);
+      }
     }
 
     _applyBackgroundOverlays(state) {

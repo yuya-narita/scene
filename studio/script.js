@@ -4602,8 +4602,8 @@
     const fit=$('#sceneBackgroundFit')?.value || 'cover';
     const dim=Math.max(0,Math.min(85,Number($('#sceneBackgroundDim')?.value||0)));
     const transitionMs=Math.max(0,Number($('#sceneBackgroundTransitionDuration')?.value||700));
-    const motionMs=Math.max(250,Number($('#sceneBackgroundMotionDuration')?.value||6500));
-    const amount=Math.max(1,Number($('#sceneBackgroundMotionAmount')?.value||9));
+    const motionMs=Math.max(250,Number($('#sceneBackgroundMotionDuration')?.value||12000));
+    const amount=Math.max(1,Number($('#sceneBackgroundMotionAmount')?.value||2));
 
     layer.className='scene-motion-preview-image';
     wrap.classList.remove('preview-cut','preview-fade','preview-flash','preview-glitch','is-previewing');
@@ -4616,7 +4616,7 @@
     if(motion!=='none')layer.classList.add(`motion-${motion}`);
     if(veil)veil.style.background=`rgba(0,0,0,${dim/100})`;
 
-    const names={none:t('motion.none'),slowZoom:'SLOW ZOOM',breath:'BREATH',panLeft:'PAN LEFT',panRight:'PAN RIGHT',panUp:'PAN UP',panDown:'PAN DOWN'};
+    const names={none:t('motion.none'),slowZoom:'SLOW ZOOM IN',zoomOut:'SLOW ZOOM OUT',breath:'BREATH',parallax:'DRIFT',panLeft:'PAN LEFT',panRight:'PAN RIGHT',panUp:'PAN UP',panDown:'PAN DOWN',panUpLeft:'PAN UP LEFT',panUpRight:'PAN UP RIGHT',panDownLeft:'PAN DOWN LEFT',panDownRight:'PAN DOWN RIGHT'};
     const transitionNames={fade:'FADE',cut:'CUT',flash:'FLASH',glitch:'GLITCH'};
     if(label)label.textContent=`${transitionNames[transition]||transition.toUpperCase()} / ${fit.toUpperCase()} / ${names[motion]||motion} / ${dim}%`;
 
@@ -4641,9 +4641,9 @@
     const transitionOut=$('#sceneBackgroundTransitionDurationOutput');
     if(transitionOut)transitionOut.textContent=`${$('#sceneBackgroundTransitionDuration')?.value||700}ms`;
     const motionDurationOut=$('#sceneBackgroundMotionDurationOutput');
-    if(motionDurationOut)motionDurationOut.textContent=`${$('#sceneBackgroundMotionDuration')?.value||6500}ms`;
+    if(motionDurationOut)motionDurationOut.textContent=`${$('#sceneBackgroundMotionDuration')?.value||12000}ms`;
     const motionAmountOut=$('#sceneBackgroundMotionAmountOutput');
-    if(motionAmountOut)motionAmountOut.textContent=`${$('#sceneBackgroundMotionAmount')?.value||9}%`;
+    if(motionAmountOut)motionAmountOut.textContent=`${$('#sceneBackgroundMotionAmount')?.value||2}%`;
     updateMotionPreview();
     const dimLabel=$('#sceneBackgroundDimLabel');
     if(dimLabel){
@@ -4674,20 +4674,21 @@
       bg._editorFileName=asset.name || bg._editorFileName || '';
       bg._editorManaged=true;
       bg.transition=$('#sceneBackgroundTransition').value;
+      bg.exit=$('#sceneBackgroundExit')?.value||'auto';
       bg.fit=$('#sceneBackgroundFit').value;
       bg.dim=pct($('#sceneBackgroundDim').value,34);
       bg.transitionDuration=Math.min(10000,Math.max(0,Number($('#sceneBackgroundTransitionDuration')?.value||700)));
       const motion=$('#sceneBackgroundMotion').value;
       if(motion==='none') delete bg.motion;
       else {
-        const duration=Math.max(250,Number($('#sceneBackgroundMotionDuration')?.value||6500));
-        const amount=Math.max(1,Number($('#sceneBackgroundMotionAmount')?.value||9));
+        const duration=Math.max(250,Number($('#sceneBackgroundMotionDuration')?.value||12000));
+        const amount=Math.max(1,Number($('#sceneBackgroundMotionAmount')?.value||2));
         bg.motion={
           type:motion,
           duration,
           pan:amount,
-          scaleFrom: motion==='slowZoom' ? 1 : (/^pan/.test(motion) ? Math.min(3,1.035/Math.max(.40,1-(Math.min(30,amount)/100*2))) : 1+amount/200),
-          scaleTo: /^pan/.test(motion) ? Math.min(3,1.035/Math.max(.40,1-(Math.min(30,amount)/100*2))) : 1+amount/100
+          scaleFrom: motion==='slowZoom' ? 1 : (motion==='zoomOut'?1+amount/100:(/^pan/.test(motion) ? Math.min(3,1.035/Math.max(.40,1-(Math.min(30,amount)/100*2))) : 1+amount/200)),
+          scaleTo: /^pan/.test(motion) ? Math.min(3,1.035/Math.max(.40,1-(Math.min(30,amount)/100*2))) : (motion==='zoomOut'?1:1+amount/100)
         };
       }
       p.background=bg;
@@ -4731,10 +4732,10 @@
     $('#sceneBackgroundMode').value=mode;
     setAssetField('sceneBackgroundInput',bg?.src||'',bg?._editorFileName||'');
     loadExternalUrlField('sceneBackgroundInput','sceneBackgroundUrlInput');
-    $('#sceneBackgroundTransition').value=bg?.transition||'fade'; $('#sceneBackgroundFit').value=bg?.fit||'cover'; $('#sceneBackgroundMotion').value=bg?.motion?.type||'none'; $('#sceneBackgroundDim').value=Math.round((bg?.dim ?? 0.34)*100);
+    $('#sceneBackgroundTransition').value=bg?.transition||'fade'; if($('#sceneBackgroundExit'))$('#sceneBackgroundExit').value=bg?.exit||'auto'; $('#sceneBackgroundFit').value=bg?.fit||'cover'; $('#sceneBackgroundMotion').value=bg?.motion?.type||'none'; $('#sceneBackgroundDim').value=Math.round((bg?.dim ?? 0.34)*100);
     $('#sceneBackgroundTransitionDuration').value=bg?.transitionDuration ?? 700;
-    $('#sceneBackgroundMotionDuration').value=bg?.motion?.duration ?? (bg?.motion?.type==='breath'?4200:6500);
-    $('#sceneBackgroundMotionAmount').value=bg?.motion?.pan ?? 9;
+    $('#sceneBackgroundMotionDuration').value=bg?.motion?.duration ?? (bg?.motion?.type==='breath'?8000:12000);
+    $('#sceneBackgroundMotionAmount').value=bg?.motion?.pan ?? 2;
     loadPersistentAudio(scene,'Bgm','bgm',{volume:.5,fadeIn:800,fadeOut:800,changeVolume:.3,volumeFade:500,stopFade:800});
     loadPersistentAudio(scene,'Ambient','ambient',{volume:.35,fadeIn:600,fadeOut:600,changeVolume:.25,volumeFade:500,stopFade:600});
     const se=managedAudio(scene,'oneshot'); $('#sceneSeEnabled').checked=Boolean(se); setAssetField('sceneSeInput',se?.src||'',se?._editorFileName||''); loadExternalUrlField('sceneSeInput','sceneSeUrlInput'); $('#sceneSeVolume').value=Math.round((se?.volume ?? .8)*100); $('#sceneSeFadeIn').value=se?.fadeIn ?? 0;
@@ -5845,7 +5846,7 @@
   });
   $('#sceneColorCustomInput')?.addEventListener('input',()=>syncAdvancedFieldsToScene());
   $('#sceneShadowSelect')?.addEventListener('change',()=>syncAdvancedFieldsToScene());
-  ['sceneBackgroundTransition','sceneBackgroundFit','sceneBackgroundMotion'].forEach(id=>{
+  ['sceneBackgroundTransition','sceneBackgroundExit','sceneBackgroundFit','sceneBackgroundMotion'].forEach(id=>{
     $('#'+id)?.addEventListener('change',()=>{syncAdvancedFieldsToScene();updateAdvancedConditionalUI();});
   });
   ['sceneBackgroundDim','sceneBackgroundTransitionDuration','sceneBackgroundMotionDuration','sceneBackgroundMotionAmount'].forEach(id=>{
@@ -6114,7 +6115,7 @@
     if(liveEditEnabled && player && !playerScreen?.hidden) refreshLivePlayer({preserveSheet:true});
   }));
 
-  ['sceneBackgroundMode','sceneBackgroundTransition','sceneBackgroundFit','sceneBackgroundMotion','sceneBackgroundDim','sceneBgmAction','sceneBgmLoop','sceneBgmVolume','sceneBgmFadeIn','sceneBgmFadeOut','sceneBgmVolumeChange','sceneBgmVolumeFade','sceneBgmStopFade','sceneAmbientAction','sceneAmbientLoop','sceneAmbientVolume','sceneAmbientFadeIn','sceneAmbientFadeOut','sceneAmbientVolumeChange','sceneAmbientVolumeFade','sceneAmbientStopFade','sceneSeEnabled','sceneSeVolume','sceneSeFadeIn'].forEach(id=>{
+  ['sceneBackgroundMode','sceneBackgroundTransition','sceneBackgroundExit','sceneBackgroundFit','sceneBackgroundMotion','sceneBackgroundDim','sceneBgmAction','sceneBgmLoop','sceneBgmVolume','sceneBgmFadeIn','sceneBgmFadeOut','sceneBgmVolumeChange','sceneBgmVolumeFade','sceneBgmStopFade','sceneAmbientAction','sceneAmbientLoop','sceneAmbientVolume','sceneAmbientFadeIn','sceneAmbientFadeOut','sceneAmbientVolumeChange','sceneAmbientVolumeFade','sceneAmbientStopFade','sceneSeEnabled','sceneSeVolume','sceneSeFadeIn'].forEach(id=>{
     const el=$('#'+id); if(!el)return; const evt=el.type==='range'?'input':'change'; el.addEventListener(evt,()=>{updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
   });
   function bindAssetInput(inputId,labelId,onPick){
@@ -8214,6 +8215,16 @@ function openDesktopBackgroundDetail(){
       desktopDetailSelect(u('切替演出','Transition'),[
         ['fade',t('transition.fade')],['cut',t('transition.cut')],['flash',t('transition.flash')],['glitch',t('transition.glitch')]
       ],bg0.transition||'fade',v=>{const bg=ensureImageState();bg.transition=v;apply();}),
+      desktopDetailSelect(u('背景の消え方','Background exit'),[
+        ['auto',u('切替演出に任せる','Follow transition')],
+        ['fade',u('ゆっくり薄くなる','Fade away')],
+        ['dark',u('暗闇へ溶ける','Dissolve to dark')],
+        ['light',u('白へ溶ける','Dissolve to light')],
+        ['blur',u('ぼやけながら消える','Blur away')],
+        ['zoomOut',u('縮みながら消える','Shrink away')],
+        ['zoomIn',u('拡大しながら消える','Expand away')],
+        ['afterimage',u('残像を残して消える','Afterimage')]
+      ],bg0.exit||'auto',v=>{const bg=ensureImageState();bg.exit=v;apply();}),
       desktopDetailRange(u('切替時間','Transition duration'),{
         min:0,max:10,step:.05,
         value:(Number(bg0.transitionDuration)||700)/1000,
@@ -8227,10 +8238,29 @@ function openDesktopBackgroundDetail(){
     const motionBase=bg0.motion||{type:'none'};
 
     const motionTypeField=desktopDetailSelect(u('動き','Motion'),[
-      ['none',t('motion.none')],['slowZoom',t('motion.slowZoom')],['breath',t('motion.breath')],
-      ['panLeft',t('motion.panLeft')],['panRight',t('motion.panRight')],['panUp',t('motion.panUp')],['panDown',t('motion.panDown')]
+      ['none',u('なし／このSceneで停止','None / stop here')],
+      ['slowZoom',u('超低速ズームイン','Ultra-slow zoom in')],
+      ['zoomOut',u('超低速ズームアウト','Ultra-slow zoom out')],
+      ['breath',u('わずかに呼吸','Subtle breathing')],
+      ['parallax',u('わずかに漂う','Subtle drift')],
+      ['panLeft',u('左へ流す','Drift left')],['panRight',u('右へ流す','Drift right')],
+      ['panUp',u('上へ流す','Drift up')],['panDown',u('下へ流す','Drift down')],
+      ['panUpLeft',u('左上へ流す','Drift up-left')],['panUpRight',u('右上へ流す','Drift up-right')],
+      ['panDownLeft',u('左下へ流す','Drift down-left')],['panDownRight',u('右下へ流す','Drift down-right')]
     ],motionBase.type||'none',()=>{});
     motionSec.appendChild(motionTypeField);
+
+    const previousMotion=previousFraming()?.motion;
+    const copyPreviousMotion=desktopAction(u('前Sceneの動きを継続','Continue previous Scene motion'),()=>{
+      if(!previousMotion?.type||previousMotion.type==='none')return;
+      const bg=ensureImageState();
+      bg.motion={...clone(previousMotion),continuity:'carry'};
+      apply();
+      closeDesktopBackgroundDetail();
+      openDesktopBackgroundDetail();
+    });
+    copyPreviousMotion.disabled=!sourceBg.src||!previousMotion?.type||previousMotion.type==='none';
+    motionSec.appendChild(copyPreviousMotion);
 
     const motionDynamic=document.createElement('div');
     motionDynamic.className='desktop-background-motion-dynamic';
@@ -8254,8 +8284,8 @@ function openDesktopBackgroundDetail(){
       const timingGrid=two(motionDynamic);
       timingGrid.append(
         desktopDetailRange(u('動きの時間','Motion duration'),{
-          min:.5,max:30,step:.25,
-          value:(Number(motion.duration)||6500)/1000,
+          min:.5,max:60,step:.25,
+          value:(Number(motion.duration)||12000)/1000,
           unit:u(' 秒',' sec'),format:v=>v.toFixed(2),
           oninput:v=>{
             const next=ensureImageState();
@@ -8265,11 +8295,22 @@ function openDesktopBackgroundDetail(){
         })
       );
 
-      if(motionType==='slowZoom'||motionType==='breath'){
+      timingGrid.append(
+        desktopDetailSelect(u('動きのつながり','Motion continuity'),[
+          ['restart',u('このSceneから開始','Start from this Scene')],
+          ['carry',u('前Sceneの続きから','Continue previous Scene phase')]
+        ],motion.continuity==='carry'?'carry':'restart',v=>{
+          const next=ensureImageState();
+          next.motion={...(next.motion||{}),type:next.motion?.type||motionType,continuity:v};
+          apply();
+        })
+      );
+
+      if(motionType==='slowZoom'||motionType==='zoomOut'||motionType==='breath'){
         const zoomGrid=two(motionDynamic);
         zoomGrid.append(
           desktopDetailRange(u('開始倍率','Start scale'),{
-            min:1,max:1.5,step:.01,value:Number(motion.scaleFrom)||1,
+            min:1,max:1.5,step:.01,value:Number(motion.scaleFrom)||(motionType==='zoomOut'?1.02:1),
             format:v=>v.toFixed(2),
             oninput:v=>{
               const next=ensureImageState();
@@ -8279,7 +8320,7 @@ function openDesktopBackgroundDetail(){
           }),
           desktopDetailRange(u('終了倍率','End scale'),{
             min:1,max:1.7,step:.01,
-            value:Number(motion.scaleTo)||(motionType==='slowZoom'?1.14:1.11),
+            value:Number(motion.scaleTo)||(motionType==='slowZoom'?1.02:(motionType==='zoomOut'?1:1.015)),
             format:v=>v.toFixed(2),
             oninput:v=>{
               const next=ensureImageState();
@@ -8292,7 +8333,7 @@ function openDesktopBackgroundDetail(){
         const panGrid=two(motionDynamic);
         panGrid.append(
           desktopDetailRange(u('移動量','Travel amount'),{
-            min:1,max:30,step:1,value:Number(motion.pan)||9,unit:' %',
+            min:1,max:30,step:1,value:Number(motion.pan)||2,unit:' %',
             format:v=>Math.round(v),
             oninput:v=>{
               const next=ensureImageState();
@@ -8309,9 +8350,12 @@ function openDesktopBackgroundDetail(){
       motionSelect.addEventListener('change',()=>{
         const bg=ensureImageState();
         const v=motionSelect.value;
-        bg.motion={...(bg.motion||{}),type:v};
         if(v==='none')bg.motion={type:'none'};
-        else if(/^pan/.test(v))bg.motion=ensurePanCoverage(bg.motion);
+        else if(v==='slowZoom')bg.motion={type:v,duration:12000,scaleFrom:1,scaleTo:1.02,continuity:'restart'};
+        else if(v==='zoomOut')bg.motion={type:v,duration:12000,scaleFrom:1.02,scaleTo:1,continuity:'restart'};
+        else if(v==='breath')bg.motion={type:v,duration:12000,scaleFrom:1,scaleTo:1.015,continuity:'restart'};
+        else if(v==='parallax')bg.motion={type:v,duration:16000,pan:1,continuity:'restart'};
+        else if(/^pan/.test(v))bg.motion=ensurePanCoverage({type:v,duration:12000,pan:2,continuity:'restart'});
         apply();
         renderMotionControls();
       });

@@ -2365,3 +2365,21 @@ html.sp-scene-image-open body{
 }
 .sp-scene.is-disappearing.is-disappear-shatter{animation:spDisappearShatter var(--sp-disappear-fade,700ms) cubic-bezier(.18,.7,.2,1) both!important;transition:none!important}
 .sp-scene.is-disappearing.is-disappear-explode{animation:spDisappearExplode var(--sp-disappear-fade,700ms) cubic-bezier(.12,.76,.14,1) both!important;transition:none!important}
+/* Background motion v2 — subtle diagonal travel and phase continuity. */
+.sp-motion-slowZoom{animation:sp-bg-slowzoom var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-zoomOut{animation:sp-bg-zoomout var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-breath{animation:sp-bg-breath var(--sp-bg-duration,8000ms) ease-in-out var(--sp-bg-delay,0ms) infinite alternate}
+.sp-motion-panLeft{animation:sp-bg-pan-left var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panRight{animation:sp-bg-pan-right var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panUp{animation:sp-bg-pan-up var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panDown{animation:sp-bg-pan-down var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panUpLeft{animation:sp-bg-pan-up-left var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panUpRight{animation:sp-bg-pan-up-right var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panDownLeft{animation:sp-bg-pan-down-left var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panDownRight{animation:sp-bg-pan-down-right var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-parallax{animation:sp-bg-parallax var(--sp-bg-duration,9000ms) ease-in-out var(--sp-bg-delay,0ms) infinite alternate}
+@keyframes sp-bg-zoomout{from{transform:scale(var(--sp-bg-scale-from,1.08))}to{transform:scale(var(--sp-bg-scale-to,1))}}
+@keyframes sp-bg-pan-up-left{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),var(--sp-bg-pan,4%))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),calc(var(--sp-bg-pan,4%) * -1))}}
+@keyframes sp-bg-pan-up-right{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),var(--sp-bg-pan,4%))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),calc(var(--sp-bg-pan,4%) * -1))}}
+@keyframes sp-bg-pan-down-left{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),calc(var(--sp-bg-pan,4%) * -1))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),var(--sp-bg-pan,4%))}}
+@keyframes sp-bg-pan-down-right{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),calc(var(--sp-bg-pan,4%) * -1))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),var(--sp-bg-pan,4%))}}

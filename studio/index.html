@@ -25,7 +25,7 @@
 
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20260906-37">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20260906-38">
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -577,8 +577,9 @@
               <div id="sceneBackgroundPreview" class="adv-asset-preview" data-overlay-label="このSceneから背景変更" hidden></div>
               <div class="adv-grid">
                 <label class="adv-field"><span>切替</span><select id="sceneBackgroundTransition"><option value="fade">fade</option><option value="cut">cut</option><option value="flash">flash</option><option value="glitch">glitch</option></select></label>
+                <label class="adv-field"><span>背景の消え方</span><select id="sceneBackgroundExit"><option value="auto">切替演出に任せる</option><option value="fade">ゆっくり薄くなる</option><option value="dark">暗闇へ溶ける</option><option value="light">白へ溶ける</option><option value="blur">ぼやけながら消える</option><option value="zoomOut">縮みながら消える</option><option value="zoomIn">拡大しながら消える</option><option value="afterimage">残像を残して消える</option></select></label>
                 <label class="adv-field"><span>表示</span><select id="sceneBackgroundFit"><option value="cover">cover</option><option value="contain">contain</option></select></label>
-                <label class="adv-field"><span>動き</span><select id="sceneBackgroundMotion"><option value="none">なし</option><option value="slowZoom">SLOW ZOOM（ゆっくり寄る）</option><option value="breath">BREATH（ゆるく拡大縮小）</option><option value="panLeft">PAN LEFT（左へ移動）</option><option value="panRight">PAN RIGHT（右へ移動）</option><option value="panUp">PAN UP（上へ移動）</option><option value="panDown">PAN DOWN（下へ移動）</option></select></label>
+                <label class="adv-field"><span>動き</span><select id="sceneBackgroundMotion"><option value="none">なし／このSceneで停止</option><option value="slowZoom">超低速ズームイン</option><option value="zoomOut">超低速ズームアウト</option><option value="breath">わずかに呼吸</option><option value="parallax">わずかに漂う</option><option value="panLeft">左へ移動</option><option value="panRight">右へ移動</option><option value="panUp">上へ移動</option><option value="panDown">下へ移動</option><option value="panUpLeft">左上へ移動</option><option value="panUpRight">右上へ移動</option><option value="panDownLeft">左下へ移動</option><option value="panDownRight">右下へ移動</option></select></label>
                 <label class="adv-field range-field"><span>暗さ <output id="sceneBackgroundDimOutput">34%</output></span><input id="sceneBackgroundDim" type="range" min="0" max="85" step="1" value="34"></label><div class="adv-field scene-motion-preview-field">
                   <span>背景プレビュー <small>切替・表示・動き・暗さ</small></span>
                   <div id="sceneMotionPreview" class="scene-motion-preview">
@@ -588,8 +589,8 @@
                   </div>
                 </div>
                 <label class="adv-field range-field"><span>切替の速さ <output id="sceneBackgroundTransitionDurationOutput">700ms</output></span><input id="sceneBackgroundTransitionDuration" type="range" min="0" max="10000" step="50" value="700"></label>
-                <label class="adv-field range-field"><span>動きの速さ <output id="sceneBackgroundMotionDurationOutput">6500ms</output></span><input id="sceneBackgroundMotionDuration" type="range" min="1500" max="20000" step="250" value="6500"></label>
-                <label class="adv-field range-field"><span>動きの強さ <output id="sceneBackgroundMotionAmountOutput">9%</output></span><input id="sceneBackgroundMotionAmount" type="range" min="1" max="20" step="1" value="9"></label>
+                <label class="adv-field range-field"><span>動きの速さ <output id="sceneBackgroundMotionDurationOutput">12000ms</output></span><input id="sceneBackgroundMotionDuration" type="range" min="1500" max="60000" step="250" value="12000"></label>
+                <label class="adv-field range-field"><span>動きの強さ <output id="sceneBackgroundMotionAmountOutput">2%</output></span><input id="sceneBackgroundMotionAmount" type="range" min="1" max="20" step="1" value="2"></label>
               </div>
             </div>
           </div>
@@ -912,11 +913,11 @@
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
 <script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js?v=20260906-37"></script>
+<script src="./scene-player-core.js?v=20260906-38"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260906-37"></script>
+<script src="./script.js?v=20260906-38"></script>
 
 
 
