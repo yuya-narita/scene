@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>あ箱 本棚</title>
+  <link rel="stylesheet" href="bookshelf.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><strong><span>あ</span><span class="box">□</span></strong><small>本棚</small></div>
+    <button id="addButton" class="primary" type="button">＋ Masterを追加</button>
+    <input id="fileInput" type="file" hidden>
+  </header>
+
+  <main>
+    <section class="intro">
+      <div>
+        <p class="eyebrow">LOCAL BOOKSHELF</p>
+        <h1>作品そのものは、作者の手元に。</h1>
+        <p>Master .scene をこの端末のブラウザ内に保存して管理します。作品本体はサーバーへ送信しません。</p>
+      </div>
+      <div class="intro-actions">
+        <button id="backupButton" type="button">本棚をバックアップ</button>
+        <button id="restoreButton" type="button">バックアップから復元</button>
+        <input id="restoreInput" type="file" accept=".zip,application/zip" hidden>
+      </div>
+    </section>
+
+    <section class="shelf-head">
+      <div><h2>本棚</h2><p id="countText">0作品</p></div>
+      <p class="local-note">この端末内に保存</p>
+    </section>
+
+    <section id="emptyState" class="empty">
+      <div class="empty-mark">□</div>
+      <h2>まだ本棚は空です</h2>
+      <p>作者用の Master .scene を追加してください。Distribution .scene は本棚には入りません。</p>
+      <button id="emptyAddButton" class="primary" type="button">Masterを追加</button>
+    </section>
+
+    <section id="grid" class="grid" aria-live="polite"></section>
+  </main>
+
+  <dialog id="detailDialog" class="detail-dialog">
+    <button id="closeDetail" class="dialog-close" aria-label="閉じる">×</button>
+    <div id="detailContent"></div>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="bookshelf.js"></script>
+</body>
+</html>
