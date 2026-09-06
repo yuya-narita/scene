@@ -6774,7 +6774,10 @@ function startInlineTextEdit(field='text'){
     modal.style.setProperty('max-width','none','important');
     modal.style.setProperty('max-height','none','important');
     modal.style.setProperty('height','100%','important');
-    modal.style.setProperty('overflow','auto','important');
+    // The modal itself is a fixed-height flex column on iPhone. Its body is
+    // the sole scroll owner so the header/footer remain reachable and the
+    // compact sheet underneath never receives the gesture.
+    modal.style.setProperty('overflow','hidden','important');
     modal.style.setProperty('border','0','important');
     modal.style.setProperty('border-radius','0','important');
     modal.style.setProperty('box-shadow','none','important');

@@ -25,7 +25,7 @@
 
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20260905-35">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20260906-36">
   <link rel="stylesheet" href="./style.css">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -107,6 +107,76 @@
     .ending-quick-se .check-row{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;min-height:32px!important;padding:0!important;border:0!important;background:transparent!important}
     .ending-quick-se .check-row input[type="checkbox"]{appearance:auto!important;-webkit-appearance:checkbox!important;display:inline-block!important;flex:0 0 auto!important;width:18px!important;height:18px!important;min-width:18px!important;min-height:18px!important;margin:0!important;padding:0!important;border:initial!important;border-radius:3px!important;box-shadow:none!important}
     .ending-quick-se .check-row span{display:inline!important;width:auto!important;margin:0!important;font-size:12px!important;line-height:1.4!important}
+    /*
+      iPhone Live Edit sheets must own the available viewport between the
+      top safe area and the bottom tool bar. The old content-sized sheet
+      clipped the last compact controls because its body could not scroll.
+    */
+    @media (max-width:1099px){
+      body.live-edit-sheet-open{overflow:hidden!important}
+      body.live-edit-sheet-open .live-edit-sheet:not([hidden]){
+        position:fixed!important;
+        z-index:760!important;
+        top:max(84px,calc(env(safe-area-inset-top,0px) + 58px))!important;
+        right:12px!important;
+        bottom:calc(78px + env(safe-area-inset-bottom,0px))!important;
+        left:12px!important;
+        display:flex!important;
+        width:auto!important;
+        height:auto!important;
+        max-height:none!important;
+        min-height:0!important;
+        flex-direction:column!important;
+        overflow:hidden!important;
+      }
+      body.live-edit-sheet-open .live-edit-sheet-head{
+        position:relative!important;
+        z-index:2;
+        flex:0 0 auto!important;
+      }
+      body.live-edit-sheet-open .live-edit-sheet-body{
+        flex:1 1 auto!important;
+        min-height:0!important;
+        max-height:none!important;
+        overflow-x:hidden!important;
+        overflow-y:auto!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch;
+        touch-action:pan-y;
+        scrollbar-gutter:stable;
+        padding-bottom:max(24px,env(safe-area-inset-bottom,0px))!important;
+      }
+      body.live-edit-sheet-open .live-edit-sheet-body>.live-edit-detail:last-child{
+        margin-bottom:4px!important;
+      }
+      body.mobile-live-detail-open .live-edit-sheet-body{
+        display:flex!important;
+        overflow:hidden!important;
+        padding:0!important;
+      }
+      .mobile-live-detail-sheet .desktop-text-detail-modal[data-mobile-live-detail="true"]{
+        display:flex!important;
+        flex:1 1 auto!important;
+        min-width:0!important;
+        min-height:0!important;
+        flex-direction:column!important;
+        overflow:hidden!important;
+      }
+      .mobile-live-detail-sheet .desktop-text-detail-head,
+      .mobile-live-detail-sheet .desktop-text-detail-foot{
+        flex:0 0 auto!important;
+      }
+      .mobile-live-detail-sheet .desktop-text-detail-body{
+        flex:1 1 auto!important;
+        min-height:0!important;
+        max-height:none!important;
+        overflow-x:hidden!important;
+        overflow-y:auto!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch;
+        touch-action:pan-y;
+      }
+    }
   </style>
 </head>
 <body>
@@ -834,11 +904,11 @@
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
 <script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js?v=20260905-35"></script>
+<script src="./scene-player-core.js?v=20260906-36"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260905-35"></script>
+<script src="./script.js?v=20260906-36"></script>
 
 
 
