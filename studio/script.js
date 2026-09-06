@@ -5859,7 +5859,11 @@
       el.addEventListener(type,(event)=>event.stopPropagation(),{passive:true});
     });
   });
-  $('#autoRecStart')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();startAutoRec();});
+  $('#autoRecStart')?.addEventListener('click',(event)=>{
+    event.preventDefault();event.stopPropagation();
+    if(document.body.classList.contains('live-edit-sheet-open'))return;
+    startAutoRec();
+  });
   $('#autoRecCancel')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();finishAutoRec(false);});
   $('#autoRecRetry')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();startAutoRec();});
   $('#publishFromPreviewButton')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();openPublishDialog();});
@@ -6212,6 +6216,19 @@
   const desktopTimingButton=$('#desktopTimingButton');
   const desktopShortcutButton=$('#desktopShortcutButton');
   const desktopLiveMQ=window.matchMedia('(min-width:1100px)');
+  const autoRecPanelForSheet=$('#autoRecPanel');
+  function syncAutoRecSheetLayer(){
+    if(!autoRecPanelForSheet)return;
+    const blocked=document.body.classList.contains('live-edit-sheet-open');
+    autoRecPanelForSheet.inert=blocked;
+    autoRecPanelForSheet.setAttribute('aria-hidden',blocked?'true':'false');
+    autoRecPanelForSheet.classList.toggle('is-under-live-edit-sheet',blocked);
+    if(blocked&&autoRecPanelForSheet.contains(document.activeElement))document.activeElement?.blur?.();
+  }
+  if(autoRecPanelForSheet){
+    new MutationObserver(syncAutoRecSheetLayer).observe(document.body,{attributes:true,attributeFilter:['class']});
+    syncAutoRecSheetLayer();
+  }
   // A detail inspector is the only scroll owner while it is open. At either
   // boundary, consume the wheel instead of chaining it to the panel below.
   document.addEventListener('wheel',event=>{
@@ -11526,7 +11543,11 @@ function openDesktopTextDetail(){
   });
   playerHost.addEventListener('sceneplayer:historyopen',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
   playerHost.addEventListener('sceneplayer:historyclose',()=>{requestAnimationFrame(ensureLiveEditEmptyTarget);});
-  $('#autoRecStart')?.addEventListener('click',()=>{closeLiveEditSheet();if(liveEditToolbar)liveEditToolbar.hidden=true;});
+  $('#autoRecStart')?.addEventListener('click',()=>{
+    if(document.body.classList.contains('live-edit-sheet-open'))return;
+    closeLiveEditSheet();
+    if(liveEditToolbar)liveEditToolbar.hidden=true;
+  });
   $('#autoRecCancel')?.addEventListener('click',()=>{if(liveEditEnabled)setLiveToolbarVisible(true);});
   $('#autoRecRetry')?.addEventListener('click',()=>{if(liveEditEnabled)setLiveToolbarVisible(true);});
 
