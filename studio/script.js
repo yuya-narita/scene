@@ -3074,13 +3074,28 @@
     const masterWorkId=String(doc?.studio?.identity?.workId||'').trim();
     if(masterWorkId)doc.workId=masterWorkId;
 
+    // A copyId identifies one officially issued Distribution package.
+    // It is NOT a reader/device ID and it does not change when the file is
+    // copied, forwarded or backed up outside A-Hako.
+    const copyId=`copy_${randomHex(16)}`;
+    const issuedAt=new Date().toISOString();
+
     // Distribution is a finished work, not a Studio source file.
     delete doc.studio;
     stripDistributionEditorData(doc);
     doc.package={...(doc.package||{}),format:'scene-package',version:'1.0',role:'distribution'};
+    doc.distribution={
+      schemaVersion:'1',
+      copyId,
+      issuedAt
+    };
 
     manifest.packageRole='distribution';
     if(masterWorkId)manifest.workId=masterWorkId;
+    // Manifest mirrors the issue identity for lightweight inspection. The
+    // canonical runtime value remains scene.json.distribution.copyId.
+    manifest.copyId=copyId;
+    manifest.issuedAt=issuedAt;
 
     const output=[];
     for(const [name,bytes] of entries.entries()){
@@ -3230,8 +3245,8 @@
       downloadBlobFile(name,result.blob);
       setProjectIoStatus(
         uiLanguage==='ja'
-          ? `配布版 ${name} を書き出しました（Studioでは編集できません / ${result.assetCount} assets）`
-          : `Exported distribution ${name} (not editable in Studio / ${result.assetCount} assets)`
+          ? `配布版 ${name} を書き出しました（copyId: ${result.doc?.distribution?.copyId||'-'} / Studioでは編集できません / ${result.assetCount} assets）`
+          : `Exported distribution ${name} (copyId: ${result.doc?.distribution?.copyId||'-'} / not editable in Studio / ${result.assetCount} assets)`
       );
     }catch(error){
       console.error(error);
