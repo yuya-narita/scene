@@ -4,7 +4,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
 let lastStats=null;
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
@@ -145,7 +145,37 @@ async function loadReaderAnalytics(){
   }
 }
 
-async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadAnalytics(),loadReaderAnalytics()]);}
+function renderDistributionCopies(node,rows,{byWork=false}={}){
+  if(!node)return;
+  if(!rows?.length){node.innerHTML='<div class="empty">まだ観測データはありません。</div>';return;}
+  node.innerHTML=rows.map((row,i)=>{
+    const primary=byWork?row.workId:row.copyId;
+    const secondary=byWork?`${Number(row.observedCopies||0).toLocaleString('ja-JP')}冊を観測`:row.workId;
+    return `<div class="distribution-copy-row"><span class="rank">${i+1}</span><div class="distribution-copy-main"><code>${escapeHtml(primary||'')}</code><small>${escapeHtml(secondary||'')}</small></div><span><b>${Number(row.observedReaders||0).toLocaleString('ja-JP')}+</b><small>観測読者</small></span><span><b>${Number(row.completions||0).toLocaleString('ja-JP')}</b><small>読了</small></span><span><b>${Number(row.opens||0).toLocaleString('ja-JP')}</b><small>起動</small></span></div>`;
+  }).join('');
+}
+async function loadDistributionObservation(){
+  if(els.distTopCopies)els.distTopCopies.innerHTML='<div class="empty">読み込み中…</div>';
+  if(els.distWorks)els.distWorks.innerHTML='<div class="empty">読み込み中…</div>';
+  try{
+    const d=await apiWithTimeout(`/admin/distribution-observation?days=7&_=${Date.now()}`,{},12000);
+    const t=d.today||{},p=d.period||{};
+    els.distTodayReaders.textContent=`${Number(t.observedReaders||0).toLocaleString('ja-JP')}+`;
+    els.distTodayCompletions.textContent=Number(t.completions||0).toLocaleString('ja-JP');
+    els.distPeriodReaders.textContent=`${Number(p.observedReaders||0).toLocaleString('ja-JP')}+`;
+    els.distObservedCopies.textContent=Number(p.observedCopies||0).toLocaleString('ja-JP');
+    els.distObservedWorks.textContent=Number(p.observedWorks||0).toLocaleString('ja-JP');
+    els.distPeriodOpens.textContent=Number(p.opens||0).toLocaleString('ja-JP');
+    renderDistributionCopies(els.distTopCopies,d.topCopies||[]);
+    renderDistributionCopies(els.distWorks,d.works||[],{byWork:true});
+  }catch(e){
+    ['distTodayReaders','distTodayCompletions','distPeriodReaders','distObservedCopies','distObservedWorks','distPeriodOpens'].forEach(k=>{if(els[k])els[k].textContent='–';});
+    if(els.distTopCopies)els.distTopCopies.innerHTML=`<div class="empty">配布版観測を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
+    if(els.distWorks)els.distWorks.innerHTML='';
+  }
+}
+
+async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation()]);}
 
 async function loadReports(){const status=els.filter.value;els.list.innerHTML='<div class="empty">読み込み中…</div>';try{const [shown,open]=await Promise.all([api(`/admin/reports?status=${encodeURIComponent(status)}`),api('/admin/reports?status=open')]);els.openCount.textContent=open.count;els.shownCount.textContent=shown.count;renderReports(shown.reports);}catch(e){els.list.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}

@@ -47,3 +47,10 @@
 .reader-host-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #eceef1;}
 .reader-host-row:last-child{border-bottom:0}.reader-host-row code{font-size:11px;overflow-wrap:anywhere}.reader-host-row span{display:grid;text-align:right}.reader-host-row b{font-size:12px}.reader-host-row small{font-size:9px;color:#888}
 @media(max-width:900px){.reader-other-hosts{margin-left:36px}.reader-host-row{grid-template-columns:minmax(0,1fr) auto auto;gap:8px}}
+
+/* v0.3.67 Distribution copy observation */
+.distribution-observation-summary{grid-template-columns:repeat(6,minmax(0,1fr));}
+.distribution-copy-list{display:grid;gap:8px;}
+.distribution-copy-row{display:grid;grid-template-columns:30px minmax(0,1fr) repeat(3,minmax(62px,auto));gap:10px;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px;}
+.distribution-copy-row>.rank{font-size:11px;color:#999;text-align:center}.distribution-copy-main{min-width:0}.distribution-copy-main code{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.distribution-copy-main small{display:block;margin-top:3px;font-size:9px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.distribution-copy-row>span:not(.rank){display:grid;text-align:right}.distribution-copy-row b{font-size:13px}.distribution-copy-row small{font-size:9px;color:#888}
+@media(max-width:900px){.distribution-observation-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.distribution-copy-row{grid-template-columns:24px minmax(0,1fr) repeat(3,minmax(48px,auto));gap:7px;padding:10px}.distribution-copy-row b{font-size:12px}}
