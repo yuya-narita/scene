@@ -4,7 +4,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
 let lastStats=null;
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
@@ -213,7 +213,35 @@ async function loadDistributionObservation(){
   }
 }
 
-async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation()]);}
+
+function renderRelayRows(node,rows,{byWork=false}={}){
+  if(!node)return;
+  if(!rows?.length){node.innerHTML='<div class="empty">まだRELAYはありません。</div>';return;}
+  node.innerHTML=rows.map((row,i)=>{
+    const primary=byWork?row.workId:row.copyId;
+    const secondary=byWork?`${Number(row.relayedCopies||0).toLocaleString('ja-JP')}冊が旅中`:row.workId;
+    return `<div class="distribution-copy-row"><span class="rank">${i+1}</span><div class="distribution-copy-main"><code>${escapeHtml(primary||'')}</code><small>${escapeHtml(secondary||'')}</small></div><span><b>${Number(row.relays||0).toLocaleString('ja-JP')}</b><small>RELAY</small></span><span><b>${Number(row.maxHop||0).toLocaleString('ja-JP')}</b><small>hop</small></span></div>`;
+  }).join('');
+}
+async function loadRelayAnalytics(){
+  if(els.relayTopCopies)els.relayTopCopies.innerHTML='<div class="empty">読み込み中…</div>';
+  if(els.relayWorksList)els.relayWorksList.innerHTML='<div class="empty">読み込み中…</div>';
+  try{
+    const d=await apiWithTimeout(`/admin/distribution-relay?days=7&_=${Date.now()}`,{},12000),p=d.period||{};
+    els.relayPeriodCount.textContent=Number(p.relays||0).toLocaleString('ja-JP');
+    els.relayCopies.textContent=Number(p.relayedCopies||0).toLocaleString('ja-JP');
+    els.relayWorks.textContent=Number(p.relayedWorks||0).toLocaleString('ja-JP');
+    els.relayMaxHop.textContent=Number(p.maxHop||0).toLocaleString('ja-JP');
+    renderRelayRows(els.relayTopCopies,d.topCopies||[]);
+    renderRelayRows(els.relayWorksList,d.works||[],{byWork:true});
+  }catch(e){
+    ['relayPeriodCount','relayCopies','relayWorks','relayMaxHop'].forEach(k=>{if(els[k])els[k].textContent='–';});
+    if(els.relayTopCopies)els.relayTopCopies.innerHTML=`<div class="empty">RELAY情報を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
+    if(els.relayWorksList)els.relayWorksList.innerHTML='';
+  }
+}
+
+async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation(),loadRelayAnalytics()]);}
 
 async function loadReports(){const status=els.filter.value;els.list.innerHTML='<div class="empty">読み込み中…</div>';try{const [shown,open]=await Promise.all([api(`/admin/reports?status=${encodeURIComponent(status)}`),api('/admin/reports?status=open')]);els.openCount.textContent=open.count;els.shownCount.textContent=shown.count;renderReports(shown.reports);}catch(e){els.list.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
