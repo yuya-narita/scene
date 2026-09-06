@@ -8001,10 +8001,13 @@ function openDesktopBackgroundDetail(){
       motion.scaleTo=Math.max(Number(motion.scaleTo)||1,scale);
       return motion;
     };
+    const hasExplicitBackgroundSource=()=>Boolean(
+      p.background && typeof p.background==='object'
+      && Object.prototype.hasOwnProperty.call(p.background,'src')
+    );
     const ensureImageState=()=>{
-      if(!p.background || typeof p.background!=='object' || p.background.src===''){
+      if(!p.background || typeof p.background!=='object'){
         p.background={
-          src:p.background?.src||'',
           transition:p.background?.transition||'fade',
           transitionDuration:Number(p.background?.transitionDuration)||700,
           fit:p.background?.fit||'cover',
@@ -8058,7 +8061,7 @@ function openDesktopBackgroundDetail(){
     // SOURCE --------------------------------------------------------------
     const sourceSec=section(u('背景','Background'));
     const sourceGrid=two(sourceSec);
-    const mode=!p.background?'inherit':(p.background.src===''?'clear':'image');
+    const mode=!hasExplicitBackgroundSource()?'inherit':(p.background.src===''?'clear':'image');
     sourceGrid.append(
       desktopDetailSelect(u('このSceneの背景','Background for this Scene'),[
         ['inherit',u('前Sceneから継続','Continue previous Scene')],
@@ -8224,7 +8227,25 @@ function openDesktopBackgroundDetail(){
         ['zoomOut',u('縮みながら消える','Shrink away')],
         ['zoomIn',u('拡大しながら消える','Expand away')],
         ['afterimage',u('残像を残して消える','Afterimage')]
-      ],bg0.exit||'auto',v=>{const bg=ensureImageState();bg.exit=v;apply();}),
+      ],bg0.exit||'auto',v=>{
+        const wasInherited=!hasExplicitBackgroundSource();
+        const bg=ensureImageState();
+        bg.exit=v;
+        // A custom exit on an inherited background means: enter this Scene by
+        // removing the previous Scene's effective background with that exit.
+        if(v!=='auto' && wasInherited){
+          bg.src='';
+          bg._exitClearsBackground=true;
+        }else if(v==='auto' && bg._exitClearsBackground){
+          delete bg.src;
+          delete bg._exitClearsBackground;
+        }
+        apply();
+        if(wasInherited && v!=='auto'){
+          closeDesktopBackgroundDetail();
+          openDesktopBackgroundDetail();
+        }
+      }),
       desktopDetailRange(u('切替時間','Transition duration'),{
         min:0,max:10,step:.05,
         value:(Number(bg0.transitionDuration)||700)/1000,
