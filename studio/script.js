@@ -6787,18 +6787,72 @@ function startInlineTextEdit(field='text'){
 
     liveEditSheetBody.replaceChildren(modal);
 
-    // PC modal is now inside the mobile sheet, so strip desktop constraints.
+    // iPhone Safari: build one explicit, flex-constrained scroll chain.
+    // The previous CSS-only fix could not win against these inline !important
+    // modal constraints, leaving the detail body visually clipped but not
+    // actually scrollable. Keep the modal fixed-height, and make its body the
+    // sole vertical scroll owner.
+    modal.style.setProperty('display','flex','important');
+    modal.style.setProperty('flex-direction','column','important');
     modal.style.setProperty('width','100%','important');
     modal.style.setProperty('max-width','none','important');
     modal.style.setProperty('max-height','none','important');
     modal.style.setProperty('height','100%','important');
-    // The modal itself is a fixed-height flex column on iPhone. Its body is
-    // the sole scroll owner so the header/footer remain reachable and the
-    // compact sheet underneath never receives the gesture.
+    modal.style.setProperty('min-height','0','important');
     modal.style.setProperty('overflow','hidden','important');
     modal.style.setProperty('border','0','important');
     modal.style.setProperty('border-radius','0','important');
     modal.style.setProperty('box-shadow','none','important');
+
+    // The host must not become a competing nested scroller.
+    liveEditSheetBody.style.setProperty('display','block','important');
+    liveEditSheetBody.style.setProperty('height','100%','important');
+    liveEditSheetBody.style.setProperty('min-height','0','important');
+    liveEditSheetBody.style.setProperty('overflow','hidden','important');
+    liveEditSheetBody.style.setProperty('padding','0','important');
+
+    const mobileDetailBody=modal.querySelector('.desktop-text-detail-body');
+    if(mobileDetailBody){
+      mobileDetailBody.style.setProperty('flex','1 1 auto','important');
+      mobileDetailBody.style.setProperty('min-height','0','important');
+      mobileDetailBody.style.setProperty('height','auto','important');
+      mobileDetailBody.style.setProperty('max-height','none','important');
+      mobileDetailBody.style.setProperty('overflow-x','hidden','important');
+      mobileDetailBody.style.setProperty('overflow-y','auto','important');
+      mobileDetailBody.style.setProperty('-webkit-overflow-scrolling','touch','important');
+      mobileDetailBody.style.setProperty('overscroll-behavior','contain','important');
+      mobileDetailBody.style.setProperty('touch-action','pan-y','important');
+
+      // Safari fallback: if native overflow scrolling is swallowed by the
+      // surrounding Player/Live Edit gesture layers, move this one container
+      // directly. Range/color controls keep their own drag gesture.
+      let touchY=0, touchX=0;
+      mobileDetailBody.addEventListener('touchstart',event=>{
+        if(event.touches.length!==1)return;
+        touchY=event.touches[0].clientY;
+        touchX=event.touches[0].clientX;
+      },{passive:true});
+      mobileDetailBody.addEventListener('touchmove',event=>{
+        if(event.touches.length!==1)return;
+        const target=event.target instanceof Element?event.target:null;
+        if(target?.closest('input[type=\"range\"], .studio-color-square, .studio-color-hue'))return;
+        const y=event.touches[0].clientY;
+        const x=event.touches[0].clientX;
+        const dy=touchY-y;
+        const dx=touchX-x;
+        touchY=y; touchX=x;
+        if(Math.abs(dy)<=Math.abs(dx) || Math.abs(dy)<1)return;
+        const max=Math.max(0,mobileDetailBody.scrollHeight-mobileDetailBody.clientHeight);
+        if(max<=0)return;
+        const before=mobileDetailBody.scrollTop;
+        mobileDetailBody.scrollTop=Math.max(0,Math.min(max,before+dy));
+        if(mobileDetailBody.scrollTop!==before){
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      },{passive:false});
+      mobileDetailBody.scrollTop=0;
+    }
 
     // Detail close buttons should return to the compact Live Edit sheet.
     let mobileDetailReturned=false;

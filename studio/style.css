@@ -10746,3 +10746,34 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   .auto-rec-resonance-choice{padding:20px 16px;}
 }
 
+
+/* v47 — iPhone detail inspector scroll-chain hardening.
+   JS establishes the same constraints inline; this is the CSS fallback and
+   prevents older mobile detail rules from reintroducing nested scrolling. */
+@media (max-width:899px){
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet .live-edit-sheet-body{
+    display:block!important;
+    height:100%!important;
+    min-height:0!important;
+    overflow:hidden!important;
+    padding:0!important;
+  }
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet .desktop-text-detail-modal[data-mobile-live-detail="true"]{
+    display:flex!important;
+    flex-direction:column!important;
+    height:100%!important;
+    min-height:0!important;
+    overflow:hidden!important;
+  }
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet .desktop-text-detail-modal[data-mobile-live-detail="true"] > .desktop-text-detail-body{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    height:auto!important;
+    max-height:none!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior:contain!important;
+    touch-action:pan-y!important;
+  }
+}
