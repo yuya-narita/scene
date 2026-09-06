@@ -233,7 +233,7 @@
     ['#sceneBgmLoop + span','audio.loop'],['#sceneAmbientLoop + span','audio.loop'],['#sceneSeEnabled + span','audio.seEnable'],
     ['.audio-card:nth-child(1) .audio-card-title small','audio.bgm.note'],['.audio-card:nth-child(2) .audio-card-title small','audio.ambient.note'],['.audio-card:nth-child(3) .audio-card-title small','audio.se.note'],
     ['.advanced-hint','audio.hint'],['#editReturnButton','preview.return'],
-    ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#easyPublishButton span','publish.action'],['#easyPublishButton small','publish.short'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],['#easyMenuPanel label[for="importPackageInput"] span','file.open'],['#menuExportPackageButton span','file.export'],['#menuDraftManageButton span','draft.manager'],['#menuNewDraftButton span','draft.new'],['#menuNewDraftButton small','draft.new.note'],['#easyMenuPanel .easy-menu-language > span','work.language'],
+    ['label.easy-file-open span','file.open'],['#exportPackageButton span','file.export'],['#easyPublishButton span','publish.action'],['#easyPublishButton small','publish.short'],['#draftManageButton span','draft.manager'],['#newDraftQuickButton span','draft.new'],['#newDraftQuickButton small','draft.new.note'],['#easyMenuPanel label[for="importPackageInput"] span','file.open'],['#menuExportPackageButton span','file.export'],['#menuExportDistributionButton span','file.exportDistribution'],['#menuExportDistributionButton small','file.exportDistribution.note'],['#menuDraftManageButton span','draft.manager'],['#menuNewDraftButton span','draft.new'],['#menuNewDraftButton small','draft.new.note'],['#easyMenuPanel .easy-menu-language > span','work.language'],
     ['.work-meta-section > summary','work.info'],['.author-history-help','work.authorHistory'],['label[for="descriptionInput"] .field-label','work.description'],['#descriptionInput','work.description.ph','placeholder'],['.work-description-help','work.description.help'],['.ending-editor .section-heading > span','ending.heading'],['.ending-editor .section-heading > small','ending.note'],['#endingLabelInput','ending.label.ph','placeholder'],['label[for="subtitleInput"] .field-label','work.subtitle'],['label[for="languageInput"] .field-label','work.language'],['label[for="seriesTitleInput"] .field-label','work.series'],['label[for="episodeInput"] .field-label','work.episode'],['.easy-cover-simple .section-heading > span','work.cover'],['.easy-cover-simple .section-heading > small','work.cover.note'],['label[for="coverImageInput"]','work.cover.choose'],['#coverImageClear','work.cover.remove'],['.cover-preview-empty small','work.cover.empty'],['.easy-cover-actions p','work.cover.saveNote'],['.project-io-details summary','work.developer'],
     ['#advancedPreviewButton','common.preview'],['#advancedExportButton','file.export'],['.auto-timing-head strong','auto.heading'],['#sceneAutoTimingReset','auto.reset'],['.auto-timing-controls label span','auto.second'],['.auto-timing-editor > p','auto.hint'],
     ['#sceneColorSelect','text.color','aria-label'],['#sceneShadowSelect','text.shadow','aria-label'],['#sceneColorSelect option[value="auto"]','effect.auto'],['#sceneColorSelect option[value="white"]','color.white'],['#sceneColorSelect option[value="black"]','color.black'],['#sceneColorSelect option[value="custom"]','color.custom'],['#sceneShadowSelect option[value="auto"]','effect.auto'],['#sceneShadowSelect option[value="none"]','shadow.none'],['#sceneShadowSelect option[value="soft"]','shadow.soft'],['#sceneShadowSelect option[value="strong"]','shadow.strong'],
@@ -3038,6 +3038,65 @@
     return {doc:packaged,manifest,studioState,blob,assetCount:packageAssetCount};
   }
 
+  // ---------------------------------------------------------
+  // Distribution .scene v1 (phase 1)
+  // - Master export remains unchanged.
+  // - Distribution packages contain only runtime work data + used assets.
+  // - Studio-only state/private identity/editor hints are removed.
+  // - Legacy packages without packageRole remain editable as Master .scene.
+  // ---------------------------------------------------------
+  function stripDistributionEditorData(value){
+    if(Array.isArray(value)){
+      value.forEach(stripDistributionEditorData);
+      return value;
+    }
+    if(!value || typeof value!=='object')return value;
+    delete value._editorFileName;
+    delete value._editorManaged;
+    Object.values(value).forEach(stripDistributionEditorData);
+    return value;
+  }
+
+  async function buildDistributionScenePackage(documentOverride=null){
+    // Reuse the proven Master packager for asset collection/self-containment,
+    // then sanitize only the package metadata/runtime document. This avoids a
+    // second asset pipeline and keeps Master export behaviour untouched.
+    const masterResult=await buildScenePackage(documentOverride);
+    const entries=await readZipEntries(masterResult.blob);
+
+    const sceneBytes=entries.get('scene.json');
+    const manifestBytes=entries.get('manifest.json');
+    if(!sceneBytes || !manifestBytes)throw new Error('distribution-source-invalid');
+
+    const doc=JSON.parse(ZIP_TEXT_DECODER.decode(sceneBytes).replace(/^\uFEFF/,''));
+    const manifest=JSON.parse(ZIP_TEXT_DECODER.decode(manifestBytes).replace(/^\uFEFF/,''));
+
+    const masterWorkId=String(doc?.studio?.identity?.workId||'').trim();
+    if(masterWorkId)doc.workId=masterWorkId;
+
+    // Distribution is a finished work, not a Studio source file.
+    delete doc.studio;
+    stripDistributionEditorData(doc);
+    doc.package={...(doc.package||{}),format:'scene-package',version:'1.0',role:'distribution'};
+
+    manifest.packageRole='distribution';
+    if(masterWorkId)manifest.workId=masterWorkId;
+
+    const output=[];
+    for(const [name,bytes] of entries.entries()){
+      if(name==='studio-state.json')continue;
+      if(name==='scene.json' || name==='manifest.json')continue;
+      output.push({name,bytes});
+    }
+    output.unshift(
+      {name:'scene.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(doc,null,2))},
+      {name:'manifest.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(manifest,null,2))}
+    );
+
+    const blob=await makeStoreZip(output);
+    return {doc,manifest,blob,assetCount:masterResult.assetCount};
+  }
+
   async function saveLatestMasterSceneByUser(){
     const masterDocument=latestPublishedMasterDocument||workingDocument;
     if(!masterDocument?.scenes?.length)return false;
@@ -3163,6 +3222,42 @@
     }
   }
 
+  async function exportDistributionScenePackage(){
+    try{
+      if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
+      const result=await buildDistributionScenePackage();
+      const name=`${safeFileStem(result.doc.title)}_distribution.scene`;
+      downloadBlobFile(name,result.blob);
+      setProjectIoStatus(
+        uiLanguage==='ja'
+          ? `配布版 ${name} を書き出しました（Studioでは編集できません / ${result.assetCount} assets）`
+          : `Exported distribution ${name} (not editable in Studio / ${result.assetCount} assets)`
+      );
+    }catch(error){
+      console.error(error);
+      const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
+      if(assetFailure){
+        setProjectIoStatus(
+          uiLanguage==='ja'
+            ? '素材を.scene内へ回収できなかったため、配布版の書き出しを中止しました。'
+            : 'Distribution export stopped because an asset could not be embedded.',
+          {error:true}
+        );
+        alert(
+          uiLanguage==='ja'
+            ? `Distribution .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
+            : `The Distribution .scene must be self-contained.\n\nThis asset could not be retrieved:\n${error?.assetUrl||''}`
+        );
+      }else{
+        const detail=(error && (error.stack||error.message)) ? String(error.stack||error.message) : String(error);
+        setProjectIoStatus(
+          uiLanguage==='ja' ? `配布版を書き出せませんでした。 ${detail.split('\n')[0]}` : `Distribution export failed. ${detail.split('\n')[0]}`,
+          {error:true}
+        );
+      }
+    }
+  }
+
   async function importScenePackage(file){
     try{
       const entries=await readZipEntries(file);
@@ -3172,6 +3267,26 @@
       const parsed=JSON.parse(ZIP_TEXT_DECODER.decode(sceneBytes).replace(/^\uFEFF/,''));
       const manifestBytes=entries.get('manifest.json');
       const manifest=manifestBytes ? JSON.parse(ZIP_TEXT_DECODER.decode(manifestBytes).replace(/^\uFEFF/,'')) : null;
+
+      // Distribution .scene is a finished/read-only package. Never promote it
+      // back into an editable Master inside Studio. Legacy packages have no
+      // packageRole and intentionally continue to import as Master .scene.
+      const packageRole=String(manifest?.packageRole||parsed?.package?.role||'').toLowerCase();
+      if(packageRole==='distribution'){
+        setProjectIoStatus(
+          uiLanguage==='ja'
+            ? 'この.sceneは配布版です。Studioでは編集・更新できません。Master .sceneを開いてください。'
+            : 'This is a Distribution .scene and cannot be edited or updated in Studio. Open the Master .scene instead.',
+          {error:true}
+        );
+        alert(
+          uiLanguage==='ja'
+            ? 'この.sceneは配布版です。\n\nPlayerで読むための完成ファイルなので、Studioでは編集・更新できません。\n編集する場合は作者のMaster .sceneを開いてください。'
+            : 'This is a Distribution .scene.\n\nIt is a finished file for playback and cannot be edited or updated in Studio. Open the author Master .scene to edit.'
+        );
+        return;
+      }
+
       const studioStateBytes=entries.get('studio-state.json');
       let studioState=null;
       if(studioStateBytes){
@@ -5910,6 +6025,8 @@
     if(advancedReturn) advancedReturn.hidden=!hasDocument;
     const menuExport=$('#menuExportPackageButton');
     if(menuExport) menuExport.disabled=!hasSource;
+    const menuDistributionExport=$('#menuExportDistributionButton');
+    if(menuDistributionExport) menuDistributionExport.disabled=!hasSource;
     const floatingAdvanced=$('#floatingAdvancedButton');
     if(floatingAdvanced){
       const inAdvanced=advancedScreen && !advancedScreen.hidden;
@@ -6040,6 +6157,7 @@
   document.addEventListener('click',closeEasyMenu);
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
   $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();exportScenePackage();});
+  $('#menuExportDistributionButton')?.addEventListener('click',()=>{closeEasyMenu();exportDistributionScenePackage();});
   $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
   $('#menuNewDraftButton')?.addEventListener('click',()=>{closeEasyMenu();$('#newDraftQuickButton')?.click();});
   $('#floatingAdvancedButton')?.addEventListener('click',(event)=>{
