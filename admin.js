@@ -86,10 +86,48 @@ function renderPopularWorks(rows){
     <div class="popular-metrics"><span><b>${Number(w.views||0).toLocaleString('ja-JP')}</b><small>閲覧</small></span><span><b>${Number(w.completions||0).toLocaleString('ja-JP')}</b><small>読了</small></span><span><b>${escapeHtml(formatRate(w.completions,w.views))}</b><small>読了率</small></span><span><b>${Number(w.sceneAdvances||0).toLocaleString('ja-JP')}</b><small>Scene</small></span></div>
   </div>`).join('');
 }
+function jstDayKeyClient(date=new Date()){
+  const jst=new Date(date.getTime()+9*60*60*1000);
+  return jst.toISOString().slice(0,10);
+}
+function recentJstDaysClient(count){
+  const out=[];const now=Date.now();
+  for(let i=0;i<count;i++)out.push(jstDayKeyClient(new Date(now-i*24*60*60*1000)));
+  return out;
+}
+async function loadAnalyticsPaged(days=7){
+  const dayKeys=recentJstDaysClient(days);
+  const byWork=new Map();
+  let today={views:0,completions:0,sceneAdvances:0};
+  for(let di=0;di<dayKeys.length;di++){
+    let cursor='';
+    do{
+      const qs=new URLSearchParams({day:dayKeys[di],limit:'50',_:String(Date.now())});
+      if(cursor)qs.set('cursor',cursor);
+      const page=await apiWithTimeout(`/admin/analytics-page?${qs.toString()}`,{},12000);
+      const t=page.totals||{};
+      if(di===0){
+        today.views+=Number(t.views||0);
+        today.completions+=Number(t.completions||0);
+        today.sceneAdvances+=Number(t.sceneAdvances||0);
+      }
+      for(const row of page.works||[]){
+        const id=String(row.workId||'');if(!id)continue;
+        if(!byWork.has(id))byWork.set(id,{workId:id,title:row.title||'無題',views:0,completions:0,sceneAdvances:0});
+        const w=byWork.get(id);
+        if(row.title)w.title=row.title;
+        w.views+=Number(row.views||0);w.completions+=Number(row.completions||0);w.sceneAdvances+=Number(row.sceneAdvances||0);
+      }
+      cursor=String(page.nextCursor||'');
+    }while(cursor);
+  }
+  const popularWorks=[...byWork.values()].sort((x,y)=>y.views-x.views||y.completions-x.completions||y.sceneAdvances-x.sceneAdvances).slice(0,10);
+  return {today,popularWorks};
+}
 async function loadAnalytics(){
   if(els.popularWorks)els.popularWorks.innerHTML='<div class="empty">読み込み中…</div>';
   try{
-    const d=await api('/admin/analytics?days=7');
+    const d=await loadAnalyticsPaged(7);
     const t=d.today||{};
     els.todayViews.textContent=Number(t.views||0).toLocaleString('ja-JP');
     els.todayCompletions.textContent=Number(t.completions||0).toLocaleString('ja-JP');
