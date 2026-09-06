@@ -3413,9 +3413,11 @@
 
       this._resetBackgroundRuntime();
       this.backgroundState = next;
-      this.host.classList.toggle('sp-has-background', Boolean(next.src));
+      const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
+      // Keep the outgoing layer drawable until its exit animation completes.
+      this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
 
-      if (srcChanged) this._swapBackground(next, transition, exit, motionPhase);
+      if (srcChanged) this._swapBackground(next, transition, exit, motionPhase, leavingBackground);
       else this._styleCurrentBackground(next, Boolean(sceneBg?.motion), motionPhase);
 
       this._applyBackgroundOverlays(next);
@@ -3431,7 +3433,7 @@
       return this.backgroundLayerIndex === 0 ? this.els.bgB : this.els.bgA;
     }
 
-    _swapBackground(state, transition, exit = 'auto', motionPhase = 0) {
+    _swapBackground(state, transition, exit = 'auto', motionPhase = 0, clearHostAfter = false) {
       const current = this._currentBackgroundLayer();
       const incoming = this._nextBackgroundLayer();
       const transitionDuration=Math.min(10000,Math.max(0,asNumber(state.transitionDuration,700)));
@@ -3464,6 +3466,7 @@
       this._backgroundTimeout(() => {
         current.style.backgroundImage = '';
         current.className = current.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
+        if(clearHostAfter) this.host.classList.remove('sp-has-background');
       }, mode === 'cut' && !hasCustomExit ? 20 : transitionDuration+120);
     }
 
