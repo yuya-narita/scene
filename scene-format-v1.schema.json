@@ -530,6 +530,19 @@
             "glitch"
           ]
         },
+        "exit": {
+          "description": "Optional outgoing treatment applied to the previous background when entering this Scene.",
+          "enum": [
+            "auto",
+            "fade",
+            "dark",
+            "light",
+            "blur",
+            "zoomOut",
+            "zoomIn",
+            "afterimage"
+          ]
+        },
         "dim": {
           "type": "number",
           "minimum": 0,
@@ -596,10 +609,15 @@
                 "parallax",
                 "breath",
                 "slowZoom",
+                "zoomOut",
                 "panLeft",
                 "panRight",
                 "panUp",
-                "panDown"
+                "panDown",
+                "panUpLeft",
+                "panUpRight",
+                "panDownLeft",
+                "panDownRight"
               ]
             },
             "duration": {
@@ -616,6 +634,13 @@
             },
             "pan": {
               "type": "number"
+            },
+            "continuity": {
+              "description": "carry keeps the motion phase continuous across a background swap when the motion type matches.",
+              "enum": [
+                "restart",
+                "carry"
+              ]
             }
           },
           "additionalProperties": true
