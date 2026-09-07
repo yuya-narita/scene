@@ -36,39 +36,43 @@ async function openDetail(id){const w=await getWork(id);if(!w)return;currentWork
 async function loadJourney(w){const panel=$('#journeyPanel'),button=$('#viewJourney');if(!panel||!button)return;panel.hidden=false;panel.innerHTML='<div class="journey-loading">旅の記録を読み込んでいます…</div>';button.disabled=true;button.textContent='読み込み中…';try{const res=await fetch(`${API_BASE}/bookshelf-insights/${encodeURIComponent(w.workId)}?days=7`,{headers:{Accept:'application/json'},cache:'no-store'});const data=await res.json().catch(()=>null);if(!res.ok||!data?.ok)throw new Error(data?.error||`HTTP ${res.status}`);currentJourneyData=data;currentJourneyTitle=w.title||'作品の木';renderJourney(panel,data);button.textContent='旅を更新';}catch(err){console.error(err);panel.innerHTML=`<div class="journey-error"><strong>旅の記録を読み込めませんでした。</strong><span>通信状態またはWorkerの更新を確認してください。</span></div>`;button.textContent='もう一度読み込む';}finally{button.disabled=false;}}
 function workJourneyTreeSvg(journeys){
   if(!Array.isArray(journeys)||!journeys.length)return'';
-  // workId を一本の根として、動きのある copyId を枝に束ねる。
-  // copyId / relayId は表示せず、各一冊は「発行」の節としてだけ描画する。
+  // workId を植木鉢＝一本の根として、copyId / RELAY の旅を上方向へ育てる。
+  // 内部IDは表示せず、各一冊は「発行」の節、到達は●、未到達は○として描画する。
   const root={type:'work',children:journeys.map(j=>j&&j.tree).filter(Boolean)};
   const nodes=[],edges=[];let leaf=0,maxLevel=0;
+  const X_GAP=58,Y_GAP=68,LEFT=34,TOP=28,BOTTOM=48;
   function levelOf(node){
     if(node.type==='work')return 0;
     if(node.type==='issue')return 1;
     return Math.max(2,Math.max(0,Number(node.depth||0))+2);
   }
-  function place(node,parent=null){
+  function measure(node,parent=null){
     const children=Array.isArray(node.children)?node.children:[];
     const level=levelOf(node);maxLevel=Math.max(maxLevel,level);
-    let y;
+    let x;
     if(children.length){
-      const ys=children.map(c=>place(c,node));
-      y=ys.reduce((a,b)=>a+b,0)/ys.length;
-    }else{y=26+(leaf++*34);}
-    node.__x=30+level*78;node.__y=y;nodes.push(node);if(parent)edges.push([parent,node]);return y;
+      const xs=children.map(c=>measure(c,node));
+      x=xs.reduce((a,b)=>a+b,0)/xs.length;
+    }else{x=LEFT+(leaf++*X_GAP);}
+    node.__x=x;node.__level=level;nodes.push(node);if(parent)edges.push([parent,node]);return x;
   }
-  place(root);
-  const width=Math.max(330,72+(maxLevel+1)*78),height=Math.max(88,54+Math.max(1,leaf-1)*34);
+  measure(root);
+  const width=Math.max(330,(Math.max(1,leaf)-1)*X_GAP+LEFT*2);
+  const height=Math.max(230,TOP+BOTTOM+(maxLevel+1)*Y_GAP);
+  // 根を下、深いRELAYほど上へ。作品が読まれるほど木が上方向へ伸びる。
+  nodes.forEach(n=>{n.__y=height-BOTTOM-(n.__level*Y_GAP);});
   const paths=edges.map(([a,b])=>{
-    // 作品ノードだけは植木鉢の側面ではなく、鉢の中央上から伸びた幹の先を枝の起点にする。
-    const x1=a.__x,y1=a.type==='work'?a.__y-18:a.__y,x2=b.__x,y2=b.__y,m=(x1+x2)/2;
-    return`<path d="M${x1} ${y1} C${m} ${y1},${m} ${y2},${x2} ${y2}"/>`;
+    const x1=a.__x,y1=a.type==='work'?a.__y-18:a.__y,x2=b.__x,y2=b.__y;
+    const mid=(y1+y2)/2;
+    return`<path d="M${x1} ${y1} C${x1} ${mid},${x2} ${mid},${x2} ${y2}"/>`;
   }).join('');
   const marks=nodes.map(n=>{
     if(n.type==='work')return`<g class="work-root"><path d="M${n.__x-9} ${n.__y-5}h18l-3 12h-12z"/><line class="work-trunk" x1="${n.__x}" y1="${n.__y-18}" x2="${n.__x}" y2="${n.__y-5}"/><text x="${n.__x}" y="${n.__y+21}" text-anchor="middle">作品</text></g>`;
-    if(n.type==='issue')return`<g class="issue"><circle cx="${n.__x}" cy="${n.__y}" r="5"/><text x="${n.__x}" y="${n.__y+17}" text-anchor="middle">発行</text></g>`;
+    if(n.type==='issue')return`<g class="issue"><circle cx="${n.__x}" cy="${n.__y}" r="5"/><text x="${n.__x+9}" y="${n.__y+3}">発行</text></g>`;
     if(n.type==='pending')return`<circle class="pending" cx="${n.__x}" cy="${n.__y}" r="5"/>`;
     return`<circle class="reader" cx="${n.__x}" cy="${n.__y}" r="5"/>`;
   }).join('');
-  return`<div class="journey-tree-scroll"><svg class="journey-tree-svg work-tree" viewBox="0 0 ${width} ${height}" role="img" aria-label="一つの作品から読者へ広がっていく旅の木"><g class="branches">${paths}</g>${marks}</svg></div>`;
+  return`<div class="journey-tree-scroll"><svg class="journey-tree-svg work-tree" viewBox="0 0 ${width} ${height}" role="img" aria-label="作品を根に、読者へ届くほど上へ育つ旅の木"><g class="branches">${paths}</g>${marks}</svg></div>`;
 }
 function renderJourney(panel,data){
   const all=data.allTime||{},recent=data.period||{},journeys=Array.isArray(data.journeys)?data.journeys:[];

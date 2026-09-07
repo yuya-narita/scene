@@ -23,3 +23,12 @@
 
 /* V59.1: pot/stem correction — branches grow from the top-center stem, never from the pot side */
 .journey-tree-svg .work-root .work-trunk{stroke:#6f695f;stroke-width:1.8;stroke-linecap:round}
+
+/* V59.2: WORK TREE vertical growth — pot at bottom, arrivals grow upward */
+.tree-preview .journey-tree-svg.work-tree{width:100%;min-width:0;max-height:190px}
+.tree-dialog-canvas .journey-tree-scroll{display:flex;justify-content:center;align-items:flex-end;min-width:100%;min-height:100%;overflow:visible}
+.tree-dialog-canvas .journey-tree-svg.work-tree{width:auto;min-width:0;max-width:none;max-height:none;height:min(74vh,820px);min-height:560px}
+@media(max-width:680px){
+  .tree-preview .journey-tree-svg.work-tree{min-width:0;max-height:155px}
+  .tree-dialog-canvas .journey-tree-svg.work-tree{min-width:0;min-height:520px;height:70vh}
+}
