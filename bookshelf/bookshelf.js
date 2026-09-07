@@ -57,9 +57,13 @@ function workJourneyTreeSvg(journeys){
   }
   place(root);
   const width=Math.max(330,72+(maxLevel+1)*78),height=Math.max(88,54+Math.max(1,leaf-1)*34);
-  const paths=edges.map(([a,b])=>{const x1=a.__x,y1=a.__y,x2=b.__x,y2=b.__y,m=(x1+x2)/2;return`<path d="M${x1} ${y1} C${m} ${y1},${m} ${y2},${x2} ${y2}"/>`;}).join('');
+  const paths=edges.map(([a,b])=>{
+    // 作品ノードだけは植木鉢の側面ではなく、鉢の中央上から伸びた幹の先を枝の起点にする。
+    const x1=a.__x,y1=a.type==='work'?a.__y-18:a.__y,x2=b.__x,y2=b.__y,m=(x1+x2)/2;
+    return`<path d="M${x1} ${y1} C${m} ${y1},${m} ${y2},${x2} ${y2}"/>`;
+  }).join('');
   const marks=nodes.map(n=>{
-    if(n.type==='work')return`<g class="work-root"><path d="M${n.__x-8} ${n.__y-5}h16l-3 11h-10z"/><line x1="${n.__x}" y1="${n.__y-12}" x2="${n.__x}" y2="${n.__y-5}"/><text x="${n.__x}" y="${n.__y+20}" text-anchor="middle">作品</text></g>`;
+    if(n.type==='work')return`<g class="work-root"><path d="M${n.__x-9} ${n.__y-5}h18l-3 12h-12z"/><line class="work-trunk" x1="${n.__x}" y1="${n.__y-18}" x2="${n.__x}" y2="${n.__y-5}"/><text x="${n.__x}" y="${n.__y+21}" text-anchor="middle">作品</text></g>`;
     if(n.type==='issue')return`<g class="issue"><circle cx="${n.__x}" cy="${n.__y}" r="5"/><text x="${n.__x}" y="${n.__y+17}" text-anchor="middle">発行</text></g>`;
     if(n.type==='pending')return`<circle class="pending" cx="${n.__x}" cy="${n.__y}" r="5"/>`;
     return`<circle class="reader" cx="${n.__x}" cy="${n.__y}" r="5"/>`;
