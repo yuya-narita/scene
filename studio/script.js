@@ -3118,7 +3118,7 @@
     return value;
   }
 
-  async function buildDistributionScenePackage(documentOverride=null){
+  async function buildDistributionScenePackage(documentOverride=null,{editionId=""}={}){
     // Reuse the proven Master packager for asset collection/self-containment,
     // then sanitize only the package metadata/runtime document. This avoids a
     // second asset pipeline and keeps Master export behaviour untouched.
@@ -3149,6 +3149,9 @@
     // Older Masters without an explicit policy remain ON for compatibility.
     doc.sharing ||= {};
     doc.sharing.relay={...(doc.sharing.relay||{}),schemaVersion:'1',enabled:relayPolicyEnabled(doc)};
+    if(editionId){
+      doc.edition={schemaVersion:'1',editionId,issuedAt};
+    }
     doc.distribution={
       schemaVersion:'1',
       copyId,
@@ -3161,6 +3164,7 @@
     // canonical runtime value remains scene.json.distribution.copyId.
     manifest.copyId=copyId;
     manifest.issuedAt=issuedAt;
+    if(editionId)manifest.editionId=editionId;
     manifest.relayEnabled=relayPolicyEnabled(doc);
 
     const output=[];
@@ -3176,6 +3180,70 @@
 
     const blob=await makeStoreZip(output);
     return {doc,manifest,blob,assetCount:masterResult.assetCount};
+  }
+
+  function makeEditionId(){
+    return `edition_${randomHex(16)}`;
+  }
+
+  function relaySourceRuntimeDocument(sourceDocument,editionId){
+    const runtime=clone(sourceDocument);
+    const ident=ensureMasterIdentity(sourceDocument);
+    if(ident?.workId)runtime.workId=ident.workId;
+    delete runtime.studio;
+    stripDistributionEditorData(runtime);
+    runtime.package={...(runtime.package||{}),format:'scene-package',version:'1.0',role:'distribution'};
+    runtime.edition={schemaVersion:'1',editionId,issuedAt:new Date().toISOString()};
+    runtime.sharing ||= {};
+    runtime.sharing.relay={schemaVersion:'2',enabled:true,transport:'url'};
+    // copyId belongs to each issued Distribution, not to the shared Edition source.
+    delete runtime.distribution;
+    return runtime;
+  }
+
+  async function registerRelayEditionSource(sourceDocument,editionId){
+    const ident=ensureMasterIdentity(sourceDocument);
+    if(!ident?.workId||!ident?.ownerKey)throw new Error('Master identity missing');
+
+    // URL RELAY is author-originated. The Worker must already know this Master
+    // identity so a reader can never upload an arbitrary third-party work.
+    const status=await fetchMasterPublicationStatus(sourceDocument);
+    if(!status?.exists){
+      const error=new Error(
+        uiLanguage==='ja'
+          ? 'URL RELAYを使う配布版は、先にこの作品を一度公開してください。作者確認後にRELAY用の版を登録します。'
+          : 'Publish this work once before exporting a URL-RELAY Distribution so the author identity can be verified.'
+      );
+      error.code='RELAY_MASTER_NOT_PUBLISHED';
+      throw error;
+    }
+
+    // Use the normal hosting pipeline so image/audio references in the relay
+    // source are server URLs. The Distribution file itself remains fully self-contained.
+    const hosted=await prepareDocumentForPublish(sourceDocument);
+    const runtime=relaySourceRuntimeDocument(hosted,editionId);
+    const response=await fetchWithTimeout(`${SCENE_STUDIO_API_BASE}/relay-source`,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'X-Scene-Work-Id':ident.workId,
+        'X-Scene-Owner-Key':ident.ownerKey
+      },
+      body:JSON.stringify({editionId,scene:runtime})
+    },30000);
+    let payload=null;
+    try{payload=await response.json();}catch(_){}
+    // A timed-out first request may have succeeded server-side. A retry with
+    // the same freshly generated editionId is safe to treat as registered.
+    if(response.status===409&&payload?.code==='EDITION_EXISTS'){
+      return {ok:true,editionId,alreadyExists:true};
+    }
+    if(!response.ok||!payload?.ok){
+      const error=new Error(payload?.error||`RELAY source registration failed (${response.status})`);
+      error.code=payload?.code||'RELAY_SOURCE_FAILED';
+      throw error;
+    }
+    return payload;
   }
 
   async function saveLatestMasterSceneByUser(){
@@ -3311,13 +3379,24 @@
       // Remember the author's choice in the Master so the next Distribution
       // export opens with the previous selection already chosen.
       setRelayPolicyEnabled(chosenRelayPolicy,{save:true});
-      const result=await buildDistributionScenePackage();
+
+      // One Distribution export freezes one Edition. The same editionId is
+      // written into the portable file and, when RELAY is ON, registered once
+      // as the server-side URL RELAY source before the file is downloaded.
+      const editionId=chosenRelayPolicy ? makeEditionId() : '';
+      const sourceDocument=clone(workingDocument);
+      const result=await buildDistributionScenePackage(sourceDocument,{editionId});
+      if(chosenRelayPolicy){
+        setProjectIoStatus(uiLanguage==='ja'?'RELAY用の版を登録しています…':'Registering RELAY Edition…');
+        await registerRelayEditionSource(sourceDocument,editionId);
+      }
+
       const name=`${safeFileStem(result.doc.title)}_distribution.scene`;
       downloadBlobFile(name,result.blob);
       setProjectIoStatus(
         uiLanguage==='ja'
-          ? `配布版 ${name} を書き出しました（copyId: ${result.doc?.distribution?.copyId||'-'} / Studioでは編集できません / ${result.assetCount} assets）`
-          : `Exported distribution ${name} (copyId: ${result.doc?.distribution?.copyId||'-'} / not editable in Studio / ${result.assetCount} assets)`
+          ? `配布版 ${name} を書き出しました（copyId: ${result.doc?.distribution?.copyId||'-'}${editionId?` / editionId: ${editionId}`:''} / Studioでは編集できません / ${result.assetCount} assets）`
+          : `Exported distribution ${name} (copyId: ${result.doc?.distribution?.copyId||'-'}${editionId?` / editionId: ${editionId}`:''} / not editable in Studio / ${result.assetCount} assets)`
       );
     }catch(error){
       console.error(error);
@@ -3340,6 +3419,9 @@
           uiLanguage==='ja' ? `配布版を書き出せませんでした。 ${detail.split('\n')[0]}` : `Distribution export failed. ${detail.split('\n')[0]}`,
           {error:true}
         );
+        if(error?.code==='RELAY_MASTER_NOT_PUBLISHED'||error?.code==='RELAY_SOURCE_FAILED'||error?.code==='OWNER_MISMATCH'){
+          alert(detail.split('\n')[0]);
+        }
       }
     }
   }
