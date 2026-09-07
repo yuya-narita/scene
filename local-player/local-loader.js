@@ -265,17 +265,40 @@
   function relayTokenFromUrl(url){
     try{return String(new URL(url,location.href).searchParams.get('relay')||'').trim();}catch(_){return '';}
   }
+  function legacyCopyText(text){
+    try{
+      const area=document.createElement('textarea');
+      area.value=String(text||'');
+      area.setAttribute('readonly','');
+      area.style.position='fixed';area.style.left='-9999px';area.style.top='0';
+      document.body.appendChild(area);area.select();area.setSelectionRange(0,area.value.length);
+      const ok=document.execCommand&&document.execCommand('copy');
+      area.remove();
+      return !!ok;
+    }catch(_){return false;}
+  }
   async function shareRelayUrl(url){
     if(navigator.share){
       try{await navigator.share({url});return {shared:true,method:'native'};}
-      catch(e){if(e?.name==='AbortError')return {shared:false,cancelled:true};throw e;}
+      catch(e){if(e?.name==='AbortError')return {shared:false,cancelled:true};
+        // Desktop browsers can expose navigator.share but reject URL sharing.
+        // Fall through to copy/manual instead of making the journey card look dead.
+        console.warn('Native URL share unavailable; falling back.',e);
+      }
     }
     if(navigator.clipboard?.writeText){
-      await navigator.clipboard.writeText(url);
-      alert('RELAY URLをコピーしました。次の一人へ送ってください。');
-      return {shared:true,method:'clipboard'};
+      try{
+        await navigator.clipboard.writeText(url);
+        alert('RELAY URLをコピーしました。次の一人へ送ってください。');
+        return {shared:true,method:'clipboard'};
+      }catch(e){console.warn('Clipboard API unavailable; falling back.',e);}
     }
-    window.prompt('このURLを次の一人へ送ってください。',url);
+    if(legacyCopyText(url)){
+      alert('RELAY URLをコピーしました。次の一人へ送ってください。');
+      return {shared:true,method:'legacy-copy'};
+    }
+    // Last resort: always show the URL so desktop users are never left with a no-op.
+    window.prompt('このURLをコピーして、次の一人へ送ってください。',url);
     return {shared:false,manual:true};
   }
   async function relayCurrentScene(){
@@ -395,7 +418,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'4.6-url-relay-e2e-entry',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl};
+  window.SceneLocalLoader={version:'4.7-url-relay-deploy-desktop-fix',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl};
 
   const initialRelayToken=relayTokenFromLocation();
   if(initialRelayToken){
