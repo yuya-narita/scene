@@ -211,7 +211,22 @@
         : (hop>0 ? `${hop}回渡って、あなたに届きました。` : 'この一冊の旅は、ここから始まります。');
     }
     if(journeyPath)journeyPath.textContent=journeyPathText(hop,isSent);
-    if(journeyPrompt)journeyPrompt.textContent=isSent?'○ は、まだ届いていない次の旅です。':'面白かったら、次の一人へ。';
+    if(journeyPrompt){
+      if(isSent){
+        journeyPrompt.textContent='○ は、まだ届いていない次の旅です。';
+      }else{
+        const readExpiresAt=String(raw?.distribution?.relay?.readExpiresAt||'');
+        const ms=Date.parse(readExpiresAt)-Date.now();
+        if(readExpiresAt&&Number.isFinite(ms)&&ms>0){
+          const days=Math.max(1,Math.ceil(ms/(24*60*60*1000)));
+          journeyPrompt.textContent=days<=1
+            ? 'この一冊の旅は、今日まで。面白かったら次の一人へ。'
+            : `この一冊は、あと${days}日あなたの手元にあります。面白かったら次の一人へ。`;
+        }else{
+          journeyPrompt.textContent='面白かったら、次の一人へ。';
+        }
+      }
+    }
   }
 
   function crc32(bytes){
@@ -440,7 +455,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'4.8-url-relay-short-ogp-reuse-pc-fix',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl};
+  window.SceneLocalLoader={version:'4.9-relay-lifecycle-14-7-30',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl};
 
   const initialRelayToken=relayTokenFromLocation();
   const initialRelayPublicId=relayPublicIdFromLocation();
