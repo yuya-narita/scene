@@ -199,7 +199,25 @@
         touch-action:pan-y;
       }
     }
-  </style>
+  
+    /* Distribution export policy: shown only when a Distribution .scene is issued. */
+    .distribution-export-dialog{border:0;padding:0;background:transparent;max-width:none;max-height:none}
+    .distribution-export-dialog::backdrop{background:rgba(13,16,20,.46);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+    .distribution-export-card{box-sizing:border-box;width:min(520px,calc(100vw - 28px));margin:auto;padding:24px;border:0;border-radius:24px;background:#fff;color:#191b20;box-shadow:0 22px 64px rgba(0,0,0,.28);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .distribution-export-kicker{display:block;margin:0 0 7px;color:#8a8f98;font-size:10px;font-weight:800;letter-spacing:.14em}
+    .distribution-export-card h2{margin:0;font-size:20px;line-height:1.35}
+    .distribution-export-lead{margin:8px 0 18px;color:#666c76;font-size:13px;line-height:1.6}
+    .distribution-export-options{display:grid;gap:10px}
+    .distribution-export-option{display:grid;grid-template-columns:20px 1fr;gap:11px;align-items:start;padding:14px;border:1px solid #dfe2e7;border-radius:16px;background:#fff;cursor:pointer}
+    .distribution-export-option:has(input:checked){border-color:#1d2025;box-shadow:0 0 0 1px #1d2025 inset;background:#f8f9fa}
+    .distribution-export-option input{width:18px;height:18px;margin:2px 0 0;accent-color:#191b20}
+    .distribution-export-option strong{display:block;font-size:14px;line-height:1.4}
+    .distribution-export-option small{display:block;margin-top:3px;color:#737985;font-size:12px;line-height:1.5}
+    .distribution-export-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}
+    .distribution-export-actions button{min-height:42px;padding:0 17px;border:1px solid #d8dce2;border-radius:999px;background:#fff;color:#23262b;font:700 13px/1 system-ui;cursor:pointer}
+    .distribution-export-actions .primary{border-color:#191b20;background:#191b20;color:#fff}
+    @media(max-width:600px){.distribution-export-card{width:calc(100vw - 24px);padding:22px 18px 18px;border-radius:22px}.distribution-export-actions{display:grid;grid-template-columns:1fr 1fr}.distribution-export-actions button{width:100%}}
+</style>
 </head>
 <body>
 <main id="app">
@@ -224,9 +242,6 @@
         </button>
         <button id="menuExportDistributionButton" class="easy-menu-item" type="button" disabled>
           <span>配布版を書き出す</span><small>Distribution .scene</small>
-        </button>
-        <button id="menuRelayToggleButton" class="easy-menu-item" type="button" aria-pressed="true">
-          <span>回し読み</span><small>ON｜次の一人へ渡せます</small>
         </button>
         <button id="menuDraftManageButton" class="easy-menu-item" type="button">
           <span>制作中一覧</span><small id="menuDraftCount">0 / 10</small>
@@ -778,6 +793,28 @@
         <button id="publishRetryButton" class="publish-primary" type="button">もう一度試す</button>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="distributionExportDialog" class="distribution-export-dialog">
+    <form method="dialog" class="distribution-export-card">
+      <span class="distribution-export-kicker">DISTRIBUTION</span>
+      <h2 id="distributionExportTitle">配布版を書き出す</h2>
+      <p id="distributionExportLead" class="distribution-export-lead">この一冊を回し読みできるようにしますか？</p>
+      <div class="distribution-export-options" role="radiogroup" aria-labelledby="distributionExportLead">
+        <label class="distribution-export-option">
+          <input id="distributionRelayOn" type="radio" name="distributionRelayPolicy" value="on">
+          <span><strong>回し読みできる</strong><small>読了した人が、次の一人へ渡せます。</small></span>
+        </label>
+        <label class="distribution-export-option">
+          <input id="distributionRelayOff" type="radio" name="distributionRelayPolicy" value="off">
+          <span><strong>回し読みできない</strong><small>この一冊を次の人へ渡す機能はありません。</small></span>
+        </label>
+      </div>
+      <div class="distribution-export-actions">
+        <button value="cancel" type="submit">キャンセル</button>
+        <button value="export" type="submit" class="primary">書き出す</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="deleteSceneDialog" class="scene-delete-dialog">

@@ -21,6 +21,9 @@
   const episodeTitleInput = $('#episodeTitleInput');
   const descriptionInput = $('#descriptionInput');
   const menuRelayToggleButton = $('#menuRelayToggleButton');
+  const distributionExportDialog = $('#distributionExportDialog');
+  const distributionRelayOn = $('#distributionRelayOn');
+  const distributionRelayOff = $('#distributionRelayOff');
   const coverLogoInput = $('#coverLogoInput');
   const coverLogoChoose = $('#coverLogoChoose');
   const coverLogoClear = $('#coverLogoClear');
@@ -549,6 +552,25 @@
     if(workingDocument)applyRelayPolicyToDocument(workingDocument);
     refreshRelayPolicyUI();
     if(save && workingDocument)try{scheduleDraftSave(120);}catch(_){}
+  }
+
+  function confirmDistributionRelayPolicy(){
+    if(!distributionExportDialog || typeof distributionExportDialog.showModal!=='function'){
+      // Old browser fallback: preserve the currently remembered author choice.
+      return Promise.resolve(relayEnabled);
+    }
+    if(distributionRelayOn)distributionRelayOn.checked=Boolean(relayEnabled);
+    if(distributionRelayOff)distributionRelayOff.checked=!relayEnabled;
+    return new Promise((resolve)=>{
+      const onClose=()=>{
+        distributionExportDialog.removeEventListener('close',onClose);
+        if(distributionExportDialog.returnValue!=='export'){resolve(null);return;}
+        resolve(distributionRelayOff?.checked ? false : true);
+      };
+      distributionExportDialog.addEventListener('close',onClose);
+      distributionExportDialog.returnValue='';
+      distributionExportDialog.showModal();
+    });
   }
   // Once a Scene document exists it is the single source of truth.
   // Easy's textarea is only a source draft until the user edits it again.
@@ -3284,6 +3306,11 @@
   async function exportDistributionScenePackage(){
     try{
       if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
+      const chosenRelayPolicy=await confirmDistributionRelayPolicy();
+      if(chosenRelayPolicy===null)return;
+      // Remember the author's choice in the Master so the next Distribution
+      // export opens with the previous selection already chosen.
+      setRelayPolicyEnabled(chosenRelayPolicy,{save:true});
       const result=await buildDistributionScenePackage();
       const name=`${safeFileStem(result.doc.title)}_distribution.scene`;
       downloadBlobFile(name,result.blob);
@@ -6220,7 +6247,6 @@
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
   $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();exportScenePackage();});
   $('#menuExportDistributionButton')?.addEventListener('click',()=>{closeEasyMenu();exportDistributionScenePackage();});
-  menuRelayToggleButton?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();setRelayPolicyEnabled(!relayEnabled);});
   $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
   $('#menuNewDraftButton')?.addEventListener('click',()=>{closeEasyMenu();$('#newDraftQuickButton')?.click();});
   $('#floatingAdvancedButton')?.addEventListener('click',(event)=>{
