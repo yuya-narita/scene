@@ -2612,7 +2612,14 @@
   }
 
   function downloadBlobFile(name,blob){
-    const url=URL.createObjectURL(blob);
+    // iOS Safari may append `.zip` when a ZIP-backed .scene is downloaded
+    // with application/zip.  .scene is our public file extension, so expose
+    // scene downloads as generic binary while keeping the ZIP bytes intact.
+    const isScene=/\.scene$/i.test(String(name||''));
+    const downloadBlob=isScene && blob?.type!=='application/octet-stream'
+      ? new Blob([blob],{type:'application/octet-stream'})
+      : blob;
+    const url=URL.createObjectURL(downloadBlob);
     const a=document.createElement('a');
     a.href=url; a.download=name; a.style.display='none';
     document.body.appendChild(a); a.click(); a.remove();
