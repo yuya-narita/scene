@@ -32,24 +32,17 @@ function coverHtml(w,cls=''){if(w.coverBlob){const u=URL.createObjectURL(w.cover
 async function render(){coverUrls.forEach(URL.revokeObjectURL);coverUrls=[];const works=(await getAllWorks()).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));$('#countText').textContent=`${works.length}作品`;$('#emptyState').hidden=works.length>0;$('#grid').innerHTML=works.map(w=>`<button class="book" data-id="${escapeHtml(w.workId)}" type="button"><div class="cover">${w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="">`})():`<div class="cover-fallback">□</div>`}<span class="badge">MASTER</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><p>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</p></div></button>`).join('');document.querySelectorAll('.book').forEach(b=>b.addEventListener('click',()=>openDetail(b.dataset.id)));}
 async function openDetail(id){const w=await getWork(id);if(!w)return;currentWorkId=id;const cover=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="detail-cover"><img src="${u}" alt=""></div>`})():`<div class="detail-cover"><div class="cover-fallback">□</div></div>`;$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MASTER</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene · revision ${w.revision||0}</p><p>本棚更新 ${escapeHtml(fmtDate(w.updatedAt))}</p></div></div><section id="journeyPanel" class="journey-panel" hidden></section><div class="actions"><button id="editWork" class="edit" type="button">Studioで編集</button><button id="viewJourney" class="journey" type="button">旅を見る</button><button id="exportMaster" type="button">Masterを書き出す</button><button id="replaceMaster" type="button">Masterを更新</button><button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">「本棚から外す」は、このブラウザ内の本棚コピーだけを削除します。手元に書き出した .scene ファイルまでは削除しません。</p>`;$('#detailDialog').showModal();$('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);$('#exportMaster').onclick=()=>downloadBlob(w.blob,w.fileName||`${w.title}.scene`);$('#replaceMaster').onclick=()=>{$('#fileInput').dataset.replace=id;$('#fileInput').click();};$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteWork(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};}
 async function loadJourney(w){const panel=$('#journeyPanel'),button=$('#viewJourney');if(!panel||!button)return;panel.hidden=false;panel.innerHTML='<div class="journey-loading">旅の記録を読み込んでいます…</div>';button.disabled=true;button.textContent='読み込み中…';try{const res=await fetch(`${API_BASE}/bookshelf-insights/${encodeURIComponent(w.workId)}?days=7`,{headers:{Accept:'application/json'},cache:'no-store'});const data=await res.json().catch(()=>null);if(!res.ok||!data?.ok)throw new Error(data?.error||`HTTP ${res.status}`);renderJourney(panel,data);button.textContent='旅を更新';}catch(err){console.error(err);panel.innerHTML=`<div class="journey-error"><strong>旅の記録を読み込めませんでした。</strong><span>通信状態またはWorkerの更新を確認してください。</span></div>`;button.textContent='もう一度読み込む';}finally{button.disabled=false;}}
-function journeyTreeSvg(tree){
-  if(!tree)return'';
+function workJourneyTreeSvg(journeys){
+  if(!Array.isArray(journeys)||!journeys.length)return'';
+  // workId を一本の根として、動きのある copyId を枝に束ねる。
+  // copyId / relayId は表示せず、各一冊は「発行」の節としてだけ描画する。
+  const root={type:'work',children:journeys.map(j=>j&&j.tree).filter(Boolean)};
   const nodes=[],edges=[];let leaf=0,maxLevel=0;
-  function levelOf(node){return node.type==='issue'?0:Math.max(1,Math.max(0,Number(node.depth||0))+1);}
-  function walk(node,parent=null){
-    const children=Array.isArray(node.children)?node.children:[];
-    const level=levelOf(node);maxLevel=Math.max(maxLevel,level);
-    let y;
-    if(children.length){
-      const ys=children.map(c=>walk(c,node));
-      y=ys.reduce((a,b)=>a+b,0)/ys.length;
-    }else{y=22+(leaf++*32);}
-    node.__x=22+level*78;node.__y=y;nodes.push(node);
-    if(parent)edges.push([parent,node]);
-    return y;
+  function levelOf(node){
+    if(node.type==='work')return 0;
+    if(node.type==='issue')return 1;
+    return Math.max(2,Math.max(0,Number(node.depth||0))+2);
   }
-  // walk needs parent coordinates later; collect parent relation separately.
-  nodes.length=0;edges.length=0;leaf=0;maxLevel=0;
   function place(node,parent=null){
     const children=Array.isArray(node.children)?node.children:[];
     const level=levelOf(node);maxLevel=Math.max(maxLevel,level);
@@ -57,23 +50,25 @@ function journeyTreeSvg(tree){
     if(children.length){
       const ys=children.map(c=>place(c,node));
       y=ys.reduce((a,b)=>a+b,0)/ys.length;
-    }else{y=22+(leaf++*32);}
-    node.__x=22+level*78;node.__y=y;nodes.push(node);if(parent)edges.push([parent,node]);return y;
+    }else{y=26+(leaf++*34);}
+    node.__x=30+level*78;node.__y=y;nodes.push(node);if(parent)edges.push([parent,node]);return y;
   }
-  place(tree);
-  const width=Math.max(300,54+(maxLevel+1)*78),height=Math.max(62,44+Math.max(1,leaf-1)*32);
+  place(root);
+  const width=Math.max(330,72+(maxLevel+1)*78),height=Math.max(88,54+Math.max(1,leaf-1)*34);
   const paths=edges.map(([a,b])=>{const x1=a.__x,y1=a.__y,x2=b.__x,y2=b.__y,m=(x1+x2)/2;return`<path d="M${x1} ${y1} C${m} ${y1},${m} ${y2},${x2} ${y2}"/>`;}).join('');
   const marks=nodes.map(n=>{
-    if(n.type==='issue')return`<g class="issue"><circle cx="${n.__x}" cy="${n.__y}" r="6"/><text x="${n.__x}" y="${n.__y+18}" text-anchor="middle">発行</text></g>`;
+    if(n.type==='work')return`<g class="work-root"><path d="M${n.__x-8} ${n.__y-5}h16l-3 11h-10z"/><line x1="${n.__x}" y1="${n.__y-12}" x2="${n.__x}" y2="${n.__y-5}"/><text x="${n.__x}" y="${n.__y+20}" text-anchor="middle">作品</text></g>`;
+    if(n.type==='issue')return`<g class="issue"><circle cx="${n.__x}" cy="${n.__y}" r="5"/><text x="${n.__x}" y="${n.__y+17}" text-anchor="middle">発行</text></g>`;
     if(n.type==='pending')return`<circle class="pending" cx="${n.__x}" cy="${n.__y}" r="5"/>`;
     return`<circle class="reader" cx="${n.__x}" cy="${n.__y}" r="5"/>`;
   }).join('');
-  return`<div class="journey-tree-scroll"><svg class="journey-tree-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="この一冊が読者へ届いた流れ"><g class="branches">${paths}</g>${marks}</svg></div>`;
+  return`<div class="journey-tree-scroll"><svg class="journey-tree-svg work-tree" viewBox="0 0 ${width} ${height}" role="img" aria-label="一つの作品から読者へ広がっていく旅の木"><g class="branches">${paths}</g>${marks}</svg></div>`;
 }
 function renderJourney(panel,data){
   const all=data.allTime||{},recent=data.period||{},journeys=Array.isArray(data.journeys)?data.journeys:[];
-  const journeyRows=journeys.length?`<div class="journey-list"><div class="journey-list-head"><strong>一冊ごとの旅</strong><span>● 到達　○ 送り出し中</span></div>${journeys.map((j,i)=>`<section class="journey-tree-card"><div class="journey-tree-meta"><strong>一冊 ${i+1}</strong><span>最長 ${Math.max(0,Number(j.maxDepth||0))}人 · 到達 ${Math.max(0,Number(j.relayArrivals||0))} · 送り出し ${Math.max(0,Number(j.generations||0))}</span></div>${journeyTreeSvg(j.tree)}</section>`).join('')}</div>`:`<div class="journey-empty">まだ観測できた旅はありません。送り出したRELAY.sceneが次のLocal Playerで開かれると、ここに枝が育ちます。</div>`;
-  panel.innerHTML=`<div class="journey-head"><div><p class="eyebrow">OUTSIDE THE BOX</p><h3>外で起きていること</h3></div><span>匿名集計</span></div><div class="journey-section-label"><strong>これまで</strong><span>作品が外で動いた累計</span></div><div class="journey-stats"><div><small>観測された読者+</small><strong>${Math.max(0,Number(all.observedReaders||0))}+</strong></div><div><small>読了</small><strong>${Math.max(0,Number(all.completions||0))}</strong></div><div><small>観測された一冊</small><strong>${Math.max(0,Number(all.observedCopies||0))}</strong></div><div><small>旅に出た一冊</small><strong>${Math.max(0,Number(all.relayedCopies||0))}</strong></div><div><small>届いた回数</small><strong>${Math.max(0,Number(all.relayArrivals||0))}</strong></div><div><small>最長の旅</small><strong>${Math.max(0,Number(all.maxHop||0))}人</strong></div></div><div class="journey-recent"><div><strong>最近7日間</strong><span>いまも動いているかを見る</span></div><p><b>${Math.max(0,Number(recent.observedReaders||0))}+</b> 読者 <b>${Math.max(0,Number(recent.completions||0))}</b> 読了 <b>${Math.max(0,Number(recent.relayArrivals||0))}</b> 届いた <small>（送り出し ${Math.max(0,Number(recent.relayGenerations||0))}）</small></p></div>${journeyRows}<p class="journey-note">● はRELAY.sceneが次のLocal Playerで実際に観測された到達です。○ は「この作品を回す」で送り出されたものの、まだ次のPlayerで観測されていない枝です。Master本体・氏名・送受信相手は送信しません。</p>`;
+  const activeCopies=journeys.length;
+  const treeBlock=journeys.length?`<div class="journey-list"><div class="journey-list-head"><div><strong>作品の木</strong><small>一つの作品から、届いた分だけ枝が育ちます</small></div><span>● 到達　○ 送り出し中</span></div><div class="work-tree-meta"><span>動いている一冊 ${activeCopies}</span><span>最長 ${Math.max(0,Number(all.maxHop||0))}人</span></div>${workJourneyTreeSvg(journeys)}</div>`:`<div class="journey-empty">まだ木は育っていません。「この作品を回す」で送り出したRELAY.sceneが次のLocal Playerで開かれると、作品から枝が伸びます。</div>`;
+  panel.innerHTML=`<div class="journey-head"><div><p class="eyebrow">OUTSIDE THE BOX</p><h3>外で起きていること</h3></div><span>匿名集計</span></div><div class="journey-section-label"><strong>これまで</strong><span>作品が外で動いた累計</span></div><div class="journey-stats"><div><small>観測された読者+</small><strong>${Math.max(0,Number(all.observedReaders||0))}+</strong></div><div><small>読了</small><strong>${Math.max(0,Number(all.completions||0))}</strong></div><div><small>観測された一冊</small><strong>${Math.max(0,Number(all.observedCopies||0))}</strong></div><div><small>旅に出た一冊</small><strong>${Math.max(0,Number(all.relayedCopies||0))}</strong></div><div><small>届いた回数</small><strong>${Math.max(0,Number(all.relayArrivals||0))}</strong></div><div><small>最長の旅</small><strong>${Math.max(0,Number(all.maxHop||0))}人</strong></div></div><div class="journey-recent"><div><strong>最近7日間</strong><span>いまも動いているかを見る</span></div><p><b>${Math.max(0,Number(recent.observedReaders||0))}+</b> 読者 <b>${Math.max(0,Number(recent.completions||0))}</b> 読了 <b>${Math.max(0,Number(recent.relayArrivals||0))}</b> 届いた <small>（送り出し ${Math.max(0,Number(recent.relayGenerations||0))}）</small></p></div>${treeBlock}<p class="journey-note">作品を根に、正規に発行された一冊ごとの旅を枝としてまとめています。● はRELAY.sceneが次のLocal Playerで実際に観測された到達、○ は送り出されたもののまだ次で観測されていない枝です。内部では一冊ごとのcopyIdを分けたまま保持します。Master本体・氏名・送受信相手は送信しません。</p>`;
 }
 
 async function editInStudio(w){await setHandoff(w.workId);location.href='../studio/?from=bookshelf';}
