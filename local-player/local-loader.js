@@ -65,6 +65,10 @@
   function relayTokenFromLocation(){
     try{return String(new URL(location.href).searchParams.get('relay')||'').trim();}catch(_){return '';}
   }
+  function relayPublicIdFromLocation(){
+    try{return String(new URL(location.href).searchParams.get('relayKey')||'').trim();}catch(_){return '';}
+  }
+  function validRelayPublicId(v){return /^[A-Za-z0-9_-]{8,32}$/.test(String(v||''));}
   function validRelayToken(v){return /^[a-f0-9]{48}$/i.test(String(v||''));}
   function relayResolveErrorMessage(code,fallback){
     if(code==='RELAY_EXPIRED')return 'この一冊の受け取り期限が切れています。';
@@ -72,8 +76,9 @@
     if(code==='EDITION_NOT_FOUND'||code==='RELAY_NOT_FOUND')return 'この一冊の旅を見つけられませんでした。';
     return String(fallback||'RELAYを読み込めませんでした。');
   }
-  async function openRelayFromUrl(token){
-    if(!validRelayToken(token)){
+  async function openRelayFromUrl(token='',publicId=''){
+    const hasToken=validRelayToken(token),hasPublicId=validRelayPublicId(publicId);
+    if(!hasToken&&!hasPublicId){
       setStatus('このRELAY URLは正しくありません。');
       return false;
     }
@@ -83,7 +88,8 @@
     setStatus('一冊を受け取っています…');
     if(openButton)openButton.disabled=true;
     try{
-      const response=await fetch(`${API_BASE}/relay/resolve?token=${encodeURIComponent(token)}`,{method:'GET',cache:'no-store'});
+      const query=hasPublicId?`id=${encodeURIComponent(publicId)}`:`token=${encodeURIComponent(token)}`;
+      const response=await fetch(`${API_BASE}/relay/resolve?${query}`,{method:'GET',cache:'no-store'});
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok||!payload?.scene){
         throw new Error(relayResolveErrorMessage(payload?.code,payload?.error));
@@ -94,11 +100,10 @@
       renderJourney(raw);
       const previousUrls=assetUrls;assetUrls=[];
       try{
-        await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`relay-url:${String(payload?.relay?.relayId||token)}`});
+        await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`relay-url:${String(payload?.relay?.relayId||publicId||token)}`});
       }catch(error){assetUrls=previousUrls;throw error;}
-      for(const u of previousUrls){try{URL.revokeObjectURL(u)}catch(_){}}
+      for(const u of previousUrls){try{URL.revokeObjectURL(u)}catch(_){} }
       launcher.hidden=true;
-      // URL RELAY recipients should never be sent to the local file picker.
       if(backButton)backButton.hidden=true;
       setStatus('');
       return true;
@@ -177,6 +182,12 @@
       localStorage.setItem(sentStateKey(info),JSON.stringify({sent:true,relayId,hop,sentAt}));
     }catch(_){ }
   }
+  function issuedStateKey(info){return `ahako:url-relay-issued:${info.copyId}:${info.sourceArrivalId}`;}
+  function loadIssuedState(info){
+    try{const v=JSON.parse(localStorage.getItem(issuedStateKey(info))||'null');if(!v||!validRelayId(v.relayId)||!validRelayPublicId(v.publicId)||!/^https:\/\//.test(String(v.url||'')))return null;if(v.expiresAt&&Date.parse(v.expiresAt)<=Date.now()){localStorage.removeItem(issuedStateKey(info));return null;}return v;}catch(_){return null;}
+  }
+  function saveIssuedState(info,value){try{localStorage.setItem(issuedStateKey(info),JSON.stringify(value));}catch(_){}}
+
   function journeyPathText(hop,sent=false){
     const parts=['発行'];
     if(hop<=0){parts.push('◎ あなた');}
@@ -189,8 +200,8 @@
     if(!journey)return;
     const info=relayInfo(raw);
     if(!info){journey.hidden=true;return;}
-    const persisted=loadSentState(info);
-    const isSent=sent===null?!!persisted:!!sent;
+    const issued=loadIssuedState(info);
+    const isSent=sent===null?issued?.shared===true:!!sent;
     const hop=info.sourceHop;
     journey.hidden=false;
     journey.classList.toggle('is-sent',isSent);
@@ -243,7 +254,7 @@
       })
     });
     const payload=await response.json().catch(()=>null);
-    if(!response.ok||!payload?.ok||!payload?.url||!validRelayId(payload?.relayId)){
+    if(!response.ok||!payload?.ok||!payload?.url||!validRelayId(payload?.relayId)||!validRelayPublicId(payload?.publicId)){
       const code=String(payload?.code||'');
       if(code==='EDITION_NOT_FOUND')throw new Error('この版はまだURL RELAY用に登録されていません。');
       if(code==='EDITION_STOPPED')throw new Error('この版のRELAYは作者により停止されています。');
@@ -251,12 +262,12 @@
     }
     return payload;
   }
-  async function commitRelayUrl(token){
-    if(!validRelayToken(token))return false;
+  async function commitRelayUrl(publicId){
+    if(!validRelayPublicId(publicId))return false;
     try{
       const response=await fetch(`${API_BASE}/relay/commit`,{
         method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
-        body:JSON.stringify({token})
+        body:JSON.stringify({id:publicId})
       });
       const payload=await response.json().catch(()=>null);
       return !!(response.ok&&payload?.ok);
@@ -277,49 +288,60 @@
       return !!ok;
     }catch(_){return false;}
   }
+  function isLikelyDesktop(){
+    try{return !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||'') && matchMedia('(pointer:fine)').matches;}catch(_){return false;}
+  }
+  async function copyRelayUrl(url){
+    if(navigator.clipboard?.writeText){
+      try{await navigator.clipboard.writeText(url);return true;}catch(e){console.warn('Clipboard API unavailable; falling back.',e);}
+    }
+    return legacyCopyText(url);
+  }
   async function shareRelayUrl(url){
+    if(isLikelyDesktop()){
+      if(await copyRelayUrl(url)){
+        alert('RELAY URLをコピーしました。次の一人へ送ってください。');
+        return {shared:true,method:'desktop-copy'};
+      }
+      window.prompt('このURLをコピーして、次の一人へ送ってください。',url);
+      return {shared:false,manual:true};
+    }
     if(navigator.share){
       try{await navigator.share({url});return {shared:true,method:'native'};}
-      catch(e){if(e?.name==='AbortError')return {shared:false,cancelled:true};
-        // Desktop browsers can expose navigator.share but reject URL sharing.
-        // Fall through to copy/manual instead of making the journey card look dead.
-        console.warn('Native URL share unavailable; falling back.',e);
-      }
+      catch(e){if(e?.name==='AbortError')return {shared:false,cancelled:true};console.warn('Native URL share unavailable; falling back.',e);}
     }
-    if(navigator.clipboard?.writeText){
-      try{
-        await navigator.clipboard.writeText(url);
-        alert('RELAY URLをコピーしました。次の一人へ送ってください。');
-        return {shared:true,method:'clipboard'};
-      }catch(e){console.warn('Clipboard API unavailable; falling back.',e);}
-    }
-    if(legacyCopyText(url)){
+    if(await copyRelayUrl(url)){
       alert('RELAY URLをコピーしました。次の一人へ送ってください。');
-      return {shared:true,method:'legacy-copy'};
+      return {shared:true,method:'clipboard'};
     }
-    // Last resort: always show the URL so desktop users are never left with a no-op.
     window.prompt('このURLをコピーして、次の一人へ送ってください。',url);
     return {shared:false,manual:true};
   }
+
   async function relayCurrentScene(){
     if(!currentPackage)return;
     const info=relayInfo(currentPackage.raw);
     if(!info)return;
-    if(loadSentState(info)){renderJourney(currentPackage.raw);return;}
     if(relayButton)relayButton.disabled=true;
     if(journey){journey.classList.add('is-sharing');journey.setAttribute('aria-disabled','true');}
     const hop=Math.min(1000,info.sourceHop+1);
     try{
-      const issued=await createRelayUrl(info,hop);
+      let issued=loadIssuedState(info);
+      if(!issued){
+        issued=await createRelayUrl(info,hop);
+        saveIssuedState(info,{url:String(issued.url),publicId:String(issued.publicId),relayId:String(issued.relayId),hop,expiresAt:String(issued.expiresAt||''),issuedAt:new Date().toISOString(),shared:false});
+      }
       const result=await shareRelayUrl(String(issued.url));
-      if(result.cancelled||!result.shared)return;
-      const token=relayTokenFromUrl(String(issued.url));
-      // Commit only after the URL was actually handed off. If this commit is
-      // lost after a successful native share, /relay/resolve auto-recovers it
-      // when the recipient opens the URL, so cancelled shares never grow a ○.
-      await commitRelayUrl(token);
-      saveSentState(info,{relayId:String(issued.relayId),hop,sentAt:new Date().toISOString()});
-      renderJourney(currentPackage.raw,{sent:true});
+      if(result.cancelled)return;
+      if(result.shared){
+        // A successful share/copy may still not mean the recipient opened it.
+        // Commit the pending ○, but keep this card reusable and always reuse
+        // the exact same relay URL for this arrival.
+        await commitRelayUrl(String(issued.publicId));
+        issued={...issued,shared:true,sharedAt:new Date().toISOString()};
+        saveIssuedState(info,issued);
+        renderJourney(currentPackage.raw,{sent:true});
+      }
     }catch(error){console.error(error);alert(`RELAY URLを作れませんでした: ${error?.message||error}`);}
     finally{if(relayButton)relayButton.disabled=false;if(journey){journey.classList.remove('is-sharing');journey.removeAttribute('aria-disabled');}}
   }
@@ -411,21 +433,21 @@
   openButton.addEventListener('click',e=>{e.stopPropagation();openPicker();});
   backButton?.addEventListener('click',returnToLauncher);
   relayButton?.addEventListener('click',relayCurrentScene);
-  journey?.addEventListener('click',()=>{if(relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sent')&&!journey.classList.contains('is-sharing'))relayCurrentScene();});
-  journey?.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sent')&&!journey.classList.contains('is-sharing')){e.preventDefault();relayCurrentScene();}});
+  journey?.addEventListener('click',()=>{if(relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing'))relayCurrentScene();});
+  journey?.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing')){e.preventDefault();relayCurrentScene();}});
   fileInput.addEventListener('change',()=>openScene(fileInput.files?.[0]));
   ['dragenter','dragover'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.add('is-over');}));
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'4.7-url-relay-deploy-desktop-fix',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl};
+  window.SceneLocalLoader={version:'4.8-url-relay-short-ogp-reuse-pc-fix',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl};
 
   const initialRelayToken=relayTokenFromLocation();
-  if(initialRelayToken){
-    // A RELAY recipient should never see the local-file task. Convert the
-    // launcher into a neutral receiving card immediately, then resolve.
+  const initialRelayPublicId=relayPublicIdFromLocation();
+  if(initialRelayToken||initialRelayPublicId){
     setRelayEntryMode(true);
     if(launcher)launcher.hidden=false;
-    openRelayFromUrl(initialRelayToken);
+    openRelayFromUrl(initialRelayToken,initialRelayPublicId);
   }
+
 })();

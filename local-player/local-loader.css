@@ -93,8 +93,8 @@
 }
 
 /* v62.1 — the journey card itself is the pass-along action. */
-.public-journey:not(.is-sent){cursor:pointer}
-.public-journey:not(.is-sent):active{transform:scale(.995)}
+.public-journey{cursor:pointer}
+.public-journey:not(.is-sharing):active{transform:scale(.995)}
 .public-journey:focus-visible{outline:2px solid currentColor;outline-offset:3px}
 .public-journey.is-sharing{opacity:.6;pointer-events:none}
-.public-journey.is-sent{cursor:default}
+.public-journey.is-sent{cursor:pointer}
