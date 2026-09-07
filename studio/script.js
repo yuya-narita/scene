@@ -20,6 +20,7 @@
   const episodeInput = $('#episodeInput');
   const episodeTitleInput = $('#episodeTitleInput');
   const descriptionInput = $('#descriptionInput');
+  const menuRelayToggleButton = $('#menuRelayToggleButton');
   const coverLogoInput = $('#coverLogoInput');
   const coverLogoChoose = $('#coverLogoChoose');
   const coverLogoClear = $('#coverLogoClear');
@@ -508,6 +509,7 @@
   function setUILanguage(language){
     uiLanguage = I18N?.setLocale?.(language) || language;
     applyStaticUITranslations();
+    refreshRelayPolicyUI();
     updateCount();
     updateAdvancedConditionalUI?.();
     if(workingDocument) renderAdvanced?.();
@@ -520,6 +522,34 @@
   let cinemaBackgroundUrl = '';
   let player = null;
   let workingDocument = null;
+  // RELAY policy is author-controlled per work. Missing policy in older Masters
+  // intentionally means ON so existing Distribution/RELAY behaviour is preserved.
+  let relayEnabled = true;
+
+  function relayPolicyEnabled(doc){
+    return doc?.sharing?.relay?.enabled !== false;
+  }
+  function applyRelayPolicyToDocument(doc){
+    if(!doc || typeof doc!=='object')return;
+    doc.sharing ||= {};
+    doc.sharing.relay={...(doc.sharing.relay||{}),schemaVersion:'1',enabled:Boolean(relayEnabled)};
+  }
+  function refreshRelayPolicyUI(){
+    if(!menuRelayToggleButton)return;
+    menuRelayToggleButton.setAttribute('aria-pressed',relayEnabled?'true':'false');
+    const label=menuRelayToggleButton.querySelector('span');
+    const note=menuRelayToggleButton.querySelector('small');
+    if(label)label.textContent=uiLanguage==='ja'?'回し読み':'Pass-along';
+    if(note)note.textContent=relayEnabled
+      ? (uiLanguage==='ja'?'ON｜次の一人へ渡せます':'ON | Readers can pass it on')
+      : (uiLanguage==='ja'?'OFF｜回し読みしません':'OFF | Pass-along disabled');
+  }
+  function setRelayPolicyEnabled(enabled,{save=true}={}){
+    relayEnabled=Boolean(enabled);
+    if(workingDocument)applyRelayPolicyToDocument(workingDocument);
+    refreshRelayPolicyUI();
+    if(save && workingDocument)try{scheduleDraftSave(120);}catch(_){}
+  }
   // Once a Scene document exists it is the single source of truth.
   // Easy's textarea is only a source draft until the user edits it again.
   let easySourceDirty = true;
@@ -1175,7 +1205,7 @@
       alert('現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。');
       return false;
     }
-    workingDocument=null;easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     latestPublishedId='';
     latestPublishedUrl='';
@@ -2028,6 +2058,7 @@
         typography:{ fontFamily:selectedFont }
       },
       player:{ navigation:{ allowPrevious:true } },
+      sharing:{ relay:{ schemaVersion:'1', enabled:Boolean(relayEnabled) } },
       cover:{
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
@@ -2460,6 +2491,7 @@
     workingDocument.appearance.typography ||= {};
     workingDocument.appearance.typography.fontFamily=selectedFont;
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
+    applyRelayPolicyToDocument(workingDocument);
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
     const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
     workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
@@ -3091,6 +3123,10 @@
     delete doc.studio;
     stripDistributionEditorData(doc);
     doc.package={...(doc.package||{}),format:'scene-package',version:'1.0',role:'distribution'};
+    // Keep the author's pass-along choice in the finished Distribution.
+    // Older Masters without an explicit policy remain ON for compatibility.
+    doc.sharing ||= {};
+    doc.sharing.relay={...(doc.sharing.relay||{}),schemaVersion:'1',enabled:relayPolicyEnabled(doc)};
     doc.distribution={
       schemaVersion:'1',
       copyId,
@@ -3103,6 +3139,7 @@
     // canonical runtime value remains scene.json.distribution.copyId.
     manifest.copyId=copyId;
     manifest.issuedAt=issuedAt;
+    manifest.relayEnabled=relayPolicyEnabled(doc);
 
     const output=[];
     for(const [name,bytes] of entries.entries()){
@@ -3418,6 +3455,8 @@
     el.textContent=message||''; el.classList.toggle('is-error',Boolean(error));
   }
   function restoreEasyStateFromDocument(doc){
+    relayEnabled=relayPolicyEnabled(doc);
+    refreshRelayPolicyUI();
     titleInput.value=doc.title||'';
     authorInput.value=doc.author||'';
     if(subtitleInput)subtitleInput.value=doc.metadata?.subtitle||'';
@@ -6068,6 +6107,7 @@
     syncEasyPublishButton();
   }
   bodyInput.addEventListener('input',updateEasyFileActions);
+  refreshRelayPolicyUI();
   updateEasyFileActions();
  
 
@@ -6180,6 +6220,7 @@
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
   $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();exportScenePackage();});
   $('#menuExportDistributionButton')?.addEventListener('click',()=>{closeEasyMenu();exportDistributionScenePackage();});
+  menuRelayToggleButton?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();setRelayPolicyEnabled(!relayEnabled);});
   $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
   $('#menuNewDraftButton')?.addEventListener('click',()=>{closeEasyMenu();$('#newDraftQuickButton')?.click();});
   $('#floatingAdvancedButton')?.addEventListener('click',(event)=>{
