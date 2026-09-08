@@ -1066,37 +1066,41 @@ body{
 }
 
 
-/* V63.13.2 — collapse the space formerly occupied by 「もう一度読む」.
-   Keep authored ending text content-driven instead of letting flex:1
-   absorb all newly freed height. */
+/* =========================================================
+   V63.13.4 — restore authored ending text position only
+   Keep the lower block (Resonance -> 3 links -> own copy -> journey)
+   packed toward the bottom, while the authored ending copy returns
+   to its original upper position independently of that lower block.
+   ========================================================= */
+.public-ending.has-resonance .public-ending-inner{
+  position:relative!important;
+}
+
 .public-ending.has-resonance .public-ending-label,
 .public-ending.has-resonance .public-ending-label[hidden]{
-  flex:0 1 auto!important;
-  min-height:clamp(120px,22vh,220px)!important;
-  padding:2vh 0 12px!important;
+  position:absolute!important;
+  top:22vh!important;
+  left:20px!important;
+  right:20px!important;
+  width:auto!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:0!important;
+  display:grid!important;
+  place-items:center!important;
+  z-index:1!important;
 }
+
+.public-ending.has-resonance .public-resonance-result{
+  margin-top:auto!important;
+}
+
 @media(max-width:520px){
   .public-ending.has-resonance .public-ending-label,
   .public-ending.has-resonance .public-ending-label[hidden]{
-    min-height:clamp(118px,19vh,180px)!important;
-    padding:1vh 0 10px!important;
-  }
-}
-
-
-/* V63.13.3 — keep the authored ending text above,
-   and pack Resonance + 3 links + own-copy + journey toward the bottom. */
-.public-ending.has-resonance .public-resonance-result{
-  margin-top:auto!important;
-  margin-bottom:12px!important;
-}
-.public-ending.has-resonance .public-ending-actions.public-ending-three{
-  margin-top:0!important;
-  margin-bottom:0!important;
-}
-@media(max-width:520px){
-  .public-ending.has-resonance .public-resonance-result{
-    margin-top:auto!important;
-    margin-bottom:12px!important;
+    top:21vh!important;
+    left:18px!important;
+    right:18px!important;
+    padding:0!important;
   }
 }
