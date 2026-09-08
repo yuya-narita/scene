@@ -188,3 +188,11 @@
 .local-launcher-card.is-relay-entry .local-own-copy{
   margin:14px auto 0;
 }
+
+/* V63.12.5 — center RELAY status copy inside the card. */
+.local-launcher-card.is-relay-entry .local-status{
+  width:100%;
+  margin-left:auto;
+  margin-right:auto;
+  text-align:center;
+}
