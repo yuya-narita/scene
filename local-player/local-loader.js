@@ -70,8 +70,20 @@
   }
   function validRelayPublicId(v){return /^[A-Za-z0-9_-]{8,32}$/.test(String(v||''));}
   function validRelayToken(v){return /^[a-f0-9]{48}$/i.test(String(v||''));}
+  function relayReceiverArrivalId(token='',publicId=''){
+    const credential=validRelayPublicId(publicId)?`id:${publicId}`:`token:${token}`;
+    const key=`ahako:url-relay-receiver:${credential}`;
+    let id='';try{id=String(localStorage.getItem(key)||'');}catch(_){}
+    if(!/^arrival_[a-f0-9]{32}$/i.test(id)){
+      try{id=`arrival_${crypto.randomUUID().replaceAll('-','')}`;}catch(_){const a=new Uint8Array(16);crypto.getRandomValues(a);id=`arrival_${[...a].map(v=>v.toString(16).padStart(2,'0')).join('')}`;}
+      try{localStorage.setItem(key,id);}catch(_){}
+    }
+    return id;
+  }
   function relayResolveErrorMessage(code,fallback){
     if(code==='RELAY_EXPIRED')return 'この一冊の受け取り期限が切れています。';
+    if(code==='RELAY_ALREADY_RECEIVED')return 'この一冊は、もう誰かのもとへ届きました。';
+    if(code==='RELAY_RECEIVER_REQUIRED')return 'このRELAY URLを受け取る準備ができませんでした。';
     if(code==='EDITION_STOPPED')return 'この版のRELAYは作者により停止されています。';
     if(code==='EDITION_NOT_FOUND'||code==='RELAY_NOT_FOUND')return 'この一冊の旅を見つけられませんでした。';
     return String(fallback||'RELAYを読み込めませんでした。');
@@ -88,13 +100,23 @@
     setStatus('一冊を受け取っています…');
     if(openButton)openButton.disabled=true;
     try{
-      const query=hasPublicId?`id=${encodeURIComponent(publicId)}`:`token=${encodeURIComponent(token)}`;
+      const receiverArrivalId=relayReceiverArrivalId(token,publicId);
+      const credentialQuery=hasPublicId?`id=${encodeURIComponent(publicId)}`:`token=${encodeURIComponent(token)}`;
+      const query=`${credentialQuery}&arrivalId=${encodeURIComponent(receiverArrivalId)}`;
       const response=await fetch(`${API_BASE}/relay/resolve?${query}`,{method:'GET',cache:'no-store'});
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok||!payload?.scene){
         throw new Error(relayResolveErrorMessage(payload?.code,payload?.error));
       }
       const raw=JSON.parse(JSON.stringify(payload.scene));
+      // Keep the winning receiver arrival stable for observation and future
+      // "next one" RELAY creation. This makes reopening by the same browser
+      // continue the same anonymous reader node instead of minting another one.
+      const resolvedCopyId=String(payload?.relay?.copyId||raw?.distribution?.copyId||'');
+      const resolvedRelayId=String(payload?.relay?.relayId||raw?.distribution?.relay?.relayId||'');
+      if(/^copy_[a-f0-9]{32}$/i.test(resolvedCopyId)&&/^relay_[a-f0-9]{32}$/i.test(resolvedRelayId)){
+        try{localStorage.setItem(`ahako:distribution-arrival:${resolvedCopyId}:${resolvedRelayId}`,receiverArrivalId);}catch(_){}
+      }
       currentPackage={files:new Map(),manifest:{package:'url-relay',packageVersion:'1.0'},raw};
       if(relayButton)relayButton.hidden=true;
       renderJourney(raw);
