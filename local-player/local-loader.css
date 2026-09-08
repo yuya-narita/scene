@@ -153,3 +153,14 @@
   .relay-share-sheet__handle{display:none}
   .relay-share-sheet__panel h2{font-size:26px;margin-top:2px}
 }
+
+
+/* V63.12 — missed RELAY → own copy */
+.local-own-copy{
+  box-sizing:border-box;width:100%;margin-top:14px;padding:15px 18px;
+  border:0;border-radius:14px;background:#f5f5f2;color:#12161c;
+  font:700 16px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;
+  cursor:pointer
+}
+.local-own-copy:disabled{opacity:.5;cursor:default}
+.local-launcher-card.is-relay-entry .local-own-copy{display:block}

@@ -5,6 +5,7 @@
   const openButton=document.getElementById('localOpenButton');
   const fileInput=document.getElementById('localFileInput');
   const status=document.getElementById('localStatus');
+  const ownCopyButton=document.getElementById('localOwnCopyButton');
   const backButton=document.getElementById('localBackButton');
   const relayButton=document.getElementById('publicRelay');
   const journey=document.getElementById('publicJourney');
@@ -26,6 +27,7 @@
   function revokeAssets(){for(const url of assetUrls){try{URL.revokeObjectURL(url)}catch(_){}}assetUrls=[];}
   function setStatus(text){if(status)status.textContent=text||'';}
   function setRelayEntryMode(active){
+    if(ownCopyButton)ownCopyButton.hidden=true;
     if(!dropZone)return;
     dropZone.classList.toggle('is-relay-entry',!!active);
     dropZone.setAttribute('aria-label',active?'RELAYを受け取っています':'.sceneを開く');
@@ -115,6 +117,82 @@
     }
   }
 
+  function ownCopyCredentialFromLocation(){
+    const publicId=relayPublicIdFromLocation();
+    const token=relayTokenFromLocation();
+    if(validRelayPublicId(publicId))return {id:publicId};
+    if(validRelayToken(token))return {token};
+    return null;
+  }
+  function textBytes(value){return new TextEncoder().encode(String(value||''));}
+  async function putOwnedSceneInBookshelf(scene){
+    const copyId=String(scene?.distribution?.copyId||'').trim();
+    const workId=String(scene?.workId||'').trim();
+    const editionId=String(scene?.edition?.editionId||'').trim();
+    if(!validCopyId(copyId)||!validWorkId(workId)||!/^edition_[a-f0-9]{32}$/i.test(editionId)){
+      throw new Error('自分の一冊を確認できませんでした。');
+    }
+    const manifest={
+      package:'scene-package',packageVersion:'1.0',entry:'scene.json',
+      packageRole:'distribution',workId,editionId,copyId,
+      issuedAt:String(scene?.distribution?.issuedAt||scene?.edition?.issuedAt||new Date().toISOString()),
+      relayEnabled:scene?.sharing?.relay?.enabled!==false,
+      title:String(scene?.title||'Untitled'),author:String(scene?.author||'')
+    };
+    const blob=buildStoredZip([
+      ['scene.json',textBytes(JSON.stringify(scene,null,2))],
+      ['manifest.json',textBytes(JSON.stringify(manifest,null,2))]
+    ]);
+    const now=new Date().toISOString();
+    const coverUrl=/^https?:\/\//i.test(String(scene?.cover?.src||''))?String(scene.cover.src):'';
+    const rec={
+      role:'distribution',copyId,workId,editionId,
+      title:String(scene?.title||'Untitled'),author:String(scene?.author||''),
+      sceneCount:Array.isArray(scene?.scenes)?scene.scenes.length:0,
+      relayEnabled:scene?.sharing?.relay?.enabled!==false,
+      issuedAt:String(scene?.distribution?.issuedAt||''),
+      coverBlob:null,coverUrl,
+      blob,fileName:`${safeFileBase(scene?.title||'book')}_distribution.scene`,
+      addedAt:now,updatedAt:now
+    };
+    const db=await openBookshelfDb();
+    try{
+      if(!db.objectStoreNames.contains(READER_BOOKS))throw new Error('読者本棚がまだありません。');
+      await idbRequest(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).put(rec));
+    }finally{db.close();}
+    return rec;
+  }
+  async function receiveOwnCopy(){
+    const credential=ownCopyCredentialFromLocation();
+    if(!credential)return;
+    if(ownCopyButton)ownCopyButton.disabled=true;
+    setStatus('自分の一冊を用意しています…');
+    try{
+      const response=await fetch(`${API_BASE}/relay/own`,{
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+        body:JSON.stringify(credential)
+      });
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.scene){
+        const code=String(payload?.code||'');
+        if(code==='EDITION_STOPPED')throw new Error('この版の配布は終了しています。');
+        if(code==='EDITION_NOT_FOUND'||code==='RELAY_NOT_FOUND')throw new Error('この作品を見つけられませんでした。');
+        throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
+      }
+      await putOwnedSceneInBookshelf(payload.scene);
+      setStatus('自分の一冊を本棚に受け取りました。');
+      if(ownCopyButton){
+        ownCopyButton.disabled=false;
+        ownCopyButton.textContent='本棚を開く';
+        ownCopyButton.onclick=()=>{location.href='../bookshelf/';};
+      }
+    }catch(error){
+      console.error(error);
+      setStatus(String(error?.message||error));
+      if(ownCopyButton)ownCopyButton.disabled=false;
+    }
+  }
+
   // ------------------------------------------------------------
   // V63.1 URL RELAY receiver
   // A relay URL is a delivery ticket, not an owned local file. When a valid
@@ -166,7 +244,9 @@
       const response=await fetch(`${API_BASE}/relay/resolve?${query}`,{method:'GET',cache:'no-store'});
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok||!payload?.scene){
-        throw new Error(relayResolveErrorMessage(payload?.code,payload?.error));
+        const relayError=new Error(relayResolveErrorMessage(payload?.code,payload?.error));
+        relayError.code=String(payload?.code||'');
+        throw relayError;
       }
       const raw=JSON.parse(JSON.stringify(payload.scene));
       // Keep the winning receiver arrival stable for observation and future
@@ -198,6 +278,14 @@
       setRelayEntryMode(true);
       if(backButton)backButton.hidden=true;
       setStatus(String(error?.message||error));
+      if(error?.code==='RELAY_ALREADY_RECEIVED'&&ownCopyButton){
+        const title=dropZone?.querySelector('h1');
+        if(title)title.textContent='この一冊は、もう届きました。';
+        ownCopyButton.hidden=false;
+        ownCopyButton.disabled=false;
+        ownCopyButton.textContent='自分の一冊を受け取る';
+        ownCopyButton.onclick=receiveOwnCopy;
+      }
       return false;
     }finally{
       if(openButton)openButton.disabled=false;
@@ -594,7 +682,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.3-unified-share-sheet',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.4-own-copy',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();
