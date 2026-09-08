@@ -196,3 +196,43 @@
   margin-right:auto;
   text-align:center;
 }
+
+
+/* V63.13 — RELAY reader completion → own copy */
+.public-own-copy-wrap{
+  width:min(560px,92vw);
+  margin:14px auto 0;
+  display:grid;
+  gap:8px;
+  justify-items:center;
+  opacity:0;
+  transform:translateY(8px);
+  transition:opacity .75s ease 3700ms,transform .75s ease 3700ms
+}
+.public-ending.is-visible .public-own-copy-wrap{opacity:1;transform:translateY(0)}
+.public-own-copy-wrap[hidden]{display:none!important}
+.public-own-copy{
+  box-sizing:border-box;
+  width:100%;
+  min-height:54px;
+  padding:12px 18px;
+  border:1px solid var(--public-line);
+  border-radius:16px;
+  background:var(--public-text);
+  color:var(--public-bg);
+  font:700 15px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;
+  letter-spacing:.02em
+}
+.public-own-copy:disabled{opacity:.5}
+.public-own-copy-status{
+  min-height:18px;
+  margin:0;
+  text-align:center;
+  color:var(--public-sub);
+  font-size:11px;
+  line-height:1.5
+}
+@media(max-width:680px){
+  .public-own-copy-wrap{width:min(92vw,520px);margin-top:10px}
+  .public-own-copy{min-height:50px;font-size:14px}
+}

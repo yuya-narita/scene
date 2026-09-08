@@ -7,7 +7,7 @@
   <title>あ箱 Local Player</title>
   <link rel="stylesheet" href="./scene-player-core.css?v=chat-test-v08">
   <link rel="stylesheet" href="./public-player.css?v=chat-test-v08">
-  <link rel="stylesheet" href="./local-loader.css?v=63.12.5">
+  <link rel="stylesheet" href="./local-loader.css?v=63.13">
   <script>window.__AHAKO_LOCAL_PLAYER__ = true;</script>
 </head>
 <body>
@@ -69,6 +69,10 @@
 <button id="publicRestart" class="public-reread" type="button">
         もう一度読む
       </button>
+      <div id="publicOwnCopyWrap" class="public-own-copy-wrap" hidden>
+        <button id="publicOwnCopy" class="public-own-copy" type="button">自分の一冊を受け取る</button>
+        <p id="publicOwnCopyStatus" class="public-own-copy-status" aria-live="polite"></p>
+      </div>
       <section id="publicJourney" class="public-journey" hidden aria-live="polite" role="button" tabindex="0" aria-label="次の一人へ">
         <small>この一冊の旅</small>
         <strong id="publicJourneyMessage"></strong>
@@ -134,6 +138,6 @@
 
   <script src="./scene-player-core.js?v=local-current"></script>
   <script src="./public-player.js?v=61"></script>
-  <script src="./local-loader.js?v=63.12.3"></script>
+  <script src="./local-loader.js?v=63.13"></script>
 </body>
 </html>

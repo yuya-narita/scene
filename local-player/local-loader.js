@@ -12,6 +12,10 @@
   const journeyMessage=document.getElementById('publicJourneyMessage');
   const journeyPath=document.getElementById('publicJourneyPath');
   const journeyPrompt=document.getElementById('publicJourneyPrompt');
+  const endingOwnWrap=document.getElementById('publicOwnCopyWrap');
+  const endingOwnButton=document.getElementById('publicOwnCopy');
+  const endingOwnStatus=document.getElementById('publicOwnCopyStatus');
+  const sceneHost=document.getElementById('scenePlayer');
   let assetUrls=[];
   let currentPackage=null;
   let currentSourceMode='file';
@@ -166,49 +170,39 @@
     }finally{db.close();}
     return rec;
   }
-  async function receiveOwnCopy(){
+  async function receiveOwnCopy({button=ownCopyButton,statusNode=status,onSuccess=null}={}){
     const credential=ownCopyCredentialFromLocation();
-    if(!credential)return;
-    if(ownCopyButton)ownCopyButton.disabled=true;
-    setStatus('自分の一冊を用意しています…');
+    if(!credential)return false;
+    if(button)button.disabled=true;
+    if(statusNode)statusNode.textContent='自分の一冊を用意しています…';
     try{
-      let response=await fetch(`${API_BASE}/relay/own`,{
+      const response=await fetch(`${API_BASE}/relay/own`,{
         method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
         body:JSON.stringify(credential)
       });
-      let payload=await response.json().catch(()=>null);
-      if((!response.ok||!payload?.ok)&&String(payload?.code||'')==='RELAY_RECEIVER_REQUIRED'){
-        const publicId=relayPublicIdFromLocation(),token=relayTokenFromLocation();
-        currentRelayReceiverArrivalId=relayReceiverArrivalId(token,publicId);
-        const retryCredential=validRelayPublicId(publicId)
-          ? {id:publicId,arrivalId:currentRelayReceiverArrivalId}
-          : {token,arrivalId:currentRelayReceiverArrivalId};
-        response=await fetch(`${API_BASE}/relay/own`,{
-          method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
-          body:JSON.stringify(retryCredential)
-        });
-        payload=await response.json().catch(()=>null);
-      }
+      const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok||!payload?.scene){
         const code=String(payload?.code||'');
         if(code==='EDITION_STOPPED')throw new Error('この版の配布は終了しています。');
         if(code==='EDITION_NOT_FOUND'||code==='RELAY_NOT_FOUND')throw new Error('この作品を見つけられませんでした。');
         if(code==='OWN_COPY_NOT_AVAILABLE')throw new Error('この一冊はまだ誰かに届いていません。');
-        if(code==='RELAY_ALREADY_YOURS')throw new Error('この一冊はすでにあなたのもとへ届いています。');
         if(code==='RELAY_RECEIVER_REQUIRED')throw new Error('受け取り情報を確認できませんでした。');
         throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
       }
       await putOwnedSceneInBookshelf(payload.scene);
-      setStatus('自分の一冊を本棚に受け取りました。');
-      if(ownCopyButton){
-        ownCopyButton.disabled=false;
-        ownCopyButton.textContent='本棚を開く';
-        ownCopyButton.onclick=()=>{location.href='../bookshelf/';};
+      if(statusNode)statusNode.textContent='自分の一冊を本棚に受け取りました。';
+      if(button){
+        button.disabled=false;
+        button.textContent='本棚を開く';
+        button.onclick=()=>{location.href='../bookshelf/';};
       }
+      if(typeof onSuccess==='function')onSuccess(payload);
+      return true;
     }catch(error){
       console.error(error);
-      setStatus(String(error?.message||error));
-      if(ownCopyButton)ownCopyButton.disabled=false;
+      if(statusNode)statusNode.textContent=String(error?.message||error);
+      if(button)button.disabled=false;
+      return false;
     }
   }
 
@@ -304,7 +298,7 @@
         ownCopyButton.hidden=false;
         ownCopyButton.disabled=false;
         ownCopyButton.textContent='自分の一冊を受け取る';
-        ownCopyButton.onclick=receiveOwnCopy;
+        ownCopyButton.onclick=()=>receiveOwnCopy({button:ownCopyButton,statusNode:status});
       }
       return false;
     }finally{
@@ -651,6 +645,13 @@
   async function openScene(file,{sourceMode='file',sourceKey=''}={}){
     if(!file)return;
     currentSourceMode=sourceMode;
+    if(endingOwnWrap)endingOwnWrap.hidden=true;
+    if(endingOwnStatus)endingOwnStatus.textContent='';
+    if(endingOwnButton){
+      endingOwnButton.disabled=false;
+      endingOwnButton.textContent='自分の一冊を受け取る';
+      endingOwnButton.onclick=null;
+    }
     setStatus('読み込み中…');openButton.disabled=true;
     try{
       const files=await readZip(await file.arrayBuffer());
@@ -694,6 +695,19 @@
   function openPicker(){fileInput.click();}
   openButton.addEventListener('click',e=>{e.stopPropagation();openPicker();});
   backButton?.addEventListener('click',returnToLauncher);
+  sceneHost?.addEventListener('sceneplayer:end',()=>{
+    const canOwn=currentSourceMode==='relay-url'&&!!relayInfo(currentPackage?.raw);
+    if(!endingOwnWrap)return;
+    endingOwnWrap.hidden=!canOwn;
+    if(!canOwn)return;
+    if(endingOwnStatus)endingOwnStatus.textContent='';
+    if(endingOwnButton){
+      endingOwnButton.disabled=false;
+      endingOwnButton.textContent='自分の一冊を受け取る';
+      endingOwnButton.onclick=()=>receiveOwnCopy({button:endingOwnButton,statusNode:endingOwnStatus});
+    }
+  });
+
   relayButton?.addEventListener('click',relayCurrentScene);
   journey?.addEventListener('click',()=>{if(relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing'))relayCurrentScene();});
   journey?.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing')){e.preventDefault();relayCurrentScene();}});
@@ -702,7 +716,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.6-own-copy-receiver-stable',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.7-relay-completion-own-copy',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();
