@@ -14,6 +14,9 @@
   let assetUrls=[];
   let currentPackage=null;
   let currentSourceMode='file';
+  let currentBookshelfCopyId='';
+  const BOOKSHELF_DB='ahako-local-bookshelf';
+  const READER_BOOKS='readerBooks';
   const API_BASE='https://scene-studio-api.a-hako.workers.dev';
 
   const u16=(v,o)=>v.getUint16(o,true);
@@ -54,6 +57,60 @@
 
 
 
+
+  function bookshelfCopyIdFromLocation(){
+    let copyId='';
+    try{copyId=String(new URL(location.href).searchParams.get('bookshelfCopy')||'').trim();}catch(_){}
+    if(copyId)return copyId;
+    try{return String(sessionStorage.getItem('ahako:bookshelf:open-copy')||'').trim();}catch(_){return '';}
+  }
+  function clearBookshelfOpenHandoff(){
+    try{sessionStorage.removeItem('ahako:bookshelf:open-copy');}catch(_){}
+  }
+  function validBookshelfCopyId(v){return /^copy_[a-f0-9]{32}$/i.test(String(v||''));}
+  function idbRequest(req){return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('IndexedDB error'));});}
+  function openBookshelfDb(){
+    return new Promise((resolve,reject)=>{
+      const req=indexedDB.open(BOOKSHELF_DB);
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error||new Error('本棚を開けませんでした。'));
+      req.onupgradeneeded=()=>{try{req.transaction.abort();}catch(_){}reject(new Error('読者本棚がまだありません。'));};
+    });
+  }
+  async function readerBookFromBookshelf(copyId){
+    if(!validBookshelfCopyId(copyId))throw new Error('本棚の一冊を確認できません。');
+    const db=await openBookshelfDb();
+    try{
+      if(!db.objectStoreNames.contains(READER_BOOKS))throw new Error('読者本棚がまだありません。');
+      const rec=await idbRequest(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).get(copyId));
+      if(!rec?.blob)throw new Error('この一冊は本棚に見つかりませんでした。');
+      return rec;
+    }finally{db.close();}
+  }
+  async function openBookshelfCopy(copyId){
+    currentBookshelfCopyId=copyId;
+    currentSourceMode='bookshelf';
+    setRelayEntryMode(false);
+    if(launcher)launcher.hidden=false;
+    setStatus('本棚から開いています…');
+    if(openButton)openButton.disabled=true;
+    try{
+      const rec=await readerBookFromBookshelf(copyId);
+      clearBookshelfOpenHandoff();
+      const file=new File([rec.blob],rec.fileName||`${rec.title||'book'}_distribution.scene`,{type:'application/octet-stream'});
+      await openScene(file,{sourceMode:'bookshelf',sourceKey:`bookshelf:${copyId}`});
+      return true;
+    }catch(error){
+      console.error(error);
+      currentPackage=null;
+      if(launcher)launcher.hidden=false;
+      if(backButton)backButton.hidden=true;
+      setStatus(String(error?.message||error));
+      return false;
+    }finally{
+      if(openButton)openButton.disabled=false;
+    }
+  }
 
   // ------------------------------------------------------------
   // V63.1 URL RELAY receiver
@@ -430,9 +487,9 @@
     }
     return out;
   }
-  async function openScene(file){
+  async function openScene(file,{sourceMode='file',sourceKey=''}={}){
     if(!file)return;
-    currentSourceMode='file';
+    currentSourceMode=sourceMode;
     setStatus('読み込み中…');openButton.disabled=true;
     try{
       const files=await readZip(await file.arrayBuffer());
@@ -446,7 +503,7 @@
       // Validate/build first; revoke previous package only after the new package is ready.
       const nextUrls=[];const previousUrls=assetUrls;assetUrls=[];
       let doc;
-      try{const map=buildAssetMap(files);doc=rewriteAssets(raw,map);await window.ScenePublicPlayer.loadDocument(doc,{sourceKey:`local:${file.name}:${file.size}:${file.lastModified||0}`});}
+      try{const map=buildAssetMap(files);doc=rewriteAssets(raw,map);await window.ScenePublicPlayer.loadDocument(doc,{sourceKey:sourceKey||`local:${file.name}:${file.size}:${file.lastModified||0}`});}
       catch(error){for(const u of assetUrls){try{URL.revokeObjectURL(u)}catch(_){}}assetUrls=previousUrls;throw error;}
       for(const u of previousUrls){try{URL.revokeObjectURL(u)}catch(_){}}
       launcher.hidden=true;if(backButton)backButton.hidden=false;setStatus('');
@@ -455,6 +512,13 @@
   }
   function returnToLauncher(){
     if(currentSourceMode==='relay-url'){try{history.back();}catch(_){}return;}
+    if(currentSourceMode==='bookshelf'){
+      try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
+      revokeAssets();
+      currentPackage=null;
+      location.href='../bookshelf/';
+      return;
+    }
     // Let the current public Player own Core/audio teardown, then release only
     // the Blob URLs that belong to the local package.
     try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
@@ -477,11 +541,14 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'4.9-relay-lifecycle-14-7-30',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl};
+  window.SceneLocalLoader={version:'5.0-bookshelf-direct',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
+  const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayToken=relayTokenFromLocation();
   const initialRelayPublicId=relayPublicIdFromLocation();
-  if(initialRelayToken||initialRelayPublicId){
+  if(validBookshelfCopyId(initialBookshelfCopyId)){
+    openBookshelfCopy(initialBookshelfCopyId);
+  }else if(initialRelayToken||initialRelayPublicId){
     setRelayEntryMode(true);
     if(launcher)launcher.hidden=false;
     openRelayFromUrl(initialRelayToken,initialRelayPublicId);
