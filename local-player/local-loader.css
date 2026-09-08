@@ -100,3 +100,31 @@
 .public-journey:focus-visible{outline:2px solid currentColor;outline-offset:3px}
 .public-journey.is-sharing{opacity:.6;pointer-events:none}
 .public-journey.is-sent{cursor:pointer}
+
+
+/* V63.11.2 — iPhone/mobile RELAY share sheet */
+.relay-share-sheet{position:fixed;inset:0;z-index:40000;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.relay-share-sheet__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.48)}
+.relay-share-sheet__panel{
+  box-sizing:border-box;position:absolute;left:0;right:0;bottom:0;
+  width:100%;max-width:680px;margin:0 auto;padding:10px 18px calc(18px + env(safe-area-inset-bottom));
+  border-radius:24px 24px 0 0;background:#f7f7f5;color:#161616;
+  box-shadow:0 -16px 44px rgba(0,0,0,.24)
+}
+.relay-share-sheet__handle{width:42px;height:5px;margin:2px auto 18px;border-radius:999px;background:rgba(0,0,0,.2)}
+.relay-share-sheet__panel h2{margin:0 0 6px;font-size:24px;line-height:1.25}
+.relay-share-sheet__panel>p{margin:0 0 14px;color:#686868;font-size:14px}
+.relay-share-sheet__url{
+  box-sizing:border-box;width:100%;margin:0 0 14px;padding:12px 14px;
+  border:1px solid rgba(0,0,0,.12);border-radius:12px;background:#fff;
+  font-size:13px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  user-select:text;-webkit-user-select:text
+}
+.relay-share-sheet button{box-sizing:border-box;width:100%;min-height:52px;margin:0 0 9px;border-radius:14px;font-size:16px;font-weight:700}
+.relay-share-sheet__primary{border:0;background:#181818;color:#fff}
+.relay-share-sheet__copy{border:1px solid rgba(0,0,0,.14);background:#fff;color:#181818}
+.relay-share-sheet__cancel{border:0;background:transparent;color:#686868}
+.relay-share-sheet__status{min-height:20px!important;margin:2px 0 0!important;text-align:center!important;font-size:13px!important;color:#4d4d4d!important}
+@media(min-width:720px){
+  .relay-share-sheet__panel{bottom:24px;border-radius:24px}
+}

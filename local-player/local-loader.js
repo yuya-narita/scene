@@ -373,6 +373,9 @@
   function relayTokenFromUrl(url){
     try{return String(new URL(url,location.href).searchParams.get('relay')||'').trim();}catch(_){return '';}
   }
+  function escapeHtml(value){
+    return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
   function legacyCopyText(text){
     try{
       const area=document.createElement('textarea');
@@ -394,6 +397,67 @@
     }
     return legacyCopyText(url);
   }
+  function mobileRelayShareSheet(url){
+    return new Promise(resolve=>{
+      const old=document.getElementById('relayShareSheet');
+      if(old)old.remove();
+
+      const overlay=document.createElement('div');
+      overlay.id='relayShareSheet';
+      overlay.className='relay-share-sheet';
+      overlay.innerHTML=`
+        <div class="relay-share-sheet__backdrop" data-relay-close></div>
+        <section class="relay-share-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="relayShareTitle">
+          <div class="relay-share-sheet__handle" aria-hidden="true"></div>
+          <h2 id="relayShareTitle">次の一人へ</h2>
+          <p>この一冊のURLを送ります。</p>
+          <div class="relay-share-sheet__url">${escapeHtml(url)}</div>
+          <button class="relay-share-sheet__primary" type="button" data-relay-share>共有する</button>
+          <button class="relay-share-sheet__copy" type="button" data-relay-copy>URLをコピー</button>
+          <button class="relay-share-sheet__cancel" type="button" data-relay-close>キャンセル</button>
+          <p class="relay-share-sheet__status" aria-live="polite"></p>
+        </section>`;
+      document.body.appendChild(overlay);
+
+      const status=overlay.querySelector('.relay-share-sheet__status');
+      let settled=false;
+      const finish=result=>{
+        if(settled)return;
+        settled=true;
+        overlay.remove();
+        resolve(result);
+      };
+
+      overlay.querySelectorAll('[data-relay-close]').forEach(el=>el.addEventListener('click',()=>finish({shared:false,cancelled:true})));
+
+      const shareButton=overlay.querySelector('[data-relay-share]');
+      if(!navigator.share)shareButton.hidden=true;
+      shareButton.addEventListener('click',async()=>{
+        try{
+          await navigator.share({url});
+          finish({shared:true,method:'native'});
+        }catch(e){
+          if(e?.name==='AbortError')return;
+          console.warn('Native URL share unavailable.',e);
+          status.textContent='共有画面を開けませんでした。URLをコピーしてください。';
+        }
+      });
+
+      overlay.querySelector('[data-relay-copy]').addEventListener('click',async()=>{
+        // This click is a fresh user gesture, so iOS Safari can copy without
+        // showing the old manual prompt in normal cases.
+        let ok=legacyCopyText(url);
+        if(!ok)ok=await copyRelayUrl(url);
+        if(ok){
+          status.textContent='コピーしました。';
+          setTimeout(()=>finish({shared:true,method:'mobile-copy'}),350);
+          return;
+        }
+        status.textContent='コピーできませんでした。URLを長押ししてコピーしてください。';
+      });
+    });
+  }
+
   async function shareRelayUrl(url){
     if(isLikelyDesktop()){
       // Desktop browsers may show a clipboard permission prompt for
@@ -410,16 +474,11 @@
       window.prompt('このURLをコピーして、次の一人へ送ってください。',url);
       return {shared:false,manual:true};
     }
-    if(navigator.share){
-      try{await navigator.share({url});return {shared:true,method:'native'};}
-      catch(e){if(e?.name==='AbortError')return {shared:false,cancelled:true};console.warn('Native URL share unavailable; falling back.',e);}
-    }
-    if(await copyRelayUrl(url)){
-      alert('RELAY URLをコピーしました。次の一人へ送ってください。');
-      return {shared:true,method:'clipboard'};
-    }
-    window.prompt('このURLをコピーして、次の一人へ送ってください。',url);
-    return {shared:false,manual:true};
+    // On iPhone/iPad the RELAY URL is created asynchronously before this point.
+    // Calling navigator.share() immediately can lose Safari's transient user
+    // activation and fall through to an unfriendly window.prompt().
+    // Show our own sheet first; the next tap gives share/copy a fresh gesture.
+    return await mobileRelayShareSheet(url);
   }
 
   async function relayCurrentScene(){
@@ -551,7 +610,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.1-bookshelf-relay',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.2-mobile-share-sheet',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();
