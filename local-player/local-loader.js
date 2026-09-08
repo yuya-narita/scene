@@ -16,6 +16,7 @@
   let currentPackage=null;
   let currentSourceMode='file';
   let currentBookshelfCopyId='';
+  let currentRelayReceiverArrivalId='';
   const BOOKSHELF_DB='ahako-local-bookshelf';
   const READER_BOOKS='readerBooks';
   const API_BASE='https://scene-studio-api.a-hako.workers.dev';
@@ -120,8 +121,11 @@
   function ownCopyCredentialFromLocation(){
     const publicId=relayPublicIdFromLocation();
     const token=relayTokenFromLocation();
-    if(validRelayPublicId(publicId))return {id:publicId,arrivalId:relayReceiverArrivalId('',publicId)};
-    if(validRelayToken(token))return {token,arrivalId:relayReceiverArrivalId(token,'')};
+    const arrivalId=validArrivalId(currentRelayReceiverArrivalId)
+      ? currentRelayReceiverArrivalId
+      : relayReceiverArrivalId(token,publicId);
+    if(validRelayPublicId(publicId))return {id:publicId,arrivalId};
+    if(validRelayToken(token))return {token,arrivalId};
     return null;
   }
   function textBytes(value){return new TextEncoder().encode(String(value||''));}
@@ -168,11 +172,23 @@
     if(ownCopyButton)ownCopyButton.disabled=true;
     setStatus('自分の一冊を用意しています…');
     try{
-      const response=await fetch(`${API_BASE}/relay/own`,{
+      let response=await fetch(`${API_BASE}/relay/own`,{
         method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
         body:JSON.stringify(credential)
       });
-      const payload=await response.json().catch(()=>null);
+      let payload=await response.json().catch(()=>null);
+      if((!response.ok||!payload?.ok)&&String(payload?.code||'')==='RELAY_RECEIVER_REQUIRED'){
+        const publicId=relayPublicIdFromLocation(),token=relayTokenFromLocation();
+        currentRelayReceiverArrivalId=relayReceiverArrivalId(token,publicId);
+        const retryCredential=validRelayPublicId(publicId)
+          ? {id:publicId,arrivalId:currentRelayReceiverArrivalId}
+          : {token,arrivalId:currentRelayReceiverArrivalId};
+        response=await fetch(`${API_BASE}/relay/own`,{
+          method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+          body:JSON.stringify(retryCredential)
+        });
+        payload=await response.json().catch(()=>null);
+      }
       if(!response.ok||!payload?.ok||!payload?.scene){
         const code=String(payload?.code||'');
         if(code==='EDITION_STOPPED')throw new Error('この版の配布は終了しています。');
@@ -242,6 +258,7 @@
     if(openButton)openButton.disabled=true;
     try{
       const receiverArrivalId=relayReceiverArrivalId(token,publicId);
+      currentRelayReceiverArrivalId=receiverArrivalId;
       const credentialQuery=hasPublicId?`id=${encodeURIComponent(publicId)}`:`token=${encodeURIComponent(token)}`;
       const query=`${credentialQuery}&arrivalId=${encodeURIComponent(receiverArrivalId)}`;
       const response=await fetch(`${API_BASE}/relay/resolve?${query}`,{method:'GET',cache:'no-store'});
@@ -685,7 +702,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.5-own-copy-idempotent',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.6-own-copy-receiver-stable',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();

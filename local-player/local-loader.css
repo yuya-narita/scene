@@ -165,13 +165,21 @@
 .local-own-copy:disabled{opacity:.5;cursor:default}
 .local-launcher-card.is-relay-entry .local-own-copy{display:block}
 
-/* V63.12.1 — PC RELAY launcher: center against the visual viewport, including scrollbar width. */
+/* V63.12.3 — PC RELAY card: pin the card itself to the viewport center. */
 @media (min-width: 720px){
   .local-launcher{
     box-sizing:border-box;
-    left:50%;
-    right:auto;
-    width:100vw;
-    transform:translateX(-50%);
+    left:0;
+    right:0;
+    width:auto;
+    transform:none;
+  }
+  .local-launcher-card.is-relay-entry{
+    position:fixed;
+    left:50vw;
+    top:50vh;
+    top:50dvh;
+    margin:0;
+    transform:translate(-50%,-50%);
   }
 }
