@@ -1082,3 +1082,21 @@ body{
     padding:1vh 0 10px!important;
   }
 }
+
+
+/* V63.13.3 — keep the authored ending text above,
+   and pack Resonance + 3 links + own-copy + journey toward the bottom. */
+.public-ending.has-resonance .public-resonance-result{
+  margin-top:auto!important;
+  margin-bottom:12px!important;
+}
+.public-ending.has-resonance .public-ending-actions.public-ending-three{
+  margin-top:0!important;
+  margin-bottom:0!important;
+}
+@media(max-width:520px){
+  .public-ending.has-resonance .public-resonance-result{
+    margin-top:auto!important;
+    margin-bottom:12px!important;
+  }
+}
