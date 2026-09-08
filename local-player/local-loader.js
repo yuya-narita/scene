@@ -120,8 +120,8 @@
   function ownCopyCredentialFromLocation(){
     const publicId=relayPublicIdFromLocation();
     const token=relayTokenFromLocation();
-    if(validRelayPublicId(publicId))return {id:publicId};
-    if(validRelayToken(token))return {token};
+    if(validRelayPublicId(publicId))return {id:publicId,arrivalId:relayReceiverArrivalId('',publicId)};
+    if(validRelayToken(token))return {token,arrivalId:relayReceiverArrivalId(token,'')};
     return null;
   }
   function textBytes(value){return new TextEncoder().encode(String(value||''));}
@@ -177,6 +177,9 @@
         const code=String(payload?.code||'');
         if(code==='EDITION_STOPPED')throw new Error('この版の配布は終了しています。');
         if(code==='EDITION_NOT_FOUND'||code==='RELAY_NOT_FOUND')throw new Error('この作品を見つけられませんでした。');
+        if(code==='OWN_COPY_NOT_AVAILABLE')throw new Error('この一冊はまだ誰かに届いていません。');
+        if(code==='RELAY_ALREADY_YOURS')throw new Error('この一冊はすでにあなたのもとへ届いています。');
+        if(code==='RELAY_RECEIVER_REQUIRED')throw new Error('受け取り情報を確認できませんでした。');
         throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
       }
       await putOwnedSceneInBookshelf(payload.scene);
@@ -682,7 +685,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.4-own-copy',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.5-own-copy-idempotent',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();
