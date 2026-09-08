@@ -397,7 +397,7 @@
     }
     return legacyCopyText(url);
   }
-  function mobileRelayShareSheet(url){
+  function relayShareSheet(url){
     return new Promise(resolve=>{
       const old=document.getElementById('relayShareSheet');
       if(old)old.remove();
@@ -459,26 +459,10 @@
   }
 
   async function shareRelayUrl(url){
-    if(isLikelyDesktop()){
-      // Desktop browsers may show a clipboard permission prompt for
-      // navigator.clipboard.writeText(). Prefer the user-gesture based
-      // execCommand copy path first so RELAY sharing stays one-click.
-      if(legacyCopyText(url)){
-        alert('RELAY URLをコピーしました。次の一人へ送ってください。');
-        return {shared:true,method:'desktop-legacy-copy'};
-      }
-      if(await copyRelayUrl(url)){
-        alert('RELAY URLをコピーしました。次の一人へ送ってください。');
-        return {shared:true,method:'desktop-copy'};
-      }
-      window.prompt('このURLをコピーして、次の一人へ送ってください。',url);
-      return {shared:false,manual:true};
-    }
-    // On iPhone/iPad the RELAY URL is created asynchronously before this point.
-    // Calling navigator.share() immediately can lose Safari's transient user
-    // activation and fall through to an unfriendly window.prompt().
-    // Show our own sheet first; the next tap gives share/copy a fresh gesture.
-    return await mobileRelayShareSheet(url);
+    // Use the same in-app RELAY sheet on every device.
+    // It gives both desktop and mobile a consistent choice:
+    // native/system share when available, or one-tap URL copy.
+    return await relayShareSheet(url);
   }
 
   async function relayCurrentScene(){
@@ -610,7 +594,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.2-mobile-share-sheet',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.3-unified-share-sheet',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();
