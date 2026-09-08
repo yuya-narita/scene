@@ -170,6 +170,33 @@
     }finally{db.close();}
     return rec;
   }
+  function showOwnCopyGate(gate={}){
+    const old=document.getElementById('ownCopyGateSheet');
+    if(old)old.remove();
+    const mode=String(gate?.mode||'purchase');
+    const title=String(gate?.label||'自分の一冊');
+    const message=String(gate?.message||(
+      mode==='support'
+        ? 'この一冊を受け取るには、作者への支援が必要です。'
+        : 'この一冊を受け取るには、購入が必要です。'
+    ));
+    const overlay=document.createElement('div');
+    overlay.id='ownCopyGateSheet';
+    overlay.className='own-copy-gate-sheet';
+    overlay.innerHTML=`<div class="own-copy-gate-sheet__backdrop"></div>
+      <section class="own-copy-gate-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="ownCopyGateTitle">
+        <small>OWN COPY</small>
+        <h2 id="ownCopyGateTitle">${escapeHtml(title)}</h2>
+        <p>${escapeHtml(message)}</p>
+        <div class="own-copy-gate-sheet__notice">購入・支援の確認連携は準備中です。現在はこの先で新しい一冊を発行しません。</div>
+        <button type="button" data-gate-close>閉じる</button>
+      </section>`;
+    document.body.appendChild(overlay);
+    const close=()=>overlay.remove();
+    overlay.querySelector('.own-copy-gate-sheet__backdrop')?.addEventListener('click',close);
+    overlay.querySelector('[data-gate-close]')?.addEventListener('click',close);
+  }
+
   async function receiveOwnCopy({button=ownCopyButton,statusNode=status,onSuccess=null}={}){
     const credential=ownCopyCredentialFromLocation();
     if(!credential)return false;
@@ -187,6 +214,12 @@
         if(code==='EDITION_NOT_FOUND'||code==='RELAY_NOT_FOUND')throw new Error('この作品を見つけられませんでした。');
         if(code==='OWN_COPY_NOT_AVAILABLE')throw new Error('この一冊はまだ誰かに届いていません。');
         if(code==='RELAY_RECEIVER_REQUIRED')throw new Error('受け取り情報を確認できませんでした。');
+        if(code==='OWN_COPY_GATE_REQUIRED'){
+          if(statusNode)statusNode.textContent='';
+          if(button)button.disabled=false;
+          showOwnCopyGate(payload?.gate||{});
+          return false;
+        }
         throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
       }
       await putOwnedSceneInBookshelf(payload.scene);
@@ -716,7 +749,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.7-relay-completion-own-copy',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.8-own-copy-gate-foundation',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();

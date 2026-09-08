@@ -236,3 +236,21 @@
   .public-own-copy-wrap{width:min(92vw,520px);margin-top:10px}
   .public-own-copy{min-height:50px;font-size:14px}
 }
+
+
+/* V63.14 — dormant OWN COPY purchase/support gate */
+.own-copy-gate-sheet{position:fixed;inset:0;z-index:45000;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.own-copy-gate-sheet__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.58)}
+.own-copy-gate-sheet__panel{
+  box-sizing:border-box;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(460px,calc(100% - 32px));padding:24px;border-radius:22px;background:#f7f7f5;color:#171717;
+  box-shadow:0 24px 70px rgba(0,0,0,.32)
+}
+.own-copy-gate-sheet__panel small{font-size:9px;font-weight:800;letter-spacing:.18em;color:#8a8a86}
+.own-copy-gate-sheet__panel h2{margin:8px 0 8px;font-size:22px}
+.own-copy-gate-sheet__panel p{margin:0;color:#5f5f5b;font-size:14px;line-height:1.7}
+.own-copy-gate-sheet__notice{margin-top:16px;padding:12px;border-radius:12px;background:#ececea;color:#666;font-size:12px;line-height:1.6}
+.own-copy-gate-sheet__panel button{width:100%;min-height:50px;margin-top:16px;border:0;border-radius:13px;background:#181818;color:#fff;font-weight:700;font-size:15px}
+@media(max-width:680px){
+  .own-copy-gate-sheet__panel{top:auto;bottom:0;left:0;transform:none;width:100%;border-radius:24px 24px 0 0;padding:22px 18px calc(18px + env(safe-area-inset-bottom))}
+}
