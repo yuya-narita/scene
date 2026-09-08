@@ -22,7 +22,6 @@
   const endingLeft = document.getElementById('publicEndingLeft');
   const endingRight = document.getElementById('publicEndingRight');
   const endingCoverButton = document.getElementById('publicEndingCover');
-  const restartButton = document.getElementById('publicRestart');
 
   const errorPanel = document.getElementById('publicError');
   const errorTitle = document.getElementById('publicErrorTitle');
@@ -988,13 +987,6 @@
 
   endingCoverButton?.addEventListener('click', () => {
     returnToCover();
-  });
-
-  restartButton.addEventListener('click', () => {
-    localStorage.removeItem(storageKey());
-    ending.classList.remove('is-visible');
-    ending.hidden = true;
-    ensurePlayer(0);
   });
 
   retryButton.addEventListener('click', () => {
