@@ -64,6 +64,9 @@
     if(copyId)return copyId;
     try{return String(sessionStorage.getItem('ahako:bookshelf:open-copy')||'').trim();}catch(_){return '';}
   }
+  function relayNowFromLocation(){
+    try{return new URL(location.href).searchParams.get('relayNow')==='1';}catch(_){return false;}
+  }
   function clearBookshelfOpenHandoff(){
     try{sessionStorage.removeItem('ahako:bookshelf:open-copy');}catch(_){}
   }
@@ -541,13 +544,16 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.0-bookshelf-direct',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.1-bookshelf-relay',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
+  const initialRelayNow=relayNowFromLocation();
   const initialRelayToken=relayTokenFromLocation();
   const initialRelayPublicId=relayPublicIdFromLocation();
   if(validBookshelfCopyId(initialBookshelfCopyId)){
-    openBookshelfCopy(initialBookshelfCopyId);
+    openBookshelfCopy(initialBookshelfCopyId).then(ok=>{
+      if(ok&&initialRelayNow&&relayInfo(currentPackage?.raw))setTimeout(()=>relayCurrentScene(),0);
+    });
   }else if(initialRelayToken||initialRelayPublicId){
     setRelayEntryMode(true);
     if(launcher)launcher.hidden=false;
