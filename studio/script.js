@@ -11986,8 +11986,9 @@ function openDesktopTextDetail(){
   // Master files stay in IndexedDB on this origin. No work payload is sent
   // to the A-Hako API by this integration.
   const BOOKSHELF_DB_NAME='ahako-local-bookshelf';
-  const BOOKSHELF_DB_VERSION=1;
+  const BOOKSHELF_DB_VERSION=2;
   const BOOKSHELF_WORKS_STORE='works';
+  const BOOKSHELF_READER_STORE='readerBooks';
   const BOOKSHELF_HANDOFF_STORE='handoff';
   const openedFromBookshelf=new URLSearchParams(location.search).get('from')==='bookshelf';
 
@@ -11997,6 +11998,7 @@ function openDesktopTextDetail(){
       req.onupgradeneeded=()=>{
         const db=req.result;
         if(!db.objectStoreNames.contains(BOOKSHELF_WORKS_STORE))db.createObjectStore(BOOKSHELF_WORKS_STORE,{keyPath:'workId'});
+        if(!db.objectStoreNames.contains(BOOKSHELF_READER_STORE))db.createObjectStore(BOOKSHELF_READER_STORE,{keyPath:'copyId'});
         if(!db.objectStoreNames.contains(BOOKSHELF_HANDOFF_STORE))db.createObjectStore(BOOKSHELF_HANDOFF_STORE,{keyPath:'key'});
       };
       req.onsuccess=()=>resolve(req.result);
