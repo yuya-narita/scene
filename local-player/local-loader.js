@@ -33,7 +33,7 @@
     const privacy=dropZone.querySelector('.local-privacy-link');
     if(active){
       if(small)small.textContent='あ箱';
-      if(title)title.textContent='一冊を受け取っています';
+      if(title)title.textContent='この一冊は、もう届きました。';
       if(desc)desc.hidden=true;
       if(openButton)openButton.hidden=true;
       if(hint)hint.hidden=true;
