@@ -36,7 +36,7 @@ function mime(name){const n=String(name).toLowerCase();if(/\.jpe?g$/.test(n))ret
 function parseJson(bytes){return JSON.parse(td.decode(bytes).replace(/^\uFEFF/,''));}
 async function inspectMaster(file){const entries=await readZipEntries(file);const sceneBytes=entries.get('scene.json');if(!sceneBytes)throw new Error('scene.json がありません。');const doc=parseJson(sceneBytes);const manifest=entries.get('manifest.json')?parseJson(entries.get('manifest.json')):{};const role=String(manifest.packageRole||doc?.package?.role||'').toLowerCase();if(role==='distribution')throw new Error('これは配布版です。本棚には作者の Master .scene を追加してください。');const workId=String(doc?.studio?.identity?.workId||doc?.workId||'').trim();if(!workId)throw new Error('Master の workId を確認できません。');if(!doc?.studio?.identity&&!entries.has('studio-state.json'))throw new Error('Master .scene と確認できないため追加を止めました。');let coverBlob=null;const coverPath=String(doc?.cover?.src||manifest?.cover?.image||'').replace(/^\.\//,'');if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:mime(coverPath)});return{workId,title:String(doc.title||manifest.title||'Untitled'),author:String(doc.author||manifest.author||''),sceneCount:Array.isArray(doc.scenes)?doc.scenes.length:0,revision:Number(doc?.studio?.identity?.revision||0)||0,masterCreatedAt:String(doc?.studio?.identity?.createdAt||''),coverBlob,blob:new Blob([await file.arrayBuffer()],{type:'application/octet-stream'})};}
 async function addMaster(file,{silent=false}={}){const info=await inspectMaster(file);const old=await getWork(info.workId);const now=new Date().toISOString();await putWork({...info,fileName:file.name||`${info.title}.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!silent)toast(old?'同じ作品のMasterを更新しました。':'Masterを本棚に追加しました。');return info.workId;}
-async function inspectDistribution(file){const entries=await readZipEntries(file);const sceneBytes=entries.get('scene.json');if(!sceneBytes)throw new Error('scene.json がありません。');const doc=parseJson(sceneBytes);const manifest=entries.get('manifest.json')?parseJson(entries.get('manifest.json')):{};const role=String(manifest.packageRole||doc?.package?.role||'').toLowerCase();if(role!=='distribution')throw new Error('これは Distribution .scene ではありません。');const copyId=String(doc?.distribution?.copyId||manifest?.copyId||'').trim();const workId=String(doc?.distribution?.workId||manifest?.workId||doc?.workId||'').trim();const editionId=String(doc?.edition?.editionId||manifest?.editionId||'').trim();if(!/^copy_[a-f0-9]{32}$/i.test(copyId))throw new Error('Distribution の copyId を確認できません。');if(!/^work_[a-f0-9]{32}$/i.test(workId))throw new Error('Distribution の workId を確認できません。');let coverBlob=null;const coverPath=String(doc?.cover?.src||manifest?.cover?.image||'').replace(/^\.\//,'');if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:mime(coverPath)});return{role:'distribution',copyId,workId,editionId,title:String(doc.title||manifest.title||'Untitled'),author:String(doc.author||manifest.author||''),sceneCount:Array.isArray(doc.scenes)?doc.scenes.length:0,relayEnabled:doc?.sharing?.relay?.enabled!==false,issuedAt:String(doc?.distribution?.issuedAt||doc?.edition?.issuedAt||''),coverBlob,blob:new Blob([await file.arrayBuffer()],{type:'application/octet-stream'})};}
+async function inspectDistribution(file){const entries=await readZipEntries(file);const sceneBytes=entries.get('scene.json');if(!sceneBytes)throw new Error('scene.json がありません。');const doc=parseJson(sceneBytes);const manifest=entries.get('manifest.json')?parseJson(entries.get('manifest.json')):{};const role=String(manifest.packageRole||doc?.package?.role||'').toLowerCase();if(role!=='distribution')throw new Error('これは Distribution .scene ではありません。');const copyId=String(doc?.distribution?.copyId||manifest?.copyId||'').trim();const workId=String(doc?.distribution?.workId||manifest?.workId||doc?.workId||'').trim();const editionId=String(doc?.edition?.editionId||manifest?.editionId||'').trim();if(!/^copy_[a-f0-9]{32}$/i.test(copyId))throw new Error('Distribution の copyId を確認できません。');if(!/^[A-Za-z0-9_-]{12,80}$/.test(workId))throw new Error('Distribution の workId を確認できません。');let coverBlob=null;const coverPath=String(doc?.cover?.src||manifest?.cover?.image||'').replace(/^\.\//,'');if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:mime(coverPath)});return{role:'distribution',copyId,workId,editionId,title:String(doc.title||manifest.title||'Untitled'),author:String(doc.author||manifest.author||''),sceneCount:Array.isArray(doc.scenes)?doc.scenes.length:0,relayEnabled:doc?.sharing?.relay?.enabled!==false,issuedAt:String(doc?.distribution?.issuedAt||doc?.edition?.issuedAt||''),coverBlob,blob:new Blob([await file.arrayBuffer()],{type:'application/octet-stream'})};}
 async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmtDate(v){if(!v)return'—';const d=new Date(v);if(Number.isNaN(d.getTime()))return'—';return new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);}
@@ -146,6 +146,37 @@ async function makeStoreZip(entries){const locals=[],centrals=[];let offset=0;fo
 async function backupShelf(){const works=await getAllWorks(),readerBooks=await getAllReaderBooks();if(!works.length&&!readerBooks.length){toast('バックアップする本がありません。');return;}const meta={format:'ahako-local-bookshelf-backup',version:'2',exportedAt:new Date().toISOString(),works:works.map(w=>({workId:w.workId,title:w.title,fileName:w.fileName})),readerBooks:readerBooks.map(w=>({copyId:w.copyId,title:w.title,fileName:w.fileName}))};const entries=[{name:'bookshelf.json',bytes:te.encode(JSON.stringify(meta,null,2))}];for(const w of works)entries.push({name:`masters/${w.workId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});for(const w of readerBooks)entries.push({name:`distributions/${w.copyId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});downloadBlob(await makeStoreZip(entries),`ahako_bookshelf_backup_${new Date().toISOString().slice(0,10)}.zip`);toast(`${works.length+readerBooks.length}冊をバックアップしました。`);}
 async function restoreShelf(file){const entries=await readZipEntries(file);const metaBytes=entries.get('bookshelf.json');if(!metaBytes)throw new Error('あ箱 本棚のバックアップではありません。');const meta=parseJson(metaBytes);if(meta.format!=='ahako-local-bookshelf-backup')throw new Error('バックアップ形式が違います。');let n=0;for(const item of meta.works||[]){const bytes=entries.get(`masters/${item.workId}.scene`);if(!bytes)continue;await addMaster(new File([bytes],item.fileName||`${item.title||item.workId}.scene`),{silent:true});n++;}for(const item of meta.readerBooks||[]){const bytes=entries.get(`distributions/${item.copyId}.scene`);if(!bytes)continue;await addDistribution(new File([bytes],item.fileName||`${item.title||item.copyId}_distribution.scene`),{silent:true});n++;}await render();toast(`${n}冊を復元しました。`);}
 
+async function addDroppedScene(file){
+  const entries=await readZipEntries(file);
+  const sceneBytes=entries.get('scene.json');if(!sceneBytes)throw new Error('scene.json がありません。');
+  const doc=parseJson(sceneBytes);
+  const manifest=entries.get('manifest.json')?parseJson(entries.get('manifest.json')):{};
+  const role=String(manifest.packageRole||doc?.package?.role||'').toLowerCase();
+  if(role==='distribution'){
+    await addDistribution(file);
+    applyShelfTab('owned');
+    return 'owned';
+  }
+  await addMaster(file);
+  applyShelfTab('created');
+  return 'created';
+}
+function installSceneDrop(){
+  if(!matchMedia('(pointer:fine)').matches)return;
+  const overlay=$('#sceneDropOverlay');let depth=0;
+  const hasFiles=e=>Array.from(e.dataTransfer?.types||[]).includes('Files');
+  window.addEventListener('dragenter',e=>{if(!hasFiles(e))return;e.preventDefault();depth++;document.body.classList.add('scene-drag-active');overlay?.setAttribute('aria-hidden','false');});
+  window.addEventListener('dragover',e=>{if(!hasFiles(e))return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';});
+  window.addEventListener('dragleave',e=>{if(!hasFiles(e))return;depth=Math.max(0,depth-1);if(depth===0){document.body.classList.remove('scene-drag-active');overlay?.setAttribute('aria-hidden','true');}});
+  window.addEventListener('drop',async e=>{
+    if(!hasFiles(e))return;e.preventDefault();depth=0;document.body.classList.remove('scene-drag-active');overlay?.setAttribute('aria-hidden','true');
+    const files=Array.from(e.dataTransfer?.files||[]).filter(f=>/\.(scene|zip)$/i.test(f.name||''));
+    if(!files.length){alert('.scene ファイルをドロップしてください。');return;}
+    let added=0;
+    for(const file of files){try{await addDroppedScene(file);added++;}catch(err){console.error(err);alert(`${file.name||'ファイル'}\n${err.message||'本棚に追加できませんでした。'}`);}}
+    if(added){$('#detailDialog').close();await render();}
+  });
+}
 $('#addButton').onclick=$('#emptyAddButton').onclick=()=>{$('#fileInput').dataset.replace='';$('#fileInput').click();};
 $('#addDistributionButton').onclick=$('#emptyDistributionButton').onclick=()=>{$('#distributionInput').dataset.replace='';$('#distributionInput').click();};
 $('#ownedTab').onclick=()=>switchShelf('owned');
@@ -157,5 +188,6 @@ $('#restoreButton').onclick=()=>$('#restoreInput').click();
 $('#restoreInput').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{await restoreShelf(f);}catch(err){alert(err.message||'復元できませんでした。');}finally{e.target.value='';}};
 $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
+installSceneDrop();
 render().catch(e=>{console.error(e);alert('本棚を開けませんでした。');});
 })();
