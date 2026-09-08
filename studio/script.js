@@ -532,6 +532,19 @@
   function relayPolicyEnabled(doc){
     return doc?.sharing?.relay?.enabled !== false;
   }
+  function ownCopyGateMode(doc){
+    const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
+    return ['free','purchase','support'].includes(mode)?mode:'free';
+  }
+  function applyOwnCopyGateToDocument(doc){
+    if(!doc || typeof doc!=='object')return;
+    doc.commerce ||= {};
+    doc.commerce.ownCopyGate={
+      ...(doc.commerce.ownCopyGate||{}),
+      schemaVersion:'1',
+      mode:ownCopyGateMode(doc)
+    };
+  }
   function applyRelayPolicyToDocument(doc){
     if(!doc || typeof doc!=='object')return;
     doc.sharing ||= {};
@@ -2081,6 +2094,7 @@
       },
       player:{ navigation:{ allowPrevious:true } },
       sharing:{ relay:{ schemaVersion:'1', enabled:Boolean(relayEnabled) } },
+      commerce:{ ownCopyGate:{ schemaVersion:'1', mode:'free' } },
       cover:{
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
@@ -3149,6 +3163,7 @@
     // Older Masters without an explicit policy remain ON for compatibility.
     doc.sharing ||= {};
     doc.sharing.relay={...(doc.sharing.relay||{}),schemaVersion:'1',enabled:relayPolicyEnabled(doc)};
+    applyOwnCopyGateToDocument(doc);
     if(editionId){
       doc.edition={schemaVersion:'1',editionId,issuedAt};
     }
@@ -3196,6 +3211,7 @@
     runtime.edition={schemaVersion:'1',editionId,issuedAt:new Date().toISOString()};
     runtime.sharing ||= {};
     runtime.sharing.relay={schemaVersion:'2',enabled:true,transport:'url'};
+    applyOwnCopyGateToDocument(runtime);
     // copyId belongs to each issued Distribution, not to the shared Edition source.
     delete runtime.distribution;
     return runtime;

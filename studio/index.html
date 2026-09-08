@@ -213,7 +213,11 @@
     .distribution-export-option input{width:18px;height:18px;margin:2px 0 0;accent-color:#191b20}
     .distribution-export-option strong{display:block;font-size:14px;line-height:1.4}
     .distribution-export-option small{display:block;margin-top:3px;color:#737985;font-size:12px;line-height:1.5}
-    .distribution-export-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}
+    .distribution-own-copy-gate{display:grid;gap:4px;margin-top:14px;padding:12px 14px;border:1px dashed #d8dce2;border-radius:14px;background:#fafafa}
+.distribution-own-copy-gate small{font-size:9px;font-weight:800;letter-spacing:.16em;color:#969ba4}
+.distribution-own-copy-gate strong{font-size:13px}
+.distribution-own-copy-gate span{font-size:11px;line-height:1.5;color:#777d87}
+.distribution-export-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}
     .distribution-export-actions button{min-height:42px;padding:0 17px;border:1px solid #d8dce2;border-radius:999px;background:#fff;color:#23262b;font:700 13px/1 system-ui;cursor:pointer}
     .distribution-export-actions .primary{border-color:#191b20;background:#191b20;color:#fff}
     @media(max-width:600px){.distribution-export-card{width:calc(100vw - 24px);padding:22px 18px 18px;border-radius:22px}.distribution-export-actions{display:grid;grid-template-columns:1fr 1fr}.distribution-export-actions button{width:100%}}
@@ -810,6 +814,11 @@
           <span><strong>回し読みできない</strong><small>この一冊を次の人へ渡す機能はありません。</small></span>
         </label>
       </div>
+      <div class="distribution-own-copy-gate">
+        <small>OWN COPY</small>
+        <strong>自分の一冊：無料</strong>
+        <span>V63.14では無料のまま。購入・支援を挟めるゲート構造だけ先に持たせます。</span>
+      </div>
       <div class="distribution-export-actions">
         <button value="cancel" type="submit">キャンセル</button>
         <button value="export" type="submit" class="primary">書き出す</button>
@@ -977,7 +986,7 @@
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=20260908-41"></script>
+<script src="./script.js?v=63.14"></script>
 
 
 
