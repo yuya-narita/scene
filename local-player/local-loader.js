@@ -396,6 +396,13 @@
   }
   async function shareRelayUrl(url){
     if(isLikelyDesktop()){
+      // Desktop browsers may show a clipboard permission prompt for
+      // navigator.clipboard.writeText(). Prefer the user-gesture based
+      // execCommand copy path first so RELAY sharing stays one-click.
+      if(legacyCopyText(url)){
+        alert('RELAY URLをコピーしました。次の一人へ送ってください。');
+        return {shared:true,method:'desktop-legacy-copy'};
+      }
       if(await copyRelayUrl(url)){
         alert('RELAY URLをコピーしました。次の一人へ送ってください。');
         return {shared:true,method:'desktop-copy'};
