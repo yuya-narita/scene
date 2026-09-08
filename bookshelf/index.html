@@ -4,12 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css">
+  <link rel="stylesheet" href="bookshelf.css?v=63.9.1">
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><strong><span>あ</span><span class="box">□</span></strong><small>本棚</small></div>
-    <button id="addButton" class="primary" type="button">＋ Masterを追加</button>
+    <div class="topbar-actions">
+      <button id="addButton" class="primary" type="button">＋ Masterを追加</button>
+      <button id="addDistributionButton" type="button">＋ 自分の一冊</button>
+    </div>
+    <input id="distributionInput" type="file" accept=".scene,application/zip" hidden>
     <input id="fileInput" type="file" hidden>
   </header>
 
@@ -17,8 +21,8 @@
     <section class="intro">
       <div>
         <p class="eyebrow">LOCAL BOOKSHELF</p>
-        <h1>作品そのものは、作者の手元に。</h1>
-        <p>Master .scene をこの端末のブラウザ内に保存して管理します。作品本体はサーバーへ送信しません。</p>
+        <h1>作品を、手元の本棚に。</h1>
+        <p>Master .scene と、自分が持っている Distribution .scene をこの端末のブラウザ内に保存して管理します。作品本体はサーバーへ送信しません。</p>
       </div>
       <div class="intro-actions">
         <button id="backupButton" type="button">本棚をバックアップ</button>
@@ -28,17 +32,22 @@
     </section>
 
     <section class="shelf-head">
-      <div><h2>本棚</h2><p id="countText">0作品</p></div>
+      <div><h2>本棚</h2><p id="countText">0冊</p></div>
       <p class="local-note">この端末内に保存</p>
     </section>
 
     <section id="emptyState" class="empty">
       <div class="empty-mark">□</div>
-      <h2>まだ本棚は空です</h2>
-      <p>作者用の Master .scene を追加してください。Distribution .scene は本棚には入りません。</p>
+      <h2 id="emptyTitle">まだ本棚は空です</h2>
+      <p id="emptyCopy">自分が持っている一冊を追加してください。</p>
       <button id="emptyAddButton" class="primary" type="button">Masterを追加</button>
+      <button id="emptyDistributionButton" type="button">自分の一冊を追加</button>
     </section>
 
+    <nav id="shelfTabs" class="shelf-tabs" aria-label="本棚の切り替え">
+      <button id="ownedTab" class="shelf-tab" type="button" data-shelf="owned">もっている本</button>
+      <button id="createdTab" class="shelf-tab" type="button" data-shelf="created">つくった本</button>
+    </nav>
     <section id="grid" class="grid" aria-live="polite"></section>
   </main>
 
@@ -58,6 +67,6 @@
   </dialog>
 
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js"></script>
+  <script src="bookshelf.js?v=63.9.1"></script>
 </body>
 </html>
