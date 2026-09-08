@@ -183,3 +183,8 @@
     transform:translate(-50%,-50%);
   }
 }
+
+/* V63.12.4 — center own-copy CTA inside the RELAY card. */
+.local-launcher-card.is-relay-entry .local-own-copy{
+  margin:14px auto 0;
+}
