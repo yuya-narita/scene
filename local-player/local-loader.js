@@ -24,6 +24,18 @@
   const BOOKSHELF_DB='ahako-local-bookshelf';
   const READER_BOOKS='readerBooks';
   const API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  function isLineInAppBrowser(){
+    return /(?:^|\s)Line\//i.test(String(navigator.userAgent||''))||/\bLine\b/i.test(String(navigator.userAgent||''));
+  }
+  function bookshelfClaimUrl(token,{external=false}={}){
+    if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
+    const u=new URL('../bookshelf/',location.href);
+    u.searchParams.set('claim',String(token));
+    // Official LINE in-app browser escape hatch. LINE strips/handles this and
+    // opens the target in the device's default browser on iOS/Android.
+    if(external)u.searchParams.set('openExternalBrowser','1');
+    return u.href;
+  }
 
   const u16=(v,o)=>v.getUint16(o,true);
   const u32=(v,o)=>v.getUint32(o,true);
@@ -234,13 +246,35 @@
         }
         throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
       }
-      await putOwnedSceneInBookshelf(payload.scene);
-      sendBookshelfEvent('own_copy_saved',payload.scene);
-      if(statusNode)statusNode.textContent='自分の一冊を本棚に受け取りました。';
+      const claimToken=String(payload?.bookshelfClaim?.token||'').trim();
+      const lineBrowser=isLineInAppBrowser();
+      let savedLocally=false;
+      // Safari/normal browser keeps the fast path: save directly if its local
+      // bookshelf DB already exists. An in-app browser intentionally skips
+      // this, because that IndexedDB would be isolated from Safari.
+      if(!lineBrowser){
+        try{
+          await putOwnedSceneInBookshelf(payload.scene);
+          savedLocally=true;
+          sendBookshelfEvent('own_copy_saved',payload.scene);
+        }catch(error){
+          console.info('Local bookshelf handoff will be used instead.',error);
+        }
+      }
+      const claimUrl=bookshelfClaimUrl(claimToken,{external:lineBrowser});
+      if(statusNode){
+        statusNode.textContent=savedLocally
+          ? '自分の一冊を本棚に受け取りました。'
+          : (lineBrowser?'自分の一冊を用意しました。Safariの本棚で受け取れます。':'自分の一冊を用意しました。本棚を開いて受け取れます。');
+      }
       if(button){
         button.disabled=false;
         button.textContent='本棚を開く';
-        button.onclick=()=>{location.href='../bookshelf/';};
+        button.onclick=()=>{
+          if(savedLocally&&!lineBrowser){location.href='../bookshelf/';return;}
+          if(claimUrl){location.href=claimUrl;return;}
+          location.href='../bookshelf/';
+        };
       }
       if(typeof onSuccess==='function')onSuccess(payload);
       return true;
