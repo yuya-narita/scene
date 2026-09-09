@@ -25,6 +25,7 @@ let suppressBookClick=false;
 let draggingBookId='';
 let desktopReorderTarget='';
 let touchReorderInstalled=false;
+let touchBookReordering=false;
 let archiveDockOpen=false;
 let mobileShelfColumns=loadMobileColumns();
 let pinchGesture=null;
@@ -169,8 +170,9 @@ function applyShelfTab(tab,{remember=true}={}){
     b.setAttribute('aria-selected',on?'true':'false');
   });
 }
-async function render(){
-  coverUrls.forEach(URL.revokeObjectURL);coverUrls=[];
+async function render({deferCoverRevoke=false}={}){
+  const staleCoverUrls=coverUrls;coverUrls=[];
+  if(!deferCoverRevoke)staleCoverUrls.forEach(URL.revokeObjectURL);
   const masters=(await getAllWorks()).map(w=>({...w,role:'master'}));
   const readers=(await getAllReaderBooks()).map(w=>({...w,role:'distribution'}));
   shelfCounts={owned:readers.length,created:masters.length};
@@ -219,8 +221,9 @@ async function render(){
   applyMobileColumns(mobileShelfColumns);
   installShelfPinch();
   bindBookInteractions();
+  return staleCoverUrls;
 }
-async function switchShelf(tab){applyShelfTab(tab);await render();}
+async function switchShelf(tab,{deferCoverRevoke=false}={}){applyShelfTab(tab);return await render({deferCoverRevoke});}
 
 function swipeShelfBodyHtml(tab){
   if(tab==='official'){
@@ -293,17 +296,17 @@ function installShelfSwipe(){
   const tabs=['owned','created','official'];
   let gesture=null;
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
-  const blockedTarget=target=>!!target?.closest?.('dialog[open],button,input,select,textarea,a,summary,[contenteditable="true"]');
+  const blockedTarget=target=>!!target?.closest?.('dialog[open],button:not(.book),input,select,textarea,a,summary,[contenteditable="true"]');
   const cleanup=()=>{if(gesture?.view)removeShelfSwipeStage(gesture.view);gesture=null;};
   window.addEventListener('touchstart',e=>{
     if(!mobile()||e.touches.length!==1||pinchGesture)return;
-    if(document.querySelector('dialog[open]')||blockedTarget(e.target))return;
+    if(document.querySelector('dialog[open]')||$('#bookshelfMenu')?.open||blockedTarget(e.target))return;
     const t=e.touches[0];
     if(t.clientX<22||t.clientX>window.innerWidth-22)return;
     gesture={x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,lastAt:performance.now(),vx:0,horizontal:false,cancelled:false,view:null,direction:null};
   },{passive:true});
   window.addEventListener('touchmove',e=>{
-    const g=gesture;if(!g||e.touches.length!==1){cleanup();return;}
+    const g=gesture;if(!g||e.touches.length!==1||touchBookReordering){cleanup();return;}
     const t=e.touches[0],dx=t.clientX-g.x,dy=t.clientY-g.y;
     const now=performance.now(),dt=Math.max(1,now-g.lastAt);g.vx=(t.clientX-g.lastX)/dt;g.lastX=t.clientX;g.lastY=t.clientY;g.lastAt=now;
     const ax=Math.abs(dx),ay=Math.abs(dy);
@@ -341,8 +344,14 @@ function installShelfSwipe(){
     suppressBookClick=true;setTimeout(()=>{suppressBookClick=false;},320);
     const toX=g.direction==='left'?-g.view.width:g.view.width;
     await animateShelfSwipeStage(g.view,toX,220);
-    const next=g.view.nextTab;removeShelfSwipeStage(g.view);
-    await switchShelf(next);
+    const next=g.view.nextTab;
+    // Keep the completed viewer page covering the old live shelf while the real
+    // next shelf is rendered underneath. Removing the stage first exposed the
+    // previous shelf for a frame on iOS Safari and looked like an afterimage.
+    const staleUrls=await switchShelf(next,{deferCoverRevoke:true});
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    removeShelfSwipeStage(g.view);
+    staleUrls.forEach(URL.revokeObjectURL);
   },{passive:true});
   window.addEventListener('touchcancel',()=>{const g=gesture;gesture=null;const live=currentShelfBodyElement();if(live)live.style.transform='';removeShelfSwipeStage(g?.view);},{passive:true});
 }
@@ -505,7 +514,7 @@ function installTouchReorder(_books,box){
     for(const t of list)if(t.identifier===id)return t;
     return null;
   };
-  const clear=()=>{if(!state)return;clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;};
+  const clear=()=>{if(!state){touchBookReordering=false;return;}clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;touchBookReordering=false;};
   window.addEventListener('contextmenu',e=>{if(e.target?.closest?.('#grid .book'))e.preventDefault();},{capture:true});
 
   // V63.21.4: use touch events instead of pointer capture for iPhone reorder.
@@ -519,7 +528,7 @@ function installTouchReorder(_books,box){
     const st={book,id:book.dataset.id,touchId:t.identifier,x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,lastTarget:'',dragging:false,timer:null,ghost:null};state=st;
     st.timer=setTimeout(()=>{
       if(state!==st||!document.body.contains(book))return;
-      st.dragging=true;suppressBookClick=true;book.classList.add('is-touch-dragging');
+      st.dragging=true;touchBookReordering=true;suppressBookClick=true;book.classList.add('is-touch-dragging');
       const r=book.getBoundingClientRect();const ghost=book.cloneNode(true);ghost.classList.add('book-drag-ghost');ghost.removeAttribute('draggable');ghost.style.width=`${r.width}px`;ghost.style.left=`${st.x-r.width/2}px`;ghost.style.top=`${st.y-42}px`;document.body.appendChild(ghost);st.ghost=ghost;
       if(navigator.vibrate)navigator.vibrate(18);
     },260);
@@ -545,7 +554,7 @@ function installTouchReorder(_books,box){
 
   const finish=async e=>{
     const st=state;if(!st)return;const t=pointFor(e,st.touchId);clearTimeout(st.timer);
-    if(!st.dragging){state=null;return;}
+    if(!st.dragging){state=null;touchBookReordering=false;return;}
     const x=t?.clientX??st.lastX,y=t?.clientY??st.lastY;const target=document.elementFromPoint(x,y),toBox=!!target?.closest?.('#archiveDropZone');
     persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(toBox){await sendBookToBox(st.id);setArchiveDock(false);}
   };
