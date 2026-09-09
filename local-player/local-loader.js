@@ -25,12 +25,16 @@
   const READER_BOOKS='readerBooks';
   const API_BASE='https://scene-studio-api.a-hako.workers.dev';
   const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
+  const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
   function newBookshelfHandoffId(){
     const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);
     return 'handoff_'+Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
   }
   function rememberBookshelfClaimSource(handoffId,token){
-    try{sessionStorage.setItem(BOOKSHELF_CLAIM_SOURCE_SESSION,`${handoffId}:${token}`);}catch(_){}
+    try{
+      sessionStorage.setItem(BOOKSHELF_CLAIM_SOURCE_SESSION,`${handoffId}:${token}`);
+      sessionStorage.setItem(`${BOOKSHELF_CLAIM_RETURN_PREFIX}${handoffId}`,location.href);
+    }catch(_){}
   }
   function isLineInAppBrowser(){
     return /(?:^|\s)Line\//i.test(String(navigator.userAgent||''))||/\bLine\b/i.test(String(navigator.userAgent||''));
