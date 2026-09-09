@@ -539,3 +539,47 @@ body.bookshelf-scroll-locked{
   .archive-transfer button{margin-top:0;padding:10px 8px;font-size:10.5px}
   .archive-transfer p{font-size:9px;line-height:1.45}
 }
+
+/* V63.28 — tabs-only top chrome + bottom-corner shelf actions. */
+.shelf-head-meta{display:none!important}
+.shelf-floating-actions{
+  position:fixed;
+  right:max(18px,env(safe-area-inset-right));
+  bottom:max(18px,env(safe-area-inset-bottom));
+  z-index:24;
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.shelf-floating-actions[hidden]{display:none!important}
+.shelf-floating-actions .shelf-icon-action{
+  width:48px;height:48px;min-width:48px;
+  border-radius:15px;
+  background:rgba(255,255,255,.88);
+  box-shadow:0 8px 24px rgba(45,35,22,.08);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+}
+@media(max-width:680px) and (pointer:coarse){
+  /* Top area now contains only the global header and the three shelf tabs. */
+  main{padding-top:100px}
+  .shelf-chrome{
+    top:52px;
+    min-height:48px;
+    padding:5px 14px 6px;
+  }
+  .shelf-tabs{margin:0;padding:2px;gap:2px;border-radius:12px}
+  .shelf-tab{padding:7px 4px;font-size:11px;border-radius:9px}
+  #grid,.empty,.official-shelf{scroll-margin-top:100px}
+
+  .shelf-floating-actions{
+    right:max(14px,env(safe-area-inset-right));
+    bottom:max(14px,env(safe-area-inset-bottom));
+    gap:7px;
+  }
+  .shelf-floating-actions .shelf-icon-action{
+    width:44px;height:44px;min-width:44px;
+    border-radius:14px;
+    font-size:20px;
+  }
+  .shelf-floating-actions .shelf-icon-pen{font-size:17px}
+}

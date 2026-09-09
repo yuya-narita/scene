@@ -28,12 +28,8 @@
 
   <main>
     <div id="shelfChrome" class="shelf-chrome">
-      <section class="shelf-head">
+      <section class="shelf-head shelf-head-meta" aria-hidden="true">
         <div><h1>本棚</h1><p id="countText">0冊</p></div>
-        <div id="shelfHeadActions" class="shelf-head-actions" hidden>
-          <button id="shelfAddIconButton" class="shelf-icon-action" type="button" aria-label="本を追加" title="本を追加">＋</button>
-          <button id="createStudioIconButton" class="shelf-icon-action shelf-icon-pen" type="button" aria-label="Studioで作る" title="Studioで作る">✎</button>
-        </div>
       </section>
 
       <nav id="shelfTabs" class="shelf-tabs" aria-label="本棚の切り替え">
@@ -55,6 +51,11 @@
     <section id="grid" class="grid" aria-live="polite"></section>
 
     <button id="archiveLauncher" class="archive-launcher" type="button" hidden aria-label="段ボール箱を開く" aria-expanded="false">📦<span id="archiveLauncherCount">0</span></button>
+
+    <div id="shelfHeadActions" class="shelf-head-actions shelf-floating-actions" hidden>
+      <button id="createStudioIconButton" class="shelf-icon-action shelf-icon-pen" type="button" aria-label="Studioで作る" title="Studioで作る">✎</button>
+      <button id="shelfAddIconButton" class="shelf-icon-action" type="button" aria-label="本を追加" title="本を追加">＋</button>
+    </div>
 
     <button id="archiveDropZone" class="archive-drop-zone" type="button" hidden aria-label="しまった本を開く">
       <span class="archive-box-shell">
