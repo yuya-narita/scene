@@ -85,12 +85,26 @@ function isXInAppBrowser(){
   const ua=String(navigator.userAgent||'');
   return /Twitter(?:\s|\/|Android|$)/i.test(ua)||/com\.atebits\.Tweetie2/i.test(ua);
 }
+function isIOSFamily(){
+  const ua=String(navigator.userAgent||'');
+  return /iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints||0)>1);
+}
+function isRealIOSSafari(){
+  if(!isIOSFamily())return false;
+  const ua=String(navigator.userAgent||'');
+  return /Version\/[\d.]+/i.test(ua)&&/Safari\/[\d.]+/i.test(ua)&&!/(CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|GSA)\//i.test(ua);
+}
 function bookshelfClaimTokenFromLocation(){
   try{return String(new URL(location.href).searchParams.get('claim')||'').trim();}catch(_){return '';}
 }
 function shouldHoldClaimForX(){
   const token=bookshelfClaimTokenFromLocation();
-  return validBookshelfClaimToken(token)&&isXInAppBrowser();
+  if(!validBookshelfClaimToken(token))return false;
+  // X on iOS does not always expose a Twitter-specific UA. The safe rule is
+  // therefore inverted: on iOS a claim is consumed only by real Safari.
+  // Unknown WKWebView/in-app browsers keep the bearer URL untouched so the
+  // native Safari button can hand the exact same claim to Safari.
+  return isXInAppBrowser()||(isIOSFamily()&&!isRealIOSSafari());
 }
 function showXClaimHandoff(){
   document.body.classList.add('x-claim-handoff-active');
