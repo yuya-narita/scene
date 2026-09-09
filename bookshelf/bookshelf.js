@@ -306,29 +306,58 @@ function bindBookInteractions(){
 function installTouchReorder(_books,box){
   if(touchReorderInstalled||!matchMedia('(pointer:coarse)').matches)return;touchReorderInstalled=true;
   let state=null;
+  const pointFor=(e,id)=>{
+    const list=e.touches?.length?e.touches:e.changedTouches;
+    if(!list)return null;
+    for(const t of list)if(t.identifier===id)return t;
+    return null;
+  };
   const clear=()=>{if(!state)return;clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;};
   window.addEventListener('contextmenu',e=>{if(e.target?.closest?.('#grid .book'))e.preventDefault();},{capture:true});
-  window.addEventListener('pointerdown',e=>{
-    if(e.pointerType==='mouse')return;const book=e.target?.closest?.('#grid .book');if(!book)return;
-    const st={book,id:book.dataset.id,pointerId:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,lastTarget:'',dragging:false,timer:null,ghost:null};state=st;
-    st.timer=setTimeout(()=>{if(state!==st||!document.body.contains(book))return;st.dragging=true;suppressBookClick=true;book.classList.add('is-touch-dragging');const r=book.getBoundingClientRect();const ghost=book.cloneNode(true);ghost.classList.add('book-drag-ghost');ghost.removeAttribute('draggable');ghost.style.width=`${r.width}px`;ghost.style.left=`${st.x-r.width/2}px`;ghost.style.top=`${st.y-42}px`;document.body.appendChild(ghost);st.ghost=ghost;try{book.setPointerCapture(e.pointerId);}catch(_){}if(navigator.vibrate)navigator.vibrate(18);},240);
+
+  // V63.21.4: use touch events instead of pointer capture for iPhone reorder.
+  // A normal swipe is left entirely to Safari. Only a finger that remains still
+  // through the long-press delay arms reorder; after that, touchmove is cancelled
+  // so vertical and horizontal movement both belong to the bookshelf.
+  window.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1)return;
+    const book=e.target?.closest?.('#grid .book');if(!book)return;
+    const t=e.touches[0];
+    const st={book,id:book.dataset.id,touchId:t.identifier,x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,lastTarget:'',dragging:false,timer:null,ghost:null};state=st;
+    st.timer=setTimeout(()=>{
+      if(state!==st||!document.body.contains(book))return;
+      st.dragging=true;suppressBookClick=true;book.classList.add('is-touch-dragging');
+      const r=book.getBoundingClientRect();const ghost=book.cloneNode(true);ghost.classList.add('book-drag-ghost');ghost.removeAttribute('draggable');ghost.style.width=`${r.width}px`;ghost.style.left=`${st.x-r.width/2}px`;ghost.style.top=`${st.y-42}px`;document.body.appendChild(ghost);st.ghost=ghost;
+      if(navigator.vibrate)navigator.vibrate(18);
+    },260);
   },{passive:true});
-  window.addEventListener('pointermove',e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;
+
+  window.addEventListener('touchmove',e=>{
+    const st=state;if(!st)return;const t=pointFor(e,st.touchId);if(!t)return;
     if(!st.dragging){
-      const dx=e.clientX-st.x,dy=e.clientY-st.y;
-      // V63.21.3: before the long-press has actually armed reorder, never hijack
-      // a normal swipe. Any finger travel cancels the reorder timer and leaves
-      // scrolling entirely to Safari.
-      if(Math.hypot(dx,dy)>8){clearTimeout(st.timer);state=null;}
+      const dx=t.clientX-st.x,dy=t.clientY-st.y;
+      // Real scrolling wins immediately when the finger starts moving before
+      // the long press has armed. This prevents the shelf from "twitching".
+      if(Math.hypot(dx,dy)>9){clearTimeout(st.timer);state=null;}
       return;
     }
     e.preventDefault();
-    if(e.clientY<105)window.scrollBy(0,-12);else if(e.clientY>window.innerHeight-115)window.scrollBy(0,12);
-    if(st.ghost){const r=st.ghost.getBoundingClientRect();st.ghost.style.left=`${e.clientX-r.width/2}px`;st.ghost.style.top=`${e.clientY-42}px`;}
-    const target=document.elementFromPoint(e.clientX,e.clientY);const liveBox=$('#archiveDropZone');const overBox=target?.closest?.('#archiveDropZone');liveBox?.classList.toggle('is-drag-over',!!overBox);document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));const targetBook=target?.closest?.('#grid .book');if(targetBook&&targetBook!==st.book){targetBook.classList.add('is-drag-target');if(st.lastTarget!==targetBook.dataset.id){st.lastTarget=targetBook.dataset.id;moveBookBefore(st.id,targetBook.dataset.id);}}
-  }, {passive:false});
-  const finish=async e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;clearTimeout(st.timer);if(!st.dragging){state=null;return;}const target=document.elementFromPoint(e.clientX,e.clientY),toBox=!!target?.closest?.('#archiveDropZone');persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(toBox){await sendBookToBox(st.id);setArchiveDock(false);}};
-  window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',e=>{if(state&&e.pointerId===state.pointerId){const was=state.dragging;clear();if(was)setTimeout(()=>{suppressBookClick=false;},100);}});
+    st.lastX=t.clientX;st.lastY=t.clientY;
+    if(t.clientY<105)window.scrollBy(0,-12);else if(t.clientY>window.innerHeight-115)window.scrollBy(0,12);
+    if(st.ghost){const r=st.ghost.getBoundingClientRect();st.ghost.style.left=`${t.clientX-r.width/2}px`;st.ghost.style.top=`${t.clientY-42}px`;}
+    const target=document.elementFromPoint(t.clientX,t.clientY);const liveBox=$('#archiveDropZone');const overBox=target?.closest?.('#archiveDropZone');liveBox?.classList.toggle('is-drag-over',!!overBox);
+    document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));
+    const targetBook=target?.closest?.('#grid .book');if(targetBook&&targetBook!==st.book){targetBook.classList.add('is-drag-target');if(st.lastTarget!==targetBook.dataset.id){st.lastTarget=targetBook.dataset.id;moveBookBefore(st.id,targetBook.dataset.id);}}
+  },{passive:false});
+
+  const finish=async e=>{
+    const st=state;if(!st)return;const t=pointFor(e,st.touchId);clearTimeout(st.timer);
+    if(!st.dragging){state=null;return;}
+    const x=t?.clientX??st.lastX,y=t?.clientY??st.lastY;const target=document.elementFromPoint(x,y),toBox=!!target?.closest?.('#archiveDropZone');
+    persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(toBox){await sendBookToBox(st.id);setArchiveDock(false);}
+  };
+  window.addEventListener('touchend',finish,{passive:true});
+  window.addEventListener('touchcancel',e=>{if(state){const was=state.dragging;clear();if(was)setTimeout(()=>{suppressBookClick=false;},100);}},{passive:true});
 }
 
 function setArchiveDock(open){
