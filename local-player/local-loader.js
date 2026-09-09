@@ -31,6 +31,23 @@
     const ua=String(navigator.userAgent||'');
     return /Twitter(?:\s|\/|Android|$)/i.test(ua)||/com\.atebits\.Tweetie2/i.test(ua);
   }
+  function isIOSFamily(){
+    const ua=String(navigator.userAgent||'');
+    return /iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints||0)>1);
+  }
+  function isRealIOSSafari(){
+    if(!isIOSFamily())return false;
+    const ua=String(navigator.userAgent||'');
+    // iOS app webviews (X/LINE/etc.) generally do not expose Safari's
+    // Version/... Safari/... pair. Require both so an unknown in-app browser
+    // can never become the local bookshelf by accident.
+    return /Version\/[\d.]+/i.test(ua)&&/Safari\/[\d.]+/i.test(ua)&&!/(CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|GSA)\//i.test(ua);
+  }
+  function isIsolatedBookshelfBrowser(){
+    // On iOS, only real Safari may consume/save a bookshelf claim locally.
+    // This deliberately catches X even when X removes its Twitter UA marker.
+    return isLineInAppBrowser()||isXInAppBrowser()||(isIOSFamily()&&!isRealIOSSafari());
+  }
   function bookshelfClaimUrl(token,{external=false}={}){
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
     const u=new URL('../bookshelf/',location.href);
@@ -253,7 +270,7 @@
       const claimToken=String(payload?.bookshelfClaim?.token||'').trim();
       const lineBrowser=isLineInAppBrowser();
       const xBrowser=isXInAppBrowser();
-      const isolatedInAppBrowser=lineBrowser||xBrowser;
+      const isolatedInAppBrowser=isIsolatedBookshelfBrowser();
       let savedLocally=false;
       // Safari/normal browser keeps the fast path: save directly if its local
       // bookshelf DB already exists. An in-app browser intentionally skips
