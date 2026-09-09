@@ -28,6 +28,7 @@ let touchReorderInstalled=false;
 let archiveDockOpen=false;
 let mobileShelfColumns=loadMobileColumns();
 let pinchGesture=null;
+let shelfDataCache={owned:[],created:[]};
 const insightsCache=new Map();
 
 function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(WORKS))db.createObjectStore(WORKS,{keyPath:'workId'});if(!db.objectStoreNames.contains(READER_BOOKS))db.createObjectStore(READER_BOOKS,{keyPath:'copyId'});if(!db.objectStoreNames.contains(HANDOFF))db.createObjectStore(HANDOFF,{keyPath:'key'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
@@ -173,6 +174,7 @@ async function render(){
   const masters=(await getAllWorks()).map(w=>({...w,role:'master'}));
   const readers=(await getAllReaderBooks()).map(w=>({...w,role:'distribution'}));
   shelfCounts={owned:readers.length,created:masters.length};
+  shelfDataCache={owned:readers,created:masters};
   if(!currentShelfTab)currentShelfTab=chooseFirstShelf();
   applyShelfTab(currentShelfTab,{remember:false});
   $('#ownedTab').textContent=`もっている本${readers.length?` ${readers.length}`:''}`;
@@ -220,15 +222,69 @@ async function render(){
 }
 async function switchShelf(tab){applyShelfTab(tab);await render();}
 
-function animateShelfSwipe(direction){
-  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
-  const el=currentShelfTab==='official'?$('#officialShelf'):($('#emptyState')&&!$('#emptyState').hidden?$('#emptyState'):$('#grid'));
-  if(!el||el.hidden||typeof el.animate!=='function')return;
-  const from=direction==='left'?'18px':'-18px';
-  el.animate([
-    {transform:`translateX(${from})`,opacity:.72},
-    {transform:'translateX(0)',opacity:1}
-  ],{duration:180,easing:'cubic-bezier(.22,.7,.2,1)'});
+function swipeShelfBodyHtml(tab){
+  if(tab==='official'){
+    const official=$('#officialShelf');
+    return official?official.outerHTML.replace(/ hidden(?:=\"\")?/,''):'';
+  }
+  const source=tab==='created'?shelfDataCache.created:shelfDataCache.owned;
+  const arranged=orderedShelfBooks(source,tab);
+  if(arranged.visible.length){
+    return `<section class="grid shelf-swipe-grid" data-mobile-columns="${mobileShelfColumns}">${arranged.visible.map(w=>bookCardHtml(w)).join('')}</section>`;
+  }
+  const created=tab==='created';
+  const title=created?'まだ、つくった本はありません':'まだ、もっている本はありません';
+  const copy=created?'Master .scene を追加すると、ここから作品を育てられます。':'自分が持っている Distribution .scene を追加すると、ここに並びます。';
+  return `<section class="empty shelf-swipe-empty"><div class="empty-mark">□</div><h2>${title}</h2><p>${copy}</p></section>`;
+}
+function currentShelfBodyElement(){
+  if(currentShelfTab==='official')return $('#officialShelf');
+  if($('#emptyState')&&!$('#emptyState').hidden)return $('#emptyState');
+  return $('#grid');
+}
+function makeShelfSwipeStage(nextTab,direction){
+  const current=currentShelfBodyElement();
+  if(!current)return null;
+  const rect=current.getBoundingClientRect();
+  const stage=document.createElement('div');
+  stage.className='shelf-swipe-stage';
+  stage.style.top=`${Math.max(0,rect.top)}px`;
+  const currentPage=document.createElement('div');
+  const nextPage=document.createElement('div');
+  currentPage.className='shelf-swipe-page is-current';
+  nextPage.className='shelf-swipe-page is-next';
+  const currentInner=document.createElement('div');
+  const nextInner=document.createElement('div');
+  currentInner.className='shelf-swipe-page-inner';
+  nextInner.className='shelf-swipe-page-inner';
+  currentInner.append(current.cloneNode(true));
+  nextInner.innerHTML=swipeShelfBodyHtml(nextTab);
+  currentPage.append(currentInner);nextPage.append(nextInner);
+  stage.append(currentPage,nextPage);document.body.append(stage);
+  const width=window.innerWidth;
+  nextPage.style.transform=`translate3d(${direction==='left'?width:-width}px,0,0)`;
+  return {stage,currentPage,nextPage,width,direction,nextTab};
+}
+function removeShelfSwipeStage(view){
+  if(view?.stage?.isConnected)view.stage.remove();
+}
+function positionShelfSwipeStage(view,dx){
+  if(!view)return;
+  view.currentPage.style.transform=`translate3d(${dx}px,0,0)`;
+  const base=view.direction==='left'?view.width:-view.width;
+  view.nextPage.style.transform=`translate3d(${base+dx}px,0,0)`;
+  const progress=Math.min(1,Math.abs(dx)/Math.max(1,view.width));
+  view.currentPage.style.filter=`brightness(${1-progress*.045})`;
+  view.nextPage.style.boxShadow=view.direction==='left'?'-18px 0 28px rgba(35,28,20,.10)':'18px 0 28px rgba(35,28,20,.10)';
+}
+function animateShelfSwipeStage(view,toX,duration=220){
+  if(!view)return Promise.resolve();
+  const from=new DOMMatrixReadOnly(getComputedStyle(view.currentPage).transform).m41||0;
+  const base=view.direction==='left'?view.width:-view.width;
+  const easing='cubic-bezier(.22,.72,.18,1)';
+  const a=view.currentPage.animate([{transform:`translate3d(${from}px,0,0)`},{transform:`translate3d(${toX}px,0,0)`}],{duration,easing,fill:'forwards'});
+  view.nextPage.animate([{transform:`translate3d(${base+from}px,0,0)`},{transform:`translate3d(${base+toX}px,0,0)`}],{duration,easing,fill:'forwards'});
+  return a.finished.catch(()=>{});
 }
 
 function installShelfSwipe(){
@@ -238,37 +294,57 @@ function installShelfSwipe(){
   let gesture=null;
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
   const blockedTarget=target=>!!target?.closest?.('dialog[open],button,input,select,textarea,a,summary,[contenteditable="true"]');
+  const cleanup=()=>{if(gesture?.view)removeShelfSwipeStage(gesture.view);gesture=null;};
   window.addEventListener('touchstart',e=>{
     if(!mobile()||e.touches.length!==1||pinchGesture)return;
     if(document.querySelector('dialog[open]')||blockedTarget(e.target))return;
     const t=e.touches[0];
-    // Leave Safari's edge back/forward swipe alone.
     if(t.clientX<22||t.clientX>window.innerWidth-22)return;
-    gesture={x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,startAt:performance.now(),horizontal:false,cancelled:false};
+    gesture={x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,lastAt:performance.now(),vx:0,horizontal:false,cancelled:false,view:null,direction:null};
   },{passive:true});
   window.addEventListener('touchmove',e=>{
-    const g=gesture;if(!g||e.touches.length!==1){gesture=null;return;}
+    const g=gesture;if(!g||e.touches.length!==1){cleanup();return;}
     const t=e.touches[0],dx=t.clientX-g.x,dy=t.clientY-g.y;
-    g.lastX=t.clientX;g.lastY=t.clientY;
+    const now=performance.now(),dt=Math.max(1,now-g.lastAt);g.vx=(t.clientX-g.lastX)/dt;g.lastX=t.clientX;g.lastY=t.clientY;g.lastAt=now;
     const ax=Math.abs(dx),ay=Math.abs(dy);
     if(!g.horizontal){
       if(ay>14&&ay>ax*1.15){g.cancelled=true;return;}
-      if(ax>16&&ax>ay*1.35)g.horizontal=true;
+      if(ax>12&&ax>ay*1.25)g.horizontal=true;
     }
-    if(g.horizontal&&!g.cancelled)e.preventDefault();
-  },{passive:false});
-  window.addEventListener('touchend',e=>{
-    const g=gesture;gesture=null;if(!g||g.cancelled||!g.horizontal)return;
-    const t=e.changedTouches?.[0];if(!t)return;
-    const dx=t.clientX-g.x,dy=t.clientY-g.y,elapsed=performance.now()-g.startAt;
-    if(Math.abs(dx)<58||Math.abs(dx)<Math.abs(dy)*1.45||elapsed>900)return;
+    if(!g.horizontal||g.cancelled)return;
+    e.preventDefault();
     const index=tabs.indexOf(currentShelfTab);if(index<0)return;
-    const nextIndex=dx<0?index+1:index-1;
-    if(nextIndex<0||nextIndex>=tabs.length)return;
     const direction=dx<0?'left':'right';
-    switchShelf(tabs[nextIndex]).then(()=>animateShelfSwipe(direction));
+    const nextIndex=direction==='left'?index+1:index-1;
+    if(nextIndex<0||nextIndex>=tabs.length){
+      // Edge resistance, like a viewer reaching the first/last page.
+      const resisted=Math.sign(dx)*Math.min(44,Math.abs(dx)*.22);
+      if(g.view){removeShelfSwipeStage(g.view);g.view=null;}
+      const current=currentShelfBodyElement();if(current)current.style.transform=`translate3d(${resisted}px,0,0)`;
+      return;
+    }
+    if(!g.view||g.direction!==direction){
+      if(g.view)removeShelfSwipeStage(g.view);
+      g.direction=direction;g.view=makeShelfSwipeStage(tabs[nextIndex],direction);
+      const current=currentShelfBodyElement();if(current)current.style.transform='';
+    }
+    positionShelfSwipeStage(g.view,dx);
+  },{passive:false});
+  window.addEventListener('touchend',async e=>{
+    const g=gesture;gesture=null;if(!g)return;
+    const live=currentShelfBodyElement();if(live)live.style.transform='';
+    if(g.cancelled||!g.horizontal||!g.view){removeShelfSwipeStage(g.view);return;}
+    const t=e.changedTouches?.[0];if(!t){removeShelfSwipeStage(g.view);return;}
+    const dx=t.clientX-g.x;
+    const commit=Math.abs(dx)>g.view.width*.28||Math.abs(g.vx)>.55;
+    if(!commit){await animateShelfSwipeStage(g.view,0,190);removeShelfSwipeStage(g.view);return;}
+    suppressBookClick=true;setTimeout(()=>{suppressBookClick=false;},320);
+    const toX=g.direction==='left'?-g.view.width:g.view.width;
+    await animateShelfSwipeStage(g.view,toX,220);
+    const next=g.view.nextTab;removeShelfSwipeStage(g.view);
+    await switchShelf(next);
   },{passive:true});
-  window.addEventListener('touchcancel',()=>{gesture=null;},{passive:true});
+  window.addEventListener('touchcancel',()=>{const g=gesture;gesture=null;const live=currentShelfBodyElement();if(live)live.style.transform='';removeShelfSwipeStage(g?.view);},{passive:true});
 }
 
 async function openDetail(role,id){const isReader=role==='distribution',w=isReader?await getReaderBook(id):await getWork(id);if(!w)return;currentWorkId=id;const cover=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="detail-cover"><img src="${u}" alt=""></div>`})():(w.coverUrl?`<div class="detail-cover"><img src="${escapeHtml(w.coverUrl)}" alt=""></div>`:`<div class="detail-cover"><div class="cover-fallback">□</div></div>`);if(isReader){const relayAction=w.relayEnabled===false?'':`<button id="relayDistribution" class="journey" type="button">次の一人へ</button>`;$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MY COPY</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene</p><p>本棚追加 ${escapeHtml(fmtDate(w.addedAt))}</p></div></div><div class="actions"><button id="readDistribution" class="edit" type="button">読む</button>${relayAction}<button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">${w.relayEnabled===false?'この一冊は「もっている本」に保存されています。作者の設定によりRELAYは無効です。':'この一冊は「もっている本」に保存されています。読むことも、そのまま次の一人へ送ることもできます。'}</p>`;$('#detailDialog').showModal();const openReaderCopy=(relayNow=false)=>{try{sessionStorage.setItem('ahako:bookshelf:open-copy',w.copyId);}catch(_){}const q=new URLSearchParams({bookshelfCopy:w.copyId});if(relayNow)q.set('relayNow','1');location.href=`../local-player/?${q.toString()}`;};$('#readDistribution').onclick=()=>openReaderCopy(false);if($('#relayDistribution'))$('#relayDistribution').onclick=()=>openReaderCopy(true);$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteReaderBook(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};return;}$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MASTER</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene · revision ${w.revision||0}</p><p>本棚更新 ${escapeHtml(fmtDate(w.updatedAt))}</p></div></div><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><div class="actions"><button id="editWork" class="edit" type="button">Studioで編集</button><button id="viewJourney" class="journey" type="button">旅を見る</button><button id="exportMaster" type="button">Masterを書き出す</button><button id="replaceMaster" type="button">Masterを更新</button><button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">「本棚から外す」は、このブラウザ内の本棚コピーだけを削除します。手元に書き出した .scene ファイルまでは削除しません。</p>`;$('#detailDialog').showModal();loadStrengths(w);$('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);$('#exportMaster').onclick=()=>downloadBlob(w.blob,w.fileName||`${w.title}.scene`);$('#replaceMaster').onclick=()=>{$('#fileInput').dataset.replace=id;$('#fileInput').click();};$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteWork(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};}
