@@ -635,7 +635,7 @@ function installTouchReorder(_books,box){
     const st=state;if(!st)return;const t=pointFor(e,st.touchId);clearTimeout(st.timer);
     if(!st.dragging){state=null;touchBookReordering=false;return;}
     const x=t?.clientX??st.lastX,y=t?.clientY??st.lastY;const target=document.elementFromPoint(x,y),toBox=!!target?.closest?.('#archiveDropZone');
-    persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(toBox){await sendBookToBox(st.id);setArchiveDock(false);}
+    persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(toBox){await sendBookToBox(st.id);/* Keep the storage dock open so multiple books can be packed consecutively. */}
   };
   window.addEventListener('touchend',finish,{passive:true});
   window.addEventListener('touchcancel',e=>{if(state){const was=state.dragging;clear();if(was)setTimeout(()=>{suppressBookClick=false;},100);}},{passive:true});
