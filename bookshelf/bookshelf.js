@@ -81,6 +81,7 @@ async function addDistribution(file,{silent=false}={}){const info=await inspectD
 
 function validBookshelfClaimToken(v){return /^[a-f0-9]{48}$/i.test(String(v||''));}
 const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
+const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
 function validBookshelfHandoffId(v){return /^handoff_[a-f0-9]{24}$/i.test(String(v||''));}
 function bookshelfClaimTokenFromLocation(){
   try{return String(new URL(location.href).searchParams.get('claim')||'').trim();}catch(_){return '';}
@@ -96,6 +97,20 @@ function sameClaimSourceContext(){
 }
 function clearClaimSourceMarker(){
   try{sessionStorage.removeItem(BOOKSHELF_CLAIM_SOURCE_SESSION);}catch(_){}
+}
+function restoreClaimSourcePage(){
+  const handoffId=bookshelfHandoffIdFromLocation();
+  if(!validBookshelfHandoffId(handoffId))return false;
+  try{
+    const key=`${BOOKSHELF_CLAIM_RETURN_PREFIX}${handoffId}`;
+    const raw=String(sessionStorage.getItem(key)||'').trim();
+    if(!raw)return false;
+    const target=new URL(raw,location.href);
+    if(target.origin!==location.origin)return false;
+    sessionStorage.removeItem(key);
+    location.replace(target.href);
+    return true;
+  }catch(_){return false;}
 }
 function showClaimHandoff(){
   document.body.classList.add('x-claim-handoff-active');
@@ -915,6 +930,8 @@ installShelfSwipe();
   // different normal browser) opens the URL, the source nonce is absent and
   // the claim can be imported safely. No X/LINE user-agent guessing required.
   if(sameClaimSourceContext()){
+    // V63.34.2 — clean up the source WebView after Safari handoff.
+    if(restoreClaimSourcePage())return;
     showClaimHandoff();
     document.querySelector('[data-claim-open-safari]')?.addEventListener('click',()=>{
       // V63.33.2 EXPERIMENT — ask iOS to hand the exact claim URL to Safari.
