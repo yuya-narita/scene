@@ -189,7 +189,15 @@ function loadShelfScroll(tab){
 }
 function restoreShelfScroll(tab){
   const y=loadShelfScroll(tab);
-  return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>{window.scrollTo(0,y);resolve();})));
+  // Restore before the next paint whenever possible. Waiting two frames here made
+  // Safari visibly paint the newly-rendered shelf at the top before jumping back.
+  window.scrollTo(0,y);
+  return new Promise(resolve=>requestAnimationFrame(()=>{
+    // One layout pass is enough for images/grid sizing; correct once while the
+    // manga-viewer stage is still covering the live shelf.
+    window.scrollTo(0,y);
+    resolve();
+  }));
 }
 
 function chooseFirstShelf(){
@@ -303,6 +311,13 @@ function makeShelfSwipeStage(nextTab,direction){
   stage.append(currentPage,nextPage);document.body.append(stage);
   const width=window.innerWidth;
   nextPage.style.transform=`translate3d(${direction==='left'?width:-width}px,0,0)`;
+  // Draw the neighbouring shelf at its remembered vertical viewport from the
+  // first frame. Without this, the swipe snapshot itself showed page-top and
+  // then changed to the remembered position after the commit.
+  const bodyTop=Math.max(0,(window.scrollY||window.pageYOffset||0)+rect.top);
+  const targetY=loadShelfScroll(nextTab);
+  const innerOffset=Math.max(0,targetY-bodyTop);
+  nextInner.style.transform=`translate3d(0,${-innerOffset}px,0)`;
   return {stage,currentPage,nextPage,width,direction,nextTab};
 }
 function removeShelfSwipeStage(view){
