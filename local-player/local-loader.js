@@ -296,25 +296,15 @@
         button.textContent='本棚を開く';
         button.onclick=()=>{
           if(!claimUrl){location.href='../bookshelf/';return;}
-          // V63.34 — direct handoff. On iOS, use the Safari URL scheme from
-          // the reader's explicit tap so X/WebViews can leave immediately.
-          // If the scheme is refused, fall back to the normal claim URL; the
-          // V63.33 nonce guard will then show the safe handoff page instead
-          // of consuming the claim in the source WebView.
-          if(isIOSFamily()){
-            try{
-              const target=new URL(claimUrl);
-              const safariUrl=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;
-              let leftPage=false;
-              const markLeft=()=>{leftPage=true;};
-              window.addEventListener('pagehide',markLeft,{once:true});
-              document.addEventListener('visibilitychange',()=>{if(document.hidden)leftPage=true;},{once:true});
-              location.href=safariUrl;
-              setTimeout(()=>{if(!leftPage&&document.visibilityState==='visible')location.href=claimUrl;},900);
-              return;
-            }catch(e){console.error(e);}
-          }
-          location.href=claimUrl;
+          // V63.34.1 — literal copy of the V63.33.2 experiment that worked on X.
+          // Keep the successful path intentionally tiny: explicit user tap ->
+          // build the exact Safari scheme URL -> assign location.href.
+          try{
+            const target=new URL(claimUrl);
+            if(target.protocol!=='https:')return;
+            const safariUrl=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;
+            location.href=safariUrl;
+          }catch(e){console.error(e);}
         };
       }
       if(typeof onSuccess==='function')onSuccess(payload);
