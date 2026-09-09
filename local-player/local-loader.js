@@ -24,6 +24,14 @@
   const BOOKSHELF_DB='ahako-local-bookshelf';
   const READER_BOOKS='readerBooks';
   const API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
+  function newBookshelfHandoffId(){
+    const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);
+    return 'handoff_'+Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  function rememberBookshelfClaimSource(handoffId,token){
+    try{sessionStorage.setItem(BOOKSHELF_CLAIM_SOURCE_SESSION,`${handoffId}:${token}`);}catch(_){}
+  }
   function isLineInAppBrowser(){
     return /(?:^|\s)Line\//i.test(String(navigator.userAgent||''))||/\bLine\b/i.test(String(navigator.userAgent||''));
   }
@@ -48,12 +56,14 @@
     // This deliberately catches X even when X removes its Twitter UA marker.
     return isLineInAppBrowser()||isXInAppBrowser()||(isIOSFamily()&&!isRealIOSSafari());
   }
-  function bookshelfClaimUrl(token,{external=false}={}){
+  function bookshelfClaimUrl(token,{external=false,handoffId=''}={}){
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
     const u=new URL('../bookshelf/',location.href);
     u.searchParams.set('claim',String(token));
-    // Official LINE in-app browser escape hatch. LINE strips/handles this and
-    // opens the target in the device's default browser on iOS/Android.
+    if(/^handoff_[a-f0-9]{24}$/i.test(String(handoffId||'')))u.searchParams.set('handoff',String(handoffId));
+    // LINE can open this handoff URL in the device browser. Other in-app
+    // browsers keep the same URL until the user chooses their native Safari/
+    // browser button. The claim itself is not consumed in the source context.
     if(external)u.searchParams.set('openExternalBrowser','1');
     return u.href;
   }
@@ -269,36 +279,22 @@
       }
       const claimToken=String(payload?.bookshelfClaim?.token||'').trim();
       const lineBrowser=isLineInAppBrowser();
-      const xBrowser=isXInAppBrowser();
-      const isolatedInAppBrowser=isIsolatedBookshelfBrowser();
-      let savedLocally=false;
-      // Safari/normal browser keeps the fast path: save directly if its local
-      // bookshelf DB already exists. An in-app browser intentionally skips
-      // this, because that IndexedDB would be isolated from Safari.
-      if(!isolatedInAppBrowser){
-        try{
-          await putOwnedSceneInBookshelf(payload.scene);
-          savedLocally=true;
-          sendBookshelfEvent('own_copy_saved',payload.scene);
-        }catch(error){
-          console.info('Local bookshelf handoff will be used instead.',error);
-        }
-      }
-      const claimUrl=bookshelfClaimUrl(claimToken,{external:lineBrowser});
+      // V63.33: never save an OWN COPY directly from the page that minted it.
+      // A short-lived claim URL must cross browser contexts (or be explicitly
+      // confirmed by a user who is already in Safari). This removes the need
+      // to guess whether the current WebKit view belongs to X/LINE/etc.
+      const handoffId=newBookshelfHandoffId();
+      if(claimToken)rememberBookshelfClaimSource(handoffId,claimToken);
+      const claimUrl=bookshelfClaimUrl(claimToken,{external:lineBrowser,handoffId});
       if(statusNode){
-        statusNode.textContent=savedLocally
-          ? '自分の一冊を本棚に受け取りました。'
-          : (lineBrowser
-              ? '自分の一冊を用意しました。Safariの本棚で受け取れます。'
-              : (xBrowser
-                  ? '自分の一冊を用意しました。本棚を開いたあと、X右下のSafariボタンから受け取れます。'
-                  : '自分の一冊を用意しました。本棚を開いて受け取れます。'));
+        statusNode.textContent=lineBrowser
+          ? '自分の一冊を用意しました。Safariの本棚で受け取れます。'
+          : '自分の一冊を用意しました。本棚を開いてSafariへ受け渡します。';
       }
       if(button){
         button.disabled=false;
         button.textContent='本棚を開く';
         button.onclick=()=>{
-          if(savedLocally&&!isolatedInAppBrowser){location.href='../bookshelf/';return;}
           if(claimUrl){location.href=claimUrl;return;}
           location.href='../bookshelf/';
         };
