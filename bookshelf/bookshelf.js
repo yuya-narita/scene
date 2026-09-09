@@ -222,7 +222,7 @@ async function render({deferCoverRevoke=false}={}){
     shelfAdd.dataset.addRole=owned?'distribution':'master';
     studioCreate.hidden=owned;
   }
-  const archiveVisible=!official&&source.length>0;
+  const archiveVisible=!official;
   const archiveDrop=$('#archiveDropZone'),archiveLauncher=$('#archiveLauncher');
   archiveDrop.hidden=!archiveVisible;
   archiveLauncher.hidden=!archiveVisible;
