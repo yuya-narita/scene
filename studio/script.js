@@ -12094,9 +12094,15 @@ function openDesktopTextDetail(){
   }
 
   const menuSaveBookshelfButton=document.querySelector('#menuSaveBookshelfButton');
+  const menuOpenBookshelfButton=document.querySelector('#menuOpenBookshelfButton');
   if(menuSaveBookshelfButton){
-    menuSaveBookshelfButton.hidden=!openedFromBookshelf;
+    const label=menuSaveBookshelfButton.querySelector('span');
+    if(label)label.textContent=openedFromBookshelf?'本棚へ保存して戻る':'本棚へ保存して移動';
     menuSaveBookshelfButton.addEventListener('click',()=>{closeEasyMenu();saveMasterBackToBookshelf();});
+  }
+  if(menuOpenBookshelfButton){
+    menuOpenBookshelfButton.hidden=openedFromBookshelf;
+    menuOpenBookshelfButton.addEventListener('click',()=>{closeEasyMenu();location.href='../bookshelf/';});
   }
   if(openedFromBookshelf)setTimeout(openMasterFromBookshelf,120);
 
