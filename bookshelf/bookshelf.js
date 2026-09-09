@@ -79,6 +79,57 @@ async function addMaster(file,{silent=false}={}){const info=await inspectMaster(
 async function inspectDistribution(file){const entries=await readZipEntries(file);const sceneBytes=entries.get('scene.json');if(!sceneBytes)throw new Error('scene.json がありません。');const doc=parseJson(sceneBytes);const manifest=entries.get('manifest.json')?parseJson(entries.get('manifest.json')):{};const role=String(manifest.packageRole||doc?.package?.role||'').toLowerCase();if(role!=='distribution')throw new Error('これは Distribution .scene ではありません。');const copyId=String(doc?.distribution?.copyId||manifest?.copyId||'').trim();const workId=String(doc?.distribution?.workId||manifest?.workId||doc?.workId||'').trim();const editionId=String(doc?.edition?.editionId||manifest?.editionId||'').trim();if(!/^copy_[a-f0-9]{32}$/i.test(copyId))throw new Error('Distribution の copyId を確認できません。');if(!/^[A-Za-z0-9_-]{12,80}$/.test(workId))throw new Error('Distribution の workId を確認できません。');let coverBlob=null;const coverPath=String(doc?.cover?.src||manifest?.cover?.image||'').replace(/^\.\//,'');if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:mime(coverPath)});const coverUrl=/^https?:\/\//i.test(String(doc?.cover?.src||''))?String(doc.cover.src):'';return{role:'distribution',copyId,workId,editionId,title:String(doc.title||manifest.title||'Untitled'),author:String(doc.author||manifest.author||''),sceneCount:Array.isArray(doc.scenes)?doc.scenes.length:0,relayEnabled:doc?.sharing?.relay?.enabled!==false,issuedAt:String(doc?.distribution?.issuedAt||doc?.edition?.issuedAt||''),coverBlob,coverUrl,blob:new Blob([await file.arrayBuffer()],{type:'application/octet-stream'})};}
 async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
 
+function validBookshelfClaimToken(v){return /^[a-f0-9]{48}$/i.test(String(v||''));}
+function safeClaimFileBase(v){return String(v||'book').replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,' ').trim().slice(0,80)||'book';}
+async function distributionFileFromClaimScene(scene){
+  const copyId=String(scene?.distribution?.copyId||'').trim();
+  const workId=String(scene?.distribution?.workId||scene?.workId||'').trim();
+  const editionId=String(scene?.edition?.editionId||'').trim();
+  if(!/^copy_[a-f0-9]{32}$/i.test(copyId)||!/^[A-Za-z0-9_-]{12,80}$/.test(workId)||!/^edition_[a-f0-9]{32}$/i.test(editionId))throw new Error('受け取った一冊を確認できませんでした。');
+  const manifest={
+    package:'scene-package',packageVersion:'1.0',entry:'scene.json',packageRole:'distribution',
+    workId,editionId,copyId,
+    issuedAt:String(scene?.distribution?.issuedAt||scene?.edition?.issuedAt||new Date().toISOString()),
+    relayEnabled:scene?.sharing?.relay?.enabled!==false,
+    title:String(scene?.title||'Untitled'),author:String(scene?.author||'')
+  };
+  const blob=await makeStoreZip([
+    {name:'scene.json',bytes:te.encode(JSON.stringify(scene,null,2))},
+    {name:'manifest.json',bytes:te.encode(JSON.stringify(manifest,null,2))}
+  ]);
+  return new File([blob],`${safeClaimFileBase(scene?.title||'book')}_distribution.scene`,{type:'application/octet-stream'});
+}
+async function importBookshelfClaimFromLocation(){
+  let u;try{u=new URL(location.href);}catch(_){return false;}
+  const token=String(u.searchParams.get('claim')||'').trim();
+  if(!token)return false;
+  // Remove LINE's external-browser hint and the bearer token from visible URL
+  // as soon as the page owns a copy of it in memory.
+  u.searchParams.delete('claim');u.searchParams.delete('openExternalBrowser');
+  const cleanUrl=u.pathname+(u.search||'')+(u.hash||'');
+  if(!validBookshelfClaimToken(token)){history.replaceState(null,'',cleanUrl);throw new Error('本棚への受取リンクを確認できませんでした。');}
+  const response=await fetch(`${API_BASE}/bookshelf-claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({token})});
+  const payload=await response.json().catch(()=>null);
+  if(!response.ok||!payload?.ok||!payload?.scene){
+    history.replaceState(null,'',cleanUrl);
+    const code=String(payload?.code||'');
+    if(code==='BOOKSHELF_CLAIM_EXPIRED')throw new Error('本棚への受取リンクの有効期限が切れました。もう一度「自分の一冊を受け取る」から開いてください。');
+    if(code==='BOOKSHELF_CLAIM_NOT_FOUND')throw new Error('この本棚への受取リンクは、すでに使われたか見つかりませんでした。');
+    throw new Error(String(payload?.error||'本棚へ一冊を受け取れませんでした。'));
+  }
+  const file=await distributionFileFromClaimScene(payload.scene);
+  await addDistribution(file,{silent:true});
+  applyShelfTab('owned');
+  history.replaceState(null,'',cleanUrl);
+  try{
+    await fetch(`${API_BASE}/bookshelf-claim/consume`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',keepalive:true,body:JSON.stringify({token})});
+  }catch(_){}
+  try{
+    fetch(`${API_BASE}/bookshelf-event`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',keepalive:true,body:JSON.stringify({event:'own_copy_saved',workId:String(payload.scene?.workId||payload.scene?.distribution?.workId||''),copyId:String(payload.scene?.distribution?.copyId||'')})}).catch(()=>{});
+  }catch(_){}
+  return true;
+}
+
 
 function clampMobileColumns(value){return Math.max(2,Math.min(4,Number(value)||2));}
 function loadMobileColumns(){
@@ -817,5 +868,12 @@ installSceneDrop();
 installShelfScrollGuard();
 installDesktopShelfArrowKeys();
 installShelfSwipe();
-render().then(()=>restoreShelfScroll(currentShelfTab)).catch(e=>{console.error(e);alert('本棚を開けませんでした。');});
+(async()=>{
+  let claimed=false;
+  try{claimed=await importBookshelfClaimFromLocation();}
+  catch(e){console.error(e);alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
+  await render();
+  await restoreShelfScroll(currentShelfTab);
+  if(claimed)toast('自分の一冊を本棚に受け取りました。');
+})().catch(e=>{console.error(e);alert('本棚を開けませんでした。');});
 })();
