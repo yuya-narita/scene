@@ -80,33 +80,24 @@ async function inspectDistribution(file){const entries=await readZipEntries(file
 async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
 
 function validBookshelfClaimToken(v){return /^[a-f0-9]{48}$/i.test(String(v||''));}
-
-function isXInAppBrowser(){
-  const ua=String(navigator.userAgent||'');
-  return /Twitter(?:\s|\/|Android|$)/i.test(ua)||/com\.atebits\.Tweetie2/i.test(ua);
-}
-function isIOSFamily(){
-  const ua=String(navigator.userAgent||'');
-  return /iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints||0)>1);
-}
-function isRealIOSSafari(){
-  if(!isIOSFamily())return false;
-  const ua=String(navigator.userAgent||'');
-  return /Version\/[\d.]+/i.test(ua)&&/Safari\/[\d.]+/i.test(ua)&&!/(CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|GSA)\//i.test(ua);
-}
+const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
+function validBookshelfHandoffId(v){return /^handoff_[a-f0-9]{24}$/i.test(String(v||''));}
 function bookshelfClaimTokenFromLocation(){
   try{return String(new URL(location.href).searchParams.get('claim')||'').trim();}catch(_){return '';}
 }
-function shouldHoldClaimForX(){
-  const token=bookshelfClaimTokenFromLocation();
-  if(!validBookshelfClaimToken(token))return false;
-  // X on iOS does not always expose a Twitter-specific UA. The safe rule is
-  // therefore inverted: on iOS a claim is consumed only by real Safari.
-  // Unknown WKWebView/in-app browsers keep the bearer URL untouched so the
-  // native Safari button can hand the exact same claim to Safari.
-  return isXInAppBrowser()||(isIOSFamily()&&!isRealIOSSafari());
+function bookshelfHandoffIdFromLocation(){
+  try{return String(new URL(location.href).searchParams.get('handoff')||'').trim();}catch(_){return '';}
 }
-function showXClaimHandoff(){
+function sameClaimSourceContext(){
+  const token=bookshelfClaimTokenFromLocation();
+  const handoffId=bookshelfHandoffIdFromLocation();
+  if(!validBookshelfClaimToken(token)||!validBookshelfHandoffId(handoffId))return false;
+  try{return sessionStorage.getItem(BOOKSHELF_CLAIM_SOURCE_SESSION)===`${handoffId}:${token}`;}catch(_){return false;}
+}
+function clearClaimSourceMarker(){
+  try{sessionStorage.removeItem(BOOKSHELF_CLAIM_SOURCE_SESSION);}catch(_){}
+}
+function showClaimHandoff(){
   document.body.classList.add('x-claim-handoff-active');
   let panel=document.getElementById('xClaimHandoff');
   if(!panel){
@@ -117,12 +108,13 @@ function showXClaimHandoff(){
     panel.innerHTML=`<div class="x-claim-handoff-card">
       <p class="eyebrow">MY COPY HANDOFF</p>
       <h1>Safariで本棚に受け取る</h1>
-      <p class="x-claim-handoff-lead">この一冊は、まだXの中では受け取っていません。</p>
+      <p class="x-claim-handoff-lead">この一冊は、まだこのブラウザの本棚には保存していません。</p>
       <div class="x-claim-handoff-guide">
-        <strong>画面右下のSafariボタンから開いてください。</strong>
-        <span>Safariで同じページが開いた時に、この一冊を本棚へ保存します。</span>
+        <strong>アプリ内ブラウザなら、Safariでこのページを開いてください。</strong>
+        <span>Xでは右下のSafariボタン、その他のアプリでは「Safariで開く」「ブラウザで開く」を使います。別のブラウザで同じページが開いた時に、自動で一冊を保存します。</span>
       </div>
-      <p class="x-claim-handoff-note">受取リンクは短時間だけ有効です。Xを閉じても、Safariで開くまでは一冊を消費しません。</p>
+      <button type="button" class="claim-current-browser" data-claim-current>すでにSafariで開いている場合、この本棚に受け取る</button>
+      <p class="x-claim-handoff-note">受取リンクは短時間だけ有効です。アプリ内ブラウザでこのボタンを押すと、そのアプリ専用の本棚に保存されるため、Safariで開いている時だけ使用してください。</p>
     </div>`;
     document.body.appendChild(panel);
   }
@@ -153,7 +145,7 @@ async function importBookshelfClaimFromLocation(){
   if(!token)return false;
   // Remove LINE's external-browser hint and the bearer token from visible URL
   // as soon as the page owns a copy of it in memory.
-  u.searchParams.delete('claim');u.searchParams.delete('openExternalBrowser');
+  u.searchParams.delete('claim');u.searchParams.delete('handoff');u.searchParams.delete('openExternalBrowser');
   const cleanUrl=u.pathname+(u.search||'')+(u.hash||'');
   if(!validBookshelfClaimToken(token)){history.replaceState(null,'',cleanUrl);throw new Error('本棚への受取リンクを確認できませんでした。');}
   const response=await fetch(`${API_BASE}/bookshelf-claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({token})});
@@ -917,11 +909,26 @@ installShelfScrollGuard();
 installDesktopShelfArrowKeys();
 installShelfSwipe();
 (async()=>{
-  // X's in-app browser has its own IndexedDB. Never consume a bookshelf claim
-  // there: keep the bearer URL intact so X's native Safari button can reopen
-  // exactly the same claim in Safari, where the real local bookshelf lives.
-  if(shouldHoldClaimForX()){
-    showXClaimHandoff();
+  // V63.33 — context handoff guard. The source page stores a nonce in
+  // sessionStorage and carries the same nonce in the claim URL. If the claim
+  // opens in that same browsing context, do NOT consume it. When Safari (or a
+  // different normal browser) opens the URL, the source nonce is absent and
+  // the claim can be imported safely. No X/LINE user-agent guessing required.
+  if(sameClaimSourceContext()){
+    showClaimHandoff();
+    document.querySelector('[data-claim-current]')?.addEventListener('click',async()=>{
+      const button=document.querySelector('[data-claim-current]');
+      if(button)button.disabled=true;
+      clearClaimSourceMarker();
+      document.body.classList.remove('x-claim-handoff-active');
+      document.getElementById('xClaimHandoff')?.remove();
+      let claimed=false;
+      try{claimed=await importBookshelfClaimFromLocation();}
+      catch(e){console.error(e);alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
+      await render();
+      await restoreShelfScroll(currentShelfTab);
+      if(claimed)toast('自分の一冊を本棚に受け取りました。');
+    },{once:true});
     return;
   }
   let claimed=false;
