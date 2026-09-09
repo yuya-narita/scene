@@ -410,3 +410,12 @@ body.bookshelf-scroll-locked{
   .archive-batch-actions{position:sticky;bottom:0;z-index:2;padding:11px 14px;box-shadow:0 -7px 18px rgba(45,35,22,.06)}
   .archive-batch-actions button{padding:10px 12px;font-size:10px}
 }
+
+/* V63.25.5 — atomic per-shelf scroll restore on iPhone.
+   The manga swipe snapshot remains visible while the freshly rendered live shelf
+   is positioned once, preventing Safari from showing an intermediate Y position. */
+@media(max-width:680px) and (pointer:coarse){
+  body.shelf-scroll-restoring #grid,
+  body.shelf-scroll-restoring #emptyState,
+  body.shelf-scroll-restoring #officialShelf{visibility:hidden!important}
+}

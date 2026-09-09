@@ -188,15 +188,20 @@ function loadShelfScroll(tab){
   try{return Math.max(0,Number(localStorage.getItem(key)||0)||0);}catch(_){return 0;}
 }
 function restoreShelfScroll(tab){
-  const y=loadShelfScroll(tab);
-  // Restore before the next paint whenever possible. Waiting two frames here made
-  // Safari visibly paint the newly-rendered shelf at the top before jumping back.
-  window.scrollTo(0,y);
+  const savedY=loadShelfScroll(tab);
+  const body=document.body;
+  body?.classList.add('shelf-scroll-restoring');
   return new Promise(resolve=>requestAnimationFrame(()=>{
-    // One layout pass is enough for images/grid sizing; correct once while the
-    // manga-viewer stage is still covering the live shelf.
-    window.scrollTo(0,y);
-    resolve();
+    // Wait until the target shelf has its final grid geometry, then place it once.
+    // Keep the live shelf hidden during this single positioning pass so Safari
+    // cannot paint an intermediate scroll position between two scrollTo calls.
+    const maxY=Math.max(0,document.documentElement.scrollHeight-window.innerHeight);
+    const y=Math.min(savedY,maxY);
+    try{window.scrollTo({left:0,top:y,behavior:'instant'});}catch(_){window.scrollTo(0,y);}
+    requestAnimationFrame(()=>{
+      body?.classList.remove('shelf-scroll-restoring');
+      resolve();
+    });
   }));
 }
 
@@ -314,10 +319,14 @@ function makeShelfSwipeStage(nextTab,direction){
   // Draw the neighbouring shelf at its remembered vertical viewport from the
   // first frame. Without this, the swipe snapshot itself showed page-top and
   // then changed to the remembered position after the commit.
-  const bodyTop=Math.max(0,(window.scrollY||window.pageYOffset||0)+rect.top);
+  const currentY=window.scrollY||window.pageYOffset||0;
   const targetY=loadShelfScroll(nextTab);
-  const innerOffset=Math.max(0,targetY-bodyTop);
-  nextInner.style.transform=`translate3d(0,${-innerOffset}px,0)`;
+  // The swipe stage starts at the current shelf body's viewport position.
+  // To preview the neighbour at its remembered document scroll position, shift
+  // by the *difference* between the current and target scroll Y. The previous
+  // bodyTop-based formula displayed an in-between position, then snapped again
+  // when the live shelf was revealed.
+  nextInner.style.transform=`translate3d(0,${currentY-targetY}px,0)`;
   return {stage,currentPage,nextPage,width,direction,nextTab};
 }
 function removeShelfSwipeStage(view){
