@@ -124,8 +124,6 @@ async function render(){
   $('#grid').hidden=official;
   $('#emptyState').hidden=official||books.length>0||arranged.archived.length>0;
   $('#countText').textContent=official?'あ箱の本':`${source.length}冊`;
-  $('.local-note').textContent=official?'あ箱から届く棚':'この端末内に保存';
-  $('.local-note').hidden=createdShelf;
   const shelfActions=$('#shelfHeadActions'),shelfAdd=$('#shelfAddIconButton'),studioCreate=$('#createStudioIconButton');
   shelfActions.hidden=official;
   if(!official){
