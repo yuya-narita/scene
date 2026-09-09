@@ -23,6 +23,7 @@ let activeArchivedBooks=[];
 let suppressBookClick=false;
 let draggingBookId='';
 let touchReorderInstalled=false;
+let archiveDockOpen=false;
 const insightsCache=new Map();
 
 function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(WORKS))db.createObjectStore(WORKS,{keyPath:'workId'});if(!db.objectStoreNames.contains(READER_BOOKS))db.createObjectStore(READER_BOOKS,{keyPath:'copyId'});if(!db.objectStoreNames.contains(HANDOFF))db.createObjectStore(HANDOFF,{keyPath:'key'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
@@ -133,8 +134,13 @@ async function render(){
     shelfAdd.dataset.addRole=owned?'distribution':'master';
     studioCreate.hidden=owned;
   }
-  $('#archiveDropZone').hidden=official||source.length===0;
+  const archiveVisible=!official&&source.length>0;
+  const archiveDrop=$('#archiveDropZone'),archiveLauncher=$('#archiveLauncher');
+  archiveDrop.hidden=!archiveVisible;
+  archiveLauncher.hidden=!archiveVisible;
+  if(!archiveVisible) setArchiveDock(false);
   $('#archiveCount').textContent=`${arranged.archived.length}冊`;
+  $('#archiveLauncherCount').textContent=String(arranged.archived.length);
   if(!official&&!books.length&&!arranged.archived.length){
     const created=currentShelfTab==='created';
     $('#emptyTitle').textContent=created?'まだ、つくった本はありません':'まだ、もっている本はありません';
@@ -252,7 +258,14 @@ function installSceneDrop(){
 function moveBookBefore(dragId,targetId){
   if(!dragId||!targetId||dragId===targetId)return;
   const grid=$('#grid'),drag=grid?.querySelector(`.book[data-id="${CSS.escape(dragId)}"]`),target=grid?.querySelector(`.book[data-id="${CSS.escape(targetId)}"]`);
-  if(!drag||!target)return;grid.insertBefore(drag,target);persistVisibleOrderFromDom();
+  if(!drag||!target)return;
+  const books=Array.from(grid.querySelectorAll('.book')),before=new Map(books.map(el=>[el,el.getBoundingClientRect()]));
+  const dragIndex=books.indexOf(drag),targetIndex=books.indexOf(target);
+  if(dragIndex<targetIndex)grid.insertBefore(drag,target.nextSibling);else grid.insertBefore(drag,target);
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    Array.from(grid.querySelectorAll('.book')).forEach(el=>{const a=before.get(el),b=el.getBoundingClientRect();if(!a)return;const dx=a.left-b.left,dy=a.top-b.top;if(Math.abs(dx)<1&&Math.abs(dy)<1)return;el.animate([{transform:`translate3d(${dx}px,${dy}px,0)`},{transform:'translate3d(0,0,0)'}],{duration:190,easing:'cubic-bezier(.2,.8,.2,1)'});});
+  }
+  persistVisibleOrderFromDom();
 }
 function waitAnimation(animation,fallback=240){return new Promise(resolve=>{let done=false;const finish=()=>{if(done)return;done=true;resolve();};if(animation){animation.addEventListener?.('finish',finish,{once:true});animation.addEventListener?.('cancel',finish,{once:true});}setTimeout(finish,fallback);});}
 async function animateBookIntoBox(id){
@@ -277,6 +290,8 @@ async function sendBookToBox(id){if(!id||!SHELF_ARCHIVE_KEYS[currentShelfTab])re
 function bindBookInteractions(){
   const books=Array.from(document.querySelectorAll('#grid .book')),box=$('#archiveDropZone');
   books.forEach(book=>{
+    book.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();});
+    book.addEventListener('selectstart',e=>e.preventDefault());
     book.addEventListener('click',e=>{if(suppressBookClick){e.preventDefault();e.stopPropagation();return;}openDetail(book.dataset.role,book.dataset.id);});
     book.addEventListener('dragstart',e=>{if(matchMedia('(pointer:coarse)').matches){e.preventDefault();return;}draggingBookId=book.dataset.id;suppressBookClick=true;book.classList.add('is-dragging');e.dataTransfer?.setData('text/ahako-book-id',book.dataset.id);if(e.dataTransfer)e.dataTransfer.effectAllowed='move';});
     book.addEventListener('dragend',()=>{draggingBookId='';book.classList.remove('is-dragging');box?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));persistVisibleOrderFromDom();setTimeout(()=>{suppressBookClick=false;},80);});
@@ -290,15 +305,23 @@ function bindBookInteractions(){
 function installTouchReorder(_books,box){
   if(touchReorderInstalled||!matchMedia('(pointer:coarse)').matches)return;touchReorderInstalled=true;
   let state=null;
-  const clear=()=>{if(!state)return;clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');box?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;};
+  const clear=()=>{if(!state)return;clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;};
+  window.addEventListener('contextmenu',e=>{if(e.target?.closest?.('#grid .book'))e.preventDefault();},{capture:true});
   window.addEventListener('pointerdown',e=>{
     if(e.pointerType==='mouse')return;const book=e.target?.closest?.('#grid .book');if(!book)return;
-    const st={book,id:book.dataset.id,pointerId:e.pointerId,x:e.clientX,y:e.clientY,dragging:false,timer:null,ghost:null};state=st;
-    st.timer=setTimeout(()=>{if(state!==st||!document.body.contains(book))return;st.dragging=true;suppressBookClick=true;book.classList.add('is-touch-dragging');const r=book.getBoundingClientRect();const ghost=book.cloneNode(true);ghost.classList.add('book-drag-ghost');ghost.removeAttribute('draggable');ghost.style.width=`${r.width}px`;ghost.style.left=`${e.clientX-r.width/2}px`;ghost.style.top=`${e.clientY-42}px`;document.body.appendChild(ghost);st.ghost=ghost;try{book.setPointerCapture(e.pointerId);}catch(_){}if(navigator.vibrate)navigator.vibrate(18);},280);
+    const st={book,id:book.dataset.id,pointerId:e.pointerId,x:e.clientX,y:e.clientY,lastTarget:'',dragging:false,timer:null,ghost:null};state=st;
+    st.timer=setTimeout(()=>{if(state!==st||!document.body.contains(book))return;st.dragging=true;suppressBookClick=true;book.classList.add('is-touch-dragging');const r=book.getBoundingClientRect();const ghost=book.cloneNode(true);ghost.classList.add('book-drag-ghost');ghost.removeAttribute('draggable');ghost.style.width=`${r.width}px`;ghost.style.left=`${st.x-r.width/2}px`;ghost.style.top=`${st.y-42}px`;document.body.appendChild(ghost);st.ghost=ghost;try{book.setPointerCapture(e.pointerId);}catch(_){}if(navigator.vibrate)navigator.vibrate(18);},240);
   },{passive:true});
-  window.addEventListener('pointermove',e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;if(!st.dragging){if(Math.hypot(e.clientX-st.x,e.clientY-st.y)>10){clearTimeout(st.timer);state=null;}return;}e.preventDefault();if(st.ghost){const r=st.ghost.getBoundingClientRect();st.ghost.style.left=`${e.clientX-r.width/2}px`;st.ghost.style.top=`${e.clientY-42}px`;}const target=document.elementFromPoint(e.clientX,e.clientY);const liveBox=$('#archiveDropZone');const overBox=target?.closest?.('#archiveDropZone');liveBox?.classList.toggle('is-drag-over',!!overBox);document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));const targetBook=target?.closest?.('#grid .book');if(targetBook&&targetBook!==st.book){targetBook.classList.add('is-drag-target');moveBookBefore(st.id,targetBook.dataset.id);}}, {passive:false});
-  const finish=async e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;clearTimeout(st.timer);if(!st.dragging){state=null;return;}const target=document.elementFromPoint(e.clientX,e.clientY),toBox=!!target?.closest?.('#archiveDropZone');persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},80);if(toBox)await sendBookToBox(st.id);};
-  window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',e=>{if(state&&e.pointerId===state.pointerId){const was=state.dragging;clear();if(was)setTimeout(()=>{suppressBookClick=false;},80);}});
+  window.addEventListener('pointermove',e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;if(!st.dragging){if(Math.hypot(e.clientX-st.x,e.clientY-st.y)>10){clearTimeout(st.timer);state=null;}return;}e.preventDefault();if(st.ghost){const r=st.ghost.getBoundingClientRect();st.ghost.style.left=`${e.clientX-r.width/2}px`;st.ghost.style.top=`${e.clientY-42}px`;}const target=document.elementFromPoint(e.clientX,e.clientY);const liveBox=$('#archiveDropZone');const overBox=target?.closest?.('#archiveDropZone');liveBox?.classList.toggle('is-drag-over',!!overBox);document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));const targetBook=target?.closest?.('#grid .book');if(targetBook&&targetBook!==st.book){targetBook.classList.add('is-drag-target');if(st.lastTarget!==targetBook.dataset.id){st.lastTarget=targetBook.dataset.id;moveBookBefore(st.id,targetBook.dataset.id);}}}, {passive:false});
+  const finish=async e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;clearTimeout(st.timer);if(!st.dragging){state=null;return;}const target=document.elementFromPoint(e.clientX,e.clientY),toBox=!!target?.closest?.('#archiveDropZone');persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(toBox){await sendBookToBox(st.id);setArchiveDock(false);}};
+  window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',e=>{if(state&&e.pointerId===state.pointerId){const was=state.dragging;clear();if(was)setTimeout(()=>{suppressBookClick=false;},100);}});
+}
+
+function setArchiveDock(open){
+  archiveDockOpen=!!open;
+  const launcher=$('#archiveLauncher'),drop=$('#archiveDropZone');
+  launcher?.classList.toggle('is-open',archiveDockOpen);launcher?.setAttribute('aria-expanded',archiveDockOpen?'true':'false');
+  drop?.classList.toggle('is-dock-open',archiveDockOpen);document.body.classList.toggle('archive-dock-open',archiveDockOpen);
 }
 function openArchiveBox(){
   if(currentShelfTab==='official')return;
@@ -328,7 +351,8 @@ $('#restoreButton').onclick=()=>{closeBookshelfMenu();$('#restoreInput').click()
 $('#restoreInput').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{await restoreShelf(f);}catch(err){alert(err.message||'復元できませんでした。');}finally{e.target.value='';}};
 
 document.addEventListener('click',e=>{const menu=$('#bookshelfMenu');if(menu?.open&&!menu.contains(e.target))menu.open=false;});
-$('#archiveDropZone').onclick=openArchiveBox;
+$('#archiveLauncher').onclick=()=>setArchiveDock(!archiveDockOpen);
+$('#archiveDropZone').onclick=()=>{if(matchMedia('(pointer:coarse)').matches&&!archiveDockOpen){setArchiveDock(true);return;}openArchiveBox();};
 $('#closeArchive').onclick=()=>$('#archiveDialog').close();
 $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
