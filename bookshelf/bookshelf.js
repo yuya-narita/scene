@@ -106,15 +106,13 @@ function showClaimHandoff(){
     panel.className='x-claim-handoff';
     panel.setAttribute('role','status');
     panel.innerHTML=`<div class="x-claim-handoff-card">
-      <p class="eyebrow">MY COPY HANDOFF</p>
-      <h1>Safariで本棚に受け取る</h1>
-      <p class="x-claim-handoff-lead">この一冊は、まだこのブラウザの本棚には保存していません。</p>
+      <p class="eyebrow">MY COPY</p>
+      <h1>Safariで受け取る</h1>
       <div class="x-claim-handoff-guide">
-        <strong>アプリ内ブラウザなら、Safariでこのページを開いてください。</strong>
-        <span>Xでは右下のSafariボタン、その他のアプリでは「Safariで開く」「ブラウザで開く」を使います。別のブラウザで同じページが開いた時に、自動で一冊を保存します。</span>
+        <strong>Safariでこのページを開いてください。</strong>
+        <span>Xなら右下のSafariボタンから開けます。Safariで開くと、自動で本棚に入ります。</span>
       </div>
-      <button type="button" class="claim-current-browser" data-claim-current>すでにSafariで開いている場合、この本棚に受け取る</button>
-      <p class="x-claim-handoff-note">受取リンクは短時間だけ有効です。アプリ内ブラウザでこのボタンを押すと、そのアプリ専用の本棚に保存されるため、Safariで開いている時だけ使用してください。</p>
+      <button type="button" class="claim-current-browser" data-claim-current>Safariで開いています → 受け取る</button>
     </div>`;
     document.body.appendChild(panel);
   }

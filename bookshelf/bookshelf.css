@@ -605,3 +605,16 @@ body.x-claim-handoff-active>#toast{display:none!important}
 
 .x-claim-handoff .claim-current-browser{display:block;width:100%;margin-top:14px;padding:14px 16px;border:1px solid #d8d0c2;border-radius:14px;background:#f6f3ec;color:#292622;font-size:12px;font-weight:800;line-height:1.45;cursor:pointer}
 .x-claim-handoff .claim-current-browser:disabled{opacity:.45;cursor:default}
+
+/* V63.33.1 — simplified MY COPY handoff surface; V63.33 guard logic unchanged */
+.x-claim-handoff-card{padding:28px 26px}
+.x-claim-handoff-card h1{font-size:32px}
+.x-claim-handoff-guide{margin-top:22px;padding:18px 20px}
+.x-claim-handoff-guide strong{font-size:18px}
+.x-claim-handoff-guide span{margin-top:7px;font-size:13px;line-height:1.65}
+.x-claim-handoff .claim-current-browser{margin-top:12px;padding:13px 16px}
+@media(max-width:680px){
+  .x-claim-handoff-card{padding:24px 22px}
+  .x-claim-handoff-card h1{font-size:29px}
+  .x-claim-handoff-guide{padding:17px 18px}
+}
