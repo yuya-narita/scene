@@ -109,10 +109,12 @@ function showClaimHandoff(){
       <p class="eyebrow">MY COPY</p>
       <h1>Safariで受け取る</h1>
       <div class="x-claim-handoff-guide">
-        <strong>Safariでこのページを開いてください。</strong>
-        <span>Xなら右下のSafariボタンから開けます。Safariで開くと、自動で本棚に入ります。</span>
+        <strong>Safariへ移動して、この一冊を受け取ります。</strong>
+        <span>まずは下のボタンで直接Safariを開けるか試します。</span>
       </div>
+      <button type="button" class="claim-open-safari" data-claim-open-safari>Safariで受け取る（実験）</button>
       <button type="button" class="claim-current-browser" data-claim-current>Safariで開いています → 受け取る</button>
+      <p class="claim-experiment-note">開かなければ、右下のSafariボタンから開けば従来どおり受け取れます。</p>
     </div>`;
     document.body.appendChild(panel);
   }
@@ -914,6 +916,17 @@ installShelfSwipe();
   // the claim can be imported safely. No X/LINE user-agent guessing required.
   if(sameClaimSourceContext()){
     showClaimHandoff();
+    document.querySelector('[data-claim-open-safari]')?.addEventListener('click',()=>{
+      // V63.33.2 EXPERIMENT — ask iOS to hand the exact claim URL to Safari.
+      // x-safari-https is intentionally treated as experimental/undocumented;
+      // if the host WebView refuses it, the existing native Safari button remains the fallback.
+      try{
+        const target=new URL(location.href);
+        if(target.protocol!=='https:')return;
+        const safariUrl=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;
+        location.href=safariUrl;
+      }catch(e){console.error(e);}
+    });
     document.querySelector('[data-claim-current]')?.addEventListener('click',async()=>{
       const button=document.querySelector('[data-claim-current]');
       if(button)button.disabled=true;
