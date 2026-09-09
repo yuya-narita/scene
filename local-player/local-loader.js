@@ -27,6 +27,10 @@
   function isLineInAppBrowser(){
     return /(?:^|\s)Line\//i.test(String(navigator.userAgent||''))||/\bLine\b/i.test(String(navigator.userAgent||''));
   }
+  function isXInAppBrowser(){
+    const ua=String(navigator.userAgent||'');
+    return /Twitter(?:\s|\/|Android|$)/i.test(ua)||/com\.atebits\.Tweetie2/i.test(ua);
+  }
   function bookshelfClaimUrl(token,{external=false}={}){
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
     const u=new URL('../bookshelf/',location.href);
@@ -248,11 +252,13 @@
       }
       const claimToken=String(payload?.bookshelfClaim?.token||'').trim();
       const lineBrowser=isLineInAppBrowser();
+      const xBrowser=isXInAppBrowser();
+      const isolatedInAppBrowser=lineBrowser||xBrowser;
       let savedLocally=false;
       // Safari/normal browser keeps the fast path: save directly if its local
       // bookshelf DB already exists. An in-app browser intentionally skips
       // this, because that IndexedDB would be isolated from Safari.
-      if(!lineBrowser){
+      if(!isolatedInAppBrowser){
         try{
           await putOwnedSceneInBookshelf(payload.scene);
           savedLocally=true;
@@ -265,13 +271,17 @@
       if(statusNode){
         statusNode.textContent=savedLocally
           ? '自分の一冊を本棚に受け取りました。'
-          : (lineBrowser?'自分の一冊を用意しました。Safariの本棚で受け取れます。':'自分の一冊を用意しました。本棚を開いて受け取れます。');
+          : (lineBrowser
+              ? '自分の一冊を用意しました。Safariの本棚で受け取れます。'
+              : (xBrowser
+                  ? '自分の一冊を用意しました。本棚を開いたあと、X右下のSafariボタンから受け取れます。'
+                  : '自分の一冊を用意しました。本棚を開いて受け取れます。'));
       }
       if(button){
         button.disabled=false;
         button.textContent='本棚を開く';
         button.onclick=()=>{
-          if(savedLocally&&!lineBrowser){location.href='../bookshelf/';return;}
+          if(savedLocally&&!isolatedInAppBrowser){location.href='../bookshelf/';return;}
           if(claimUrl){location.href=claimUrl;return;}
           location.href='../bookshelf/';
         };
