@@ -306,23 +306,20 @@ function bindBookInteractions(){
 function installTouchReorder(_books,box){
   if(touchReorderInstalled||!matchMedia('(pointer:coarse)').matches)return;touchReorderInstalled=true;
   let state=null;
-  const clear=()=>{if(!state)return;clearTimeout(state.timer);if(state.scrollRaf)cancelAnimationFrame(state.scrollRaf);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;};
+  const clear=()=>{if(!state)return;clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;};
   window.addEventListener('contextmenu',e=>{if(e.target?.closest?.('#grid .book'))e.preventDefault();},{capture:true});
   window.addEventListener('pointerdown',e=>{
     if(e.pointerType==='mouse')return;const book=e.target?.closest?.('#grid .book');if(!book)return;
-    const st={book,id:book.dataset.id,pointerId:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,startScrollY:window.scrollY,scrollTargetY:window.scrollY,scrollRaf:0,lastTarget:'',dragging:false,scrolling:false,timer:null,ghost:null};state=st;
+    const st={book,id:book.dataset.id,pointerId:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,lastTarget:'',dragging:false,timer:null,ghost:null};state=st;
     st.timer=setTimeout(()=>{if(state!==st||!document.body.contains(book))return;st.dragging=true;suppressBookClick=true;book.classList.add('is-touch-dragging');const r=book.getBoundingClientRect();const ghost=book.cloneNode(true);ghost.classList.add('book-drag-ghost');ghost.removeAttribute('draggable');ghost.style.width=`${r.width}px`;ghost.style.left=`${st.x-r.width/2}px`;ghost.style.top=`${st.y-42}px`;document.body.appendChild(ghost);st.ghost=ghost;try{book.setPointerCapture(e.pointerId);}catch(_){}if(navigator.vibrate)navigator.vibrate(18);},240);
   },{passive:true});
   window.addEventListener('pointermove',e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;
     if(!st.dragging){
       const dx=e.clientX-st.x,dy=e.clientY-st.y;
-      if(st.scrolling){
-        e.preventDefault();
-        st.scrollTargetY=Math.max(0,st.startScrollY+(st.y-e.clientY));
-        if(!st.scrollRaf)st.scrollRaf=requestAnimationFrame(()=>{st.scrollRaf=0;window.scrollTo(0,st.scrollTargetY);});
-        st.lastX=e.clientX;st.lastY=e.clientY;return;
-      }
-      if(Math.hypot(dx,dy)>10){clearTimeout(st.timer);if(Math.abs(dy)>Math.abs(dx)){st.scrolling=true;e.preventDefault();st.scrollTargetY=Math.max(0,st.startScrollY+(st.y-e.clientY));if(!st.scrollRaf)st.scrollRaf=requestAnimationFrame(()=>{st.scrollRaf=0;window.scrollTo(0,st.scrollTargetY);});st.lastX=e.clientX;st.lastY=e.clientY;}else{state=null;}return;}
+      // V63.21.3: before the long-press has actually armed reorder, never hijack
+      // a normal swipe. Any finger travel cancels the reorder timer and leaves
+      // scrolling entirely to Safari.
+      if(Math.hypot(dx,dy)>8){clearTimeout(st.timer);state=null;}
       return;
     }
     e.preventDefault();
@@ -330,7 +327,7 @@ function installTouchReorder(_books,box){
     if(st.ghost){const r=st.ghost.getBoundingClientRect();st.ghost.style.left=`${e.clientX-r.width/2}px`;st.ghost.style.top=`${e.clientY-42}px`;}
     const target=document.elementFromPoint(e.clientX,e.clientY);const liveBox=$('#archiveDropZone');const overBox=target?.closest?.('#archiveDropZone');liveBox?.classList.toggle('is-drag-over',!!overBox);document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));const targetBook=target?.closest?.('#grid .book');if(targetBook&&targetBook!==st.book){targetBook.classList.add('is-drag-target');if(st.lastTarget!==targetBook.dataset.id){st.lastTarget=targetBook.dataset.id;moveBookBefore(st.id,targetBook.dataset.id);}}
   }, {passive:false});
-  const finish=async e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;clearTimeout(st.timer);if(!st.dragging){if(st.scrolling){suppressBookClick=true;setTimeout(()=>{suppressBookClick=false;},80);}state=null;return;}const target=document.elementFromPoint(e.clientX,e.clientY),toBox=!!target?.closest?.('#archiveDropZone');persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(toBox){await sendBookToBox(st.id);setArchiveDock(false);}};
+  const finish=async e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;clearTimeout(st.timer);if(!st.dragging){state=null;return;}const target=document.elementFromPoint(e.clientX,e.clientY),toBox=!!target?.closest?.('#archiveDropZone');persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(toBox){await sendBookToBox(st.id);setArchiveDock(false);}};
   window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',e=>{if(state&&e.pointerId===state.pointerId){const was=state.dragging;clear();if(was)setTimeout(()=>{suppressBookClick=false;},100);}});
 }
 
