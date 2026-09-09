@@ -318,11 +318,12 @@ function installShelfSwipe(){
   document.documentElement.dataset.shelfSwipeInstalled='1';
   const tabs=['owned','created','official'];
   let gesture=null;
+  let settling=false;
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
   const blockedTarget=target=>!!target?.closest?.('dialog[open],button:not(.book),input,select,textarea,a,summary,[contenteditable="true"]');
   const cleanup=()=>{if(gesture?.view)removeShelfSwipeStage(gesture.view);gesture=null;};
   window.addEventListener('touchstart',e=>{
-    if(!mobile()||e.touches.length!==1||pinchGesture)return;
+    if(!mobile()||settling||e.touches.length!==1||pinchGesture)return;
     if(document.querySelector('dialog[open]')||$('#bookshelfMenu')?.open||blockedTarget(e.target))return;
     const t=e.touches[0];
     if(t.clientX<22||t.clientX>window.innerWidth-22)return;
@@ -364,17 +365,28 @@ function installShelfSwipe(){
     const dx=t.clientX-g.x;
     const commit=Math.abs(dx)>g.view.width*.28||Math.abs(g.vx)>.55;
     if(!commit){await animateShelfSwipeStage(g.view,0,190);removeShelfSwipeStage(g.view);return;}
-    suppressBookClick=true;setTimeout(()=>{suppressBookClick=false;},320);
+    // V63.24.3: serialize page commits. A second swipe that starts while the
+    // previous viewer animation/render is still settling can otherwise build a
+    // new stage from the old tab and leave Safari with a half-translated snapshot.
+    settling=true;
+    suppressBookClick=true;setTimeout(()=>{suppressBookClick=false;},280);
     const toX=g.direction==='left'?-g.view.width:g.view.width;
-    await animateShelfSwipeStage(g.view,toX,220);
-    const next=g.view.nextTab;
-    // Keep the completed viewer page covering the old live shelf while the real
-    // next shelf is rendered underneath. Removing the stage first exposed the
-    // previous shelf for a frame on iOS Safari and looked like an afterimage.
-    const staleUrls=await switchShelf(next,{deferCoverRevoke:true});
-    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    removeShelfSwipeStage(g.view);
-    staleUrls.forEach(URL.revokeObjectURL);
+    let staleUrls=[];
+    try{
+      await animateShelfSwipeStage(g.view,toX,175);
+      const next=g.view.nextTab;
+      // Keep the completed viewer page covering the old live shelf while the real
+      // next shelf is rendered underneath. Removing the stage first exposed the
+      // previous shelf for a frame on iOS Safari and looked like an afterimage.
+      staleUrls=await switchShelf(next,{deferCoverRevoke:true});
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    }finally{
+      removeShelfSwipeStage(g.view);
+      // Defensive cleanup for interrupted WebKit animations / rapid direction changes.
+      document.querySelectorAll('.shelf-swipe-stage').forEach(stage=>stage.remove());
+      staleUrls.forEach(URL.revokeObjectURL);
+      settling=false;
+    }
   },{passive:true});
   window.addEventListener('touchcancel',()=>{const g=gesture;gesture=null;const live=currentShelfBodyElement();if(live)live.style.transform='';removeShelfSwipeStage(g?.view);},{passive:true});
 }
