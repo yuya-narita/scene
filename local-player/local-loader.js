@@ -295,8 +295,26 @@
         button.disabled=false;
         button.textContent='本棚を開く';
         button.onclick=()=>{
-          if(claimUrl){location.href=claimUrl;return;}
-          location.href='../bookshelf/';
+          if(!claimUrl){location.href='../bookshelf/';return;}
+          // V63.34 — direct handoff. On iOS, use the Safari URL scheme from
+          // the reader's explicit tap so X/WebViews can leave immediately.
+          // If the scheme is refused, fall back to the normal claim URL; the
+          // V63.33 nonce guard will then show the safe handoff page instead
+          // of consuming the claim in the source WebView.
+          if(isIOSFamily()){
+            try{
+              const target=new URL(claimUrl);
+              const safariUrl=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;
+              let leftPage=false;
+              const markLeft=()=>{leftPage=true;};
+              window.addEventListener('pagehide',markLeft,{once:true});
+              document.addEventListener('visibilitychange',()=>{if(document.hidden)leftPage=true;},{once:true});
+              location.href=safariUrl;
+              setTimeout(()=>{if(!leftPage&&document.visibilityState==='visible')location.href=claimUrl;},900);
+              return;
+            }catch(e){console.error(e);}
+          }
+          location.href=claimUrl;
         };
       }
       if(typeof onSuccess==='function')onSuccess(payload);
