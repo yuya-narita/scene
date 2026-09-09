@@ -179,9 +179,28 @@ function bookCardHtml(w,{archived=false}={}){
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmtDate(v){if(!v)return'—';const d=new Date(v);if(Number.isNaN(d.getTime()))return'—';return new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);}
 function coverHtml(w,cls=''){if(w.coverBlob){const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="${cls}"><img src="${u}" alt=""></div>`;}return`<div class="${cls}"><div class="cover-fallback">□</div></div>`;}
+function shelfViewportTop(){
+  const chrome=$('#shelfChrome');
+  return Math.max(0,Math.round(chrome?.getBoundingClientRect?.().bottom||0));
+}
+function shelfMeaningfulMaxScroll(el=currentShelfBodyElement()){
+  if(!el||el.hidden)return 0;
+  const rect=el.getBoundingClientRect();
+  const docTop=(window.scrollY||window.pageYOffset||0)+rect.top;
+  // Only the actual shelf body should create vertical travel. Fixed chrome,
+  // main bottom padding and Safari's 100vh bookkeeping must not create a
+  // phantom few-dozen-pixel scroll range on short shelves.
+  const bottomGap=18;
+  const max=Math.max(0,docTop+rect.height+bottomGap-window.innerHeight);
+  return max<6?0:Math.round(max);
+}
+function clampShelfScrollY(y,el=currentShelfBodyElement()){
+  return Math.min(Math.max(0,Math.round(Number(y)||0)),shelfMeaningfulMaxScroll(el));
+}
 function saveShelfScroll(tab=currentShelfTab,y=window.scrollY||window.pageYOffset||0){
   const key=SHELF_SCROLL_KEYS[tab];if(!key)return;
-  try{localStorage.setItem(key,String(Math.max(0,Math.round(Number(y)||0))));}catch(_){}
+  const value=tab===currentShelfTab?clampShelfScrollY(y):Math.max(0,Math.round(Number(y)||0));
+  try{localStorage.setItem(key,String(value));}catch(_){}
 }
 function loadShelfScroll(tab){
   const key=SHELF_SCROLL_KEYS[tab];if(!key)return 0;
@@ -192,11 +211,12 @@ function restoreShelfScroll(tab){
   const body=document.body;
   body?.classList.add('shelf-scroll-restoring');
   return new Promise(resolve=>requestAnimationFrame(()=>{
-    // Wait until the target shelf has its final grid geometry, then place it once.
-    // Keep the live shelf hidden during this single positioning pass so Safari
-    // cannot paint an intermediate scroll position between two scrollTo calls.
-    const maxY=Math.max(0,document.documentElement.scrollHeight-window.innerHeight);
-    const y=Math.min(savedY,maxY);
+    // Clamp to the shelf body's real travel, not document.scrollHeight. On iOS
+    // a short shelf can otherwise inherit a bogus scroll range from 100vh/main
+    // padding and then carry that offset into the next manga-viewer page.
+    const y=clampShelfScrollY(savedY);
+    try{localStorage.setItem(SHELF_SCROLL_KEYS[tab],String(y));}catch(_){}
+    body?.classList.toggle('shelf-no-vertical-scroll',y===0&&shelfMeaningfulMaxScroll()===0);
     try{window.scrollTo({left:0,top:y,behavior:'instant'});}catch(_){window.scrollTo(0,y);}
     requestAnimationFrame(()=>{
       body?.classList.remove('shelf-scroll-restoring');
@@ -304,7 +324,7 @@ function makeShelfSwipeStage(nextTab,direction){
   const currentRect=current.getBoundingClientRect();
   const currentY=window.scrollY||window.pageYOffset||0;
   const bodyDocTop=currentY+currentRect.top;
-  const targetY=loadShelfScroll(nextTab);
+  let targetY=loadShelfScroll(nextTab);
   const stage=document.createElement('div');
   stage.className='shelf-swipe-stage';
   stage.style.top=`${stageTop}px`;
@@ -322,9 +342,19 @@ function makeShelfSwipeStage(nextTab,direction){
   stage.append(currentPage,nextPage);document.body.append(stage);
   const width=window.innerWidth;
   nextPage.style.transform=`translate3d(${direction==='left'?width:-width}px,0,0)`;
+  // Clamp the remembered target position against the *snapshot's* actual body
+  // height before it is ever shown. This also heals old saved offsets produced
+  // by the previous short-shelf bug (e.g. official shelf remembered at 40px).
+  const targetBody=nextInner.firstElementChild;
+  const targetViewportHeight=Math.max(0,window.innerHeight-stageTop);
+  const targetBodyHeight=Math.max(0,targetBody?.getBoundingClientRect?.().height||0);
+  let targetMax=Math.max(0,targetBodyHeight+18-targetViewportHeight);
+  if(targetMax<6)targetMax=0;
+  targetY=Math.min(targetY,Math.round(targetMax));
+  try{localStorage.setItem(SHELF_SCROLL_KEYS[nextTab],String(targetY));}catch(_){}
   // The fixed shelf chrome is outside the moving pages. Each page is therefore
   // positioned inside the same viewport using its own remembered document Y.
-  // This prevents a short shelf from entering from below and then jumping up.
+  // This prevents a short shelf from inheriting the previous shelf's Y.
   const currentOffset=(bodyDocTop-currentY)-stageTop;
   const targetOffset=(bodyDocTop-targetY)-stageTop;
   currentInner.style.transform=`translate3d(0,${currentOffset}px,0)`;
@@ -351,6 +381,26 @@ function animateShelfSwipeStage(view,toX,duration=220){
   const a=view.currentPage.animate([{transform:`translate3d(${from}px,0,0)`},{transform:`translate3d(${toX}px,0,0)`}],{duration,easing,fill:'forwards'});
   view.nextPage.animate([{transform:`translate3d(${base+from}px,0,0)`},{transform:`translate3d(${base+toX}px,0,0)`}],{duration,easing,fill:'forwards'});
   return a.finished.catch(()=>{});
+}
+
+function installShelfScrollGuard(){
+  if(document.documentElement.dataset.shelfScrollGuardInstalled==='1')return;
+  document.documentElement.dataset.shelfScrollGuardInstalled='1';
+  let raf=0;
+  window.addEventListener('scroll',()=>{
+    if(raf||document.body.classList.contains('bookshelf-scroll-locked')||document.body.classList.contains('shelf-scroll-restoring'))return;
+    raf=requestAnimationFrame(()=>{
+      raf=0;
+      if(!matchMedia('(max-width:680px) and (pointer:coarse)').matches)return;
+      const max=shelfMeaningfulMaxScroll();
+      const y=window.scrollY||window.pageYOffset||0;
+      document.body.classList.toggle('shelf-no-vertical-scroll',max===0);
+      if(y>max+1){
+        try{window.scrollTo({left:0,top:max,behavior:'instant'});}catch(_){window.scrollTo(0,max);}
+      }
+      saveShelfScroll(currentShelfTab,Math.min(y,max));
+    });
+  },{passive:true});
 }
 
 function installShelfSwipe(){
@@ -738,6 +788,7 @@ $('#closeArchive').onclick=()=>$('#archiveDialog').close();
 $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
 installSceneDrop();
+installShelfScrollGuard();
 installShelfSwipe();
 render().then(()=>restoreShelfScroll(currentShelfTab)).catch(e=>{console.error(e);alert('本棚を開けませんでした。');});
 })();

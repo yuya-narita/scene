@@ -470,3 +470,12 @@ body.bookshelf-scroll-locked{
     scroll-margin-top:166px;
   }
 }
+
+/* V63.26.2 — short shelves must not manufacture vertical scroll travel.
+   iOS Safari's legacy 100vh can be taller than the visible dynamic viewport,
+   which allowed a one-row shelf to slip under the fixed chrome and leaked that
+   bogus Y into the neighbouring shelf snapshot. */
+@media(max-width:680px) and (pointer:coarse){
+  body{min-height:100dvh}
+  body.shelf-no-vertical-scroll{overflow-y:hidden;overscroll-behavior-y:none}
+}
