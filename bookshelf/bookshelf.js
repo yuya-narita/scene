@@ -11,11 +11,18 @@ const te=new TextEncoder();
 const $=s=>document.querySelector(s);
 let currentWorkId='';
 const SHELF_TAB_KEY='ahako:bookshelf:last-tab';
+const SHELF_ORDER_KEYS={owned:'ahako:bookshelf:order:owned',created:'ahako:bookshelf:order:created'};
+const SHELF_ARCHIVE_KEYS={owned:'ahako:bookshelf:archive:owned',created:'ahako:bookshelf:archive:created'};
 let currentShelfTab=null;
 let shelfCounts={owned:0,created:0};
 let coverUrls=[];
 let currentJourneyData=null;
 let currentJourneyTitle='';
+let activeBooks=[];
+let activeArchivedBooks=[];
+let suppressBookClick=false;
+let draggingBookId='';
+let touchReorderInstalled=false;
 const insightsCache=new Map();
 
 function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(WORKS))db.createObjectStore(WORKS,{keyPath:'workId'});if(!db.objectStoreNames.contains(READER_BOOKS))db.createObjectStore(READER_BOOKS,{keyPath:'copyId'});if(!db.objectStoreNames.contains(HANDOFF))db.createObjectStore(HANDOFF,{keyPath:'key'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
@@ -39,6 +46,48 @@ async function inspectMaster(file){const entries=await readZipEntries(file);cons
 async function addMaster(file,{silent=false}={}){const info=await inspectMaster(file);const old=await getWork(info.workId);const now=new Date().toISOString();await putWork({...info,fileName:file.name||`${info.title}.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!silent)toast(old?'同じ作品のMasterを更新しました。':'Masterを本棚に追加しました。');return info.workId;}
 async function inspectDistribution(file){const entries=await readZipEntries(file);const sceneBytes=entries.get('scene.json');if(!sceneBytes)throw new Error('scene.json がありません。');const doc=parseJson(sceneBytes);const manifest=entries.get('manifest.json')?parseJson(entries.get('manifest.json')):{};const role=String(manifest.packageRole||doc?.package?.role||'').toLowerCase();if(role!=='distribution')throw new Error('これは Distribution .scene ではありません。');const copyId=String(doc?.distribution?.copyId||manifest?.copyId||'').trim();const workId=String(doc?.distribution?.workId||manifest?.workId||doc?.workId||'').trim();const editionId=String(doc?.edition?.editionId||manifest?.editionId||'').trim();if(!/^copy_[a-f0-9]{32}$/i.test(copyId))throw new Error('Distribution の copyId を確認できません。');if(!/^[A-Za-z0-9_-]{12,80}$/.test(workId))throw new Error('Distribution の workId を確認できません。');let coverBlob=null;const coverPath=String(doc?.cover?.src||manifest?.cover?.image||'').replace(/^\.\//,'');if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:mime(coverPath)});const coverUrl=/^https?:\/\//i.test(String(doc?.cover?.src||''))?String(doc.cover.src):'';return{role:'distribution',copyId,workId,editionId,title:String(doc.title||manifest.title||'Untitled'),author:String(doc.author||manifest.author||''),sceneCount:Array.isArray(doc.scenes)?doc.scenes.length:0,relayEnabled:doc?.sharing?.relay?.enabled!==false,issuedAt:String(doc?.distribution?.issuedAt||doc?.edition?.issuedAt||''),coverBlob,coverUrl,blob:new Blob([await file.arrayBuffer()],{type:'application/octet-stream'})};}
 async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
+
+function readIdList(key){try{const v=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(v)?v.filter(x=>typeof x==='string'&&x):[];}catch(_){return[];}}
+function writeIdList(key,list){try{localStorage.setItem(key,JSON.stringify([...new Set(list.filter(Boolean))]));}catch(_){}}
+function shelfIdOf(w){return w?.role==='distribution'?String(w.copyId||''):String(w.workId||'');}
+function orderedShelfBooks(books,tab){
+  const archiveKey=SHELF_ARCHIVE_KEYS[tab],orderKey=SHELF_ORDER_KEYS[tab];
+  const archived=new Set(readIdList(archiveKey));
+  const visible=books.filter(w=>!archived.has(shelfIdOf(w)));
+  const archivedBooks=books.filter(w=>archived.has(shelfIdOf(w)));
+  const order=readIdList(orderKey),rank=new Map(order.map((id,i)=>[id,i]));
+  visible.sort((a,b)=>{
+    const ai=rank.has(shelfIdOf(a))?rank.get(shelfIdOf(a)):Number.MAX_SAFE_INTEGER;
+    const bi=rank.has(shelfIdOf(b))?rank.get(shelfIdOf(b)):Number.MAX_SAFE_INTEGER;
+    return ai-bi||String(b.updatedAt||b.addedAt||'').localeCompare(String(a.updatedAt||a.addedAt||''));
+  });
+  archivedBooks.sort((a,b)=>String(b.updatedAt||b.addedAt||'').localeCompare(String(a.updatedAt||a.addedAt||'')));
+  return {visible,archived:archivedBooks};
+}
+function persistVisibleOrderFromDom(tab=currentShelfTab){
+  if(!SHELF_ORDER_KEYS[tab])return;
+  const ids=Array.from(document.querySelectorAll('#grid .book')).map(el=>el.dataset.id).filter(Boolean);
+  writeIdList(SHELF_ORDER_KEYS[tab],ids);
+}
+function archiveBookId(tab,id){
+  if(!SHELF_ARCHIVE_KEYS[tab]||!id)return;
+  const archived=readIdList(SHELF_ARCHIVE_KEYS[tab]);
+  if(!archived.includes(id))archived.push(id);
+  writeIdList(SHELF_ARCHIVE_KEYS[tab],archived);
+  writeIdList(SHELF_ORDER_KEYS[tab],readIdList(SHELF_ORDER_KEYS[tab]).filter(x=>x!==id));
+}
+function restoreBookId(tab,id){
+  if(!SHELF_ARCHIVE_KEYS[tab]||!id)return;
+  writeIdList(SHELF_ARCHIVE_KEYS[tab],readIdList(SHELF_ARCHIVE_KEYS[tab]).filter(x=>x!==id));
+  const order=readIdList(SHELF_ORDER_KEYS[tab]);if(!order.includes(id))order.push(id);writeIdList(SHELF_ORDER_KEYS[tab],order);
+}
+function bookCardHtml(w,{archived=false}={}){
+  const badge=w.role==='distribution'?'MY COPY':'MASTER',id=shelfIdOf(w);
+  const image=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="" draggable="false">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false">`:`<div class="cover-fallback">□</div>`);
+  if(archived)return`<div class="archive-item" data-role="${w.role}" data-id="${escapeHtml(id)}"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div><button class="archive-restore" type="button">本棚へ戻す</button></div>`;
+  return`<button class="book" data-role="${w.role}" data-id="${escapeHtml(id)}" draggable="true" type="button"><div class="cover">${image}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><p>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</p></div></button>`;
+}
+
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmtDate(v){if(!v)return'—';const d=new Date(v);if(Number.isNaN(d.getTime()))return'—';return new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);}
 function coverHtml(w,cls=''){if(w.coverBlob){const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="${cls}"><img src="${u}" alt=""></div>`;}return`<div class="${cls}"><div class="cover-fallback">□</div></div>`;}
@@ -67,16 +116,28 @@ async function render(){
   $('#ownedTab').textContent=`もっている本${readers.length?` ${readers.length}`:''}`;
   $('#createdTab').textContent=`つくった本${masters.length?` ${masters.length}`:''}`;
   const official=currentShelfTab==='official';
-  const books=(currentShelfTab==='created'?masters:readers).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  const createdShelf=currentShelfTab==='created';
+  const source=createdShelf?masters:readers;
+  const arranged=official?{visible:[],archived:[]}:orderedShelfBooks(source,currentShelfTab);
+  const books=arranged.visible;activeBooks=books;activeArchivedBooks=arranged.archived;
   $('#officialShelf').hidden=!official;
   $('#grid').hidden=official;
-  $('#emptyState').hidden=official||books.length>0;
-  $('#countText').textContent=official?'あ箱の本':`${books.length}冊`;
-  const createdShelf=currentShelfTab==='created';
+  $('#emptyState').hidden=official||books.length>0||arranged.archived.length>0;
+  $('#countText').textContent=official?'あ箱の本':`${source.length}冊`;
   $('.local-note').textContent=official?'あ箱から届く棚':'この端末内に保存';
   $('.local-note').hidden=createdShelf;
-  $('#createInStudioButton').hidden=!createdShelf;
-  if(!official&&!books.length){
+  const shelfActions=$('#shelfHeadActions'),shelfAdd=$('#shelfAddIconButton'),studioCreate=$('#createStudioIconButton');
+  shelfActions.hidden=official;
+  if(!official){
+    const owned=currentShelfTab==='owned';
+    shelfAdd.setAttribute('aria-label',owned?'Distributionを追加':'Masterを追加');
+    shelfAdd.title=owned?'Distributionを追加':'Masterを追加';
+    shelfAdd.dataset.addRole=owned?'distribution':'master';
+    studioCreate.hidden=owned;
+  }
+  $('#archiveDropZone').hidden=official||source.length===0;
+  $('#archiveCount').textContent=`${arranged.archived.length}冊`;
+  if(!official&&!books.length&&!arranged.archived.length){
     const created=currentShelfTab==='created';
     $('#emptyTitle').textContent=created?'まだ、つくった本はありません':'まだ、もっている本はありません';
     $('#emptyCopy').textContent=created?'Master .scene を追加すると、ここから作品を育てられます。':'自分が持っている Distribution .scene を追加すると、ここに並びます。';
@@ -84,8 +145,8 @@ async function render(){
     $('#emptyAddButton').hidden=!created;
     $('#emptyDistributionButton').hidden=created;
   }
-  $('#grid').innerHTML=official?'':books.map(w=>{const badge=w.role==='distribution'?'MY COPY':'MASTER';const id=w.role==='distribution'?w.copyId:w.workId;return`<button class="book" data-role="${w.role}" data-id="${escapeHtml(id)}" type="button"><div class="cover">${w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="">`:`<div class="cover-fallback">□</div>`)}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><p>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</p></div></button>`;}).join('');
-  document.querySelectorAll('.book').forEach(b=>b.addEventListener('click',()=>openDetail(b.dataset.role,b.dataset.id)));
+  $('#grid').innerHTML=official?'':books.map(w=>bookCardHtml(w)).join('');
+  bindBookInteractions();
 }
 async function switchShelf(tab){applyShelfTab(tab);await render();}
 async function openDetail(role,id){const isReader=role==='distribution',w=isReader?await getReaderBook(id):await getWork(id);if(!w)return;currentWorkId=id;const cover=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="detail-cover"><img src="${u}" alt=""></div>`})():(w.coverUrl?`<div class="detail-cover"><img src="${escapeHtml(w.coverUrl)}" alt=""></div>`:`<div class="detail-cover"><div class="cover-fallback">□</div></div>`);if(isReader){const relayAction=w.relayEnabled===false?'':`<button id="relayDistribution" class="journey" type="button">次の一人へ</button>`;$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MY COPY</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene</p><p>本棚追加 ${escapeHtml(fmtDate(w.addedAt))}</p></div></div><div class="actions"><button id="readDistribution" class="edit" type="button">読む</button>${relayAction}<button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">${w.relayEnabled===false?'この一冊は「もっている本」に保存されています。作者の設定によりRELAYは無効です。':'この一冊は「もっている本」に保存されています。読むことも、そのまま次の一人へ送ることもできます。'}</p>`;$('#detailDialog').showModal();const openReaderCopy=(relayNow=false)=>{try{sessionStorage.setItem('ahako:bookshelf:open-copy',w.copyId);}catch(_){}const q=new URLSearchParams({bookshelfCopy:w.copyId});if(relayNow)q.set('relayNow','1');location.href=`../local-player/?${q.toString()}`;};$('#readDistribution').onclick=()=>openReaderCopy(false);if($('#relayDistribution'))$('#relayDistribution').onclick=()=>openReaderCopy(true);$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteReaderBook(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};return;}$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MASTER</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene · revision ${w.revision||0}</p><p>本棚更新 ${escapeHtml(fmtDate(w.updatedAt))}</p></div></div><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><div class="actions"><button id="editWork" class="edit" type="button">Studioで編集</button><button id="viewJourney" class="journey" type="button">旅を見る</button><button id="exportMaster" type="button">Masterを書き出す</button><button id="replaceMaster" type="button">Masterを更新</button><button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">「本棚から外す」は、このブラウザ内の本棚コピーだけを削除します。手元に書き出した .scene ファイルまでは削除しません。</p>`;$('#detailDialog').showModal();loadStrengths(w);$('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);$('#exportMaster').onclick=()=>downloadBlob(w.blob,w.fileName||`${w.title}.scene`);$('#replaceMaster').onclick=()=>{$('#fileInput').dataset.replace=id;$('#fileInput').click();};$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteWork(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};}
@@ -155,8 +216,8 @@ function downloadBlob(blob,name){const a=document.createElement('a');const u=URL
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2500);}
 function zipU16(v,o,x){v.setUint16(o,x,true)}function zipU32(v,o,x){v.setUint32(o,x>>>0,true)}function crc32(bytes){let c=0xffffffff;for(const b of bytes){c^=b;for(let k=0;k<8;k++)c=(c>>>1)^((c&1)?0xedb88320:0)}return(c^0xffffffff)>>>0}
 async function makeStoreZip(entries){const locals=[],centrals=[];let offset=0;for(const e of entries){const nb=te.encode(e.name),data=e.bytes instanceof Uint8Array?e.bytes:new Uint8Array(e.bytes),crc=crc32(data);const l=new Uint8Array(30+nb.length+data.length),lv=new DataView(l.buffer);zipU32(lv,0,0x04034b50);zipU16(lv,4,20);zipU16(lv,6,0x0800);zipU16(lv,8,0);zipU32(lv,14,crc);zipU32(lv,18,data.length);zipU32(lv,22,data.length);zipU16(lv,26,nb.length);l.set(nb,30);l.set(data,30+nb.length);locals.push(l);const c=new Uint8Array(46+nb.length),cv=new DataView(c.buffer);zipU32(cv,0,0x02014b50);zipU16(cv,4,20);zipU16(cv,6,20);zipU16(cv,8,0x0800);zipU32(cv,16,crc);zipU32(cv,20,data.length);zipU32(cv,24,data.length);zipU16(cv,28,nb.length);zipU32(cv,42,offset);c.set(nb,46);centrals.push(c);offset+=l.length;}const centralOffset=offset,centralSize=centrals.reduce((n,x)=>n+x.length,0),end=new Uint8Array(22),ev=new DataView(end.buffer);zipU32(ev,0,0x06054b50);zipU16(ev,8,entries.length);zipU16(ev,10,entries.length);zipU32(ev,12,centralSize);zipU32(ev,16,centralOffset);return new Blob([...locals,...centrals,end],{type:'application/zip'});}
-async function backupShelf(){const works=await getAllWorks(),readerBooks=await getAllReaderBooks();if(!works.length&&!readerBooks.length){toast('バックアップする本がありません。');return;}const meta={format:'ahako-local-bookshelf-backup',version:'2',exportedAt:new Date().toISOString(),works:works.map(w=>({workId:w.workId,title:w.title,fileName:w.fileName})),readerBooks:readerBooks.map(w=>({copyId:w.copyId,title:w.title,fileName:w.fileName}))};const entries=[{name:'bookshelf.json',bytes:te.encode(JSON.stringify(meta,null,2))}];for(const w of works)entries.push({name:`masters/${w.workId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});for(const w of readerBooks)entries.push({name:`distributions/${w.copyId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});downloadBlob(await makeStoreZip(entries),`ahako_bookshelf_backup_${new Date().toISOString().slice(0,10)}.zip`);toast(`${works.length+readerBooks.length}冊をバックアップしました。`);}
-async function restoreShelf(file){const entries=await readZipEntries(file);const metaBytes=entries.get('bookshelf.json');if(!metaBytes)throw new Error('あ箱 本棚のバックアップではありません。');const meta=parseJson(metaBytes);if(meta.format!=='ahako-local-bookshelf-backup')throw new Error('バックアップ形式が違います。');let n=0;for(const item of meta.works||[]){const bytes=entries.get(`masters/${item.workId}.scene`);if(!bytes)continue;await addMaster(new File([bytes],item.fileName||`${item.title||item.workId}.scene`),{silent:true});n++;}for(const item of meta.readerBooks||[]){const bytes=entries.get(`distributions/${item.copyId}.scene`);if(!bytes)continue;await addDistribution(new File([bytes],item.fileName||`${item.title||item.copyId}_distribution.scene`),{silent:true});n++;}await render();toast(`${n}冊を復元しました。`);}
+async function backupShelf(){const works=await getAllWorks(),readerBooks=await getAllReaderBooks();if(!works.length&&!readerBooks.length){toast('バックアップする本がありません。');return;}const meta={format:'ahako-local-bookshelf-backup',version:'3',privateBackup:true,exportedAt:new Date().toISOString(),works:works.map(w=>({workId:w.workId,title:w.title,fileName:w.fileName})),readerBooks:readerBooks.map(w=>({copyId:w.copyId,title:w.title,fileName:w.fileName})),layout:{createdOrder:readIdList(SHELF_ORDER_KEYS.created),ownedOrder:readIdList(SHELF_ORDER_KEYS.owned),archivedCreated:readIdList(SHELF_ARCHIVE_KEYS.created),archivedOwned:readIdList(SHELF_ARCHIVE_KEYS.owned)}};const entries=[{name:'bookshelf.json',bytes:te.encode(JSON.stringify(meta,null,2))}];for(const w of works)entries.push({name:`masters/${w.workId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});for(const w of readerBooks)entries.push({name:`distributions/${w.copyId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});downloadBlob(await makeStoreZip(entries),`ahako_bookshelf_backup_${new Date().toISOString().slice(0,10)}.zip`);toast(`${works.length+readerBooks.length}冊をバックアップしました。`);}
+async function restoreShelf(file){const entries=await readZipEntries(file);const metaBytes=entries.get('bookshelf.json');if(!metaBytes)throw new Error('あ箱 本棚のバックアップではありません。');const meta=parseJson(metaBytes);if(meta.format!=='ahako-local-bookshelf-backup')throw new Error('バックアップ形式が違います。');let n=0;for(const item of meta.works||[]){const bytes=entries.get(`masters/${item.workId}.scene`);if(!bytes)continue;await addMaster(new File([bytes],item.fileName||`${item.title||item.workId}.scene`),{silent:true});n++;}for(const item of meta.readerBooks||[]){const bytes=entries.get(`distributions/${item.copyId}.scene`);if(!bytes)continue;await addDistribution(new File([bytes],item.fileName||`${item.title||item.copyId}_distribution.scene`),{silent:true});n++;}if(meta.layout&&typeof meta.layout==='object'){writeIdList(SHELF_ORDER_KEYS.created,Array.isArray(meta.layout.createdOrder)?meta.layout.createdOrder:[]);writeIdList(SHELF_ORDER_KEYS.owned,Array.isArray(meta.layout.ownedOrder)?meta.layout.ownedOrder:[]);writeIdList(SHELF_ARCHIVE_KEYS.created,Array.isArray(meta.layout.archivedCreated)?meta.layout.archivedCreated:[]);writeIdList(SHELF_ARCHIVE_KEYS.owned,Array.isArray(meta.layout.archivedOwned)?meta.layout.archivedOwned:[]);}await render();toast(`${n}冊を復元しました。`);}
 
 async function addDroppedScene(file){
   const entries=await readZipEntries(file);
@@ -177,11 +238,11 @@ function installSceneDrop(){
   if(!matchMedia('(pointer:fine)').matches)return;
   const overlay=$('#sceneDropOverlay');let depth=0;
   const hasFiles=e=>Array.from(e.dataTransfer?.types||[]).includes('Files');
-  window.addEventListener('dragenter',e=>{if(!hasFiles(e))return;e.preventDefault();depth++;document.body.classList.add('scene-drag-active');overlay?.setAttribute('aria-hidden','false');});
-  window.addEventListener('dragover',e=>{if(!hasFiles(e))return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';});
-  window.addEventListener('dragleave',e=>{if(!hasFiles(e))return;depth=Math.max(0,depth-1);if(depth===0){document.body.classList.remove('scene-drag-active');overlay?.setAttribute('aria-hidden','true');}});
+  window.addEventListener('dragenter',e=>{if(draggingBookId||!hasFiles(e))return;e.preventDefault();depth++;document.body.classList.add('scene-drag-active');overlay?.setAttribute('aria-hidden','false');});
+  window.addEventListener('dragover',e=>{if(draggingBookId||!hasFiles(e))return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';});
+  window.addEventListener('dragleave',e=>{if(draggingBookId||!hasFiles(e))return;depth=Math.max(0,depth-1);if(depth===0){document.body.classList.remove('scene-drag-active');overlay?.setAttribute('aria-hidden','true');}});
   window.addEventListener('drop',async e=>{
-    if(!hasFiles(e))return;e.preventDefault();depth=0;document.body.classList.remove('scene-drag-active');overlay?.setAttribute('aria-hidden','true');
+    if(draggingBookId||!hasFiles(e))return;e.preventDefault();depth=0;document.body.classList.remove('scene-drag-active');overlay?.setAttribute('aria-hidden','true');
     const files=Array.from(e.dataTransfer?.files||[]).filter(f=>/\.(scene|zip)$/i.test(f.name||''));
     if(!files.length){alert('.scene ファイルをドロップしてください。');return;}
     let added=0;
@@ -189,9 +250,74 @@ function installSceneDrop(){
     if(added){$('#detailDialog').close();await render();}
   });
 }
+
+function moveBookBefore(dragId,targetId){
+  if(!dragId||!targetId||dragId===targetId)return;
+  const grid=$('#grid'),drag=grid?.querySelector(`.book[data-id="${CSS.escape(dragId)}"]`),target=grid?.querySelector(`.book[data-id="${CSS.escape(targetId)}"]`);
+  if(!drag||!target)return;grid.insertBefore(drag,target);persistVisibleOrderFromDom();
+}
+function waitAnimation(animation,fallback=240){return new Promise(resolve=>{let done=false;const finish=()=>{if(done)return;done=true;resolve();};if(animation){animation.addEventListener?.('finish',finish,{once:true});animation.addEventListener?.('cancel',finish,{once:true});}setTimeout(finish,fallback);});}
+async function animateBookIntoBox(id){
+  const book=$(`#grid .book[data-id="${CSS.escape(id)}"]`),box=$('#archiveDropZone');
+  if(!book||!box||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const a=book.getBoundingClientRect(),b=box.getBoundingClientRect();
+  if(!a.width||!a.height||!b.width||!b.height)return;
+  const ghost=book.cloneNode(true);ghost.classList.remove('is-dragging','is-drag-target','is-touch-dragging');ghost.classList.add('book-box-flight');ghost.removeAttribute('draggable');
+  Object.assign(ghost.style,{left:`${a.left}px`,top:`${a.top}px`,width:`${a.width}px`,height:`${a.height}px`});document.body.appendChild(ghost);
+  book.style.visibility='hidden';
+  const dx=(b.left+b.width/2)-(a.left+a.width/2),dy=(b.top+b.height/2)-(a.top+a.height/2);
+  const anim=ghost.animate([{transform:'translate3d(0,0,0) scale(1)',opacity:1},{transform:`translate3d(${dx}px,${dy}px,0) scale(.2) rotate(2deg)`,opacity:.08}],{duration:240,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards'});
+  await waitAnimation(anim,280);ghost.remove();book.style.visibility='';
+}
+function animateBookOutOfBox(id,fromRect){
+  const book=$(`#grid .book[data-id="${CSS.escape(id)}"]`);if(!book||!fromRect||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const r=book.getBoundingClientRect();if(!r.width||!r.height)return;
+  const dx=(fromRect.left+fromRect.width/2)-(r.left+r.width/2),dy=(fromRect.top+fromRect.height/2)-(r.top+r.height/2);
+  book.animate([{transform:`translate3d(${dx}px,${dy}px,0) scale(.2)`,opacity:.08},{transform:'translate3d(0,0,0) scale(1)',opacity:1}],{duration:280,easing:'cubic-bezier(.16,.84,.26,1)',fill:'both'});
+}
+async function sendBookToBox(id){if(!id||!SHELF_ARCHIVE_KEYS[currentShelfTab])return;await animateBookIntoBox(id);archiveBookId(currentShelfTab,id);await render();$('#archiveDropZone')?.animate?.([{transform:'scale(.96)'},{transform:'scale(1.04)'},{transform:'scale(1)'}],{duration:220,easing:'ease-out'});toast('段ボール箱にしまいました。');}
+function bindBookInteractions(){
+  const books=Array.from(document.querySelectorAll('#grid .book')),box=$('#archiveDropZone');
+  books.forEach(book=>{
+    book.addEventListener('click',e=>{if(suppressBookClick){e.preventDefault();e.stopPropagation();return;}openDetail(book.dataset.role,book.dataset.id);});
+    book.addEventListener('dragstart',e=>{if(matchMedia('(pointer:coarse)').matches){e.preventDefault();return;}draggingBookId=book.dataset.id;suppressBookClick=true;book.classList.add('is-dragging');e.dataTransfer?.setData('text/ahako-book-id',book.dataset.id);if(e.dataTransfer)e.dataTransfer.effectAllowed='move';});
+    book.addEventListener('dragend',()=>{draggingBookId='';book.classList.remove('is-dragging');box?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));persistVisibleOrderFromDom();setTimeout(()=>{suppressBookClick=false;},80);});
+    book.addEventListener('dragover',e=>{const id=draggingBookId;if(!id||id===book.dataset.id)return;e.preventDefault();book.classList.add('is-drag-target');});
+    book.addEventListener('dragleave',()=>book.classList.remove('is-drag-target'));
+    book.addEventListener('drop',e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();book.classList.remove('is-drag-target');moveBookBefore(id,book.dataset.id);});
+  });
+  if(box){box.ondragover=e=>{if(!draggingBookId)return;e.preventDefault();box.classList.add('is-drag-over');if(e.dataTransfer)e.dataTransfer.dropEffect='move';};box.ondragleave=()=>box.classList.remove('is-drag-over');box.ondrop=async e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();box.classList.remove('is-drag-over');await sendBookToBox(id);};}
+  installTouchReorder(books,box);
+}
+function installTouchReorder(_books,box){
+  if(touchReorderInstalled||!matchMedia('(pointer:coarse)').matches)return;touchReorderInstalled=true;
+  let state=null;
+  const clear=()=>{if(!state)return;clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');box?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;};
+  window.addEventListener('pointerdown',e=>{
+    if(e.pointerType==='mouse')return;const book=e.target?.closest?.('#grid .book');if(!book)return;
+    const st={book,id:book.dataset.id,pointerId:e.pointerId,x:e.clientX,y:e.clientY,dragging:false,timer:null,ghost:null};state=st;
+    st.timer=setTimeout(()=>{if(state!==st||!document.body.contains(book))return;st.dragging=true;suppressBookClick=true;book.classList.add('is-touch-dragging');const r=book.getBoundingClientRect();const ghost=book.cloneNode(true);ghost.classList.add('book-drag-ghost');ghost.removeAttribute('draggable');ghost.style.width=`${r.width}px`;ghost.style.left=`${e.clientX-r.width/2}px`;ghost.style.top=`${e.clientY-42}px`;document.body.appendChild(ghost);st.ghost=ghost;try{book.setPointerCapture(e.pointerId);}catch(_){}if(navigator.vibrate)navigator.vibrate(18);},280);
+  },{passive:true});
+  window.addEventListener('pointermove',e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;if(!st.dragging){if(Math.hypot(e.clientX-st.x,e.clientY-st.y)>10){clearTimeout(st.timer);state=null;}return;}e.preventDefault();if(st.ghost){const r=st.ghost.getBoundingClientRect();st.ghost.style.left=`${e.clientX-r.width/2}px`;st.ghost.style.top=`${e.clientY-42}px`;}const target=document.elementFromPoint(e.clientX,e.clientY);const liveBox=$('#archiveDropZone');const overBox=target?.closest?.('#archiveDropZone');liveBox?.classList.toggle('is-drag-over',!!overBox);document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));const targetBook=target?.closest?.('#grid .book');if(targetBook&&targetBook!==st.book){targetBook.classList.add('is-drag-target');moveBookBefore(st.id,targetBook.dataset.id);}}, {passive:false});
+  const finish=async e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;clearTimeout(st.timer);if(!st.dragging){state=null;return;}const target=document.elementFromPoint(e.clientX,e.clientY),toBox=!!target?.closest?.('#archiveDropZone');persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},80);if(toBox)await sendBookToBox(st.id);};
+  window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',e=>{if(state&&e.pointerId===state.pointerId){const was=state.dragging;clear();if(was)setTimeout(()=>{suppressBookClick=false;},80);}});
+}
+function openArchiveBox(){
+  if(currentShelfTab==='official')return;
+  const list=$('#archiveList');
+  list.innerHTML=activeArchivedBooks.length?activeArchivedBooks.map(w=>bookCardHtml(w,{archived:true})).join(''):'<div class="archive-empty">箱の中は空です。</div>';
+  list.querySelectorAll('.archive-restore').forEach(btn=>btn.onclick=async()=>{
+    const item=btn.closest('.archive-item'),id=item?.dataset.id;if(!id)return;
+    const boxRect=$('#archiveDropZone')?.getBoundingClientRect?.();
+    if(item&&!matchMedia('(prefers-reduced-motion: reduce)').matches){const a=item.animate([{transform:'scale(1)',opacity:1},{transform:'scale(.92)',opacity:0}],{duration:140,easing:'ease-in',fill:'forwards'});await waitAnimation(a,170);}
+    restoreBookId(currentShelfTab,id);$('#archiveDialog').close();await render();animateBookOutOfBox(id,boxRect);toast('本棚へ戻しました。');
+  });
+  $('#archiveDialog').showModal();
+}
 function closeBookshelfMenu(){const menu=$('#bookshelfMenu');if(menu)menu.open=false;}
 function openStudioFromBookshelf(){closeBookshelfMenu();location.href='../studio/?from=bookshelf';}
-$('#createInStudioButton').onclick=$('#emptyCreateButton').onclick=openStudioFromBookshelf;
+$('#createStudioIconButton').onclick=$('#emptyCreateButton').onclick=openStudioFromBookshelf;
+$('#shelfAddIconButton').onclick=()=>{const role=$('#shelfAddIconButton').dataset.addRole;if(role==='distribution'){$('#distributionInput').dataset.replace='';$('#distributionInput').click();return;}$('#fileInput').dataset.replace='';$('#fileInput').click();};
 $('#addButton').onclick=$('#emptyAddButton').onclick=()=>{closeBookshelfMenu();$('#fileInput').dataset.replace='';$('#fileInput').click();};
 $('#addDistributionButton').onclick=$('#emptyDistributionButton').onclick=()=>{closeBookshelfMenu();$('#distributionInput').dataset.replace='';$('#distributionInput').click();};
 $('#ownedTab').onclick=()=>switchShelf('owned');
@@ -204,6 +330,8 @@ $('#restoreButton').onclick=()=>{closeBookshelfMenu();$('#restoreInput').click()
 $('#restoreInput').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{await restoreShelf(f);}catch(err){alert(err.message||'復元できませんでした。');}finally{e.target.value='';}};
 
 document.addEventListener('click',e=>{const menu=$('#bookshelfMenu');if(menu?.open&&!menu.contains(e.target))menu.open=false;});
+$('#archiveDropZone').onclick=openArchiveBox;
+$('#closeArchive').onclick=()=>$('#archiveDialog').close();
 $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
 installSceneDrop();

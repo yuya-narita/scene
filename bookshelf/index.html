@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=63.18">
+  <link rel="stylesheet" href="bookshelf.css?v=63.20.1">
 </head>
 <body>
   <header class="topbar">
@@ -18,6 +18,7 @@
         <button id="backupButton" type="button">本棚をバックアップ</button>
         <button id="restoreButton" type="button">バックアップから復元</button>
         <p>Master .scene と、自分が持っている Distribution .scene はこの端末のブラウザ内に保存されます。作品本体はサーバーへ送信しません。</p>
+        <p class="backup-private-note">バックアップにはMaster本体と「自分の一冊」のcopyIdが含まれます。端末移動・保管用の個人データとして扱い、他人への配布には使わないでください。</p>
       </div>
     </details>
     <input id="distributionInput" type="file" hidden>
@@ -29,7 +30,10 @@
     <section class="shelf-head">
       <div><h1>本棚</h1><p id="countText">0冊</p></div>
       <p class="local-note">この端末内に保存</p>
-      <button id="createInStudioButton" class="shelf-create-link" type="button" hidden>＋ Studioで作る</button>
+      <div id="shelfHeadActions" class="shelf-head-actions" hidden>
+        <button id="shelfAddIconButton" class="shelf-icon-action" type="button" aria-label="本を追加" title="本を追加">＋</button>
+        <button id="createStudioIconButton" class="shelf-icon-action shelf-icon-pen" type="button" aria-label="Studioで作る" title="Studioで作る">✎</button>
+      </div>
     </section>
 
     <nav id="shelfTabs" class="shelf-tabs" aria-label="本棚の切り替え">
@@ -49,6 +53,14 @@
 
     <section id="grid" class="grid" aria-live="polite"></section>
 
+    <button id="archiveDropZone" class="archive-drop-zone" type="button" hidden aria-label="しまった本を開く">
+      <span class="archive-box-shell">
+        <span class="archive-box-icon" aria-hidden="true">📦</span>
+        <span class="archive-box-copy"><strong>段ボール箱</strong><small id="archiveCount">0冊</small></span>
+      </span>
+      <span class="archive-box-hint">ここへドラッグしてしまう</span>
+    </button>
+
     <section id="officialShelf" class="official-shelf" hidden>
       <div class="official-shelf-mark">あ□</div>
       <p class="eyebrow">A-HAKO BOOKS</p>
@@ -66,6 +78,16 @@
     <div id="detailContent"></div>
   </dialog>
 
+  <dialog id="archiveDialog" class="archive-dialog">
+    <button id="closeArchive" class="dialog-close" aria-label="閉じる">×</button>
+    <div class="archive-dialog-head">
+      <p class="eyebrow">STORAGE BOX</p>
+      <h2>段ボール箱</h2>
+      <p>本棚から一時的にしまった本です。</p>
+    </div>
+    <div id="archiveList" class="archive-list"></div>
+  </dialog>
+
   <dialog id="treeDialog" class="tree-dialog">
     <header class="tree-dialog-bar">
       <div><p class="eyebrow">WORK TREE</p><h2 id="treeDialogTitle">作品の木</h2></div>
@@ -80,6 +102,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=63.18"></script>
+  <script src="bookshelf.js?v=63.20"></script>
 </body>
 </html>
