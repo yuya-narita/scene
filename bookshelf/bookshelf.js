@@ -69,17 +69,20 @@ function touchDistance(touches){
   const a=touches[0],b=touches[1];return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
 }
 function installShelfPinch(){
-  const grid=$('#grid');if(!grid||grid.dataset.pinchInstalled==='1')return;grid.dataset.pinchInstalled='1';
+  if(document.documentElement.dataset.shelfPinchInstalled==='1')return;
+  document.documentElement.dataset.shelfPinchInstalled='1';
   applyMobileColumns(loadMobileColumns());
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
-  grid.addEventListener('touchstart',e=>{
-    if(!mobile()||e.touches.length!==2)return;
+  const blockedTarget=target=>!!target?.closest?.('dialog[open]');
+  window.addEventListener('touchstart',e=>{
+    if(!mobile()||e.touches.length!==2||blockedTarget(e.target))return;
     const d=touchDistance(e.touches);if(!d)return;
     pinchGesture={startDistance:d,startColumns:mobileShelfColumns,lastColumns:mobileShelfColumns};
-    // Two fingers are always shelf zoom, never book long-press/reorder.
+    // V63.23.1: two-finger shelf zoom works anywhere in the page/viewport,
+    // including empty shelf space. It is never treated as book reorder.
     e.preventDefault();
   },{passive:false});
-  grid.addEventListener('touchmove',e=>{
+  window.addEventListener('touchmove',e=>{
     if(!pinchGesture||e.touches.length!==2)return;
     e.preventDefault();
     const d=touchDistance(e.touches);if(!d)return;
@@ -99,11 +102,11 @@ function installShelfPinch(){
     const finalColumns=pinchGesture.lastColumns;pinchGesture=null;
     if(changed)toast(`${finalColumns}列表示`);
   };
-  grid.addEventListener('touchend',finish,{passive:true});
-  grid.addEventListener('touchcancel',finish,{passive:true});
+  window.addEventListener('touchend',finish,{passive:true});
+  window.addEventListener('touchcancel',finish,{passive:true});
   // iOS Safari may emit gesture events in addition to touch events.
-  grid.addEventListener('gesturestart',e=>{if(mobile())e.preventDefault();},{passive:false});
-  grid.addEventListener('gesturechange',e=>{if(mobile())e.preventDefault();},{passive:false});
+  window.addEventListener('gesturestart',e=>{if(mobile()&&!blockedTarget(e.target))e.preventDefault();},{passive:false});
+  window.addEventListener('gesturechange',e=>{if(mobile()&&pinchGesture)e.preventDefault();},{passive:false});
 }
 
 function readIdList(key){try{const v=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(v)?v.filter(x=>typeof x==='string'&&x):[];}catch(_){return[];}}
@@ -229,21 +232,21 @@ function animateShelfSwipe(direction){
 }
 
 function installShelfSwipe(){
-  const main=document.querySelector('main');
-  if(!main||main.dataset.shelfSwipeInstalled==='1')return;
-  main.dataset.shelfSwipeInstalled='1';
+  if(document.documentElement.dataset.shelfSwipeInstalled==='1')return;
+  document.documentElement.dataset.shelfSwipeInstalled='1';
   const tabs=['owned','created','official'];
   let gesture=null;
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
-  main.addEventListener('touchstart',e=>{
+  const blockedTarget=target=>!!target?.closest?.('dialog[open],button,input,select,textarea,a,summary,[contenteditable="true"]');
+  window.addEventListener('touchstart',e=>{
     if(!mobile()||e.touches.length!==1||pinchGesture)return;
-    if(document.querySelector('dialog[open]'))return;
+    if(document.querySelector('dialog[open]')||blockedTarget(e.target))return;
     const t=e.touches[0];
     // Leave Safari's edge back/forward swipe alone.
     if(t.clientX<22||t.clientX>window.innerWidth-22)return;
     gesture={x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,startAt:performance.now(),horizontal:false,cancelled:false};
   },{passive:true});
-  main.addEventListener('touchmove',e=>{
+  window.addEventListener('touchmove',e=>{
     const g=gesture;if(!g||e.touches.length!==1){gesture=null;return;}
     const t=e.touches[0],dx=t.clientX-g.x,dy=t.clientY-g.y;
     g.lastX=t.clientX;g.lastY=t.clientY;
@@ -254,7 +257,7 @@ function installShelfSwipe(){
     }
     if(g.horizontal&&!g.cancelled)e.preventDefault();
   },{passive:false});
-  main.addEventListener('touchend',e=>{
+  window.addEventListener('touchend',e=>{
     const g=gesture;gesture=null;if(!g||g.cancelled||!g.horizontal)return;
     const t=e.changedTouches?.[0];if(!t)return;
     const dx=t.clientX-g.x,dy=t.clientY-g.y,elapsed=performance.now()-g.startAt;
@@ -265,7 +268,7 @@ function installShelfSwipe(){
     const direction=dx<0?'left':'right';
     switchShelf(tabs[nextIndex]).then(()=>animateShelfSwipe(direction));
   },{passive:true});
-  main.addEventListener('touchcancel',()=>{gesture=null;},{passive:true});
+  window.addEventListener('touchcancel',()=>{gesture=null;},{passive:true});
 }
 
 async function openDetail(role,id){const isReader=role==='distribution',w=isReader?await getReaderBook(id):await getWork(id);if(!w)return;currentWorkId=id;const cover=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="detail-cover"><img src="${u}" alt=""></div>`})():(w.coverUrl?`<div class="detail-cover"><img src="${escapeHtml(w.coverUrl)}" alt=""></div>`:`<div class="detail-cover"><div class="cover-fallback">□</div></div>`);if(isReader){const relayAction=w.relayEnabled===false?'':`<button id="relayDistribution" class="journey" type="button">次の一人へ</button>`;$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MY COPY</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene</p><p>本棚追加 ${escapeHtml(fmtDate(w.addedAt))}</p></div></div><div class="actions"><button id="readDistribution" class="edit" type="button">読む</button>${relayAction}<button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">${w.relayEnabled===false?'この一冊は「もっている本」に保存されています。作者の設定によりRELAYは無効です。':'この一冊は「もっている本」に保存されています。読むことも、そのまま次の一人へ送ることもできます。'}</p>`;$('#detailDialog').showModal();const openReaderCopy=(relayNow=false)=>{try{sessionStorage.setItem('ahako:bookshelf:open-copy',w.copyId);}catch(_){}const q=new URLSearchParams({bookshelfCopy:w.copyId});if(relayNow)q.set('relayNow','1');location.href=`../local-player/?${q.toString()}`;};$('#readDistribution').onclick=()=>openReaderCopy(false);if($('#relayDistribution'))$('#relayDistribution').onclick=()=>openReaderCopy(true);$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteReaderBook(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};return;}$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MASTER</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene · revision ${w.revision||0}</p><p>本棚更新 ${escapeHtml(fmtDate(w.updatedAt))}</p></div></div><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><div class="actions"><button id="editWork" class="edit" type="button">Studioで編集</button><button id="viewJourney" class="journey" type="button">旅を見る</button><button id="exportMaster" type="button">Masterを書き出す</button><button id="replaceMaster" type="button">Masterを更新</button><button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">「本棚から外す」は、このブラウザ内の本棚コピーだけを削除します。手元に書き出した .scene ファイルまでは削除しません。</p>`;$('#detailDialog').showModal();loadStrengths(w);$('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);$('#exportMaster').onclick=()=>downloadBlob(w.blob,w.fileName||`${w.title}.scene`);$('#replaceMaster').onclick=()=>{$('#fileInput').dataset.replace=id;$('#fileInput').click();};$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteWork(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};}
