@@ -13,6 +13,7 @@ let currentWorkId='';
 const SHELF_TAB_KEY='ahako:bookshelf:last-tab';
 const SHELF_ORDER_KEYS={owned:'ahako:bookshelf:order:owned',created:'ahako:bookshelf:order:created'};
 const SHELF_ARCHIVE_KEYS={owned:'ahako:bookshelf:archive:owned',created:'ahako:bookshelf:archive:created'};
+const MOBILE_COLUMNS_KEY='ahako:bookshelf:mobile-columns';
 let currentShelfTab=null;
 let shelfCounts={owned:0,created:0};
 let coverUrls=[];
@@ -25,6 +26,8 @@ let draggingBookId='';
 let desktopReorderTarget='';
 let touchReorderInstalled=false;
 let archiveDockOpen=false;
+let mobileShelfColumns=2;
+let pinchGesture=null;
 const insightsCache=new Map();
 
 function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(WORKS))db.createObjectStore(WORKS,{keyPath:'workId'});if(!db.objectStoreNames.contains(READER_BOOKS))db.createObjectStore(READER_BOOKS,{keyPath:'copyId'});if(!db.objectStoreNames.contains(HANDOFF))db.createObjectStore(HANDOFF,{keyPath:'key'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
@@ -48,6 +51,60 @@ async function inspectMaster(file){const entries=await readZipEntries(file);cons
 async function addMaster(file,{silent=false}={}){const info=await inspectMaster(file);const old=await getWork(info.workId);const now=new Date().toISOString();await putWork({...info,fileName:file.name||`${info.title}.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!silent)toast(old?'同じ作品のMasterを更新しました。':'Masterを本棚に追加しました。');return info.workId;}
 async function inspectDistribution(file){const entries=await readZipEntries(file);const sceneBytes=entries.get('scene.json');if(!sceneBytes)throw new Error('scene.json がありません。');const doc=parseJson(sceneBytes);const manifest=entries.get('manifest.json')?parseJson(entries.get('manifest.json')):{};const role=String(manifest.packageRole||doc?.package?.role||'').toLowerCase();if(role!=='distribution')throw new Error('これは Distribution .scene ではありません。');const copyId=String(doc?.distribution?.copyId||manifest?.copyId||'').trim();const workId=String(doc?.distribution?.workId||manifest?.workId||doc?.workId||'').trim();const editionId=String(doc?.edition?.editionId||manifest?.editionId||'').trim();if(!/^copy_[a-f0-9]{32}$/i.test(copyId))throw new Error('Distribution の copyId を確認できません。');if(!/^[A-Za-z0-9_-]{12,80}$/.test(workId))throw new Error('Distribution の workId を確認できません。');let coverBlob=null;const coverPath=String(doc?.cover?.src||manifest?.cover?.image||'').replace(/^\.\//,'');if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:mime(coverPath)});const coverUrl=/^https?:\/\//i.test(String(doc?.cover?.src||''))?String(doc.cover.src):'';return{role:'distribution',copyId,workId,editionId,title:String(doc.title||manifest.title||'Untitled'),author:String(doc.author||manifest.author||''),sceneCount:Array.isArray(doc.scenes)?doc.scenes.length:0,relayEnabled:doc?.sharing?.relay?.enabled!==false,issuedAt:String(doc?.distribution?.issuedAt||doc?.edition?.issuedAt||''),coverBlob,coverUrl,blob:new Blob([await file.arrayBuffer()],{type:'application/octet-stream'})};}
 async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
+
+
+function clampMobileColumns(value){return Math.max(2,Math.min(4,Number(value)||2));}
+function loadMobileColumns(){
+  try{return clampMobileColumns(localStorage.getItem(MOBILE_COLUMNS_KEY)||2);}catch(_){return 2;}
+}
+function applyMobileColumns(value,{announce=false}={}){
+  mobileShelfColumns=clampMobileColumns(value);
+  const grid=$('#grid');
+  if(grid)grid.dataset.mobileColumns=String(mobileShelfColumns);
+  try{localStorage.setItem(MOBILE_COLUMNS_KEY,String(mobileShelfColumns));}catch(_){}
+  if(announce)toast(`${mobileShelfColumns}列表示`);
+}
+function touchDistance(touches){
+  if(!touches||touches.length<2)return 0;
+  const a=touches[0],b=touches[1];return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+}
+function installShelfPinch(){
+  const grid=$('#grid');if(!grid||grid.dataset.pinchInstalled==='1')return;grid.dataset.pinchInstalled='1';
+  applyMobileColumns(loadMobileColumns());
+  const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
+  grid.addEventListener('touchstart',e=>{
+    if(!mobile()||e.touches.length!==2)return;
+    const d=touchDistance(e.touches);if(!d)return;
+    pinchGesture={startDistance:d,startColumns:mobileShelfColumns,lastColumns:mobileShelfColumns};
+    // Two fingers are always shelf zoom, never book long-press/reorder.
+    e.preventDefault();
+  },{passive:false});
+  grid.addEventListener('touchmove',e=>{
+    if(!pinchGesture||e.touches.length!==2)return;
+    e.preventDefault();
+    const d=touchDistance(e.touches);if(!d)return;
+    const ratio=d/pinchGesture.startDistance;
+    let next=pinchGesture.startColumns;
+    // Pinch inward = zoom the shelf out (more books per row).
+    if(ratio<0.68)next=pinchGesture.startColumns+2;
+    else if(ratio<0.86)next=pinchGesture.startColumns+1;
+    else if(ratio>1.47)next=pinchGesture.startColumns-2;
+    else if(ratio>1.16)next=pinchGesture.startColumns-1;
+    next=clampMobileColumns(next);
+    if(next!==pinchGesture.lastColumns){pinchGesture.lastColumns=next;applyMobileColumns(next);if(navigator.vibrate)navigator.vibrate(10);}
+  },{passive:false});
+  const finish=()=>{
+    if(!pinchGesture)return;
+    const changed=pinchGesture.lastColumns!==pinchGesture.startColumns;
+    const finalColumns=pinchGesture.lastColumns;pinchGesture=null;
+    if(changed)toast(`${finalColumns}列表示`);
+  };
+  grid.addEventListener('touchend',finish,{passive:true});
+  grid.addEventListener('touchcancel',finish,{passive:true});
+  // iOS Safari may emit gesture events in addition to touch events.
+  grid.addEventListener('gesturestart',e=>{if(mobile())e.preventDefault();},{passive:false});
+  grid.addEventListener('gesturechange',e=>{if(mobile())e.preventDefault();},{passive:false});
+}
 
 function readIdList(key){try{const v=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(v)?v.filter(x=>typeof x==='string'&&x):[];}catch(_){return[];}}
 function writeIdList(key,list){try{localStorage.setItem(key,JSON.stringify([...new Set(list.filter(Boolean))]));}catch(_){}}
@@ -151,6 +208,8 @@ async function render(){
     $('#emptyDistributionButton').hidden=created;
   }
   $('#grid').innerHTML=official?'':books.map(w=>bookCardHtml(w)).join('');
+  applyMobileColumns(mobileShelfColumns);
+  installShelfPinch();
   bindBookInteractions();
 }
 async function switchShelf(tab){applyShelfTab(tab);await render();}
@@ -320,7 +379,7 @@ function installTouchReorder(_books,box){
   // through the long-press delay arms reorder; after that, touchmove is cancelled
   // so vertical and horizontal movement both belong to the bookshelf.
   window.addEventListener('touchstart',e=>{
-    if(e.touches.length!==1)return;
+    if(e.touches.length!==1){if(state){clearTimeout(state.timer);state=null;}return;}
     const book=e.target?.closest?.('#grid .book');if(!book)return;
     const t=e.touches[0];
     const st={book,id:book.dataset.id,touchId:t.identifier,x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,lastTarget:'',dragging:false,timer:null,ghost:null};state=st;
