@@ -298,10 +298,16 @@ function currentShelfBodyElement(){
 function makeShelfSwipeStage(nextTab,direction){
   const current=currentShelfBodyElement();
   if(!current)return null;
-  const rect=current.getBoundingClientRect();
+  const chrome=$('#shelfChrome');
+  const chromeRect=chrome?.getBoundingClientRect();
+  const stageTop=Math.max(0,Math.round(chromeRect?.bottom||current.getBoundingClientRect().top||0));
+  const currentRect=current.getBoundingClientRect();
+  const currentY=window.scrollY||window.pageYOffset||0;
+  const bodyDocTop=currentY+currentRect.top;
+  const targetY=loadShelfScroll(nextTab);
   const stage=document.createElement('div');
   stage.className='shelf-swipe-stage';
-  stage.style.top=`${Math.max(0,rect.top)}px`;
+  stage.style.top=`${stageTop}px`;
   const currentPage=document.createElement('div');
   const nextPage=document.createElement('div');
   currentPage.className='shelf-swipe-page is-current';
@@ -316,17 +322,13 @@ function makeShelfSwipeStage(nextTab,direction){
   stage.append(currentPage,nextPage);document.body.append(stage);
   const width=window.innerWidth;
   nextPage.style.transform=`translate3d(${direction==='left'?width:-width}px,0,0)`;
-  // Draw the neighbouring shelf at its remembered vertical viewport from the
-  // first frame. Without this, the swipe snapshot itself showed page-top and
-  // then changed to the remembered position after the commit.
-  const currentY=window.scrollY||window.pageYOffset||0;
-  const targetY=loadShelfScroll(nextTab);
-  // The swipe stage starts at the current shelf body's viewport position.
-  // To preview the neighbour at its remembered document scroll position, shift
-  // by the *difference* between the current and target scroll Y. The previous
-  // bodyTop-based formula displayed an in-between position, then snapped again
-  // when the live shelf was revealed.
-  nextInner.style.transform=`translate3d(0,${currentY-targetY}px,0)`;
+  // The fixed shelf chrome is outside the moving pages. Each page is therefore
+  // positioned inside the same viewport using its own remembered document Y.
+  // This prevents a short shelf from entering from below and then jumping up.
+  const currentOffset=(bodyDocTop-currentY)-stageTop;
+  const targetOffset=(bodyDocTop-targetY)-stageTop;
+  currentInner.style.transform=`translate3d(0,${currentOffset}px,0)`;
+  nextInner.style.transform=`translate3d(0,${targetOffset}px,0)`;
   return {stage,currentPage,nextPage,width,direction,nextTab};
 }
 function removeShelfSwipeStage(view){

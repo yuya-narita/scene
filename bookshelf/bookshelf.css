@@ -419,3 +419,54 @@ body.bookshelf-scroll-locked{
   body.shelf-scroll-restoring #emptyState,
   body.shelf-scroll-restoring #officialShelf{visibility:hidden!important}
 }
+
+/* V63.26 — fixed compact shelf chrome + stable manga-viewer viewport */
+.shelf-chrome{position:relative;z-index:12;background:#f6f3ec}
+@media(max-width:680px){
+  main{padding-top:6px}
+  .shelf-chrome{
+    position:sticky;top:60px;z-index:18;
+    margin:0 -14px 10px;padding:8px 14px 9px;
+    background:rgba(246,243,236,.97);
+    border-bottom:1px solid rgba(221,214,200,.72);
+    -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  }
+  .shelf-head{margin:0 0 7px;padding:0;min-height:39px;align-items:center}
+  .shelf-head h1{font-size:20px;line-height:1.05;margin:0 0 1px}
+  .shelf-head p{font-size:10px;line-height:1.1}
+  .shelf-head-actions{gap:6px}
+  .shelf-icon-action{width:32px;height:32px;min-width:32px;font-size:18px}
+  .shelf-icon-pen{font-size:16px}
+  .shelf-tabs{margin:0;width:100%;padding:3px;gap:3px;border-radius:13px}
+  .shelf-tab{padding:7px 5px;font-size:11px;border-radius:10px}
+  #grid,.empty,.official-shelf{scroll-margin-top:132px}
+}
+
+/* V63.26.1 — keep the whole mobile shelf chrome physically fixed.
+   V63.26 used sticky, so the chrome still travelled from its natural position
+   to top:60px and looked as if it slid under / compressed into the top bar. */
+@media(max-width:680px) and (pointer:coarse){
+  .topbar{
+    position:fixed;
+    top:0;left:0;right:0;
+    width:100%;
+    z-index:30;
+  }
+  main{
+    /* 60px top bar + ~96px shelf chrome + a small breathing gap. */
+    padding-top:166px;
+  }
+  .shelf-chrome{
+    position:fixed;
+    top:60px;
+    left:0;right:0;
+    width:100%;
+    margin:0;
+    padding:8px 14px 9px;
+    z-index:28;
+    min-height:96px;
+  }
+  #grid,.empty,.official-shelf{
+    scroll-margin-top:166px;
+  }
+}
