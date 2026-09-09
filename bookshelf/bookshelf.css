@@ -336,3 +336,15 @@ body.archive-dock-open{padding-bottom:96px}
   .shelf-swipe-page .grid[data-mobile-columns="4"] .badge{top:5px;left:5px;padding:3px 5px;font-size:6px}
   .shelf-swipe-page .official-shelf,.shelf-swipe-page .empty{margin-top:0}
 }
+
+
+/* V63.24.2 — freeze the bookshelf behind menus / modal sheets on iPhone.
+   Archive dock itself stays scrollable; only the archive contents dialog locks. */
+body.bookshelf-scroll-locked{
+  position:fixed;
+  left:0;
+  right:0;
+  width:100%;
+  overflow:hidden;
+  overscroll-behavior:none;
+}
