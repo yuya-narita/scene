@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=63.20">
+  <link rel="stylesheet" href="bookshelf.css?v=63.21">
 </head>
 <body>
   <header class="topbar">
@@ -29,7 +29,6 @@
   <main>
     <section class="shelf-head">
       <div><h1>本棚</h1><p id="countText">0冊</p></div>
-      <p class="local-note">この端末内に保存</p>
       <div id="shelfHeadActions" class="shelf-head-actions" hidden>
         <button id="shelfAddIconButton" class="shelf-icon-action" type="button" aria-label="本を追加" title="本を追加">＋</button>
         <button id="createStudioIconButton" class="shelf-icon-action shelf-icon-pen" type="button" aria-label="Studioで作る" title="Studioで作る">✎</button>
@@ -53,12 +52,15 @@
 
     <section id="grid" class="grid" aria-live="polite"></section>
 
+    <button id="archiveLauncher" class="archive-launcher" type="button" hidden aria-label="段ボール箱を開く" aria-expanded="false">📦<span id="archiveLauncherCount">0</span></button>
+
     <button id="archiveDropZone" class="archive-drop-zone" type="button" hidden aria-label="しまった本を開く">
       <span class="archive-box-shell">
         <span class="archive-box-icon" aria-hidden="true">📦</span>
         <span class="archive-box-copy"><strong>段ボール箱</strong><small id="archiveCount">0冊</small></span>
       </span>
       <span class="archive-box-hint">ここへドラッグしてしまう</span>
+      <span id="archiveDockClose" class="archive-dock-close" role="button" aria-label="収納ドックを閉じる">×</span>
     </button>
 
     <section id="officialShelf" class="official-shelf" hidden>
@@ -102,6 +104,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=63.20"></script>
+  <script src="bookshelf.js?v=63.21"></script>
 </body>
 </html>
