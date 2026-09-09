@@ -80,6 +80,40 @@ async function inspectDistribution(file){const entries=await readZipEntries(file
 async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
 
 function validBookshelfClaimToken(v){return /^[a-f0-9]{48}$/i.test(String(v||''));}
+
+function isXInAppBrowser(){
+  const ua=String(navigator.userAgent||'');
+  return /Twitter(?:\s|\/|Android|$)/i.test(ua)||/com\.atebits\.Tweetie2/i.test(ua);
+}
+function bookshelfClaimTokenFromLocation(){
+  try{return String(new URL(location.href).searchParams.get('claim')||'').trim();}catch(_){return '';}
+}
+function shouldHoldClaimForX(){
+  const token=bookshelfClaimTokenFromLocation();
+  return validBookshelfClaimToken(token)&&isXInAppBrowser();
+}
+function showXClaimHandoff(){
+  document.body.classList.add('x-claim-handoff-active');
+  let panel=document.getElementById('xClaimHandoff');
+  if(!panel){
+    panel=document.createElement('section');
+    panel.id='xClaimHandoff';
+    panel.className='x-claim-handoff';
+    panel.setAttribute('role','status');
+    panel.innerHTML=`<div class="x-claim-handoff-card">
+      <p class="eyebrow">MY COPY HANDOFF</p>
+      <h1>Safariで本棚に受け取る</h1>
+      <p class="x-claim-handoff-lead">この一冊は、まだXの中では受け取っていません。</p>
+      <div class="x-claim-handoff-guide">
+        <strong>画面右下のSafariボタンから開いてください。</strong>
+        <span>Safariで同じページが開いた時に、この一冊を本棚へ保存します。</span>
+      </div>
+      <p class="x-claim-handoff-note">受取リンクは短時間だけ有効です。Xを閉じても、Safariで開くまでは一冊を消費しません。</p>
+    </div>`;
+    document.body.appendChild(panel);
+  }
+  return true;
+}
 function safeClaimFileBase(v){return String(v||'book').replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,' ').trim().slice(0,80)||'book';}
 async function distributionFileFromClaimScene(scene){
   const copyId=String(scene?.distribution?.copyId||'').trim();
@@ -869,6 +903,13 @@ installShelfScrollGuard();
 installDesktopShelfArrowKeys();
 installShelfSwipe();
 (async()=>{
+  // X's in-app browser has its own IndexedDB. Never consume a bookshelf claim
+  // there: keep the bearer URL intact so X's native Safari button can reopen
+  // exactly the same claim in Safari, where the real local bookshelf lives.
+  if(shouldHoldClaimForX()){
+    showXClaimHandoff();
+    return;
+  }
   let claimed=false;
   try{claimed=await importBookshelfClaimFromLocation();}
   catch(e){console.error(e);alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
