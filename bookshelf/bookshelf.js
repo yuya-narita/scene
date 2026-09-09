@@ -216,6 +216,58 @@ async function render(){
   bindBookInteractions();
 }
 async function switchShelf(tab){applyShelfTab(tab);await render();}
+
+function animateShelfSwipe(direction){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const el=currentShelfTab==='official'?$('#officialShelf'):($('#emptyState')&&!$('#emptyState').hidden?$('#emptyState'):$('#grid'));
+  if(!el||el.hidden||typeof el.animate!=='function')return;
+  const from=direction==='left'?'18px':'-18px';
+  el.animate([
+    {transform:`translateX(${from})`,opacity:.72},
+    {transform:'translateX(0)',opacity:1}
+  ],{duration:180,easing:'cubic-bezier(.22,.7,.2,1)'});
+}
+
+function installShelfSwipe(){
+  const main=document.querySelector('main');
+  if(!main||main.dataset.shelfSwipeInstalled==='1')return;
+  main.dataset.shelfSwipeInstalled='1';
+  const tabs=['owned','created','official'];
+  let gesture=null;
+  const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
+  main.addEventListener('touchstart',e=>{
+    if(!mobile()||e.touches.length!==1||pinchGesture)return;
+    if(document.querySelector('dialog[open]'))return;
+    const t=e.touches[0];
+    // Leave Safari's edge back/forward swipe alone.
+    if(t.clientX<22||t.clientX>window.innerWidth-22)return;
+    gesture={x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,startAt:performance.now(),horizontal:false,cancelled:false};
+  },{passive:true});
+  main.addEventListener('touchmove',e=>{
+    const g=gesture;if(!g||e.touches.length!==1){gesture=null;return;}
+    const t=e.touches[0],dx=t.clientX-g.x,dy=t.clientY-g.y;
+    g.lastX=t.clientX;g.lastY=t.clientY;
+    const ax=Math.abs(dx),ay=Math.abs(dy);
+    if(!g.horizontal){
+      if(ay>14&&ay>ax*1.15){g.cancelled=true;return;}
+      if(ax>16&&ax>ay*1.35)g.horizontal=true;
+    }
+    if(g.horizontal&&!g.cancelled)e.preventDefault();
+  },{passive:false});
+  main.addEventListener('touchend',e=>{
+    const g=gesture;gesture=null;if(!g||g.cancelled||!g.horizontal)return;
+    const t=e.changedTouches?.[0];if(!t)return;
+    const dx=t.clientX-g.x,dy=t.clientY-g.y,elapsed=performance.now()-g.startAt;
+    if(Math.abs(dx)<58||Math.abs(dx)<Math.abs(dy)*1.45||elapsed>900)return;
+    const index=tabs.indexOf(currentShelfTab);if(index<0)return;
+    const nextIndex=dx<0?index+1:index-1;
+    if(nextIndex<0||nextIndex>=tabs.length)return;
+    const direction=dx<0?'left':'right';
+    switchShelf(tabs[nextIndex]).then(()=>animateShelfSwipe(direction));
+  },{passive:true});
+  main.addEventListener('touchcancel',()=>{gesture=null;},{passive:true});
+}
+
 async function openDetail(role,id){const isReader=role==='distribution',w=isReader?await getReaderBook(id):await getWork(id);if(!w)return;currentWorkId=id;const cover=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="detail-cover"><img src="${u}" alt=""></div>`})():(w.coverUrl?`<div class="detail-cover"><img src="${escapeHtml(w.coverUrl)}" alt=""></div>`:`<div class="detail-cover"><div class="cover-fallback">□</div></div>`);if(isReader){const relayAction=w.relayEnabled===false?'':`<button id="relayDistribution" class="journey" type="button">次の一人へ</button>`;$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MY COPY</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene</p><p>本棚追加 ${escapeHtml(fmtDate(w.addedAt))}</p></div></div><div class="actions"><button id="readDistribution" class="edit" type="button">読む</button>${relayAction}<button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">${w.relayEnabled===false?'この一冊は「もっている本」に保存されています。作者の設定によりRELAYは無効です。':'この一冊は「もっている本」に保存されています。読むことも、そのまま次の一人へ送ることもできます。'}</p>`;$('#detailDialog').showModal();const openReaderCopy=(relayNow=false)=>{try{sessionStorage.setItem('ahako:bookshelf:open-copy',w.copyId);}catch(_){}const q=new URLSearchParams({bookshelfCopy:w.copyId});if(relayNow)q.set('relayNow','1');location.href=`../local-player/?${q.toString()}`;};$('#readDistribution').onclick=()=>openReaderCopy(false);if($('#relayDistribution'))$('#relayDistribution').onclick=()=>openReaderCopy(true);$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteReaderBook(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};return;}$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MASTER</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene · revision ${w.revision||0}</p><p>本棚更新 ${escapeHtml(fmtDate(w.updatedAt))}</p></div></div><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><div class="actions"><button id="editWork" class="edit" type="button">Studioで編集</button><button id="viewJourney" class="journey" type="button">旅を見る</button><button id="exportMaster" type="button">Masterを書き出す</button><button id="replaceMaster" type="button">Masterを更新</button><button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">「本棚から外す」は、このブラウザ内の本棚コピーだけを削除します。手元に書き出した .scene ファイルまでは削除しません。</p>`;$('#detailDialog').showModal();loadStrengths(w);$('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);$('#exportMaster').onclick=()=>downloadBlob(w.blob,w.fileName||`${w.title}.scene`);$('#replaceMaster').onclick=()=>{$('#fileInput').dataset.replace=id;$('#fileInput').click();};$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteWork(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};}
 async function fetchInsights(workId,{force=false}={}){if(!force&&insightsCache.has(workId))return insightsCache.get(workId);const res=await fetch(`${API_BASE}/bookshelf-insights/${encodeURIComponent(workId)}?days=7`,{headers:{Accept:'application/json'},cache:'no-store'});const data=await res.json().catch(()=>null);if(!res.ok||!data?.ok)throw new Error(data?.error||`HTTP ${res.status}`);insightsCache.set(workId,data);return data;}
 function strengthCard(label,ratio,sample,minimum,formula,{provisional=false}={}){const enough=sample>=minimum;const pct=Number.isFinite(Number(ratio))?Math.round(Math.max(0,Number(ratio))*100):0;const shownPct=Math.min(999,pct);return`<div class="strength-card${enough?'':' is-observing'}"><div class="strength-label"><strong>${label}</strong><span>${formula}</span></div>${enough?`<div class="strength-value">${shownPct}<small>%</small></div><div class="strength-meter"><i style="width:${Math.min(100,shownPct)}%"></i></div>`:`<div class="strength-observing">まだ観測中</div><div class="strength-sample">${Math.max(0,sample)} / ${minimum}</div>`}${provisional?'<p>「自分の一冊」はV63.15以降の保存から計測しています。</p>':''}</div>`;}
@@ -463,5 +515,6 @@ $('#closeArchive').onclick=()=>$('#archiveDialog').close();
 $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
 installSceneDrop();
+installShelfSwipe();
 render().catch(e=>{console.error(e);alert('本棚を開けませんでした。');});
 })();
