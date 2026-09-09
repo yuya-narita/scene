@@ -461,6 +461,50 @@ async function makeStoreZip(entries){const locals=[],centrals=[];let offset=0;fo
 async function backupShelf(){const works=await getAllWorks(),readerBooks=await getAllReaderBooks();if(!works.length&&!readerBooks.length){toast('バックアップする本がありません。');return;}const meta={format:'ahako-local-bookshelf-backup',version:'3',privateBackup:true,exportedAt:new Date().toISOString(),works:works.map(w=>({workId:w.workId,title:w.title,fileName:w.fileName})),readerBooks:readerBooks.map(w=>({copyId:w.copyId,title:w.title,fileName:w.fileName})),layout:{createdOrder:readIdList(SHELF_ORDER_KEYS.created),ownedOrder:readIdList(SHELF_ORDER_KEYS.owned),archivedCreated:readIdList(SHELF_ARCHIVE_KEYS.created),archivedOwned:readIdList(SHELF_ARCHIVE_KEYS.owned)}};const entries=[{name:'bookshelf.json',bytes:te.encode(JSON.stringify(meta,null,2))}];for(const w of works)entries.push({name:`masters/${w.workId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});for(const w of readerBooks)entries.push({name:`distributions/${w.copyId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});downloadBlob(await makeStoreZip(entries),`ahako_bookshelf_backup_${new Date().toISOString().slice(0,10)}.zip`);toast(`${works.length+readerBooks.length}冊をバックアップしました。`);}
 async function restoreShelf(file){const entries=await readZipEntries(file);const metaBytes=entries.get('bookshelf.json');if(!metaBytes)throw new Error('あ箱 本棚のバックアップではありません。');const meta=parseJson(metaBytes);if(meta.format!=='ahako-local-bookshelf-backup')throw new Error('バックアップ形式が違います。');let n=0;for(const item of meta.works||[]){const bytes=entries.get(`masters/${item.workId}.scene`);if(!bytes)continue;await addMaster(new File([bytes],item.fileName||`${item.title||item.workId}.scene`),{silent:true});n++;}for(const item of meta.readerBooks||[]){const bytes=entries.get(`distributions/${item.copyId}.scene`);if(!bytes)continue;await addDistribution(new File([bytes],item.fileName||`${item.title||item.copyId}_distribution.scene`),{silent:true});n++;}if(meta.layout&&typeof meta.layout==='object'){writeIdList(SHELF_ORDER_KEYS.created,Array.isArray(meta.layout.createdOrder)?meta.layout.createdOrder:[]);writeIdList(SHELF_ORDER_KEYS.owned,Array.isArray(meta.layout.ownedOrder)?meta.layout.ownedOrder:[]);writeIdList(SHELF_ARCHIVE_KEYS.created,Array.isArray(meta.layout.archivedCreated)?meta.layout.archivedCreated:[]);writeIdList(SHELF_ARCHIVE_KEYS.owned,Array.isArray(meta.layout.archivedOwned)?meta.layout.archivedOwned:[]);}await render();toast(`${n}冊を復元しました。`);}
 
+async function exportStorageBox(){
+  const archivedCreated=readIdList(SHELF_ARCHIVE_KEYS.created),archivedOwned=readIdList(SHELF_ARCHIVE_KEYS.owned);
+  const masters=[],distributions=[];
+  for(const workId of archivedCreated){const w=await getWork(workId);if(w)masters.push(w);}
+  for(const copyId of archivedOwned){const w=await getReaderBook(copyId);if(w)distributions.push(w);}
+  if(!masters.length&&!distributions.length){toast('箱の中は空です。');return;}
+  const meta={
+    format:'ahako-storage-box',version:'1',privateBackup:true,exportedAt:new Date().toISOString(),
+    works:masters.map(w=>({workId:w.workId,title:w.title,fileName:w.fileName})),
+    readerBooks:distributions.map(w=>({copyId:w.copyId,title:w.title,fileName:w.fileName})),
+    layout:{archivedCreated:masters.map(w=>w.workId),archivedOwned:distributions.map(w=>w.copyId)}
+  };
+  const entries=[{name:'box.json',bytes:te.encode(JSON.stringify(meta,null,2))}];
+  for(const w of masters)entries.push({name:`masters/${w.workId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});
+  for(const w of distributions)entries.push({name:`distributions/${w.copyId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});
+  downloadBlob(await makeStoreZip(entries),`ahako_box_${new Date().toISOString().slice(0,10)}.zip`);
+  toast(`${masters.length+distributions.length}冊を箱に詰めました。`);
+}
+async function importStorageBox(file){
+  const entries=await readZipEntries(file),metaBytes=entries.get('box.json');
+  if(!metaBytes)throw new Error('あ箱の段ボールZIPではありません。');
+  const meta=parseJson(metaBytes);if(meta.format!=='ahako-storage-box')throw new Error('段ボールZIPの形式が違います。');
+  let added=0,skipped=0;
+  const createdToArchive=[],ownedToArchive=[];
+  for(const item of meta.works||[]){
+    if(await getWork(item.workId)){skipped++;continue;}
+    const bytes=entries.get(`masters/${item.workId}.scene`);if(!bytes)continue;
+    const id=await addMaster(new File([bytes],item.fileName||`${item.title||item.workId}.scene`),{silent:true});
+    createdToArchive.push(id);added++;
+  }
+  for(const item of meta.readerBooks||[]){
+    if(await getReaderBook(item.copyId)){skipped++;continue;}
+    const bytes=entries.get(`distributions/${item.copyId}.scene`);if(!bytes)continue;
+    const id=await addDistribution(new File([bytes],item.fileName||`${item.title||item.copyId}_distribution.scene`),{silent:true});
+    ownedToArchive.push(id);added++;
+  }
+  for(const id of createdToArchive)archiveBookId('created',id);
+  for(const id of ownedToArchive)archiveBookId('owned',id);
+  await render();
+  if($('#archiveDialog')?.open)openArchiveBox();
+  const parts=[];if(added)parts.push(`${added}冊を箱に入れました`);if(skipped)parts.push(`${skipped}冊は既にあるためスキップ`);
+  toast(parts.join('・')||'読み込める本がありませんでした。');
+}
+
 async function addDroppedScene(file){
   const entries=await readZipEntries(file);
   const sceneBytes=entries.get('scene.json');if(!sceneBytes)throw new Error('scene.json がありません。');
@@ -630,6 +674,9 @@ $('#fileInput').onchange=async e=>{const file=e.target.files?.[0];if(!file)retur
 $('#backupButton').onclick=()=>{closeBookshelfMenu();backupShelf().catch(e=>alert(e.message));};
 $('#restoreButton').onclick=()=>{closeBookshelfMenu();$('#restoreInput').click();};
 $('#restoreInput').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{await restoreShelf(f);}catch(err){alert(err.message||'復元できませんでした。');}finally{e.target.value='';}};
+$('#exportBoxButton')?.addEventListener('click',()=>exportStorageBox().catch(e=>alert(e.message||'箱を書き出せませんでした。')));
+$('#importBoxButton')?.addEventListener('click',()=>$('#boxImportInput')?.click());
+$('#boxImportInput')?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{await importStorageBox(f);}catch(err){alert(err.message||'箱を読み込めませんでした。');}finally{e.target.value='';}});
 
 document.addEventListener('click',e=>{const menu=$('#bookshelfMenu');if(menu?.open&&!menu.contains(e.target)){menu.open=false;syncShelfScrollLock();}});
 $('#bookshelfMenu')?.addEventListener('toggle',syncShelfScrollLock);

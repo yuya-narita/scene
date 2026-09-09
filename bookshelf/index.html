@@ -88,6 +88,12 @@
       <p>本棚から一時的にしまった本です。</p>
     </div>
     <div id="archiveList" class="archive-list"></div>
+    <div class="archive-transfer">
+      <button id="exportBoxButton" type="button">箱を書き出す</button>
+      <button id="importBoxButton" type="button">箱を読み込む</button>
+      <p>「もっている本」と「つくった本」の段ボール内を、端末移動用の1つのZIPにまとめます。既に同じ一冊／Masterがある場合は重複しません。</p>
+    </div>
+    <input id="boxImportInput" type="file" accept=".zip,application/zip" hidden>
   </dialog>
 
   <dialog id="treeDialog" class="tree-dialog">

@@ -348,3 +348,9 @@ body.bookshelf-scroll-locked{
   overflow:hidden;
   overscroll-behavior:none;
 }
+
+/* V63.25 — portable storage-box ZIP */
+.archive-transfer{padding:0 20px 20px;display:grid;grid-template-columns:1fr 1fr;gap:10px;border-top:1px solid #eee7dc;background:#fff}
+.archive-transfer button{margin-top:16px;padding:12px 14px;border-radius:12px;font-size:12px;font-weight:800}
+.archive-transfer p{grid-column:1/-1;margin:0;color:#81796e;font-size:10px;line-height:1.65}
+@media(max-width:680px){.archive-transfer{padding:0 14px 16px}.archive-transfer button{padding:11px 10px;font-size:11px}}
