@@ -22,6 +22,7 @@ let activeBooks=[];
 let activeArchivedBooks=[];
 let suppressBookClick=false;
 let draggingBookId='';
+let desktopReorderTarget='';
 let touchReorderInstalled=false;
 let archiveDockOpen=false;
 const insightsCache=new Map();
@@ -293,11 +294,11 @@ function bindBookInteractions(){
     book.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();});
     book.addEventListener('selectstart',e=>e.preventDefault());
     book.addEventListener('click',e=>{if(suppressBookClick){e.preventDefault();e.stopPropagation();return;}openDetail(book.dataset.role,book.dataset.id);});
-    book.addEventListener('dragstart',e=>{if(matchMedia('(pointer:coarse)').matches){e.preventDefault();return;}draggingBookId=book.dataset.id;suppressBookClick=true;book.classList.add('is-dragging');e.dataTransfer?.setData('text/ahako-book-id',book.dataset.id);if(e.dataTransfer)e.dataTransfer.effectAllowed='move';});
-    book.addEventListener('dragend',()=>{draggingBookId='';book.classList.remove('is-dragging');box?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));persistVisibleOrderFromDom();setTimeout(()=>{suppressBookClick=false;},80);});
-    book.addEventListener('dragover',e=>{const id=draggingBookId;if(!id||id===book.dataset.id)return;e.preventDefault();book.classList.add('is-drag-target');});
+    book.addEventListener('dragstart',e=>{if(matchMedia('(pointer:coarse)').matches){e.preventDefault();return;}draggingBookId=book.dataset.id;desktopReorderTarget='';suppressBookClick=true;book.classList.add('is-dragging');e.dataTransfer?.setData('text/ahako-book-id',book.dataset.id);if(e.dataTransfer)e.dataTransfer.effectAllowed='move';});
+    book.addEventListener('dragend',()=>{draggingBookId='';desktopReorderTarget='';book.classList.remove('is-dragging');box?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));persistVisibleOrderFromDom();setTimeout(()=>{suppressBookClick=false;},80);});
+    book.addEventListener('dragover',e=>{const id=draggingBookId;if(!id||id===book.dataset.id)return;e.preventDefault();book.classList.add('is-drag-target');if(desktopReorderTarget!==book.dataset.id){desktopReorderTarget=book.dataset.id;moveBookBefore(id,book.dataset.id);}});
     book.addEventListener('dragleave',()=>book.classList.remove('is-drag-target'));
-    book.addEventListener('drop',e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();book.classList.remove('is-drag-target');moveBookBefore(id,book.dataset.id);});
+    book.addEventListener('drop',e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();desktopReorderTarget='';book.classList.remove('is-drag-target');persistVisibleOrderFromDom();});
   });
   if(box){box.ondragover=e=>{if(!draggingBookId)return;e.preventDefault();box.classList.add('is-drag-over');if(e.dataTransfer)e.dataTransfer.dropEffect='move';};box.ondragleave=()=>box.classList.remove('is-drag-over');box.ondrop=async e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();box.classList.remove('is-drag-over');await sendBookToBox(id);};}
   installTouchReorder(books,box);
@@ -305,18 +306,23 @@ function bindBookInteractions(){
 function installTouchReorder(_books,box){
   if(touchReorderInstalled||!matchMedia('(pointer:coarse)').matches)return;touchReorderInstalled=true;
   let state=null;
-  const clear=()=>{if(!state)return;clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;};
+  const clear=()=>{if(!state)return;clearTimeout(state.timer);if(state.scrollRaf)cancelAnimationFrame(state.scrollRaf);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;};
   window.addEventListener('contextmenu',e=>{if(e.target?.closest?.('#grid .book'))e.preventDefault();},{capture:true});
   window.addEventListener('pointerdown',e=>{
     if(e.pointerType==='mouse')return;const book=e.target?.closest?.('#grid .book');if(!book)return;
-    const st={book,id:book.dataset.id,pointerId:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,lastTarget:'',dragging:false,scrolling:false,timer:null,ghost:null};state=st;
+    const st={book,id:book.dataset.id,pointerId:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,startScrollY:window.scrollY,scrollTargetY:window.scrollY,scrollRaf:0,lastTarget:'',dragging:false,scrolling:false,timer:null,ghost:null};state=st;
     st.timer=setTimeout(()=>{if(state!==st||!document.body.contains(book))return;st.dragging=true;suppressBookClick=true;book.classList.add('is-touch-dragging');const r=book.getBoundingClientRect();const ghost=book.cloneNode(true);ghost.classList.add('book-drag-ghost');ghost.removeAttribute('draggable');ghost.style.width=`${r.width}px`;ghost.style.left=`${st.x-r.width/2}px`;ghost.style.top=`${st.y-42}px`;document.body.appendChild(ghost);st.ghost=ghost;try{book.setPointerCapture(e.pointerId);}catch(_){}if(navigator.vibrate)navigator.vibrate(18);},240);
   },{passive:true});
   window.addEventListener('pointermove',e=>{const st=state;if(!st||e.pointerId!==st.pointerId)return;
     if(!st.dragging){
       const dx=e.clientX-st.x,dy=e.clientY-st.y;
-      if(st.scrolling){e.preventDefault();window.scrollBy(0,st.lastY-e.clientY);st.lastX=e.clientX;st.lastY=e.clientY;return;}
-      if(Math.hypot(dx,dy)>10){clearTimeout(st.timer);if(Math.abs(dy)>Math.abs(dx)){st.scrolling=true;e.preventDefault();window.scrollBy(0,st.lastY-e.clientY);st.lastX=e.clientX;st.lastY=e.clientY;}else{state=null;}return;}
+      if(st.scrolling){
+        e.preventDefault();
+        st.scrollTargetY=Math.max(0,st.startScrollY+(st.y-e.clientY));
+        if(!st.scrollRaf)st.scrollRaf=requestAnimationFrame(()=>{st.scrollRaf=0;window.scrollTo(0,st.scrollTargetY);});
+        st.lastX=e.clientX;st.lastY=e.clientY;return;
+      }
+      if(Math.hypot(dx,dy)>10){clearTimeout(st.timer);if(Math.abs(dy)>Math.abs(dx)){st.scrolling=true;e.preventDefault();st.scrollTargetY=Math.max(0,st.startScrollY+(st.y-e.clientY));if(!st.scrollRaf)st.scrollRaf=requestAnimationFrame(()=>{st.scrollRaf=0;window.scrollTo(0,st.scrollTargetY);});st.lastX=e.clientX;st.lastY=e.clientY;}else{state=null;}return;}
       return;
     }
     e.preventDefault();

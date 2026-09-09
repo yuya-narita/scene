@@ -228,3 +228,9 @@ main{padding-top:22px}
   .book.is-touch-dragging{opacity:.16}
   .book-drag-ghost{transform:rotate(1deg) scale(.96);opacity:.94}
 }
+
+/* V63.21.2 — calmer iPhone shelf scroll + live desktop FLIP reorder */
+@media (pointer:fine){
+  #grid .book{transition:none}
+  #grid .book.is-drag-target .cover{transition:outline-color .12s ease,transform .12s ease}
+}
