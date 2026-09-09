@@ -16,6 +16,7 @@ let shelfCounts={owned:0,created:0};
 let coverUrls=[];
 let currentJourneyData=null;
 let currentJourneyTitle='';
+const insightsCache=new Map();
 
 function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(WORKS))db.createObjectStore(WORKS,{keyPath:'workId'});if(!db.objectStoreNames.contains(READER_BOOKS))db.createObjectStore(READER_BOOKS,{keyPath:'copyId'});if(!db.objectStoreNames.contains(HANDOFF))db.createObjectStore(HANDOFF,{keyPath:'key'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function tx(store,mode,fn){const db=await openDb();return new Promise((resolve,reject)=>{const t=db.transaction(store,mode);const s=t.objectStore(store);let out;try{out=fn(s);}catch(e){db.close();reject(e);return;}t.oncomplete=()=>{db.close();resolve(out)};t.onerror=()=>{db.close();reject(t.error)};});}
@@ -43,13 +44,12 @@ function fmtDate(v){if(!v)return'—';const d=new Date(v);if(Number.isNaN(d.getT
 function coverHtml(w,cls=''){if(w.coverBlob){const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="${cls}"><img src="${u}" alt=""></div>`;}return`<div class="${cls}"><div class="cover-fallback">□</div></div>`;}
 function chooseFirstShelf(){
   const saved=localStorage.getItem(SHELF_TAB_KEY);
+  if(['owned','created','official'].includes(saved))return saved;
   if(shelfCounts.created>0&&shelfCounts.owned===0)return 'created';
-  if(shelfCounts.owned>0&&shelfCounts.created===0)return 'owned';
-  if(shelfCounts.owned>0&&shelfCounts.created>0&&['owned','created'].includes(saved))return saved;
   return 'owned';
 }
 function applyShelfTab(tab,{remember=true}={}){
-  currentShelfTab=tab==='created'?'created':'owned';
+  currentShelfTab=['owned','created','official'].includes(tab)?tab:'owned';
   if(remember)localStorage.setItem(SHELF_TAB_KEY,currentShelfTab);
   document.querySelectorAll('.shelf-tab').forEach(b=>{
     const on=b.dataset.shelf===currentShelfTab;
@@ -66,22 +66,34 @@ async function render(){
   applyShelfTab(currentShelfTab,{remember:false});
   $('#ownedTab').textContent=`もっている本${readers.length?` ${readers.length}`:''}`;
   $('#createdTab').textContent=`つくった本${masters.length?` ${masters.length}`:''}`;
+  const official=currentShelfTab==='official';
   const books=(currentShelfTab==='created'?masters:readers).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  $('#countText').textContent=`${books.length}冊`;
-  $('#emptyState').hidden=books.length>0;
-  if(!books.length){
+  $('#officialShelf').hidden=!official;
+  $('#grid').hidden=official;
+  $('#emptyState').hidden=official||books.length>0;
+  $('#countText').textContent=official?'あ箱の本':`${books.length}冊`;
+  const createdShelf=currentShelfTab==='created';
+  $('.local-note').textContent=official?'あ箱から届く棚':'この端末内に保存';
+  $('.local-note').hidden=createdShelf;
+  $('#createInStudioButton').hidden=!createdShelf;
+  if(!official&&!books.length){
     const created=currentShelfTab==='created';
     $('#emptyTitle').textContent=created?'まだ、つくった本はありません':'まだ、もっている本はありません';
     $('#emptyCopy').textContent=created?'Master .scene を追加すると、ここから作品を育てられます。':'自分が持っている Distribution .scene を追加すると、ここに並びます。';
+    $('#emptyCreateButton').hidden=!created;
     $('#emptyAddButton').hidden=!created;
     $('#emptyDistributionButton').hidden=created;
   }
-  $('#grid').innerHTML=books.map(w=>{const badge=w.role==='distribution'?'MY COPY':'MASTER';const id=w.role==='distribution'?w.copyId:w.workId;return`<button class="book" data-role="${w.role}" data-id="${escapeHtml(id)}" type="button"><div class="cover">${w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="">`:`<div class="cover-fallback">□</div>`)}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><p>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</p></div></button>`;}).join('');
+  $('#grid').innerHTML=official?'':books.map(w=>{const badge=w.role==='distribution'?'MY COPY':'MASTER';const id=w.role==='distribution'?w.copyId:w.workId;return`<button class="book" data-role="${w.role}" data-id="${escapeHtml(id)}" type="button"><div class="cover">${w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="">`:`<div class="cover-fallback">□</div>`)}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><p>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</p></div></button>`;}).join('');
   document.querySelectorAll('.book').forEach(b=>b.addEventListener('click',()=>openDetail(b.dataset.role,b.dataset.id)));
 }
 async function switchShelf(tab){applyShelfTab(tab);await render();}
-async function openDetail(role,id){const isReader=role==='distribution',w=isReader?await getReaderBook(id):await getWork(id);if(!w)return;currentWorkId=id;const cover=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="detail-cover"><img src="${u}" alt=""></div>`})():(w.coverUrl?`<div class="detail-cover"><img src="${escapeHtml(w.coverUrl)}" alt=""></div>`:`<div class="detail-cover"><div class="cover-fallback">□</div></div>`);if(isReader){const relayAction=w.relayEnabled===false?'':`<button id="relayDistribution" class="journey" type="button">次の一人へ</button>`;$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MY COPY</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene</p><p>本棚追加 ${escapeHtml(fmtDate(w.addedAt))}</p></div></div><div class="actions"><button id="readDistribution" class="edit" type="button">読む</button>${relayAction}<button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">${w.relayEnabled===false?'この一冊は「もっている本」に保存されています。作者の設定によりRELAYは無効です。':'この一冊は「もっている本」に保存されています。読むことも、そのまま次の一人へ送ることもできます。'}</p>`;$('#detailDialog').showModal();const openReaderCopy=(relayNow=false)=>{try{sessionStorage.setItem('ahako:bookshelf:open-copy',w.copyId);}catch(_){}const q=new URLSearchParams({bookshelfCopy:w.copyId});if(relayNow)q.set('relayNow','1');location.href=`../local-player/?${q.toString()}`;};$('#readDistribution').onclick=()=>openReaderCopy(false);if($('#relayDistribution'))$('#relayDistribution').onclick=()=>openReaderCopy(true);$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteReaderBook(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};return;}$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MASTER</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene · revision ${w.revision||0}</p><p>本棚更新 ${escapeHtml(fmtDate(w.updatedAt))}</p></div></div><section id="journeyPanel" class="journey-panel" hidden></section><div class="actions"><button id="editWork" class="edit" type="button">Studioで編集</button><button id="viewJourney" class="journey" type="button">旅を見る</button><button id="exportMaster" type="button">Masterを書き出す</button><button id="replaceMaster" type="button">Masterを更新</button><button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">「本棚から外す」は、このブラウザ内の本棚コピーだけを削除します。手元に書き出した .scene ファイルまでは削除しません。</p>`;$('#detailDialog').showModal();$('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);$('#exportMaster').onclick=()=>downloadBlob(w.blob,w.fileName||`${w.title}.scene`);$('#replaceMaster').onclick=()=>{$('#fileInput').dataset.replace=id;$('#fileInput').click();};$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteWork(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};}
-async function loadJourney(w){const panel=$('#journeyPanel'),button=$('#viewJourney');if(!panel||!button)return;panel.hidden=false;panel.innerHTML='<div class="journey-loading">旅の記録を読み込んでいます…</div>';button.disabled=true;button.textContent='読み込み中…';try{const res=await fetch(`${API_BASE}/bookshelf-insights/${encodeURIComponent(w.workId)}?days=7`,{headers:{Accept:'application/json'},cache:'no-store'});const data=await res.json().catch(()=>null);if(!res.ok||!data?.ok)throw new Error(data?.error||`HTTP ${res.status}`);currentJourneyData=data;currentJourneyTitle=w.title||'作品の木';renderJourney(panel,data);button.textContent='旅を更新';}catch(err){console.error(err);panel.innerHTML=`<div class="journey-error"><strong>旅の記録を読み込めませんでした。</strong><span>通信状態またはWorkerの更新を確認してください。</span></div>`;button.textContent='もう一度読み込む';}finally{button.disabled=false;}}
+async function openDetail(role,id){const isReader=role==='distribution',w=isReader?await getReaderBook(id):await getWork(id);if(!w)return;currentWorkId=id;const cover=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="detail-cover"><img src="${u}" alt=""></div>`})():(w.coverUrl?`<div class="detail-cover"><img src="${escapeHtml(w.coverUrl)}" alt=""></div>`:`<div class="detail-cover"><div class="cover-fallback">□</div></div>`);if(isReader){const relayAction=w.relayEnabled===false?'':`<button id="relayDistribution" class="journey" type="button">次の一人へ</button>`;$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MY COPY</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene</p><p>本棚追加 ${escapeHtml(fmtDate(w.addedAt))}</p></div></div><div class="actions"><button id="readDistribution" class="edit" type="button">読む</button>${relayAction}<button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">${w.relayEnabled===false?'この一冊は「もっている本」に保存されています。作者の設定によりRELAYは無効です。':'この一冊は「もっている本」に保存されています。読むことも、そのまま次の一人へ送ることもできます。'}</p>`;$('#detailDialog').showModal();const openReaderCopy=(relayNow=false)=>{try{sessionStorage.setItem('ahako:bookshelf:open-copy',w.copyId);}catch(_){}const q=new URLSearchParams({bookshelfCopy:w.copyId});if(relayNow)q.set('relayNow','1');location.href=`../local-player/?${q.toString()}`;};$('#readDistribution').onclick=()=>openReaderCopy(false);if($('#relayDistribution'))$('#relayDistribution').onclick=()=>openReaderCopy(true);$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteReaderBook(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};return;}$('#detailContent').innerHTML=`<div class="detail-hero">${cover}<div class="detail-copy"><p class="eyebrow">MASTER</p><h2>${escapeHtml(w.title)}</h2><p>${escapeHtml(w.author||'作者未設定')}</p><p>${w.sceneCount||0} Scene · revision ${w.revision||0}</p><p>本棚更新 ${escapeHtml(fmtDate(w.updatedAt))}</p></div></div><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><div class="actions"><button id="editWork" class="edit" type="button">Studioで編集</button><button id="viewJourney" class="journey" type="button">旅を見る</button><button id="exportMaster" type="button">Masterを書き出す</button><button id="replaceMaster" type="button">Masterを更新</button><button id="removeWork" class="danger" type="button">本棚から外す</button></div><p class="detail-note">「本棚から外す」は、このブラウザ内の本棚コピーだけを削除します。手元に書き出した .scene ファイルまでは削除しません。</p>`;$('#detailDialog').showModal();loadStrengths(w);$('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);$('#exportMaster').onclick=()=>downloadBlob(w.blob,w.fileName||`${w.title}.scene`);$('#replaceMaster').onclick=()=>{$('#fileInput').dataset.replace=id;$('#fileInput').click();};$('#removeWork').onclick=async()=>{if(!confirm(`「${w.title}」を本棚から外しますか？`))return;await deleteWork(id);$('#detailDialog').close();await render();toast('本棚から外しました。');};}
+async function fetchInsights(workId,{force=false}={}){if(!force&&insightsCache.has(workId))return insightsCache.get(workId);const res=await fetch(`${API_BASE}/bookshelf-insights/${encodeURIComponent(workId)}?days=7`,{headers:{Accept:'application/json'},cache:'no-store'});const data=await res.json().catch(()=>null);if(!res.ok||!data?.ok)throw new Error(data?.error||`HTTP ${res.status}`);insightsCache.set(workId,data);return data;}
+function strengthCard(label,ratio,sample,minimum,formula,{provisional=false}={}){const enough=sample>=minimum;const pct=Number.isFinite(Number(ratio))?Math.round(Math.max(0,Number(ratio))*100):0;const shownPct=Math.min(999,pct);return`<div class="strength-card${enough?'':' is-observing'}"><div class="strength-label"><strong>${label}</strong><span>${formula}</span></div>${enough?`<div class="strength-value">${shownPct}<small>%</small></div><div class="strength-meter"><i style="width:${Math.min(100,shownPct)}%"></i></div>`:`<div class="strength-observing">まだ観測中</div><div class="strength-sample">${Math.max(0,sample)} / ${minimum}</div>`}${provisional?'<p>「自分の一冊」はV63.15以降の保存から計測しています。</p>':''}</div>`;}
+function renderStrengths(panel,data){const all=data?.allTime||{},strength=data?.strengths?.allTime||{},minimum=Math.max(1,Number(data?.strengths?.minimumSample||10));panel.innerHTML=`<div class="strength-head"><div><p class="eyebrow">WORK SIGNAL</p><h3>作品の力</h3></div><span>匿名集計</span></div><div class="strength-grid">${strengthCard('旅する力',strength.journey,Math.max(0,Number(all.completions||0)),minimum,'次の一人へ ÷ 読了')}${strengthCard('本棚に残る力',strength.bookshelf,Math.max(0,Number(all.completions||0)),minimum,'自分の一冊 ÷ 読了',{provisional:true})}${strengthCard('最後まで読まれる力',strength.completion,Math.max(0,Number(all.observedReaders||0)),minimum,'読了 ÷ 観測読者')}</div><p class="strength-note">数字が少ない間は評価を固定せず「まだ観測中」と表示します。作品ごとの強さを、人気順ではなく読者の行動から見ます。</p>`;}
+async function loadStrengths(w){const panel=$('#strengthPanel');if(!panel)return;try{const data=await fetchInsights(w.workId);if(currentWorkId!==w.workId)return;renderStrengths(panel,data);}catch(err){console.error(err);if(currentWorkId!==w.workId)return;panel.innerHTML='<div class="strength-error">作品の力を読み込めませんでした。</div>';}}
+async function loadJourney(w){const panel=$('#journeyPanel'),button=$('#viewJourney');if(!panel||!button)return;panel.hidden=false;panel.innerHTML='<div class="journey-loading">旅の記録を読み込んでいます…</div>';button.disabled=true;button.textContent='読み込み中…';try{const data=await fetchInsights(w.workId,{force:true});currentJourneyData=data;currentJourneyTitle=w.title||'作品の木';renderStrengths($('#strengthPanel'),data);renderJourney(panel,data);button.textContent='旅を更新';}catch(err){console.error(err);panel.innerHTML=`<div class="journey-error"><strong>旅の記録を読み込めませんでした。</strong><span>通信状態またはWorkerの更新を確認してください。</span></div>`;button.textContent='もう一度読み込む';}finally{button.disabled=false;}}
 function workJourneyTreeSvg(journeys){
   if(!Array.isArray(journeys)||!journeys.length)return'';
   // workId を植木鉢＝一本の根として、copyId / RELAY の旅を上方向へ育てる。
@@ -177,15 +189,21 @@ function installSceneDrop(){
     if(added){$('#detailDialog').close();await render();}
   });
 }
-$('#addButton').onclick=$('#emptyAddButton').onclick=()=>{$('#fileInput').dataset.replace='';$('#fileInput').click();};
-$('#addDistributionButton').onclick=$('#emptyDistributionButton').onclick=()=>{$('#distributionInput').dataset.replace='';$('#distributionInput').click();};
+function closeBookshelfMenu(){const menu=$('#bookshelfMenu');if(menu)menu.open=false;}
+function openStudioFromBookshelf(){closeBookshelfMenu();location.href='../studio/?from=bookshelf';}
+$('#createInStudioButton').onclick=$('#emptyCreateButton').onclick=openStudioFromBookshelf;
+$('#addButton').onclick=$('#emptyAddButton').onclick=()=>{closeBookshelfMenu();$('#fileInput').dataset.replace='';$('#fileInput').click();};
+$('#addDistributionButton').onclick=$('#emptyDistributionButton').onclick=()=>{closeBookshelfMenu();$('#distributionInput').dataset.replace='';$('#distributionInput').click();};
 $('#ownedTab').onclick=()=>switchShelf('owned');
 $('#createdTab').onclick=()=>switchShelf('created');
+$('#officialTab').onclick=()=>switchShelf('official');
 $('#distributionInput').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const expected=e.target.dataset.replace||'';const id=await addDistribution(file);if(expected&&expected!==id)toast('別の一冊だったため、新しい一冊として追加しました。');applyShelfTab('owned');$('#detailDialog').close();await render();}catch(err){alert(err.message||'Distributionを追加できませんでした。');}finally{e.target.value='';e.target.dataset.replace='';}};
 $('#fileInput').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const expected=e.target.dataset.replace||'';const id=await addMaster(file);if(expected&&expected!==id)toast('別作品のMasterだったため、その作品として追加しました。');applyShelfTab('created');$('#detailDialog').close();await render();}catch(err){alert(err.message||'Masterを追加できませんでした。');}finally{e.target.value='';e.target.dataset.replace='';}};
-$('#backupButton').onclick=()=>backupShelf().catch(e=>alert(e.message));
-$('#restoreButton').onclick=()=>$('#restoreInput').click();
+$('#backupButton').onclick=()=>{closeBookshelfMenu();backupShelf().catch(e=>alert(e.message));};
+$('#restoreButton').onclick=()=>{closeBookshelfMenu();$('#restoreInput').click();};
 $('#restoreInput').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{await restoreShelf(f);}catch(err){alert(err.message||'復元できませんでした。');}finally{e.target.value='';}};
+
+document.addEventListener('click',e=>{const menu=$('#bookshelfMenu');if(menu?.open&&!menu.contains(e.target))menu.open=false;});
 $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
 installSceneDrop();
