@@ -14,6 +14,7 @@ const SHELF_TAB_KEY='ahako:bookshelf:last-tab';
 const SHELF_ORDER_KEYS={owned:'ahako:bookshelf:order:owned',created:'ahako:bookshelf:order:created'};
 const SHELF_ARCHIVE_KEYS={owned:'ahako:bookshelf:archive:owned',created:'ahako:bookshelf:archive:created'};
 const MOBILE_COLUMNS_KEY='ahako:bookshelf:mobile-columns';
+const SHELF_SCROLL_KEYS={owned:'ahako:bookshelf:scroll:owned',created:'ahako:bookshelf:scroll:created',official:'ahako:bookshelf:scroll:official'};
 let currentShelfTab=null;
 let shelfCounts={owned:0,created:0};
 let coverUrls=[];
@@ -171,13 +172,26 @@ function restoreBookId(tab,id){
 function bookCardHtml(w,{archived=false}={}){
   const badge=w.role==='distribution'?'MY COPY':'MASTER',id=shelfIdOf(w);
   const image=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="" draggable="false">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false">`:`<div class="cover-fallback">□</div>`);
-  if(archived)return`<div class="archive-item" data-role="${w.role}" data-id="${escapeHtml(id)}"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div><button class="archive-restore" type="button">本棚へ戻す</button></div>`;
+  if(archived)return`<label class="archive-item" data-role="${w.role}" data-id="${escapeHtml(id)}"><input class="archive-check" type="checkbox" aria-label="${escapeHtml(w.title)}を選択"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div></label>`;
   return`<button class="book" data-role="${w.role}" data-id="${escapeHtml(id)}" draggable="true" type="button"><div class="cover">${image}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><p>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</p></div></button>`;
 }
 
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmtDate(v){if(!v)return'—';const d=new Date(v);if(Number.isNaN(d.getTime()))return'—';return new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);}
 function coverHtml(w,cls=''){if(w.coverBlob){const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="${cls}"><img src="${u}" alt=""></div>`;}return`<div class="${cls}"><div class="cover-fallback">□</div></div>`;}
+function saveShelfScroll(tab=currentShelfTab,y=window.scrollY||window.pageYOffset||0){
+  const key=SHELF_SCROLL_KEYS[tab];if(!key)return;
+  try{localStorage.setItem(key,String(Math.max(0,Math.round(Number(y)||0))));}catch(_){}
+}
+function loadShelfScroll(tab){
+  const key=SHELF_SCROLL_KEYS[tab];if(!key)return 0;
+  try{return Math.max(0,Number(localStorage.getItem(key)||0)||0);}catch(_){return 0;}
+}
+function restoreShelfScroll(tab){
+  const y=loadShelfScroll(tab);
+  return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>{window.scrollTo(0,y);resolve();})));
+}
+
 function chooseFirstShelf(){
   const saved=localStorage.getItem(SHELF_TAB_KEY);
   if(['owned','created','official'].includes(saved))return saved;
@@ -246,7 +260,7 @@ async function render({deferCoverRevoke=false}={}){
   bindBookInteractions();
   return staleCoverUrls;
 }
-async function switchShelf(tab,{deferCoverRevoke=false}={}){applyShelfTab(tab);return await render({deferCoverRevoke});}
+async function switchShelf(tab,{deferCoverRevoke=false}={}){const from=currentShelfTab;if(from)saveShelfScroll(from);applyShelfTab(tab);const stale=await render({deferCoverRevoke});await restoreShelfScroll(currentShelfTab);return stale;}
 
 function swipeShelfBodyHtml(tab){
   if(tab==='official'){
@@ -550,8 +564,8 @@ function moveBookBefore(dragId,targetId){
   persistVisibleOrderFromDom();
 }
 function waitAnimation(animation,fallback=240){return new Promise(resolve=>{let done=false;const finish=()=>{if(done)return;done=true;resolve();};if(animation){animation.addEventListener?.('finish',finish,{once:true});animation.addEventListener?.('cancel',finish,{once:true});}setTimeout(finish,fallback);});}
-async function animateBookIntoBox(id){
-  const book=$(`#grid .book[data-id="${CSS.escape(id)}"]`),box=$('#archiveDropZone');
+async function animateBookIntoBox(id,targetEl=null){
+  const book=$(`#grid .book[data-id="${CSS.escape(id)}"]`),box=targetEl||$('#archiveDropZone');
   if(!book||!box||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
   const a=book.getBoundingClientRect(),b=box.getBoundingClientRect();
   if(!a.width||!a.height||!b.width||!b.height)return;
@@ -568,20 +582,21 @@ function animateBookOutOfBox(id,fromRect){
   const dx=(fromRect.left+fromRect.width/2)-(r.left+r.width/2),dy=(fromRect.top+fromRect.height/2)-(r.top+r.height/2);
   book.animate([{transform:`translate3d(${dx}px,${dy}px,0) scale(.2)`,opacity:.08},{transform:'translate3d(0,0,0) scale(1)',opacity:1}],{duration:280,easing:'cubic-bezier(.16,.84,.26,1)',fill:'both'});
 }
-async function sendBookToBox(id){if(!id||!SHELF_ARCHIVE_KEYS[currentShelfTab])return;await animateBookIntoBox(id);archiveBookId(currentShelfTab,id);await render();$('#archiveDropZone')?.animate?.([{transform:'scale(.96)'},{transform:'scale(1.04)'},{transform:'scale(1)'}],{duration:220,easing:'ease-out'});toast('段ボール箱にしまいました。');}
+async function sendBookToBox(id,targetEl=null){if(!id||!SHELF_ARCHIVE_KEYS[currentShelfTab])return;const target=targetEl||$('#archiveDropZone')||$('#archiveLauncher');await animateBookIntoBox(id,target);archiveBookId(currentShelfTab,id);await render();const liveTarget=target?.id==='archiveLauncher'?$('#archiveLauncher'):$('#archiveDropZone');liveTarget?.animate?.([{transform:'scale(.96)'},{transform:'scale(1.04)'},{transform:'scale(1)'}],{duration:220,easing:'ease-out'});toast('段ボール箱にしまいました。');}
 function bindBookInteractions(){
-  const books=Array.from(document.querySelectorAll('#grid .book')),box=$('#archiveDropZone');
+  const books=Array.from(document.querySelectorAll('#grid .book')),box=$('#archiveDropZone'),launcher=$('#archiveLauncher');
   books.forEach(book=>{
     book.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();});
     book.addEventListener('selectstart',e=>e.preventDefault());
     book.addEventListener('click',e=>{if(suppressBookClick){e.preventDefault();e.stopPropagation();return;}openDetail(book.dataset.role,book.dataset.id);});
     book.addEventListener('dragstart',e=>{if(matchMedia('(pointer:coarse)').matches){e.preventDefault();return;}draggingBookId=book.dataset.id;desktopReorderTarget='';suppressBookClick=true;book.classList.add('is-dragging');e.dataTransfer?.setData('text/ahako-book-id',book.dataset.id);if(e.dataTransfer)e.dataTransfer.effectAllowed='move';});
-    book.addEventListener('dragend',()=>{draggingBookId='';desktopReorderTarget='';book.classList.remove('is-dragging');box?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));persistVisibleOrderFromDom();setTimeout(()=>{suppressBookClick=false;},80);});
+    book.addEventListener('dragend',()=>{draggingBookId='';desktopReorderTarget='';book.classList.remove('is-dragging');box?.classList.remove('is-drag-over');launcher?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));persistVisibleOrderFromDom();setTimeout(()=>{suppressBookClick=false;},80);});
     book.addEventListener('dragover',e=>{const id=draggingBookId;if(!id||id===book.dataset.id)return;e.preventDefault();book.classList.add('is-drag-target');if(desktopReorderTarget!==book.dataset.id){desktopReorderTarget=book.dataset.id;moveBookBefore(id,book.dataset.id);}});
     book.addEventListener('dragleave',()=>book.classList.remove('is-drag-target'));
     book.addEventListener('drop',e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();desktopReorderTarget='';book.classList.remove('is-drag-target');persistVisibleOrderFromDom();});
   });
-  if(box){box.ondragover=e=>{if(!draggingBookId)return;e.preventDefault();box.classList.add('is-drag-over');if(e.dataTransfer)e.dataTransfer.dropEffect='move';};box.ondragleave=()=>box.classList.remove('is-drag-over');box.ondrop=async e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();box.classList.remove('is-drag-over');await sendBookToBox(id);};}
+  const installArchiveDropTarget=target=>{if(!target)return;target.ondragover=e=>{if(!draggingBookId)return;e.preventDefault();target.classList.add('is-drag-over');if(e.dataTransfer)e.dataTransfer.dropEffect='move';};target.ondragleave=()=>target.classList.remove('is-drag-over');target.ondrop=async e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();e.stopPropagation();target.classList.remove('is-drag-over');await sendBookToBox(id,target);};};
+  installArchiveDropTarget(box);installArchiveDropTarget(launcher);
   installTouchReorder(books,box);
 }
 function installTouchReorder(_books,box){
@@ -593,7 +608,7 @@ function installTouchReorder(_books,box){
     for(const t of list)if(t.identifier===id)return t;
     return null;
   };
-  const clear=()=>{if(!state){touchBookReordering=false;return;}clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;touchBookReordering=false;};
+  const clear=()=>{if(!state){touchBookReordering=false;return;}clearTimeout(state.timer);state.ghost?.remove();state.book?.classList.remove('is-touch-dragging');$('#archiveDropZone')?.classList.remove('is-drag-over');$('#archiveLauncher')?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));state=null;touchBookReordering=false;};
   window.addEventListener('contextmenu',e=>{if(e.target?.closest?.('#grid .book'))e.preventDefault();},{capture:true});
 
   // V63.21.4: use touch events instead of pointer capture for iPhone reorder.
@@ -626,7 +641,7 @@ function installTouchReorder(_books,box){
     st.lastX=t.clientX;st.lastY=t.clientY;
     if(t.clientY<105)window.scrollBy(0,-12);else if(t.clientY>window.innerHeight-115)window.scrollBy(0,12);
     if(st.ghost){const r=st.ghost.getBoundingClientRect();st.ghost.style.left=`${t.clientX-r.width/2}px`;st.ghost.style.top=`${t.clientY-42}px`;}
-    const target=document.elementFromPoint(t.clientX,t.clientY);const liveBox=$('#archiveDropZone');const overBox=target?.closest?.('#archiveDropZone');liveBox?.classList.toggle('is-drag-over',!!overBox);
+    const target=document.elementFromPoint(t.clientX,t.clientY);const liveBox=$('#archiveDropZone'),liveLauncher=$('#archiveLauncher');const overBox=target?.closest?.('#archiveDropZone'),overLauncher=target?.closest?.('#archiveLauncher');liveBox?.classList.toggle('is-drag-over',!!overBox);liveLauncher?.classList.toggle('is-drag-over',!!overLauncher);
     document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));
     const targetBook=target?.closest?.('#grid .book');if(targetBook&&targetBook!==st.book){targetBook.classList.add('is-drag-target');if(st.lastTarget!==targetBook.dataset.id){st.lastTarget=targetBook.dataset.id;moveBookBefore(st.id,targetBook.dataset.id);}}
   },{passive:false});
@@ -634,8 +649,8 @@ function installTouchReorder(_books,box){
   const finish=async e=>{
     const st=state;if(!st)return;const t=pointFor(e,st.touchId);clearTimeout(st.timer);
     if(!st.dragging){state=null;touchBookReordering=false;return;}
-    const x=t?.clientX??st.lastX,y=t?.clientY??st.lastY;const target=document.elementFromPoint(x,y),toBox=!!target?.closest?.('#archiveDropZone');
-    persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(toBox){await sendBookToBox(st.id);/* Keep the storage dock open so multiple books can be packed consecutively. */}
+    const x=t?.clientX??st.lastX,y=t?.clientY??st.lastY;const target=document.elementFromPoint(x,y),boxTarget=target?.closest?.('#archiveDropZone,#archiveLauncher');
+    persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(boxTarget){await sendBookToBox(st.id,boxTarget);/* Small launcher and open dock both accept consecutive packing. */}
   };
   window.addEventListener('touchend',finish,{passive:true});
   window.addEventListener('touchcancel',e=>{if(state){const was=state.dragging;clear();if(was)setTimeout(()=>{suppressBookClick=false;},100);}},{passive:true});
@@ -649,14 +664,21 @@ function setArchiveDock(open){
 }
 function openArchiveBox(){
   if(currentShelfTab==='official')return;
-  const list=$('#archiveList');
+  const list=$('#archiveList'),restoreSelected=$('#restoreSelectedButton'),selectedCount=$('#archiveSelectedCount');
   list.innerHTML=activeArchivedBooks.length?activeArchivedBooks.map(w=>bookCardHtml(w,{archived:true})).join(''):'<div class="archive-empty">箱の中は空です。</div>';
-  list.querySelectorAll('.archive-restore').forEach(btn=>btn.onclick=async()=>{
-    const item=btn.closest('.archive-item'),id=item?.dataset.id;if(!id)return;
-    const boxRect=$('#archiveDropZone')?.getBoundingClientRect?.();
-    if(item&&!matchMedia('(prefers-reduced-motion: reduce)').matches){const a=item.animate([{transform:'scale(1)',opacity:1},{transform:'scale(.92)',opacity:0}],{duration:140,easing:'ease-in',fill:'forwards'});await waitAnimation(a,170);}
-    restoreBookId(currentShelfTab,id);$('#archiveDialog').close();await render();animateBookOutOfBox(id,boxRect);toast('本棚へ戻しました。');
-  });
+  const checks=()=>Array.from(list.querySelectorAll('.archive-check:checked'));
+  const syncSelection=()=>{const n=checks().length;if(restoreSelected){restoreSelected.disabled=n===0;restoreSelected.hidden=activeArchivedBooks.length===0;}if(selectedCount)selectedCount.textContent=n?`${n}冊選択`:'本を選択してください';};
+  list.querySelectorAll('.archive-check').forEach(ch=>ch.addEventListener('change',syncSelection));
+  syncSelection();
+  if(restoreSelected)restoreSelected.onclick=async()=>{
+    const ids=checks().map(ch=>ch.closest('.archive-item')?.dataset.id).filter(Boolean);if(!ids.length)return;
+    const boxRect=($('#archiveLauncher')&&!$('#archiveLauncher').hidden?$('#archiveLauncher'):$('#archiveDropZone'))?.getBoundingClientRect?.();
+    ids.forEach(id=>restoreBookId(currentShelfTab,id));
+    $('#archiveDialog').close();
+    await render();
+    ids.slice(0,8).forEach((id,i)=>setTimeout(()=>animateBookOutOfBox(id,boxRect),i*36));
+    toast(`${ids.length}冊を本棚へ戻しました。`);
+  };
   $('#archiveDialog').showModal();
   syncShelfScrollLock();
 }
@@ -691,5 +713,5 @@ $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
 installSceneDrop();
 installShelfSwipe();
-render().catch(e=>{console.error(e);alert('本棚を開けませんでした。');});
+render().then(()=>restoreShelfScroll(currentShelfTab)).catch(e=>{console.error(e);alert('本棚を開けませんでした。');});
 })();

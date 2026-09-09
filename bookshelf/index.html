@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=63.24.2">
+  <link rel="stylesheet" href="bookshelf.css?v=63.25.3">
 </head>
 <body>
   <header class="topbar">
@@ -88,6 +88,10 @@
       <p>本棚から一時的にしまった本です。</p>
     </div>
     <div id="archiveList" class="archive-list"></div>
+    <div class="archive-batch-actions">
+      <span id="archiveSelectedCount">本を選択してください</span>
+      <button id="restoreSelectedButton" type="button" disabled>選択した本を本棚へ戻す</button>
+    </div>
     <div class="archive-transfer">
       <button id="exportBoxButton" type="button">箱を書き出す</button>
       <button id="importBoxButton" type="button">箱を読み込む</button>
@@ -110,6 +114,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=63.24.2"></script>
+  <script src="bookshelf.js?v=63.25.3"></script>
 </body>
 </html>
