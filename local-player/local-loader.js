@@ -197,6 +197,18 @@
     overlay.querySelector('[data-gate-close]')?.addEventListener('click',close);
   }
 
+  function sendBookshelfEvent(event,scene){
+    const workId=String(scene?.workId||scene?.distribution?.workId||'').trim();
+    const copyId=String(scene?.distribution?.copyId||'').trim();
+    if(event!=='own_copy_saved'||!/^[A-Za-z0-9_-]{12,80}$/.test(workId)||!/^copy_[a-f0-9]{32}$/i.test(copyId))return;
+    try{
+      fetch(`${API_BASE}/bookshelf-event`,{
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',keepalive:true,
+        body:JSON.stringify({event,workId,copyId})
+      }).catch(()=>{});
+    }catch(_){}
+  }
+
   async function receiveOwnCopy({button=ownCopyButton,statusNode=status,onSuccess=null}={}){
     const credential=ownCopyCredentialFromLocation();
     if(!credential)return false;
@@ -223,6 +235,7 @@
         throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
       }
       await putOwnedSceneInBookshelf(payload.scene);
+      sendBookshelfEvent('own_copy_saved',payload.scene);
       if(statusNode)statusNode.textContent='自分の一冊を本棚に受け取りました。';
       if(button){
         button.disabled=false;
@@ -749,7 +762,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.8-own-copy-gate-foundation',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.9-bookshelf-metrics-events',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();
