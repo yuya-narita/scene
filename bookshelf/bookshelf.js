@@ -26,7 +26,7 @@ let draggingBookId='';
 let desktopReorderTarget='';
 let touchReorderInstalled=false;
 let archiveDockOpen=false;
-let mobileShelfColumns=2;
+let mobileShelfColumns=loadMobileColumns();
 let pinchGesture=null;
 const insightsCache=new Map();
 
@@ -208,6 +208,9 @@ async function render(){
     $('#emptyDistributionButton').hidden=created;
   }
   $('#grid').innerHTML=official?'':books.map(w=>bookCardHtml(w)).join('');
+  // Re-read the persisted density on every render/reload before applying it.
+  // This prevents the default 2-column value from briefly/incorrectly winning on Safari reload.
+  mobileShelfColumns=loadMobileColumns();
   applyMobileColumns(mobileShelfColumns);
   installShelfPinch();
   bindBookInteractions();
