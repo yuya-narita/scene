@@ -403,6 +403,25 @@ function installShelfScrollGuard(){
   },{passive:true});
 }
 
+
+function installDesktopShelfArrowKeys(){
+  if(document.documentElement.dataset.desktopShelfArrowKeysInstalled==='1')return;
+  document.documentElement.dataset.desktopShelfArrowKeysInstalled='1';
+  const tabs=['owned','created','official'];
+  document.addEventListener('keydown',e=>{
+    if(e.defaultPrevented||!matchMedia('(min-width:681px)').matches)return;
+    if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
+    const target=e.target;
+    if(target?.closest?.('input,textarea,select,[contenteditable="true"],dialog[open],details[open]'))return;
+    if($('#bookshelfMenu')?.open||document.querySelector('dialog[open]'))return;
+    const index=tabs.indexOf(currentShelfTab);if(index<0)return;
+    const nextIndex=e.key==='ArrowRight'?index+1:index-1;
+    if(nextIndex<0||nextIndex>=tabs.length)return;
+    e.preventDefault();
+    switchShelf(tabs[nextIndex]);
+  });
+}
+
 function installShelfSwipe(){
   if(document.documentElement.dataset.shelfSwipeInstalled==='1')return;
   document.documentElement.dataset.shelfSwipeInstalled='1';
@@ -789,6 +808,7 @@ $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
 installSceneDrop();
 installShelfScrollGuard();
+installDesktopShelfArrowKeys();
 installShelfSwipe();
 render().then(()=>restoreShelfScroll(currentShelfTab)).catch(e=>{console.error(e);alert('本棚を開けませんでした。');});
 })();

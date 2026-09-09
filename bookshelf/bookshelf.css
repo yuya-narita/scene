@@ -479,3 +479,63 @@ body.bookshelf-scroll-locked{
   body{min-height:100dvh}
   body.shelf-no-vertical-scroll{overflow-y:hidden;overscroll-behavior-y:none}
 }
+
+/* V63.27 — reclaim mobile shelf viewport + keep storage-box transfer controls visible. */
+@media(max-width:680px) and (pointer:coarse){
+  .topbar{height:52px}
+  main{padding-top:140px}
+  .shelf-chrome{
+    top:52px;
+    min-height:82px;
+    padding:5px 14px 6px;
+  }
+  .shelf-head{min-height:32px;margin:0 0 4px;align-items:center}
+  .shelf-head h1{font-size:19px;line-height:1;margin:0 0 1px}
+  .shelf-head p{font-size:9px;line-height:1}
+  .shelf-head-actions{gap:5px}
+  .shelf-icon-action{width:30px;height:30px;min-width:30px;font-size:17px}
+  .shelf-icon-pen{font-size:15px}
+  .shelf-tabs{padding:2px;gap:2px;border-radius:12px}
+  .shelf-tab{padding:6px 4px;font-size:10.5px;border-radius:9px}
+  #grid,.empty,.official-shelf{scroll-margin-top:140px}
+}
+
+/* The dialog itself never scrolls. Only the book list does, so both the
+   selection action and box transfer controls remain visible at all times. */
+.archive-dialog{
+  display:none;
+  flex-direction:column;
+  overflow:hidden;
+}
+.archive-dialog[open]{display:flex}
+.archive-dialog-head{flex:0 0 auto}
+.archive-list{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;
+  overflow:auto;
+  overscroll-behavior:contain;
+}
+.archive-batch-actions,.archive-transfer{flex:0 0 auto}
+@media(max-width:680px){
+  .archive-dialog{max-height:min(82dvh,760px)}
+  .archive-dialog-head{padding:20px 20px 12px}
+  .archive-dialog-head h2{font-size:22px;margin-bottom:5px}
+  .archive-list{padding:11px 14px 12px}
+  .archive-batch-actions{
+    position:relative;
+    bottom:auto;
+    z-index:3;
+    padding:9px 14px;
+    box-shadow:0 -5px 14px rgba(45,35,22,.045);
+  }
+  .archive-transfer{
+    position:relative;
+    z-index:3;
+    padding:8px 14px 12px;
+    gap:8px;
+    box-shadow:0 -4px 12px rgba(45,35,22,.035);
+  }
+  .archive-transfer button{margin-top:0;padding:10px 8px;font-size:10.5px}
+  .archive-transfer p{font-size:9px;line-height:1.45}
+}
