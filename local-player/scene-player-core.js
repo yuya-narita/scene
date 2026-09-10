@@ -110,6 +110,12 @@
       this.historyScrollRaf = 0;
       this.historyMetrics = null;
       this.historyDepthItems = new Set();
+      // Local Player experiment: a downward drag can grab the visited-past drum
+      // directly, without first entering a separate PAST selection mode.
+      this.historyDirectGesture = null;
+      this.historyDirectActive = false;
+      this.historyNearestIndex = -1;
+      this.historyMomentumRaf = 0;
       this.destroyed = false;
       this._bound = [];
       this.presentationTimers = [];
@@ -461,13 +467,58 @@
 
       if (this.options.swipe) {
         this._on(this.els.stage, 'touchstart', (e) => {
+          this._cancelHistoryMomentum();
           const t = e.changedTouches[0];
           this.touchStartY = t.clientY;
           this.touchStartX = t.clientX;
+          this.historyDirectGesture = {
+            startY: t.clientY,
+            startX: t.clientX,
+            currentY: t.clientY,
+            lastY: t.clientY,
+            lastAt: performance.now(),
+            fingerVelocity: 0,
+            startScroll: 0,
+            ready: false,
+            ended: false
+          };
         }, { passive: true });
 
         this._on(this.els.stage, 'touchmove', (e) => {
-          // Keep the page itself fixed. History has its own native momentum scroller.
+          if (this.touchStartY == null || this.touchStartX == null) return;
+          const t = e.changedTouches[0];
+          const dy = t.clientY - this.touchStartY;
+          const dx = t.clientX - this.touchStartX;
+          const verticalPull = dy > 10 && Math.abs(dy) >= Math.abs(dx);
+
+          // V63.35.13 Local-only experiment: pulling down grabs History while
+          // the SAME finger is still moving. The visited future boundary remains
+          // maxVisitedIndex, so an unread Scene can never appear here.
+          if (verticalPull && this.options.allowPrevious && this.maxVisitedIndex > 0) {
+            if (e.cancelable) e.preventDefault();
+            const g = this.historyDirectGesture;
+            if (!this.historyDirectActive) {
+              this.historyDirectActive = true;
+              this.openHistory({ directGesture: true });
+            }
+            if (g) {
+              const now = performance.now();
+              const dt = Math.max(1, now - g.lastAt);
+              const instant = (t.clientY - g.lastY) / dt;
+              // Smooth noisy iOS move samples, but keep a quick fling responsive.
+              g.fingerVelocity = g.fingerVelocity * 0.68 + instant * 0.32;
+              g.currentY = t.clientY;
+              g.lastY = t.clientY;
+              g.lastAt = now;
+              if (g.ready) {
+                this.els.historyScroll.scrollTop = Math.max(0, g.startScroll - (g.currentY - g.startY) * 1.55);
+                this._scheduleHistoryDepth();
+              }
+            }
+            return;
+          }
+
+          // Keep the page itself fixed for the existing discrete swipe actions.
           if (e.cancelable) e.preventDefault();
         }, { passive: false });
 
@@ -476,14 +527,28 @@
           const t = e.changedTouches[0];
           const dy = t.clientY - this.touchStartY;
           const dx = t.clientX - this.touchStartX;
+          const g = this.historyDirectGesture;
           this.touchStartY = null;
           this.touchStartX = null;
 
+          if (this.historyDirectActive) {
+            this.suppressNextClick = true;
+            if (g) {
+              g.currentY = t.clientY;
+              g.ended = true;
+              if (g.ready) this._finishDirectHistoryGesture();
+            } else {
+              this._commitDirectHistory();
+            }
+            return;
+          }
+
+          this.historyDirectGesture = null;
           if (Math.max(Math.abs(dx), Math.abs(dy)) < this.options.swipeThreshold) return;
           this.suppressNextClick = true;
 
-          // Pulling down/right enters History Scroll. Pushing up/left still advances
-          // only one unread Scene at a time.
+          // Up/left still advances exactly one unread Scene. Horizontal right
+          // keeps the old History entry as a temporary fallback during testing.
           if (Math.abs(dy) >= Math.abs(dx)) {
             if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
             else if (dy < 0) { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
@@ -2247,6 +2312,7 @@
       this._clearPresentationTimers();
       this.historyOpen = true;
       this.host.classList.add('sp-history-open');
+      this.els.history.classList.toggle('is-direct', !!options.directGesture);
       this.els.history.hidden = false;
       this._renderHistory();
 
@@ -2261,17 +2327,25 @@
           this.els.historyScroll.scrollTop = Math.max(0, target);
 
           // A pull gesture should feel like grabbing the drum and moving into the past.
-          // Give it a small initial offset while preserving native momentum afterwards.
+          // Legacy History gets its small offset. Direct History instead binds
+          // the current finger displacement to scrollTop after centering.
           const drag = Math.abs(asNumber(options.dragDistance, 0));
           const wheel = Math.abs(asNumber(options.wheelDelta, 0));
-          if (drag > 0 || wheel > 0) {
+          if (!options.directGesture && (drag > 0 || wheel > 0)) {
             this.els.historyScroll.scrollTop = Math.max(
               0,
               this.els.historyScroll.scrollTop - clamp((drag || wheel) * 0.7, 18, 110)
             );
           }
+          if (options.directGesture && this.historyDirectGesture) {
+            const g = this.historyDirectGesture;
+            g.startScroll = this.els.historyScroll.scrollTop;
+            g.ready = true;
+            this.els.historyScroll.scrollTop = Math.max(0, g.startScroll - (g.currentY - g.startY) * 1.55);
+          }
         }
         this._updateHistoryDepth();
+        if (options.directGesture && this.historyDirectGesture?.ended) this._finishDirectHistoryGesture();
       });
 
       emit(this.host, 'sceneplayer:historyopen', {
@@ -2283,8 +2357,12 @@
 
     closeHistory(options = {}) {
       if (!this.historyOpen) return false;
+      this._cancelHistoryMomentum();
       this.historyOpen = false;
+      this.historyDirectActive = false;
+      this.historyDirectGesture = null;
       this.host.classList.remove('sp-history-open');
+      this.els.history.classList.remove('is-direct');
       this.els.history.hidden = true;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
       emit(this.host, 'sceneplayer:historyclose', {
@@ -2440,6 +2518,7 @@
       if (nearestIndex > 0 && Math.abs(metrics[nearestIndex - 1].center - center) <= Math.abs(metrics[nearestIndex].center - center)) {
         nearestIndex -= 1;
       }
+      this.historyNearestIndex = Number(metrics[nearestIndex]?.item?.dataset?.index ?? this.index);
 
       // Only the small visible neighbourhood needs the drum depth effect.
       // Clear the previously touched nodes, then update roughly ±6 Scenes.
@@ -2461,6 +2540,66 @@
         if (i === nearestIndex) entry.item.classList.add('is-nearest');
         this.historyDepthItems.add(entry.item);
       }
+    }
+
+    _cancelHistoryMomentum() {
+      if (this.historyMomentumRaf) cancelAnimationFrame(this.historyMomentumRaf);
+      this.historyMomentumRaf = 0;
+    }
+
+    _finishDirectHistoryGesture() {
+      const g = this.historyDirectGesture;
+      if (!g || !this.historyOpen) return;
+      this._cancelHistoryMomentum();
+      this._updateHistoryDepth();
+
+      // Convert finger velocity to drum velocity. Pulling down moves scrollTop up.
+      let velocity = -g.fingerVelocity * 1.55; // px/ms in scroll coordinates
+      const startedAt = performance.now();
+      let lastAt = startedAt;
+
+      // Slow releases should settle immediately instead of floating.
+      if (Math.abs(velocity) < 0.18) {
+        this._commitDirectHistory();
+        return;
+      }
+
+      const step = (now) => {
+        if (!this.historyOpen || !this.historyDirectActive) {
+          this.historyMomentumRaf = 0;
+          return;
+        }
+        const dt = Math.min(32, Math.max(1, now - lastAt));
+        lastAt = now;
+        const scroll = this.els.historyScroll;
+        const before = scroll.scrollTop;
+        scroll.scrollTop = Math.max(0, before + velocity * dt);
+        this._updateHistoryDepth();
+
+        // Time-normalized friction; cap the experiment so it always settles fast.
+        velocity *= Math.pow(0.935, dt / 16.67);
+        const hitBoundary = Math.abs(scroll.scrollTop - before) < 0.1;
+        if (Math.abs(velocity) < 0.035 || hitBoundary || now - startedAt > 850) {
+          this.historyMomentumRaf = 0;
+          this._commitDirectHistory();
+          return;
+        }
+        this.historyMomentumRaf = requestAnimationFrame(step);
+      };
+      this.historyMomentumRaf = requestAnimationFrame(step);
+    }
+
+    _commitDirectHistory() {
+      if (!this.historyOpen || !this.historyDirectActive) return false;
+      this._updateHistoryDepth();
+      const nextIndex = Number.isInteger(this.historyNearestIndex) ? this.historyNearestIndex : this.index;
+      const safeIndex = Math.max(0, Math.min(nextIndex, this.maxVisitedIndex));
+      this.closeHistory({ keepVisualState: true });
+      const changed = safeIndex !== this.index;
+      if (changed) this.goToVisited(safeIndex);
+      // The physical pull must never synthesize an immediate "next" tap.
+      this.suppressNextClick = true;
+      return true;
     }
 
     refreshCurrent(options = {}) {
