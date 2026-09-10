@@ -114,6 +114,12 @@
 
 
 
+  function bookshelfMasterIdFromLocation(){
+    let workId='';
+    try{workId=String(new URL(location.href).searchParams.get('bookshelfMaster')||'').trim();}catch(_){}
+    if(workId)return workId;
+    try{return String(sessionStorage.getItem('ahako:bookshelf:open-master')||'').trim();}catch(_){return '';}
+  }
   function bookshelfCopyIdFromLocation(){
     let copyId='';
     try{copyId=String(new URL(location.href).searchParams.get('bookshelfCopy')||'').trim();}catch(_){}
@@ -154,6 +160,33 @@
       req.onerror=()=>reject(req.error||new Error('本棚を開けませんでした。'));
       req.onupgradeneeded=()=>{try{req.transaction.abort();}catch(_){}reject(new Error('読者本棚がまだありません。'));};
     });
+  }
+  async function masterBookFromBookshelf(workId){
+    if(!validWorkId(workId))throw new Error('本棚のMasterを確認できません。');
+    const db=await openBookshelfDb();
+    try{
+      if(!db.objectStoreNames.contains('works'))throw new Error('作者本棚がまだありません。');
+      const rec=await idbRequest(db.transaction('works','readonly').objectStore('works').get(workId));
+      if(!rec?.blob)throw new Error('このMasterは本棚に見つかりませんでした。');
+      return rec;
+    }finally{db.close();}
+  }
+  async function openBookshelfMaster(workId){
+    currentBookshelfCopyId='';
+    currentSourceMode='bookshelf-master';
+    setRelayEntryMode(false);
+    if(launcher)launcher.hidden=false;
+    setStatus('作者本棚から開いています…');
+    if(openButton)openButton.disabled=true;
+    try{
+      const rec=await masterBookFromBookshelf(workId);
+      try{sessionStorage.removeItem('ahako:bookshelf:open-master');}catch(_){}
+      const file=new File([rec.blob],rec.fileName||`${rec.title||'book'}.scene`,{type:'application/octet-stream'});
+      await openScene(file,{sourceMode:'bookshelf-master',sourceKey:`bookshelf-master:${workId}`});
+      return true;
+    }catch(error){
+      console.error(error);currentPackage=null;if(launcher)launcher.hidden=false;if(backButton)backButton.hidden=true;setStatus(String(error?.message||error));return false;
+    }finally{if(openButton)openButton.disabled=false;}
   }
   async function readerBookFromBookshelf(copyId){
     if(!validBookshelfCopyId(copyId))throw new Error('本棚の一冊を確認できません。');
@@ -930,10 +963,11 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.9-bookshelf-metrics-events',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
+  window.SceneLocalLoader={version:'5.10-bookshelf-master-read',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
+  const initialBookshelfMasterId=bookshelfMasterIdFromLocation();
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();
   const initialRelayToken=relayTokenFromLocation();
@@ -942,6 +976,8 @@
     openAdminReview(initialReviewUrl);
   }else if(initialOfficialShelfId){
     openOfficialShelfRead(initialOfficialShelfId);
+  }else if(validWorkId(initialBookshelfMasterId)){
+    openBookshelfMaster(initialBookshelfMasterId);
   }else if(validBookshelfCopyId(initialBookshelfCopyId)){
     openBookshelfCopy(initialBookshelfCopyId).then(ok=>{
       if(ok&&initialRelayNow&&relayInfo(currentPackage?.raw))setTimeout(()=>relayCurrentScene(),0);
