@@ -367,10 +367,10 @@ function officialCardHtml(item,claimed=false){
   const descriptionHtml=description?`<div class="official-description">${escapeHtml(description)}</div>`:'';
   const facts=[sceneCount?`${sceneCount} Scene`:'',item.relayEnabled===false?'RELAY OFF':(item.relayEnabled===true?'RELAY ON':'')].filter(Boolean).join(' · ');
   const factsHtml=facts?`<div class="official-facts">${escapeHtml(facts)}</div>`:'';
-  return `<article class="official-book-card ${kind}" data-official-read="${escapeHtml(item.shelfId)}" tabindex="0" role="link" aria-label="${escapeHtml((item.title||'Untitled')+'を読む')}">
-    <div class="official-book-cover">${cover}<span class="official-kind">${label}</span></div>
-    <div class="official-book-copy"><h3>${escapeHtml(item.title||'Untitled')}</h3>${subtitleHtml}<p class="official-author">${escapeHtml(item.author||'作者未設定')}</p>${factsHtml}${descriptionHtml}<strong class="official-remaining">残り ${remaining} / ${limit}冊</strong>
-    <div class="official-actions"><button type="button" data-official-claim="${escapeHtml(item.shelfId)}" ${(sold||received)?'disabled':''}>${received?'受け取り済み':(sold?'旅立ちました':'一冊を受け取る')}</button></div></div>
+  return `<article class="official-book-card ${kind}">
+    <div class="official-book-cover" data-official-read="${escapeHtml(item.shelfId)}" tabindex="0" role="button" aria-label="${escapeHtml((item.title||'Untitled')+'を読む')}">${cover}<span class="official-kind">${label}</span></div>
+    <div class="official-book-copy"><div class="official-book-meta"><h3>${escapeHtml(item.title||'Untitled')}</h3>${subtitleHtml}<p class="official-author">${escapeHtml(item.author||'作者未設定')}</p>${factsHtml}${descriptionHtml}</div><div class="official-book-footer"><strong class="official-remaining">${sold?'すべて旅立ちました':`残り ${remaining} / ${limit}冊`}</strong>
+    <div class="official-actions"><button type="button" data-official-claim="${escapeHtml(item.shelfId)}" ${(sold||received)?'disabled':''}>${received?'受け取り済み':(sold?'旅立ちました':'一冊を受け取る')}</button></div></div></div>
   </article>`;
 }
 async function loadOfficialShelf({force=false}={}){
@@ -387,10 +387,10 @@ async function renderOfficialShelf(){
     const owned=await getAllReaderBooks();
     const claimedEditions=new Set(owned.map(book=>`${String(book.workId||'')}::${String(book.editionId||'')}`));
     host.innerHTML=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
-    host.querySelectorAll('.official-book-card[data-official-read]').forEach(card=>{
-      const open=()=>{const href=officialReadUrl(card.dataset.officialRead);if(href)location.href=href;};
-      card.onclick=e=>{if(e.target.closest('[data-official-claim]'))return;open();};
-      card.onkeydown=e=>{if(e.target!==card)return;if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
+    host.querySelectorAll('.official-book-cover[data-official-read]').forEach(cover=>{
+      const open=()=>{const href=officialReadUrl(cover.dataset.officialRead);if(href)location.href=href;};
+      cover.onclick=open;
+      cover.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
     });
     host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=e=>{e.stopPropagation();claimOfficialBook(button);});
   }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}

@@ -660,3 +660,28 @@ body.x-claim-handoff-active>#toast{display:none!important}
   .official-actions{display:block}
   .official-actions [data-official-claim]{width:100%;min-height:44px}
 }
+
+
+/* V63.35.8 — cover-only read target + unified official card geometry. */
+.official-books{grid-template-columns:repeat(auto-fill,minmax(220px,240px));justify-content:start;align-items:stretch}
+.official-book-card{display:flex;flex-direction:column;height:100%;min-width:0;cursor:default}
+.official-book-cover[data-official-read]{cursor:pointer}
+.official-book-cover[data-official-read]:focus-visible{outline:2px solid #171717;outline-offset:-3px}
+.official-book-copy{display:flex;flex:1;flex-direction:column;min-height:212px}
+.official-book-meta{min-height:128px}
+.official-book-copy h3{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.official-subtitle{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
+.official-description{-webkit-line-clamp:2;min-height:3.3em;margin-bottom:8px}
+.official-book-footer{margin-top:auto}
+.official-remaining{min-height:1.5em;margin-bottom:10px}
+.official-actions [data-official-claim]{min-height:46px}
+@media(max-width:680px){
+  .official-books{grid-template-columns:1fr;max-width:340px}
+  .official-book-card{display:grid;grid-template-columns:42% 58%;min-height:232px}
+  .official-book-cover{aspect-ratio:auto;min-height:232px;height:100%}
+  .official-book-copy{min-height:232px;padding:12px 12px 11px}
+  .official-book-meta{min-height:150px}
+  .official-description{-webkit-line-clamp:3;min-height:0;margin-bottom:8px}
+  .official-book-footer{margin-top:auto}
+  .official-actions [data-official-claim]{min-height:44px}
+}
