@@ -35,6 +35,7 @@ const insightsCache=new Map();
 const copyJourneyCache=new Map();
 let officialShelfItems=[];
 let officialShelfLoaded=false;
+const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
 let shelfScrollLockY=0;
 
 function shelfScrollShouldLock(){
@@ -335,17 +336,34 @@ function restoreShelfScroll(tab){
 }
 
 
-function officialCardHtml(item){
+
+function officialReaderId(){
+  let id='';try{id=String(localStorage.getItem(OFFICIAL_READER_ID_KEY)||'');}catch(_){}
+  if(!/^reader_[a-f0-9]{32}$/i.test(id)){
+    try{id=`reader_${crypto.randomUUID().replaceAll('-','')}`;}catch(_){const a=new Uint8Array(16);crypto.getRandomValues(a);id=`reader_${[...a].map(v=>v.toString(16).padStart(2,'0')).join('')}`;}
+    try{localStorage.setItem(OFFICIAL_READER_ID_KEY,id);}catch(_){}
+  }
+  return id;
+}
+function officialReadUrl(shelfId){
+  if(!/^shelf_[a-f0-9]{24}$/i.test(String(shelfId||'')))return '';
+  const u=new URL('../local-player/',location.href);
+  u.searchParams.set('officialShelf',String(shelfId));
+  return u.href;
+}
+
+function officialCardHtml(item,claimed=false){
   const kind=item.kind==='bloom'?'bloom':'seed';
   const label=kind==='bloom'?'🌸 開花':'🌱 種本';
   const remaining=Math.max(0,Number(item.remaining||0));
   const limit=Math.max(1,Number(item.issueLimit||1));
   const sold=remaining<=0;
+  const received=!!claimed;
   const cover=item.coverUrl?`<img src="${escapeHtml(item.coverUrl)}" alt="">`:`<div class="official-cover-fallback">あ□</div>`;
   return `<article class="official-book-card ${kind}">
     <div class="official-book-cover">${cover}<span class="official-kind">${label}</span></div>
     <div class="official-book-copy"><h3>${escapeHtml(item.title||'Untitled')}</h3><p>${escapeHtml(item.author||'作者未設定')}</p><strong class="official-remaining">残り ${remaining} / ${limit}冊</strong>
-    <button type="button" data-official-claim="${escapeHtml(item.shelfId)}" ${sold?'disabled':''}>${sold?'旅立ちました':'一冊を受け取る'}</button></div>
+    <div class="official-actions"><button type="button" class="official-read" data-official-read="${escapeHtml(item.shelfId)}">読む</button><button type="button" data-official-claim="${escapeHtml(item.shelfId)}" ${(sold||received)?'disabled':''}>${received?'受け取り済み':(sold?'旅立ちました':'一冊を受け取る')}</button></div></div>
   </article>`;
 }
 async function loadOfficialShelf({force=false}={}){
@@ -359,7 +377,10 @@ async function renderOfficialShelf(){
   const host=$('#officialBooks');if(!host)return;
   try{
     const items=await loadOfficialShelf({force:true});
-    host.innerHTML=items.length?items.map(officialCardHtml).join(''):`<div class="official-empty"><strong>まだ本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
+    const owned=await getAllReaderBooks();
+    const claimedEditions=new Set(owned.map(book=>`${String(book.workId||'')}::${String(book.editionId||'')}`));
+    host.innerHTML=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
+    host.querySelectorAll('[data-official-read]').forEach(button=>button.onclick=()=>{const href=officialReadUrl(button.dataset.officialRead);if(href)location.href=href;});
     host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=()=>claimOfficialBook(button));
   }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
 }
@@ -367,9 +388,9 @@ async function claimOfficialBook(button){
   if(button.disabled)return;const shelfId=String(button.dataset.officialClaim||'');
   button.disabled=true;const before=button.textContent;button.textContent='受け取っています…';
   try{
-    const response=await fetch(`${API_BASE}/official-shelf/claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({shelfId})});
+    const response=await fetch(`${API_BASE}/official-shelf/claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({shelfId,readerId:officialReaderId()})});
     const payload=await response.json().catch(()=>null);
-    if(!response.ok||!payload?.ok||!payload?.scene)throw new Error(payload?.code==='SHELF_SOLD_OUT'?'この種本はすべて旅立ちました。':String(payload?.error||'一冊を受け取れませんでした。'));
+    if(!response.ok||!payload?.ok||!payload?.scene){const code=String(payload?.code||'');throw new Error(code==='SHELF_SOLD_OUT'?'この種本はすべて旅立ちました。':code==='SHELF_ALREADY_CLAIMED'?'この種本はすでに受け取っています。':String(payload?.error||'一冊を受け取れませんでした。'));}
     const file=await distributionFileFromClaimScene(payload.scene);await addDistribution(file,{silent:true});
     officialShelfLoaded=false;await renderOfficialShelf();toast('あ箱から一冊を受け取りました。');
     setTimeout(()=>switchShelf('owned'),450);
