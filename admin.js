@@ -4,12 +4,76 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
 let lastStats=null;
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
 async function apiWithTimeout(path,options={},timeoutMs=12000){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);try{return await api(path,{...options,signal:controller.signal});}catch(e){if(e?.name==='AbortError')throw new Error('通信がタイムアウトしました');throw e;}finally{clearTimeout(timer);}}
 function toast(text){const n=document.createElement('div');n.className='toast';n.textContent=text;document.body.append(n);setTimeout(()=>n.remove(),1800);}
+
+// v63.35.1 — one admin, four workspaces
+function setAdminTab(name,{remember=true}={}){
+  const valid=['status','selection','reports','maintenance'];
+  if(!valid.includes(name))name='status';
+  document.querySelectorAll('[data-admin-tab]').forEach(b=>{const on=b.dataset.adminTab===name;b.classList.toggle('is-active',on);b.setAttribute('aria-selected',on?'true':'false');});
+  document.querySelectorAll('[data-admin-panel]').forEach(p=>p.classList.toggle('is-active',p.dataset.adminPanel===name));
+  if(remember)sessionStorage.setItem('ahako-admin-tab',name);
+  if(name==='selection'&&token)loadOfficialShelfAdmin();
+  if(name==='reports'&&token)loadReports();
+}
+function formatJstDate(value){
+  if(!value)return '発行日時不明';
+  const d=new Date(value);if(Number.isNaN(d.getTime()))return '発行日時不明';
+  return d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function groupLatestEditions(rows){
+  const groups=new Map();
+  for(const row of rows||[]){
+    const key=String(row.workId||'');if(!key)continue;
+    if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);
+  }
+  return [...groups.values()].map(items=>items.sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0))).sort((a,b)=>new Date(b[0]?.createdAt||0)-new Date(a[0]?.createdAt||0));
+}
+function renderEditionCandidates(rows){
+  if(!els.editionCandidates)return;
+  const groups=groupLatestEditions(rows);
+  if(!groups.length){els.editionCandidates.innerHTML='<div class="empty">発行済みEditionはありません。</div>';return;}
+  els.editionCandidates.innerHTML=groups.map((items,idx)=>{
+    const latest=items[0],workId=String(latest.workId||'');
+    const opts=items.map((x,i)=>`<option value="${escapeHtml(x.editionId)}">${i===0?'最新 · ':''}${escapeHtml(formatJstDate(x.createdAt))}</option>`).join('');
+    return `<article class="edition-candidate" data-work-id="${escapeHtml(workId)}">
+      <div class="edition-cover-placeholder">あ□</div>
+      <div class="edition-candidate-main">
+        <div class="edition-candidate-head"><div><small>発行済み作品</small><h3>${escapeHtml(latest.title||'無題')}</h3><p>${escapeHtml(latest.author||'作者未設定')}</p></div><span class="edition-count">${items.length} Edition</span></div>
+        <div class="edition-choice-row"><label>Edition<select data-edition-choice>${opts}</select></label><a class="review-link" href="${API}/work/${encodeURIComponent(workId)}" target="_blank" rel="noopener">読む</a></div>
+        <div class="seed-controls"><label>種類<select data-shelf-kind><option value="seed">🌱 種本</option><option value="bloom">🌸 開花</option></select></label><label>発行冊数<input data-issue-limit type="number" min="1" max="100000" value="10" inputmode="numeric"></label><button class="primary" type="button" data-put-shelf>あ箱の本に置く</button></div>
+        <small class="candidate-note">「読む」は現在の公開作品を別タブで開きます。選定するEditionは上の発行日時で確認してください。</small>
+      </div>
+    </article>`;
+  }).join('');
+}
+function renderOfficialShelfAdmin(items){
+  if(!els.officialShelfItems)return;
+  if(!items?.length){els.officialShelfItems.innerHTML='<div class="empty">まだありません。</div>';return;}
+  els.officialShelfItems.innerHTML=items.map(x=>`<article class="official-shelf-row">
+    <div><small>${x.kind==='bloom'?'🌸 開花':'🌱 種本'} · ${escapeHtml(x.status==='active'?'公開中':'停止中')}</small><strong>${escapeHtml(x.title||'無題')}</strong><span>${escapeHtml(x.author||'作者未設定')}</span></div>
+    <div class="shelf-count"><strong>${Number(x.issuedCount||0).toLocaleString('ja-JP')} / ${Number(x.issueLimit||0).toLocaleString('ja-JP')}</strong><small>発行</small></div>
+    <button type="button" data-shelf-id="${escapeHtml(x.shelfId)}" data-shelf-action="${x.status==='active'?'stop':'resume'}">${x.status==='active'?'停止':'再開'}</button>
+  </article>`).join('');
+}
+let officialShelfLoading=false;
+async function loadOfficialShelfAdmin(){
+  if(officialShelfLoading)return;officialShelfLoading=true;
+  if(els.selectionStatus)els.selectionStatus.textContent='読み込み中…';
+  try{
+    const [editions,shelf]=await Promise.all([api('/admin/official-shelf/editions'),api('/admin/official-shelf')]);
+    renderEditionCandidates(editions.items||[]);renderOfficialShelfAdmin(shelf.items||[]);
+    if(els.selectionStatus)els.selectionStatus.textContent=`${groupLatestEditions(editions.items||[]).length}作品`;
+  }catch(e){
+    if(els.editionCandidates)els.editionCandidates.innerHTML=`<div class="empty">作品候補を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
+    if(els.selectionStatus)els.selectionStatus.textContent='';
+  }finally{officialShelfLoading=false;}
+}
 const reasonLabel=r=>({copyright:'第三者の著作物・権利侵害',unauthorized:'自分の作品が無断で使用されている',other:'その他'})[r]||r;
 const subjectLabel=s=>({text:'本文・文章',cover:'表紙',image:'背景・画像',audio:'BGM・SE・音声',other:'その他'})[s]||s||'不明';
 async function connect(){token=els.token.value.trim();if(!token){els.loginStatus.textContent='ADMIN_TOKENを入力してください。';return;}els.connect.disabled=true;try{await api('/admin/stats');sessionStorage.setItem('ahako-admin-token',token);els.loginStatus.textContent='';els.login.hidden=true;els.content.hidden=false;els.refresh.disabled=false;await loadDashboard();}catch(e){els.loginStatus.textContent=e.status===401?'ADMIN_TOKENが違います。':`接続できません: ${e.message}`;}finally{els.connect.disabled=false;}}
@@ -33,7 +97,7 @@ async function loadStats(){
     els.suspendedCount.textContent=Number(d.works?.suspended||0).toLocaleString('ja-JP');
     els.r2Usage.textContent=formatBytes(d.storage?.totalBytes||0);
     els.assetCount.textContent=Number(d.storage?.assetCount||0).toLocaleString('ja-JP');
-    els.openCount.textContent=Number(d.reports?.open||0).toLocaleString('ja-JP');
+    els.openCount.textContent=Number(d.reports?.open||0).toLocaleString('ja-JP');if(els.reportTabBadge){const n=Number(d.reports?.open||0);els.reportTabBadge.textContent=n.toLocaleString('ja-JP');els.reportTabBadge.hidden=n===0;}
     const orphanCount=Number(d.storage?.orphanAssetCount||0);
     const orphanBytes=Number(d.storage?.orphanAssetBytes||0);
     const recentCount=Number(d.storage?.recentUnreferencedCount||0);
@@ -302,6 +366,19 @@ els.list.addEventListener('click',async e=>{
 async function inspect(){const id=els.workId.value.trim();if(!id)return;els.direct.textContent='確認中…';try{const d=await api(`/admin/work/${encodeURIComponent(id)}`);els.direct.innerHTML=`<div class="report-card"><div class="meta"><span>workId</span><code>${escapeHtml(d.id)}</code><span>状態</span><strong>${escapeHtml(d.state)}</strong><span>素材</span><span>${Number(d.assets?.length||0)}件</span></div><div class="actions"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">作品を見る</a><button data-direct="suspend" class="stop">一時停止</button><button data-direct="republish">再公開</button><button data-direct="delete" class="delete">完全削除</button></div></div>`;}catch(e){els.direct.textContent=`確認できません: ${e.message}`;}}
 els.direct.addEventListener('click',async e=>{const b=e.target.closest('button[data-direct]');if(!b)return;const id=els.workId.value.trim();b.disabled=true;try{await moderate(id,b.dataset.direct);await inspect();await loadDashboard();}catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}});
 if(els.cleanupOrphans)els.cleanupOrphans.addEventListener('click',cleanupOrphans);
+document.querySelectorAll('[data-admin-tab]').forEach(b=>b.addEventListener('click',()=>setAdminTab(b.dataset.adminTab)));
+if(els.reloadSelection)els.reloadSelection.addEventListener('click',loadOfficialShelfAdmin);
+if(els.editionCandidates)els.editionCandidates.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-put-shelf]');if(!b)return;const card=b.closest('.edition-candidate');
+  const workId=card?.dataset.workId||'',editionId=card?.querySelector('[data-edition-choice]')?.value||'',kind=card?.querySelector('[data-shelf-kind]')?.value||'seed',issueLimit=Number(card?.querySelector('[data-issue-limit]')?.value||0);
+  if(!workId||!editionId||!Number.isInteger(issueLimit)||issueLimit<1){alert('Editionと発行冊数を確認してください。');return;}
+  const label=kind==='bloom'?'開花':'種本';if(!confirm(`「${card.querySelector('h3')?.textContent||'この作品'}」を${label}として ${issueLimit}冊、「あ箱の本」に置きますか？`))return;
+  b.disabled=true;try{await api('/admin/official-shelf',{method:'POST',body:JSON.stringify({workId,editionId,kind,issueLimit})});toast(`あ箱の本に${label}を置きました`);await loadOfficialShelfAdmin();}catch(err){alert(`追加できませんでした: ${err.message}`);}finally{b.disabled=false;}
+});
+if(els.officialShelfItems)els.officialShelfItems.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-shelf-action]');if(!b)return;b.disabled=true;try{await api(`/admin/official-shelf/${encodeURIComponent(b.dataset.shelfId)}/${b.dataset.shelfAction}`,{method:'POST'});toast(b.dataset.shelfAction==='stop'?'停止しました':'再開しました');await loadOfficialShelfAdmin();}catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
+});
 els.connect.addEventListener('click',connect);els.token.addEventListener('keydown',e=>{if(e.key==='Enter')connect();});els.refresh.addEventListener('click',loadDashboard);els.filter.addEventListener('change',loadReports);els.inspect.addEventListener('click',inspect);
+setAdminTab(sessionStorage.getItem('ahako-admin-tab')||'status',{remember:false});
 if(token)connect();
 })();
