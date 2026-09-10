@@ -39,7 +39,7 @@ const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
 let shelfScrollLockY=0;
 
 function shelfScrollShouldLock(){
-  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open);
+  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open);
 }
 function syncShelfScrollLock(){
   const body=document.body;if(!body)return;
@@ -300,6 +300,13 @@ function restoreBookId(tab,id){
   if(!SHELF_ARCHIVE_KEYS[tab]||!id)return;
   writeIdList(SHELF_ARCHIVE_KEYS[tab],readIdList(SHELF_ARCHIVE_KEYS[tab]).filter(x=>x!==id));
   const order=readIdList(SHELF_ORDER_KEYS[tab]);if(!order.includes(id))order.push(id);writeIdList(SHELF_ORDER_KEYS[tab],order);
+}
+async function permanentlyDeleteArchivedBook(tab,id){
+  if(!id||!SHELF_ARCHIVE_KEYS[tab])return;
+  if(tab==='owned')await deleteReaderBook(id);
+  else if(tab==='created')await deleteWork(id);
+  writeIdList(SHELF_ARCHIVE_KEYS[tab],readIdList(SHELF_ARCHIVE_KEYS[tab]).filter(x=>x!==id));
+  writeIdList(SHELF_ORDER_KEYS[tab],readIdList(SHELF_ORDER_KEYS[tab]).filter(x=>x!==id));
 }
 function compactSeriesLine(w){
   const parts=[String(w.seriesTitle||'').trim(),String(w.episode||'').trim(),String(w.episodeTitle||'').trim()].filter(Boolean);
@@ -1018,14 +1025,20 @@ function setArchiveDock(open){
 }
 function openArchiveBox(){
   if(currentShelfTab==='official')return;
-  const list=$('#archiveList'),restoreSelected=$('#restoreSelectedButton'),selectedCount=$('#archiveSelectedCount');
+  const list=$('#archiveList'),restoreSelected=$('#restoreSelectedButton'),deleteSelected=$('#deleteSelectedButton'),selectedCount=$('#archiveSelectedCount');
   list.innerHTML=activeArchivedBooks.length?activeArchivedBooks.map(w=>bookCardHtml(w,{archived:true})).join(''):'<div class="archive-empty">箱の中は空です。</div>';
   const checks=()=>Array.from(list.querySelectorAll('.archive-check:checked'));
-  const syncSelection=()=>{const n=checks().length;if(restoreSelected){restoreSelected.disabled=n===0;restoreSelected.hidden=activeArchivedBooks.length===0;}if(selectedCount)selectedCount.textContent=n?`${n}冊選択`:'本を選択してください';};
+  const selectedItems=()=>checks().map(ch=>{const item=ch.closest('.archive-item');return item?{id:item.dataset.id||'',title:item.querySelector('.archive-item-copy strong')?.textContent||'この本'}:null;}).filter(x=>x?.id);
+  const syncSelection=()=>{
+    const n=checks().length;
+    if(restoreSelected){restoreSelected.disabled=n===0;restoreSelected.hidden=activeArchivedBooks.length===0;}
+    if(deleteSelected){deleteSelected.disabled=n===0;deleteSelected.hidden=activeArchivedBooks.length===0;}
+    if(selectedCount)selectedCount.textContent=n?`${n}冊選択`:'本を選択してください';
+  };
   list.querySelectorAll('.archive-check').forEach(ch=>ch.addEventListener('change',syncSelection));
   syncSelection();
   if(restoreSelected)restoreSelected.onclick=async()=>{
-    const ids=checks().map(ch=>ch.closest('.archive-item')?.dataset.id).filter(Boolean);if(!ids.length)return;
+    const ids=selectedItems().map(x=>x.id);if(!ids.length)return;
     const boxRect=($('#archiveLauncher')&&!$('#archiveLauncher').hidden?$('#archiveLauncher'):$('#archiveDropZone'))?.getBoundingClientRect?.();
     ids.forEach(id=>restoreBookId(currentShelfTab,id));
     $('#archiveDialog').close();
@@ -1033,7 +1046,19 @@ function openArchiveBox(){
     ids.slice(0,8).forEach((id,i)=>setTimeout(()=>animateBookOutOfBox(id,boxRect),i*36));
     toast(`${ids.length}冊を本棚へ戻しました。`);
   };
-  $('#archiveDialog').showModal();
+  if(deleteSelected)deleteSelected.onclick=()=>{
+    const items=selectedItems();if(!items.length)return;
+    const dialog=$('#deleteArchiveDialog'),summary=$('#deleteArchiveSummary');
+    dialog.dataset.tab=currentShelfTab;
+    dialog.dataset.ids=JSON.stringify(items.map(x=>x.id));
+    if(summary){
+      const first=items[0]?.title||'この本';
+      summary.textContent=items.length===1?`「${first}」を完全に削除します。`:`選択した${items.length}冊を完全に削除します。`;
+    }
+    if(!dialog.open)dialog.showModal();
+    syncShelfScrollLock();
+  };
+  if(!$('#archiveDialog').open)$('#archiveDialog').showModal();
   syncShelfScrollLock();
 }
 function closeBookshelfMenu(){const menu=$('#bookshelfMenu');if(menu)menu.open=false;syncShelfScrollLock();}
@@ -1058,6 +1083,9 @@ document.addEventListener('click',e=>{const menu=$('#bookshelfMenu');if(menu?.op
 $('#bookshelfMenu')?.addEventListener('toggle',syncShelfScrollLock);
 $('#detailDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#archiveDialog')?.addEventListener('close',syncShelfScrollLock);
+$('#deleteArchiveDialog')?.addEventListener('close',syncShelfScrollLock);
+$('#cancelArchiveDelete')?.addEventListener('click',()=>$('#deleteArchiveDialog')?.close());
+$('#confirmArchiveDelete')?.addEventListener('click',async()=>{const dialog=$('#deleteArchiveDialog');if(!dialog)return;let ids=[];try{ids=JSON.parse(dialog.dataset.ids||'[]');}catch(_){ids=[];}const tab=dialog.dataset.tab||currentShelfTab;if(!Array.isArray(ids)||!ids.length){dialog.close();return;}const button=$('#confirmArchiveDelete');if(button){button.disabled=true;button.textContent='削除中…';}try{for(const id of ids)await permanentlyDeleteArchivedBook(tab,id);dialog.close();await render();if($('#archiveDialog')?.open)openArchiveBox();toast(`${ids.length}冊を削除しました。`);}catch(err){console.error(err);alert(err?.message||'削除できませんでした。');}finally{if(button){button.disabled=false;button.textContent='削除する';}dialog.dataset.ids='';}});
 $('#bookshelfMenu')?.addEventListener('keydown',e=>{if(e.key==='Escape'){e.currentTarget.open=false;syncShelfScrollLock();}});
 $('#archiveLauncher').onclick=()=>setArchiveDock(!archiveDockOpen);
 $('#archiveDockClose').onclick=e=>{e.preventDefault();e.stopPropagation();setArchiveDock(false);};

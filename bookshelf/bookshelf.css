@@ -858,3 +858,28 @@ body.x-claim-handoff-active>#toast{display:none!important}
   .copy-journey-summary em{font-size:10px}
   .copy-journey-details{padding:0 14px 14px}
 }
+
+/* V63.35.17 — safe permanent delete inside Storage Box + bottom action clearance */
+.archive-selection-buttons{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+.archive-batch-actions .archive-delete-button{color:#9a3f38;border-color:#d8bcb8;background:#fff;white-space:nowrap}
+.archive-delete-dialog{width:min(440px,calc(100vw - 34px));border:0;border-radius:20px;padding:0;box-shadow:0 24px 80px rgba(0,0,0,.32)}
+.archive-delete-dialog::backdrop{background:rgba(15,13,10,.58);backdrop-filter:blur(4px)}
+.archive-delete-dialog-inner{padding:26px 24px 22px;background:#fff}
+.archive-delete-dialog-inner .eyebrow{margin-bottom:8px}
+.archive-delete-dialog-inner h2{margin:0 0 12px;font-size:22px;letter-spacing:-.03em}
+.archive-delete-summary{margin:0 0 10px;font-size:13px;font-weight:800;line-height:1.55}
+.archive-delete-warning{margin:0;padding:13px 14px;border:1px solid #ead6d2;border-radius:12px;background:#fbf6f4;color:#8e433d;font-size:11px;line-height:1.65}
+.archive-delete-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}
+.archive-delete-actions button{border-radius:12px;padding:12px 10px;font-weight:800}
+.archive-delete-actions .danger-confirm{background:#9a3f38;border-color:#9a3f38;color:#fff}
+.archive-delete-actions .danger-confirm:disabled{opacity:.55;cursor:default}
+@media(max-width:680px){
+  .archive-batch-actions{gap:8px}
+  .archive-selection-buttons{gap:6px;flex:1;justify-content:flex-end}
+  .archive-batch-actions .archive-delete-button{padding:10px 11px}
+  .archive-batch-actions #restoreSelectedButton{padding:10px 11px}
+  .archive-delete-dialog-inner{padding:24px 20px 20px}
+  /* Keep final book metadata clear of the fixed cardboard / add actions. */
+  main{padding-bottom:max(138px,calc(env(safe-area-inset-bottom) + 112px))}
+  #grid,.empty,.official-shelf{padding-bottom:18px}
+}

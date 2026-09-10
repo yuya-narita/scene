@@ -90,7 +90,10 @@
     <div id="archiveList" class="archive-list"></div>
     <div class="archive-batch-actions">
       <span id="archiveSelectedCount">本を選択してください</span>
-      <button id="restoreSelectedButton" type="button" disabled>選択した本を本棚へ戻す</button>
+      <div class="archive-selection-buttons">
+        <button id="deleteSelectedButton" class="archive-delete-button" type="button" disabled>削除</button>
+        <button id="restoreSelectedButton" type="button" disabled>選択した本を本棚へ戻す</button>
+      </div>
     </div>
     <div class="archive-transfer">
       <button id="exportBoxButton" type="button">箱を書き出す</button>
@@ -98,6 +101,21 @@
       <p>「もっている本」と「つくった本」の段ボール内を、端末移動用の1つのZIPにまとめます。既に同じ一冊／Masterがある場合は重複しません。</p>
     </div>
     <input id="boxImportInput" type="file" accept=".zip,application/zip" hidden>
+  </dialog>
+
+
+
+  <dialog id="deleteArchiveDialog" class="archive-delete-dialog">
+    <div class="archive-delete-dialog-inner">
+      <p class="eyebrow">DELETE BOOK</p>
+      <h2>本を削除しますか？</h2>
+      <p id="deleteArchiveSummary" class="archive-delete-summary"></p>
+      <p class="archive-delete-warning">削除すると、この端末の段ボール箱と本棚から本そのものが消えます。元に戻せません。</p>
+      <div class="archive-delete-actions">
+        <button id="cancelArchiveDelete" type="button">キャンセル</button>
+        <button id="confirmArchiveDelete" class="danger-confirm" type="button">削除する</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="treeDialog" class="tree-dialog">
