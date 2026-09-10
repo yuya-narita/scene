@@ -84,7 +84,7 @@ async function addDistribution(file,{silent=false}={}){const info=await inspectD
 
 
 async function hydrateStoredBookMetadata(w){
-  if(!w?.blob||w.shelfMetaVersion===2)return w;
+  if(!w?.blob||w.shelfMetaVersion===3)return w;
   try{
     const entries=await readZipEntries(w.blob);
     const sceneBytes=entries.get('scene.json');if(!sceneBytes)return w;
@@ -97,7 +97,7 @@ async function hydrateStoredBookMetadata(w){
       episode:String(doc?.metadata?.episode||manifest?.series?.episode||w.episode||''),
       episodeTitle:String(doc?.metadata?.episodeTitle||manifest?.episodeTitle||w.episodeTitle||''),
       coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}},
-      shelfMetaVersion:2
+      shelfMetaVersion:3
     };
     if(w.role==='distribution'||w.copyId)await putReaderBook(next);else await putWork(next);
     return next;
@@ -321,8 +321,10 @@ function authoredCoverOverlayHtml(w){
   if(v.title!==false&&String(w.title||'').trim())fields.push(`<strong class="shelf-cover-title"${coverTextStyle(w,'title')}>${escapeHtml(w.title)}</strong>`);
   if(v.subtitle!==false&&String(w.subtitle||'').trim())fields.push(`<span class="shelf-cover-subtitle"${coverTextStyle(w,'subtitle')}>${escapeHtml(w.subtitle)}</span>`);
   if(v.author!==false&&String(w.author||'').trim())fields.push(`<small class="shelf-cover-author"${coverTextStyle(w,'author')}>${escapeHtml(w.author)}</small>`);
-  const ep=[v.episode!==false?String(w.episode||'').trim():'',v.episodeTitle!==false?String(w.episodeTitle||'').trim():''].filter(Boolean).join('　');
+  const ep=v.episode!==false?String(w.episode||'').trim():'';
+  const epTitle=v.episodeTitle!==false?String(w.episodeTitle||'').trim():'';
   if(ep)fields.push(`<span class="shelf-cover-episode">${escapeHtml(ep)}</span>`);
+  if(epTitle)fields.push(`<span class="shelf-cover-episode-title">${escapeHtml(epTitle)}</span>`);
   return fields.length?`<span class="shelf-cover-authored">${fields.join('')}</span>`:'';
 }
 function bookCardHtml(w,{archived=false}={}){
@@ -606,14 +608,19 @@ function positionShelfSwipeStage(view,dx){
   view.currentPage.style.filter=`brightness(${1-progress*.045})`;
   view.nextPage.style.boxShadow=view.direction==='left'?'-18px 0 28px rgba(35,28,20,.10)':'18px 0 28px rgba(35,28,20,.10)';
 }
-function animateShelfSwipeStage(view,toX,duration=220){
-  if(!view)return Promise.resolve();
+async function animateShelfSwipeStage(view,toX,duration=220){
+  if(!view)return;
   const from=new DOMMatrixReadOnly(getComputedStyle(view.currentPage).transform).m41||0;
   const base=view.direction==='left'?view.width:-view.width;
   const easing='cubic-bezier(.22,.72,.18,1)';
   const a=view.currentPage.animate([{transform:`translate3d(${from}px,0,0)`},{transform:`translate3d(${toX}px,0,0)`}],{duration,easing,fill:'forwards'});
-  view.nextPage.animate([{transform:`translate3d(${base+from}px,0,0)`},{transform:`translate3d(${base+toX}px,0,0)`}],{duration,easing,fill:'forwards'});
-  return a.finished.catch(()=>{});
+  const b=view.nextPage.animate([{transform:`translate3d(${base+from}px,0,0)`},{transform:`translate3d(${base+toX}px,0,0)`}],{duration,easing,fill:'forwards'});
+  await Promise.all([a.finished.catch(()=>{}),b.finished.catch(()=>{})]);
+  // Safari can finish the current-page animation a frame before the incoming page.
+  // Commit both transforms synchronously so the new tab never shows the old shelf for one frame.
+  view.currentPage.style.transform=`translate3d(${toX}px,0,0)`;
+  view.nextPage.style.transform=`translate3d(${base+toX}px,0,0)`;
+  a.cancel();b.cancel();
 }
 
 function installShelfScrollGuard(){
@@ -716,6 +723,9 @@ function installShelfSwipe(){
     let staleUrls=[];
     try{
       await animateShelfSwipeStage(g.view,toX,175);
+      // The incoming snapshot is now the only visible page while the live shelf renders underneath.
+      g.view.currentPage.style.visibility='hidden';
+      g.view.nextPage.style.transform='translate3d(0,0,0)';
       const next=g.view.nextTab;
       // Keep the completed viewer page covering the old live shelf while the real
       // next shelf is rendered underneath. Removing the stage first exposed the
