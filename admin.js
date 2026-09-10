@@ -44,7 +44,7 @@ function renderPublishedWorks(rows){
       <div class="edition-cover-placeholder ${x.coverUrl?'has-cover':''}">${cover}</div>
       <div class="edition-candidate-main">
         <div class="edition-candidate-head"><div><small>公開中</small><h3>${escapeHtml(x.title||'無題')}</h3><p>${escapeHtml(x.author||'作者未設定')}</p></div><span class="edition-count">${relayOn?'RELAY ON':'RELAY OFF'}</span></div>
-        <div class="edition-choice-row"><span class="work-updated">更新 · ${escapeHtml(formatJstDate(x.updatedAt))}</span><a class="review-link" href="${API}/work/${encodeURIComponent(x.workId)}" target="_blank" rel="noopener">読む</a></div>
+        <div class="edition-choice-row"><span class="work-updated">更新 · ${escapeHtml(formatJstDate(x.updatedAt))}</span><button class="review-link" type="button" data-review-work>読む</button></div>
         <div class="seed-controls"><label>種類<select data-shelf-kind><option value="seed">🌱 種本</option><option value="bloom">🌸 開花</option></select></label><label>発行冊数<input data-issue-limit type="number" min="1" max="100000" value="10" inputmode="numeric"></label><button class="primary" type="button" data-add-work-shelf ${relayOn?'':'disabled'}>あ箱の本に追加</button></div>
         <small class="candidate-note">${relayOn?'追加時点の公開版を新しいEditionとして凍結し、そのEditionから一冊ずつ発行します。':'この作品はRELAYがOFFのため、種本・開花には追加できません。'}</small>
       </div>
@@ -62,9 +62,9 @@ function renderEditionCandidates(rows){
       <div class="edition-cover-placeholder">あ□</div>
       <div class="edition-candidate-main">
         <div class="edition-candidate-head"><div><small>発行済み作品</small><h3>${escapeHtml(latest.title||'無題')}</h3><p>${escapeHtml(latest.author||'作者未設定')}</p></div><span class="edition-count">${items.length} Edition</span></div>
-        <div class="edition-choice-row"><label>Edition<select data-edition-choice>${opts}</select></label><a class="review-link" href="${API}/work/${encodeURIComponent(workId)}" target="_blank" rel="noopener">読む</a></div>
+        <div class="edition-choice-row"><label>Edition<select data-edition-choice>${opts}</select></label><button class="review-link" type="button" data-review-edition>読む</button></div>
         <div class="seed-controls"><label>種類<select data-shelf-kind><option value="seed">🌱 種本</option><option value="bloom">🌸 開花</option></select></label><label>発行冊数<input data-issue-limit type="number" min="1" max="100000" value="10" inputmode="numeric"></label><button class="primary" type="button" data-put-shelf>あ箱の本に置く</button></div>
-        <small class="candidate-note">「読む」は現在の公開作品を別タブで開きます。選定するEditionは上の発行日時で確認してください。</small>
+        <small class="candidate-note">「読む」は選択した凍結Editionを審査モードで開きます。審査閲覧は観測・読了・RELAYの数字に入りません。</small>
       </div>
     </article>`;
   }).join('');
@@ -387,9 +387,28 @@ els.list.addEventListener('click',async e=>{
 async function inspect(){const id=els.workId.value.trim();if(!id)return;els.direct.textContent='確認中…';try{const d=await api(`/admin/work/${encodeURIComponent(id)}`);els.direct.innerHTML=`<div class="report-card"><div class="meta"><span>workId</span><code>${escapeHtml(d.id)}</code><span>状態</span><strong>${escapeHtml(d.state)}</strong><span>素材</span><span>${Number(d.assets?.length||0)}件</span></div><div class="actions"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">作品を見る</a><button data-direct="suspend" class="stop">一時停止</button><button data-direct="republish">再公開</button><button data-direct="delete" class="delete">完全削除</button></div></div>`;}catch(e){els.direct.textContent=`確認できません: ${e.message}`;}}
 els.direct.addEventListener('click',async e=>{const b=e.target.closest('button[data-direct]');if(!b)return;const id=els.workId.value.trim();b.disabled=true;try{await moderate(id,b.dataset.direct);await inspect();await loadDashboard();}catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}});
 if(els.cleanupOrphans)els.cleanupOrphans.addEventListener('click',cleanupOrphans);
+async function openSelectionReview({workId,editionId=''}){
+  if(!workId)return;
+  // Open the tab on the explicit click first, so Safari/Chrome popup blockers
+  // do not reject it while the review ticket is being created.
+  const popup=window.open('about:blank','_blank');
+  if(popup){
+    try{popup.document.title='あ箱 審査';popup.document.body.innerHTML='<p style="font-family:system-ui;padding:24px">審査用の一冊を準備しています…</p>';}catch(_){}
+  }
+  try{
+    const data=await api('/admin/official-shelf/review',{method:'POST',body:JSON.stringify({workId,...(editionId?{editionId}:{})})});
+    if(popup)popup.location.replace(data.url);else window.open(data.url,'_blank','noopener');
+  }catch(err){
+    if(popup)popup.close();
+    alert(`審査用Playerを開けませんでした: ${err.message}`);
+  }
+}
+
 document.querySelectorAll('[data-admin-tab]').forEach(b=>b.addEventListener('click',()=>setAdminTab(b.dataset.adminTab)));
 if(els.reloadSelection)els.reloadSelection.addEventListener('click',loadOfficialShelfAdmin);
 if(els.publishedWorks)els.publishedWorks.addEventListener('click',async e=>{
+  const review=e.target.closest('[data-review-work]');
+  if(review){const card=review.closest('.operator-work');await openSelectionReview({workId:card?.dataset.workId||''});return;}
   const b=e.target.closest('[data-add-work-shelf]');if(!b)return;
   const card=b.closest('.operator-work'),workId=card?.dataset.workId||'',kind=card?.querySelector('[data-shelf-kind]')?.value||'seed',issueLimit=Number(card?.querySelector('[data-issue-limit]')?.value||0);
   if(!workId||!Number.isInteger(issueLimit)||issueLimit<1){alert('作品と発行冊数を確認してください。');return;}
@@ -400,6 +419,8 @@ if(els.publishedWorks)els.publishedWorks.addEventListener('click',async e=>{
   catch(err){alert(`追加できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 if(els.editionCandidates)els.editionCandidates.addEventListener('click',async e=>{
+  const review=e.target.closest('[data-review-edition]');
+  if(review){const card=review.closest('.edition-candidate');await openSelectionReview({workId:card?.dataset.workId||'',editionId:card?.querySelector('[data-edition-choice]')?.value||''});return;}
   const b=e.target.closest('[data-put-shelf]');if(!b)return;const card=b.closest('.edition-candidate');
   const workId=card?.dataset.workId||'',editionId=card?.querySelector('[data-edition-choice]')?.value||'',kind=card?.querySelector('[data-shelf-kind]')?.value||'seed',issueLimit=Number(card?.querySelector('[data-issue-limit]')?.value||0);
   if(!workId||!editionId||!Number.isInteger(issueLimit)||issueLimit<1){alert('Editionと発行冊数を確認してください。');return;}
