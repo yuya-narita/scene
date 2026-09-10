@@ -254,3 +254,6 @@
 @media(max-width:680px){
   .own-copy-gate-sheet__panel{top:auto;bottom:0;left:0;transform:none;width:100%;border-radius:24px 24px 0 0;padding:22px 18px calc(18px + env(safe-area-inset-bottom))}
 }
+
+/* V63.35.4 admin review: show the journey shape, but never make it actionable. */
+.public-journey.is-review{pointer-events:none;cursor:default;opacity:.78}

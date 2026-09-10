@@ -306,12 +306,12 @@
   function distributionObservationEndpoint(){
     return 'https://scene-studio-api.a-hako.workers.dev/distribution-observation';
   }
-  function prepareDistributionObservation(){
+  function prepareDistributionObservation({disabled=false}={}){
     distributionObservationSessionId=randomObservationId('session');
     distributionObservationStarted=false;
     // Distribution observation is a built-in, privacy-limited runtime function.
     // No consent dialog is shown. Only valid Distribution.scene packages are eligible.
-    distributionObservationEnabled=Boolean(LOCAL_MODE&&distributionIdentity());
+    distributionObservationEnabled=Boolean(!disabled&&LOCAL_MODE&&distributionIdentity());
     // Remove the obsolete v51 consent flag if it exists; it no longer controls observation.
     try{localStorage.removeItem('ahako:distribution-observation-consent:v1');}catch(_){}
   }
@@ -673,7 +673,7 @@
     documentData = hydrated;
     analyticsSceneAdvances = 0;
     analyticsCompleted = false;
-    prepareDistributionObservation();
+    prepareDistributionObservation({disabled:options.suppressObservation===true});
     applyDocumentMeta(hydrated);
     if(!analyticsViewSent && currentWorkId()){
       analyticsViewSent=true;

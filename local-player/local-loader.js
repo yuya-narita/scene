@@ -121,6 +121,14 @@
   function relayNowFromLocation(){
     try{return new URL(location.href).searchParams.get('relayNow')==='1';}catch(_){return false;}
   }
+  function reviewUrlFromLocation(){
+    try{
+      const value=String(new URL(location.href).searchParams.get('review')||'').trim();
+      if(!value)return '';
+      const u=new URL(value,location.href);
+      return u.protocol==='https:'?u.href:'';
+    }catch(_){return '';}
+  }
   function clearBookshelfOpenHandoff(){
     try{sessionStorage.removeItem('ahako:bookshelf:open-copy');}catch(_){}
   }
@@ -319,6 +327,30 @@
       if(button)button.disabled=false;
       return false;
     }
+  }
+
+  async function openAdminReview(reviewUrl){
+    currentSourceMode='review';
+    currentBookshelfCopyId='';
+    currentRelayReceiverArrivalId='';
+    setRelayEntryMode(false);
+    if(launcher)launcher.hidden=false;
+    setStatus('審査用の一冊を読み込んでいます…');
+    if(openButton)openButton.disabled=true;
+    try{
+      const response=await fetch(reviewUrl,{method:'GET',cache:'no-store'});
+      const raw=await response.json().catch(()=>null);
+      if(!response.ok||!raw||typeof raw!=='object')throw new Error(response.status===410?'審査リンクの期限が切れました。':'審査用Editionを読み込めませんでした。');
+      currentPackage={files:new Map(),manifest:{package:'admin-review',packageVersion:'1.0'},raw:JSON.parse(JSON.stringify(raw))};
+      if(relayButton)relayButton.hidden=true;
+      if(journey){renderJourney(raw);journey.setAttribute('aria-disabled','true');journey.classList.add('is-review');}
+      if(endingOwnWrap)endingOwnWrap.hidden=true;
+      await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`admin-review:${reviewUrl}`,suppressObservation:true});
+      launcher.hidden=true;if(backButton)backButton.hidden=false;setStatus('');
+      return true;
+    }catch(error){
+      console.error(error);currentPackage=null;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;
+    }finally{if(openButton)openButton.disabled=false;}
   }
 
   // ------------------------------------------------------------
@@ -788,6 +820,12 @@
     finally{openButton.disabled=false;fileInput.value='';}
   }
   function returnToLauncher(){
+    if(currentSourceMode==='review'){
+      try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
+      try{window.close();}catch(_){}
+      if(history.length>1){try{history.back();}catch(_){}}
+      return;
+    }
     if(currentSourceMode==='relay-url'){try{history.back();}catch(_){}return;}
     if(currentSourceMode==='bookshelf'){
       try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
@@ -824,8 +862,8 @@
   });
 
   relayButton?.addEventListener('click',relayCurrentScene);
-  journey?.addEventListener('click',()=>{if(relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing'))relayCurrentScene();});
-  journey?.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing')){e.preventDefault();relayCurrentScene();}});
+  journey?.addEventListener('click',()=>{if(currentSourceMode!=='review'&&relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing'))relayCurrentScene();});
+  journey?.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&currentSourceMode!=='review'&&relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing')){e.preventDefault();relayCurrentScene();}});
   fileInput.addEventListener('change',()=>openScene(fileInput.files?.[0]));
   ['dragenter','dragover'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.add('is-over');}));
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
@@ -833,11 +871,14 @@
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
   window.SceneLocalLoader={version:'5.9-bookshelf-metrics-events',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy};
 
+  const initialReviewUrl=reviewUrlFromLocation();
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
   const initialRelayNow=relayNowFromLocation();
   const initialRelayToken=relayTokenFromLocation();
   const initialRelayPublicId=relayPublicIdFromLocation();
-  if(validBookshelfCopyId(initialBookshelfCopyId)){
+  if(initialReviewUrl){
+    openAdminReview(initialReviewUrl);
+  }else if(validBookshelfCopyId(initialBookshelfCopyId)){
     openBookshelfCopy(initialBookshelfCopyId).then(ok=>{
       if(ok&&initialRelayNow&&relayInfo(currentPackage?.raw))setTimeout(()=>relayCurrentScene(),0);
     });
