@@ -33,6 +33,8 @@ let pinchGesture=null;
 let shelfDataCache={owned:[],created:[]};
 const insightsCache=new Map();
 const copyJourneyCache=new Map();
+let officialShelfItems=[];
+let officialShelfLoaded=false;
 let shelfScrollLockY=0;
 
 function shelfScrollShouldLock(){
@@ -332,6 +334,48 @@ function restoreShelfScroll(tab){
   }));
 }
 
+
+function officialCardHtml(item){
+  const kind=item.kind==='bloom'?'bloom':'seed';
+  const label=kind==='bloom'?'🌸 開花':'🌱 種本';
+  const remaining=Math.max(0,Number(item.remaining||0));
+  const limit=Math.max(1,Number(item.issueLimit||1));
+  const sold=remaining<=0;
+  const cover=item.coverUrl?`<img src="${escapeHtml(item.coverUrl)}" alt="">`:`<div class="official-cover-fallback">あ□</div>`;
+  return `<article class="official-book-card ${kind}">
+    <div class="official-book-cover">${cover}<span class="official-kind">${label}</span></div>
+    <div class="official-book-copy"><h3>${escapeHtml(item.title||'Untitled')}</h3><p>${escapeHtml(item.author||'作者未設定')}</p><strong class="official-remaining">残り ${remaining} / ${limit}冊</strong>
+    <button type="button" data-official-claim="${escapeHtml(item.shelfId)}" ${sold?'disabled':''}>${sold?'旅立ちました':'一冊を受け取る'}</button></div>
+  </article>`;
+}
+async function loadOfficialShelf({force=false}={}){
+  if(officialShelfLoaded&&!force)return officialShelfItems;
+  const response=await fetch(`${API_BASE}/official-shelf`,{cache:'no-store'});
+  const payload=await response.json().catch(()=>null);
+  if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'あ箱の本を読み込めませんでした。'));
+  officialShelfItems=Array.isArray(payload.items)?payload.items:[];officialShelfLoaded=true;return officialShelfItems;
+}
+async function renderOfficialShelf(){
+  const host=$('#officialBooks');if(!host)return;
+  try{
+    const items=await loadOfficialShelf({force:true});
+    host.innerHTML=items.length?items.map(officialCardHtml).join(''):`<div class="official-empty"><strong>まだ本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
+    host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=()=>claimOfficialBook(button));
+  }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
+}
+async function claimOfficialBook(button){
+  if(button.disabled)return;const shelfId=String(button.dataset.officialClaim||'');
+  button.disabled=true;const before=button.textContent;button.textContent='受け取っています…';
+  try{
+    const response=await fetch(`${API_BASE}/official-shelf/claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({shelfId})});
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok||!payload?.scene)throw new Error(payload?.code==='SHELF_SOLD_OUT'?'この種本はすべて旅立ちました。':String(payload?.error||'一冊を受け取れませんでした。'));
+    const file=await distributionFileFromClaimScene(payload.scene);await addDistribution(file,{silent:true});
+    officialShelfLoaded=false;await renderOfficialShelf();toast('あ箱から一冊を受け取りました。');
+    setTimeout(()=>switchShelf('owned'),450);
+  }catch(e){button.disabled=false;button.textContent=before;toast(e?.message||String(e));}
+}
+
 function chooseFirstShelf(){
   const saved=localStorage.getItem(SHELF_TAB_KEY);
   if(['owned','created','official'].includes(saved))return saved;
@@ -392,6 +436,7 @@ async function render({deferCoverRevoke=false}={}){
     $('#emptyDistributionButton').hidden=created;
   }
   $('#grid').innerHTML=official?'':books.map(w=>bookCardHtml(w)).join('');
+  if(official)await renderOfficialShelf();
   // Re-read the persisted density on every render/reload before applying it.
   // This prevents the default 2-column value from briefly/incorrectly winning on Safari reload.
   mobileShelfColumns=loadMobileColumns();

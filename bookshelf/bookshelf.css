@@ -622,3 +622,12 @@ body.x-claim-handoff-active>#toast{display:none!important}
 /* V63.33.2 EXPERIMENT — direct Safari handoff probe */
 .x-claim-handoff .claim-open-safari{display:block;width:100%;margin-top:14px;padding:15px 16px;border:1px solid #171717;border-radius:14px;background:#171717;color:#fff;font-size:14px;font-weight:850;line-height:1.45;cursor:pointer}
 .x-claim-handoff .claim-experiment-note{margin:11px 3px 0;color:#8a8378;font-size:10px;line-height:1.65;text-align:center}
+
+/* V63.35 — あ箱の本: seed / bloom shelf */
+.official-books{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px;text-align:left}
+.official-book-card{overflow:hidden;border:1px solid #ded6c9;border-radius:18px;background:rgba(255,255,255,.78);box-shadow:0 8px 26px rgba(43,34,21,.06)}
+.official-book-cover{position:relative;aspect-ratio:3/4;background:#eee8dd;overflow:hidden}.official-book-cover img{width:100%;height:100%;object-fit:cover;display:block}.official-cover-fallback{width:100%;height:100%;display:grid;place-items:center;font-size:30px;font-weight:850;color:#756c60}
+.official-kind{position:absolute;left:10px;top:10px;padding:6px 9px;border-radius:999px;background:rgba(255,255,255,.9);font-size:10px;font-weight:850;box-shadow:0 3px 12px rgba(0,0,0,.08)}
+.official-book-copy{padding:14px}.official-book-copy h3{margin:0;font-size:15px;line-height:1.45}.official-book-copy p{margin:4px 0 10px;color:#81796e;font-size:10px}.official-remaining{display:block;margin:0 0 11px;font-size:11px}.official-book-copy button{width:100%;padding:11px 12px;border-radius:12px;background:#171717;color:#fff;border-color:#171717;font-weight:800}.official-book-copy button:disabled{opacity:.42}
+.official-book-card.bloom{box-shadow:0 10px 32px rgba(43,34,21,.10)}
+@media(max-width:680px){.official-books{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}.official-book-card{border-radius:15px}.official-book-copy{padding:11px}.official-book-copy h3{font-size:13px}.official-book-copy button{padding:10px 8px;font-size:11px}.official-kind{left:7px;top:7px;font-size:9px}}

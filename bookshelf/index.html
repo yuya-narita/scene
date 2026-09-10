@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=63.31">
+  <link rel="stylesheet" href="bookshelf.css?v=63.35">
 </head>
 <body>
   <header class="topbar">
@@ -71,10 +71,7 @@
       <p class="eyebrow">A-HAKO BOOKS</p>
       <h2>あ箱から届く本。</h2>
       <p>大きなランキングではなく、あ箱から時々一冊を置く小さな棚です。</p>
-      <div class="official-empty">
-        <strong>まだ本はありません。</strong>
-        <span>最初の一冊が置かれると、ここからそのまま読めるようになります。</span>
-      </div>
+      <div id="officialBooks" class="official-books"><div class="official-empty"><strong>読み込んでいます…</strong><span>あ箱から届く本を確認しています。</span></div></div>
     </section>
   </main>
 
@@ -117,6 +114,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=63.31"></script>
+  <script src="bookshelf.js?v=63.35"></script>
 </body>
 </html>
