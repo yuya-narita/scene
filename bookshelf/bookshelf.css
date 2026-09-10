@@ -649,3 +649,14 @@ body.x-claim-handoff-active>#toast{display:none!important}
   .official-actions{gap:6px}
   .official-book-copy button{padding:10px 7px;font-size:10.5px}
 }
+
+
+/* V63.35.7 — official shelf: card opens reader; claim stays the only action button. */
+.official-book-card[data-official-read]{cursor:pointer}
+.official-book-card[data-official-read]:focus-visible{outline:2px solid #171717;outline-offset:3px}
+.official-actions{display:block}
+.official-actions [data-official-claim]{width:100%}
+@media(max-width:680px){
+  .official-actions{display:block}
+  .official-actions [data-official-claim]{width:100%;min-height:44px}
+}

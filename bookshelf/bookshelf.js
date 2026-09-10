@@ -211,7 +211,7 @@ function installShelfPinch(){
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
   const blockedTarget=target=>!!target?.closest?.('dialog[open]');
   window.addEventListener('touchstart',e=>{
-    if(!mobile()||e.touches.length!==2||blockedTarget(e.target))return;
+    if(!mobile()||currentShelfTab==='official'||e.touches.length!==2||blockedTarget(e.target))return;
     const d=touchDistance(e.touches);if(!d)return;
     pinchGesture={startDistance:d,startColumns:mobileShelfColumns,lastColumns:mobileShelfColumns};
     // V63.23.1: two-finger shelf zoom works anywhere in the page/viewport,
@@ -241,7 +241,7 @@ function installShelfPinch(){
   window.addEventListener('touchend',finish,{passive:true});
   window.addEventListener('touchcancel',finish,{passive:true});
   // iOS Safari may emit gesture events in addition to touch events.
-  window.addEventListener('gesturestart',e=>{if(mobile()&&!blockedTarget(e.target))e.preventDefault();},{passive:false});
+  window.addEventListener('gesturestart',e=>{if(mobile()&&currentShelfTab!=='official'&&!blockedTarget(e.target))e.preventDefault();},{passive:false});
   window.addEventListener('gesturechange',e=>{if(mobile()&&pinchGesture)e.preventDefault();},{passive:false});
 }
 
@@ -367,10 +367,10 @@ function officialCardHtml(item,claimed=false){
   const descriptionHtml=description?`<div class="official-description">${escapeHtml(description)}</div>`:'';
   const facts=[sceneCount?`${sceneCount} Scene`:'',item.relayEnabled===false?'RELAY OFF':(item.relayEnabled===true?'RELAY ON':'')].filter(Boolean).join(' · ');
   const factsHtml=facts?`<div class="official-facts">${escapeHtml(facts)}</div>`:'';
-  return `<article class="official-book-card ${kind}">
+  return `<article class="official-book-card ${kind}" data-official-read="${escapeHtml(item.shelfId)}" tabindex="0" role="link" aria-label="${escapeHtml((item.title||'Untitled')+'を読む')}">
     <div class="official-book-cover">${cover}<span class="official-kind">${label}</span></div>
     <div class="official-book-copy"><h3>${escapeHtml(item.title||'Untitled')}</h3>${subtitleHtml}<p class="official-author">${escapeHtml(item.author||'作者未設定')}</p>${factsHtml}${descriptionHtml}<strong class="official-remaining">残り ${remaining} / ${limit}冊</strong>
-    <div class="official-actions"><button type="button" class="official-read" data-official-read="${escapeHtml(item.shelfId)}">読む</button><button type="button" data-official-claim="${escapeHtml(item.shelfId)}" ${(sold||received)?'disabled':''}>${received?'受け取り済み':(sold?'旅立ちました':'一冊を受け取る')}</button></div></div>
+    <div class="official-actions"><button type="button" data-official-claim="${escapeHtml(item.shelfId)}" ${(sold||received)?'disabled':''}>${received?'受け取り済み':(sold?'旅立ちました':'一冊を受け取る')}</button></div></div>
   </article>`;
 }
 async function loadOfficialShelf({force=false}={}){
@@ -387,8 +387,12 @@ async function renderOfficialShelf(){
     const owned=await getAllReaderBooks();
     const claimedEditions=new Set(owned.map(book=>`${String(book.workId||'')}::${String(book.editionId||'')}`));
     host.innerHTML=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
-    host.querySelectorAll('[data-official-read]').forEach(button=>button.onclick=()=>{const href=officialReadUrl(button.dataset.officialRead);if(href)location.href=href;});
-    host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=()=>claimOfficialBook(button));
+    host.querySelectorAll('.official-book-card[data-official-read]').forEach(card=>{
+      const open=()=>{const href=officialReadUrl(card.dataset.officialRead);if(href)location.href=href;};
+      card.onclick=e=>{if(e.target.closest('[data-official-claim]'))return;open();};
+      card.onkeydown=e=>{if(e.target!==card)return;if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
+    });
+    host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=e=>{e.stopPropagation();claimOfficialBook(button);});
   }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
 }
 async function claimOfficialBook(button){
