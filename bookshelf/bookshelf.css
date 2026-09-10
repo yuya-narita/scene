@@ -321,7 +321,7 @@ body.archive-dock-open{padding-bottom:96px}
   .shelf-swipe-page{
     position:absolute;inset:0;will-change:transform;backface-visibility:hidden;
   }
-  .shelf-swipe-page-inner{max-width:1120px;margin:0 auto;padding:0 14px 80px;min-height:100%}
+  .shelf-swipe-page-inner{max-width:1120px;margin:0 auto;padding:0 14px 80px;min-height:100%;display:flow-root}
   .shelf-swipe-page .book{pointer-events:none}
   .shelf-swipe-page .grid[data-mobile-columns="2"]{grid-template-columns:repeat(2,minmax(0,1fr));gap:17px 13px}
   .shelf-swipe-page .grid[data-mobile-columns="3"]{grid-template-columns:repeat(3,minmax(0,1fr));gap:15px 9px}
@@ -334,7 +334,7 @@ body.archive-dock-open{padding-bottom:96px}
   .shelf-swipe-page .grid[data-mobile-columns="4"] .book-meta p{font-size:8px}
   .shelf-swipe-page .grid[data-mobile-columns="3"] .badge{top:6px;left:6px;padding:4px 6px;font-size:7px}
   .shelf-swipe-page .grid[data-mobile-columns="4"] .badge{top:5px;left:5px;padding:3px 5px;font-size:6px}
-  .shelf-swipe-page .official-shelf,.shelf-swipe-page .empty{margin-top:0}
+  .shelf-swipe-page .empty{margin-top:0}
 }
 
 
@@ -939,3 +939,7 @@ body.x-claim-handoff-active>#toast{display:none!important}
   .official-description{-webkit-line-clamp:3}
   .official-facts{font-size:9px}
 }
+
+
+/* V63.35.21 — keep live/snapshot top-margin geometry identical during shelf swipe.
+   flow-root prevents the official shelf margin from collapsing through the swipe wrapper. */
