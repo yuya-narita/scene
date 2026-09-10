@@ -602,7 +602,14 @@ function makeShelfSwipeStage(nextTab,direction){
   // positioned inside the same viewport using its own remembered document Y.
   // This prevents a short shelf from inheriting the previous shelf's Y.
   const currentOffset=(bodyDocTop-currentY)-stageTop;
-  const targetOffset=(bodyDocTop-targetY)-stageTop;
+  // Different shelf bodies may intentionally have different top margins
+  // (e.g. the official shelf breathing space). The swipe snapshot must
+  // account for that geometry before the live tab is rendered, otherwise
+  // Safari shows the incoming page once at the old body's Y and then jumps
+  // to the live body's Y after the swipe completes.
+  const currentMarginTop=parseFloat(getComputedStyle(current).marginTop)||0;
+  const targetMarginTop=parseFloat(getComputedStyle(targetBody).marginTop)||0;
+  const targetOffset=(bodyDocTop+(targetMarginTop-currentMarginTop)-targetY)-stageTop;
   currentInner.style.transform=`translate3d(0,${currentOffset}px,0)`;
   nextInner.style.transform=`translate3d(0,${targetOffset}px,0)`;
   return {stage,currentPage,nextPage,width,direction,nextTab};
