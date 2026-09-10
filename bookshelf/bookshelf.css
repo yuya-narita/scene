@@ -831,3 +831,30 @@ body.x-claim-handoff-active>#toast{display:none!important}
   .detail-work-info{margin-top:0;padding-top:13px}
   .detail-work-info .eyebrow{margin-bottom:6px}
 }
+
+/* V63.35.16 — MY COPY hierarchy: read/relay first, compact journey, safe management */
+.reader-primary-actions{padding-bottom:16px}
+.reader-primary-actions .journey{grid-column:1/-1;font-weight:700;background:#f6f1e7}
+.detail-management{display:flex;justify-content:flex-start;padding:0 26px 16px}
+.detail-management .compact-danger{width:auto;max-width:100%;padding:9px 13px;border-radius:10px;font-size:11px;line-height:1.2;white-space:nowrap;color:#9a3f38;background:#fff}
+.copy-journey-panel.is-compact{padding:0;overflow:hidden;background:#faf8f3}
+.copy-journey-summary{display:flex;width:100%;align-items:center;justify-content:space-between;gap:14px;border:0;border-radius:15px;padding:14px 16px;background:transparent;text-align:left}
+.copy-journey-summary>span{display:flex;min-width:0;flex-direction:column;gap:2px}
+.copy-journey-summary small{color:#8b8377;font-size:9px;letter-spacing:.18em}
+.copy-journey-summary strong{font-size:15px;line-height:1.35}
+.copy-journey-summary em{margin-top:2px;color:#6d665c;font-size:10.5px;font-style:normal;font-weight:600;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.copy-journey-summary>b{flex:0 0 auto;color:#877f74;font-size:25px;font-weight:400;line-height:1;transition:transform .18s ease}
+.copy-journey-summary[aria-expanded="true"]>b{transform:rotate(90deg)}
+.copy-journey-details{padding:0 16px 15px}
+.copy-journey-details[hidden]{display:none!important}
+.copy-journey-panel.is-open{padding-bottom:0}
+@media(max-width:680px){
+  .reader-primary-actions{padding:0 18px 14px}
+  .detail-management{padding:0 18px 14px}
+  .detail-management .compact-danger{font-size:10.5px;padding:8px 11px}
+  .copy-journey-panel.is-compact{margin:0 18px 14px;padding:0}
+  .copy-journey-summary{padding:13px 14px}
+  .copy-journey-summary strong{font-size:14px}
+  .copy-journey-summary em{font-size:10px}
+  .copy-journey-details{padding:0 14px 14px}
+}
