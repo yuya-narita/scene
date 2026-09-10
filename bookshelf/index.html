@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=63.35">
+  <link rel="stylesheet" href="bookshelf.css?v=63.35.22">
 </head>
 <body>
   <header class="topbar">
@@ -39,16 +39,25 @@
       </nav>
     </div>
 
-    <section id="emptyState" class="empty">
-      <div class="empty-mark">□</div>
-      <h2 id="emptyTitle">まだ本棚は空です</h2>
-      <p id="emptyCopy">自分が持っている一冊を追加してください。</p>
-      <button id="emptyCreateButton" class="primary" type="button" hidden>Studioで作る</button>
-      <button id="emptyAddButton" type="button">Masterを追加</button>
-      <button id="emptyDistributionButton" type="button">自分の一冊を追加</button>
-    </section>
+    <div id="shelfBodyViewport" class="shelf-body-viewport">
+      <section id="emptyState" class="empty">
+        <div class="empty-mark">□</div>
+        <h2 id="emptyTitle">まだ本棚は空です</h2>
+        <p id="emptyCopy">自分が持っている一冊を追加してください。</p>
+        <button id="emptyCreateButton" class="primary" type="button" hidden>Studioで作る</button>
+        <button id="emptyAddButton" type="button">Masterを追加</button>
+        <button id="emptyDistributionButton" type="button">自分の一冊を追加</button>
+      </section>
 
-    <section id="grid" class="grid" aria-live="polite"></section>
+      <section id="grid" class="grid" aria-live="polite"></section>
+
+      <section id="officialShelf" class="official-shelf" hidden>
+        <p class="eyebrow">A-HAKO BOOKS</p>
+        <h2>あ箱から届く本。</h2>
+        <p>大きなランキングではなく、あ箱から時々一冊を置く小さな棚です。</p>
+        <div id="officialBooks" class="official-books"><div class="official-empty"><strong>読み込んでいます…</strong><span>あ箱から届く本を確認しています。</span></div></div>
+      </section>
+    </div>
 
     <button id="archiveLauncher" class="archive-launcher" type="button" hidden aria-label="段ボール箱を開く" aria-expanded="false">📦<span id="archiveLauncherCount">0</span></button>
 
@@ -65,13 +74,6 @@
       <span class="archive-box-hint">ここへドラッグしてしまう</span>
       <span id="archiveDockClose" class="archive-dock-close" role="button" aria-label="収納ドックを閉じる">×</span>
     </button>
-
-    <section id="officialShelf" class="official-shelf" hidden>
-      <p class="eyebrow">A-HAKO BOOKS</p>
-      <h2>あ箱から届く本。</h2>
-      <p>大きなランキングではなく、あ箱から時々一冊を置く小さな棚です。</p>
-      <div id="officialBooks" class="official-books"><div class="official-empty"><strong>読み込んでいます…</strong><span>あ箱から届く本を確認しています。</span></div></div>
-    </section>
   </main>
 
   <dialog id="detailDialog" class="detail-dialog">
@@ -131,6 +133,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=63.35.19"></script>
+  <script src="bookshelf.js?v=63.35.22"></script>
 </body>
 </html>

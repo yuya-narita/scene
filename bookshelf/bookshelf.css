@@ -943,3 +943,14 @@ body.x-claim-handoff-active>#toast{display:none!important}
 
 /* V63.35.21 — keep live/snapshot top-margin geometry identical during shelf swipe.
    flow-root prevents the official shelf margin from collapsing through the swipe wrapper. */
+
+/* V63.35.22 — one shared top-gap coordinate for every shelf body.
+   The gap lives outside the shelf card/grid, so live and swipe snapshots land
+   at exactly the same Y. Do not reintroduce per-tab top margins here. */
+.shelf-body-viewport{padding-top:10px;display:flow-root}
+.official-shelf{margin-top:0!important}
+@media(max-width:680px){
+  #grid{padding-top:0!important}
+  .shelf-swipe-grid{padding-top:0!important}
+  .official-shelf{margin-top:0!important}
+}
