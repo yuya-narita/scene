@@ -765,3 +765,69 @@ body.x-claim-handoff-active>#toast{display:none!important}
   .shelf-cover-author,.shelf-cover-episode{font-size:clamp(6px,2vw,9px)}
 }
 \n\n/* V63.35.11 — single-stage shelf swipe + tighter metadata + split episode cover lines */\n#grid .book-meta{min-height:124px}\n#grid .book-work-info{min-height:50px;gap:2px}\n#grid .book-facts{padding-top:3px}\n.shelf-cover-episode{margin-top:10px}\n.shelf-cover-episode-title{\n  margin-top:3px;\n  font-family:"Yu Mincho","Hiragino Mincho ProN",serif;\n  font-size:clamp(7px,.72vw,11px);\n  line-height:1.35;\n  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;\n}\n@media(max-width:680px){\n  #grid .book-meta{min-height:112px}\n  #grid .book-work-info{min-height:44px}\n  #grid.grid[data-mobile-columns="3"] .book-meta{min-height:94px}\n  #grid.grid[data-mobile-columns="3"] .book-work-info{min-height:38px}\n  #grid.grid[data-mobile-columns="4"] .book-meta{min-height:82px}\n  #grid.grid[data-mobile-columns="4"] .book-work-info{min-height:32px}\n}\n
+/* V63.35.12 — exact swipe snapshot geometry + compact authored cover + unified detail identity */
+/* The swipe snapshot must use the same local-card rules as the live #grid.
+   Previous V63.35.x rules were scoped to #grid only, so Safari first showed a
+   differently-sized snapshot, then the correctly-sized live shelf: the visible
+   two-stage redraw. */
+:is(#grid,.shelf-swipe-grid) .book{height:100%}
+:is(#grid,.shelf-swipe-grid) .book-meta{display:flex;flex-direction:column;min-height:148px}
+:is(#grid,.shelf-swipe-grid) .book-meta h3{
+  flex:0 0 auto;white-space:normal;overflow:hidden;text-overflow:clip;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+  line-height:1.45;min-height:2.9em;margin-bottom:4px;
+}
+:is(#grid,.shelf-swipe-grid) .book-work-info{display:flex;flex-direction:column;gap:3px;min-height:72px;overflow:hidden}
+:is(#grid,.shelf-swipe-grid) .book-series,
+:is(#grid,.shelf-swipe-grid) .book-subtitle,
+:is(#grid,.shelf-swipe-grid) .book-description{margin:0;color:#6f685f;font-size:10px;line-height:1.42}
+:is(#grid,.shelf-swipe-grid) .book-series{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:is(#grid,.shelf-swipe-grid) .book-subtitle{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:is(#grid,.shelf-swipe-grid) .book-description{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;color:#746d63}
+:is(#grid,.shelf-swipe-grid) .book-facts{margin-top:auto!important;padding-top:5px;color:#807a70;font-size:11px;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:1.45em}
+
+.shelf-cover-episode-line{margin-top:9px;display:flex;max-width:100%;align-items:baseline;justify-content:center;gap:0;font-family:"Yu Mincho","Hiragino Mincho ProN",serif;font-size:clamp(7px,.72vw,11px);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shelf-cover-episode-line .shelf-cover-episode,
+.shelf-cover-episode-line .shelf-cover-episode-title{margin:0;display:inline;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shelf-cover-episode-sep{flex:0 0 auto}
+/* Undo the previous separate-row spacing. */
+.shelf-cover-episode{margin-top:0}
+
+.detail-copy{align-self:center;min-width:0}
+.detail-copy .eyebrow{margin:0 0 7px}
+.detail-copy h2{font-size:24px;line-height:1.2;margin:0 0 6px;letter-spacing:-.02em}
+.detail-copy p{margin:2px 0;color:#756e64;font-size:11px;line-height:1.4}
+.detail-copy .detail-hero-subtitle{margin:0 0 7px;color:#4f4942;font-size:12px;font-weight:650;line-height:1.4}
+.detail-copy .detail-hero-author{color:#665f56;font-weight:600}
+.detail-copy .detail-hero-episode{margin-top:7px;color:#877e72;font-size:10px;font-weight:700;letter-spacing:.03em}
+.detail-copy .detail-hero-episode-title{color:#25211d;font-size:12px;font-weight:800;line-height:1.35}
+.detail-copy .detail-hero-facts,.detail-copy .detail-hero-date{color:#81796f;font-size:10.5px}
+.detail-work-info{margin-top:-2px}
+.detail-work-info .detail-series{margin-bottom:6px!important}
+.detail-work-info .detail-description{color:#5f584f!important;font-size:11.5px!important;line-height:1.68!important}
+
+@media(max-width:680px){
+  :is(#grid,.shelf-swipe-grid) .book-meta{min-height:132px}
+  :is(#grid,.shelf-swipe-grid) .book-work-info{min-height:60px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-meta{min-height:110px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-work-info{min-height:50px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-description{-webkit-line-clamp:2;font-size:8px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-series,
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-subtitle{font-size:8px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-facts{font-size:9px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-meta{min-height:96px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-work-info{min-height:42px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-description{display:none}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-series,
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-subtitle{font-size:7px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-facts{font-size:8px}
+  .detail-hero{grid-template-columns:110px minmax(0,1fr);gap:18px;padding:22px 18px 16px}
+  .detail-copy h2{font-size:20px;line-height:1.16;margin-bottom:5px}
+  .detail-copy .detail-hero-subtitle{font-size:10.5px;margin-bottom:6px}
+  .detail-copy .detail-hero-author{font-size:10.5px}
+  .detail-copy .detail-hero-episode{font-size:9px;margin-top:5px}
+  .detail-copy .detail-hero-episode-title{font-size:10.5px}
+  .detail-copy .detail-hero-facts,.detail-copy .detail-hero-date{font-size:9.5px}
+  .detail-work-info{margin-top:0;padding-top:13px}
+  .detail-work-info .eyebrow{margin-bottom:6px}
+}
