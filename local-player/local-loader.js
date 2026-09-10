@@ -919,7 +919,7 @@
       return;
     }
     if(currentSourceMode==='relay-url'||currentSourceMode==='official-shelf'){try{history.back();}catch(_){}return;}
-    if(currentSourceMode==='bookshelf'){
+    if(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master'){
       try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
       revokeAssets();
       currentPackage=null;
@@ -963,7 +963,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.10-bookshelf-master-read',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.11-bookshelf-return-fix',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
