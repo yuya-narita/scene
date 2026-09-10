@@ -110,15 +110,6 @@
       this.historyScrollRaf = 0;
       this.historyMetrics = null;
       this.historyDepthItems = new Set();
-      // Local Player experiment: visited Scenes behave like a reversible scroll range.
-      // Drag down = earlier visited Scene, drag up = later visited Scene, but never
-      // beyond maxVisitedIndex. Unread future Scenes remain tap-only.
-      this.visitedScrollGesture = null;
-      this.visitedScrollActive = false;
-      this.historyDirectGesture = null; // legacy PAST internals kept as fallback API only
-      this.historyDirectActive = false;
-      this.historyNearestIndex = -1;
-      this.historyMomentumRaf = 0;
       this.destroyed = false;
       this._bound = [];
       this.presentationTimers = [];
@@ -470,48 +461,13 @@
 
       if (this.options.swipe) {
         this._on(this.els.stage, 'touchstart', (e) => {
-          this._cancelHistoryMomentum();
           const t = e.changedTouches[0];
           this.touchStartY = t.clientY;
           this.touchStartX = t.clientX;
-          this.visitedScrollActive = false;
-          this.visitedScrollGesture = {
-            startY: t.clientY,
-            startX: t.clientX,
-            startIndex: this.index,
-            maxIndex: this.maxVisitedIndex,
-            lastIndex: this.index
-          };
         }, { passive: true });
 
         this._on(this.els.stage, 'touchmove', (e) => {
-          if (this.touchStartY == null || this.touchStartX == null) return;
-          const t = e.changedTouches[0];
-          const dy = t.clientY - this.touchStartY;
-          const dx = t.clientX - this.touchStartX;
-          const g = this.visitedScrollGesture;
-
-          // V63.35.14 Local-only experiment:
-          // the already-read range itself is scrollable. No PAST drum appears.
-          // Downward motion walks into the past; upward motion can return through
-          // already-visited Scenes up to the previous reading frontier.
-          const vertical = Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx) * 0.9;
-          if (vertical && this.options.allowPrevious && g && g.maxIndex >= 0) {
-            if (e.cancelable) e.preventDefault();
-            this.visitedScrollActive = true;
-
-            // Roughly one Scene per 54px keeps the gesture quick enough for long
-            // rewinds while still allowing a nearby Scene to be targeted easily.
-            const sceneDelta = Math.trunc((-dy) / 54);
-            const target = Math.max(0, Math.min(g.maxIndex, g.startIndex + sceneDelta));
-            if (target !== g.lastIndex) {
-              g.lastIndex = target;
-              this.goToVisited(target);
-            }
-            return;
-          }
-
-          // Keep the page itself fixed for the existing discrete swipe actions.
+          // Keep the page itself fixed. History has its own native momentum scroller.
           if (e.cancelable) e.preventDefault();
         }, { passive: false });
 
@@ -520,29 +476,20 @@
           const t = e.changedTouches[0];
           const dy = t.clientY - this.touchStartY;
           const dx = t.clientX - this.touchStartX;
-          const wasVisitedScroll = this.visitedScrollActive;
           this.touchStartY = null;
           this.touchStartX = null;
-          this.visitedScrollActive = false;
-          this.visitedScrollGesture = null;
-
-          if (wasVisitedScroll) {
-            // A scroll gesture must never synthesize the tap that advances into
-            // an unread Scene when the finger is released.
-            this.suppressNextClick = true;
-            this.els.stage.focus({ preventScroll: true });
-            return;
-          }
 
           if (Math.max(Math.abs(dx), Math.abs(dy)) < this.options.swipeThreshold) return;
           this.suppressNextClick = true;
 
-          // Horizontal swipes retain the original discrete navigation behaviour.
-          // Vertical swipes no longer open PAST; they are reserved for the
-          // reversible visited-Scene scroll above.
-          if (Math.abs(dx) > Math.abs(dy) && dx < 0) {
-            if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
-            this.next();
+          // Pulling down/right enters History Scroll. Pushing up/left still advances
+          // only one unread Scene at a time.
+          if (Math.abs(dy) >= Math.abs(dx)) {
+            if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
+            else if (dy < 0) { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
+          } else {
+            if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
+            else { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
           }
         }, { passive: true });
       }
@@ -2300,7 +2247,6 @@
       this._clearPresentationTimers();
       this.historyOpen = true;
       this.host.classList.add('sp-history-open');
-      this.els.history.classList.toggle('is-direct', !!options.directGesture);
       this.els.history.hidden = false;
       this._renderHistory();
 
@@ -2315,25 +2261,17 @@
           this.els.historyScroll.scrollTop = Math.max(0, target);
 
           // A pull gesture should feel like grabbing the drum and moving into the past.
-          // Legacy History gets its small offset. Direct History instead binds
-          // the current finger displacement to scrollTop after centering.
+          // Give it a small initial offset while preserving native momentum afterwards.
           const drag = Math.abs(asNumber(options.dragDistance, 0));
           const wheel = Math.abs(asNumber(options.wheelDelta, 0));
-          if (!options.directGesture && (drag > 0 || wheel > 0)) {
+          if (drag > 0 || wheel > 0) {
             this.els.historyScroll.scrollTop = Math.max(
               0,
               this.els.historyScroll.scrollTop - clamp((drag || wheel) * 0.7, 18, 110)
             );
           }
-          if (options.directGesture && this.historyDirectGesture) {
-            const g = this.historyDirectGesture;
-            g.startScroll = this.els.historyScroll.scrollTop;
-            g.ready = true;
-            this.els.historyScroll.scrollTop = Math.max(0, g.startScroll - (g.currentY - g.startY) * 1.55);
-          }
         }
         this._updateHistoryDepth();
-        if (options.directGesture && this.historyDirectGesture?.ended) this._finishDirectHistoryGesture();
       });
 
       emit(this.host, 'sceneplayer:historyopen', {
@@ -2345,12 +2283,8 @@
 
     closeHistory(options = {}) {
       if (!this.historyOpen) return false;
-      this._cancelHistoryMomentum();
       this.historyOpen = false;
-      this.historyDirectActive = false;
-      this.historyDirectGesture = null;
       this.host.classList.remove('sp-history-open');
-      this.els.history.classList.remove('is-direct');
       this.els.history.hidden = true;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
       emit(this.host, 'sceneplayer:historyclose', {
@@ -2506,7 +2440,6 @@
       if (nearestIndex > 0 && Math.abs(metrics[nearestIndex - 1].center - center) <= Math.abs(metrics[nearestIndex].center - center)) {
         nearestIndex -= 1;
       }
-      this.historyNearestIndex = Number(metrics[nearestIndex]?.item?.dataset?.index ?? this.index);
 
       // Only the small visible neighbourhood needs the drum depth effect.
       // Clear the previously touched nodes, then update roughly ±6 Scenes.
@@ -2528,66 +2461,6 @@
         if (i === nearestIndex) entry.item.classList.add('is-nearest');
         this.historyDepthItems.add(entry.item);
       }
-    }
-
-    _cancelHistoryMomentum() {
-      if (this.historyMomentumRaf) cancelAnimationFrame(this.historyMomentumRaf);
-      this.historyMomentumRaf = 0;
-    }
-
-    _finishDirectHistoryGesture() {
-      const g = this.historyDirectGesture;
-      if (!g || !this.historyOpen) return;
-      this._cancelHistoryMomentum();
-      this._updateHistoryDepth();
-
-      // Convert finger velocity to drum velocity. Pulling down moves scrollTop up.
-      let velocity = -g.fingerVelocity * 1.55; // px/ms in scroll coordinates
-      const startedAt = performance.now();
-      let lastAt = startedAt;
-
-      // Slow releases should settle immediately instead of floating.
-      if (Math.abs(velocity) < 0.18) {
-        this._commitDirectHistory();
-        return;
-      }
-
-      const step = (now) => {
-        if (!this.historyOpen || !this.historyDirectActive) {
-          this.historyMomentumRaf = 0;
-          return;
-        }
-        const dt = Math.min(32, Math.max(1, now - lastAt));
-        lastAt = now;
-        const scroll = this.els.historyScroll;
-        const before = scroll.scrollTop;
-        scroll.scrollTop = Math.max(0, before + velocity * dt);
-        this._updateHistoryDepth();
-
-        // Time-normalized friction; cap the experiment so it always settles fast.
-        velocity *= Math.pow(0.935, dt / 16.67);
-        const hitBoundary = Math.abs(scroll.scrollTop - before) < 0.1;
-        if (Math.abs(velocity) < 0.035 || hitBoundary || now - startedAt > 850) {
-          this.historyMomentumRaf = 0;
-          this._commitDirectHistory();
-          return;
-        }
-        this.historyMomentumRaf = requestAnimationFrame(step);
-      };
-      this.historyMomentumRaf = requestAnimationFrame(step);
-    }
-
-    _commitDirectHistory() {
-      if (!this.historyOpen || !this.historyDirectActive) return false;
-      this._updateHistoryDepth();
-      const nextIndex = Number.isInteger(this.historyNearestIndex) ? this.historyNearestIndex : this.index;
-      const safeIndex = Math.max(0, Math.min(nextIndex, this.maxVisitedIndex));
-      this.closeHistory({ keepVisualState: true });
-      const changed = safeIndex !== this.index;
-      if (changed) this.goToVisited(safeIndex);
-      // The physical pull must never synthesize an immediate "next" tap.
-      this.suppressNextClick = true;
-      return true;
     }
 
     refreshCurrent(options = {}) {

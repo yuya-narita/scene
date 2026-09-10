@@ -1937,19 +1937,3 @@ html.sp-scene-image-open body{
 @keyframes sp-bg-pan-up-right{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),var(--sp-bg-pan,4%))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),calc(var(--sp-bg-pan,4%) * -1))}}
 @keyframes sp-bg-pan-down-left{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),calc(var(--sp-bg-pan,4%) * -1))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),var(--sp-bg-pan,4%))}}
 @keyframes sp-bg-pan-down-right{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),calc(var(--sp-bg-pan,4%) * -1))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),var(--sp-bg-pan,4%))}}
-
-/* V63.35.13 Local Player experiment — direct visited-past scrub.
-   A downward drag enters the existing drum under the same finger; the separate
-   PAST header is hidden only for this touch path. Desktop/keyboard History stays
-   unchanged. */
-.sp-history.is-direct .sp-history-top{
-  opacity:0;
-  pointer-events:none;
-}
-.sp-history.is-direct .sp-history-scroll{
-  inset:0;
-}
-.sp-history.is-direct .sp-history-list{
-  padding-top:40vh;
-  padding-bottom:40vh;
-}
