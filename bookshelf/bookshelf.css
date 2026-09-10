@@ -883,3 +883,38 @@ body.x-claim-handoff-active>#toast{display:none!important}
   main{padding-bottom:max(138px,calc(env(safe-area-inset-bottom) + 112px))}
   #grid,.empty,.official-shelf{padding-bottom:18px}
 }
+
+/* V63.35.18 — MASTER hierarchy + stronger bottom clearance */
+.master-primary-actions{padding-bottom:14px}
+.master-primary-actions .edit{grid-column:1/-1}
+.master-signal-panel{margin:0 26px 16px;border:1px solid #ddd6c8;border-radius:18px;background:#faf8f3;overflow:hidden}
+.master-signal-summary{display:flex;width:100%;align-items:center;justify-content:space-between;gap:14px;border:0;padding:14px 16px;background:transparent;text-align:left}
+.master-signal-summary>span{display:flex;min-width:0;flex-direction:column;gap:2px}
+.master-signal-summary small{color:#8b8377;font-size:9px;letter-spacing:.18em}
+.master-signal-summary strong{font-size:16px;line-height:1.35}
+.master-signal-summary em{margin-top:2px;color:#6d665c;font-size:10.5px;font-style:normal;font-weight:600}
+.master-signal-summary>b{flex:0 0 auto;color:#877f74;font-size:25px;font-weight:400;line-height:1;transition:transform .18s ease}
+.master-signal-summary[aria-expanded="true"]>b{transform:rotate(90deg)}
+.master-signal-details{padding:0 14px 15px}
+.master-signal-details[hidden]{display:none!important}
+.master-signal-details .strength-panel{margin:0;padding:0;border:0;background:transparent}
+.master-signal-details .strength-head{display:none}
+.master-signal-details .strength-note{margin-bottom:12px}
+.master-journey-button{width:100%;margin-top:8px}
+.master-file-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:0 26px 14px}
+.master-file-actions button{padding:11px 10px;border-radius:11px;font-size:12px;font-weight:700}
+.master-management{padding-top:0}
+@media(max-width:680px){
+  .master-primary-actions{padding:0 18px 12px}
+  .master-signal-panel{margin:0 18px 14px}
+  .master-signal-summary{padding:13px 14px}
+  .master-signal-summary strong{font-size:14px}
+  .master-signal-summary em{font-size:10px}
+  .master-signal-details{padding:0 12px 13px}
+  .master-file-actions{padding:0 18px 12px;gap:8px}
+  .master-file-actions button{font-size:10.5px;padding:10px 8px;white-space:nowrap}
+  .master-management{padding:0 18px 14px}
+  /* Clearance belongs to the shelf content itself: fixed 📦 / ＋ must never cover final metadata. */
+  main{padding-bottom:max(172px,calc(env(safe-area-inset-bottom) + 146px))}
+  #grid,.empty,.official-shelf{padding-bottom:max(118px,calc(env(safe-area-inset-bottom) + 96px))}
+}
