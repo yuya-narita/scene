@@ -110,9 +110,12 @@
       this.historyScrollRaf = 0;
       this.historyMetrics = null;
       this.historyDepthItems = new Set();
-      // Local Player experiment: a downward drag can grab the visited-past drum
-      // directly, without first entering a separate PAST selection mode.
-      this.historyDirectGesture = null;
+      // Local Player experiment: visited Scenes behave like a reversible scroll range.
+      // Drag down = earlier visited Scene, drag up = later visited Scene, but never
+      // beyond maxVisitedIndex. Unread future Scenes remain tap-only.
+      this.visitedScrollGesture = null;
+      this.visitedScrollActive = false;
+      this.historyDirectGesture = null; // legacy PAST internals kept as fallback API only
       this.historyDirectActive = false;
       this.historyNearestIndex = -1;
       this.historyMomentumRaf = 0;
@@ -471,16 +474,13 @@
           const t = e.changedTouches[0];
           this.touchStartY = t.clientY;
           this.touchStartX = t.clientX;
-          this.historyDirectGesture = {
+          this.visitedScrollActive = false;
+          this.visitedScrollGesture = {
             startY: t.clientY,
             startX: t.clientX,
-            currentY: t.clientY,
-            lastY: t.clientY,
-            lastAt: performance.now(),
-            fingerVelocity: 0,
-            startScroll: 0,
-            ready: false,
-            ended: false
+            startIndex: this.index,
+            maxIndex: this.maxVisitedIndex,
+            lastIndex: this.index
           };
         }, { passive: true });
 
@@ -489,31 +489,24 @@
           const t = e.changedTouches[0];
           const dy = t.clientY - this.touchStartY;
           const dx = t.clientX - this.touchStartX;
-          const verticalPull = dy > 10 && Math.abs(dy) >= Math.abs(dx);
+          const g = this.visitedScrollGesture;
 
-          // V63.35.13 Local-only experiment: pulling down grabs History while
-          // the SAME finger is still moving. The visited future boundary remains
-          // maxVisitedIndex, so an unread Scene can never appear here.
-          if (verticalPull && this.options.allowPrevious && this.maxVisitedIndex > 0) {
+          // V63.35.14 Local-only experiment:
+          // the already-read range itself is scrollable. No PAST drum appears.
+          // Downward motion walks into the past; upward motion can return through
+          // already-visited Scenes up to the previous reading frontier.
+          const vertical = Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx) * 0.9;
+          if (vertical && this.options.allowPrevious && g && g.maxIndex >= 0) {
             if (e.cancelable) e.preventDefault();
-            const g = this.historyDirectGesture;
-            if (!this.historyDirectActive) {
-              this.historyDirectActive = true;
-              this.openHistory({ directGesture: true });
-            }
-            if (g) {
-              const now = performance.now();
-              const dt = Math.max(1, now - g.lastAt);
-              const instant = (t.clientY - g.lastY) / dt;
-              // Smooth noisy iOS move samples, but keep a quick fling responsive.
-              g.fingerVelocity = g.fingerVelocity * 0.68 + instant * 0.32;
-              g.currentY = t.clientY;
-              g.lastY = t.clientY;
-              g.lastAt = now;
-              if (g.ready) {
-                this.els.historyScroll.scrollTop = Math.max(0, g.startScroll - (g.currentY - g.startY) * 1.55);
-                this._scheduleHistoryDepth();
-              }
+            this.visitedScrollActive = true;
+
+            // Roughly one Scene per 54px keeps the gesture quick enough for long
+            // rewinds while still allowing a nearby Scene to be targeted easily.
+            const sceneDelta = Math.trunc((-dy) / 54);
+            const target = Math.max(0, Math.min(g.maxIndex, g.startIndex + sceneDelta));
+            if (target !== g.lastIndex) {
+              g.lastIndex = target;
+              this.goToVisited(target);
             }
             return;
           }
@@ -527,34 +520,29 @@
           const t = e.changedTouches[0];
           const dy = t.clientY - this.touchStartY;
           const dx = t.clientX - this.touchStartX;
-          const g = this.historyDirectGesture;
+          const wasVisitedScroll = this.visitedScrollActive;
           this.touchStartY = null;
           this.touchStartX = null;
+          this.visitedScrollActive = false;
+          this.visitedScrollGesture = null;
 
-          if (this.historyDirectActive) {
+          if (wasVisitedScroll) {
+            // A scroll gesture must never synthesize the tap that advances into
+            // an unread Scene when the finger is released.
             this.suppressNextClick = true;
-            if (g) {
-              g.currentY = t.clientY;
-              g.ended = true;
-              if (g.ready) this._finishDirectHistoryGesture();
-            } else {
-              this._commitDirectHistory();
-            }
+            this.els.stage.focus({ preventScroll: true });
             return;
           }
 
-          this.historyDirectGesture = null;
           if (Math.max(Math.abs(dx), Math.abs(dy)) < this.options.swipeThreshold) return;
           this.suppressNextClick = true;
 
-          // Up/left still advances exactly one unread Scene. Horizontal right
-          // keeps the old History entry as a temporary fallback during testing.
-          if (Math.abs(dy) >= Math.abs(dx)) {
-            if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
-            else if (dy < 0) { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
-          } else {
-            if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
-            else { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
+          // Horizontal swipes retain the original discrete navigation behaviour.
+          // Vertical swipes no longer open PAST; they are reserved for the
+          // reversible visited-Scene scroll above.
+          if (Math.abs(dx) > Math.abs(dy) && dx < 0) {
+            if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
+            this.next();
           }
         }, { passive: true });
       }
