@@ -122,17 +122,24 @@
 
       <div class="admin-tab-panel" data-admin-panel="selection">
         <section class="panel selection-panel">
-          <div class="section-head"><div><small>AHACO BOOKS</small><h2>作品選定</h2></div><small class="muted-note">発行済みEditionから「あ箱の本」へ</small></div>
-          <p class="selection-lead">作品を確認して、種本または開花として「あ箱の本」に置きます。</p>
+          <div class="section-head"><div><small>FROM ADMIN</small><h2>運営から追加</h2></div><small class="muted-note">現在公開中のMasterを、その場で凍結Editionにして発行</small></div>
+          <p class="selection-lead">最初の「あ箱の本」はここから作れます。作品を読んで確認し、種本または開花として追加します。</p>
           <div class="selection-toolbar">
-            <button id="reloadSelectionButton" type="button">候補を更新</button>
-            <span id="selectionStatus" class="status"></span>
+            <button id="reloadSelectionButton" type="button">作品を更新</button>
+            <span id="publishedWorksStatus" class="status"></span>
           </div>
+          <div id="publishedWorks" class="edition-candidate-list"><div class="empty">読み込み中…</div></div>
+        </section>
+
+        <section class="panel selection-panel">
+          <div class="section-head"><div><small>AUTO CANDIDATES</small><h2>自動候補</h2></div><small class="muted-note">既に発行済みのEditionから候補を拾います</small></div>
+          <p class="selection-lead">ここが0作品でも正常です。利用が増えたら、旅や読了の動きから半自動で候補を上げていきます。</p>
+          <div class="selection-toolbar"><span id="selectionStatus" class="status"></span></div>
           <div id="editionCandidates" class="edition-candidate-list"><div class="empty">読み込み中…</div></div>
         </section>
 
         <section class="panel">
-          <div class="section-head"><div><small>ON SHELF</small><h2>現在の「あ箱の本」</h2></div><small class="muted-note">停止・再開できます</small></div>
+          <div class="section-head"><div><small>ON SHELF</small><h2>現在の「あ箱の本」</h2></div><small class="muted-note">停止・再開・棚から削除</small></div>
           <div id="officialShelfItems" class="official-shelf-list"><div class="empty">読み込み中…</div></div>
         </section>
       </div>
@@ -163,6 +170,6 @@
       </div>
     </div>
   </main>
-  <script src="./admin.js?v=0.3.68-tabs-books"></script>
+  <script src="./admin.js?v=0.3.69-admin-add-delete"></script>
 </body>
 </html>
