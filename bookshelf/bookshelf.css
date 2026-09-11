@@ -1063,3 +1063,54 @@ html{
   outline:none;
   box-shadow:none;
 }
+
+/* V63.35.45 — metadata quantity must never change card geometry.
+   V63.35.44 split subtitle / episode / episode title into independent rows.
+   The 3/4-column layouts already had a definite work-info height, but the
+   default/2-column layout still used only min-height and therefore grew when
+   more rows were present. Keep live and swipe roots on the same fixed boxes. */
+:is(#grid,.shelf-swipe-grid) .book{
+  display:block;
+  width:100%;
+  align-self:start;
+}
+:is(#grid,.shelf-swipe-grid) .book-work-info{
+  height:82px;
+  min-height:82px;
+  max-height:82px;
+  flex:0 0 82px;
+  overflow:hidden;
+}
+@media(max-width:680px){
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-work-info{
+    height:38px;min-height:38px;max-height:38px;flex-basis:38px
+  }
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-work-info{
+    height:32px;min-height:32px;max-height:32px;flex-basis:32px
+  }
+}
+
+/* Official cards use a different component, so lock its title/info/meta boxes
+   as well. This prevents future shelf items with more optional fields from
+   producing unequal card heights. */
+.official-book-copy h3{min-height:2.9em}
+.official-work-info{height:82px;min-height:82px;max-height:82px;flex:0 0 82px;overflow:hidden}
+.official-book-meta{height:150px;min-height:150px;max-height:150px;overflow:hidden}
+
+/* V63.35.46 — the local shelf is an index, not the detail view.
+   It now renders only episode / episode title between the fixed title and
+   author. Compact the reserved box without changing live/swipe geometry. */
+:is(#grid,.shelf-swipe-grid) .book-work-info{
+  height:32px;
+  min-height:32px;
+  max-height:32px;
+  flex:0 0 32px;
+}
+@media(max-width:680px){
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-work-info{
+    height:28px;min-height:28px;max-height:28px;flex-basis:28px
+  }
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-work-info{
+    height:25px;min-height:25px;max-height:25px;flex-basis:25px
+  }
+}
