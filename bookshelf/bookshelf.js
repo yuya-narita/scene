@@ -614,7 +614,7 @@ function makeShelfSwipeStage(nextTab,direction){
   currentPage.append(currentInner);nextPage.append(nextInner);
   stage.append(currentPage,nextPage);document.body.append(stage);
   const width=window.innerWidth;
-  nextPage.style.left=`${direction==='left'?width:-width}px`;
+  nextPage.style.transform=`translate3d(${direction==='left'?width:-width}px,0,0)`;
   // Clamp the remembered target position against the *snapshot's* actual body
   // height before it is ever shown. This also heals old saved offsets produced
   // by the previous short-shelf bug (e.g. official shelf remembered at 40px).
@@ -633,8 +633,8 @@ function makeShelfSwipeStage(nextTab,direction){
   // gap. Per-tab margin compensation caused the incoming snapshot to sit
   // slightly low and then jump upward when the real shelf replaced it.
   const targetOffset=(bodyDocTop-targetY)-stageTop;
-  currentInner.style.top=`${Math.round(currentOffset)}px`;
-  nextInner.style.top=`${Math.round(targetOffset)}px`;
+  currentInner.style.transform=`translate3d(0,${currentOffset}px,0)`;
+  nextInner.style.transform=`translate3d(0,${targetOffset}px,0)`;
   return {stage,currentPage,nextPage,width,direction,nextTab,liveCurrent:useLiveCurrent?current:null};
 }
 function removeShelfSwipeStage(view){
@@ -645,20 +645,19 @@ function removeShelfSwipeStage(view){
 }
 function positionShelfSwipeStage(view,dx){
   if(!view)return;
-  const x=Math.round(dx);
-  view.currentPage.style.left=`${x}px`;
+  view.currentPage.style.transform=`translate3d(${dx}px,0,0)`;
   if(view.liveCurrent)view.liveCurrent.style.transform=`translate3d(${dx}px,0,0)`;
   const base=view.direction==='left'?view.width:-view.width;
-  view.nextPage.style.left=`${Math.round(base+dx)}px`;
+  view.nextPage.style.transform=`translate3d(${base+dx}px,0,0)`;
   view.nextPage.style.boxShadow=view.direction==='left'?'-18px 0 28px rgba(35,28,20,.10)':'18px 0 28px rgba(35,28,20,.10)';
 }
 async function animateShelfSwipeStage(view,toX,duration=220){
   if(!view)return;
-  const from=parseFloat(getComputedStyle(view.currentPage).left)||0;
+  const from=new DOMMatrixReadOnly(getComputedStyle(view.currentPage).transform).m41||0;
   const base=view.direction==='left'?view.width:-view.width;
   const easing='cubic-bezier(.22,.72,.18,1)';
-  const a=view.currentPage.animate([{left:`${Math.round(from)}px`},{left:`${Math.round(toX)}px`}],{duration,easing,fill:'forwards'});
-  const b=view.nextPage.animate([{left:`${Math.round(base+from)}px`},{left:`${Math.round(base+toX)}px`}],{duration,easing,fill:'forwards'});
+  const a=view.currentPage.animate([{transform:`translate3d(${from}px,0,0)`},{transform:`translate3d(${toX}px,0,0)`}],{duration,easing,fill:'forwards'});
+  const b=view.nextPage.animate([{transform:`translate3d(${base+from}px,0,0)`},{transform:`translate3d(${base+toX}px,0,0)`}],{duration,easing,fill:'forwards'});
   let liveAnimation=null;
   if(view.liveCurrent){
     const liveFrom=new DOMMatrixReadOnly(getComputedStyle(view.liveCurrent).transform).m41||from;
@@ -666,44 +665,11 @@ async function animateShelfSwipeStage(view,toX,duration=220){
   }
   await Promise.all([a.finished.catch(()=>{}),b.finished.catch(()=>{}),liveAnimation?.finished?.catch(()=>{})]);
   // Safari can finish the current-page animation a frame before the incoming page.
-  // Commit both page positions synchronously so the new tab never shows the old shelf for one frame.
-  view.currentPage.style.left=`${Math.round(toX)}px`;
-  view.nextPage.style.left=`${Math.round(base+toX)}px`;
+  // Commit both transforms synchronously so the new tab never shows the old shelf for one frame.
+  view.currentPage.style.transform=`translate3d(${toX}px,0,0)`;
+  view.nextPage.style.transform=`translate3d(${base+toX}px,0,0)`;
   if(view.liveCurrent)view.liveCurrent.style.transform=`translate3d(${toX}px,0,0)`;
   a.cancel();b.cancel();if(liveAnimation)liveAnimation.cancel();
-}
-
-function adoptLocalSwipeSnapshot(view,staleUrls=[]){
-  // V63.35.27: the exact grid the user saw during the swipe becomes the live
-  // local shelf. V63.35.25 moved only its card children into the pre-existing
-  // #grid; that still changed the grid formatting/compositing context at the
-  // landing frame and made WebKit re-layout small 3/4-column metadata.
-  if(!view||view.nextTab==='official')return staleUrls;
-  const snapshotGrid=view.nextPage?.querySelector?.('.shelf-swipe-grid');
-  const liveGrid=$('#grid');
-  if(!snapshotGrid||!liveGrid)return staleUrls;
-
-  const snapshotBlobUrls=[...snapshotGrid.querySelectorAll('img[src^="blob:"]')].map(img=>img.src);
-  const keep=new Set(snapshotBlobUrls);
-  const unusedLiveUrls=coverUrls.filter(url=>!keep.has(url));
-
-  // Preserve the already-laid-out grid itself, not only its card children.
-  // The move and stage removal happen in the same task, so there is no frame
-  // with a missing #grid and no second grid layout root for Safari to adopt.
-  snapshotGrid.id='grid';
-  snapshotGrid.classList.remove('shelf-swipe-grid');
-  snapshotGrid.setAttribute('aria-live',liveGrid.getAttribute('aria-live')||'polite');
-  snapshotGrid.hidden=false;
-  liveGrid.replaceWith(snapshotGrid);
-
-  // The render underneath created a second set of blob URLs. Its whole grid is
-  // gone now, so revoke only that unused set and keep the adopted grid URLs.
-  unusedLiveUrls.forEach(url=>{try{URL.revokeObjectURL(url);}catch(_){}});
-  coverUrls=[...new Set(snapshotBlobUrls)];
-  bindBookInteractions();
-
-  const kept=new Set(snapshotBlobUrls);
-  return staleUrls.filter(url=>!kept.has(url));
 }
 
 function adoptOfficialSwipeSnapshot(view){
@@ -860,7 +826,7 @@ function installShelfSwipe(){
       await animateShelfSwipeStage(g.view,toX,175);
       // The incoming snapshot is now the only visible page while the live shelf renders underneath.
       g.view.currentPage.style.visibility='hidden';
-      g.view.nextPage.style.left='0px';
+      g.view.nextPage.style.transform='translate3d(0,0,0)';
       const next=g.view.nextTab;
       // Keep the completed viewer page covering the old live shelf while the real
       // next shelf is rendered underneath. Removing the stage first exposed the
@@ -872,7 +838,11 @@ function installShelfSwipe(){
         await waitForLiveShelfVisualReady();
         adoptOfficialSwipeSnapshot(g.view);
       }else{
-        staleUrls=adoptLocalSwipeSnapshot(g.view,staleUrls);
+        // V63.35.31: do not rename/reparent the temporary swipe grid. Changing
+        // .shelf-swipe-grid into #grid at landing makes WebKit recalculate only
+        // the narrow ellipsized metadata lines. The normal grid has already
+        // been rendered, positioned, and decoded underneath, so reveal it once.
+        await waitForLiveShelfVisualReady();
       }
     }finally{
       removeShelfSwipeStage(g.view);
