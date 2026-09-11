@@ -637,6 +637,33 @@ async function animateShelfSwipeStage(view,toX,duration=220){
   a.cancel();b.cancel();
 }
 
+async function waitForLiveShelfVisualReady(){
+  // The swipe snapshot stays on top until the newly rendered live shelf has
+  // finished decoding its cover images. Two rAFs are not enough on iOS Safari
+  // when moving from the official shelf to a local shelf whose object URLs were
+  // not already on screen; removing the snapshot early produces a flash /
+  // two-stage landing as live covers paint a moment later.
+  const live=currentShelfBodyElement();
+  if(!live)return;
+  const imgs=[...live.querySelectorAll('img')];
+  const jobs=imgs.map(img=>{
+    if(img.complete&&img.naturalWidth>0)return Promise.resolve();
+    if(typeof img.decode==='function')return img.decode().catch(()=>{});
+    return new Promise(resolve=>{
+      const done=()=>resolve();
+      img.addEventListener('load',done,{once:true});
+      img.addEventListener('error',done,{once:true});
+    });
+  });
+  if(jobs.length){
+    await Promise.race([
+      Promise.all(jobs),
+      new Promise(resolve=>setTimeout(resolve,500))
+    ]);
+  }
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+}
+
 function installShelfScrollGuard(){
   if(document.documentElement.dataset.shelfScrollGuardInstalled==='1')return;
   document.documentElement.dataset.shelfScrollGuardInstalled='1';
@@ -745,7 +772,7 @@ function installShelfSwipe(){
       // next shelf is rendered underneath. Removing the stage first exposed the
       // previous shelf for a frame on iOS Safari and looked like an afterimage.
       staleUrls=await switchShelf(next,{deferCoverRevoke:true});
-      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      await waitForLiveShelfVisualReady();
     }finally{
       removeShelfSwipeStage(g.view);
       // Defensive cleanup for interrupted WebKit animations / rapid direction changes.
