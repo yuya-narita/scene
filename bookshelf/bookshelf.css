@@ -1024,3 +1024,12 @@ html{
   :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-work-info{height:38px;min-height:38px;max-height:38px}
   :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-work-info{height:32px;min-height:32px;max-height:32px}
 }
+
+/* V63.35.34 — diagnostic V33 proved a real computed-style mismatch.
+   Legacy #grid rules resolve every compact metadata paragraph to 9px/8px,
+   while the temporary class-only grid resolved series/subtitle to 8px/7px.
+   Match the swipe snapshot to the established live #grid values. */
+@media(max-width:680px) and (pointer:coarse){
+  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="3"] .book-meta p{font-size:9px}
+  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="4"] .book-meta p{font-size:8px}
+}
