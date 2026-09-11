@@ -338,10 +338,9 @@ function bookCardHtml(w,{archived=false}={}){
   const image=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="" draggable="false">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false">`:`<div class="cover-fallback">□</div>`);
   if(archived)return`<label class="archive-item" data-role="${w.role}" data-id="${escapeHtml(id)}"><input class="archive-check" type="checkbox" aria-label="${escapeHtml(w.title)}を選択"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div></label>`;
   const subtitle=String(w.subtitle||'').trim();
-  const episode=String(w.episode||'').trim();
-  const episodeTitle=String(w.episodeTitle||'').trim();
+  const seriesLine=compactSeriesLine(w);
   const description=String(w.description||'').trim();
-  return`<button class="book" data-role="${w.role}" data-id="${escapeHtml(id)}" draggable="true" type="button"><div class="cover">${image}${authoredCoverOverlayHtml(w)}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><div class="book-work-info">${subtitle?`<p class="book-subtitle">${escapeHtml(subtitle)}</p>`:''}${episode?`<p class="book-series">${escapeHtml(episode)}</p>`:''}${episodeTitle?`<p class="book-subtitle">${escapeHtml(episodeTitle)}</p>`:''}${description?`<p class="book-description">${escapeHtml(description)}</p>`:''}</div><p class="book-facts">${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</p></div></button>`;
+  return`<button class="book" data-role="${w.role}" data-id="${escapeHtml(id)}" draggable="true" type="button"><div class="cover">${image}${authoredCoverOverlayHtml(w)}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><div class="book-work-info">${seriesLine?`<p class="book-series">${escapeHtml(seriesLine)}</p>`:''}${subtitle?`<p class="book-subtitle">${escapeHtml(subtitle)}</p>`:''}${description?`<p class="book-description">${escapeHtml(description)}</p>`:''}</div><p class="book-facts">${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</p></div></button>`;
 }
 
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
