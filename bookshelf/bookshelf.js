@@ -352,13 +352,21 @@ function shelfViewportTop(){
 }
 function shelfMeaningfulMaxScroll(el=currentShelfBodyElement()){
   if(!el||el.hidden)return 0;
+  const scrollY=window.scrollY||window.pageYOffset||0;
   const rect=el.getBoundingClientRect();
-  const docTop=(window.scrollY||window.pageYOffset||0)+rect.top;
-  // Only the actual shelf body should create vertical travel. Fixed chrome,
-  // main bottom padding and Safari's 100vh bookkeeping must not create a
-  // phantom few-dozen-pixel scroll range on short shelves.
+  const docTop=scrollY+rect.top;
+  // The shelf remains the primary scroll source, but the intentional in-flow
+  // site footer is also reachable. V63.35.40 styled that footer correctly but
+  // this guard still clamped scrolling at the shelf body, making the footer
+  // physically impossible to reveal on iPhone Safari.
   const bottomGap=18;
-  const max=Math.max(0,docTop+rect.height+bottomGap-window.innerHeight);
+  let meaningfulBottom=docTop+rect.height+bottomGap;
+  const footer=$('.site-footer');
+  if(footer){
+    const footerRect=footer.getBoundingClientRect();
+    meaningfulBottom=Math.max(meaningfulBottom,scrollY+footerRect.top+footerRect.height);
+  }
+  const max=Math.max(0,meaningfulBottom-window.innerHeight);
   return max<6?0:Math.round(max);
 }
 function clampShelfScrollY(y,el=currentShelfBodyElement()){
