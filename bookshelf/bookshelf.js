@@ -715,7 +715,14 @@ function makeShelfSwipeStage(nextTab,direction){
   const stageTop=Math.max(0,Math.round(chromeRect?.bottom||current.getBoundingClientRect().top||0));
   const currentRect=current.getBoundingClientRect();
   const currentY=window.scrollY||window.pageYOffset||0;
-  const bodyDocTop=currentY+currentRect.top;
+  const bodyViewport=$('#shelfBodyViewport');
+  const bodyViewportRect=bodyViewport?.getBoundingClientRect?.();
+  const bodyViewportPadding=Math.max(0,parseFloat(getComputedStyle(bodyViewport).paddingTop)||0);
+  // V63.35.55: the incoming page belongs to the shared shelf viewport, not to
+  // the outgoing body's border box. Official and local bodies can differ by a
+  // fractional/border pixel; using the outgoing box made the local snapshot
+  // land about 2px low and then move upward when the real grid appeared.
+  const targetBodyDocTop=currentY+(bodyViewportRect?.top??currentRect.top)+bodyViewportPadding;
   let targetY=loadShelfScroll(nextTab);
   const stage=document.createElement('div');
   stage.className='shelf-swipe-stage';
@@ -770,11 +777,11 @@ function makeShelfSwipeStage(nextTab,direction){
   // The fixed shelf chrome is outside the moving pages. Each page is therefore
   // positioned inside the same viewport using its own remembered document Y.
   // This prevents a short shelf from inheriting the previous shelf's Y.
-  const currentOffset=(bodyDocTop-currentY)-stageTop;
+  const currentOffset=currentRect.top-stageTop;
   // V63.35.22: every shelf body now starts after the same shared 10px shell
   // gap. Per-tab margin compensation caused the incoming snapshot to sit
   // slightly low and then jump upward when the real shelf replaced it.
-  const targetOffset=(bodyDocTop-targetY)-stageTop;
+  const targetOffset=(targetBodyDocTop-targetY)-stageTop;
   currentInner.style.transform=`translate3d(0,${currentOffset}px,0)`;
   nextInner.style.transform=`translate3d(0,${targetOffset}px,0)`;
   return {stage,currentPage,nextPage,width,direction,nextTab,liveCurrent:useLiveCurrent?current:null};
@@ -1028,17 +1035,21 @@ function installShelfSwipe(){
     let staleUrls=[];
     const scrollExtentHold=holdShelfScrollExtent();
     try{
-      await animateShelfSwipeStage(g.view,toX,175);
+      const next=g.view.nextTab;
+      // V63.35.55: install the retained destination at the beginning of the
+      // 175ms landing animation. Keeping the stage microscopically translucent
+      // makes Safari paint that real underlay throughout the animation instead
+      // of first discovering it after the foreground has stopped moving.
+      g.view.stage.style.willChange='opacity';
+      g.view.stage.style.opacity='.999';
+      const [,switchedUrls]=await Promise.all([
+        animateShelfSwipeStage(g.view,toX,175),
+        switchShelf(next,{refreshOfficial:false,concealRestore:false})
+      ]);
+      staleUrls=switchedUrls;
       // The incoming snapshot is now the only visible page while the live shelf renders underneath.
       g.view.currentPage.style.visibility='hidden';
       g.view.nextPage.style.transform='translate3d(0,0,0)';
-      const next=g.view.nextTab;
-      // Keep the completed viewer page covering the old live shelf while the real
-      // next shelf is rendered underneath. Removing the stage first exposed the
-      // previous shelf for a frame on iOS Safari and looked like an afterimage.
-      // The official snapshot was built from the already-loaded hidden shelf.
-      // Do not force a second network fetch/render inside the landing frame.
-      staleUrls=await switchShelf(next,{refreshOfficial:false,concealRestore:true});
       await releaseShelfScrollExtentAtTarget(scrollExtentHold,next);
       // Every destination is now a retained live shelf. Do not replace either
       // the local grid or official shelf with the swipe snapshot at landing.
