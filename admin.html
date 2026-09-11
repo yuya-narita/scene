@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 運営</title>
-  <link rel="stylesheet" href="./admin.css?v=0.3.68">
+  <link rel="stylesheet" href="./admin.css?v=0.3.71">
 </head>
 <body>
   <main class="admin-shell">
@@ -28,6 +28,7 @@
         <button class="admin-tab is-active" type="button" data-admin-tab="status">状況</button>
         <button class="admin-tab" type="button" data-admin-tab="selection">作品選定</button>
         <button class="admin-tab" type="button" data-admin-tab="reports">報告 <span id="reportTabBadge" class="tab-badge" hidden>0</span></button>
+        <button class="admin-tab" type="button" data-admin-tab="contacts">お問い合わせ <span id="contactTabBadge" class="tab-badge" hidden>0</span></button>
         <button class="admin-tab" type="button" data-admin-tab="maintenance">保守</button>
       </nav>
 
@@ -39,6 +40,7 @@
         <div><small>R2使用量</small><strong id="r2Usage">–</strong></div>
         <div><small>素材</small><strong id="assetCount">–</strong></div>
         <div><small>未対応報告</small><strong id="openCount">0</strong></div>
+        <div><small>未対応お問い合わせ</small><strong id="openContactCount">0</strong></div>
       </section>
 
       <section class="panel analytics-panel">
@@ -168,8 +170,15 @@
         <div id="reportList" class="report-list"></div>
       </section>
       </div>
+
+      <div class="admin-tab-panel" data-admin-panel="contacts">
+      <section class="panel">
+        <div class="section-head"><div><small>CONTACTS</small><h2>お問い合わせ受信箱</h2></div><div class="report-tools"><span>表示 <strong id="shownContactCount">0</strong></span><select id="contactFilter"><option value="open">未対応</option><option value="resolved">対応済み</option><option value="all">すべて</option></select></div></div>
+        <div id="contactList" class="contact-list"></div>
+      </section>
+      </div>
     </div>
   </main>
-  <script src="./admin.js?v=0.3.70-review-player"></script>
+  <script src="./admin.js?v=0.3.71-contact-inbox"></script>
 </body>
 </html>

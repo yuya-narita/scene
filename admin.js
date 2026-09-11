@@ -4,7 +4,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
 let lastStats=null;
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
@@ -13,13 +13,14 @@ function toast(text){const n=document.createElement('div');n.className='toast';n
 
 // v63.35.1 — one admin, four workspaces
 function setAdminTab(name,{remember=true}={}){
-  const valid=['status','selection','reports','maintenance'];
+  const valid=['status','selection','reports','contacts','maintenance'];
   if(!valid.includes(name))name='status';
   document.querySelectorAll('[data-admin-tab]').forEach(b=>{const on=b.dataset.adminTab===name;b.classList.toggle('is-active',on);b.setAttribute('aria-selected',on?'true':'false');});
   document.querySelectorAll('[data-admin-panel]').forEach(p=>p.classList.toggle('is-active',p.dataset.adminPanel===name));
   if(remember)sessionStorage.setItem('ahako-admin-tab',name);
   if(name==='selection'&&token)loadOfficialShelfAdmin();
   if(name==='reports'&&token)loadReports();
+  if(name==='contacts'&&token)loadContacts();
 }
 function formatJstDate(value){
   if(!value)return '発行日時不明';
@@ -119,6 +120,7 @@ async function loadStats(){
     els.r2Usage.textContent=formatBytes(d.storage?.totalBytes||0);
     els.assetCount.textContent=Number(d.storage?.assetCount||0).toLocaleString('ja-JP');
     els.openCount.textContent=Number(d.reports?.open||0).toLocaleString('ja-JP');if(els.reportTabBadge){const n=Number(d.reports?.open||0);els.reportTabBadge.textContent=n.toLocaleString('ja-JP');els.reportTabBadge.hidden=n===0;}
+    if(els.openContactCount)els.openContactCount.textContent=Number(d.contacts?.open||0).toLocaleString('ja-JP');if(els.contactTabBadge){const n=Number(d.contacts?.open||0);els.contactTabBadge.textContent=n.toLocaleString('ja-JP');els.contactTabBadge.hidden=n===0;}
     const orphanCount=Number(d.storage?.orphanAssetCount||0);
     const orphanBytes=Number(d.storage?.orphanAssetBytes||0);
     const recentCount=Number(d.storage?.recentUnreferencedCount||0);
@@ -326,7 +328,7 @@ async function loadRelayAnalytics(){
   }
 }
 
-async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation(),loadRelayAnalytics()]);}
+async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadContacts(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation(),loadRelayAnalytics()]);}
 
 async function loadReports(){const status=els.filter.value;els.list.innerHTML='<div class="empty">読み込み中…</div>';try{const [shown,open]=await Promise.all([api(`/admin/reports?status=${encodeURIComponent(status)}`),api('/admin/reports?status=open')]);els.openCount.textContent=open.count;els.shownCount.textContent=shown.count;renderReports(shown.reports);}catch(e){els.list.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -368,6 +370,33 @@ function renderReports(rows){
     </article>`;
   }).join('');
 }
+
+function contactCategoryLabel(value){return ({general:'一般',bug:'不具合',request:'要望',other:'その他'})[value]||'その他';}
+async function loadContacts(){
+  if(!els.contactList||!els.contactFilter)return;
+  const status=els.contactFilter.value;
+  els.contactList.innerHTML='<div class="empty">読み込み中…</div>';
+  try{
+    const [shown,open]=await Promise.all([api(`/admin/contacts?status=${encodeURIComponent(status)}`),api('/admin/contacts?status=open')]);
+    if(els.openContactCount)els.openContactCount.textContent=Number(open.count||0).toLocaleString('ja-JP');
+    if(els.shownContactCount)els.shownContactCount.textContent=Number(shown.count||0).toLocaleString('ja-JP');
+    if(els.contactTabBadge){const n=Number(open.count||0);els.contactTabBadge.textContent=n.toLocaleString('ja-JP');els.contactTabBadge.hidden=n===0;}
+    renderContacts(shown.contacts||[]);
+  }catch(e){els.contactList.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}
+}
+function renderContacts(rows){
+  if(!rows.length){els.contactList.innerHTML='<div class="empty">お問い合わせはありません。</div>';return;}
+  els.contactList.innerHTML=rows.map(x=>{
+    const resolved=x.status==='resolved';
+    const page=x.pageUrl||'';
+    return `<article class="contact-card ${resolved?'is-resolved':''}" data-contact-id="${escapeHtml(x.id)}">
+      <div class="contact-card-head"><div><h3>${escapeHtml(x.subject||'件名なし')}</h3><span class="contact-category">${escapeHtml(contactCategoryLabel(x.category))}</span>${resolved?'<span class="resolved-badge">対応済み</span>':''}</div><time>${escapeHtml(new Date(x.createdAt).toLocaleString('ja-JP'))}</time></div>
+      <div class="contact-message"><p>${escapeHtml(x.message||'')}</p></div>
+      <div class="meta"><span>名前</span><strong>${escapeHtml(x.name||'未入力')}</strong><span>返信先</span><a class="inline-link" href="mailto:${escapeHtml(x.email||'')}">${escapeHtml(x.email||'')}</a><span>送信元</span>${page?`<a class="inline-link" href="${escapeHtml(page)}" target="_blank" rel="noopener noreferrer">${escapeHtml(page)}</a>`:'<em>記録なし</em>'}<span>ID</span><code>${escapeHtml(x.id)}</code></div>
+      <div class="actions"><a href="mailto:${escapeHtml(x.email||'')}?subject=${encodeURIComponent(`Re: ${x.subject||'お問い合わせ'}`)}">メールで返信</a><button data-contact-action="${resolved?'reopen':'resolve'}">${resolved?'未対応へ戻す':'対応済みにする'}</button><button class="delete" data-contact-action="delete">削除</button></div>
+    </article>`;
+  }).join('');
+}
 async function moderate(workId,action){if(action==='delete'){if(!confirm(`【完全削除】\nworkId ${workId} の作品本体と、他作品が使用していない関連素材をR2から削除します。\nこの操作は元に戻せません。`))return false;const typed=prompt(`誤操作防止のため、削除する workId を入力してください。\n\n${workId}`,'');if(typed===null)return false;if(typed.trim()!==workId){alert('workIdが一致しないため削除を中止しました。');return false;}await api(`/admin/work/${encodeURIComponent(workId)}`,{method:'DELETE'});toast('完全削除しました');return true;}await api(`/admin/work/${encodeURIComponent(workId)}/${action}`,{method:'POST'});toast(action==='suspend'?'一時停止しました':'再公開しました');return true;}
 els.list.addEventListener('click',async e=>{
   const b=e.target.closest('button[data-group-action]');if(!b)return;
@@ -382,6 +411,19 @@ els.list.addEventListener('click',async e=>{
       const done=await moderate(workId,action);if(done===false)return;
     }
     await loadDashboard();
+  }catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
+});
+if(els.contactList)els.contactList.addEventListener('click',async e=>{
+  const b=e.target.closest('button[data-contact-action]');if(!b)return;
+  const card=b.closest('.contact-card'),id=card?.dataset.contactId||'',action=b.dataset.contactAction;
+  if(!id)return;
+  if(action==='delete'&&!confirm('このお問い合わせを完全に削除しますか？\nこの操作は元に戻せません。'))return;
+  b.disabled=true;
+  try{
+    if(action==='delete')await api(`/admin/contact/${encodeURIComponent(id)}`,{method:'DELETE'});
+    else await api(`/admin/contact/${encodeURIComponent(id)}/${action}`,{method:'POST'});
+    toast(action==='delete'?'削除しました':action==='resolve'?'対応済みにしました':'未対応へ戻しました');
+    await Promise.all([loadContacts(),loadStats()]);
   }catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 async function inspect(){const id=els.workId.value.trim();if(!id)return;els.direct.textContent='確認中…';try{const d=await api(`/admin/work/${encodeURIComponent(id)}`);els.direct.innerHTML=`<div class="report-card"><div class="meta"><span>workId</span><code>${escapeHtml(d.id)}</code><span>状態</span><strong>${escapeHtml(d.state)}</strong><span>素材</span><span>${Number(d.assets?.length||0)}件</span></div><div class="actions"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">作品を見る</a><button data-direct="suspend" class="stop">一時停止</button><button data-direct="republish">再公開</button><button data-direct="delete" class="delete">完全削除</button></div></div>`;}catch(e){els.direct.textContent=`確認できません: ${e.message}`;}}
@@ -436,7 +478,7 @@ if(els.officialShelfItems)els.officialShelfItems.addEventListener('click',async 
   }
   const b=e.target.closest('[data-shelf-action]');if(!b)return;b.disabled=true;try{await api(`/admin/official-shelf/${encodeURIComponent(b.dataset.shelfId)}/${b.dataset.shelfAction}`,{method:'POST'});toast(b.dataset.shelfAction==='stop'?'停止しました':'再開しました');await loadOfficialShelfAdmin();}catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
-els.connect.addEventListener('click',connect);els.token.addEventListener('keydown',e=>{if(e.key==='Enter')connect();});els.refresh.addEventListener('click',loadDashboard);els.filter.addEventListener('change',loadReports);els.inspect.addEventListener('click',inspect);
+els.connect.addEventListener('click',connect);els.token.addEventListener('keydown',e=>{if(e.key==='Enter')connect();});els.refresh.addEventListener('click',loadDashboard);els.filter.addEventListener('change',loadReports);if(els.contactFilter)els.contactFilter.addEventListener('change',loadContacts);els.inspect.addEventListener('click',inspect);
 setAdminTab(sessionStorage.getItem('ahako-admin-tab')||'status',{remember:false});
 if(token)connect();
 })();

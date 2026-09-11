@@ -1060,3 +1060,35 @@ html{
   outline:none;
   box-shadow:none;
 }
+
+/* V63.35.38 — shared A-Hako footer menu between the two shelf actions. */
+.site-footer-menu{
+  position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));z-index:25;
+  transform:translateX(-50%);margin:0
+}
+.site-footer-menu>summary{
+  display:flex;align-items:center;justify-content:center;width:52px;height:48px;
+  padding:0;border:1px solid #d8d0c3;border-radius:16px;background:rgba(255,255,255,.88);
+  color:#171717;font-size:17px;font-weight:800;line-height:46px;letter-spacing:-.08em;
+  box-shadow:0 8px 24px rgba(45,35,22,.08);cursor:pointer;list-style:none;
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  -webkit-tap-highlight-color:transparent
+}
+.site-footer-menu>summary::-webkit-details-marker{display:none}
+.site-footer-menu>summary::marker{display:none;content:""}
+.site-footer-menu>summary:focus,.site-footer-menu>summary:focus-visible{outline:none}
+.site-footer-menu .footer-box{font-size:.82em;margin-left:1px}
+.site-footer-menu[open]>summary{background:#171717;color:#fff;border-color:#171717}
+.site-footer-menu>nav{
+  position:absolute;left:50%;bottom:calc(100% + 10px);display:grid;width:218px;
+  transform:translateX(-50%);padding:9px;border:1px solid #ddd5c8;border-radius:17px;
+  background:rgba(255,255,255,.97);box-shadow:0 16px 45px rgba(43,34,21,.18);
+  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)
+}
+.site-footer-menu>nav strong{padding:8px 10px 6px;color:#8a8277;font-size:9px;letter-spacing:.18em}
+.site-footer-menu>nav a{padding:10px;border-radius:10px;color:#292621;font-size:12px;font-weight:650;text-decoration:none}
+.site-footer-menu>nav a:active{background:#f2eee7}
+@media(max-width:680px) and (pointer:coarse){
+  .site-footer-menu{bottom:max(14px,env(safe-area-inset-bottom))}
+  .site-footer-menu>summary{width:48px;height:44px;border-radius:14px;font-size:16px;line-height:42px}
+}

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>お問い合わせ | あ箱</title><meta name="description" content="あ箱へのお問い合わせフォーム。"><link rel="stylesheet" href="../legal.css?v=63.35.38"></head>
+<body><header class="legal-top"><a class="legal-brand" href="../bookshelf/" aria-label="あ箱 本棚へ"><span>あ</span><span>□</span></a><a class="legal-back" href="../bookshelf/">本棚へ戻る</a></header><main class="legal-main">
+<p class="legal-eyebrow">A-HAKO / CONTACT</p><h1>お問い合わせ</h1><p class="legal-lead">不具合、機能へのご意見、そのほか「あ箱」に関するお問い合わせを受け付けています。</p>
+<section class="legal-section"><form id="contactForm" class="contact-form" novalidate>
+<label><span>お名前 <small>任意</small></span><input id="contactName" name="name" type="text" maxlength="80" autocomplete="name"></label>
+<label><span>返信先メールアドレス <small>必須</small></span><input id="contactEmail" name="email" type="email" maxlength="320" autocomplete="email" inputmode="email" required></label>
+<label><span>お問い合わせの種類 <small>必須</small></span><select id="contactCategory" name="category" required><option value="general">一般</option><option value="bug">不具合</option><option value="request">機能への要望</option><option value="other">その他</option></select></label>
+<label><span>件名 <small>必須</small></span><input id="contactSubject" name="subject" type="text" maxlength="120" required></label>
+<label><span>お問い合わせ内容 <small>必須・3000文字以内</small></span><textarea id="contactMessage" name="message" maxlength="3000" required></textarea></label>
+<label class="contact-hp" aria-hidden="true">ウェブサイト<input id="contactWebsite" name="website" type="text" tabindex="-1" autocomplete="off"></label>
+<p class="contact-consent">送信すると、返信とサービス運営のために入力内容を取り扱うことに同意したものとします。詳しくは<a href="../privacy/">プライバシーポリシー</a>をご確認ください。</p>
+<button id="contactSubmit" class="contact-submit" type="submit">送信する</button><p id="contactStatus" class="contact-status" role="status" aria-live="polite"></p>
+</form></section>
+<section class="legal-section"><h2>作品に関する権利侵害の申立て</h2><p>公開作品の著作権、無断転載などに関する申立ては、対象作品のPlayer内にある「報告」から送信してください。作品IDや対象箇所と一緒に運営へ届きます。</p></section>
+<footer class="legal-footer"><a href="../bookshelf/">あ箱 本棚</a><a href="../terms/">利用規約</a><a href="../privacy/">プライバシーポリシー</a><span>© A-HAKO</span></footer></main><script src="contact.js?v=63.35.38"></script></body></html>

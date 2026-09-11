@@ -1232,6 +1232,9 @@ $('#archiveDropZone').onclick=()=>{if(matchMedia('(pointer:coarse)').matches&&!a
 $('#closeArchive').onclick=()=>$('#archiveDialog').close();
 $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
+const siteFooterMenu=$('#siteFooterMenu');
+document.addEventListener('click',e=>{if(siteFooterMenu?.open&&!siteFooterMenu.contains(e.target))siteFooterMenu.open=false;});
+siteFooterMenu?.addEventListener('keydown',e=>{if(e.key==='Escape')siteFooterMenu.open=false;});
 installSceneDrop();
 installShelfScrollGuard();
 installDesktopShelfArrowKeys();

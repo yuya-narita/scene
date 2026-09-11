@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=63.35.37">
+  <link rel="stylesheet" href="bookshelf.css?v=63.35.38">
 </head>
 <body>
   <header class="topbar">
@@ -65,6 +65,16 @@
       <button id="createStudioIconButton" class="shelf-icon-action shelf-icon-pen" type="button" aria-label="Studioで作る" title="Studioで作る">✎</button>
       <button id="shelfAddIconButton" class="shelf-icon-action" type="button" aria-label="本を追加" title="本を追加">＋</button>
     </div>
+
+    <details id="siteFooterMenu" class="site-footer-menu">
+      <summary aria-label="あ箱の案内を開く"><span>あ</span><span class="footer-box">□</span></summary>
+      <nav aria-label="あ箱の案内">
+        <strong>あ箱</strong>
+        <a href="../contact/">お問い合わせ</a>
+        <a href="../terms/">利用規約</a>
+        <a href="../privacy/">プライバシーポリシー</a>
+      </nav>
+    </details>
 
     <button id="archiveDropZone" class="archive-drop-zone" type="button" hidden aria-label="しまった本を開く">
       <span class="archive-box-shell">
@@ -133,6 +143,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=63.35.37"></script>
+  <script src="bookshelf.js?v=63.35.38"></script>
 </body>
 </html>
