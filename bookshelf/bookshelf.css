@@ -764,7 +764,29 @@ body.x-claim-handoff-active>#toast{display:none!important}
   .shelf-cover-subtitle{font-size:clamp(7px,2.4vw,10px)}
   .shelf-cover-author,.shelf-cover-episode{font-size:clamp(6px,2vw,9px)}
 }
-\n\n/* V63.35.11 — single-stage shelf swipe + tighter metadata + split episode cover lines */\n#grid .book-meta{min-height:124px}\n#grid .book-work-info{min-height:50px;gap:2px}\n#grid .book-facts{padding-top:3px}\n.shelf-cover-episode{margin-top:10px}\n.shelf-cover-episode-title{\n  margin-top:3px;\n  font-family:"Yu Mincho","Hiragino Mincho ProN",serif;\n  font-size:clamp(7px,.72vw,11px);\n  line-height:1.35;\n  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;\n}\n@media(max-width:680px){\n  #grid .book-meta{min-height:112px}\n  #grid .book-work-info{min-height:44px}\n  #grid.grid[data-mobile-columns="3"] .book-meta{min-height:94px}\n  #grid.grid[data-mobile-columns="3"] .book-work-info{min-height:38px}\n  #grid.grid[data-mobile-columns="4"] .book-meta{min-height:82px}\n  #grid.grid[data-mobile-columns="4"] .book-work-info{min-height:32px}\n}\n
+
+
+/* V63.35.11 — single-stage shelf swipe + tighter metadata + split episode cover lines */
+#grid .book-meta{min-height:124px}
+#grid .book-work-info{min-height:50px;gap:2px}
+#grid .book-facts{padding-top:3px}
+.shelf-cover-episode{margin-top:10px}
+.shelf-cover-episode-title{
+  margin-top:3px;
+  font-family:"Yu Mincho","Hiragino Mincho ProN",serif;
+  font-size:clamp(7px,.72vw,11px);
+  line-height:1.35;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+}
+@media(max-width:680px){
+  #grid .book-meta{min-height:112px}
+  #grid .book-work-info{min-height:44px}
+  #grid.grid[data-mobile-columns="3"] .book-meta{min-height:94px}
+  #grid.grid[data-mobile-columns="3"] .book-work-info{min-height:38px}
+  #grid.grid[data-mobile-columns="4"] .book-meta{min-height:82px}
+  #grid.grid[data-mobile-columns="4"] .book-work-info{min-height:32px}
+}
+
 /* V63.35.12 — exact swipe snapshot geometry + compact authored cover + unified detail identity */
 /* The swipe snapshot must use the same local-card rules as the live #grid.
    Previous V63.35.x rules were scoped to #grid only, so Safari first showed a
@@ -953,4 +975,18 @@ body.x-claim-handoff-active>#toast{display:none!important}
   #grid{padding-top:0!important}
   .shelf-swipe-grid{padding-top:0!important}
   .official-shelf{margin-top:0!important}
+}
+
+
+/* V63.35.25 — local swipe snapshot/live typography must be pixel-identical. */
+:is(#grid,.shelf-swipe-grid) .book-meta{min-height:124px}
+:is(#grid,.shelf-swipe-grid) .book-work-info{min-height:50px;gap:2px}
+:is(#grid,.shelf-swipe-grid) .book-facts{padding-top:3px}
+@media(max-width:680px){
+  :is(#grid,.shelf-swipe-grid) .book-meta{min-height:112px}
+  :is(#grid,.shelf-swipe-grid) .book-work-info{min-height:44px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-meta{min-height:94px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-work-info{min-height:38px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-meta{min-height:82px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-work-info{min-height:32px}
 }

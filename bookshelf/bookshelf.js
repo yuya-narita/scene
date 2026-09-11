@@ -582,7 +582,16 @@ function makeShelfSwipeStage(nextTab,direction){
   const nextInner=document.createElement('div');
   currentInner.className='shelf-swipe-page-inner';
   nextInner.className='shelf-swipe-page-inner';
-  currentInner.append(current.cloneNode(true));
+  // V63.35.24: when leaving the official shelf, do not clone its live DOM.
+  // Official cards contain network-backed cover images; cloning them makes iOS Safari
+  // create a second image layer and can flash even when the original shelf is already
+  // fully visible. Keep the real official shelf as the outgoing page instead.
+  const useLiveCurrent=currentShelfTab==='official';
+  if(useLiveCurrent){
+    currentPage.style.visibility='hidden';
+  }else{
+    currentInner.append(current.cloneNode(true));
+  }
   nextInner.innerHTML=swipeShelfBodyHtml(nextTab);
   currentPage.append(currentInner);nextPage.append(nextInner);
   stage.append(currentPage,nextPage);document.body.append(stage);
@@ -608,18 +617,24 @@ function makeShelfSwipeStage(nextTab,direction){
   const targetOffset=(bodyDocTop-targetY)-stageTop;
   currentInner.style.transform=`translate3d(0,${currentOffset}px,0)`;
   nextInner.style.transform=`translate3d(0,${targetOffset}px,0)`;
-  return {stage,currentPage,nextPage,width,direction,nextTab};
+  return {stage,currentPage,nextPage,width,direction,nextTab,liveCurrent:useLiveCurrent?current:null};
 }
 function removeShelfSwipeStage(view){
+  if(view?.liveCurrent){
+    view.liveCurrent.style.transform='';
+    view.liveCurrent.style.filter='';
+  }
   if(view?.stage?.isConnected)view.stage.remove();
 }
 function positionShelfSwipeStage(view,dx){
   if(!view)return;
   view.currentPage.style.transform=`translate3d(${dx}px,0,0)`;
+  if(view.liveCurrent)view.liveCurrent.style.transform=`translate3d(${dx}px,0,0)`;
   const base=view.direction==='left'?view.width:-view.width;
   view.nextPage.style.transform=`translate3d(${base+dx}px,0,0)`;
   const progress=Math.min(1,Math.abs(dx)/Math.max(1,view.width));
   view.currentPage.style.filter=`brightness(${1-progress*.045})`;
+  if(view.liveCurrent)view.liveCurrent.style.filter=`brightness(${1-progress*.045})`;
   view.nextPage.style.boxShadow=view.direction==='left'?'-18px 0 28px rgba(35,28,20,.10)':'18px 0 28px rgba(35,28,20,.10)';
 }
 async function animateShelfSwipeStage(view,toX,duration=220){
@@ -629,12 +644,49 @@ async function animateShelfSwipeStage(view,toX,duration=220){
   const easing='cubic-bezier(.22,.72,.18,1)';
   const a=view.currentPage.animate([{transform:`translate3d(${from}px,0,0)`},{transform:`translate3d(${toX}px,0,0)`}],{duration,easing,fill:'forwards'});
   const b=view.nextPage.animate([{transform:`translate3d(${base+from}px,0,0)`},{transform:`translate3d(${base+toX}px,0,0)`}],{duration,easing,fill:'forwards'});
-  await Promise.all([a.finished.catch(()=>{}),b.finished.catch(()=>{})]);
+  let liveAnimation=null;
+  if(view.liveCurrent){
+    const liveFrom=new DOMMatrixReadOnly(getComputedStyle(view.liveCurrent).transform).m41||from;
+    liveAnimation=view.liveCurrent.animate([{transform:`translate3d(${liveFrom}px,0,0)`},{transform:`translate3d(${toX}px,0,0)`}],{duration,easing,fill:'forwards'});
+  }
+  await Promise.all([a.finished.catch(()=>{}),b.finished.catch(()=>{}),liveAnimation?.finished?.catch(()=>{})]);
   // Safari can finish the current-page animation a frame before the incoming page.
   // Commit both transforms synchronously so the new tab never shows the old shelf for one frame.
   view.currentPage.style.transform=`translate3d(${toX}px,0,0)`;
   view.nextPage.style.transform=`translate3d(${base+toX}px,0,0)`;
-  a.cancel();b.cancel();
+  if(view.liveCurrent)view.liveCurrent.style.transform=`translate3d(${toX}px,0,0)`;
+  a.cancel();b.cancel();if(liveAnimation)liveAnimation.cancel();
+}
+
+function adoptLocalSwipeSnapshot(view,staleUrls=[]){
+  // V63.35.25: the page the user actually saw during the swipe becomes the
+  // live local shelf. Do not throw that painted DOM away and rebuild the same
+  // cards with fresh blob: URLs; iOS Safari can repaint/reflow for one frame,
+  // which is visible as a flash and as metadata text resizing in 3/4 columns.
+  if(!view||view.nextTab==='official')return staleUrls;
+  const snapshotGrid=view.nextPage?.querySelector?.('.shelf-swipe-grid');
+  const liveGrid=$('#grid');
+  if(!snapshotGrid||!liveGrid)return staleUrls;
+
+  const snapshotBlobUrls=[...snapshotGrid.querySelectorAll('img[src^="blob:"]')].map(img=>img.src);
+  const keep=new Set(snapshotBlobUrls);
+  const unusedLiveUrls=coverUrls.filter(url=>!keep.has(url));
+
+  // Move the already-painted card nodes. Moving happens synchronously in the
+  // same task in which the swipe stage is removed, so WebKit never gets a
+  // paint opportunity between the viewer page and the real shelf.
+  liveGrid.replaceChildren(...snapshotGrid.childNodes);
+  liveGrid.dataset.mobileColumns=String(mobileShelfColumns);
+
+  // The render underneath created a second set of blob URLs. Those nodes are
+  // gone now, so revoke only that unused set and keep the URLs used by the
+  // adopted, already-painted cards alive as the current shelf URLs.
+  unusedLiveUrls.forEach(url=>{try{URL.revokeObjectURL(url);}catch(_){}});
+  coverUrls=[...new Set(snapshotBlobUrls)];
+  bindBookInteractions();
+
+  const kept=new Set(snapshotBlobUrls);
+  return staleUrls.filter(url=>!kept.has(url));
 }
 
 async function waitForLiveShelfVisualReady(){
@@ -749,7 +801,8 @@ function installShelfSwipe(){
   },{passive:false});
   window.addEventListener('touchend',async e=>{
     const g=gesture;gesture=null;if(!g)return;
-    const live=currentShelfBodyElement();if(live)live.style.transform='';
+    const live=currentShelfBodyElement();
+    if(live&&g.view?.liveCurrent!==live)live.style.transform='';
     if(g.cancelled||!g.horizontal||!g.view){removeShelfSwipeStage(g.view);return;}
     const t=e.changedTouches?.[0];if(!t){removeShelfSwipeStage(g.view);return;}
     const dx=t.clientX-g.x;
@@ -772,7 +825,11 @@ function installShelfSwipe(){
       // next shelf is rendered underneath. Removing the stage first exposed the
       // previous shelf for a frame on iOS Safari and looked like an afterimage.
       staleUrls=await switchShelf(next,{deferCoverRevoke:true});
-      await waitForLiveShelfVisualReady();
+      if(next==='official'){
+        await waitForLiveShelfVisualReady();
+      }else{
+        staleUrls=adoptLocalSwipeSnapshot(g.view,staleUrls);
+      }
     }finally{
       removeShelfSwipeStage(g.view);
       // Defensive cleanup for interrupted WebKit animations / rapid direction changes.
