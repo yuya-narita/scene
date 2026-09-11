@@ -814,6 +814,25 @@ async function waitForLiveShelfVisualReady(){
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 }
 
+async function revealPrepaintedLiveShelf(view){
+  // V63.35.52: local-to-local swipes no longer reparent the tall snapshot grid
+  // into #grid. Reparenting a 16-card, 2/3-column layer made iOS Safari discard
+  // and rasterize that layer again when the fixed swipe stage was removed.
+  // Keep the completed snapshot over the independently rendered live shelf,
+  // give WebKit a prepaint window, then reveal the live pixels over a few frames.
+  const stage=view?.stage;
+  if(!stage?.isConnected)return;
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  stage.style.willChange='opacity';
+  const animation=stage.animate(
+    [{opacity:1},{opacity:0}],
+    {duration:64,easing:'linear',fill:'forwards'}
+  );
+  await animation.finished.catch(()=>{});
+  stage.style.opacity='0';
+  animation.cancel();
+}
+
 function installShelfScrollGuard(){
   if(document.documentElement.dataset.shelfScrollGuardInstalled==='1')return;
   document.documentElement.dataset.shelfScrollGuardInstalled='1';
@@ -931,7 +950,12 @@ function installShelfSwipe(){
         await waitForLiveShelfVisualReady();
         adoptOfficialSwipeSnapshot(g.view);
       }else{
-        staleUrls=adoptLocalSwipeSnapshot(g.view,staleUrls);
+        // Render the real destination shelf underneath and leave it there.
+        // Moving the snapshot DOM into the document was the only operation
+        // unique to swipe navigation, and caused a visible WebKit reraster at
+        // deep scroll positions. Tab-button navigation never used that move.
+        await waitForLiveShelfVisualReady();
+        await revealPrepaintedLiveShelf(g.view);
       }
     }finally{
       restoreShelfScrollExtent(scrollExtentHold);
