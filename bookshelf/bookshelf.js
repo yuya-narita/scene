@@ -588,6 +588,11 @@ function makeShelfSwipeStage(nextTab,direction){
   // fully visible. Keep the real official shelf as the outgoing page instead.
   const useLiveCurrent=currentShelfTab==='official';
   if(useLiveCurrent){
+    // V63.35.26: the official shelf itself remains the outgoing visual.
+    // Mark the stage so its own background stays transparent; otherwise the
+    // fixed stage paints an opaque cream layer over the live official DOM and
+    // WebKit can flash that layer at creation/removal.
+    stage.classList.add('uses-live-current');
     currentPage.style.visibility='hidden';
   }else{
     currentInner.append(current.cloneNode(true));
