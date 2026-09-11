@@ -442,19 +442,23 @@ async function loadOfficialShelf({force=false}={}){
   if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'あ箱の本を読み込めませんでした。'));
   officialShelfItems=Array.isArray(payload.items)?payload.items:[];officialShelfLoaded=true;return officialShelfItems;
 }
-async function renderOfficialShelf(){
+function bindOfficialShelfInteractions(host=$('#officialBooks')){
+  if(!host)return;
+  host.querySelectorAll('.official-book-cover[data-official-read]').forEach(cover=>{
+    const open=()=>{const href=officialReadUrl(cover.dataset.officialRead);if(href)location.href=href;};
+    cover.onclick=open;
+    cover.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
+  });
+  host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=e=>{e.stopPropagation();claimOfficialBook(button);});
+}
+async function renderOfficialShelf({force=true}={}){
   const host=$('#officialBooks');if(!host)return;
   try{
-    const items=await loadOfficialShelf({force:true});
+    const items=await loadOfficialShelf({force});
     const owned=await getAllReaderBooks();
     const claimedEditions=new Set(owned.map(book=>`${String(book.workId||'')}::${String(book.editionId||'')}`));
     host.innerHTML=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
-    host.querySelectorAll('.official-book-cover[data-official-read]').forEach(cover=>{
-      const open=()=>{const href=officialReadUrl(cover.dataset.officialRead);if(href)location.href=href;};
-      cover.onclick=open;
-      cover.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
-    });
-    host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=e=>{e.stopPropagation();claimOfficialBook(button);});
+    bindOfficialShelfInteractions(host);
   }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
 }
 async function claimOfficialBook(button){
@@ -485,7 +489,7 @@ function applyShelfTab(tab,{remember=true}={}){
     b.setAttribute('aria-selected',on?'true':'false');
   });
 }
-async function render({deferCoverRevoke=false}={}){
+async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
   const staleCoverUrls=coverUrls;coverUrls=[];
   if(!deferCoverRevoke)staleCoverUrls.forEach(URL.revokeObjectURL);
   const masters=await Promise.all((await getAllWorks()).map(async w=>({...await hydrateStoredBookMetadata({...w,role:'master'}),role:'master'})));
@@ -530,7 +534,7 @@ async function render({deferCoverRevoke=false}={}){
     $('#emptyDistributionButton').hidden=created;
   }
   $('#grid').innerHTML=official?'':books.map(w=>bookCardHtml(w)).join('');
-  if(official)await renderOfficialShelf();
+  if(official)await renderOfficialShelf({force:refreshOfficial});
   // Re-read the persisted density on every render/reload before applying it.
   // This prevents the default 2-column value from briefly/incorrectly winning on Safari reload.
   mobileShelfColumns=loadMobileColumns();
@@ -539,7 +543,7 @@ async function render({deferCoverRevoke=false}={}){
   bindBookInteractions();
   return staleCoverUrls;
 }
-async function switchShelf(tab,{deferCoverRevoke=false}={}){const from=currentShelfTab;if(from)saveShelfScroll(from);applyShelfTab(tab);const stale=await render({deferCoverRevoke});await restoreShelfScroll(currentShelfTab);return stale;}
+async function switchShelf(tab,{deferCoverRevoke=false,refreshOfficial=true}={}){const from=currentShelfTab;if(from)saveShelfScroll(from);applyShelfTab(tab);const stale=await render({deferCoverRevoke,refreshOfficial});await restoreShelfScroll(currentShelfTab);return stale;}
 
 function swipeShelfBodyHtml(tab){
   if(tab==='official'){
@@ -696,6 +700,28 @@ function adoptLocalSwipeSnapshot(view,staleUrls=[]){
   return staleUrls.filter(url=>!kept.has(url));
 }
 
+function adoptOfficialSwipeSnapshot(view){
+  // V63.35.28: an incoming official swipe used to end by discarding the
+  // visible clone and exposing a separately fetched/rendered official DOM.
+  // If their content is identical, keep the DOM that is already on screen.
+  const snapshot=view?.nextPage?.querySelector?.('.official-shelf');
+  const live=$('#officialShelf');
+  const snapshotBooks=snapshot?.querySelector?.('#officialBooks');
+  const liveBooks=live?.querySelector?.('#officialBooks');
+  if(!snapshot||!live||!snapshotBooks||!liveBooks)return false;
+  // On the first visit the snapshot can still contain the loading state. The
+  // freshly loaded/decoded card nodes are moved into that already-positioned
+  // official page before it becomes the live shelf. A data refresh therefore
+  // changes only the shelf contents, never the whole painted page at teardown.
+  if(snapshotBooks.innerHTML!==liveBooks.innerHTML){
+    snapshotBooks.replaceChildren(...liveBooks.childNodes);
+  }
+  snapshot.hidden=false;
+  live.replaceWith(snapshot);
+  bindOfficialShelfInteractions(snapshotBooks);
+  return true;
+}
+
 async function waitForLiveShelfVisualReady(){
   // The swipe snapshot stays on top until the newly rendered live shelf has
   // finished decoding its cover images. Two rAFs are not enough on iOS Safari
@@ -831,9 +857,12 @@ function installShelfSwipe(){
       // Keep the completed viewer page covering the old live shelf while the real
       // next shelf is rendered underneath. Removing the stage first exposed the
       // previous shelf for a frame on iOS Safari and looked like an afterimage.
-      staleUrls=await switchShelf(next,{deferCoverRevoke:true});
+      // The official snapshot was built from the already-loaded hidden shelf.
+      // Do not force a second network fetch/render inside the landing frame.
+      staleUrls=await switchShelf(next,{deferCoverRevoke:true,refreshOfficial:next!=='official'});
       if(next==='official'){
         await waitForLiveShelfVisualReady();
+        adoptOfficialSwipeSnapshot(g.view);
       }else{
         staleUrls=adoptLocalSwipeSnapshot(g.view,staleUrls);
       }

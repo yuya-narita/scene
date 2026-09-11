@@ -996,8 +996,8 @@ body.x-claim-handoff-active>#toast{display:none!important}
    The real official shelf is the outgoing visual; only the incoming page is
    opaque. Text autosizing is fixed before either grid enters a transform. */
 html{
-  -webkit-text-size-adjust:100%;
-  text-size-adjust:100%;
+  -webkit-text-size-adjust:none;
+  text-size-adjust:none;
 }
 @media(max-width:680px) and (pointer:coarse){
   .shelf-swipe-page{background:#f6f3ec}
@@ -1010,5 +1010,19 @@ html{
   #grid .book-meta{
     -webkit-text-size-adjust:100%;
     text-size-adjust:100%;
+  }
+}
+
+/* V63.35.28 — transformed swipe pages must not enter Safari's text-inflation
+   calculation. Keep the explicit value on the temporary tree as well as html
+   so computed text sizing remains identical when the same DOM is adopted. */
+@media(max-width:680px) and (pointer:coarse){
+  .shelf-swipe-stage,
+  .shelf-swipe-stage .shelf-swipe-page,
+  .shelf-swipe-stage .shelf-swipe-page-inner,
+  .shelf-swipe-stage .shelf-swipe-grid,
+  .shelf-swipe-stage .shelf-swipe-grid *{
+    -webkit-text-size-adjust:none;
+    text-size-adjust:none;
   }
 }
