@@ -372,6 +372,46 @@ function loadShelfScroll(tab){
   const key=SHELF_SCROLL_KEYS[tab];if(!key)return 0;
   try{return Math.max(0,Number(localStorage.getItem(key)||0)||0);}catch(_){return 0;}
 }
+function holdShelfScrollExtent(){
+  const html=document.documentElement,body=document.body;
+  const height=Math.ceil(Math.max(html.scrollHeight,(window.scrollY||window.pageYOffset||0)+window.innerHeight));
+  const hold={htmlMinHeight:html.style.minHeight,bodyMinHeight:body.style.minHeight,released:false};
+  // Keep the outgoing document's scroll range while render() installs a
+  // shorter shelf. Without this, iOS moves its Visual Viewport before the
+  // remembered target scroll can be committed.
+  html.style.minHeight=`${height}px`;
+  body.style.minHeight=`${height}px`;
+  return hold;
+}
+function restoreShelfScrollExtent(hold){
+  if(!hold||hold.released)return;
+  hold.released=true;
+  document.documentElement.style.minHeight=hold.htmlMinHeight;
+  document.body.style.minHeight=hold.bodyMinHeight;
+}
+async function releaseShelfScrollExtentAtTarget(hold,tab){
+  const body=document.body;
+  body.classList.remove('shelf-no-vertical-scroll');
+  body.classList.add('shelf-scroll-restoring');
+  restoreShelfScrollExtent(hold);
+  const target=clampShelfScrollY(loadShelfScroll(tab));
+  const setTarget=()=>{
+    document.documentElement.scrollTop=target;
+    body.scrollTop=target;
+    try{window.scrollTo({left:0,top:target,behavior:'instant'});}catch(_){window.scrollTo(0,target);}
+  };
+  // Let the real target document height settle, then set and verify the target
+  // while the opaque swipe stage is still the visible page.
+  await new Promise(resolve=>requestAnimationFrame(resolve));
+  setTarget();
+  await new Promise(resolve=>requestAnimationFrame(resolve));
+  const actual=window.scrollY||window.pageYOffset||0;
+  const visualOffset=window.visualViewport?.offsetTop||0;
+  if(Math.abs(actual-target)>.5||(target===0&&Math.abs(visualOffset)>.5))setTarget();
+  await new Promise(resolve=>requestAnimationFrame(resolve));
+  body.classList.toggle('shelf-no-vertical-scroll',target===0&&shelfMeaningfulMaxScroll()===0);
+  body.classList.remove('shelf-scroll-restoring');
+}
 function restoreShelfScroll(tab){
   const savedY=loadShelfScroll(tab);
   const body=document.body;
@@ -873,6 +913,7 @@ function installShelfSwipe(){
     suppressBookClick=true;setTimeout(()=>{suppressBookClick=false;},280);
     const toX=g.direction==='left'?-g.view.width:g.view.width;
     let staleUrls=[];
+    const scrollExtentHold=holdShelfScrollExtent();
     try{
       await animateShelfSwipeStage(g.view,toX,175);
       // The incoming snapshot is now the only visible page while the live shelf renders underneath.
@@ -885,6 +926,7 @@ function installShelfSwipe(){
       // The official snapshot was built from the already-loaded hidden shelf.
       // Do not force a second network fetch/render inside the landing frame.
       staleUrls=await switchShelf(next,{deferCoverRevoke:true,refreshOfficial:next!=='official'});
+      await releaseShelfScrollExtentAtTarget(scrollExtentHold,next);
       if(next==='official'){
         await waitForLiveShelfVisualReady();
         adoptOfficialSwipeSnapshot(g.view);
@@ -892,6 +934,7 @@ function installShelfSwipe(){
         staleUrls=adoptLocalSwipeSnapshot(g.view,staleUrls);
       }
     }finally{
+      restoreShelfScrollExtent(scrollExtentHold);
       removeShelfSwipeStage(g.view);
       // Defensive cleanup for interrupted WebKit animations / rapid direction changes.
       document.querySelectorAll('.shelf-swipe-stage').forEach(stage=>stage.remove());
