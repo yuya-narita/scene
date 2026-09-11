@@ -1115,27 +1115,24 @@ html{
   }
 }
 
-/* V63.35.47 — keep the compact author baseline fixed during Safari swipe.
-   .book-facts is pushed to the bottom by margin-top:auto.  Leaving its flex
-   parent at min-height let WebKit round the remaining free space differently
-   while the 3-column grid was inside a transformed swipe page; the whole
-   rounding difference (about 2px) therefore appeared immediately above the
-   author line.  Use the already-established card heights as definite flex
-   sizes in both the live and swipe layout roots. */
-:is(#grid,.shelf-swipe-grid) .book-meta{
-  height:124px;
-  min-height:124px;
-  max-height:124px;
-  overflow:hidden;
-}
-@media(max-width:680px){
-  :is(#grid,.shelf-swipe-grid) .book-meta{
-    height:112px;min-height:112px;max-height:112px
+/* V63.35.48 — the compact author row sits outside .book-work-info, so it did
+   not inherit the paint isolation used by the other small metadata lines.
+   Keep that row on its own identical raster layer before, during and after a
+   swipe.  Definite pixel line boxes also remove the 3-column 9px × 1.45
+   fractional baseline that WebKit could snap differently after adoption. */
+@media(max-width:680px) and (pointer:coarse){
+  :is(#grid,.shelf-swipe-grid) .book-facts{
+    width:100%;min-width:0;max-width:100%;
+    line-height:16px;min-height:16px;
+    contain:paint;
+    transform:translateZ(0);
+    -webkit-backface-visibility:hidden;
+    backface-visibility:hidden;
   }
-  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-meta{
-    height:94px;min-height:94px;max-height:94px
+  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="3"] .book-facts{
+    line-height:13px;min-height:13px
   }
-  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-meta{
-    height:82px;min-height:82px;max-height:82px
+  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="4"] .book-facts{
+    line-height:12px;min-height:12px
   }
 }
