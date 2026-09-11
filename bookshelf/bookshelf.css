@@ -1063,7 +1063,7 @@ html{
 
 /* V63.35.39 — quiet, in-flow footer identity. It appears only after the
    shelf content instead of behaving like a third fixed primary action. */
-.site-footer{position:relative;z-index:25;display:flex;justify-content:center;margin-top:-52px;padding:0 20px max(28px,env(safe-area-inset-bottom))}
+.site-footer{position:relative;z-index:25;display:flex;justify-content:center;margin-top:0;padding:0 20px 44px}
 .site-footer-menu{position:relative;width:max-content;margin:0}
 .site-footer-menu>summary{
   display:flex;align-items:baseline;justify-content:center;min-width:44px;min-height:34px;
@@ -1087,6 +1087,8 @@ html{
 .site-footer-menu>nav a{padding:10px;border-radius:10px;color:#292621;font-size:12px;font-weight:650;text-decoration:none}
 .site-footer-menu>nav a:active{background:#f2eee7}
 @media(max-width:680px) and (pointer:coarse){
-  .site-footer{margin-top:-118px;padding-bottom:max(24px,env(safe-area-inset-bottom))}
+  /* The trailing space is after the mark. At the document's true bottom it
+     lifts the mark above both Safari toolbar variants on every shelf. */
+  .site-footer{margin-top:0;padding-bottom:max(116px,calc(env(safe-area-inset-bottom) + 94px))}
   .site-footer-menu>summary{min-width:44px;min-height:32px;padding:8px 12px;font-size:9px}
 }
