@@ -1006,23 +1006,21 @@ html{
   .shelf-swipe-stage.uses-live-current .shelf-swipe-page.is-next{background:#f6f3ec}
 }
 
-/* V63.35.31 — keep the narrow metadata box geometry explicit in both trees.
-   Landing no longer renames/reparents the temporary grid; the completed normal
-   #grid is revealed after its images and layout are ready. */
+/* V63.35.29 — only these two ellipsized metadata lines were being repainted.
+   Give their shared box a definite formatting/paint context in both the live
+   grid and the swipe grid. This prevents WebKit from recomputing its intrinsic
+   width and clip when the already-visible grid leaves the transformed stage. */
 @media(max-width:680px) and (pointer:coarse){
   :is(#grid,.shelf-swipe-grid) .book-work-info{
     width:100%;
     min-width:0;
     max-width:100%;
     box-sizing:border-box;
+    contain:layout paint;
+    transform:translateZ(0);
+    -webkit-backface-visibility:hidden;
+    backface-visibility:hidden;
   }
-}
-
-/* V63.35.32 — overflowing 7–8px metadata is pre-fitted once in JS. WebKit no
-   longer owns a live ellipsis calculation while the page is moving. */
-@media(max-width:680px) and (pointer:coarse){
-  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] :is(.book-series,.book-subtitle).is-shelf-text-fitted,
-  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] :is(.book-series,.book-subtitle).is-shelf-text-fitted{
-    text-overflow:clip;
-  }
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-work-info{height:38px;min-height:38px;max-height:38px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-work-info{height:32px;min-height:32px;max-height:32px}
 }

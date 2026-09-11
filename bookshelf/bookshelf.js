@@ -37,6 +37,74 @@ let officialShelfItems=[];
 let officialShelfLoaded=false;
 const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
 let shelfScrollLockY=0;
+const SWIPE_DIAGNOSTIC_KEY='ahako:bookshelf:swipe-diagnostic-v33';
+let swipeDiagnosticSession=null;
+let swipeDiagnosticRaf=0;
+
+function diagnosticRound(value){const n=Number(value);return Number.isFinite(n)?Math.round(n*1000)/1000:null;}
+function diagnosticRect(el){
+  if(!el)return null;
+  const r=el.getBoundingClientRect();
+  return{x:diagnosticRound(r.x),y:diagnosticRound(r.y),width:diagnosticRound(r.width),height:diagnosticRound(r.height),right:diagnosticRound(r.right),bottom:diagnosticRound(r.bottom)};
+}
+function diagnosticTransform(el){
+  if(!el)return null;
+  const cs=getComputedStyle(el);
+  return{transform:cs.transform,position:cs.position,display:cs.display,visibility:cs.visibility,opacity:cs.opacity,contain:cs.contain,willChange:cs.willChange};
+}
+function diagnosticTextMetric(root,label){
+  if(!root)return null;
+  const series=[...root.querySelectorAll('.book-series')];
+  const line=series.find(el=>String(el.textContent||'').includes('観測ログ'))||series.find(el=>el.scrollWidth>el.clientWidth+.5)||series[0];
+  if(!line)return{label,missing:true,rootRect:diagnosticRect(root),rootClass:root.className||'',rootId:root.id||''};
+  const book=line.closest('.book');
+  const subtitle=book?.querySelector('.book-subtitle');
+  const grid=line.closest('.grid');
+  const meta=line.closest('.book-meta');
+  const work=line.closest('.book-work-info');
+  const page=line.closest('.shelf-swipe-page');
+  const readLine=el=>{
+    if(!el)return null;
+    const cs=getComputedStyle(el),r=el.getBoundingClientRect();
+    return{text:el.textContent,rect:diagnosticRect(el),clientWidth:el.clientWidth,scrollWidth:el.scrollWidth,offsetWidth:el.offsetWidth,fontSize:cs.fontSize,lineHeight:cs.lineHeight,fontFamily:cs.fontFamily,fontWeight:cs.fontWeight,letterSpacing:cs.letterSpacing,whiteSpace:cs.whiteSpace,overflow:cs.overflow,textOverflow:cs.textOverflow,maxWidth:cs.maxWidth,width:cs.width,transform:cs.transform,opacity:cs.opacity,visibility:cs.visibility,deviceLeft:diagnosticRound(r.left*(window.devicePixelRatio||1)),deviceWidth:diagnosticRound(r.width*(window.devicePixelRatio||1))};
+  };
+  const gridStyle=grid?getComputedStyle(grid):null;
+  return{label,rootId:root.id||'',rootClass:root.className||'',series:readLine(line),subtitle:readLine(subtitle),bookRect:diagnosticRect(book),metaRect:diagnosticRect(meta),workRect:diagnosticRect(work),gridRect:diagnosticRect(grid),gridColumns:gridStyle?.gridTemplateColumns||null,columnGap:gridStyle?.columnGap||null,rowGap:gridStyle?.rowGap||null,pageRect:diagnosticRect(page),pageStyle:diagnosticTransform(page)};
+}
+function captureSwipeDiagnostic(phase,view){
+  const session=swipeDiagnosticSession;if(!session||session.samples.length>=120)return;
+  const vv=window.visualViewport;
+  session.samples.push({index:session.samples.length,t:diagnosticRound(performance.now()-session.startedAt),phase,tab:currentShelfTab,scrollX:window.scrollX,scrollY:window.scrollY,innerWidth:window.innerWidth,innerHeight:window.innerHeight,dpr:window.devicePixelRatio||1,visualViewport:vv?{width:diagnosticRound(vv.width),height:diagnosticRound(vv.height),scale:diagnosticRound(vv.scale),offsetLeft:diagnosticRound(vv.offsetLeft),offsetTop:diagnosticRound(vv.offsetTop)}:null,bodyClass:document.body.className,fonts:document.fonts?.status||'unsupported',stage:diagnosticTransform(view?.stage),currentPage:diagnosticTransform(view?.currentPage),nextPage:diagnosticTransform(view?.nextPage),live:diagnosticTextMetric($('#grid'),'live'),current:diagnosticTextMetric(view?.currentPage,'stage-current'),next:diagnosticTextMetric(view?.nextPage,'stage-next')});
+}
+function beginSwipeDiagnostic(view,fromTab,toTab,direction){
+  finishSwipeDiagnostic('superseded');
+  swipeDiagnosticSession={version:'V63.35.33',userAgent:navigator.userAgent,startedAt:performance.now(),startedAtIso:new Date().toISOString(),fromTab,toTab,direction,columns:mobileShelfColumns,screen:{width:screen.width,height:screen.height,availWidth:screen.availWidth,availHeight:screen.availHeight},samples:[]};
+  captureSwipeDiagnostic('stage-created',view);
+  const tick=()=>{if(!swipeDiagnosticSession)return;captureSwipeDiagnostic('raf',view);swipeDiagnosticRaf=requestAnimationFrame(tick);};
+  swipeDiagnosticRaf=requestAnimationFrame(tick);
+}
+function markSwipeDiagnostic(phase,view){captureSwipeDiagnostic(phase,view);}
+function finishSwipeDiagnostic(result,view){
+  if(!swipeDiagnosticSession)return;
+  if(swipeDiagnosticRaf)cancelAnimationFrame(swipeDiagnosticRaf);
+  swipeDiagnosticRaf=0;
+  captureSwipeDiagnostic(`finish:${result}`,view);
+  const done={...swipeDiagnosticSession,finishedAtIso:new Date().toISOString(),result};
+  swipeDiagnosticSession=null;
+  let history=[];try{history=JSON.parse(localStorage.getItem(SWIPE_DIAGNOSTIC_KEY)||'[]');}catch(_){history=[];}
+  if(!Array.isArray(history))history=[];
+  history.push(done);history=history.slice(-2);
+  try{localStorage.setItem(SWIPE_DIAGNOSTIC_KEY,JSON.stringify(history));}catch(_){try{localStorage.setItem(SWIPE_DIAGNOSTIC_KEY,JSON.stringify([done]));}catch(__){}}
+}
+async function copySwipeDiagnostic(){
+  closeBookshelfMenu();
+  const raw=localStorage.getItem(SWIPE_DIAGNOSTIC_KEY)||'[]';
+  let history=[];try{history=JSON.parse(raw);}catch(_){}
+  if(!Array.isArray(history)||!history.length){alert('まだ診断ログがありません。3列または4列で一度スワイプしてください。');return;}
+  const text=JSON.stringify({exportedAt:new Date().toISOString(),sessions:history},null,2);
+  try{await navigator.clipboard.writeText(text);toast(`診断ログ ${history.length}件をコピーしました`);}
+  catch(_){const area=document.createElement('textarea');area.value=text;area.style.cssText='position:fixed;inset:10px;z-index:99999;font-size:12px';document.body.append(area);area.focus();area.select();try{document.execCommand('copy');toast('診断ログをコピーしました');}catch(__){alert('ログをコピーできませんでした。表示されたテキストを全選択してコピーしてください。');}setTimeout(()=>area.remove(),1200);}
+}
 
 function shelfScrollShouldLock(){
   return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open);
@@ -219,47 +287,8 @@ function applyMobileColumns(value,{announce=false}={}){
   mobileShelfColumns=clampMobileColumns(value);
   const grid=$('#grid');
   if(grid)grid.dataset.mobileColumns=String(mobileShelfColumns);
-  stabilizeShelfOverflowText(grid);
   try{localStorage.setItem(MOBILE_COLUMNS_KEY,String(mobileShelfColumns));}catch(_){}
   if(announce)toast(`${mobileShelfColumns}列表示`);
-}
-
-// iOS Safari can change the ellipsis breakpoint of very small overflowing text
-// while a shelf page is swiped. Resolve the visible string once against the
-// element's real width, then use a normal clipped line during movement. The
-// complete value remains in data/aria-label and is restored before every fit.
-function stabilizeShelfOverflowText(root){
-  if(!root||!matchMedia('(max-width:680px) and (pointer:coarse)').matches)return;
-  const grid=root.matches?.('.grid')?root:root.querySelector?.('.grid');
-  const columns=Number(grid?.dataset?.mobileColumns||0);
-  if(!grid)return;
-  const lines=[...grid.querySelectorAll('.book-series,.book-subtitle')];
-  lines.forEach(line=>{
-    const full=line.dataset.fullText||line.textContent||'';
-    line.dataset.fullText=full;
-    line.textContent=full;
-    line.classList.remove('is-shelf-text-fitted');
-    line.removeAttribute('aria-label');
-    line.removeAttribute('title');
-  });
-  if(columns!==3&&columns!==4)return;
-  lines.forEach(line=>{
-    const full=line.dataset.fullText||'';
-    if(line.scrollWidth<=line.clientWidth+0.5)return;
-    const chars=Array.from(full);
-    let low=0,high=chars.length,best='…';
-    while(low<=high){
-      const middle=(low+high)>>1;
-      const candidate=`${chars.slice(0,middle).join('').trimEnd()}…`;
-      line.textContent=candidate;
-      if(line.scrollWidth<=line.clientWidth+0.5){best=candidate;low=middle+1;}
-      else high=middle-1;
-    }
-    line.textContent=best;
-    line.classList.add('is-shelf-text-fitted');
-    line.setAttribute('aria-label',full);
-    line.title=full;
-  });
 }
 function touchDistance(touches){
   if(!touches||touches.length<2)return 0;
@@ -652,9 +681,6 @@ function makeShelfSwipeStage(nextTab,direction){
   }
   currentPage.append(currentInner);nextPage.append(nextInner);
   stage.append(currentPage,nextPage);document.body.append(stage);
-  // Fit before the newly appended page can be painted. Both the normal and
-  // temporary grids therefore carry a fixed visible string during the swipe.
-  stabilizeShelfOverflowText(nextInner);
   const width=window.innerWidth;
   nextPage.style.transform=`translate3d(${direction==='left'?width:-width}px,0,0)`;
   // Clamp the remembered target position against the *snapshot's* actual body
@@ -682,6 +708,7 @@ function makeShelfSwipeStage(nextTab,direction){
 function removeShelfSwipeStage(view){
   if(view?.liveCurrent){
     view.liveCurrent.style.transform='';
+    view.liveCurrent.style.filter='';
   }
   if(view?.stage?.isConnected)view.stage.remove();
 }
@@ -691,6 +718,9 @@ function positionShelfSwipeStage(view,dx){
   if(view.liveCurrent)view.liveCurrent.style.transform=`translate3d(${dx}px,0,0)`;
   const base=view.direction==='left'?view.width:-view.width;
   view.nextPage.style.transform=`translate3d(${base+dx}px,0,0)`;
+  const progress=Math.min(1,Math.abs(dx)/Math.max(1,view.width));
+  view.currentPage.style.filter=`brightness(${1-progress*.045})`;
+  if(view.liveCurrent)view.liveCurrent.style.filter=`brightness(${1-progress*.045})`;
   view.nextPage.style.boxShadow=view.direction==='left'?'-18px 0 28px rgba(35,28,20,.10)':'18px 0 28px rgba(35,28,20,.10)';
 }
 async function animateShelfSwipeStage(view,toX,duration=220){
@@ -712,6 +742,39 @@ async function animateShelfSwipeStage(view,toX,duration=220){
   view.nextPage.style.transform=`translate3d(${base+toX}px,0,0)`;
   if(view.liveCurrent)view.liveCurrent.style.transform=`translate3d(${toX}px,0,0)`;
   a.cancel();b.cancel();if(liveAnimation)liveAnimation.cancel();
+}
+
+function adoptLocalSwipeSnapshot(view,staleUrls=[]){
+  // V63.35.27: the exact grid the user saw during the swipe becomes the live
+  // local shelf. V63.35.25 moved only its card children into the pre-existing
+  // #grid; that still changed the grid formatting/compositing context at the
+  // landing frame and made WebKit re-layout small 3/4-column metadata.
+  if(!view||view.nextTab==='official')return staleUrls;
+  const snapshotGrid=view.nextPage?.querySelector?.('.shelf-swipe-grid');
+  const liveGrid=$('#grid');
+  if(!snapshotGrid||!liveGrid)return staleUrls;
+
+  const snapshotBlobUrls=[...snapshotGrid.querySelectorAll('img[src^="blob:"]')].map(img=>img.src);
+  const keep=new Set(snapshotBlobUrls);
+  const unusedLiveUrls=coverUrls.filter(url=>!keep.has(url));
+
+  // Preserve the already-laid-out grid itself, not only its card children.
+  // The move and stage removal happen in the same task, so there is no frame
+  // with a missing #grid and no second grid layout root for Safari to adopt.
+  snapshotGrid.id='grid';
+  snapshotGrid.classList.remove('shelf-swipe-grid');
+  snapshotGrid.setAttribute('aria-live',liveGrid.getAttribute('aria-live')||'polite');
+  snapshotGrid.hidden=false;
+  liveGrid.replaceWith(snapshotGrid);
+
+  // The render underneath created a second set of blob URLs. Its whole grid is
+  // gone now, so revoke only that unused set and keep the adopted grid URLs.
+  unusedLiveUrls.forEach(url=>{try{URL.revokeObjectURL(url);}catch(_){}});
+  coverUrls=[...new Set(snapshotBlobUrls)];
+  bindBookInteractions();
+
+  const kept=new Set(snapshotBlobUrls);
+  return staleUrls.filter(url=>!kept.has(url));
 }
 
 function adoptOfficialSwipeSnapshot(view){
@@ -812,7 +875,7 @@ function installShelfSwipe(){
   let settling=false;
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
   const blockedTarget=target=>!!target?.closest?.('dialog[open],button:not(.book),input,select,textarea,a,summary,[contenteditable="true"]');
-  const cleanup=()=>{if(gesture?.view)removeShelfSwipeStage(gesture.view);gesture=null;};
+  const cleanup=()=>{if(gesture?.view){markSwipeDiagnostic('gesture-cleanup',gesture.view);finishSwipeDiagnostic('gesture-cleanup',gesture.view);removeShelfSwipeStage(gesture.view);}gesture=null;};
   window.addEventListener('touchstart',e=>{
     if(!mobile()||settling||e.touches.length!==1||pinchGesture)return;
     if(document.querySelector('dialog[open]')||$('#bookshelfMenu')?.open||blockedTarget(e.target))return;
@@ -837,13 +900,14 @@ function installShelfSwipe(){
     if(nextIndex<0||nextIndex>=tabs.length){
       // Edge resistance, like a viewer reaching the first/last page.
       const resisted=Math.sign(dx)*Math.min(44,Math.abs(dx)*.22);
-      if(g.view){removeShelfSwipeStage(g.view);g.view=null;}
+      if(g.view){markSwipeDiagnostic('edge-resistance',g.view);finishSwipeDiagnostic('edge-resistance',g.view);removeShelfSwipeStage(g.view);g.view=null;}
       const current=currentShelfBodyElement();if(current)current.style.transform=`translate3d(${resisted}px,0,0)`;
       return;
     }
     if(!g.view||g.direction!==direction){
-      if(g.view)removeShelfSwipeStage(g.view);
+      if(g.view){markSwipeDiagnostic('direction-change',g.view);finishSwipeDiagnostic('direction-change',g.view);removeShelfSwipeStage(g.view);}
       g.direction=direction;g.view=makeShelfSwipeStage(tabs[nextIndex],direction);
+      beginSwipeDiagnostic(g.view,currentShelfTab,tabs[nextIndex],direction);
       const current=currentShelfBodyElement();if(current)current.style.transform='';
     }
     positionShelfSwipeStage(g.view,dx);
@@ -852,11 +916,11 @@ function installShelfSwipe(){
     const g=gesture;gesture=null;if(!g)return;
     const live=currentShelfBodyElement();
     if(live&&g.view?.liveCurrent!==live)live.style.transform='';
-    if(g.cancelled||!g.horizontal||!g.view){removeShelfSwipeStage(g.view);return;}
-    const t=e.changedTouches?.[0];if(!t){removeShelfSwipeStage(g.view);return;}
+    if(g.cancelled||!g.horizontal||!g.view){markSwipeDiagnostic('cancel-before-stage-remove',g.view);finishSwipeDiagnostic('cancelled',g.view);removeShelfSwipeStage(g.view);return;}
+    const t=e.changedTouches?.[0];if(!t){markSwipeDiagnostic('missing-touchend',g.view);finishSwipeDiagnostic('missing-touchend',g.view);removeShelfSwipeStage(g.view);return;}
     const dx=t.clientX-g.x;
     const commit=Math.abs(dx)>g.view.width*.28||Math.abs(g.vx)>.55;
-    if(!commit){await animateShelfSwipeStage(g.view,0,190);removeShelfSwipeStage(g.view);return;}
+    if(!commit){markSwipeDiagnostic('snapback-start',g.view);await animateShelfSwipeStage(g.view,0,190);markSwipeDiagnostic('snapback-finished',g.view);finishSwipeDiagnostic('snapback',g.view);removeShelfSwipeStage(g.view);return;}
     // V63.24.3: serialize page commits. A second swipe that starts while the
     // previous viewer animation/render is still settling can otherwise build a
     // new stage from the old tab and leave Safari with a half-translated snapshot.
@@ -865,10 +929,13 @@ function installShelfSwipe(){
     const toX=g.direction==='left'?-g.view.width:g.view.width;
     let staleUrls=[];
     try{
+      markSwipeDiagnostic('commit-animation-start',g.view);
       await animateShelfSwipeStage(g.view,toX,175);
+      markSwipeDiagnostic('commit-animation-finished',g.view);
       // The incoming snapshot is now the only visible page while the live shelf renders underneath.
       g.view.currentPage.style.visibility='hidden';
       g.view.nextPage.style.transform='translate3d(0,0,0)';
+      markSwipeDiagnostic('incoming-locked',g.view);
       const next=g.view.nextTab;
       // Keep the completed viewer page covering the old live shelf while the real
       // next shelf is rendered underneath. Removing the stage first exposed the
@@ -876,25 +943,28 @@ function installShelfSwipe(){
       // The official snapshot was built from the already-loaded hidden shelf.
       // Do not force a second network fetch/render inside the landing frame.
       staleUrls=await switchShelf(next,{deferCoverRevoke:true,refreshOfficial:next!=='official'});
+      markSwipeDiagnostic('switch-render-restore-finished',g.view);
       if(next==='official'){
         await waitForLiveShelfVisualReady();
+        markSwipeDiagnostic('official-visual-ready',g.view);
         adoptOfficialSwipeSnapshot(g.view);
+        markSwipeDiagnostic('official-adopted',g.view);
       }else{
-        // V63.35.31: do not rename/reparent the temporary swipe grid. Changing
-        // .shelf-swipe-grid into #grid at landing makes WebKit recalculate only
-        // the narrow ellipsized metadata lines. The normal grid has already
-        // been rendered, positioned, and decoded underneath, so reveal it once.
-        await waitForLiveShelfVisualReady();
+        staleUrls=adoptLocalSwipeSnapshot(g.view,staleUrls);
+        markSwipeDiagnostic('local-adopted',g.view);
       }
     }finally{
+      markSwipeDiagnostic('before-stage-remove',g.view);
       removeShelfSwipeStage(g.view);
       // Defensive cleanup for interrupted WebKit animations / rapid direction changes.
       document.querySelectorAll('.shelf-swipe-stage').forEach(stage=>stage.remove());
       staleUrls.forEach(URL.revokeObjectURL);
       settling=false;
+      markSwipeDiagnostic('after-stage-remove',g.view);
+      finishSwipeDiagnostic('committed',g.view);
     }
   },{passive:true});
-  window.addEventListener('touchcancel',()=>{const g=gesture;gesture=null;const live=currentShelfBodyElement();if(live)live.style.transform='';removeShelfSwipeStage(g?.view);},{passive:true});
+  window.addEventListener('touchcancel',()=>{const g=gesture;gesture=null;const live=currentShelfBodyElement();if(live)live.style.transform='';markSwipeDiagnostic('touchcancel',g?.view);finishSwipeDiagnostic('touchcancel',g?.view);removeShelfSwipeStage(g?.view);},{passive:true});
 }
 
 function detailWorkInfoHtml(w){
@@ -1222,6 +1292,7 @@ $('#distributionInput').onchange=async e=>{const file=e.target.files?.[0];if(!fi
 $('#fileInput').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const expected=e.target.dataset.replace||'';const id=await addMaster(file);if(expected&&expected!==id)toast('別作品のMasterだったため、その作品として追加しました。');applyShelfTab('created');$('#detailDialog').close();await render();}catch(err){alert(err.message||'Masterを追加できませんでした。');}finally{e.target.value='';e.target.dataset.replace='';}};
 $('#backupButton').onclick=()=>{closeBookshelfMenu();backupShelf().catch(e=>alert(e.message));};
 $('#restoreButton').onclick=()=>{closeBookshelfMenu();$('#restoreInput').click();};
+$('#copySwipeDiagnostic')?.addEventListener('click',copySwipeDiagnostic);
 $('#restoreInput').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{await restoreShelf(f);}catch(err){alert(err.message||'復元できませんでした。');}finally{e.target.value='';}};
 $('#exportBoxButton')?.addEventListener('click',()=>exportStorageBox().catch(e=>alert(e.message||'箱を書き出せませんでした。')));
 $('#importBoxButton')?.addEventListener('click',()=>$('#boxImportInput')?.click());
