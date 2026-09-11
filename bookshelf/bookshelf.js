@@ -31,10 +31,13 @@ let archiveDockOpen=false;
 let mobileShelfColumns=loadMobileColumns();
 let pinchGesture=null;
 let shelfDataCache={owned:[],created:[]};
+let localShelfViews={owned:null,created:null};
 const insightsCache=new Map();
 const copyJourneyCache=new Map();
 let officialShelfItems=[];
 let officialShelfLoaded=false;
+let officialShelfLoadPromise=null;
+let officialShelfRenderPromise=null;
 const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
 let shelfScrollLockY=0;
 
@@ -217,8 +220,8 @@ function loadMobileColumns(){
 }
 function applyMobileColumns(value,{announce=false}={}){
   mobileShelfColumns=clampMobileColumns(value);
-  const grid=$('#grid');
-  if(grid)grid.dataset.mobileColumns=String(mobileShelfColumns);
+  const grids=new Set([$('#grid'),localShelfViews.owned,localShelfViews.created].filter(Boolean));
+  grids.forEach(grid=>{grid.dataset.mobileColumns=String(mobileShelfColumns);});
   try{localStorage.setItem(MOBILE_COLUMNS_KEY,String(mobileShelfColumns));}catch(_){}
   if(announce)toast(`${mobileShelfColumns}列表示`);
 }
@@ -412,21 +415,30 @@ async function releaseShelfScrollExtentAtTarget(hold,tab){
   body.classList.toggle('shelf-no-vertical-scroll',target===0&&shelfMeaningfulMaxScroll()===0);
   body.classList.remove('shelf-scroll-restoring');
 }
-function restoreShelfScroll(tab){
+function restoreShelfScroll(tab,{conceal=true}={}){
   const savedY=loadShelfScroll(tab);
   const body=document.body;
   // Keep the root in its normal scrolling mode while Safari settles a document
   // height change. Switching to overflow:hidden here can resurrect the old
   // Visual Viewport offset on the next frame.
   body?.classList.remove('shelf-no-vertical-scroll');
-  body?.classList.add('shelf-scroll-restoring');
-  return new Promise(resolve=>requestAnimationFrame(()=>{
-    // Clamp to the shelf body's real travel, not document.scrollHeight. On iOS
-    // a short shelf can otherwise inherit a bogus scroll range from 100vh/main
-    // padding and then carry that offset into the next manga-viewer page.
-    const y=clampShelfScrollY(savedY);
-    try{localStorage.setItem(SHELF_SCROLL_KEYS[tab],String(y));}catch(_){}
+  body?.classList.toggle('shelf-scroll-restoring',conceal);
+  // Clamp to the shelf body's real travel, not document.scrollHeight. On iOS
+  // a short shelf can otherwise inherit a bogus scroll range from 100vh/main
+  // padding and then carry that offset into the next manga-viewer page.
+  const y=clampShelfScrollY(savedY);
+  try{localStorage.setItem(SHELF_SCROLL_KEYS[tab],String(y));}catch(_){}
+  const setTarget=()=>{
+    document.documentElement.scrollTop=y;
+    body.scrollTop=y;
     try{window.scrollTo({left:0,top:y,behavior:'instant'});}catch(_){window.scrollTo(0,y);}
+  };
+  // Tab navigation has no foreground swipe page to cover the target. Commit
+  // its scroll position in the same task as the retained DOM switch so the
+  // browser never paints either a hidden shelf or the target at the old Y.
+  if(!conceal)setTarget();
+  return new Promise(resolve=>requestAnimationFrame(()=>{
+    if(conceal)setTarget();
     requestAnimationFrame(()=>{
       // iOS may apply scroll anchoring after the first successful scrollTo.
       // Correct once more while the swipe page still covers the live shelf,
@@ -434,9 +446,7 @@ function restoreShelfScroll(tab){
       const actual=window.scrollY||window.pageYOffset||0;
       const visualOffset=window.visualViewport?.offsetTop||0;
       if(Math.abs(actual-y)>.5||(y===0&&Math.abs(visualOffset)>.5)){
-        document.documentElement.scrollTop=y;
-        body.scrollTop=y;
-        try{window.scrollTo({left:0,top:y,behavior:'instant'});}catch(_){window.scrollTo(0,y);}
+        setTarget();
       }
       requestAnimationFrame(()=>{
         body?.classList.toggle('shelf-no-vertical-scroll',y===0&&shelfMeaningfulMaxScroll()===0);
@@ -491,10 +501,15 @@ function officialCardHtml(item,claimed=false){
 }
 async function loadOfficialShelf({force=false}={}){
   if(officialShelfLoaded&&!force)return officialShelfItems;
-  const response=await fetch(`${API_BASE}/official-shelf`,{cache:'no-store'});
-  const payload=await response.json().catch(()=>null);
-  if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'あ箱の本を読み込めませんでした。'));
-  officialShelfItems=Array.isArray(payload.items)?payload.items:[];officialShelfLoaded=true;return officialShelfItems;
+  if(officialShelfLoadPromise&&!force)return officialShelfLoadPromise;
+  const job=(async()=>{
+    const response=await fetch(`${API_BASE}/official-shelf`,{cache:'no-store'});
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'あ箱の本を読み込めませんでした。'));
+    officialShelfItems=Array.isArray(payload.items)?payload.items:[];officialShelfLoaded=true;return officialShelfItems;
+  })();
+  if(!force)officialShelfLoadPromise=job;
+  try{return await job;}finally{if(officialShelfLoadPromise===job)officialShelfLoadPromise=null;}
 }
 function bindOfficialShelfInteractions(host=$('#officialBooks')){
   if(!host)return;
@@ -505,15 +520,20 @@ function bindOfficialShelfInteractions(host=$('#officialBooks')){
   });
   host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=e=>{e.stopPropagation();claimOfficialBook(button);});
 }
-async function renderOfficialShelf({force=true}={}){
-  const host=$('#officialBooks');if(!host)return;
-  try{
-    const items=await loadOfficialShelf({force});
-    const owned=await getAllReaderBooks();
-    const claimedEditions=new Set(owned.map(book=>`${String(book.workId||'')}::${String(book.editionId||'')}`));
-    host.innerHTML=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
-    bindOfficialShelfInteractions(host);
-  }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
+function renderOfficialShelf({force=true}={}){
+  if(officialShelfRenderPromise&&!force)return officialShelfRenderPromise;
+  const job=(async()=>{
+    const host=$('#officialBooks');if(!host)return;
+    try{
+      const items=await loadOfficialShelf({force});
+      const owned=await getAllReaderBooks();
+      const claimedEditions=new Set(owned.map(book=>`${String(book.workId||'')}::${String(book.editionId||'')}`));
+      host.innerHTML=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
+      bindOfficialShelfInteractions(host);
+    }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
+  })();
+  if(!force)officialShelfRenderPromise=job;
+  return job.finally(()=>{if(officialShelfRenderPromise===job)officialShelfRenderPromise=null;});
 }
 async function claimOfficialBook(button){
   if(button.disabled)return;const shelfId=String(button.dataset.officialClaim||'');
@@ -523,7 +543,7 @@ async function claimOfficialBook(button){
     const payload=await response.json().catch(()=>null);
     if(!response.ok||!payload?.ok||!payload?.scene){const code=String(payload?.code||'');throw new Error(code==='SHELF_SOLD_OUT'?'この種本はすべて旅立ちました。':code==='SHELF_ALREADY_CLAIMED'?'この種本はすでに受け取っています。':String(payload?.error||'一冊を受け取れませんでした。'));}
     const file=await distributionFileFromClaimScene(payload.scene);await addDistribution(file,{silent:true});
-    officialShelfLoaded=false;await renderOfficialShelf();toast('あ箱から一冊を受け取りました。');
+    officialShelfLoaded=false;await render({refreshOfficial:true});toast('あ箱から一冊を受け取りました。');
     setTimeout(()=>switchShelf('owned'),450);
   }catch(e){button.disabled=false;button.textContent=before;toast(e?.message||String(e));}
 }
@@ -543,24 +563,51 @@ function applyShelfTab(tab,{remember=true}={}){
     b.setAttribute('aria-selected',on?'true':'false');
   });
 }
-async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
-  const staleCoverUrls=coverUrls;coverUrls=[];
-  if(!deferCoverRevoke)staleCoverUrls.forEach(URL.revokeObjectURL);
-  const masters=await Promise.all((await getAllWorks()).map(async w=>({...await hydrateStoredBookMetadata({...w,role:'master'}),role:'master'})));
-  const readers=await Promise.all((await getAllReaderBooks()).map(async w=>({...await hydrateStoredBookMetadata({...w,role:'distribution'}),role:'distribution'})));
-  shelfCounts={owned:readers.length,created:masters.length};
-  shelfDataCache={owned:readers,created:masters};
-  if(!currentShelfTab)currentShelfTab=chooseFirstShelf();
-  applyShelfTab(currentShelfTab,{remember:false});
-  $('#ownedTab').textContent=`もっている本${readers.length?` ${readers.length}`:''}`;
-  $('#createdTab').textContent=`つくった本${masters.length?` ${masters.length}`:''}`;
+function buildLocalShelfView(tab){
+  const grid=document.createElement('section');
+  grid.className='grid';
+  grid.dataset.shelfView=tab;
+  grid.dataset.mobileColumns=String(mobileShelfColumns);
+  grid.setAttribute('aria-live','polite');
+  const arranged=orderedShelfBooks(shelfDataCache[tab]||[],tab);
+  grid.innerHTML=arranged.visible.map(w=>bookCardHtml(w)).join('');
+  return grid;
+}
+
+function rebuildLocalShelfViews(){
+  const live=$('#grid');
+  if(live)live.removeAttribute('id');
+  localShelfViews={
+    owned:buildLocalShelfView('owned'),
+    created:buildLocalShelfView('created')
+  };
+  const mounted=currentShelfTab==='created'?localShelfViews.created:localShelfViews.owned;
+  mounted.id='grid';
+  if(live)live.replaceWith(mounted);
+  else $('#officialShelf')?.before(mounted);
+}
+
+function activateLocalShelfView(tab){
+  const target=localShelfViews[tab];
+  const live=$('#grid');
+  if(!target)return live;
+  if(live!==target){
+    if(live){live.removeAttribute('id');live.hidden=true;live.replaceWith(target);}
+    else $('#officialShelf')?.before(target);
+    target.id='grid';
+  }
+  target.hidden=false;
+  return target;
+}
+
+async function presentShelfFromCache({refreshOfficial=false}={}){
   const official=currentShelfTab==='official';
-  const createdShelf=currentShelfTab==='created';
-  const source=createdShelf?masters:readers;
+  const source=official?[]:(shelfDataCache[currentShelfTab]||[]);
   const arranged=official?{visible:[],archived:[]}:orderedShelfBooks(source,currentShelfTab);
   const books=arranged.visible;activeBooks=books;activeArchivedBooks=arranged.archived;
+  const grid=official?$('#grid'):activateLocalShelfView(currentShelfTab);
   $('#officialShelf').hidden=!official;
-  $('#grid').hidden=official;
+  if(grid)grid.hidden=official;
   $('#emptyState').hidden=official||books.length>0||arranged.archived.length>0;
   $('#countText').textContent=official?'あ箱の本':`${source.length}冊`;
   const shelfActions=$('#shelfHeadActions'),shelfAdd=$('#shelfAddIconButton'),studioCreate=$('#createStudioIconButton');
@@ -576,7 +623,7 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
   const archiveDrop=$('#archiveDropZone'),archiveLauncher=$('#archiveLauncher');
   archiveDrop.hidden=!archiveVisible;
   archiveLauncher.hidden=!archiveVisible;
-  if(!archiveVisible) setArchiveDock(false);
+  if(!archiveVisible)setArchiveDock(false);
   $('#archiveCount').textContent=`${arranged.archived.length}冊`;
   $('#archiveLauncherCount').textContent=String(arranged.archived.length);
   if(!official&&!books.length&&!arranged.archived.length){
@@ -587,17 +634,47 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
     $('#emptyAddButton').hidden=!created;
     $('#emptyDistributionButton').hidden=created;
   }
-  $('#grid').innerHTML=official?'':books.map(w=>bookCardHtml(w)).join('');
-  if(official)await renderOfficialShelf({force:refreshOfficial});
-  // Re-read the persisted density on every render/reload before applying it.
-  // This prevents the default 2-column value from briefly/incorrectly winning on Safari reload.
-  mobileShelfColumns=loadMobileColumns();
+  if(official&&refreshOfficial)await renderOfficialShelf({force:true});
   applyMobileColumns(mobileShelfColumns);
   installShelfPinch();
-  bindBookInteractions();
+  if(!official)bindBookInteractions();
+}
+
+async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
+  const staleCoverUrls=coverUrls;coverUrls=[];
+  if(!deferCoverRevoke)staleCoverUrls.forEach(URL.revokeObjectURL);
+  const masters=await Promise.all((await getAllWorks()).map(async w=>({...await hydrateStoredBookMetadata({...w,role:'master'}),role:'master'})));
+  const readers=await Promise.all((await getAllReaderBooks()).map(async w=>({...await hydrateStoredBookMetadata({...w,role:'distribution'}),role:'distribution'})));
+  shelfCounts={owned:readers.length,created:masters.length};
+  shelfDataCache={owned:readers,created:masters};
+  if(!currentShelfTab)currentShelfTab=chooseFirstShelf();
+  applyShelfTab(currentShelfTab,{remember:false});
+  $('#ownedTab').textContent=`もっている本${readers.length?` ${readers.length}`:''}`;
+  $('#createdTab').textContent=`つくった本${masters.length?` ${masters.length}`:''}`;
+  mobileShelfColumns=loadMobileColumns();
+  rebuildLocalShelfViews();
+  await presentShelfFromCache({refreshOfficial:currentShelfTab==='official'&&refreshOfficial});
+  // Prepare the official shelf once in the background. Navigation reuses it
+  // and never forces a network refresh merely because the user changed tabs.
+  if(currentShelfTab!=='official'&&!officialShelfLoaded)renderOfficialShelf({force:false}).catch(()=>{});
   return staleCoverUrls;
 }
-async function switchShelf(tab,{deferCoverRevoke=false,refreshOfficial=true}={}){const from=currentShelfTab;if(from)saveShelfScroll(from);applyShelfTab(tab);const stale=await render({deferCoverRevoke,refreshOfficial});await restoreShelfScroll(currentShelfTab);return stale;}
+
+async function switchShelf(tab,{refreshOfficial=false,concealRestore=false}={}){
+  if(!['owned','created','official'].includes(tab)||tab===currentShelfTab)return [];
+  const from=currentShelfTab;
+  if(from)saveShelfScroll(from);
+  // A first official visit may race the background preload. Finish it while
+  // the current shelf (or swipe stage) remains visible, then switch once.
+  if(tab==='official'){
+    if(officialShelfRenderPromise)await officialShelfRenderPromise;
+    else if(!officialShelfLoaded)await renderOfficialShelf({force:false});
+  }
+  applyShelfTab(tab);
+  await presentShelfFromCache({refreshOfficial});
+  await restoreShelfScroll(currentShelfTab,{conceal:concealRestore});
+  return [];
+}
 
 function swipeShelfBodyHtml(tab){
   if(tab==='official'){
@@ -607,7 +684,18 @@ function swipeShelfBodyHtml(tab){
   const source=tab==='created'?shelfDataCache.created:shelfDataCache.owned;
   const arranged=orderedShelfBooks(source,tab);
   if(arranged.visible.length){
-    return `<section class="grid shelf-swipe-grid" data-mobile-columns="${mobileShelfColumns}">${arranged.visible.map(w=>bookCardHtml(w)).join('')}</section>`;
+    // V63.35.54: clone the already-built persistent shelf. Do not create a
+    // second set of Blob URLs merely because the user started navigating.
+    const cached=localShelfViews[tab];
+    if(cached){
+      const snapshot=cached.cloneNode(true);
+      snapshot.removeAttribute('id');
+      snapshot.removeAttribute('hidden');
+      snapshot.classList.add('shelf-swipe-grid');
+      snapshot.dataset.mobileColumns=String(mobileShelfColumns);
+      return snapshot.outerHTML;
+    }
+    return `<section class="grid shelf-swipe-grid" data-mobile-columns="${mobileShelfColumns}"></section>`;
   }
   const created=tab==='created';
   const title=created?'まだ、つくった本はありません':'まだ、もっている本はありません';
@@ -950,19 +1038,12 @@ function installShelfSwipe(){
       // previous shelf for a frame on iOS Safari and looked like an afterimage.
       // The official snapshot was built from the already-loaded hidden shelf.
       // Do not force a second network fetch/render inside the landing frame.
-      staleUrls=await switchShelf(next,{deferCoverRevoke:true,refreshOfficial:next!=='official'});
+      staleUrls=await switchShelf(next,{refreshOfficial:false,concealRestore:true});
       await releaseShelfScrollExtentAtTarget(scrollExtentHold,next);
-      if(next==='official'){
-        await waitForLiveShelfVisualReady();
-        adoptOfficialSwipeSnapshot(g.view);
-      }else{
-        // Render the real destination shelf underneath and leave it there.
-        // Moving the snapshot DOM into the document was the only operation
-        // unique to swipe navigation, and caused a visible WebKit reraster at
-        // deep scroll positions. Tab-button navigation never used that move.
-        await waitForLiveShelfVisualReady();
-        await revealPrepaintedLiveShelf(g.view);
-      }
+      // Every destination is now a retained live shelf. Do not replace either
+      // the local grid or official shelf with the swipe snapshot at landing.
+      await waitForLiveShelfVisualReady();
+      await revealPrepaintedLiveShelf(g.view);
     }finally{
       restoreShelfScrollExtent(scrollExtentHold);
       removeShelfSwipeStage(g.view);
@@ -1173,6 +1254,8 @@ async function sendBookToBox(id,targetEl=null){if(!id||!SHELF_ARCHIVE_KEYS[curre
 function bindBookInteractions(){
   const books=Array.from(document.querySelectorAll('#grid .book')),box=$('#archiveDropZone'),launcher=$('#archiveLauncher');
   books.forEach(book=>{
+    if(book.dataset.bookshelfInteractionsBound==='1')return;
+    book.dataset.bookshelfInteractionsBound='1';
     book.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();});
     book.addEventListener('selectstart',e=>e.preventDefault());
     book.addEventListener('click',e=>{if(suppressBookClick){e.preventDefault();e.stopPropagation();return;}openDetail(book.dataset.role,book.dataset.id);});
