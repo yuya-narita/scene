@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=63.35.46">
+  <link rel="stylesheet" href="bookshelf.css?v=63.35.49-diagnostic">
 </head>
 <body>
   <header class="topbar">
@@ -17,6 +17,7 @@
         <div class="menu-separator"></div>
         <button id="backupButton" type="button">本棚をバックアップ</button>
         <button id="restoreButton" type="button">バックアップから復元</button>
+        <button id="saveSwipeDiagnostic" type="button">スワイプ診断結果を保存</button>
         <p>Master .scene と、自分が持っている Distribution .scene はこの端末のブラウザ内に保存されます。作品本体はサーバーへ送信しません。</p>
         <p class="backup-private-note">バックアップにはMaster本体と「自分の一冊」のcopyIdが含まれます。端末移動・保管用の個人データとして扱い、他人への配布には使わないでください。</p>
         <div class="menu-separator"></div>
@@ -139,6 +140,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=63.35.46"></script>
+  <script src="bookshelf.js?v=63.35.49-diagnostic"></script>
 </body>
 </html>

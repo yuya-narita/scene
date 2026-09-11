@@ -1114,25 +1114,3 @@ html{
     height:25px;min-height:25px;max-height:25px;flex-basis:25px
   }
 }
-
-/* V63.35.48 — the compact author row sits outside .book-work-info, so it did
-   not inherit the paint isolation used by the other small metadata lines.
-   Keep that row on its own identical raster layer before, during and after a
-   swipe.  Definite pixel line boxes also remove the 3-column 9px × 1.45
-   fractional baseline that WebKit could snap differently after adoption. */
-@media(max-width:680px) and (pointer:coarse){
-  :is(#grid,.shelf-swipe-grid) .book-facts{
-    width:100%;min-width:0;max-width:100%;
-    line-height:16px;min-height:16px;
-    contain:paint;
-    transform:translateZ(0);
-    -webkit-backface-visibility:hidden;
-    backface-visibility:hidden;
-  }
-  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="3"] .book-facts{
-    line-height:13px;min-height:13px
-  }
-  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="4"] .book-facts{
-    line-height:12px;min-height:12px
-  }
-}

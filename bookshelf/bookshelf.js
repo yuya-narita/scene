@@ -37,6 +37,84 @@ let officialShelfItems=[];
 let officialShelfLoaded=false;
 const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
 let shelfScrollLockY=0;
+const SWIPE_DIAGNOSTIC_KEY='ahako:bookshelf:swipe-diagnostic-v49';
+let swipeDiagnosticSession=null;
+let swipeDiagnosticView=null;
+let swipeDiagnosticRaf=0;
+
+function diagnosticRound(value){
+  const n=Number(value);
+  return Number.isFinite(n)?Math.round(n*1000)/1000:null;
+}
+function diagnosticRect(el){
+  if(!el)return null;
+  const r=el.getBoundingClientRect();
+  return [diagnosticRound(r.x),diagnosticRound(r.y),diagnosticRound(r.width),diagnosticRound(r.height)];
+}
+function diagnosticElement(el){
+  if(!el)return null;
+  const cs=getComputedStyle(el);
+  return{r:diagnosticRect(el),fs:cs.fontSize,lh:cs.lineHeight,m:cs.marginTop,p:cs.paddingTop,t:cs.transform,v:cs.visibility,d:cs.display};
+}
+function diagnosticRoot(root){
+  if(!root)return null;
+  const grid=root.matches?.('.grid')?root:root.querySelector?.('.grid');
+  const book=grid?.querySelector?.('.book');
+  const meta=book?.querySelector?.('.book-meta');
+  return{
+    grid:diagnosticRect(grid),columns:grid?getComputedStyle(grid).gridTemplateColumns:null,
+    book:diagnosticRect(book),cover:diagnosticRect(book?.querySelector?.('.cover')),
+    meta:diagnosticElement(meta),title:diagnosticElement(meta?.querySelector?.('h3')),
+    work:diagnosticElement(meta?.querySelector?.('.book-work-info')),
+    author:diagnosticElement(meta?.querySelector?.('.book-facts'))
+  };
+}
+function captureSwipeDiagnostic(phase,view=swipeDiagnosticView){
+  const s=swipeDiagnosticSession;if(!s||s.samples.length>=110||(phase==='raf'&&s.samples.length>=80))return;
+  const stage=view?.stage,stageRect=diagnosticRect(stage),live=$('#grid');
+  let topClass='';
+  if(stageRect){
+    const hit=document.elementFromPoint(Math.max(1,window.innerWidth/2),Math.min(window.innerHeight-1,Math.max(1,stageRect[1]+8)));
+    topClass=String(hit?.id||hit?.className||hit?.tagName||'').slice(0,100);
+  }
+  s.samples.push({
+    i:s.samples.length,t:diagnosticRound(performance.now()-s.startedAt),phase,tab:currentShelfTab,
+    y:diagnosticRound(window.scrollY||window.pageYOffset||0),scrollHeight:document.documentElement.scrollHeight,
+    max:diagnosticRound(shelfMeaningfulMaxScroll()),body:document.body.className,
+    vv:window.visualViewport?[diagnosticRound(visualViewport.height),diagnosticRound(visualViewport.offsetTop)]:null,
+    stage:{r:stageRect,v:stage?getComputedStyle(stage).visibility:null,d:stage?getComputedStyle(stage).display:null,connected:!!stage?.isConnected},
+    top:topClass,live:diagnosticRoot(live),next:diagnosticRoot(view?.nextPage)
+  });
+}
+function beginSwipeDiagnostic(view,fromTab,toTab,direction){
+  finishSwipeDiagnostic('superseded');
+  swipeDiagnosticView=view;
+  swipeDiagnosticSession={version:'V63.35.49',ua:navigator.userAgent,startedAt:performance.now(),fromTab,toTab,direction,columns:mobileShelfColumns,saved:{owned:loadShelfScroll('owned'),created:loadShelfScroll('created'),official:loadShelfScroll('official')},samples:[]};
+  captureSwipeDiagnostic('stage-created',view);
+  const tick=()=>{if(!swipeDiagnosticSession)return;captureSwipeDiagnostic('raf',view);swipeDiagnosticRaf=requestAnimationFrame(tick);};
+  swipeDiagnosticRaf=requestAnimationFrame(tick);
+}
+function markSwipeDiagnostic(phase,view=swipeDiagnosticView){captureSwipeDiagnostic(phase,view);}
+function finishSwipeDiagnostic(result,view=swipeDiagnosticView){
+  if(!swipeDiagnosticSession)return;
+  if(swipeDiagnosticRaf)cancelAnimationFrame(swipeDiagnosticRaf);
+  swipeDiagnosticRaf=0;captureSwipeDiagnostic(`finish:${result}`,view);
+  const done={...swipeDiagnosticSession,result};
+  swipeDiagnosticSession=null;swipeDiagnosticView=null;
+  let history=[];try{history=JSON.parse(localStorage.getItem(SWIPE_DIAGNOSTIC_KEY)||'[]');}catch(_){}
+  if(!Array.isArray(history))history=[];
+  history.push(done);
+  try{localStorage.setItem(SWIPE_DIAGNOSTIC_KEY,JSON.stringify(history.slice(-2)));}catch(_){}
+}
+function saveSwipeDiagnostic(){
+  const raw=localStorage.getItem(SWIPE_DIAGNOSTIC_KEY)||'[]';
+  let history=[];try{history=JSON.parse(raw);}catch(_){}
+  if(!Array.isArray(history)||!history.length){alert('まだ診断記録がありません。3列表示で一度往復してください。');return;}
+  const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),sessions:history},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='AHAKO_SWIPE_DIAGNOSTIC_V49.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  toast(`診断結果 ${history.length}件を保存しました`);
+}
 
 function shelfScrollShouldLock(){
   return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open);
@@ -376,7 +454,9 @@ function restoreShelfScroll(tab){
   const savedY=loadShelfScroll(tab);
   const body=document.body;
   body?.classList.add('shelf-scroll-restoring');
+  markSwipeDiagnostic('restore-class-added');
   return new Promise(resolve=>requestAnimationFrame(()=>{
+    markSwipeDiagnostic('restore-raf-before-scroll');
     // Clamp to the shelf body's real travel, not document.scrollHeight. On iOS
     // a short shelf can otherwise inherit a bogus scroll range from 100vh/main
     // padding and then carry that offset into the next manga-viewer page.
@@ -384,8 +464,11 @@ function restoreShelfScroll(tab){
     try{localStorage.setItem(SHELF_SCROLL_KEYS[tab],String(y));}catch(_){}
     body?.classList.toggle('shelf-no-vertical-scroll',y===0&&shelfMeaningfulMaxScroll()===0);
     try{window.scrollTo({left:0,top:y,behavior:'instant'});}catch(_){window.scrollTo(0,y);}
+    markSwipeDiagnostic('restore-after-scroll');
     requestAnimationFrame(()=>{
+      markSwipeDiagnostic('restore-before-reveal');
       body?.classList.remove('shelf-scroll-restoring');
+      markSwipeDiagnostic('restore-revealed');
       resolve();
     });
   }));
@@ -805,7 +888,7 @@ function installShelfSwipe(){
   let settling=false;
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
   const blockedTarget=target=>!!target?.closest?.('dialog[open],button:not(.book),input,select,textarea,a,summary,[contenteditable="true"]');
-  const cleanup=()=>{if(gesture?.view)removeShelfSwipeStage(gesture.view);gesture=null;};
+  const cleanup=()=>{if(gesture?.view){markSwipeDiagnostic('gesture-cleanup',gesture.view);finishSwipeDiagnostic('gesture-cleanup',gesture.view);removeShelfSwipeStage(gesture.view);}gesture=null;};
   window.addEventListener('touchstart',e=>{
     if(!mobile()||settling||e.touches.length!==1||pinchGesture)return;
     if(document.querySelector('dialog[open]')||$('#bookshelfMenu')?.open||blockedTarget(e.target))return;
@@ -830,13 +913,14 @@ function installShelfSwipe(){
     if(nextIndex<0||nextIndex>=tabs.length){
       // Edge resistance, like a viewer reaching the first/last page.
       const resisted=Math.sign(dx)*Math.min(44,Math.abs(dx)*.22);
-      if(g.view){removeShelfSwipeStage(g.view);g.view=null;}
+      if(g.view){markSwipeDiagnostic('edge-resistance',g.view);finishSwipeDiagnostic('edge-resistance',g.view);removeShelfSwipeStage(g.view);g.view=null;}
       const current=currentShelfBodyElement();if(current)current.style.transform=`translate3d(${resisted}px,0,0)`;
       return;
     }
     if(!g.view||g.direction!==direction){
-      if(g.view)removeShelfSwipeStage(g.view);
+      if(g.view){markSwipeDiagnostic('direction-change',g.view);finishSwipeDiagnostic('direction-change',g.view);removeShelfSwipeStage(g.view);}
       g.direction=direction;g.view=makeShelfSwipeStage(tabs[nextIndex],direction);
+      beginSwipeDiagnostic(g.view,currentShelfTab,tabs[nextIndex],direction);
       const current=currentShelfBodyElement();if(current)current.style.transform='';
     }
     positionShelfSwipeStage(g.view,dx);
@@ -845,11 +929,11 @@ function installShelfSwipe(){
     const g=gesture;gesture=null;if(!g)return;
     const live=currentShelfBodyElement();
     if(live&&g.view?.liveCurrent!==live)live.style.transform='';
-    if(g.cancelled||!g.horizontal||!g.view){removeShelfSwipeStage(g.view);return;}
-    const t=e.changedTouches?.[0];if(!t){removeShelfSwipeStage(g.view);return;}
+    if(g.cancelled||!g.horizontal||!g.view){markSwipeDiagnostic('cancelled',g.view);finishSwipeDiagnostic('cancelled',g.view);removeShelfSwipeStage(g.view);return;}
+    const t=e.changedTouches?.[0];if(!t){markSwipeDiagnostic('missing-touchend',g.view);finishSwipeDiagnostic('missing-touchend',g.view);removeShelfSwipeStage(g.view);return;}
     const dx=t.clientX-g.x;
     const commit=Math.abs(dx)>g.view.width*.28||Math.abs(g.vx)>.55;
-    if(!commit){await animateShelfSwipeStage(g.view,0,190);removeShelfSwipeStage(g.view);return;}
+    if(!commit){markSwipeDiagnostic('snapback-start',g.view);await animateShelfSwipeStage(g.view,0,190);markSwipeDiagnostic('snapback-finished',g.view);finishSwipeDiagnostic('snapback',g.view);removeShelfSwipeStage(g.view);return;}
     // V63.24.3: serialize page commits. A second swipe that starts while the
     // previous viewer animation/render is still settling can otherwise build a
     // new stage from the old tab and leave Safari with a half-translated snapshot.
@@ -858,10 +942,13 @@ function installShelfSwipe(){
     const toX=g.direction==='left'?-g.view.width:g.view.width;
     let staleUrls=[];
     try{
+      markSwipeDiagnostic('commit-animation-start',g.view);
       await animateShelfSwipeStage(g.view,toX,175);
+      markSwipeDiagnostic('commit-animation-finished',g.view);
       // The incoming snapshot is now the only visible page while the live shelf renders underneath.
       g.view.currentPage.style.visibility='hidden';
       g.view.nextPage.style.transform='translate3d(0,0,0)';
+      markSwipeDiagnostic('incoming-locked',g.view);
       const next=g.view.nextTab;
       // Keep the completed viewer page covering the old live shelf while the real
       // next shelf is rendered underneath. Removing the stage first exposed the
@@ -869,21 +956,28 @@ function installShelfSwipe(){
       // The official snapshot was built from the already-loaded hidden shelf.
       // Do not force a second network fetch/render inside the landing frame.
       staleUrls=await switchShelf(next,{deferCoverRevoke:true,refreshOfficial:next!=='official'});
+      markSwipeDiagnostic('switch-render-restore-finished',g.view);
       if(next==='official'){
         await waitForLiveShelfVisualReady();
+        markSwipeDiagnostic('official-visual-ready',g.view);
         adoptOfficialSwipeSnapshot(g.view);
+        markSwipeDiagnostic('official-adopted',g.view);
       }else{
         staleUrls=adoptLocalSwipeSnapshot(g.view,staleUrls);
+        markSwipeDiagnostic('local-adopted',g.view);
       }
     }finally{
+      markSwipeDiagnostic('before-stage-remove',g.view);
       removeShelfSwipeStage(g.view);
       // Defensive cleanup for interrupted WebKit animations / rapid direction changes.
       document.querySelectorAll('.shelf-swipe-stage').forEach(stage=>stage.remove());
       staleUrls.forEach(URL.revokeObjectURL);
       settling=false;
+      markSwipeDiagnostic('after-stage-remove',g.view);
+      finishSwipeDiagnostic('committed',g.view);
     }
   },{passive:true});
-  window.addEventListener('touchcancel',()=>{const g=gesture;gesture=null;const live=currentShelfBodyElement();if(live)live.style.transform='';removeShelfSwipeStage(g?.view);},{passive:true});
+  window.addEventListener('touchcancel',()=>{const g=gesture;gesture=null;const live=currentShelfBodyElement();if(live)live.style.transform='';markSwipeDiagnostic('touchcancel',g?.view);finishSwipeDiagnostic('touchcancel',g?.view);removeShelfSwipeStage(g?.view);},{passive:true});
 }
 
 function detailWorkInfoHtml(w){
@@ -1230,6 +1324,7 @@ $('#archiveDropZone').onclick=()=>{if(matchMedia('(pointer:coarse)').matches&&!a
 $('#closeArchive').onclick=()=>$('#archiveDialog').close();
 $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
+$('#saveSwipeDiagnostic')?.addEventListener('click',saveSwipeDiagnostic);
 installSceneDrop();
 installShelfScrollGuard();
 installDesktopShelfArrowKeys();
