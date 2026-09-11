@@ -411,27 +411,26 @@ function officialReadUrl(shelfId){
 
 function officialCardHtml(item,claimed=false){
   const kind=item.kind==='bloom'?'bloom':'seed';
-  const label=kind==='bloom'?'🌸 開花':'🌱 種本';
+  const label=kind==='bloom'?'🌸 開花':'🌱';
   const remaining=Math.max(0,Number(item.remaining||0));
   const limit=Math.max(1,Number(item.issueLimit||1));
   const sold=remaining<=0;
   const received=!!claimed;
   const subtitle=String(item.subtitle||'').trim();
   const description=String(item.description||'').trim();
-  const seriesTitle=String(item.seriesTitle||'').trim();
   const episode=String(item.episode||'').trim();
   const episodeTitle=String(item.episodeTitle||'').trim();
-  const seriesLine=[seriesTitle,[episode,episodeTitle].filter(Boolean).join('・')].filter(Boolean).join(' · ');
   const sceneCount=Math.max(0,Number(item.sceneCount||0));
   const cover=item.coverUrl?`<img src="${escapeHtml(item.coverUrl)}" alt="">`:`<div class="official-cover-fallback">あ□</div>`;
-  const seriesHtml=seriesLine?`<p class="official-series">${escapeHtml(seriesLine)}</p>`:'';
-  const subtitleHtml=subtitle?`<div class="official-subtitle">${escapeHtml(subtitle)}</div>`:'';
-  const descriptionHtml=description?`<div class="official-description">${escapeHtml(description)}</div>`:'';
+  const subtitleHtml=subtitle?`<p class="official-subtitle">${escapeHtml(subtitle)}</p>`:'';
+  const episodeHtml=episode?`<p class="official-episode">${escapeHtml(episode)}</p>`:'';
+  const episodeTitleHtml=episodeTitle?`<p class="official-episode-title">${escapeHtml(episodeTitle)}</p>`:'';
+  const descriptionHtml=description?`<p class="official-description">${escapeHtml(description)}</p>`:'';
   const facts=[item.author||'作者未設定',sceneCount?`${sceneCount} Scene`:'',item.relayEnabled===false?'RELAY OFF':(item.relayEnabled===true?'RELAY ON':'')].filter(Boolean).join(' · ');
   const factsHtml=facts?`<div class="official-facts">${escapeHtml(facts)}</div>`:'';
   return `<article class="official-book-card ${kind}">
     <div class="official-book-cover" data-official-read="${escapeHtml(item.shelfId)}" tabindex="0" role="button" aria-label="${escapeHtml((item.title||'Untitled')+'を読む')}">${cover}<span class="official-kind">${label}</span></div>
-    <div class="official-book-copy"><div class="official-book-meta"><h3>${escapeHtml(item.title||'Untitled')}</h3><div class="official-work-info">${seriesHtml}${subtitleHtml}${descriptionHtml}</div>${factsHtml}</div><div class="official-book-footer"><strong class="official-remaining">${sold?'すべて旅立ちました':`残り ${remaining} / ${limit}冊`}</strong>
+    <div class="official-book-copy"><div class="official-book-meta"><h3>${escapeHtml(item.title||'Untitled')}</h3><div class="official-work-info">${subtitleHtml}${episodeHtml}${episodeTitleHtml}${descriptionHtml}</div>${factsHtml}</div><div class="official-book-footer"><strong class="official-remaining">${sold?'すべて旅立ちました':`残り ${remaining} / ${limit}冊`}</strong>
     <div class="official-actions"><button type="button" data-official-claim="${escapeHtml(item.shelfId)}" ${(sold||received)?'disabled':''}>${received?'受け取り済み':(sold?'旅立ちました':'一冊を受け取る')}</button></div></div></div>
   </article>`;
 }
