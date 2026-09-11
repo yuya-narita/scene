@@ -815,18 +815,24 @@ async function waitForLiveShelfVisualReady(){
 }
 
 async function revealPrepaintedLiveShelf(view){
-  // V63.35.52: local-to-local swipes no longer reparent the tall snapshot grid
-  // into #grid. Reparenting a 16-card, 2/3-column layer made iOS Safari discard
-  // and rasterize that layer again when the fixed swipe stage was removed.
-  // Keep the completed snapshot over the independently rendered live shelf,
-  // give WebKit a prepaint window, then reveal the live pixels over a few frames.
+  // V63.35.53: a fully opaque stage lets WebKit occlusion-cull the live shelf
+  // behind it. Its lower tiles can therefore remain unpainted until the fade
+  // starts, which produces the remaining one-frame flash at deep scroll
+  // positions. 0.999 is visually opaque but forces the compositor to include
+  // and rasterize the underlay before it can calculate the blended result.
   const stage=view?.stage;
   if(!stage?.isConnected)return;
-  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   stage.style.willChange='opacity';
+  stage.style.opacity='.999';
+  // Keep the already-visible snapshot still while Safari prepares every
+  // visible underlay tile. The delay is not visible to the user because both
+  // layers show the same completed destination shelf.
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await new Promise(resolve=>setTimeout(resolve,80));
+  await new Promise(resolve=>requestAnimationFrame(resolve));
   const animation=stage.animate(
-    [{opacity:1},{opacity:0}],
-    {duration:64,easing:'linear',fill:'forwards'}
+    [{opacity:.999},{opacity:0}],
+    {duration:80,easing:'linear',fill:'forwards'}
   );
   await animation.finished.catch(()=>{});
   stage.style.opacity='0';
