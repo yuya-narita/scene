@@ -614,7 +614,7 @@ function makeShelfSwipeStage(nextTab,direction){
   currentPage.append(currentInner);nextPage.append(nextInner);
   stage.append(currentPage,nextPage);document.body.append(stage);
   const width=window.innerWidth;
-  nextPage.style.transform=`translate3d(${direction==='left'?width:-width}px,0,0)`;
+  nextPage.style.left=`${direction==='left'?width:-width}px`;
   // Clamp the remembered target position against the *snapshot's* actual body
   // height before it is ever shown. This also heals old saved offsets produced
   // by the previous short-shelf bug (e.g. official shelf remembered at 40px).
@@ -633,35 +633,32 @@ function makeShelfSwipeStage(nextTab,direction){
   // gap. Per-tab margin compensation caused the incoming snapshot to sit
   // slightly low and then jump upward when the real shelf replaced it.
   const targetOffset=(bodyDocTop-targetY)-stageTop;
-  currentInner.style.transform=`translate3d(0,${currentOffset}px,0)`;
-  nextInner.style.transform=`translate3d(0,${targetOffset}px,0)`;
+  currentInner.style.top=`${Math.round(currentOffset)}px`;
+  nextInner.style.top=`${Math.round(targetOffset)}px`;
   return {stage,currentPage,nextPage,width,direction,nextTab,liveCurrent:useLiveCurrent?current:null};
 }
 function removeShelfSwipeStage(view){
   if(view?.liveCurrent){
     view.liveCurrent.style.transform='';
-    view.liveCurrent.style.filter='';
   }
   if(view?.stage?.isConnected)view.stage.remove();
 }
 function positionShelfSwipeStage(view,dx){
   if(!view)return;
-  view.currentPage.style.transform=`translate3d(${dx}px,0,0)`;
+  const x=Math.round(dx);
+  view.currentPage.style.left=`${x}px`;
   if(view.liveCurrent)view.liveCurrent.style.transform=`translate3d(${dx}px,0,0)`;
   const base=view.direction==='left'?view.width:-view.width;
-  view.nextPage.style.transform=`translate3d(${base+dx}px,0,0)`;
-  const progress=Math.min(1,Math.abs(dx)/Math.max(1,view.width));
-  view.currentPage.style.filter=`brightness(${1-progress*.045})`;
-  if(view.liveCurrent)view.liveCurrent.style.filter=`brightness(${1-progress*.045})`;
+  view.nextPage.style.left=`${Math.round(base+dx)}px`;
   view.nextPage.style.boxShadow=view.direction==='left'?'-18px 0 28px rgba(35,28,20,.10)':'18px 0 28px rgba(35,28,20,.10)';
 }
 async function animateShelfSwipeStage(view,toX,duration=220){
   if(!view)return;
-  const from=new DOMMatrixReadOnly(getComputedStyle(view.currentPage).transform).m41||0;
+  const from=parseFloat(getComputedStyle(view.currentPage).left)||0;
   const base=view.direction==='left'?view.width:-view.width;
   const easing='cubic-bezier(.22,.72,.18,1)';
-  const a=view.currentPage.animate([{transform:`translate3d(${from}px,0,0)`},{transform:`translate3d(${toX}px,0,0)`}],{duration,easing,fill:'forwards'});
-  const b=view.nextPage.animate([{transform:`translate3d(${base+from}px,0,0)`},{transform:`translate3d(${base+toX}px,0,0)`}],{duration,easing,fill:'forwards'});
+  const a=view.currentPage.animate([{left:`${Math.round(from)}px`},{left:`${Math.round(toX)}px`}],{duration,easing,fill:'forwards'});
+  const b=view.nextPage.animate([{left:`${Math.round(base+from)}px`},{left:`${Math.round(base+toX)}px`}],{duration,easing,fill:'forwards'});
   let liveAnimation=null;
   if(view.liveCurrent){
     const liveFrom=new DOMMatrixReadOnly(getComputedStyle(view.liveCurrent).transform).m41||from;
@@ -669,9 +666,9 @@ async function animateShelfSwipeStage(view,toX,duration=220){
   }
   await Promise.all([a.finished.catch(()=>{}),b.finished.catch(()=>{}),liveAnimation?.finished?.catch(()=>{})]);
   // Safari can finish the current-page animation a frame before the incoming page.
-  // Commit both transforms synchronously so the new tab never shows the old shelf for one frame.
-  view.currentPage.style.transform=`translate3d(${toX}px,0,0)`;
-  view.nextPage.style.transform=`translate3d(${base+toX}px,0,0)`;
+  // Commit both page positions synchronously so the new tab never shows the old shelf for one frame.
+  view.currentPage.style.left=`${Math.round(toX)}px`;
+  view.nextPage.style.left=`${Math.round(base+toX)}px`;
   if(view.liveCurrent)view.liveCurrent.style.transform=`translate3d(${toX}px,0,0)`;
   a.cancel();b.cancel();if(liveAnimation)liveAnimation.cancel();
 }
@@ -863,7 +860,7 @@ function installShelfSwipe(){
       await animateShelfSwipeStage(g.view,toX,175);
       // The incoming snapshot is now the only visible page while the live shelf renders underneath.
       g.view.currentPage.style.visibility='hidden';
-      g.view.nextPage.style.transform='translate3d(0,0,0)';
+      g.view.nextPage.style.left='0px';
       const next=g.view.nextTab;
       // Keep the completed viewer page covering the old live shelf while the real
       // next shelf is rendered underneath. Removing the stage first exposed the
