@@ -1033,3 +1033,16 @@ html{
   :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="3"] .book-meta p{font-size:9px}
   :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="4"] .book-meta p{font-size:8px}
 }
+
+/* V63.35.35 — after the paragraph size was aligned, the diagnostic geometry
+   exposed the remaining ~2.09px landing contraction above .book-work-info.
+   The live #grid had compact title metrics that the class-only swipe grid did
+   not inherit. Apply the established live values to both layout roots. */
+@media(max-width:680px) and (pointer:coarse){
+  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="3"] .book-meta h3{
+    font-size:11px;line-height:1.4;min-height:2.8em;margin-bottom:3px
+  }
+  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="4"] .book-meta h3{
+    font-size:9px;line-height:1.35;min-height:2.7em;margin-bottom:2px
+  }
+}
