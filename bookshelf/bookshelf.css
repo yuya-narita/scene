@@ -1017,3 +1017,12 @@ html{
     box-sizing:border-box;
   }
 }
+
+/* V63.35.32 — overflowing 7–8px metadata is pre-fitted once in JS. WebKit no
+   longer owns a live ellipsis calculation while the page is moving. */
+@media(max-width:680px) and (pointer:coarse){
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] :is(.book-series,.book-subtitle).is-shelf-text-fitted,
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] :is(.book-series,.book-subtitle).is-shelf-text-fitted{
+    text-overflow:clip;
+  }
+}

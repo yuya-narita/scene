@@ -219,8 +219,47 @@ function applyMobileColumns(value,{announce=false}={}){
   mobileShelfColumns=clampMobileColumns(value);
   const grid=$('#grid');
   if(grid)grid.dataset.mobileColumns=String(mobileShelfColumns);
+  stabilizeShelfOverflowText(grid);
   try{localStorage.setItem(MOBILE_COLUMNS_KEY,String(mobileShelfColumns));}catch(_){}
   if(announce)toast(`${mobileShelfColumns}列表示`);
+}
+
+// iOS Safari can change the ellipsis breakpoint of very small overflowing text
+// while a shelf page is swiped. Resolve the visible string once against the
+// element's real width, then use a normal clipped line during movement. The
+// complete value remains in data/aria-label and is restored before every fit.
+function stabilizeShelfOverflowText(root){
+  if(!root||!matchMedia('(max-width:680px) and (pointer:coarse)').matches)return;
+  const grid=root.matches?.('.grid')?root:root.querySelector?.('.grid');
+  const columns=Number(grid?.dataset?.mobileColumns||0);
+  if(!grid)return;
+  const lines=[...grid.querySelectorAll('.book-series,.book-subtitle')];
+  lines.forEach(line=>{
+    const full=line.dataset.fullText||line.textContent||'';
+    line.dataset.fullText=full;
+    line.textContent=full;
+    line.classList.remove('is-shelf-text-fitted');
+    line.removeAttribute('aria-label');
+    line.removeAttribute('title');
+  });
+  if(columns!==3&&columns!==4)return;
+  lines.forEach(line=>{
+    const full=line.dataset.fullText||'';
+    if(line.scrollWidth<=line.clientWidth+0.5)return;
+    const chars=Array.from(full);
+    let low=0,high=chars.length,best='…';
+    while(low<=high){
+      const middle=(low+high)>>1;
+      const candidate=`${chars.slice(0,middle).join('').trimEnd()}…`;
+      line.textContent=candidate;
+      if(line.scrollWidth<=line.clientWidth+0.5){best=candidate;low=middle+1;}
+      else high=middle-1;
+    }
+    line.textContent=best;
+    line.classList.add('is-shelf-text-fitted');
+    line.setAttribute('aria-label',full);
+    line.title=full;
+  });
 }
 function touchDistance(touches){
   if(!touches||touches.length<2)return 0;
@@ -613,6 +652,9 @@ function makeShelfSwipeStage(nextTab,direction){
   }
   currentPage.append(currentInner);nextPage.append(nextInner);
   stage.append(currentPage,nextPage);document.body.append(stage);
+  // Fit before the newly appended page can be painted. Both the normal and
+  // temporary grids therefore carry a fixed visible string during the swipe.
+  stabilizeShelfOverflowText(nextInner);
   const width=window.innerWidth;
   nextPage.style.transform=`translate3d(${direction==='left'?width:-width}px,0,0)`;
   // Clamp the remembered target position against the *snapshot's* actual body
