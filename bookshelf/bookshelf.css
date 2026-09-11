@@ -99,6 +99,10 @@
 .bookshelf-menu-panel .menu-primary{font-weight:800}
 .menu-separator{height:1px;margin:4px 6px;background:#e2dbcf}
 .bookshelf-menu-panel p{margin:5px 8px 4px;color:#827a6f;font-size:10px;line-height:1.65}
+.bookshelf-service-links{display:flex;flex-wrap:wrap;align-items:center;gap:5px 12px;padding:5px 8px 3px}
+.bookshelf-service-links small{flex:0 0 100%;color:#aaa297;font-size:9px;font-weight:650;letter-spacing:-.05em}
+.bookshelf-service-links a{color:#8f877c;font-size:9px;line-height:1.55;text-decoration:none;-webkit-tap-highlight-color:transparent}
+.bookshelf-service-links a:hover,.bookshelf-service-links a:focus-visible{color:#4f4941;text-decoration:underline;text-underline-offset:2px}
 main{padding-top:22px}
 .shelf-head{margin:0 0 14px;padding:4px 2px 0;align-items:end}
 .shelf-head h1{font-size:25px;letter-spacing:-.04em;margin:0 0 3px}
@@ -1059,36 +1063,4 @@ html{
 .tree-dialog-close:focus,.tree-dialog-close:focus-visible{
   outline:none;
   box-shadow:none;
-}
-
-/* V63.35.39 — quiet, in-flow footer identity. It appears only after the
-   shelf content instead of behaving like a third fixed primary action. */
-.site-footer{position:relative;z-index:25;display:flex;justify-content:center;margin-top:0;padding:0 20px 44px}
-.site-footer-menu{position:relative;width:max-content;margin:0}
-.site-footer-menu>summary{
-  display:flex;align-items:baseline;justify-content:center;min-width:44px;min-height:34px;
-  padding:8px 12px;border:0;background:transparent;color:rgba(95,88,78,.42);
-  font-size:10px;font-weight:650;line-height:1;letter-spacing:-.06em;
-  box-shadow:none;cursor:pointer;list-style:none;
-  -webkit-tap-highlight-color:transparent
-}
-.site-footer-menu>summary::-webkit-details-marker{display:none}
-.site-footer-menu>summary::marker{display:none;content:""}
-.site-footer-menu>summary:focus,.site-footer-menu>summary:focus-visible{outline:none}
-.site-footer-menu .footer-box{font-size:.82em;margin-left:1px}
-.site-footer-menu[open]>summary{background:transparent;color:rgba(55,50,44,.62)}
-.site-footer-menu>nav{
-  position:absolute;left:50%;bottom:calc(100% + 10px);display:grid;width:218px;
-  transform:translateX(-50%);padding:9px;border:1px solid #ddd5c8;border-radius:17px;
-  background:rgba(255,255,255,.97);box-shadow:0 16px 45px rgba(43,34,21,.18);
-  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)
-}
-.site-footer-menu>nav strong{padding:8px 10px 6px;color:#8a8277;font-size:9px;letter-spacing:.18em}
-.site-footer-menu>nav a{padding:10px;border-radius:10px;color:#292621;font-size:12px;font-weight:650;text-decoration:none}
-.site-footer-menu>nav a:active{background:#f2eee7}
-@media(max-width:680px) and (pointer:coarse){
-  /* The trailing space is after the mark. At the document's true bottom it
-     lifts the mark above both Safari toolbar variants on every shelf. */
-  .site-footer{margin-top:0;padding-bottom:max(116px,calc(env(safe-area-inset-bottom) + 94px))}
-  .site-footer-menu>summary{min-width:44px;min-height:32px;padding:8px 12px;font-size:9px}
 }
