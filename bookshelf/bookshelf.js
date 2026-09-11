@@ -575,28 +575,38 @@ function buildLocalShelfView(tab){
 }
 
 function rebuildLocalShelfViews(){
+  const oldMount=$('#localShelfMount');
   const live=$('#grid');
   if(live)live.removeAttribute('id');
   localShelfViews={
     owned:buildLocalShelfView('owned'),
     created:buildLocalShelfView('created')
   };
+  const mount=document.createElement('div');
+  mount.id='localShelfMount';
+  mount.style.display='contents';
   const mounted=currentShelfTab==='created'?localShelfViews.created:localShelfViews.owned;
+  Object.values(localShelfViews).forEach(grid=>{
+    grid.hidden=grid!==mounted;
+    mount.append(grid);
+  });
   mounted.id='grid';
-  if(live)live.replaceWith(mounted);
-  else $('#officialShelf')?.before(mounted);
+  if(oldMount)oldMount.replaceWith(mount);
+  else if(live)live.replaceWith(mount);
+  else $('#officialShelf')?.before(mount);
 }
 
 function activateLocalShelfView(tab){
   const target=localShelfViews[tab];
-  const live=$('#grid');
-  if(!target)return live;
-  if(live!==target){
-    if(live){live.removeAttribute('id');live.hidden=true;live.replaceWith(target);}
-    else $('#officialShelf')?.before(target);
-    target.id='grid';
-  }
-  target.hidden=false;
+  if(!target)return $('#grid');
+  // V63.35.56: both local shelves remain mounted for their whole lifetime.
+  // Moving a retained grid with replaceWith() still invalidated WebKit's page
+  // tiles; the flash moved earlier in V55 exactly when that DOM move moved.
+  Object.values(localShelfViews).forEach(grid=>{
+    grid.removeAttribute('id');
+    grid.hidden=grid!==target;
+  });
+  target.id='grid';
   return target;
 }
 
@@ -1036,12 +1046,10 @@ function installShelfSwipe(){
     const scrollExtentHold=holdShelfScrollExtent();
     try{
       const next=g.view.nextTab;
-      // V63.35.55: install the retained destination at the beginning of the
-      // 175ms landing animation. Keeping the stage microscopically translucent
-      // makes Safari paint that real underlay throughout the animation instead
-      // of first discovering it after the foreground has stopped moving.
-      g.view.stage.style.willChange='opacity';
-      g.view.stage.style.opacity='.999';
+      // Keep the foreground fully opaque while the already-mounted destination
+      // changes visibility. A translucent stage allowed WebKit's backing-store
+      // update to leak through during the horizontal animation.
+      g.view.stage.style.opacity='1';
       const [,switchedUrls]=await Promise.all([
         animateShelfSwipeStage(g.view,toX,175),
         switchShelf(next,{refreshOfficial:false,concealRestore:false})

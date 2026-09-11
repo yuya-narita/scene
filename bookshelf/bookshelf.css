@@ -1009,6 +1009,8 @@ html{
   text-size-adjust:100%;
 }
 @media(max-width:680px) and (pointer:coarse){
+  html,body,#shelfBodyViewport{overflow-anchor:none}
+  #localShelfMount > .grid[hidden]{display:none!important}
   .shelf-swipe-page{background:#f6f3ec}
   .shelf-swipe-stage.uses-live-current{background:transparent}
   .shelf-swipe-stage.uses-live-current .shelf-swipe-page.is-current{background:transparent}
