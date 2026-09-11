@@ -480,7 +480,11 @@ body.bookshelf-scroll-locked{
    bogus Y into the neighbouring shelf snapshot. */
 @media(max-width:680px) and (pointer:coarse){
   body{min-height:100dvh}
-  body.shelf-no-vertical-scroll{overflow-y:hidden;overscroll-behavior-y:none}
+  /* Do not switch the root scroller to overflow:hidden here.  iOS Safari can
+     restore the previous Visual Viewport offset after a long shelf is replaced
+     by a short one, even after scrollTo(0) succeeded.  The JS scroll guard
+     already clamps short shelves without changing the root scrolling mode. */
+  body.shelf-no-vertical-scroll{overscroll-behavior-y:none}
 }
 
 /* V63.27 — reclaim mobile shelf viewport + keep storage-box transfer controls visible. */
@@ -1107,10 +1111,10 @@ html{
   flex:0 0 32px;
 }
 @media(max-width:680px){
-  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-work-info{
+  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="3"] .book-work-info{
     height:28px;min-height:28px;max-height:28px;flex-basis:28px
   }
-  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-work-info{
+  :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="4"] .book-work-info{
     height:25px;min-height:25px;max-height:25px;flex-basis:25px
   }
 }
