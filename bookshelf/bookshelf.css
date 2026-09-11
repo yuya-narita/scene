@@ -859,7 +859,9 @@ body.x-claim-handoff-active>#toast{display:none!important}
 .reader-primary-actions .journey{grid-column:1/-1;font-weight:700;background:#f6f1e7}
 .detail-management{display:flex;justify-content:flex-start;padding:0 26px 16px}
 .detail-management .compact-danger{width:auto;max-width:100%;padding:9px 13px;border-radius:10px;font-size:11px;line-height:1.2;white-space:nowrap;color:#9a3f38;background:#fff}
-.copy-journey-panel.is-compact{padding:0;overflow:hidden;background:#faf8f3}
+.copy-journey-panel.is-compact{min-height:80px;padding:0;overflow:hidden;background:#faf8f3}
+.copy-journey-panel.is-compact>.copy-journey-loading,
+.copy-journey-panel.is-compact>.copy-journey-error{min-height:78px;display:flex;align-items:center;padding:0 14px}
 .copy-journey-summary{display:flex;width:100%;align-items:center;justify-content:space-between;gap:14px;border:0;border-radius:15px;padding:14px 16px;background:transparent;text-align:left}
 .copy-journey-summary>span{display:flex;min-width:0;flex-direction:column;gap:2px}
 .copy-journey-summary small{color:#8b8377;font-size:9px;letter-spacing:.18em}
