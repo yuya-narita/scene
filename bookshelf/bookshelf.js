@@ -664,10 +664,10 @@ async function animateShelfSwipeStage(view,toX,duration=220){
 }
 
 function adoptLocalSwipeSnapshot(view,staleUrls=[]){
-  // V63.35.25: the page the user actually saw during the swipe becomes the
-  // live local shelf. Do not throw that painted DOM away and rebuild the same
-  // cards with fresh blob: URLs; iOS Safari can repaint/reflow for one frame,
-  // which is visible as a flash and as metadata text resizing in 3/4 columns.
+  // V63.35.27: the exact grid the user saw during the swipe becomes the live
+  // local shelf. V63.35.25 moved only its card children into the pre-existing
+  // #grid; that still changed the grid formatting/compositing context at the
+  // landing frame and made WebKit re-layout small 3/4-column metadata.
   if(!view||view.nextTab==='official')return staleUrls;
   const snapshotGrid=view.nextPage?.querySelector?.('.shelf-swipe-grid');
   const liveGrid=$('#grid');
@@ -677,15 +677,17 @@ function adoptLocalSwipeSnapshot(view,staleUrls=[]){
   const keep=new Set(snapshotBlobUrls);
   const unusedLiveUrls=coverUrls.filter(url=>!keep.has(url));
 
-  // Move the already-painted card nodes. Moving happens synchronously in the
-  // same task in which the swipe stage is removed, so WebKit never gets a
-  // paint opportunity between the viewer page and the real shelf.
-  liveGrid.replaceChildren(...snapshotGrid.childNodes);
-  liveGrid.dataset.mobileColumns=String(mobileShelfColumns);
+  // Preserve the already-laid-out grid itself, not only its card children.
+  // The move and stage removal happen in the same task, so there is no frame
+  // with a missing #grid and no second grid layout root for Safari to adopt.
+  snapshotGrid.id='grid';
+  snapshotGrid.classList.remove('shelf-swipe-grid');
+  snapshotGrid.setAttribute('aria-live',liveGrid.getAttribute('aria-live')||'polite');
+  snapshotGrid.hidden=false;
+  liveGrid.replaceWith(snapshotGrid);
 
-  // The render underneath created a second set of blob URLs. Those nodes are
-  // gone now, so revoke only that unused set and keep the URLs used by the
-  // adopted, already-painted cards alive as the current shelf URLs.
+  // The render underneath created a second set of blob URLs. Its whole grid is
+  // gone now, so revoke only that unused set and keep the adopted grid URLs.
   unusedLiveUrls.forEach(url=>{try{URL.revokeObjectURL(url);}catch(_){}});
   coverUrls=[...new Set(snapshotBlobUrls)];
   bindBookInteractions();
