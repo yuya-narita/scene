@@ -602,6 +602,15 @@ function makeShelfSwipeStage(nextTab,direction){
     currentInner.append(current.cloneNode(true));
   }
   nextInner.innerHTML=swipeShelfBodyHtml(nextTab);
+  // The official snapshot must not retain the live shelf IDs. During landing,
+  // restoreShelfScroll() intentionally hides the live #officialShelf for two
+  // animation frames. A duplicate ID made that rule hide the foreground swipe
+  // snapshot as well, producing a direction-specific flash when swiping into
+  // the official tab.
+  if(nextTab==='official'){
+    nextInner.querySelector('#officialShelf')?.removeAttribute('id');
+    nextInner.querySelector('#officialBooks')?.removeAttribute('id');
+  }
   currentPage.append(currentInner);nextPage.append(nextInner);
   stage.append(currentPage,nextPage);document.body.append(stage);
   const width=window.innerWidth;
@@ -706,7 +715,7 @@ function adoptOfficialSwipeSnapshot(view){
   // If their content is identical, keep the DOM that is already on screen.
   const snapshot=view?.nextPage?.querySelector?.('.official-shelf');
   const live=$('#officialShelf');
-  const snapshotBooks=snapshot?.querySelector?.('#officialBooks');
+  const snapshotBooks=snapshot?.querySelector?.('.official-books');
   const liveBooks=live?.querySelector?.('#officialBooks');
   if(!snapshot||!live||!snapshotBooks||!liveBooks)return false;
   // On the first visit the snapshot can still contain the loading state. The
@@ -716,6 +725,8 @@ function adoptOfficialSwipeSnapshot(view){
   if(snapshotBooks.innerHTML!==liveBooks.innerHTML){
     snapshotBooks.replaceChildren(...liveBooks.childNodes);
   }
+  snapshot.id='officialShelf';
+  snapshotBooks.id='officialBooks';
   snapshot.hidden=false;
   live.replaceWith(snapshot);
   bindOfficialShelfInteractions(snapshotBooks);

@@ -994,35 +994,33 @@ body.x-claim-handoff-active>#toast{display:none!important}
 /* V63.35.27 — active V63.35.26 rules (the previous ZIP contained literal
    backslash-n text, so these declarations never entered the CSSOM).
    The real official shelf is the outgoing visual; only the incoming page is
-   opaque. Text autosizing is fixed before either grid enters a transform. */
+   opaque. */
 html{
-  -webkit-text-size-adjust:none;
-  text-size-adjust:none;
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
 }
 @media(max-width:680px) and (pointer:coarse){
   .shelf-swipe-page{background:#f6f3ec}
   .shelf-swipe-stage.uses-live-current{background:transparent}
   .shelf-swipe-stage.uses-live-current .shelf-swipe-page.is-current{background:transparent}
   .shelf-swipe-stage.uses-live-current .shelf-swipe-page.is-next{background:#f6f3ec}
-  .shelf-swipe-page-inner,
-  .shelf-swipe-grid,
-  .shelf-swipe-grid .book-meta,
-  #grid .book-meta{
-    -webkit-text-size-adjust:100%;
-    text-size-adjust:100%;
-  }
 }
 
-/* V63.35.28 — transformed swipe pages must not enter Safari's text-inflation
-   calculation. Keep the explicit value on the temporary tree as well as html
-   so computed text sizing remains identical when the same DOM is adopted. */
+/* V63.35.29 — only these two ellipsized metadata lines were being repainted.
+   Give their shared box a definite formatting/paint context in both the live
+   grid and the swipe grid. This prevents WebKit from recomputing its intrinsic
+   width and clip when the already-visible grid leaves the transformed stage. */
 @media(max-width:680px) and (pointer:coarse){
-  .shelf-swipe-stage,
-  .shelf-swipe-stage .shelf-swipe-page,
-  .shelf-swipe-stage .shelf-swipe-page-inner,
-  .shelf-swipe-stage .shelf-swipe-grid,
-  .shelf-swipe-stage .shelf-swipe-grid *{
-    -webkit-text-size-adjust:none;
-    text-size-adjust:none;
+  :is(#grid,.shelf-swipe-grid) .book-work-info{
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    box-sizing:border-box;
+    contain:layout paint;
+    transform:translateZ(0);
+    -webkit-backface-visibility:hidden;
+    backface-visibility:hidden;
   }
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="3"] .book-work-info{height:38px;min-height:38px;max-height:38px}
+  :is(#grid,.shelf-swipe-grid)[data-mobile-columns="4"] .book-work-info{height:32px;min-height:32px;max-height:32px}
 }
