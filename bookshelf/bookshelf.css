@@ -192,6 +192,7 @@ main{padding-top:22px}
 .archive-drop-zone[hidden],
 .official-shelf[hidden],
 #grid[hidden],
+#localShelfMount > .grid[hidden],
 #emptyState[hidden],
 .local-note[hidden]{display:none!important}
 
@@ -1023,7 +1024,6 @@ html{
   }
   #grid,.empty,.official-shelf{padding-bottom:0}
   body.bookshelf-scroll-locked #shelfBodyViewport{overflow-y:hidden}
-  #localShelfMount > .grid[hidden]{display:none!important}
   .shelf-swipe-page{background:#f6f3ec}
   .shelf-swipe-stage.uses-live-current{background:transparent}
   .shelf-swipe-stage.uses-live-current .shelf-swipe-page.is-current{background:transparent}
