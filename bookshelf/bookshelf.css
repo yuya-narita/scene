@@ -1009,7 +1009,20 @@ html{
   text-size-adjust:100%;
 }
 @media(max-width:680px) and (pointer:coarse){
-  html,body,#shelfBodyViewport{overflow-anchor:none}
+  html,body{height:100%;overflow:hidden;overflow-anchor:none}
+  #shelfBodyViewport{
+    position:fixed;
+    top:100px;right:0;bottom:0;left:0;
+    z-index:1;
+    padding:10px 14px max(118px,calc(env(safe-area-inset-bottom) + 96px));
+    overflow-x:hidden;
+    overflow-y:auto;
+    overscroll-behavior-y:contain;
+    -webkit-overflow-scrolling:touch;
+    overflow-anchor:none;
+  }
+  #grid,.empty,.official-shelf{padding-bottom:0}
+  body.bookshelf-scroll-locked #shelfBodyViewport{overflow-y:hidden}
   #localShelfMount > .grid[hidden]{display:none!important}
   .shelf-swipe-page{background:#f6f3ec}
   .shelf-swipe-stage.uses-live-current{background:transparent}

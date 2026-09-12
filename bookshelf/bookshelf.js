@@ -49,8 +49,8 @@ function syncShelfScrollLock(){
   const shouldLock=shelfScrollShouldLock();
   const locked=body.classList.contains('bookshelf-scroll-locked');
   if(shouldLock&&!locked){
-    shelfScrollLockY=window.scrollY||window.pageYOffset||0;
-    body.style.top=`-${shelfScrollLockY}px`;
+    shelfScrollLockY=readShelfScrollY();
+    body.style.top=usesInternalShelfScroller()?'0px':`-${shelfScrollLockY}px`;
     body.classList.add('bookshelf-scroll-locked');
     return;
   }
@@ -59,7 +59,7 @@ function syncShelfScrollLock(){
     body.classList.remove('bookshelf-scroll-locked');
     body.style.top='';
     shelfScrollLockY=0;
-    window.scrollTo(0,restoreY);
+    writeShelfScrollY(restoreY);
   }
 }
 
@@ -352,10 +352,33 @@ function shelfViewportTop(){
   const chrome=$('#shelfChrome');
   return Math.max(0,Math.round(chrome?.getBoundingClientRect?.().bottom||0));
 }
+function usesInternalShelfScroller(){
+  return !!($('#shelfBodyViewport')&&matchMedia('(max-width:680px) and (pointer:coarse)').matches);
+}
+function readShelfScrollY(){
+  const scroller=$('#shelfBodyViewport');
+  return usesInternalShelfScroller()?Math.max(0,scroller.scrollTop||0):(window.scrollY||window.pageYOffset||0);
+}
+function writeShelfScrollY(y){
+  const target=Math.max(0,Math.round(Number(y)||0));
+  const scroller=$('#shelfBodyViewport');
+  if(usesInternalShelfScroller()){
+    scroller.scrollTop=target;
+    return;
+  }
+  document.documentElement.scrollTop=target;
+  document.body.scrollTop=target;
+  try{window.scrollTo({left:0,top:target,behavior:'instant'});}catch(_){window.scrollTo(0,target);}
+}
 function shelfMeaningfulMaxScroll(el=currentShelfBodyElement()){
   if(!el||el.hidden)return 0;
+  if(usesInternalShelfScroller()){
+    const scroller=$('#shelfBodyViewport');
+    const max=Math.max(0,(scroller?.scrollHeight||0)-(scroller?.clientHeight||0));
+    return max<6?0:Math.round(max);
+  }
   const rect=el.getBoundingClientRect();
-  const docTop=(window.scrollY||window.pageYOffset||0)+rect.top;
+  const docTop=readShelfScrollY()+rect.top;
   // Only the actual shelf body should create vertical travel. Fixed chrome,
   // main bottom padding and Safari's 100vh bookkeeping must not create a
   // phantom few-dozen-pixel scroll range on short shelves.
@@ -366,7 +389,7 @@ function shelfMeaningfulMaxScroll(el=currentShelfBodyElement()){
 function clampShelfScrollY(y,el=currentShelfBodyElement()){
   return Math.min(Math.max(0,Math.round(Number(y)||0)),shelfMeaningfulMaxScroll(el));
 }
-function saveShelfScroll(tab=currentShelfTab,y=window.scrollY||window.pageYOffset||0){
+function saveShelfScroll(tab=currentShelfTab,y=readShelfScrollY()){
   const key=SHELF_SCROLL_KEYS[tab];if(!key)return;
   const value=tab===currentShelfTab?clampShelfScrollY(y):Math.max(0,Math.round(Number(y)||0));
   try{localStorage.setItem(key,String(value));}catch(_){}
@@ -376,8 +399,9 @@ function loadShelfScroll(tab){
   try{return Math.max(0,Number(localStorage.getItem(key)||0)||0);}catch(_){return 0;}
 }
 function holdShelfScrollExtent(){
+  if(usesInternalShelfScroller())return{internal:true,released:false};
   const html=document.documentElement,body=document.body;
-  const height=Math.ceil(Math.max(html.scrollHeight,(window.scrollY||window.pageYOffset||0)+window.innerHeight));
+  const height=Math.ceil(Math.max(html.scrollHeight,readShelfScrollY()+window.innerHeight));
   const hold={htmlMinHeight:html.style.minHeight,bodyMinHeight:body.style.minHeight,released:false};
   // Keep the outgoing document's scroll range while render() installs a
   // shorter shelf. Without this, iOS moves its Visual Viewport before the
@@ -389,6 +413,7 @@ function holdShelfScrollExtent(){
 function restoreShelfScrollExtent(hold){
   if(!hold||hold.released)return;
   hold.released=true;
+  if(hold.internal)return;
   document.documentElement.style.minHeight=hold.htmlMinHeight;
   document.body.style.minHeight=hold.bodyMinHeight;
 }
@@ -398,11 +423,7 @@ async function releaseShelfScrollExtentAtTarget(hold,tab){
   body.classList.add('shelf-scroll-restoring');
   restoreShelfScrollExtent(hold);
   const target=clampShelfScrollY(loadShelfScroll(tab));
-  const setTarget=()=>{
-    document.documentElement.scrollTop=target;
-    body.scrollTop=target;
-    try{window.scrollTo({left:0,top:target,behavior:'instant'});}catch(_){window.scrollTo(0,target);}
-  };
+  const setTarget=()=>writeShelfScrollY(target);
   // Let the real target document height settle, then set and verify the target
   // while the opaque swipe stage is still the visible page.
   // V63.35.57: a small Safari toolbar/VisualViewport adjustment can arrive
@@ -414,8 +435,8 @@ async function releaseShelfScrollExtentAtTarget(hold,tab){
   for(let frame=0;frame<12&&stableFrames<3;frame++){
     await new Promise(resolve=>requestAnimationFrame(resolve));
     setTarget();
-    const actual=window.scrollY||window.pageYOffset||0;
-    const visualOffset=window.visualViewport?.offsetTop||0;
+    const actual=readShelfScrollY();
+    const visualOffset=usesInternalShelfScroller()?0:(window.visualViewport?.offsetTop||0);
     const stable=Math.abs(actual-target)<=.5&&(
       Number.isNaN(previousVisualOffset)||Math.abs(visualOffset-previousVisualOffset)<=.25
     );
@@ -438,11 +459,7 @@ function restoreShelfScroll(tab,{conceal=true}={}){
   // padding and then carry that offset into the next manga-viewer page.
   const y=clampShelfScrollY(savedY);
   try{localStorage.setItem(SHELF_SCROLL_KEYS[tab],String(y));}catch(_){}
-  const setTarget=()=>{
-    document.documentElement.scrollTop=y;
-    body.scrollTop=y;
-    try{window.scrollTo({left:0,top:y,behavior:'instant'});}catch(_){window.scrollTo(0,y);}
-  };
+  const setTarget=()=>writeShelfScrollY(y);
   // Tab navigation has no foreground swipe page to cover the target. Commit
   // its scroll position in the same task as the retained DOM switch so the
   // browser never paints either a hidden shelf or the target at the old Y.
@@ -453,8 +470,8 @@ function restoreShelfScroll(tab,{conceal=true}={}){
       // iOS may apply scroll anchoring after the first successful scrollTo.
       // Correct once more while the swipe page still covers the live shelf,
       // then reveal only on the following frame.
-      const actual=window.scrollY||window.pageYOffset||0;
-      const visualOffset=window.visualViewport?.offsetTop||0;
+      const actual=readShelfScrollY();
+      const visualOffset=usesInternalShelfScroller()?0:(window.visualViewport?.offsetTop||0);
       if(Math.abs(actual-y)>.5||(y===0&&Math.abs(visualOffset)>.5)){
         setTarget();
       }
@@ -734,15 +751,18 @@ function makeShelfSwipeStage(nextTab,direction){
   const chromeRect=chrome?.getBoundingClientRect();
   const stageTop=Math.max(0,Math.round(chromeRect?.bottom||current.getBoundingClientRect().top||0));
   const currentRect=current.getBoundingClientRect();
-  const currentY=window.scrollY||window.pageYOffset||0;
+  const currentY=readShelfScrollY();
   const bodyViewport=$('#shelfBodyViewport');
   const bodyViewportRect=bodyViewport?.getBoundingClientRect?.();
   const bodyViewportPadding=Math.max(0,parseFloat(getComputedStyle(bodyViewport).paddingTop)||0);
+  const bodyViewportPaddingBottom=Math.max(0,parseFloat(getComputedStyle(bodyViewport).paddingBottom)||0);
   // V63.35.55: the incoming page belongs to the shared shelf viewport, not to
   // the outgoing body's border box. Official and local bodies can differ by a
   // fractional/border pixel; using the outgoing box made the local snapshot
   // land about 2px low and then move upward when the real grid appeared.
-  const targetBodyDocTop=currentY+(bodyViewportRect?.top??currentRect.top)+bodyViewportPadding;
+  const targetBodyDocTop=usesInternalShelfScroller()
+    ?(bodyViewportRect?.top??stageTop)+bodyViewportPadding
+    :currentY+(bodyViewportRect?.top??currentRect.top)+bodyViewportPadding;
   let targetY=loadShelfScroll(nextTab);
   const stage=document.createElement('div');
   stage.className='shelf-swipe-stage';
@@ -790,7 +810,9 @@ function makeShelfSwipeStage(nextTab,direction){
   const targetBody=nextInner.firstElementChild;
   const targetViewportHeight=Math.max(0,window.innerHeight-stageTop);
   const targetBodyHeight=Math.max(0,targetBody?.getBoundingClientRect?.().height||0);
-  let targetMax=Math.max(0,targetBodyHeight+18-targetViewportHeight);
+  let targetMax=usesInternalShelfScroller()
+    ?Math.max(0,bodyViewportPadding+targetBodyHeight+bodyViewportPaddingBottom-targetViewportHeight)
+    :Math.max(0,targetBodyHeight+18-targetViewportHeight);
   if(targetMax<6)targetMax=0;
   targetY=Math.min(targetY,Math.round(targetMax));
   try{localStorage.setItem(SHELF_SCROLL_KEYS[nextTab],String(targetY));}catch(_){}
@@ -956,20 +978,22 @@ function installShelfScrollGuard(){
   if(document.documentElement.dataset.shelfScrollGuardInstalled==='1')return;
   document.documentElement.dataset.shelfScrollGuardInstalled='1';
   let raf=0;
-  window.addEventListener('scroll',()=>{
+  const onScroll=()=>{
     if(raf||document.body.classList.contains('bookshelf-scroll-locked')||document.body.classList.contains('shelf-scroll-restoring'))return;
     raf=requestAnimationFrame(()=>{
       raf=0;
       if(!matchMedia('(max-width:680px) and (pointer:coarse)').matches)return;
       const max=shelfMeaningfulMaxScroll();
-      const y=window.scrollY||window.pageYOffset||0;
+      const y=readShelfScrollY();
       document.body.classList.toggle('shelf-no-vertical-scroll',max===0);
       if(y>max+1){
-        try{window.scrollTo({left:0,top:max,behavior:'instant'});}catch(_){window.scrollTo(0,max);}
+        writeShelfScrollY(max);
       }
       saveShelfScroll(currentShelfTab,Math.min(y,max));
     });
-  },{passive:true});
+  };
+  window.addEventListener('scroll',onScroll,{passive:true});
+  $('#shelfBodyViewport')?.addEventListener('scroll',onScroll,{passive:true});
 }
 
 
