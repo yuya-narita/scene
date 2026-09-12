@@ -405,13 +405,23 @@ async function releaseShelfScrollExtentAtTarget(hold,tab){
   };
   // Let the real target document height settle, then set and verify the target
   // while the opaque swipe stage is still the visible page.
-  await new Promise(resolve=>requestAnimationFrame(resolve));
-  setTarget();
-  await new Promise(resolve=>requestAnimationFrame(resolve));
-  const actual=window.scrollY||window.pageYOffset||0;
-  const visualOffset=window.visualViewport?.offsetTop||0;
-  if(Math.abs(actual-target)>.5||(target===0&&Math.abs(visualOffset)>.5))setTarget();
-  await new Promise(resolve=>requestAnimationFrame(resolve));
+  // V63.35.57: a small Safari toolbar/VisualViewport adjustment can arrive
+  // several frames after scrollTo(), especially when the outgoing official
+  // shelf was moved only a little. Keep the opaque swipe page up and pin the
+  // destination until both layout and visual viewport stay unchanged.
+  let stableFrames=0;
+  let previousVisualOffset=NaN;
+  for(let frame=0;frame<12&&stableFrames<3;frame++){
+    await new Promise(resolve=>requestAnimationFrame(resolve));
+    setTarget();
+    const actual=window.scrollY||window.pageYOffset||0;
+    const visualOffset=window.visualViewport?.offsetTop||0;
+    const stable=Math.abs(actual-target)<=.5&&(
+      Number.isNaN(previousVisualOffset)||Math.abs(visualOffset-previousVisualOffset)<=.25
+    );
+    stableFrames=stable?stableFrames+1:0;
+    previousVisualOffset=visualOffset;
+  }
   body.classList.toggle('shelf-no-vertical-scroll',target===0&&shelfMeaningfulMaxScroll()===0);
   body.classList.remove('shelf-scroll-restoring');
 }
@@ -935,13 +945,11 @@ async function revealPrepaintedLiveShelf(view){
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   await new Promise(resolve=>setTimeout(resolve,80));
   await new Promise(resolve=>requestAnimationFrame(resolve));
-  const animation=stage.animate(
-    [{opacity:.999},{opacity:0}],
-    {duration:80,easing:'linear',fill:'forwards'}
-  );
-  await animation.finished.catch(()=>{});
-  stage.style.opacity='0';
-  animation.cancel();
+  // V63.35.57: do not crossfade two copies of a long image grid. On iOS the
+  // blended duplicate layers are the visible flash. The 0.999 prepaint has
+  // already forced the live shelf into the compositor, so teardown is an
+  // atomic cut between visually identical pages.
+  stage.style.willChange='auto';
 }
 
 function installShelfScrollGuard(){
@@ -1050,14 +1058,14 @@ function installShelfSwipe(){
       // changes visibility. A translucent stage allowed WebKit's backing-store
       // update to leak through during the horizontal animation.
       g.view.stage.style.opacity='1';
-      const [,switchedUrls]=await Promise.all([
-        animateShelfSwipeStage(g.view,toX,175),
-        switchShelf(next,{refreshOfficial:false,concealRestore:false})
-      ]);
-      staleUrls=switchedUrls;
+      // Finish the horizontal gesture first. V55 moved the live shelf switch
+      // into the animation and the user's observed flash moved earlier with
+      // it. Keep all DOM/scroll work behind the completed opaque page.
+      await animateShelfSwipeStage(g.view,toX,175);
       // The incoming snapshot is now the only visible page while the live shelf renders underneath.
       g.view.currentPage.style.visibility='hidden';
       g.view.nextPage.style.transform='translate3d(0,0,0)';
+      staleUrls=await switchShelf(next,{refreshOfficial:false,concealRestore:false});
       await releaseShelfScrollExtentAtTarget(scrollExtentHold,next);
       // Every destination is now a retained live shelf. Do not replace either
       // the local grid or official shelf with the swipe snapshot at landing.
