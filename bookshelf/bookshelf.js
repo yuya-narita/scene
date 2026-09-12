@@ -11,6 +11,7 @@ const te=new TextEncoder();
 const $=s=>document.querySelector(s);
 let currentWorkId='';
 const SHELF_TAB_KEY='ahako:bookshelf:last-tab';
+const CREATED_TAB_VISIBLE_KEY='ahako:bookshelf:created-tab-visible';
 const SHELF_ORDER_KEYS={owned:'ahako:bookshelf:order:owned',created:'ahako:bookshelf:order:created'};
 const SHELF_ARCHIVE_KEYS={owned:'ahako:bookshelf:archive:owned',created:'ahako:bookshelf:archive:created'};
 const MOBILE_COLUMNS_KEY='ahako:bookshelf:mobile-columns';
@@ -576,13 +577,40 @@ async function claimOfficialBook(button){
 }
 
 function chooseFirstShelf(){
+  const tabs=visibleShelfTabs();
   const saved=localStorage.getItem(SHELF_TAB_KEY);
-  if(['owned','created','official'].includes(saved))return saved;
-  if(shelfCounts.created>0&&shelfCounts.owned===0)return 'created';
+  if(tabs.includes(saved))return saved;
+  if(tabs.includes('created')&&shelfCounts.created>0&&shelfCounts.owned===0)return 'created';
   return 'owned';
 }
+function createdTabPreference(){
+  try{
+    const saved=localStorage.getItem(CREATED_TAB_VISIBLE_KEY);
+    if(saved==='1')return true;
+    if(saved==='0')return false;
+  }catch(_){}
+  return null;
+}
+function isCreatedTabVisible(){
+  const preference=createdTabPreference();
+  return preference===null?shelfCounts.created>0:preference;
+}
+function setCreatedTabVisible(visible){
+  try{localStorage.setItem(CREATED_TAB_VISIBLE_KEY,visible?'1':'0');}catch(_){}
+  syncCreatedTabVisibility();
+}
+function visibleShelfTabs(){
+  return isCreatedTabVisible()?['owned','created','official']:['owned','official'];
+}
+function syncCreatedTabVisibility(){
+  const visible=isCreatedTabVisible();
+  const tab=$('#createdTab'),toggle=$('#createdTabToggle');
+  if(tab){tab.hidden=!visible;tab.setAttribute('aria-hidden',visible?'false':'true');}
+  if(toggle)toggle.checked=visible;
+}
 function applyShelfTab(tab,{remember=true}={}){
-  currentShelfTab=['owned','created','official'].includes(tab)?tab:'owned';
+  const tabs=visibleShelfTabs();
+  currentShelfTab=tabs.includes(tab)?tab:'owned';
   if(remember)localStorage.setItem(SHELF_TAB_KEY,currentShelfTab);
   document.querySelectorAll('.shelf-tab').forEach(b=>{
     const on=b.dataset.shelf===currentShelfTab;
@@ -685,6 +713,8 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
   shelfCounts={owned:readers.length,created:masters.length};
   shelfDataCache={owned:readers,created:masters};
   if(!currentShelfTab)currentShelfTab=chooseFirstShelf();
+  if(!visibleShelfTabs().includes(currentShelfTab))currentShelfTab='owned';
+  syncCreatedTabVisibility();
   applyShelfTab(currentShelfTab,{remember:false});
   $('#ownedTab').textContent=`もっている本${readers.length?` ${readers.length}`:''}`;
   $('#createdTab').textContent=`つくった本${masters.length?` ${masters.length}`:''}`;
@@ -698,7 +728,7 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
 }
 
 async function switchShelf(tab,{refreshOfficial=false,concealRestore=false}={}){
-  if(!['owned','created','official'].includes(tab)||tab===currentShelfTab)return [];
+  if(!visibleShelfTabs().includes(tab)||tab===currentShelfTab)return [];
   const from=currentShelfTab;
   if(from)saveShelfScroll(from);
   // A first official visit may race the background preload. Finish it while
@@ -1000,13 +1030,13 @@ function installShelfScrollGuard(){
 function installDesktopShelfArrowKeys(){
   if(document.documentElement.dataset.desktopShelfArrowKeysInstalled==='1')return;
   document.documentElement.dataset.desktopShelfArrowKeysInstalled='1';
-  const tabs=['owned','created','official'];
   document.addEventListener('keydown',e=>{
     if(e.defaultPrevented||!matchMedia('(min-width:681px)').matches)return;
     if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
     const target=e.target;
     if(target?.closest?.('input,textarea,select,[contenteditable="true"],dialog[open],details[open]'))return;
     if($('#bookshelfMenu')?.open||document.querySelector('dialog[open]'))return;
+    const tabs=visibleShelfTabs();
     const index=tabs.indexOf(currentShelfTab);if(index<0)return;
     const nextIndex=e.key==='ArrowRight'?index+1:index-1;
     if(nextIndex<0||nextIndex>=tabs.length)return;
@@ -1018,7 +1048,6 @@ function installDesktopShelfArrowKeys(){
 function installShelfSwipe(){
   if(document.documentElement.dataset.shelfSwipeInstalled==='1')return;
   document.documentElement.dataset.shelfSwipeInstalled='1';
-  const tabs=['owned','created','official'];
   let gesture=null;
   let settling=false;
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
@@ -1042,6 +1071,7 @@ function installShelfSwipe(){
     }
     if(!g.horizontal||g.cancelled)return;
     e.preventDefault();
+    const tabs=visibleShelfTabs();
     const index=tabs.indexOf(currentShelfTab);if(index<0)return;
     const direction=dx<0?'left':'right';
     const nextIndex=direction==='left'?index+1:index-1;
@@ -1250,6 +1280,7 @@ async function addDroppedScene(file){
     return 'owned';
   }
   await addMaster(file);
+  setCreatedTabVisible(true);
   applyShelfTab('created');
   return 'created';
 }
@@ -1430,8 +1461,13 @@ $('#addDistributionButton').onclick=$('#emptyDistributionButton').onclick=()=>{c
 $('#ownedTab').onclick=()=>switchShelf('owned');
 $('#createdTab').onclick=()=>switchShelf('created');
 $('#officialTab').onclick=()=>switchShelf('official');
+$('#createdTabToggle')?.addEventListener('change',async e=>{
+  const visible=!!e.currentTarget.checked;
+  setCreatedTabVisible(visible);
+  if(!visible&&currentShelfTab==='created')await switchShelf('owned');
+});
 $('#distributionInput').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const expected=e.target.dataset.replace||'';const id=await addDistribution(file);if(expected&&expected!==id)toast('別の一冊だったため、新しい一冊として追加しました。');applyShelfTab('owned');$('#detailDialog').close();await render();}catch(err){alert(err.message||'Distributionを追加できませんでした。');}finally{e.target.value='';e.target.dataset.replace='';}};
-$('#fileInput').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const expected=e.target.dataset.replace||'';const id=await addMaster(file);if(expected&&expected!==id)toast('別作品のMasterだったため、その作品として追加しました。');applyShelfTab('created');$('#detailDialog').close();await render();}catch(err){alert(err.message||'Masterを追加できませんでした。');}finally{e.target.value='';e.target.dataset.replace='';}};
+$('#fileInput').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const expected=e.target.dataset.replace||'';const id=await addMaster(file);if(expected&&expected!==id)toast('別作品のMasterだったため、その作品として追加しました。');setCreatedTabVisible(true);applyShelfTab('created');$('#detailDialog').close();await render();}catch(err){alert(err.message||'Masterを追加できませんでした。');}finally{e.target.value='';e.target.dataset.replace='';}};
 $('#backupButton').onclick=()=>{closeBookshelfMenu();backupShelf().catch(e=>alert(e.message));};
 $('#restoreButton').onclick=()=>{closeBookshelfMenu();$('#restoreInput').click();};
 $('#restoreInput').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{await restoreShelf(f);}catch(err){alert(err.message||'復元できませんでした。');}finally{e.target.value='';}};
