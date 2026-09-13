@@ -35,6 +35,17 @@ function applyFutureTheme(theme){
   for(const [key,variable] of mapping){const value=safeColor(theme[key]);if(value)root.style.setProperty(variable,value);}
 }
 
+function applyBookshelfHeader(header){
+  const hero=$('.author-hero'),image=$('#authorHeroImage');
+  if(!hero||!image)return;
+  const url=String(header?.url||'').trim();
+  const percent=value=>Number.isFinite(Number(value))?Math.max(0,Math.min(100,Number(value))):50;
+  hero.classList.toggle('has-header-image',Boolean(url));
+  image.style.backgroundImage=url?`url("${url.replace(/"/g,'\\"')}")`:'';
+  hero.style.setProperty('--header-desktop-position',`${percent(header?.desktopX)}% ${percent(header?.desktopY)}%`);
+  hero.style.setProperty('--header-mobile-position',`${percent(header?.mobileX)}% ${percent(header?.mobileY)}%`);
+}
+
 async function fetchJson(path){
   const response=await fetch(`${API_BASE}${path}`,{headers:{Accept:'application/json'},cache:'no-store'});
   const payload=await response.json().catch(()=>null);
@@ -65,6 +76,7 @@ function showError(message){
 function renderShelf(){
   const author=shelfData.author||{},series=Array.isArray(shelfData.series)?shelfData.series:[],unboxed=Array.isArray(shelfData.unboxedWorks)?shelfData.unboxedWorks:[];
   document.title=`${author.displayName||'作者'}の本棚｜あ箱`;
+  applyBookshelfHeader(author.header);
   $('#authorName').textContent=author.displayName||'作者名未設定';
   $('#workCount').textContent=String(shelfData.counts?.works??allWorks.length);
   $('#seriesCount').textContent=String(series.length);

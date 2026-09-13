@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=67.1">
+  <link rel="stylesheet" href="bookshelf.css?v=68.0">
 </head>
 <body>
   <header class="topbar">
@@ -102,7 +102,31 @@
 
   <dialog id="bookshelfAuthorDialog" class="author-dialog">
     <button id="closeBookshelfAuthor" class="dialog-close" type="button" aria-label="閉じる">×</button>
-    <div class="author-dialog-body"><p class="eyebrow">AUTHOR</p><h2>作者登録・ログイン</h2><div id="bookshelfAuthorSignedIn" hidden><strong id="bookshelfAuthorName"></strong><small id="bookshelfAuthorId"></small><div class="author-public-shelf-actions"><a id="openPublicAuthorShelf" href="../author/">公開本棚を見る</a><button id="copyPublicAuthorShelf" type="button">本棚URLをコピー</button></div><button id="bookshelfAuthorLogout" type="button">ログアウト</button></div><form id="bookshelfAuthorEmailForm"><label>作者名<input id="bookshelfAuthorDisplayName" required maxlength="80"></label><label>メールアドレス<input id="bookshelfAuthorEmail" type="email" required></label><button class="primary" type="submit">認証コードを送る</button></form><form id="bookshelfAuthorCodeForm" hidden><label>6桁の認証コード<input id="bookshelfAuthorCode" inputmode="numeric" maxlength="6" required></label><button class="primary" type="submit">確認して続ける</button><button id="bookshelfAuthorResend" type="button">コードを送り直す</button></form><p id="bookshelfAuthorStatus" class="author-status"></p></div>
+    <div class="author-dialog-body">
+      <p class="eyebrow">AUTHOR</p><h2>作者登録・ログイン</h2>
+      <div id="bookshelfAuthorSignedIn" hidden>
+        <strong id="bookshelfAuthorName"></strong><small id="bookshelfAuthorId"></small>
+        <div class="author-public-shelf-actions"><a id="openPublicAuthorShelf" href="../author/">公開本棚を見る</a><button id="copyPublicAuthorShelf" type="button">本棚URLをコピー</button></div>
+        <section class="author-header-editor" aria-labelledby="authorHeaderTitle">
+          <div class="author-header-editor-head"><div><small>BOOKSHELF HEADER</small><h3 id="authorHeaderTitle">公開本棚のヘッダー</h3></div><button id="chooseAuthorHeader" type="button">画像を選ぶ</button></div>
+          <input id="authorHeaderInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          <div class="author-header-previews">
+            <div><span>PC</span><div id="authorHeaderDesktopPreview" class="author-header-preview desktop"><em>画像未登録</em></div></div>
+            <div><span>iPhone</span><div id="authorHeaderMobilePreview" class="author-header-preview mobile"><em>画像未登録</em></div></div>
+          </div>
+          <div id="authorHeaderPositionControls" class="author-header-position-controls" hidden>
+            <fieldset><legend>PCの表示位置</legend><label>左右<input id="authorHeaderDesktopX" type="range" min="0" max="100" value="50"></label><label>上下<input id="authorHeaderDesktopY" type="range" min="0" max="100" value="50"></label></fieldset>
+            <fieldset><legend>iPhoneの表示位置</legend><label>左右<input id="authorHeaderMobileX" type="range" min="0" max="100" value="50"></label><label>上下<input id="authorHeaderMobileY" type="range" min="0" max="100" value="50"></label></fieldset>
+            <div class="author-header-actions"><button id="deleteAuthorHeader" type="button">画像を削除</button><button id="saveAuthorHeaderPosition" class="primary" type="button">位置を保存</button></div>
+          </div>
+          <p id="authorHeaderStatus" class="author-status">JPEG・PNG・WebP、8MBまで。</p>
+        </section>
+        <button id="bookshelfAuthorLogout" type="button">ログアウト</button>
+      </div>
+      <form id="bookshelfAuthorEmailForm"><label>作者名<input id="bookshelfAuthorDisplayName" required maxlength="80"></label><label>メールアドレス<input id="bookshelfAuthorEmail" type="email" required></label><button class="primary" type="submit">認証コードを送る</button></form>
+      <form id="bookshelfAuthorCodeForm" hidden><label>6桁の認証コード<input id="bookshelfAuthorCode" inputmode="numeric" maxlength="6" required></label><button class="primary" type="submit">確認して続ける</button><button id="bookshelfAuthorResend" type="button">コードを送り直す</button></form>
+      <p id="bookshelfAuthorStatus" class="author-status"></p>
+    </div>
   </dialog>
 
   <dialog id="seriesBoxDialog" class="series-box-dialog">
@@ -162,6 +186,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=67.4"></script>
+  <script src="bookshelf.js?v=68.0"></script>
 </body>
 </html>

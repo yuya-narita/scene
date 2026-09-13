@@ -10,3 +10,14 @@
 @media(min-width:681px){.work-dialog-card{padding:32px}.work-dialog-layout{grid-template-columns:210px minmax(0,1fr);align-items:center;gap:34px}.work-dialog-cover{width:210px}.work-description{margin:20px 0 0}.read-link{width:100%;margin-top:24px}}
 @media(max-width:680px){.author-hero{min-height:0;padding:21px 20px;gap:17px;align-content:initial}.author-hero .eyebrow{margin-bottom:7px}.author-hero h1{font-size:28px;line-height:1.08;word-break:keep-all;overflow-wrap:break-word}.author-hero-copy>p:last-child{margin-top:12px;font-size:11px}.author-hero-side{grid-template-columns:minmax(135px,1fr) auto;gap:10px;align-items:center}.shelf-counts dd{font-size:22px}.share-button{min-height:40px;padding:8px 12px;font-size:11px}.book-grid{row-gap:36px}.book-copy p{min-height:2.8em;white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.4}.work-dialog-body{display:contents}.work-dialog-cover{width:auto}.work-description,.read-link{grid-column:1/-1}}
 @media(max-width:390px){.author-hero-side{grid-template-columns:minmax(135px,1fr) auto}.share-button{width:auto}}
+
+/* V68 — author-selected public bookshelf header */
+.author-hero-image{position:absolute;inset:0;z-index:0;background-position:var(--header-desktop-position,50% 50%);background-size:cover;background-repeat:no-repeat;opacity:0;transition:opacity .35s ease}
+.author-hero.has-header-image .author-hero-image{opacity:1}
+.author-hero.has-header-image::after{content:'';position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,rgba(10,12,16,.8) 0%,rgba(10,12,16,.48) 58%,rgba(10,12,16,.3) 100%)}
+.author-hero.has-header-image::before{display:none}
+.author-hero.has-header-image .author-hero-copy,.author-hero.has-header-image .author-hero-side{z-index:2}
+@media(max-width:680px){
+  .author-hero-image{background-position:var(--header-mobile-position,50% 50%)}
+  .author-hero.has-header-image::after{background:linear-gradient(180deg,rgba(10,12,16,.48),rgba(10,12,16,.76))}
+}
