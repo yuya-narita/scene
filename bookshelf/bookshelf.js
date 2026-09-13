@@ -63,7 +63,7 @@ function saveAuthorSession(token,author){authorToken=String(token||'');signedInA
 function syncBookshelfAuthorUI(){const active=!!(authorToken&&signedInAuthor?.authorId),button=$('#bookshelfAuthorButton');if(button){button.textContent=active?(signedInAuthor.displayName||'ログイン中'):'作者ログイン';button.classList.toggle('is-signed-in',active);}$('#bookshelfAuthorSignedIn').hidden=!active;$('#bookshelfAuthorEmailForm').hidden=active;$('#bookshelfAuthorCodeForm').hidden=true;if(active){$('#bookshelfAuthorName').textContent=signedInAuthor.displayName||'';$('#bookshelfAuthorId').textContent=signedInAuthor.authorId||'';if($('#openPublicAuthorShelf'))$('#openPublicAuthorShelf').href=publicAuthorShelfUrl(signedInAuthor.authorId);}syncSeriesShelf();}
 async function restoreBookshelfAuthorSession(){readAuthorSession();syncBookshelfAuthorUI();if(!authorToken)return;try{const response=await fetch(`${API_BASE}/author-auth/me`,{headers:authorHeaders({Accept:'application/json'}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);return;}if(response.ok&&payload?.author)saveAuthorSession(authorToken,payload.author);}catch(_){syncBookshelfAuthorUI();}if(authorToken)await loadAuthorShelfData();}
 async function authorRequest(path,options={}){const response=await fetch(`${API_BASE}${path}`,{...options,headers:authorHeaders(options.headers||{}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);throw new Error(payload?.error||'ログインの有効期限が切れました。');}if(!response.ok||!payload?.ok)throw new Error(payload?.error||'通信できませんでした。');return payload;}
-async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);queuePublishedWorkOrderSync(createdIds);}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
+async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);await queuePublishedWorkOrderSync(createdIds,{immediate:true});}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
 
 function shelfScrollShouldLock(){
   return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open);
@@ -315,19 +315,21 @@ function orderedShelfBooks(books,tab){
   archivedBooks.sort((a,b)=>String(b.updatedAt||b.addedAt||'').localeCompare(String(a.updatedAt||a.addedAt||'')));
   return {visible,archived:archivedBooks};
 }
-function persistVisibleOrderFromDom(tab=currentShelfTab){
+function persistVisibleOrderFromDom(tab=currentShelfTab,{immediate=false}={}){
   if(!SHELF_ORDER_KEYS[tab])return;
   const ids=Array.from(document.querySelectorAll('#grid .book')).map(el=>el.dataset.id).filter(Boolean);
   writeIdList(SHELF_ORDER_KEYS[tab],ids);
-  if(tab==='created')queuePublishedWorkOrderSync(ids);
+  if(tab==='created')queuePublishedWorkOrderSync(ids,{immediate});
 }
-function queuePublishedWorkOrderSync(ids){
-  if(!authorToken||!signedInAuthor?.authorId)return;
+function queuePublishedWorkOrderSync(ids,{immediate=false}={}){
+  if(!authorToken||!signedInAuthor?.authorId)return Promise.resolve();
   const publishedIds=new Set(authorWorks.map(work=>work.workId));
   const workIds=ids.filter(id=>publishedIds.has(id));
-  if(!workIds.length)return;
+  if(!workIds.length)return Promise.resolve();
+  const send=()=>authorRequest('/author/work-order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds}),keepalive:true}).catch(()=>toast('公開本棚の作品順を保存できませんでした。'));
   clearTimeout(publishedWorkOrderSyncTimer);
-  publishedWorkOrderSyncTimer=setTimeout(()=>authorRequest('/author/work-order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds})}).catch(()=>toast('公開本棚の作品順を保存できませんでした。')),350);
+  if(immediate)return send();
+  publishedWorkOrderSyncTimer=setTimeout(send,350);
 }
 function archiveBookId(tab,id){
   if(!SHELF_ARCHIVE_KEYS[tab]||!id)return;
@@ -1416,10 +1418,10 @@ function bindBookInteractions(){
     book.addEventListener('selectstart',e=>e.preventDefault());
     book.addEventListener('click',e=>{if(suppressBookClick){e.preventDefault();e.stopPropagation();return;}openDetail(book.dataset.role,book.dataset.id);});
     book.addEventListener('dragstart',e=>{if(matchMedia('(pointer:coarse)').matches){e.preventDefault();return;}draggingBookId=book.dataset.id;desktopReorderTarget='';suppressBookClick=true;book.classList.add('is-dragging');e.dataTransfer?.setData('text/ahako-book-id',book.dataset.id);if(e.dataTransfer)e.dataTransfer.effectAllowed='move';});
-    book.addEventListener('dragend',()=>{draggingBookId='';desktopReorderTarget='';book.classList.remove('is-dragging');box?.classList.remove('is-drag-over');launcher?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));persistVisibleOrderFromDom();setTimeout(()=>{suppressBookClick=false;},80);});
+    book.addEventListener('dragend',()=>{draggingBookId='';desktopReorderTarget='';book.classList.remove('is-dragging');box?.classList.remove('is-drag-over');launcher?.classList.remove('is-drag-over');document.querySelectorAll('.book.is-drag-target').forEach(x=>x.classList.remove('is-drag-target'));persistVisibleOrderFromDom(currentShelfTab,{immediate:true});setTimeout(()=>{suppressBookClick=false;},80);});
     book.addEventListener('dragover',e=>{const id=draggingBookId;if(!id||id===book.dataset.id)return;e.preventDefault();book.classList.add('is-drag-target');if(desktopReorderTarget!==book.dataset.id){desktopReorderTarget=book.dataset.id;moveBookBefore(id,book.dataset.id);}});
     book.addEventListener('dragleave',()=>book.classList.remove('is-drag-target'));
-    book.addEventListener('drop',e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();desktopReorderTarget='';book.classList.remove('is-drag-target');persistVisibleOrderFromDom();});
+    book.addEventListener('drop',e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();desktopReorderTarget='';book.classList.remove('is-drag-target');persistVisibleOrderFromDom(currentShelfTab,{immediate:true});});
   });
   const installArchiveDropTarget=target=>{if(!target)return;target.ondragover=e=>{if(!draggingBookId)return;e.preventDefault();target.classList.add('is-drag-over');if(e.dataTransfer)e.dataTransfer.dropEffect='move';};target.ondragleave=()=>target.classList.remove('is-drag-over');target.ondrop=async e=>{const id=draggingBookId||e.dataTransfer?.getData('text/ahako-book-id');if(!id)return;e.preventDefault();e.stopPropagation();target.classList.remove('is-drag-over');await sendBookToBox(id,target);};};
   installArchiveDropTarget(box);installArchiveDropTarget(launcher);
@@ -1476,7 +1478,7 @@ function installTouchReorder(_books,box){
     const st=state;if(!st)return;const t=pointFor(e,st.touchId);clearTimeout(st.timer);
     if(!st.dragging){state=null;touchBookReordering=false;return;}
     const x=t?.clientX??st.lastX,y=t?.clientY??st.lastY;const target=document.elementFromPoint(x,y),boxTarget=target?.closest?.('#archiveDropZone,#archiveLauncher');
-    persistVisibleOrderFromDom();clear();setTimeout(()=>{suppressBookClick=false;},100);if(boxTarget){await sendBookToBox(st.id,boxTarget);/* Small launcher and open dock both accept consecutive packing. */}
+    persistVisibleOrderFromDom(currentShelfTab,{immediate:true});clear();setTimeout(()=>{suppressBookClick=false;},100);if(boxTarget){await sendBookToBox(st.id,boxTarget);/* Small launcher and open dock both accept consecutive packing. */}
   };
   window.addEventListener('touchend',finish,{passive:true});
   window.addEventListener('touchcancel',e=>{if(state){const was=state.dragging;clear();if(was)setTimeout(()=>{suppressBookClick=false;},100);}},{passive:true});
