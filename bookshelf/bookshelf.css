@@ -1156,6 +1156,7 @@ html{
   flex:0 0 32px;
 }
 @media(max-width:680px){
+  .author-dialog input{font-size:16px!important}
   :is(#grid,.shelf-swipe-grid).grid[data-mobile-columns="3"] .book-work-info{
     height:28px;min-height:28px;max-height:28px;flex-basis:28px
   }
