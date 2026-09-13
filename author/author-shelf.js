@@ -4,6 +4,7 @@ let shelfData=null;
 let allWorks=[];
 let workById=new Map();
 let toastTimer=0;
+let requestedWorkOpened=false;
 
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));}
 function authorReferenceFromUrl(){const params=new URLSearchParams(location.search),slug=String(params.get('u')||'').trim().toLowerCase();if(/^[a-z0-9][a-z0-9_-]{2,29}$/.test(slug))return`by-slug/${encodeURIComponent(slug)}`;const authorId=String(params.get('id')||params.get('author')||'').trim().toLowerCase();return validAuthorId(authorId)?encodeURIComponent(authorId):'';}
@@ -94,6 +95,8 @@ function renderShelf(){
   $('#emptyShelf').hidden=Boolean(series.length||unboxed.length);
   bindShelfActions();
   $('#loadingState').hidden=true;$('#errorState').hidden=true;$('#shelfContent').hidden=false;
+  const requestedWork=String(new URLSearchParams(location.search).get('book')||'');
+  if(!requestedWorkOpened&&workById.has(requestedWork)){requestedWorkOpened=true;setTimeout(()=>openWork(requestedWork),80);}
 }
 
 function bindShelfActions(){

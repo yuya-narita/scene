@@ -41,6 +41,7 @@ let localShelfViews={owned:null,created:null};
 const insightsCache=new Map();
 const copyJourneyCache=new Map();
 let officialShelfItems=[];
+let publicDiscoveryData={authors:[],works:[]};
 let officialShelfLoaded=false;
 let officialShelfLoadPromise=null;
 let officialShelfRenderPromise=null;
@@ -577,14 +578,32 @@ function officialCardHtml(item,claimed=false){
     <div class="official-actions"><button type="button" data-official-claim="${escapeHtml(item.shelfId)}" ${(sold||received)?'disabled':''}>${received?'受け取り済み':(sold?'旅立ちました':'一冊を受け取る')}</button></div></div></div>
   </article>`;
 }
+function publicAuthorWorkUrl(author,publicationId=''){
+  const url=new URL(publicAuthorShelfUrl(author));
+  if(publicationId)url.searchParams.set('book',String(publicationId));
+  return url.toString();
+}
+function publicDiscoveryHtml(data){
+  const authors=Array.isArray(data?.authors)?data.authors:[],works=Array.isArray(data?.works)?data.works:[];
+  const authorSection=authors.length?`<section class="public-discovery-block"><div class="public-discovery-heading"><div><p class="eyebrow">AUTHORS</p><h3>作者の棚</h3></div><span>${authors.length}棚</span></div><div class="public-author-rail">${authors.map(author=>{
+    const href=publicAuthorShelfUrl(author),header=author.header?.url?`<img src="${escapeHtml(author.header.url)}" alt="">`:'<span>あ□</span>';
+    return `<a class="public-author-card" href="${escapeHtml(href)}"><span class="public-author-card-image">${header}</span><span class="public-author-card-shade"></span><span class="public-author-card-copy"><small>PUBLIC BOOKSHELF</small><strong>${escapeHtml(author.displayName||'作者')}</strong><em>${Math.max(0,Number(author.workCount)||0)}冊</em></span></a>`;
+  }).join('')}</div></section>`:'';
+  const workSection=works.length?`<section class="public-discovery-block"><div class="public-discovery-heading"><div><p class="eyebrow">NEW BOOKS</p><h3>新しく公開された本</h3></div><span>${works.length}冊</span></div><div class="public-discovery-grid">${works.map(work=>{
+    const author=work.author||{},workHref=publicAuthorWorkUrl(author,work.publicationId),authorHref=publicAuthorShelfUrl(author),cover=work.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span>□</span>',detail=[work.episodeLabel,work.episodeTitle,work.subtitle].filter(Boolean).join(' ');
+    return `<article class="public-discovery-book"><a class="public-discovery-cover" href="${escapeHtml(workHref)}">${cover}</a><div class="public-discovery-copy"><h4><a href="${escapeHtml(workHref)}">${escapeHtml(work.title||'Untitled')}</a></h4>${detail?`<p>${escapeHtml(detail)}</p>`:''}<a class="public-discovery-author" href="${escapeHtml(authorHref)}">${escapeHtml(author.displayName||'作者')}の本棚へ</a></div></article>`;
+  }).join('')}</div></section>`:'';
+  return authorSection+workSection;
+}
 async function loadOfficialShelf({force=false}={}){
   if(officialShelfLoaded&&!force)return officialShelfItems;
   if(officialShelfLoadPromise&&!force)return officialShelfLoadPromise;
   const job=(async()=>{
-    const response=await fetch(`${API_BASE}/official-shelf`,{cache:'no-store'});
-    const payload=await response.json().catch(()=>null);
+    const [response,discoveryResponse]=await Promise.all([fetch(`${API_BASE}/official-shelf`,{cache:'no-store'}),fetch(`${API_BASE}/discover`,{cache:'no-store'})]);
+    const [payload,discoveryPayload]=await Promise.all([response.json().catch(()=>null),discoveryResponse.json().catch(()=>null)]);
     if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'あ箱の本を読み込めませんでした。'));
-    officialShelfItems=Array.isArray(payload.items)?payload.items:[];officialShelfLoaded=true;return officialShelfItems;
+    if(!discoveryResponse.ok||!discoveryPayload?.ok)throw new Error(String(discoveryPayload?.error||'公開中の本を読み込めませんでした。'));
+    officialShelfItems=Array.isArray(payload.items)?payload.items:[];publicDiscoveryData={authors:Array.isArray(discoveryPayload.authors)?discoveryPayload.authors:[],works:Array.isArray(discoveryPayload.works)?discoveryPayload.works:[]};officialShelfLoaded=true;return officialShelfItems;
   })();
   if(!force)officialShelfLoadPromise=job;
   try{return await job;}finally{if(officialShelfLoadPromise===job)officialShelfLoadPromise=null;}
@@ -606,7 +625,10 @@ function renderOfficialShelf({force=true}={}){
       const items=await loadOfficialShelf({force});
       const owned=await getAllReaderBooks();
       const claimedEditions=new Set(owned.map(book=>`${String(book.workId||'')}::${String(book.editionId||'')}`));
-      host.innerHTML=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
+      const discovery=publicDiscoveryHtml(publicDiscoveryData);
+      const seedBooks=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ種本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
+      const seedSection=`<section class="official-seed-block"><div class="public-discovery-heading"><div><p class="eyebrow">FROM A-HAKO</p><h3>あ箱から届く本</h3></div></div><p class="official-seed-lead">あ箱から、時々一冊。受け取った本は「もっている本」に入ります。</p><div class="official-seed-grid">${seedBooks}</div></section>`;
+      host.innerHTML=(discovery||items.length)?`${discovery}${seedSection}`:`<div class="official-empty"><strong>まだ本はありません。</strong><span>公開された本がここに並びます。</span></div>`;
       bindOfficialShelfInteractions(host);
     }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
   })();
