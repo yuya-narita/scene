@@ -43,7 +43,7 @@ function applyBookshelfHeader(header){
   hero.classList.toggle('has-header-image',Boolean(url));
   image.style.backgroundImage=url?`url("${url.replace(/"/g,'\\"')}")`:'';
   hero.style.setProperty('--header-desktop-position',`${percent(header?.desktopX)}% ${percent(header?.desktopY)}%`);
-  hero.style.setProperty('--header-mobile-position',`${percent(header?.mobileX)}% ${percent(header?.mobileY)}%`);
+  hero.style.setProperty('--header-mobile-position',`${percent(header?.desktopX)}% ${percent(header?.desktopY)}%`);
 }
 
 async function fetchJson(path){

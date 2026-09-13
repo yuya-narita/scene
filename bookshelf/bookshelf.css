@@ -144,7 +144,7 @@ main{padding-top:22px}
 .author-header-editor-head small{display:block!important;margin-bottom:4px;color:#9a8d7b!important;font-size:7px!important;letter-spacing:.18em}
 .author-header-editor-head h3{margin:0;font-size:15px}
 .author-header-editor-head button{padding:8px 11px;font-size:10px;font-weight:800}
-.author-header-previews{display:grid;grid-template-columns:minmax(0,1fr) 96px;align-items:end;gap:12px;margin-top:13px}
+.author-header-previews{display:grid;grid-template-columns:minmax(0,1fr);align-items:end;gap:12px;margin-top:13px}
 .author-header-previews>div>span{display:block;margin:0 0 5px;color:#877e71;font-size:8px;font-weight:800;letter-spacing:.12em}
 .author-header-preview{position:relative;overflow:hidden;border:1px solid #d5ccbe;border-radius:10px;background:#24262a center/cover no-repeat;box-shadow:inset 0 0 0 999px rgba(0,0,0,.2)}
 .author-header-preview.desktop{aspect-ratio:4.4/1}
@@ -161,7 +161,7 @@ main{padding-top:22px}
 .author-header-editor>.author-status{margin-bottom:0}
 @media(max-width:680px){
   .author-header-editor{padding:13px}
-  .author-header-previews{grid-template-columns:minmax(0,1fr) 82px;gap:9px}
+  .author-header-previews{grid-template-columns:minmax(0,1fr);gap:9px}
   .author-header-preview.desktop{aspect-ratio:3.5/1}
   .author-header-preview.mobile{aspect-ratio:1.05/1}
   .author-header-position-controls fieldset{padding:8px}

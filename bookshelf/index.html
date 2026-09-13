@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=68.0">
+  <link rel="stylesheet" href="bookshelf.css?v=68.1">
 </head>
 <body>
   <header class="topbar">
@@ -111,12 +111,10 @@
           <div class="author-header-editor-head"><div><small>BOOKSHELF HEADER</small><h3 id="authorHeaderTitle">公開本棚のヘッダー</h3></div><button id="chooseAuthorHeader" type="button">画像を選ぶ</button></div>
           <input id="authorHeaderInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
           <div class="author-header-previews">
-            <div><span>PC</span><div id="authorHeaderDesktopPreview" class="author-header-preview desktop"><em>画像未登録</em></div></div>
-            <div><span>iPhone</span><div id="authorHeaderMobilePreview" class="author-header-preview mobile"><em>画像未登録</em></div></div>
+            <div><span>プレビュー</span><div id="authorHeaderDesktopPreview" class="author-header-preview desktop"><em>画像未登録</em></div></div>
           </div>
           <div id="authorHeaderPositionControls" class="author-header-position-controls" hidden>
-            <fieldset><legend>PCの表示位置</legend><label>左右<input id="authorHeaderDesktopX" type="range" min="0" max="100" value="50"></label><label>上下<input id="authorHeaderDesktopY" type="range" min="0" max="100" value="50"></label></fieldset>
-            <fieldset><legend>iPhoneの表示位置</legend><label>左右<input id="authorHeaderMobileX" type="range" min="0" max="100" value="50"></label><label>上下<input id="authorHeaderMobileY" type="range" min="0" max="100" value="50"></label></fieldset>
+            <fieldset><legend>画像の表示位置</legend><label>左右<input id="authorHeaderDesktopX" type="range" min="0" max="100" value="50"></label><label>上下<input id="authorHeaderDesktopY" type="range" min="0" max="100" value="50"></label></fieldset>
             <div class="author-header-actions"><button id="deleteAuthorHeader" type="button">画像を削除</button><button id="saveAuthorHeaderPosition" class="primary" type="button">位置を保存</button></div>
           </div>
           <p id="authorHeaderStatus" class="author-status">JPEG・PNG・WebP、8MBまで。</p>
@@ -186,6 +184,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=68.0"></script>
+  <script src="bookshelf.js?v=68.1"></script>
 </body>
 </html>
