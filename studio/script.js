@@ -1057,7 +1057,7 @@
   }
 
   async function setHostedPublicationState(workId,action){
-    const response=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}/${action}`,{method:'POST'});
+    const response=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}/${action}`,{method:'POST',headers:authorAuthHeaders()});
     let payload=null; try{payload=await response.json();}catch(_){}
     if(!response.ok || !payload?.ok)throw new Error(payload?.error||`${action} failed (${response.status})`);
     return payload;
@@ -1096,7 +1096,7 @@
 
   async function deleteHostedPublication(workId){
     if(!workId)return;
-    const response=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}`,{method:'DELETE'});
+    const response=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}`,{method:'DELETE',headers:authorAuthHeaders()});
     let payload=null; try{payload=await response.json();}catch(_){}
     if(!response.ok || !payload?.ok)throw new Error(payload?.error||`Delete failed (${response.status})`);
   }
@@ -3240,11 +3240,11 @@
     const runtime=relaySourceRuntimeDocument(hosted,editionId);
     const response=await fetchWithTimeout(`${SCENE_STUDIO_API_BASE}/relay-source`,{
       method:'POST',
-      headers:{
+      headers:authorAuthHeaders({
         'Content-Type':'application/json',
         'X-Scene-Work-Id':ident.workId,
         'X-Scene-Owner-Key':ident.ownerKey
-      },
+      }),
       body:JSON.stringify({editionId,scene:runtime})
     },30000);
     let payload=null;
@@ -3978,6 +3978,102 @@
   // Replace only publishAdapter.publish() when Hosting API is ready.
   // ---------------------------------------------------------
   const SCENE_STUDIO_API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  const AUTHOR_AUTH_STORAGE_KEY='ahako-author-session-v1';
+  const AUTHOR_TERMS_VERSION='author-publish-v1';
+  let authorSessionToken='';
+  let signedInAuthor=null;
+
+  function readAuthorSession(){
+    try{
+      const value=JSON.parse(localStorage.getItem(AUTHOR_AUTH_STORAGE_KEY)||'null');
+      if(value?.token&&value?.author?.authorId){authorSessionToken=String(value.token);signedInAuthor=value.author;}
+    }catch(_){authorSessionToken='';signedInAuthor=null;}
+  }
+  function saveAuthorSession(token,author){
+    authorSessionToken=String(token||'');signedInAuthor=author||null;
+    try{
+      if(authorSessionToken&&signedInAuthor)localStorage.setItem(AUTHOR_AUTH_STORAGE_KEY,JSON.stringify({token:authorSessionToken,author:signedInAuthor}));
+      else localStorage.removeItem(AUTHOR_AUTH_STORAGE_KEY);
+    }catch(_){}
+    syncAuthorAccountUI();
+  }
+  function authorAuthHeaders(extra={}){
+    return {...extra,...(authorSessionToken?{'Authorization':`Bearer ${authorSessionToken}`}:{})};
+  }
+  function syncPublishConfirmationAvailability(){
+    const rights=$('#publishRightsConfirm');
+    const button=$('#publishConfirmButton');
+    if(button)button.disabled=!(rights?.checked&&signedInAuthor?.authorId&&authorSessionToken);
+  }
+  function syncAuthorAccountUI(){
+    const signedOut=$('#publishAuthorSignedOut'),signedIn=$('#publishAuthorSignedIn');
+    const active=Boolean(signedInAuthor?.authorId&&authorSessionToken);
+    if(signedOut)signedOut.hidden=active;
+    if(signedIn)signedIn.hidden=!active;
+    const name=$('#publishAuthorName'),id=$('#publishAuthorId');
+    if(name)name.textContent=signedInAuthor?.displayName||'';
+    if(id)id.textContent=signedInAuthor?.authorId||'';
+    syncPublishConfirmationAvailability();
+  }
+  async function restoreAuthorSession(){
+    readAuthorSession();syncAuthorAccountUI();
+    if(!authorSessionToken)return;
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author-auth/me`,{headers:authorAuthHeaders({'Accept':'application/json'}),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.author)throw new Error('session-invalid');
+      saveAuthorSession(authorSessionToken,payload.author);
+    }catch(_){saveAuthorSession('',null);}
+  }
+  function setAuthorAuthStatus(message='',error=false){
+    const el=$('#authorAuthStatus');if(!el)return;
+    el.textContent=message;el.classList.toggle('is-error',Boolean(error));
+  }
+  function openAuthorAuthDialog(){
+    setAuthorAuthStatus('');
+    const emailForm=$('#authorAuthEmailForm'),codeForm=$('#authorAuthCodeForm');
+    if(emailForm)emailForm.hidden=false;if(codeForm)codeForm.hidden=true;
+    const suggested=String(authorInput?.value||'').trim();
+    const display=$('#authorAuthDisplayName');if(display&&!display.value)display.value=suggested;
+    $('#authorAuthDialog')?.showModal();
+  }
+  async function requestAuthorCode(){
+    const email=String($('#authorAuthEmail')?.value||'').trim();
+    if(!email)return;
+    const button=$('#authorAuthEmailForm button[type="submit"]');if(button)button.disabled=true;
+    setAuthorAuthStatus('認証コードを送信しています…');
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author-auth/request-code`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email}),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok)throw new Error(payload?.error||'認証コードを送信できませんでした。');
+      $('#authorAuthEmailForm').hidden=true;$('#authorAuthCodeForm').hidden=false;
+      setAuthorAuthStatus('メールに届いた6桁のコードを入力してください。');
+      setTimeout(()=>$('#authorAuthCode')?.focus(),0);
+    }catch(error){setAuthorAuthStatus(error?.message||'認証コードを送信できませんでした。',true);}
+    finally{if(button)button.disabled=false;}
+  }
+  async function verifyAuthorCode(){
+    const email=String($('#authorAuthEmail')?.value||'').trim();
+    const code=String($('#authorAuthCode')?.value||'').replace(/\D/g,'').slice(0,6);
+    const displayName=String($('#authorAuthDisplayName')?.value||'').trim();
+    const button=$('#authorAuthCodeForm button[type="submit"]');if(button)button.disabled=true;
+    setAuthorAuthStatus('確認しています…');
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author-auth/verify-code`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code,displayName}),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.token||!payload?.author)throw new Error(payload?.error||'作者確認に失敗しました。');
+      saveAuthorSession(payload.token,payload.author);
+      if(authorInput&&!authorInput.value.trim())authorInput.value=payload.author.displayName||'';
+      $('#authorAuthDialog')?.close();
+      setAuthorAuthStatus('');
+    }catch(error){setAuthorAuthStatus(error?.message||'作者確認に失敗しました。',true);}
+    finally{if(button)button.disabled=false;}
+  }
+  async function logoutAuthor(){
+    const token=authorSessionToken;
+    saveAuthorSession('',null);
+    if(token){try{await fetch(`${SCENE_STUDIO_API_BASE}/author-auth/logout`,{method:'POST',headers:{'Authorization':`Bearer ${token}`}});}catch(_){}}
+  }
 
   async function uploadPublishAsset(src){
     if(!src || !/^blob:/i.test(src))return src;
@@ -3986,10 +4082,10 @@
 
     const response=await fetch(`${SCENE_STUDIO_API_BASE}/asset`,{
       method:'POST',
-      headers:{
+      headers:authorAuthHeaders({
         'Content-Type':item.blob.type||'application/octet-stream',
         'X-File-Name':encodeURIComponent(item.name||'asset')
-      },
+      }),
       body:item.blob
     });
     let payload=null;
@@ -4071,12 +4167,13 @@
       const baseEndpoint=id?`${SCENE_STUDIO_API_BASE}/publish?id=${encodeURIComponent(id)}`:`${SCENE_STUDIO_API_BASE}/publish`;
       const request={
         method:'POST',
-        headers:{
+        headers:authorAuthHeaders({
           'Content-Type':'application/json',
           'X-Scene-Work-Id':ident.workId,
           'X-Scene-Owner-Key':ident.ownerKey,
-          'X-Scene-Revision':String(requestRevision)
-        },
+          'X-Scene-Revision':String(requestRevision),
+          'X-Publish-Rights':AUTHOR_TERMS_VERSION
+        }),
         body:JSON.stringify(hostedDocument)
       };
 
@@ -4246,6 +4343,7 @@
     const confirm=$('#publishConfirmButton');
     if(rights)rights.checked=false;
     if(confirm)confirm.disabled=true;
+    syncAuthorAccountUI();
   }
 
   function openPublishDialog(){
@@ -4345,6 +4443,7 @@
 
   async function runPublish({restoreFromOld=false}={}){
     if(!workingDocument?.scenes?.length)return;
+    if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
     ensureMasterIdentity(workingDocument);
     const rights=$('#publishRightsConfirm');
     if(rights && !rights.checked){ rights.focus(); return; }
@@ -4409,7 +4508,11 @@
       console.warn('Publish failed',error);
       setPublishState('error');
       const message=$('#publishStateError p');
-      if(message && error?.code==='REVISION_CONFLICT'){
+      if(error?.code==='AUTHOR_LOGIN_REQUIRED'||error?.code==='AUTHOR_SESSION_EXPIRED'){
+        saveAuthorSession('',null);
+        if(message)message.textContent='作者として、もう一度ログインしてください。';
+        setTimeout(openAuthorAuthDialog,0);
+      }else if(message && error?.code==='REVISION_CONFLICT'){
         const remote=Math.max(0,Number(error.currentRevision)||0);
         staleRestoreRemoteRevision=remote||staleRestoreRemoteRevision;
         message.textContent=uiLanguage==='ja'
@@ -6171,7 +6274,14 @@
   $('#publishFromPreviewButton')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();openPublishDialog();});
   $('#easyPublishButton')?.addEventListener('click',(event)=>{event.preventDefault();openPublishDialogFromEasy();});
   $('#publishDialogClose')?.addEventListener('click',closePublishDialog);
-  $('#publishRightsConfirm')?.addEventListener('change',(event)=>{const b=$('#publishConfirmButton');if(b)b.disabled=!event.currentTarget.checked;});
+  $('#publishRightsConfirm')?.addEventListener('change',syncPublishConfirmationAvailability);
+  $('#publishAuthorLoginButton')?.addEventListener('click',openAuthorAuthDialog);
+  $('#publishAuthorLogoutButton')?.addEventListener('click',logoutAuthor);
+  $('#authorAuthClose')?.addEventListener('click',()=>$('#authorAuthDialog')?.close());
+  $('#authorAuthDialog')?.addEventListener('click',(event)=>{if(event.target===event.currentTarget)event.currentTarget.close();});
+  $('#authorAuthEmailForm')?.addEventListener('submit',(event)=>{event.preventDefault();requestAuthorCode();});
+  $('#authorAuthCodeForm')?.addEventListener('submit',(event)=>{event.preventDefault();verifyAuthorCode();});
+  $('#authorAuthResend')?.addEventListener('click',()=>{const emailForm=$('#authorAuthEmailForm'),codeForm=$('#authorAuthCodeForm');if(emailForm)emailForm.hidden=false;if(codeForm)codeForm.hidden=true;setAuthorAuthStatus('');});
   $('#publishConfirmButton')?.addEventListener('click',runPublish);
   $('#publishRetryButton')?.addEventListener('click',runPublish);
   $('#publishCopyButton')?.addEventListener('click',copyPublishedUrl);
@@ -12105,6 +12215,7 @@ function openDesktopTextDetail(){
     menuOpenBookshelfButton.addEventListener('click',()=>{closeEasyMenu();location.href='../bookshelf/';});
   }
   if(openedFromBookshelf)setTimeout(openMasterFromBookshelf,120);
+  restoreAuthorSession();
 
   // Public, intentionally small integration surface.
   // Embed/API clients can pass a Scene Format object directly or fetch one.

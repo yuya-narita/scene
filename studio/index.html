@@ -26,7 +26,7 @@
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="stylesheet" href="./scene-player-core.css?v=20260906-40">
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=64.0">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
     #studioPreviewViewport{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;container-type:size;container-name:studio-preview}
@@ -767,6 +767,19 @@
         <span class="publish-kicker">PUBLISH</span>
         <h2 id="publishReadyTitle">この作品を公開しますか？</h2>
         <p id="publishReadyText">公開すると、読者へ渡せるURLを発行します。</p>
+        <div id="publishAuthorGate" class="publish-author-gate">
+          <div id="publishAuthorSignedOut">
+            <small>AUTHOR</small>
+            <strong>公開には作者確認が必要です</strong>
+            <button id="publishAuthorLoginButton" class="publish-secondary" type="button">作者登録・ログイン</button>
+          </div>
+          <div id="publishAuthorSignedIn" hidden>
+            <small>AUTHOR</small>
+            <strong id="publishAuthorName"></strong>
+            <span id="publishAuthorId"></span>
+            <button id="publishAuthorLogoutButton" class="publish-author-text-button" type="button">ログアウト</button>
+          </div>
+        </div>
         <label class="publish-rights-check">
           <input id="publishRightsConfirm" type="checkbox">
           <span>この作品を公開するために必要な権利を有している、または権利者から必要な許可を得ています。</span>
@@ -799,6 +812,26 @@
         <p>時間をおいて、もう一度試してください。</p>
         <button id="publishRetryButton" class="publish-primary" type="button">もう一度試す</button>
       </div>
+    </div>
+  </dialog>
+
+  <dialog id="authorAuthDialog" class="publish-dialog author-auth-dialog">
+    <div class="publish-dialog-card author-auth-card">
+      <button id="authorAuthClose" class="publish-dialog-close" type="button" aria-label="閉じる">×</button>
+      <span class="publish-kicker">AUTHOR</span>
+      <h2>作者登録・ログイン</h2>
+      <p>公開した作品を作者アカウントに紐づけます。表示されるのは作者名だけです。</p>
+      <form id="authorAuthEmailForm" class="author-auth-form">
+        <label><span>メールアドレス</span><input id="authorAuthEmail" type="email" inputmode="email" autocomplete="email" required placeholder="name@example.com"></label>
+        <button class="publish-primary" type="submit">認証コードを送る</button>
+      </form>
+      <form id="authorAuthCodeForm" class="author-auth-form" hidden>
+        <label><span>作者名</span><input id="authorAuthDisplayName" type="text" autocomplete="nickname" maxlength="80" placeholder="例：Yuya Narita"></label>
+        <label><span>6桁の認証コード</span><input id="authorAuthCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required placeholder="000000"></label>
+        <button class="publish-primary" type="submit">確認して続ける</button>
+        <button id="authorAuthResend" class="publish-author-text-button" type="button">コードを送り直す</button>
+      </form>
+      <p id="authorAuthStatus" class="author-auth-status" aria-live="polite"></p>
     </div>
   </dialog>
 
@@ -989,7 +1022,7 @@
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=63.14"></script>
+<script src="./script.js?v=64.0"></script>
 
 
 
