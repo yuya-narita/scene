@@ -21,7 +21,6 @@ function publicPlayerUrl(work){
     rawWorkUrl.searchParams.set('raw','1');
     playerUrl.searchParams.set('src',rawWorkUrl.toString());
     playerUrl.searchParams.set('returnTo',location.href);
-    playerUrl.searchParams.set('returnLabel',`${shelfData?.author?.displayName||'作者'}の本棚へ`);
     return playerUrl.toString();
   }catch(_){
     return work.url||'#';

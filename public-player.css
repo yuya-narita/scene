@@ -48,7 +48,7 @@ body{
   .public-shelf-return{
     top:max(8px,env(safe-area-inset-top));
     left:max(8px,env(safe-area-inset-left));
-    width:min(76vw,360px);
+    width:148px;
     max-width:none;
     min-height:38px;
     padding:0 13px;

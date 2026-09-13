@@ -73,9 +73,8 @@
     if(!shelfReturnLink)return;
     const returnTo=safeAuthorShelfReturn(params.get('returnTo'));
     if(!returnTo){shelfReturnLink.hidden=true;return;}
-    const requestedLabel=String(params.get('returnLabel')||'').trim().slice(0,80);
     shelfReturnLink.href=returnTo;
-    shelfReturnLink.textContent=`← ${requestedLabel||'作者の本棚へ'}`;
+    shelfReturnLink.textContent='← 作者の本棚へ';
     shelfReturnLink.hidden=false;
   }
 
@@ -933,7 +932,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.25-author-shelf-return-collapse',
+    version: '0.3.26-compact-author-shelf-return',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
