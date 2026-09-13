@@ -30,6 +30,7 @@ let suppressBookClick=false;
 let draggingBookId='';
 let desktopReorderTarget='';
 let touchReorderInstalled=false;
+let publishedWorkOrderSyncTimer=0;
 let touchBookReordering=false;
 let archiveDockOpen=false;
 let mobileShelfColumns=loadMobileColumns();
@@ -62,7 +63,7 @@ function saveAuthorSession(token,author){authorToken=String(token||'');signedInA
 function syncBookshelfAuthorUI(){const active=!!(authorToken&&signedInAuthor?.authorId),button=$('#bookshelfAuthorButton');if(button){button.textContent=active?(signedInAuthor.displayName||'ログイン中'):'作者ログイン';button.classList.toggle('is-signed-in',active);}$('#bookshelfAuthorSignedIn').hidden=!active;$('#bookshelfAuthorEmailForm').hidden=active;$('#bookshelfAuthorCodeForm').hidden=true;if(active){$('#bookshelfAuthorName').textContent=signedInAuthor.displayName||'';$('#bookshelfAuthorId').textContent=signedInAuthor.authorId||'';if($('#openPublicAuthorShelf'))$('#openPublicAuthorShelf').href=publicAuthorShelfUrl(signedInAuthor.authorId);}syncSeriesShelf();}
 async function restoreBookshelfAuthorSession(){readAuthorSession();syncBookshelfAuthorUI();if(!authorToken)return;try{const response=await fetch(`${API_BASE}/author-auth/me`,{headers:authorHeaders({Accept:'application/json'}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);return;}if(response.ok&&payload?.author)saveAuthorSession(authorToken,payload.author);}catch(_){syncBookshelfAuthorUI();}if(authorToken)await loadAuthorShelfData();}
 async function authorRequest(path,options={}){const response=await fetch(`${API_BASE}${path}`,{...options,headers:authorHeaders(options.headers||{}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);throw new Error(payload?.error||'ログインの有効期限が切れました。');}if(!response.ok||!payload?.ok)throw new Error(payload?.error||'通信できませんでした。');return payload;}
-async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
+async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);queuePublishedWorkOrderSync(createdIds);}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
 
 function shelfScrollShouldLock(){
   return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open);
@@ -318,6 +319,15 @@ function persistVisibleOrderFromDom(tab=currentShelfTab){
   if(!SHELF_ORDER_KEYS[tab])return;
   const ids=Array.from(document.querySelectorAll('#grid .book')).map(el=>el.dataset.id).filter(Boolean);
   writeIdList(SHELF_ORDER_KEYS[tab],ids);
+  if(tab==='created')queuePublishedWorkOrderSync(ids);
+}
+function queuePublishedWorkOrderSync(ids){
+  if(!authorToken||!signedInAuthor?.authorId)return;
+  const publishedIds=new Set(authorWorks.map(work=>work.workId));
+  const workIds=ids.filter(id=>publishedIds.has(id));
+  if(!workIds.length)return;
+  clearTimeout(publishedWorkOrderSyncTimer);
+  publishedWorkOrderSyncTimer=setTimeout(()=>authorRequest('/author/work-order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds})}).catch(()=>toast('公開本棚の作品順を保存できませんでした。')),350);
 }
 function archiveBookId(tab,id){
   if(!SHELF_ARCHIVE_KEYS[tab]||!id)return;

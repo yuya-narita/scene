@@ -91,7 +91,7 @@ function openWork(publicationId){
   const series=shelfData?.series?.find(box=>box.episodes.some(episode=>episode.publicationId===publicationId));
   const episode=series?.episodes.find(item=>item.publicationId===publicationId);
   const context=[series?.title,episode?.episodeLabel||work.episodeLabel,episode?.episodeTitle||work.episodeTitle].filter(Boolean).join(' ／ ');
-  $('#workDialogContent').innerHTML=`<div class="work-dialog-layout">${coverHtml(work,'work-dialog-cover')}<div class="work-dialog-info"><p class="eyebrow">${escapeHtml(context||'PUBLIC BOOK')}</p><h2>${escapeHtml(work.title||'Untitled')}</h2><p class="work-byline">${escapeHtml(work.byline||shelfData.author?.displayName||'')}</p></div>${work.description?`<p class="work-description">${escapeHtml(work.description)}</p>`:''}<a class="read-link" href="${escapeHtml(work.url)}">この本を読む</a></div>`;
+  $('#workDialogContent').innerHTML=`<div class="work-dialog-layout">${coverHtml(work,'work-dialog-cover')}<div class="work-dialog-body"><div class="work-dialog-info"><p class="eyebrow">${escapeHtml(context||'PUBLIC BOOK')}</p><h2>${escapeHtml(work.title||'Untitled')}</h2><p class="work-byline">${escapeHtml(work.byline||shelfData.author?.displayName||'')}</p></div>${work.description?`<p class="work-description">${escapeHtml(work.description)}</p>`:''}<a class="read-link" href="${escapeHtml(work.url)}">この本を読む</a></div></div>`;
   openDialog('workDialog');
 }
 
