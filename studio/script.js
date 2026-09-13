@@ -17,7 +17,10 @@
   const COVER_INFO_FIELDS=['title','subtitle','author','episode','episodeTitle'];
   const languageInput = $('#languageInput');
   const seriesTitleInput = $('#seriesTitleInput');
+  const seriesLinkSelect = $('#seriesLinkSelect');
+  const seriesLinkStatus = $('#seriesLinkStatus');
   const episodeInput = $('#episodeInput');
+  const episodeNumberInput = $('#episodeNumberInput');
   const episodeTitleInput = $('#episodeTitleInput');
   const descriptionInput = $('#descriptionInput');
   const menuRelayToggleButton = $('#menuRelayToggleButton');
@@ -837,7 +840,7 @@
     return {
       id:currentDraftId,updatedAt:Date.now(),title:draftTitle(),body:bodyInput.value,
       easySourceDirty,protectedResplitPending,selectedSceneIndex,
-      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',episode:episodeInput?.value||'',episodeTitle:episodeTitleInput?.value||'',description:descriptionInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
+      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',seriesId:activeSeriesId(),episode:episodeInput?.value||'',episodeNumber:episodeNumberInput?.value||'',episodeTitle:episodeTitleInput?.value||'',description:descriptionInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
       document:workingDocument?clone(workingDocument):null,
       publication:{
         id:latestPublishedId||'',
@@ -904,10 +907,12 @@
     titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
+    if(episodeNumberInput)episodeNumberInput.value=String(row.easy?.episodeNumber||row.document?.metadata?.episodeNumber||'');
     if(episodeInput)episodeInput.value=row.easy?.episode||'';
     if(episodeTitleInput)episodeTitleInput.value=row.easy?.episodeTitle||row.document?.metadata?.episodeTitle||'';
     if(descriptionInput)descriptionInput.value=row.easy?.description||row.document?.metadata?.description||'';
     if(languageInput)languageInput.value=row.easy?.language||'auto';
+    renderAuthorSeriesOptions({preferred:String(row.easy?.seriesId||row.document?.metadata?.seriesId||'')});
     if(densitySelect)densitySelect.value='normal';
     coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';setCoverPositionFromValue(row.document?.cover?.position||row.cover?.position||'center center',row.document?.cover?.positions||row.cover?.positions);
     coverLogoUrl=map.get(row.cover?.logoUrl)||row.cover?.logoUrl||row.document?.cover?.logo?.src||'';coverLogoFileName=row.cover?.logoName||row.document?.cover?.logo?._editorFileName||'';
@@ -928,6 +933,7 @@
     if(workingDocument?.scenes?.length && rowHadMasterIdentity){
       await hydrateMasterPublicationState(workingDocument,{warnStale:true});
       await saveDraftNow({force:true});
+      await loadAuthorSeries();
     }else if(workingDocument?.scenes?.length){
       // Persist the newly-created master identity locally without erasing an
       // existing legacy publication id.
@@ -1248,7 +1254,7 @@
     latestPublishedAt=0;
     titleInput.value='';authorInput.value='';bodyInput.value='';
     if(densitySelect)densitySelect.value='normal';
-    if(subtitleInput)subtitleInput.value='';applyRememberedWorkIdentity();if(seriesTitleInput)seriesTitleInput.value='';if(episodeInput)episodeInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';
+    if(subtitleInput)subtitleInput.value='';applyRememberedWorkIdentity();if(seriesTitleInput)seriesTitleInput.value='';if(seriesLinkSelect)seriesLinkSelect.value='';if(episodeInput)episodeInput.value='';if(episodeNumberInput)episodeNumberInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';renderAuthorSeriesOptions();
     coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';
     if(endingLabelInput)endingLabelInput.value=''; if(endingSeEnabled)endingSeEnabled.checked=false; setAssetField('endingSeInput','',''); if(endingSeFields)endingSeFields.hidden=true; endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateAutoRecStartLabel();
@@ -1888,7 +1894,9 @@
       subtitle: subtitleInput?.value.trim() || '',
       language: selectedLanguage === 'auto' ? detected : selectedLanguage,
       seriesTitle: seriesTitleInput?.value.trim() || '',
+      seriesId: activeSeriesId(),
       episode: episodeInput?.value.trim() || '',
+      episodeNumber: Number(episodeNumberInput?.value||0)||0,
       episodeTitle: episodeTitleInput?.value.trim() || '',
       description: descriptionInput?.value.trim() || ''
     };
@@ -2050,10 +2058,12 @@
     if(meta.subtitle)manifest.subtitle=meta.subtitle;
     if(meta.episodeTitle)manifest.episodeTitle=meta.episodeTitle;
     if(meta.description)manifest.description=meta.description;
-    if(meta.seriesTitle || meta.episode){
+    if(meta.seriesTitle || meta.episode || meta.seriesId){
       manifest.series={};
+      if(meta.seriesId)manifest.series.id=meta.seriesId;
       if(meta.seriesTitle)manifest.series.title=meta.seriesTitle;
       if(meta.episode)manifest.series.episode=meta.episode;
+      if(meta.episodeNumber)manifest.series.episodeNumber=meta.episodeNumber;
     }
     if(coverPath){
       manifest.cover={
@@ -2083,7 +2093,9 @@
       metadata:{
         subtitle:subtitleInput?.value.trim() || '',
         seriesTitle:seriesTitleInput?.value.trim() || '',
+        seriesId:activeSeriesId(),
         episode:episodeInput?.value.trim() || '',
+        episodeNumber:Number(episodeNumberInput?.value||0)||0,
         episodeTitle:episodeTitleInput?.value.trim() || '',
         description:descriptionInput?.value.trim() || ''
       },
@@ -2486,7 +2498,9 @@
             author:authorInput?.value ?? '',
             subtitle:subtitleInput?.value ?? '',
             series:seriesTitleInput?.value ?? '',
+            seriesId:activeSeriesId(),
             episode:episodeInput?.value ?? '',
+            episodeNumber:episodeNumberInput?.value ?? '',
             language:languageInput?.value ?? 'ja',
             body:priorBody
           }
@@ -2519,7 +2533,11 @@
     workingDocument.metadata ||= {};
     workingDocument.metadata.subtitle=subtitleInput?.value.trim() || '';
     workingDocument.metadata.seriesTitle=seriesTitleInput?.value.trim() || '';
+    const linkedSeriesId=activeSeriesId();
+    if(linkedSeriesId)workingDocument.metadata.seriesId=linkedSeriesId;else delete workingDocument.metadata.seriesId;
     workingDocument.metadata.episode=episodeInput?.value.trim() || '';
+    const episodeNumber=Number(episodeNumberInput?.value||0);
+    if(linkedSeriesId&&Number.isInteger(episodeNumber)&&episodeNumber>=1&&episodeNumber<=9999)workingDocument.metadata.episodeNumber=episodeNumber;else delete workingDocument.metadata.episodeNumber;
     workingDocument.metadata.episodeTitle=episodeTitleInput?.value.trim() || '';
     workingDocument.metadata.description=descriptionInput?.value.trim() || '';
     workingDocument.theme=selectedTheme;
@@ -3485,7 +3503,9 @@
         doc.metadata ||= {};
         doc.metadata.subtitle=manifest.subtitle||doc.metadata.subtitle||'';
         doc.metadata.seriesTitle=manifest.series?.title||doc.metadata.seriesTitle||'';
+        doc.metadata.seriesId=manifest.series?.id||doc.metadata.seriesId||'';
         doc.metadata.episode=manifest.series?.episode||doc.metadata.episode||'';
+        doc.metadata.episodeNumber=Number(manifest.series?.episodeNumber||doc.metadata.episodeNumber||0)||0;
         doc.metadata.description=manifest.description||doc.metadata.description||'';
         if(languageInput)languageInput.value=['ja','en','mul'].includes(manifest.language)?manifest.language:'auto';
       }
@@ -3586,6 +3606,8 @@
     authorInput.value=doc.author||'';
     if(subtitleInput)subtitleInput.value=doc.metadata?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=doc.metadata?.seriesTitle||'';
+    if(episodeNumberInput)episodeNumberInput.value=String(doc.metadata?.episodeNumber||'');
+    renderAuthorSeriesOptions({preferred:String(doc.metadata?.seriesId||'')});
     if(episodeInput)episodeInput.value=doc.metadata?.episode||'';
     if(episodeTitleInput)episodeTitleInput.value=doc.metadata?.episodeTitle||'';
     if(descriptionInput)descriptionInput.value=doc.metadata?.description||'';
@@ -3982,6 +4004,7 @@
   const AUTHOR_TERMS_VERSION='author-publish-v1';
   let authorSessionToken='';
   let signedInAuthor=null;
+  let authorSeries=[];
 
   function readAuthorSession(){
     try{
@@ -3996,6 +4019,8 @@
       else localStorage.removeItem(AUTHOR_AUTH_STORAGE_KEY);
     }catch(_){}
     syncAuthorAccountUI();
+    if(authorSessionToken&&signedInAuthor?.authorId)loadAuthorSeries();
+    else{authorSeries=[];renderAuthorSeriesOptions();}
   }
   function authorAuthHeaders(extra={}){
     return {...extra,...(authorSessionToken?{'Authorization':`Bearer ${authorSessionToken}`}:{})};
@@ -4073,6 +4098,94 @@
     const token=authorSessionToken;
     saveAuthorSession('',null);
     if(token){try{await fetch(`${SCENE_STUDIO_API_BASE}/author-auth/logout`,{method:'POST',headers:{'Authorization':`Bearer ${token}`}});}catch(_){}}
+  }
+
+  function activeSeriesId(){
+    const fromDocument=String(workingDocument?.metadata?.seriesId||'').trim();
+    const selected=String(seriesLinkSelect?.value||'').trim();
+    if(seriesLinkSelect&&!seriesLinkSelect.disabled)return /^series_[a-f0-9]{32}$/i.test(selected)?selected:'';
+    return /^series_[a-f0-9]{32}$/i.test(fromDocument)?fromDocument:'';
+  }
+  function setSeriesLinkStatus(message='',ready=false){
+    if(!seriesLinkStatus)return;
+    seriesLinkStatus.textContent=message;
+    seriesLinkStatus.classList.toggle('series-link-status-ready',Boolean(ready));
+  }
+  function renderAuthorSeriesOptions({preferred=''}={}){
+    if(!seriesLinkSelect)return;
+    const current=preferred||activeSeriesId();
+    const legacyNew=!current&&Boolean(String(seriesTitleInput?.value||'').trim());
+    seriesLinkSelect.innerHTML='<option value="">単独作品</option><option value="__new__">新しいシリーズとして登録</option>'
+      +authorSeries.map(series=>`<option value="${escapeHtml(series.seriesId)}">${escapeHtml(series.title)}（${Number(series.episodeCount)||0}話）</option>`).join('');
+    if(current&&!authorSeries.some(series=>series.seriesId===current)){
+      const option=document.createElement('option');option.value=current;option.textContent=`${String(seriesTitleInput?.value||'現在のシリーズ')}（紐づけ済み）`;seriesLinkSelect.appendChild(option);
+    }
+    if(current)seriesLinkSelect.value=current;
+    else if(legacyNew)seriesLinkSelect.value='__new__';
+    else seriesLinkSelect.value='';
+    const active=Boolean(authorSessionToken&&signedInAuthor?.authorId);
+    seriesLinkSelect.disabled=!active;
+    if(episodeNumberInput)episodeNumberInput.disabled=!active||!seriesLinkSelect.value;
+    if(!active)setSeriesLinkStatus('ログインすると、登録済みシリーズを選べます。');
+    else if(authorSeries.length)setSeriesLinkStatus(`${authorSeries.length}件のシリーズから選べます。`,true);
+    else setSeriesLinkStatus('最初のシリーズは公開時に登録されます。');
+  }
+  async function loadAuthorSeries(){
+    if(!authorSessionToken||!signedInAuthor?.authorId){authorSeries=[];renderAuthorSeriesOptions();return;}
+    const preferred=activeSeriesId();
+    setSeriesLinkStatus('シリーズを確認しています…');
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/series`,{headers:authorAuthHeaders({'Accept':'application/json'}),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok)throw new Error(payload?.error||'シリーズを確認できませんでした。');
+      authorSeries=Array.isArray(payload.series)?payload.series:[];
+      renderAuthorSeriesOptions({preferred});
+    }catch(error){authorSeries=[];renderAuthorSeriesOptions({preferred});setSeriesLinkStatus(error?.message||'シリーズを確認できませんでした。');}
+  }
+  function applySeriesSelectionToDocument(){
+    if(!workingDocument)return;
+    workingDocument.metadata ||= {};
+    const selected=String(seriesLinkSelect?.value||'');
+    const episodeNumber=Number(episodeNumberInput?.value||0);
+    if(/^series_[a-f0-9]{32}$/i.test(selected))workingDocument.metadata.seriesId=selected;
+    else if(selected!=='__new__')delete workingDocument.metadata.seriesId;
+    if(selected&&Number.isInteger(episodeNumber)&&episodeNumber>=1&&episodeNumber<=9999)workingDocument.metadata.episodeNumber=episodeNumber;
+    else delete workingDocument.metadata.episodeNumber;
+  }
+  async function ensureSeriesIdentityForPublish(doc){
+    doc.metadata ||= {};
+    const selected=String(seriesLinkSelect?.value||'');
+    if(!selected){delete doc.metadata.seriesId;delete doc.metadata.episodeNumber;return;}
+    const episodeNumber=Number(episodeNumberInput?.value||doc.metadata.episodeNumber||0);
+    if(!Number.isInteger(episodeNumber)||episodeNumber<1||episodeNumber>9999){
+      const error=new Error('シリーズ内の順番を1〜9999で入力してください。');error.code='EPISODE_NUMBER_REQUIRED';throw error;
+    }
+    let seriesId=selected;
+    let seriesTitle=String(seriesTitleInput?.value||doc.metadata.seriesTitle||'').trim();
+    if(selected==='__new__'){
+      if(!seriesTitle){const error=new Error('新しいシリーズのシリーズ名を入力してください。');error.code='SERIES_TITLE_REQUIRED';throw error;}
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/series`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({title:seriesTitle}),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.series?.seriesId){const error=new Error(payload?.error||'シリーズを登録できませんでした。');error.code=payload?.code||'SERIES_CREATE_FAILED';throw error;}
+      seriesId=payload.series.seriesId;
+      seriesTitle=payload.series.title||seriesTitle;
+      authorSeries=[payload.series,...authorSeries.filter(item=>item.seriesId!==seriesId)];
+      renderAuthorSeriesOptions({preferred:seriesId});
+    }else{
+      const existing=authorSeries.find(item=>item.seriesId===selected);
+      if(existing?.title)seriesTitle=existing.title;
+    }
+    doc.metadata.seriesId=seriesId;
+    doc.metadata.seriesTitle=seriesTitle;
+    doc.metadata.episodeNumber=episodeNumber;
+    if(workingDocument){
+      workingDocument.metadata ||= {};
+      workingDocument.metadata.seriesId=seriesId;
+      workingDocument.metadata.seriesTitle=seriesTitle;
+      workingDocument.metadata.episodeNumber=episodeNumber;
+    }
+    if(seriesTitleInput)seriesTitleInput.value=seriesTitle;
+    if(episodeNumberInput)episodeNumberInput.value=String(episodeNumber);
   }
 
   async function uploadPublishAsset(src){
@@ -4160,6 +4273,10 @@
         }
         id=status.id||id||'';
       }
+
+      // Create/select a series only after revision validation. A stale Master
+      // must not leave an empty series behind when its publish is rejected.
+      await ensureSeriesIdentityForPublish(sourceDocument);
 
       // Hosting v3 master identity: local assets become permanent Worker URLs,
       // while ownerKey stays only inside the author's .scene.
@@ -5528,7 +5645,9 @@
         author:authorInput?.value ?? '',
         subtitle:subtitleInput?.value ?? '',
         series:seriesTitleInput?.value ?? '',
+        seriesId:activeSeriesId(),
         episode:episodeInput?.value ?? '',
+        episodeNumber:episodeNumberInput?.value ?? '',
         description:descriptionInput?.value ?? '',
         language:languageInput?.value ?? 'ja',
         body:bodyInput?.value ?? ''
@@ -5616,6 +5735,8 @@
     if(authorInput)authorInput.value=snap.easy.author;
     if(subtitleInput)subtitleInput.value=snap.easy.subtitle;
     if(seriesTitleInput)seriesTitleInput.value=snap.easy.series;
+    if(episodeNumberInput)episodeNumberInput.value=snap.easy.episodeNumber||'';
+    renderAuthorSeriesOptions({preferred:snap.easy.seriesId||''});
     if(episodeInput)episodeInput.value=snap.easy.episode;
     if(descriptionInput)descriptionInput.value=snap.easy.description||'';
     if(languageInput)languageInput.value=snap.easy.language;
@@ -5753,7 +5874,7 @@
     refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
   });
   // Work metadata is shell data, not Scene source. Never rebuild the Scene array here.
-  [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput,episodeTitleInput,descriptionInput]
+  [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput,episodeNumberInput,episodeTitleInput,descriptionInput]
     .forEach(el=>el?.addEventListener('input',()=>{
       refreshCoverPreviewLayout();
       syncEasyShellToWorkingDocument();
@@ -5761,6 +5882,25 @@
       rememberWorkIdentity();
       scheduleDraftSave(250);
     }));
+  seriesLinkSelect?.addEventListener('change',()=>{
+    const selected=String(seriesLinkSelect.value||'');
+    const existing=authorSeries.find(item=>item.seriesId===selected);
+    if(existing){
+      if(seriesTitleInput)seriesTitleInput.value=existing.title||'';
+      if(episodeNumberInput&&!episodeNumberInput.value)episodeNumberInput.value=String(existing.nextEpisodeNumber||1);
+      setSeriesLinkStatus(`${existing.episodeCount||0}話を登録済み。次は ${existing.nextEpisodeNumber||1}。`,true);
+    }else if(selected==='__new__'){
+      if(episodeNumberInput&&!episodeNumberInput.value)episodeNumberInput.value='1';
+      setSeriesLinkStatus('公開時に新しいseriesIdを発行します。');
+    }else{
+      setSeriesLinkStatus('この作品は前後作品に紐づきません。');
+    }
+    if(episodeNumberInput)episodeNumberInput.disabled=!selected;
+    applySeriesSelectionToDocument();
+    syncEasyShellToWorkingDocument();
+    syncEasyPublishButton();
+    scheduleDraftSave(120);
+  });
   authorInput?.addEventListener('change',()=>rememberAuthorName(authorInput.value));
   authorInput?.addEventListener('blur',()=>rememberAuthorName(authorInput.value));
   endingLabelInput?.addEventListener('input',()=>{

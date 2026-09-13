@@ -26,7 +26,7 @@
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="stylesheet" href="./scene-player-core.css?v=20260906-40">
-  <link rel="stylesheet" href="./style.css?v=64.0">
+  <link rel="stylesheet" href="./style.css?v=65.0">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
     #studioPreviewViewport{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;container-type:size;container-name:studio-preview}
@@ -479,8 +479,21 @@
               <input id="seriesTitleInput" type="text" placeholder="例：貧乏メガネのシノ">
             </label>
             <label class="field">
+              <span class="field-label">シリーズの紐づけ <small>公開時に使用</small></span>
+              <select id="seriesLinkSelect" disabled>
+                <option value="">単独作品</option>
+                <option value="__new__">新しいシリーズとして登録</option>
+              </select>
+              <small id="seriesLinkStatus" class="field-help">ログインすると、登録済みシリーズを選べます。</small>
+            </label>
+            <label class="field">
               <span class="field-label">話数表記 <small>任意・自由入力</small></span>
               <input id="episodeInput" type="text" placeholder="例：第1話 / EPISODE 01 / PROLOGUE">
+            </label>
+            <label class="field">
+              <span class="field-label">シリーズ内の順番 <small>1〜9999</small></span>
+              <input id="episodeNumberInput" type="number" min="1" max="9999" step="1" inputmode="numeric" placeholder="例：1" disabled>
+              <small class="field-help">前後の作品を結ぶための番号です。読者には「話数表記」を表示します。</small>
             </label>
             <label class="field">
               <span class="field-label">今回のタイトル <small>任意</small></span>
@@ -1022,7 +1035,7 @@
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=64.0"></script>
+<script src="./script.js?v=65.0"></script>
 
 
 
