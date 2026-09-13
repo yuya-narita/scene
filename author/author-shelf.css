@@ -20,6 +20,6 @@
 @media(max-width:680px){
   .author-hero-image{background-position:var(--header-mobile-position,50% 50%)}
   .author-hero.has-header-image::after{background:linear-gradient(180deg,rgba(10,12,16,.48),rgba(10,12,16,.76))}
-  .author-hero-side{width:100%;justify-self:stretch}
-  .author-hero-side .share-button{justify-self:end;margin-right:0}
+  .author-hero-side{position:static;width:100%;justify-self:stretch}
+  .author-hero-side .share-button{position:absolute;right:20px;bottom:20px;z-index:3;width:auto;margin:0}
 }

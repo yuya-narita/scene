@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=68.1">
+  <link rel="stylesheet" href="bookshelf.css?v=68.2">
 </head>
 <body>
   <header class="topbar">
@@ -107,6 +107,14 @@
       <div id="bookshelfAuthorSignedIn" hidden>
         <strong id="bookshelfAuthorName"></strong><small id="bookshelfAuthorId"></small>
         <div class="author-public-shelf-actions"><a id="openPublicAuthorShelf" href="../author/">公開本棚を見る</a><button id="copyPublicAuthorShelf" type="button">本棚URLをコピー</button></div>
+        <section class="author-profile-editor" aria-labelledby="authorProfileTitle">
+          <div class="author-profile-editor-head"><small>PUBLIC PROFILE</small><h3 id="authorProfileTitle">公開作者情報</h3></div>
+          <label>作者名<input id="bookshelfAuthorProfileName" maxlength="80" autocomplete="name"></label>
+          <label>本棚の紹介文<input id="bookshelfAuthorShelfLead" maxlength="140" placeholder="この作者が、あ箱で公開している本です。"></label>
+          <p class="author-profile-note">公開本棚とログイン表示に反映します。作品内に保存済みの作者名は変わりません。</p>
+          <button id="saveBookshelfAuthorProfile" class="primary" type="button">作者情報を保存</button>
+          <p id="bookshelfAuthorProfileStatus" class="author-status"></p>
+        </section>
         <section class="author-header-editor" aria-labelledby="authorHeaderTitle">
           <div class="author-header-editor-head"><div><small>BOOKSHELF HEADER</small><h3 id="authorHeaderTitle">公開本棚のヘッダー</h3></div><button id="chooseAuthorHeader" type="button">画像を選ぶ</button></div>
           <input id="authorHeaderInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
@@ -184,6 +192,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=68.1"></script>
+  <script src="bookshelf.js?v=68.2"></script>
 </body>
 </html>

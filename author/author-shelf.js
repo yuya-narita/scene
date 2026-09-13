@@ -78,6 +78,7 @@ function renderShelf(){
   document.title=`${author.displayName||'作者'}の本棚｜あ箱`;
   applyBookshelfHeader(author.header);
   $('#authorName').textContent=author.displayName||'作者名未設定';
+  $('#authorShelfLead').textContent=author.shelfLead||'この作者が、あ箱で公開している本です。';
   $('#workCount').textContent=String(shelfData.counts?.works??allWorks.length);
   $('#seriesCount').textContent=String(series.length);
   const seriesSection=$('#seriesSection');seriesSection.hidden=!series.length;
