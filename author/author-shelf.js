@@ -8,6 +8,7 @@ let toastTimer=0;
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));}
 function authorReferenceFromUrl(){const params=new URLSearchParams(location.search),slug=String(params.get('u')||'').trim().toLowerCase();if(/^[a-z0-9][a-z0-9_-]{2,29}$/.test(slug))return`by-slug/${encodeURIComponent(slug)}`;const authorId=String(params.get('id')||params.get('author')||'').trim().toLowerCase();return validAuthorId(authorId)?encodeURIComponent(authorId):'';}
 function validAuthorId(value){return /^author_[a-f0-9]{32}$/.test(value);}
+function publicShelfShareUrl(){const author=shelfData?.author||{},reference=author.slug||author.authorId;return reference?`${API_BASE}/s/${encodeURIComponent(reference)}`:location.href;}
 function showToast(message){const toast=$('#toast');toast.textContent=message;toast.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast.hidden=true;},2400);}
 function coverHtml(work,className='book-cover'){return `<span class="${className}">${work?.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span class="book-cover-fallback">□</span>'}</span>`;}
 function workLabel(work){return [work?.episodeLabel,work?.episodeTitle].filter(Boolean).join(' ')||'';}
@@ -125,9 +126,10 @@ function openDialog(id){const dialog=$(`#${id}`);if(!dialog)return;dialog.showMo
 function closeDialog(id){const dialog=$(`#${id}`);if(dialog?.open)dialog.close();if(!document.querySelector('dialog[open]'))document.body.classList.remove('dialog-open');}
 
 async function shareShelf(){
-  const data={title:document.title,text:`${shelfData.author?.displayName||'作者'}の公開本棚`,url:location.href};
+  const shareUrl=publicShelfShareUrl();
+  const data={title:document.title,text:shelfData.author?.shelfLead||`${shelfData.author?.displayName||'作者'}の公開本棚`,url:shareUrl};
   if(navigator.share){try{await navigator.share(data);return;}catch(error){if(error?.name==='AbortError')return;}}
-  try{await navigator.clipboard.writeText(location.href);showToast('本棚URLをコピーしました。');}catch(_){showToast('URLをコピーできませんでした。');}
+  try{await navigator.clipboard.writeText(shareUrl);showToast('リンクカード対応の本棚URLをコピーしました。');}catch(_){showToast('URLをコピーできませんでした。');}
 }
 
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>closeDialog(button.dataset.close));
