@@ -131,6 +131,8 @@ main{padding-top:22px}
 @media(max-width:680px){.bookshelf-author-button{max-width:118px;padding:8px 9px;font-size:8px}.series-shelf{margin-bottom:20px}.series-box{padding:12px}.series-box-books{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 10px}.series-box>header h3{font-size:15px}.author-dialog-body,.series-box-dialog-body{padding:26px 18px 20px}.series-book-choices{max-height:45dvh}}
 .series-choice-actions{display:flex;align-items:center;gap:4px}.series-choice-actions button{min-width:30px;padding:7px 8px}
 .author-dialog [hidden],.series-box-dialog [hidden],.series-shelf[hidden]{display:none!important}
+.created-shelf-group-heading{grid-column:1/-1;display:flex;align-items:end;justify-content:space-between;min-height:54px;padding:4px 1px 10px;border-bottom:1px solid #ddd4c6}.created-shelf-group-heading>div{display:flex;align-items:baseline;gap:9px}.created-shelf-group-heading small{font-size:8px;letter-spacing:.18em;color:#918778}.created-shelf-group-heading h2{margin:0;font-size:20px}.created-shelf-group-heading>span{color:#81786c;font-size:10px}.created-draft-heading{margin-top:18px}.series-choice.is-dragging{opacity:.35}.series-choice.is-drop-target{border-color:#554936;box-shadow:0 0 0 2px rgba(85,73,54,.12)}
+@media(max-width:680px){.created-shelf-group-heading{min-height:46px;padding-bottom:8px}.created-shelf-group-heading h2{font-size:17px}.created-draft-heading{margin-top:10px}}
 
 
 /* V63.18 — Studio <-> Bookshelf creation/save routes */
