@@ -628,7 +628,7 @@ function renderOfficialShelf({force=true}={}){
       const discovery=publicDiscoveryHtml(publicDiscoveryData);
       const seedBooks=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ種本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
       const seedSection=`<section class="official-seed-block"><div class="public-discovery-heading"><div><p class="eyebrow">FROM A-HAKO</p><h3>あ箱から届く本</h3></div></div><p class="official-seed-lead">あ箱から、時々一冊。受け取った本は「もっている本」に入ります。</p><div class="official-seed-grid">${seedBooks}</div></section>`;
-      host.innerHTML=(discovery||items.length)?`${discovery}${seedSection}`:`<div class="official-empty"><strong>まだ本はありません。</strong><span>公開された本がここに並びます。</span></div>`;
+      host.innerHTML=(discovery||items.length)?`${seedSection}${discovery}`:`<div class="official-empty"><strong>まだ本はありません。</strong><span>公開された本がここに並びます。</span></div>`;
       bindOfficialShelfInteractions(host);
     }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
   })();
