@@ -221,6 +221,9 @@
     .distribution-export-actions button{min-height:42px;padding:0 17px;border:1px solid #d8dce2;border-radius:999px;background:#fff;color:#23262b;font:700 13px/1 system-ui;cursor:pointer}
     .distribution-export-actions .primary{border-color:#191b20;background:#191b20;color:#fff}
     @media(max-width:600px){.distribution-export-card{width:calc(100vw - 24px);padding:22px 18px 18px;border-radius:22px}.distribution-export-actions{display:grid;grid-template-columns:1fr 1fr}.distribution-export-actions button{width:100%}}
+    .studio-author-status{max-width:190px;height:34px;padding:0 12px;border:1px solid rgba(120,120,120,.28);border-radius:999px;background:rgba(255,255,255,.86);color:#25272b;font:700 11px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+    .studio-author-status.is-signed-in::before{content:'●';margin-right:6px;color:#4e9a62;font-size:8px}
+    @media(max-width:600px){.studio-author-status{max-width:118px;height:31px;padding:0 9px;font-size:9px}}
 </style>
 </head>
 <body>
@@ -231,6 +234,7 @@
       <small id="studioModeLabel">Easy Studio</small>
     </div>
     <div class="easy-menu-corner">
+      <button id="studioAuthorStatusButton" class="studio-author-status" type="button">作者ログイン</button>
       <button id="easyMenuButton" class="easy-menu-button" type="button" aria-label="メニュー" aria-expanded="false">≡</button>
       <div id="easyMenuBackdrop" class="easy-menu-backdrop" hidden></div>
       <div id="easyMenuPanel" class="easy-menu-panel" hidden>
@@ -475,25 +479,8 @@
               </select>
             </label>
             <label class="field">
-              <span class="field-label">シリーズ名 <small>任意</small></span>
-              <input id="seriesTitleInput" type="text" placeholder="例：貧乏メガネのシノ">
-            </label>
-            <label class="field">
-              <span class="field-label">シリーズの紐づけ <small>公開時に使用</small></span>
-              <select id="seriesLinkSelect" disabled>
-                <option value="">単独作品</option>
-                <option value="__new__">新しいシリーズとして登録</option>
-              </select>
-              <small id="seriesLinkStatus" class="field-help">ログインすると、登録済みシリーズを選べます。</small>
-            </label>
-            <label class="field">
               <span class="field-label">話数表記 <small>任意・自由入力</small></span>
               <input id="episodeInput" type="text" placeholder="例：第1話 / EPISODE 01 / PROLOGUE">
-            </label>
-            <label class="field">
-              <span class="field-label">シリーズ内の順番 <small>1〜9999</small></span>
-              <input id="episodeNumberInput" type="number" min="1" max="9999" step="1" inputmode="numeric" placeholder="例：1" disabled>
-              <small class="field-help">前後の作品を結ぶための番号です。読者には「話数表記」を表示します。</small>
             </label>
             <label class="field">
               <span class="field-label">今回のタイトル <small>任意</small></span>
@@ -1035,7 +1022,7 @@
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=65.0"></script>
+<script src="./script.js?v=66.0"></script>
 
 
 

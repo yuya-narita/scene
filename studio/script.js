@@ -4043,6 +4043,8 @@
     const name=$('#publishAuthorName'),id=$('#publishAuthorId');
     if(name)name.textContent=signedInAuthor?.displayName||'';
     if(id)id.textContent=signedInAuthor?.authorId||'';
+    const statusButton=$('#studioAuthorStatusButton');
+    if(statusButton){statusButton.textContent=active?`作者：${signedInAuthor?.displayName||'ログイン中'}`:'作者ログイン';statusButton.classList.toggle('is-signed-in',active);statusButton.title=active?'作者アカウントを確認':'作者登録・ログイン';}
     syncPublishConfirmationAvailability();
   }
   async function restoreAuthorSession(){
@@ -4051,9 +4053,10 @@
     try{
       const response=await fetch(`${SCENE_STUDIO_API_BASE}/author-auth/me`,{headers:authorAuthHeaders({'Accept':'application/json'}),cache:'no-store'});
       const payload=await response.json().catch(()=>null);
-      if(!response.ok||!payload?.ok||!payload?.author)throw new Error('session-invalid');
+      if(response.status===401||response.status===403){saveAuthorSession('',null);return;}
+      if(!response.ok||!payload?.ok||!payload?.author)throw new Error('session-temporary-error');
       saveAuthorSession(authorSessionToken,payload.author);
-    }catch(_){saveAuthorSession('',null);}
+    }catch(_){syncAuthorAccountUI();}
   }
   function setAuthorAuthStatus(message='',error=false){
     const el=$('#authorAuthStatus');if(!el)return;
@@ -4168,6 +4171,10 @@
     else delete workingDocument.metadata.episodeNumber;
   }
   async function ensureSeriesIdentityForPublish(doc){
+    // V66: Series membership is managed visually from the Created Bookshelf.
+    // Publishing a book must neither create a box nor silently detach an
+    // existing work from one.
+    return;
     doc.metadata ||= {};
     const selected=String(seriesLinkSelect?.value||'');
     if(!selected){delete doc.metadata.seriesId;delete doc.metadata.episodeNumber;return;}
@@ -6449,6 +6456,10 @@
   $('#publishDialogClose')?.addEventListener('click',closePublishDialog);
   $('#publishRightsConfirm')?.addEventListener('change',syncPublishConfirmationAvailability);
   $('#publishAuthorLoginButton')?.addEventListener('click',openAuthorAuthDialog);
+  $('#studioAuthorStatusButton')?.addEventListener('click',()=>{
+    if(signedInAuthor?.authorId&&authorSessionToken){alert(`作者「${signedInAuthor.displayName||''}」でログイン中です。\n\nログアウトは公開確認画面から行えます。`);return;}
+    openAuthorAuthDialog();
+  });
   $('#publishAuthorLogoutButton')?.addEventListener('click',logoutAuthor);
   $('#authorAuthClose')?.addEventListener('click',()=>$('#authorAuthDialog')?.close());
   $('#authorAuthDialog')?.addEventListener('click',(event)=>{if(event.target===event.currentTarget)event.currentTarget.close();});
