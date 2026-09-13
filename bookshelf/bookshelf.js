@@ -16,6 +16,7 @@ const CREATED_TAB_VISIBLE_KEY='ahako:bookshelf:created-tab-visible';
 const SHELF_ORDER_KEYS={owned:'ahako:bookshelf:order:owned',created:'ahako:bookshelf:order:created'};
 const SHELF_ARCHIVE_KEYS={owned:'ahako:bookshelf:archive:owned',created:'ahako:bookshelf:archive:created'};
 const MOBILE_COLUMNS_KEY='ahako:bookshelf:mobile-columns';
+const DESKTOP_COLUMNS_KEY='ahako:bookshelf:desktop-columns';
 const SHELF_SCROLL_KEYS={owned:'ahako:bookshelf:scroll:owned',created:'ahako:bookshelf:scroll:created',official:'ahako:bookshelf:scroll:official'};
 let currentShelfTab=null;
 let shelfCounts={owned:0,created:0};
@@ -31,6 +32,7 @@ let touchReorderInstalled=false;
 let touchBookReordering=false;
 let archiveDockOpen=false;
 let mobileShelfColumns=loadMobileColumns();
+let desktopShelfColumns=loadDesktopColumns();
 let pinchGesture=null;
 let shelfDataCache={owned:[],created:[]};
 let localShelfViews={owned:null,created:null};
@@ -236,6 +238,8 @@ function clampMobileColumns(value){return Math.max(2,Math.min(4,Number(value)||2
 function loadMobileColumns(){
   try{return clampMobileColumns(localStorage.getItem(MOBILE_COLUMNS_KEY)||2);}catch(_){return 2;}
 }
+function loadDesktopColumns(){try{return Math.min(6,Math.max(3,Number(localStorage.getItem(DESKTOP_COLUMNS_KEY)||4)||4));}catch(_){return 4;}}
+function applyDesktopColumns(value,{announce=false}={}){desktopShelfColumns=Math.min(6,Math.max(3,Number(value)||4));const grids=new Set([$('#grid'),localShelfViews.owned,localShelfViews.created].filter(Boolean));grids.forEach(grid=>grid.dataset.desktopColumns=String(desktopShelfColumns));try{localStorage.setItem(DESKTOP_COLUMNS_KEY,String(desktopShelfColumns));}catch(_){}document.querySelectorAll('[data-desktop-columns]').forEach(button=>button.classList.toggle('is-active',Number(button.dataset.desktopColumns)===desktopShelfColumns));if(announce)toast(`PC ${desktopShelfColumns}列表示`);}
 function applyMobileColumns(value,{announce=false}={}){
   mobileShelfColumns=clampMobileColumns(value);
   const grids=new Set([$('#grid'),localShelfViews.owned,localShelfViews.created].filter(Boolean));
@@ -640,6 +644,7 @@ function buildLocalShelfView(tab){
   grid.className='grid';
   grid.dataset.shelfView=tab;
   grid.dataset.mobileColumns=String(mobileShelfColumns);
+  grid.dataset.desktopColumns=String(desktopShelfColumns);
   grid.setAttribute('aria-live','polite');
   const grouped=tab==='created'?new Set(authorSeries.flatMap(series=>(series.episodes||[]).map(item=>item.workId))):new Set();
   const arranged=orderedShelfBooks((shelfDataCache[tab]||[]).filter(book=>!grouped.has(book.workId)),tab);
@@ -697,6 +702,7 @@ async function presentShelfFromCache({refreshOfficial=false}={}){
   const grid=official?$('#grid'):activateLocalShelfView(currentShelfTab);
   $('#officialShelf').hidden=!official;
   if(grid)grid.hidden=official;
+  $('#desktopDensityControl').hidden=official;
   syncSeriesShelf();
   $('#emptyState').hidden=official||books.length>0||arranged.archived.length>0;
   $('#countText').textContent=official?'あ箱の本':`${source.length}冊`;
@@ -726,10 +732,12 @@ async function presentShelfFromCache({refreshOfficial=false}={}){
   }
   if(official&&refreshOfficial)await renderOfficialShelf({force:true});
   applyMobileColumns(mobileShelfColumns);
+  applyDesktopColumns(desktopShelfColumns);
   installShelfPinch();
   if(!official)bindBookInteractions();
 }
 
+function seriesStackCoverHtml(book,index){let image='<span class="series-stack-empty">□</span>';if(book?.coverBlob){const url=URL.createObjectURL(book.coverBlob);coverUrls.push(url);image=`<img src="${url}" alt="">`;}else if(book?.coverUrl)image=`<img src="${escapeHtml(book.coverUrl)}" alt="">`;return`<span class="series-stack-cover series-stack-cover-${index}">${image}</span>`;}
 function syncSeriesShelf(){
   const shelf=$('#seriesShelf');if(!shelf)return;
   const visible=currentShelfTab==='created'&&!!authorToken;
@@ -737,9 +745,8 @@ function syncSeriesShelf(){
   if(!authorToken){$('#seriesBoxes').innerHTML='';return;}
   const local=new Map((shelfDataCache.created||[]).map(book=>[book.workId,book]));
   const boxes=authorSeries.filter(series=>(series.episodes||[]).some(item=>local.has(item.workId))||series.episodeCount===0);
-  $('#seriesBoxes').innerHTML=boxes.length?boxes.map(series=>`<section class="series-box" data-series-id="${escapeHtml(series.seriesId)}"><header><div><small>SERIES</small><h3>${escapeHtml(series.title)}</h3><span>${Number(series.episodeCount)||0}冊</span></div><button class="edit-series-box" type="button">編集</button></header><div class="series-box-books">${(series.episodes||[]).map(item=>local.get(item.workId)).filter(Boolean).map(book=>bookCardHtml(book)).join('')}</div></section>`).join(''):'<p class="series-box-empty">BOXを作ると、連作をひとまとまりで並べられます。</p>';
-  document.querySelectorAll('#seriesBoxes .edit-series-box').forEach(button=>button.onclick=()=>openSeriesBoxEditor(button.closest('.series-box')?.dataset.seriesId||''));
-  document.querySelectorAll('#seriesBoxes .book').forEach(book=>book.onclick=()=>openDetail(book.dataset.role,book.dataset.id));
+  $('#seriesBoxes').innerHTML=boxes.length?boxes.map(series=>{const books=(series.episodes||[]).map(item=>local.get(item.workId)).filter(Boolean),covers=books.slice(0,3);while(covers.length<3)covers.push(null);return`<button class="series-box" data-series-id="${escapeHtml(series.seriesId)}" type="button"><span class="series-cover-stack">${covers.map((book,index)=>seriesStackCoverHtml(book,index)).join('')}</span><span class="series-box-copy"><small>SERIES BOX</small><strong>${escapeHtml(series.title)}</strong><em>${Number(series.episodeCount)||0}冊</em></span></button>`;}).join(''):'<p class="series-box-empty">BOXを作ると、連作をひとまとまりで並べられます。</p>';
+  document.querySelectorAll('#seriesBoxes .series-box').forEach(button=>button.onclick=()=>openSeriesBoxEditor(button.dataset.seriesId||''));
 }
 
 async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
@@ -756,6 +763,7 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
   $('#ownedTab').textContent=`もっている本${readers.length?` ${readers.length}`:''}`;
   $('#createdTab').textContent=`つくった本${masters.length?` ${masters.length}`:''}`;
   mobileShelfColumns=loadMobileColumns();
+  desktopShelfColumns=loadDesktopColumns();
   rebuildLocalShelfViews();
   await presentShelfFromCache({refreshOfficial:currentShelfTab==='official'&&refreshOfficial});
   // Prepare the official shelf once in the background. Navigation reuses it
@@ -1510,6 +1518,7 @@ $('#addDistributionButton').onclick=$('#emptyDistributionButton').onclick=()=>{c
 $('#ownedTab').onclick=()=>switchShelf('owned');
 $('#createdTab').onclick=()=>switchShelf('created');
 $('#officialTab').onclick=()=>switchShelf('official');
+document.querySelectorAll('[data-desktop-columns]').forEach(button=>button.onclick=()=>applyDesktopColumns(button.dataset.desktopColumns,{announce:true}));
 $('#bookshelfAuthorButton').onclick=openBookshelfAuthor;
 $('#closeBookshelfAuthor').onclick=()=>$('#bookshelfAuthorDialog').close();
 $('#bookshelfAuthorEmailForm').onsubmit=e=>{e.preventDefault();requestBookshelfAuthorCode();};
@@ -1539,6 +1548,8 @@ $('#bookshelfMenu')?.addEventListener('toggle',syncShelfScrollLock);
 $('#detailDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#archiveDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#deleteArchiveDialog')?.addEventListener('close',syncShelfScrollLock);
+$('#bookshelfAuthorDialog')?.addEventListener('close',syncShelfScrollLock);
+$('#seriesBoxDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#cancelArchiveDelete')?.addEventListener('click',()=>$('#deleteArchiveDialog')?.close());
 $('#confirmArchiveDelete')?.addEventListener('click',async()=>{const dialog=$('#deleteArchiveDialog');if(!dialog)return;let ids=[];try{ids=JSON.parse(dialog.dataset.ids||'[]');}catch(_){ids=[];}const tab=dialog.dataset.tab||currentShelfTab;if(!Array.isArray(ids)||!ids.length){dialog.close();return;}const button=$('#confirmArchiveDelete');if(button){button.disabled=true;button.textContent='削除中…';}try{for(const id of ids)await permanentlyDeleteArchivedBook(tab,id);dialog.close();await render();if($('#archiveDialog')?.open)openArchiveBox();toast(`${ids.length}冊を削除しました。`);}catch(err){console.error(err);alert(err?.message||'削除できませんでした。');}finally{if(button){button.disabled=false;button.textContent='削除する';}dialog.dataset.ids='';}});
 $('#bookshelfMenu')?.addEventListener('keydown',e=>{if(e.key==='Escape'){e.currentTarget.open=false;syncShelfScrollLock();}});
