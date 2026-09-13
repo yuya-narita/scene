@@ -16,6 +16,7 @@
   const introCoverDim = document.getElementById('publicIntroCoverDim');
   const startButton = document.getElementById('publicStart');
   const continueButton = document.getElementById('publicContinue');
+  const shelfReturnLink = document.getElementById('publicShelfReturn');
 
   const ending = document.getElementById('publicEnding');
   const endingLabel = document.getElementById('publicEndingLabel');
@@ -53,6 +54,32 @@
   const DEFAULT_SCENE = './works/external-signal/scene.json';
   const source = () => requested || DEFAULT_SCENE;
   const storageKey = () => `scene-public-progress:${source()}`;
+
+  function safeAuthorShelfReturn(raw){
+    try{
+      const url=new URL(String(raw||''),location.href);
+      if(url.protocol!=='https:'&&url.protocol!=='http:')return '';
+      const path=url.pathname.replace(/\/+$/,'');
+      const isProduction=url.hostname==='yuya-narita.github.io'&&path==='/scene/author';
+      const isSameSite=url.origin===location.origin&&/\/author$/.test(path);
+      const authorId=String(url.searchParams.get('id')||url.searchParams.get('author')||'').toLowerCase();
+      if((!isProduction&&!isSameSite)||!/^author_[a-f0-9]{32}$/.test(authorId))return '';
+      url.hash='';
+      return url.toString();
+    }catch(_){return '';}
+  }
+
+  function configureShelfReturn(){
+    if(!shelfReturnLink)return;
+    const returnTo=safeAuthorShelfReturn(params.get('returnTo'));
+    if(!returnTo){shelfReturnLink.hidden=true;return;}
+    const requestedLabel=String(params.get('returnLabel')||'').trim().slice(0,80);
+    shelfReturnLink.href=returnTo;
+    shelfReturnLink.textContent=`← ${requestedLabel||'作者の本棚へ'}`;
+    shelfReturnLink.hidden=false;
+  }
+
+  configureShelfReturn();
 
   function setReportVisible(visible){
     if(!reportButton)return;
@@ -897,7 +924,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.23-ios-stable-audio-elements',
+    version: '0.3.24-author-shelf-return',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },

@@ -14,6 +14,20 @@ function workLabel(work){return [work?.episodeLabel,work?.episodeTitle].filter(B
 function bookCardHtml(work,{position=0}={}){return `<button class="book-card" type="button" data-publication-id="${escapeHtml(work.publicationId)}">${coverHtml(work)}${position?`<span class="book-number">${position}冊目</span>`:''}<span class="book-copy"><h3>${escapeHtml(work.title||'Untitled')}</h3><p>${escapeHtml(workLabel(work)||work.byline||'')}</p></span></button>`;}
 function seriesCoverHtml(work){return `<span class="series-cover">${work?.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span>□</span>'}</span>`;}
 
+function publicPlayerUrl(work){
+  try{
+    const playerUrl=new URL('../',location.href);
+    const rawWorkUrl=new URL(work.url,location.href);
+    rawWorkUrl.searchParams.set('raw','1');
+    playerUrl.searchParams.set('src',rawWorkUrl.toString());
+    playerUrl.searchParams.set('returnTo',location.href);
+    playerUrl.searchParams.set('returnLabel',`${shelfData?.author?.displayName||'作者'}の本棚へ`);
+    return playerUrl.toString();
+  }catch(_){
+    return work.url||'#';
+  }
+}
+
 function applyFutureTheme(theme){
   if(!theme||typeof theme!=='object')return;
   const safeColor=value=>/^#[0-9a-f]{6}$/i.test(String(value||''))?value:'';
@@ -91,7 +105,7 @@ function openWork(publicationId){
   const series=shelfData?.series?.find(box=>box.episodes.some(episode=>episode.publicationId===publicationId));
   const episode=series?.episodes.find(item=>item.publicationId===publicationId);
   const context=[series?.title,episode?.episodeLabel||work.episodeLabel,episode?.episodeTitle||work.episodeTitle].filter(Boolean).join(' ／ ');
-  $('#workDialogContent').innerHTML=`<div class="work-dialog-layout">${coverHtml(work,'work-dialog-cover')}<div class="work-dialog-body"><div class="work-dialog-info"><p class="eyebrow">${escapeHtml(context||'PUBLIC BOOK')}</p><h2>${escapeHtml(work.title||'Untitled')}</h2><p class="work-byline">${escapeHtml(work.byline||shelfData.author?.displayName||'')}</p></div>${work.description?`<p class="work-description">${escapeHtml(work.description)}</p>`:''}<a class="read-link" href="${escapeHtml(work.url)}">この本を読む</a></div></div>`;
+  $('#workDialogContent').innerHTML=`<div class="work-dialog-layout">${coverHtml(work,'work-dialog-cover')}<div class="work-dialog-body"><div class="work-dialog-info"><p class="eyebrow">${escapeHtml(context||'PUBLIC BOOK')}</p><h2>${escapeHtml(work.title||'Untitled')}</h2><p class="work-byline">${escapeHtml(work.byline||shelfData.author?.displayName||'')}</p></div>${work.description?`<p class="work-description">${escapeHtml(work.description)}</p>`:''}<a class="read-link" href="${escapeHtml(publicPlayerUrl(work))}">この本を読む</a></div></div>`;
   openDialog('workDialog');
 }
 
