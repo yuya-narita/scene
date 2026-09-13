@@ -839,7 +839,7 @@
         <button class="publish-primary" type="submit">認証コードを送る</button>
       </form>
       <form id="authorAuthCodeForm" class="author-auth-form" hidden>
-        <label><span>作者名</span><input id="authorAuthDisplayName" type="text" autocomplete="nickname" maxlength="80" placeholder="例：Yuya Narita"></label>
+        <label><span>作者名 <small>初回登録のみ</small></span><input id="authorAuthDisplayName" type="text" autocomplete="nickname" maxlength="80" placeholder="例：Yuya Narita"></label>
         <label><span>6桁の認証コード</span><input id="authorAuthCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required placeholder="000000"></label>
         <button class="publish-primary" type="submit">確認して続ける</button>
         <button id="authorAuthResend" class="publish-author-text-button" type="button">コードを送り直す</button>

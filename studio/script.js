@@ -4289,6 +4289,7 @@
           'X-Scene-Work-Id':ident.workId,
           'X-Scene-Owner-Key':ident.ownerKey,
           'X-Scene-Revision':String(requestRevision),
+          ...(restoreFromOld?{'X-Scene-Restore-From-Old':'1'}:{}),
           'X-Publish-Rights':AUTHOR_TERMS_VERSION
         }),
         body:JSON.stringify(hostedDocument)
@@ -4518,13 +4519,16 @@
       button.style.minHeight='50px';
       button.dataset.restoreOldVersionButton='1';
       button.addEventListener('click',async()=>{
+        if(button.disabled)return;
         const ok=confirm(
           uiLanguage==='ja'
             ? `revision ${local} の内容を元に、公開版 revision ${remote+1} を作ります。\\n\\n現在の公開版 revision ${remote} は上書きされますが、revision番号は戻りません。続けますか？`
             : `Create published revision ${remote+1} from the content of revision ${local}?\\n\\nThe current published revision ${remote} will be replaced, but revision numbering will not move backward. Continue?`
         );
         if(!ok)return;
-        await runPublish({restoreFromOld:true});
+        button.disabled=true;
+        try{await runPublish({restoreFromOld:true});}
+        finally{button.disabled=false;}
       });
 
       const note=document.createElement('small');
