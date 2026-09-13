@@ -79,6 +79,10 @@
     shelfReturnLink.hidden=false;
   }
 
+  function setShelfReturnReading(reading){
+    shelfReturnLink?.classList.toggle('is-reading',Boolean(reading));
+  }
+
   configureShelfReturn();
 
   function setReportVisible(visible){
@@ -284,6 +288,7 @@
   }
 
   function showError(error) {
+    setShelfReturnReading(false);
     console.error(error);
     host.hidden = true;
     intro.hidden = true;
@@ -600,6 +605,7 @@
   }
 
   async function fetchScene() {
+    setShelfReturnReading(false);
     errorPanel.hidden = true;
     const src = source();
     const response = await fetch(src, { cache: 'no-store' });
@@ -693,6 +699,7 @@
   }
 
   function onEnd() {
+    setShelfReturnReading(false);
     localStorage.removeItem(storageKey());
     if(resonanceSession?.valid){
       if(player?.auto)invalidateResonance();
@@ -797,6 +804,7 @@
   }
 
   async function ensurePlayer(startAt = 0) {
+    setShelfReturnReading(true);
     if (player) {
       const previousPlayer = player;
       removeShellListeners();
@@ -875,6 +883,7 @@
 
 
   function showIntro() {
+    setShelfReturnReading(false);
     ending.classList.remove('is-visible');
     ending.hidden = true;
 
@@ -924,7 +933,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.24-author-shelf-return',
+    version: '0.3.25-author-shelf-return-collapse',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
