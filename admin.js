@@ -4,7 +4,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
 let lastStats=null;
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),authorCount:$('#authorCount'),authorList:$('#authorList'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
@@ -13,7 +13,7 @@ function toast(text){const n=document.createElement('div');n.className='toast';n
 
 // v63.35.1 — one admin, four workspaces
 function setAdminTab(name,{remember=true}={}){
-  const valid=['status','selection','reports','contacts','maintenance'];
+  const valid=['status','selection','reports','contacts','authors','maintenance'];
   if(!valid.includes(name))name='status';
   document.querySelectorAll('[data-admin-tab]').forEach(b=>{const on=b.dataset.adminTab===name;b.classList.toggle('is-active',on);b.setAttribute('aria-selected',on?'true':'false');});
   document.querySelectorAll('[data-admin-panel]').forEach(p=>p.classList.toggle('is-active',p.dataset.adminPanel===name));
@@ -21,6 +21,7 @@ function setAdminTab(name,{remember=true}={}){
   if(name==='selection'&&token)loadOfficialShelfAdmin();
   if(name==='reports'&&token)loadReports();
   if(name==='contacts'&&token)loadContacts();
+  if(name==='authors'&&token)loadAuthors();
 }
 function formatJstDate(value){
   if(!value)return '発行日時不明';
@@ -328,7 +329,20 @@ async function loadRelayAnalytics(){
   }
 }
 
-async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadContacts(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation(),loadRelayAnalytics()]);}
+async function loadAuthors(){
+  if(!els.authorList)return;
+  els.authorList.innerHTML='<div class="empty">読み込み中…</div>';
+  try{
+    const data=await api('/admin/authors');
+    const rows=data.authors||[];
+    if(els.authorCount)els.authorCount.textContent=`${rows.length.toLocaleString('ja-JP')}人`;
+    els.authorList.innerHTML=rows.length?rows.map(author=>{const active=author.accountStatus!=='suspended';return `<article class="contact-card${active?'':' is-resolved'}" data-author-id="${escapeHtml(author.authorId||'')}"><div class="meta"><span>作者名</span><strong>${escapeHtml(author.displayName||'未設定')}</strong><span>メール</span><a class="inline-link" href="mailto:${escapeHtml(author.email||'')}">${escapeHtml(author.email||'')}</a><span>authorId</span><code>${escapeHtml(author.authorId||'')}</code><span>状態</span><strong>${active?'利用中':'停止中'}</strong><span>登録</span><span>${escapeHtml(formatJstDate(author.createdAt))}</span></div><div class="actions"><button type="button" data-author-action="${active?'suspend':'activate'}" class="${active?'stop':''}">${active?'利用を停止':'利用を再開'}</button></div></article>`;}).join(''):'<div class="empty">作者アカウントはまだありません。</div>';
+  }catch(error){
+    if(els.authorCount)els.authorCount.textContent='–';
+    els.authorList.innerHTML=`<div class="empty">作者を読み込めませんでした: ${escapeHtml(error.message)}</div>`;
+  }
+}
+async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadContacts(),loadAuthors(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation(),loadRelayAnalytics()]);}
 
 async function loadReports(){const status=els.filter.value;els.list.innerHTML='<div class="empty">読み込み中…</div>';try{const [shown,open]=await Promise.all([api(`/admin/reports?status=${encodeURIComponent(status)}`),api('/admin/reports?status=open')]);els.openCount.textContent=open.count;els.shownCount.textContent=shown.count;renderReports(shown.reports);}catch(e){els.list.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -424,6 +438,18 @@ if(els.contactList)els.contactList.addEventListener('click',async e=>{
     else await api(`/admin/contact/${encodeURIComponent(id)}/${action}`,{method:'POST'});
     toast(action==='delete'?'削除しました':action==='resolve'?'対応済みにしました':'未対応へ戻しました');
     await Promise.all([loadContacts(),loadStats()]);
+  }catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
+});
+if(els.authorList)els.authorList.addEventListener('click',async e=>{
+  const b=e.target.closest('button[data-author-action]');if(!b)return;
+  const card=b.closest('[data-author-id]'),authorId=card?.dataset.authorId||'',action=b.dataset.authorAction;
+  if(!authorId)return;
+  if(action==='suspend'&&!confirm('この作者アカウントの利用を停止しますか？\n新規公開・更新・RELAY元登録ができなくなります。'))return;
+  b.disabled=true;
+  try{
+    await api(`/admin/author/${encodeURIComponent(authorId)}/${action}`,{method:'POST'});
+    toast(action==='suspend'?'作者アカウントを停止しました':'作者アカウントを再開しました');
+    await loadAuthors();
   }catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 async function inspect(){const id=els.workId.value.trim();if(!id)return;els.direct.textContent='確認中…';try{const d=await api(`/admin/work/${encodeURIComponent(id)}`);els.direct.innerHTML=`<div class="report-card"><div class="meta"><span>workId</span><code>${escapeHtml(d.id)}</code><span>状態</span><strong>${escapeHtml(d.state)}</strong><span>素材</span><span>${Number(d.assets?.length||0)}件</span></div><div class="actions"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">作品を見る</a><button data-direct="suspend" class="stop">一時停止</button><button data-direct="republish">再公開</button><button data-direct="delete" class="delete">完全削除</button></div></div>`;}catch(e){els.direct.textContent=`確認できません: ${e.message}`;}}

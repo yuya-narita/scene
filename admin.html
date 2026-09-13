@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 運営</title>
-  <link rel="stylesheet" href="./admin.css?v=0.3.71">
+  <link rel="stylesheet" href="./admin.css?v=64.0">
 </head>
 <body>
   <main class="admin-shell">
@@ -29,6 +29,7 @@
         <button class="admin-tab" type="button" data-admin-tab="selection">作品選定</button>
         <button class="admin-tab" type="button" data-admin-tab="reports">報告 <span id="reportTabBadge" class="tab-badge" hidden>0</span></button>
         <button class="admin-tab" type="button" data-admin-tab="contacts">お問い合わせ <span id="contactTabBadge" class="tab-badge" hidden>0</span></button>
+        <button class="admin-tab" type="button" data-admin-tab="authors">作者</button>
         <button class="admin-tab" type="button" data-admin-tab="maintenance">保守</button>
       </nav>
 
@@ -146,6 +147,14 @@
         </section>
       </div>
 
+      <div class="admin-tab-panel" data-admin-panel="authors">
+      <section class="panel">
+        <div class="section-head"><div><small>AUTHORS</small><h2>作者アカウント</h2></div><small id="authorCount" class="muted-note">–</small></div>
+        <p class="selection-lead">公開者を内部で確認するための一覧です。メールアドレスは管理画面だけに表示されます。</p>
+        <div id="authorList" class="contact-list"><div class="empty">読み込み中…</div></div>
+      </section>
+      </div>
+
       <div class="admin-tab-panel" data-admin-panel="maintenance">
       <section class="panel">
         <div class="section-head"><div><small>STORAGE</small><h2>R2ストレージ</h2></div><small class="muted-note">24時間未満の未参照素材は保護</small></div>
@@ -179,6 +188,6 @@
       </div>
     </div>
   </main>
-  <script src="./admin.js?v=0.3.71-contact-inbox"></script>
+  <script src="./admin.js?v=64.0"></script>
 </body>
 </html>
