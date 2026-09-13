@@ -4044,7 +4044,7 @@
     if(name)name.textContent=signedInAuthor?.displayName||'';
     if(id)id.textContent=signedInAuthor?.authorId||'';
     const statusButton=$('#studioAuthorStatusButton');
-    if(statusButton){statusButton.textContent=active?`作者：${signedInAuthor?.displayName||'ログイン中'}`:'作者ログイン';statusButton.classList.toggle('is-signed-in',active);statusButton.title=active?'作者アカウントを確認':'作者登録・ログイン';}
+    if(statusButton){statusButton.textContent=active?(signedInAuthor?.displayName||'ログイン中'):'作者ログイン';statusButton.classList.toggle('is-signed-in',active);statusButton.title=active?'作者アカウントを確認':'作者登録・ログイン';}
     syncPublishConfirmationAvailability();
   }
   async function restoreAuthorSession(){
