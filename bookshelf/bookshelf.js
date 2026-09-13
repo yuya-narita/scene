@@ -6,6 +6,7 @@ const WORKS='works';
 const READER_BOOKS='readerBooks';
 const HANDOFF='handoff';
 const API_BASE='https://scene-studio-api.a-hako.workers.dev';
+const AUTHOR_AUTH_STORAGE_KEY='ahako-author-session-v1';
 const td=new TextDecoder('utf-8');
 const te=new TextEncoder();
 const $=s=>document.querySelector(s);
@@ -41,9 +42,23 @@ let officialShelfLoadPromise=null;
 let officialShelfRenderPromise=null;
 const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
 let shelfScrollLockY=0;
+let authorToken='';
+let signedInAuthor=null;
+let authorSeries=[];
+let authorWorks=[];
+let editingSeriesId='';
+let editingSeriesWorkIds=[];
+
+function authorHeaders(extra={}){return {...extra,...(authorToken?{Authorization:`Bearer ${authorToken}`}:{})};}
+function readAuthorSession(){try{const row=JSON.parse(localStorage.getItem(AUTHOR_AUTH_STORAGE_KEY)||'null');if(row?.token&&row?.author?.authorId){authorToken=String(row.token);signedInAuthor=row.author;}}catch(_){}}
+function saveAuthorSession(token,author){authorToken=String(token||'');signedInAuthor=author||null;if(authorToken&&signedInAuthor)localStorage.setItem(AUTHOR_AUTH_STORAGE_KEY,JSON.stringify({token:authorToken,author:signedInAuthor}));else localStorage.removeItem(AUTHOR_AUTH_STORAGE_KEY);syncBookshelfAuthorUI();}
+function syncBookshelfAuthorUI(){const active=!!(authorToken&&signedInAuthor?.authorId),button=$('#bookshelfAuthorButton');if(button){button.textContent=active?`作者：${signedInAuthor.displayName||'ログイン中'}`:'作者ログイン';button.classList.toggle('is-signed-in',active);}$('#bookshelfAuthorSignedIn').hidden=!active;$('#bookshelfAuthorEmailForm').hidden=active;$('#bookshelfAuthorCodeForm').hidden=true;if(active){$('#bookshelfAuthorName').textContent=signedInAuthor.displayName||'';$('#bookshelfAuthorId').textContent=signedInAuthor.authorId||'';}syncSeriesShelf();}
+async function restoreBookshelfAuthorSession(){readAuthorSession();syncBookshelfAuthorUI();if(!authorToken)return;try{const response=await fetch(`${API_BASE}/author-auth/me`,{headers:authorHeaders({Accept:'application/json'}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);return;}if(response.ok&&payload?.author)saveAuthorSession(authorToken,payload.author);}catch(_){syncBookshelfAuthorUI();}if(authorToken)await loadAuthorShelfData();}
+async function authorRequest(path,options={}){const response=await fetch(`${API_BASE}${path}`,{...options,headers:authorHeaders(options.headers||{}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);throw new Error(payload?.error||'ログインの有効期限が切れました。');}if(!response.ok||!payload?.ok)throw new Error(payload?.error||'通信できませんでした。');return payload;}
+async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
 
 function shelfScrollShouldLock(){
-  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open);
+  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open);
 }
 function syncShelfScrollLock(){
   const body=document.body;if(!body)return;
@@ -626,7 +641,8 @@ function buildLocalShelfView(tab){
   grid.dataset.shelfView=tab;
   grid.dataset.mobileColumns=String(mobileShelfColumns);
   grid.setAttribute('aria-live','polite');
-  const arranged=orderedShelfBooks(shelfDataCache[tab]||[],tab);
+  const grouped=tab==='created'?new Set(authorSeries.flatMap(series=>(series.episodes||[]).map(item=>item.workId))):new Set();
+  const arranged=orderedShelfBooks((shelfDataCache[tab]||[]).filter(book=>!grouped.has(book.workId)),tab);
   grid.innerHTML=arranged.visible.map(w=>bookCardHtml(w)).join('');
   return grid;
 }
@@ -675,6 +691,7 @@ async function presentShelfFromCache({refreshOfficial=false}={}){
   const grid=official?$('#grid'):activateLocalShelfView(currentShelfTab);
   $('#officialShelf').hidden=!official;
   if(grid)grid.hidden=official;
+  syncSeriesShelf();
   $('#emptyState').hidden=official||books.length>0||arranged.archived.length>0;
   $('#countText').textContent=official?'あ箱の本':`${source.length}冊`;
   const shelfActions=$('#shelfHeadActions'),shelfAdd=$('#shelfAddIconButton'),studioCreate=$('#createStudioIconButton');
@@ -705,6 +722,18 @@ async function presentShelfFromCache({refreshOfficial=false}={}){
   applyMobileColumns(mobileShelfColumns);
   installShelfPinch();
   if(!official)bindBookInteractions();
+}
+
+function syncSeriesShelf(){
+  const shelf=$('#seriesShelf');if(!shelf)return;
+  const visible=currentShelfTab==='created'&&!!authorToken;
+  shelf.hidden=!visible;
+  if(!authorToken){$('#seriesBoxes').innerHTML='';return;}
+  const local=new Map((shelfDataCache.created||[]).map(book=>[book.workId,book]));
+  const boxes=authorSeries.filter(series=>(series.episodes||[]).some(item=>local.has(item.workId))||series.episodeCount===0);
+  $('#seriesBoxes').innerHTML=boxes.length?boxes.map(series=>`<section class="series-box" data-series-id="${escapeHtml(series.seriesId)}"><header><div><small>SERIES</small><h3>${escapeHtml(series.title)}</h3><span>${Number(series.episodeCount)||0}冊</span></div><button class="edit-series-box" type="button">編集</button></header><div class="series-box-books">${(series.episodes||[]).map(item=>local.get(item.workId)).filter(Boolean).map(book=>bookCardHtml(book)).join('')}</div></section>`).join(''):'<p class="series-box-empty">BOXを作ると、連作をひとまとまりで並べられます。</p>';
+  document.querySelectorAll('#seriesBoxes .edit-series-box').forEach(button=>button.onclick=()=>openSeriesBoxEditor(button.closest('.series-box')?.dataset.seriesId||''));
+  document.querySelectorAll('#seriesBoxes .book').forEach(book=>book.onclick=()=>openDetail(book.dataset.role,book.dataset.id));
 }
 
 async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
@@ -762,7 +791,8 @@ function swipeShelfBodyHtml(tab){
       snapshot.removeAttribute('hidden');
       snapshot.classList.add('shelf-swipe-grid');
       snapshot.dataset.mobileColumns=String(mobileShelfColumns);
-      return snapshot.outerHTML;
+      const series=tab==='created'&&authorToken?$('#seriesShelf')?.outerHTML.replace(/ hidden(?:="")?/,''):'';
+      return `${series||''}${snapshot.outerHTML}`;
     }
     return `<section class="grid shelf-swipe-grid" data-mobile-columns="${mobileShelfColumns}"></section>`;
   }
@@ -1455,6 +1485,17 @@ function openArchiveBox(){
   syncShelfScrollLock();
 }
 function closeBookshelfMenu(){const menu=$('#bookshelfMenu');if(menu)menu.open=false;syncShelfScrollLock();}
+function setBookshelfAuthStatus(message='',error=false){const el=$('#bookshelfAuthorStatus');el.textContent=message;el.classList.toggle('is-error',error);}
+function openBookshelfAuthor(){syncBookshelfAuthorUI();setBookshelfAuthStatus('');$('#bookshelfAuthorDialog').showModal();syncShelfScrollLock();}
+async function requestBookshelfAuthorCode(){const email=$('#bookshelfAuthorEmail').value.trim(),displayName=$('#bookshelfAuthorDisplayName').value.trim();setBookshelfAuthStatus('送信しています…');try{await authorRequest('/author-auth/request-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});$('#bookshelfAuthorEmailForm').hidden=true;$('#bookshelfAuthorCodeForm').hidden=false;$('#bookshelfAuthorCode').focus();setBookshelfAuthStatus('メールに届いた6桁のコードを入力してください。');sessionStorage.setItem('ahako:author-login-email',email);sessionStorage.setItem('ahako:author-login-name',displayName);}catch(error){setBookshelfAuthStatus(error.message,true);}}
+async function verifyBookshelfAuthorCode(){const email=sessionStorage.getItem('ahako:author-login-email')||$('#bookshelfAuthorEmail').value.trim(),displayName=sessionStorage.getItem('ahako:author-login-name')||$('#bookshelfAuthorDisplayName').value.trim(),code=$('#bookshelfAuthorCode').value.trim();setBookshelfAuthStatus('確認しています…');try{const payload=await authorRequest('/author-auth/verify-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,displayName,code})});saveAuthorSession(payload.token,payload.author);await loadAuthorShelfData();$('#bookshelfAuthorDialog').close();toast('作者アカウントでログインしました。');}catch(error){setBookshelfAuthStatus(error.message,true);}}
+function renderSeriesBookChoices(){const published=new Set(authorWorks.map(work=>work.workId)),local=shelfDataCache.created||[];$('#seriesBookChoices').innerHTML=local.map(book=>{const selected=editingSeriesWorkIds.includes(book.workId),enabled=published.has(book.workId);return`<div class="series-choice ${selected?'is-selected':''} ${enabled?'':'is-disabled'}" draggable="${selected&&enabled}" data-work-id="${escapeHtml(book.workId)}"><span class="series-choice-handle">${selected?'☰':'○'}</span><span><strong>${escapeHtml(book.title)}</strong><small>${enabled?(selected?`${editingSeriesWorkIds.indexOf(book.workId)+1}冊目`:'タップして追加'):'未公開のため追加できません'}</small></span>${enabled?(selected?'<span class="series-choice-actions"><button type="button" data-action="up" aria-label="上へ">↑</button><button type="button" data-action="down" aria-label="下へ">↓</button><button type="button" data-action="remove">外す</button></span>':'<button type="button" data-action="add">追加</button>'):''}</div>`;}).join('');
+  document.querySelectorAll('#seriesBookChoices .series-choice:not(.is-disabled) button').forEach(button=>button.onclick=()=>{const id=button.closest('.series-choice').dataset.workId,index=editingSeriesWorkIds.indexOf(id),action=button.dataset.action;if(action==='add'&&index<0)editingSeriesWorkIds.push(id);if(action==='remove'&&index>=0)editingSeriesWorkIds.splice(index,1);if(action==='up'&&index>0)[editingSeriesWorkIds[index-1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index-1]];if(action==='down'&&index>=0&&index<editingSeriesWorkIds.length-1)[editingSeriesWorkIds[index+1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index+1]];renderSeriesBookChoices();});
+  let dragged='';document.querySelectorAll('#seriesBookChoices .series-choice.is-selected').forEach(row=>{row.ondragstart=e=>{dragged=row.dataset.workId;e.dataTransfer.effectAllowed='move';};row.ondragover=e=>{if(!dragged||dragged===row.dataset.workId)return;e.preventDefault();const from=editingSeriesWorkIds.indexOf(dragged),to=editingSeriesWorkIds.indexOf(row.dataset.workId);editingSeriesWorkIds.splice(to,0,editingSeriesWorkIds.splice(from,1)[0]);renderSeriesBookChoices();};});
+}
+function openSeriesBoxEditor(seriesId=''){if(!authorToken){openBookshelfAuthor();return;}const series=authorSeries.find(item=>item.seriesId===seriesId);editingSeriesId=series?.seriesId||'';editingSeriesWorkIds=(series?.episodes||[]).map(item=>item.workId);$('#seriesBoxDialogTitle').textContent=series?'シリーズBOXを編集':'シリーズBOXを作る';$('#seriesBoxTitle').value=series?.title||'';$('#deleteSeriesBox').hidden=!series;$('#seriesBoxStatus').textContent='';renderSeriesBookChoices();$('#seriesBoxDialog').showModal();syncShelfScrollLock();}
+async function saveSeriesBox(){const title=$('#seriesBoxTitle').value.trim(),status=$('#seriesBoxStatus');if(!title){status.textContent='BOX名を入力してください。';return;}status.textContent='保存しています…';try{let id=editingSeriesId;if(!id){const created=await authorRequest('/author/series',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});id=created.series.seriesId;}else await authorRequest(`/author/series/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});await authorRequest(`/author/series/${id}/books`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds:editingSeriesWorkIds})});await loadAuthorShelfData();$('#seriesBoxDialog').close();toast('シリーズBOXを保存しました。');}catch(error){status.textContent=error.message||'保存できませんでした。';status.classList.add('is-error');}}
+async function deleteSeriesBox(){if(!editingSeriesId||!confirm('BOXを削除しますか？ 本そのものは削除されません。'))return;try{await authorRequest(`/author/series/${editingSeriesId}`,{method:'DELETE'});await loadAuthorShelfData();$('#seriesBoxDialog').close();toast('シリーズBOXを削除しました。');}catch(error){$('#seriesBoxStatus').textContent=error.message;}}
 function openStudioFromBookshelf(){closeBookshelfMenu();location.href='../studio/?from=bookshelf';}
 $('#createStudioIconButton').onclick=$('#emptyCreateButton').onclick=openStudioFromBookshelf;
 $('#shelfAddIconButton').onclick=()=>{const role=$('#shelfAddIconButton').dataset.addRole;if(role==='distribution'){$('#distributionInput').dataset.replace='';$('#distributionInput').click();return;}$('#fileInput').dataset.replace='';$('#fileInput').click();};
@@ -1463,6 +1504,16 @@ $('#addDistributionButton').onclick=$('#emptyDistributionButton').onclick=()=>{c
 $('#ownedTab').onclick=()=>switchShelf('owned');
 $('#createdTab').onclick=()=>switchShelf('created');
 $('#officialTab').onclick=()=>switchShelf('official');
+$('#bookshelfAuthorButton').onclick=openBookshelfAuthor;
+$('#closeBookshelfAuthor').onclick=()=>$('#bookshelfAuthorDialog').close();
+$('#bookshelfAuthorEmailForm').onsubmit=e=>{e.preventDefault();requestBookshelfAuthorCode();};
+$('#bookshelfAuthorCodeForm').onsubmit=e=>{e.preventDefault();verifyBookshelfAuthorCode();};
+$('#bookshelfAuthorResend').onclick=requestBookshelfAuthorCode;
+$('#bookshelfAuthorLogout').onclick=async()=>{const token=authorToken;saveAuthorSession('',null);authorSeries=[];authorWorks=[];if(token)fetch(`${API_BASE}/author-auth/logout`,{method:'POST',headers:{Authorization:`Bearer ${token}`}}).catch(()=>{});$('#bookshelfAuthorDialog').close();await render();};
+$('#createSeriesBoxButton').onclick=()=>openSeriesBoxEditor('');
+$('#closeSeriesBox').onclick=()=>$('#seriesBoxDialog').close();
+$('#saveSeriesBox').onclick=saveSeriesBox;
+$('#deleteSeriesBox').onclick=deleteSeriesBox;
 $('#createdTabToggle')?.addEventListener('change',async e=>{
   const visible=!!e.currentTarget.checked;
   setCreatedTabVisible(visible);
@@ -1495,6 +1546,8 @@ installSceneDrop();
 installShelfScrollGuard();
 installDesktopShelfArrowKeys();
 installShelfSwipe();
+readAuthorSession();
+syncBookshelfAuthorUI();
 (async()=>{
   // V63.33 — context handoff guard. The source page stores a nonce in
   // sessionStorage and carries the same nonce in the claim URL. If the claim
@@ -1526,6 +1579,7 @@ installShelfSwipe();
       try{claimed=await importBookshelfClaimFromLocation();}
       catch(e){console.error(e);alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
       await render();
+      await restoreBookshelfAuthorSession();
       await restoreShelfScroll(currentShelfTab);
       if(claimed)toast('自分の一冊を本棚に受け取りました。');
     },{once:true});
@@ -1535,6 +1589,7 @@ installShelfSwipe();
   try{claimed=await importBookshelfClaimFromLocation();}
   catch(e){console.error(e);alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
   await render();
+  await restoreBookshelfAuthorSession();
   await restoreShelfScroll(currentShelfTab);
   if(claimed)toast('自分の一冊を本棚に受け取りました。');
 })().catch(e=>{console.error(e);alert('本棚を開けませんでした。');});

@@ -4,11 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=65.0">
+  <link rel="stylesheet" href="bookshelf.css?v=66.0">
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><strong><span>あ</span><span class="box">□</span></strong><small>本棚</small></div>
+    <button id="bookshelfAuthorButton" class="bookshelf-author-button" type="button">作者ログイン</button>
     <details id="bookshelfMenu" class="bookshelf-menu">
       <summary aria-label="本棚メニュー">•••</summary>
       <div class="bookshelf-menu-panel">
@@ -59,6 +60,11 @@
         <button id="emptyDistributionButton" type="button">自分の一冊を追加</button>
       </section>
 
+      <section id="seriesShelf" class="series-shelf" hidden>
+        <div class="series-shelf-head"><div><p class="eyebrow">SERIES BOX</p><h2>シリーズBOX</h2></div><button id="createSeriesBoxButton" type="button">＋ BOXを作る</button></div>
+        <div id="seriesBoxes" class="series-boxes"></div>
+      </section>
+
       <section id="grid" class="grid" aria-live="polite"></section>
 
       <section id="officialShelf" class="official-shelf" hidden>
@@ -89,6 +95,16 @@
   <dialog id="detailDialog" class="detail-dialog">
     <button id="closeDetail" class="dialog-close" aria-label="閉じる">×</button>
     <div id="detailContent"></div>
+  </dialog>
+
+  <dialog id="bookshelfAuthorDialog" class="author-dialog">
+    <button id="closeBookshelfAuthor" class="dialog-close" type="button" aria-label="閉じる">×</button>
+    <div class="author-dialog-body"><p class="eyebrow">AUTHOR</p><h2>作者登録・ログイン</h2><div id="bookshelfAuthorSignedIn" hidden><strong id="bookshelfAuthorName"></strong><small id="bookshelfAuthorId"></small><button id="bookshelfAuthorLogout" type="button">ログアウト</button></div><form id="bookshelfAuthorEmailForm"><label>作者名<input id="bookshelfAuthorDisplayName" required maxlength="80"></label><label>メールアドレス<input id="bookshelfAuthorEmail" type="email" required></label><button class="primary" type="submit">認証コードを送る</button></form><form id="bookshelfAuthorCodeForm" hidden><label>6桁の認証コード<input id="bookshelfAuthorCode" inputmode="numeric" maxlength="6" required></label><button class="primary" type="submit">確認して続ける</button><button id="bookshelfAuthorResend" type="button">コードを送り直す</button></form><p id="bookshelfAuthorStatus" class="author-status"></p></div>
+  </dialog>
+
+  <dialog id="seriesBoxDialog" class="series-box-dialog">
+    <button id="closeSeriesBox" class="dialog-close" type="button" aria-label="閉じる">×</button>
+    <div class="series-box-dialog-body"><p class="eyebrow">SERIES BOX</p><h2 id="seriesBoxDialogTitle">シリーズBOXを作る</h2><label>BOX名<input id="seriesBoxTitle" maxlength="120" placeholder="例：あ箱 開発ログ"></label><p>公開済みの本を選び、つまみで順番を入れ替えます。</p><div id="seriesBookChoices" class="series-book-choices"></div><div class="series-box-actions"><button id="deleteSeriesBox" class="danger" type="button" hidden>BOXを削除</button><button id="saveSeriesBox" class="primary" type="button">保存する</button></div><p id="seriesBoxStatus" class="author-status"></p></div>
   </dialog>
 
   <dialog id="archiveDialog" class="archive-dialog">
@@ -143,6 +159,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=65.0"></script>
+  <script src="bookshelf.js?v=66.0"></script>
 </body>
 </html>
