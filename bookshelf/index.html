@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=68.2">
+  <link rel="stylesheet" href="bookshelf.css?v=68.4">
 </head>
 <body>
   <header class="topbar">
@@ -110,6 +110,8 @@
         <section class="author-profile-editor" aria-labelledby="authorProfileTitle">
           <div class="author-profile-editor-head"><small>PUBLIC PROFILE</small><h3 id="authorProfileTitle">公開作者情報</h3></div>
           <label>作者名<input id="bookshelfAuthorProfileName" maxlength="80" autocomplete="name"></label>
+          <label>短い本棚ID<input id="bookshelfAuthorSlug" maxlength="30" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="例：yuya"></label>
+          <p id="bookshelfAuthorShortUrl" class="author-short-url">未設定の場合は従来の本棚URLを使用します。</p>
           <label>本棚の紹介文<input id="bookshelfAuthorShelfLead" maxlength="140" placeholder="この作者が、あ箱で公開している本です。"></label>
           <p class="author-profile-note">公開本棚とログイン表示に反映します。作品内に保存済みの作者名は変わりません。</p>
           <button id="saveBookshelfAuthorProfile" class="primary" type="button">作者情報を保存</button>
@@ -192,6 +194,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=68.2"></script>
+  <script src="bookshelf.js?v=68.4"></script>
 </body>
 </html>

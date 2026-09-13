@@ -6,7 +6,7 @@ let workById=new Map();
 let toastTimer=0;
 
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));}
-function authorIdFromUrl(){return String(new URLSearchParams(location.search).get('id')||new URLSearchParams(location.search).get('author')||'').trim().toLowerCase();}
+function authorReferenceFromUrl(){const params=new URLSearchParams(location.search),slug=String(params.get('u')||'').trim().toLowerCase();if(/^[a-z0-9][a-z0-9_-]{2,29}$/.test(slug))return`by-slug/${encodeURIComponent(slug)}`;const authorId=String(params.get('id')||params.get('author')||'').trim().toLowerCase();return validAuthorId(authorId)?encodeURIComponent(authorId):'';}
 function validAuthorId(value){return /^author_[a-f0-9]{32}$/.test(value);}
 function showToast(message){const toast=$('#toast');toast.textContent=message;toast.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast.hidden=true;},2400);}
 function coverHtml(work,className='book-cover'){return `<span class="${className}">${work?.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span class="book-cover-fallback">□</span>'}</span>`;}
@@ -54,13 +54,13 @@ async function fetchJson(path){
 }
 
 async function loadShelf(){
-  const authorId=authorIdFromUrl();
+  const authorReference=authorReferenceFromUrl();
   $('#loadingState').hidden=false;$('#errorState').hidden=true;$('#shelfContent').hidden=true;
-  if(!validAuthorId(authorId)){showError('作者本棚のURLが正しくありません。');return;}
+  if(!authorReference){showError('作者本棚のURLが正しくありません。');return;}
   try{
     const [bookshelf,worksPayload]=await Promise.all([
-      fetchJson(`/authors/${encodeURIComponent(authorId)}/bookshelf`),
-      fetchJson(`/authors/${encodeURIComponent(authorId)}/works`)
+      fetchJson(`/authors/${authorReference}/bookshelf`),
+      fetchJson(`/authors/${authorReference}/works`)
     ]);
     shelfData=bookshelf;allWorks=Array.isArray(worksPayload.works)?worksPayload.works:[];
     workById=new Map(allWorks.map(work=>[work.publicationId,work]));

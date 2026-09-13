@@ -145,6 +145,7 @@ main{padding-top:22px}
 .author-profile-editor label{gap:5px}
 .author-profile-editor input{background:#fff}
 .author-profile-note{margin:0;color:#81786d;font-size:9px;line-height:1.55}
+.author-short-url{overflow:hidden;margin:-4px 0 0;color:#7d7468;font-size:8px;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
 .author-profile-editor>button{justify-self:end;padding:9px 12px;font-size:10px;font-weight:800}
 .author-profile-editor>.author-status{margin:0}
 .author-header-editor{margin:8px 0 2px;padding:16px;border:1px solid #d9d0c2;border-radius:16px;background:#f8f5ef}
