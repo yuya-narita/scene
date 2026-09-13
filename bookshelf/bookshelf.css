@@ -1237,9 +1237,10 @@ html{
 .public-discovery-copy p{overflow:hidden;margin:6px 0 0;color:#7c7469;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
 .public-discovery-author{display:inline-block;overflow:hidden;max-width:100%;margin-top:7px;color:#705b3e;font-size:9px;font-weight:700;text-decoration:none;text-overflow:ellipsis;white-space:nowrap}
 .public-discovery-author:hover{text-decoration:underline}
+.public-discovery-more{display:block;min-width:180px;margin:30px auto 0;padding:11px 20px;border-radius:999px;background:#fff;font-size:11px;font-weight:800}
 .official-seed-lead{margin:-7px 0 17px!important;color:#776f64!important;font-size:10px!important;text-align:left}
-.official-seed-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:stretch;gap:16px}
-@media(max-width:900px){.public-discovery-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.official-seed-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.official-seed-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:16px}
+@media(max-width:900px){.public-discovery-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:680px){
   .official-books{max-width:none;margin-top:24px}
   .public-discovery-block+.public-discovery-block,.official-seed-block+.public-discovery-block{margin-top:36px;padding-top:29px}
@@ -1249,5 +1250,7 @@ html{
   .public-author-card-copy strong{font-size:16px}
   .public-discovery-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:27px 10px}
   .public-discovery-copy h4{font-size:11px}
-  .official-seed-grid{grid-template-columns:1fr;max-width:340px;margin:0 auto}
+  .official-seed-grid{display:flex;max-width:none;margin:0 -14px 0 0;padding:2px 14px 13px 0;overflow-x:auto;scroll-snap-type:x proximity;overscroll-behavior-inline:contain}
+  .official-seed-grid>.official-book-card{flex:0 0 min(84vw,330px);scroll-snap-align:start}
+  .public-discovery-more{margin-top:24px}
 }

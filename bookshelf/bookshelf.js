@@ -42,6 +42,7 @@ const insightsCache=new Map();
 const copyJourneyCache=new Map();
 let officialShelfItems=[];
 let publicDiscoveryData={authors:[],works:[]};
+let publicDiscoveryVisibleWorks=0;
 let officialShelfLoaded=false;
 let officialShelfLoadPromise=null;
 let officialShelfRenderPromise=null;
@@ -583,16 +584,19 @@ function publicAuthorWorkUrl(author,publicationId=''){
   if(publicationId)url.searchParams.set('book',String(publicationId));
   return url.toString();
 }
+function publicDiscoveryPageSize(){return matchMedia('(max-width:680px)').matches?8:10;}
 function publicDiscoveryHtml(data){
-  const authors=Array.isArray(data?.authors)?data.authors:[],works=Array.isArray(data?.works)?data.works:[];
+  const allAuthors=Array.isArray(data?.authors)?data.authors:[],authors=allAuthors.slice(0,10),works=Array.isArray(data?.works)?data.works:[];
+  if(!publicDiscoveryVisibleWorks)publicDiscoveryVisibleWorks=publicDiscoveryPageSize();
+  const visibleWorks=works.slice(0,publicDiscoveryVisibleWorks);
   const authorSection=authors.length?`<section class="public-discovery-block"><div class="public-discovery-heading"><div><p class="eyebrow">AUTHORS</p><h3>作者の棚</h3></div><span>${authors.length}棚</span></div><div class="public-author-rail">${authors.map(author=>{
     const href=publicAuthorShelfUrl(author),header=author.header?.url?`<img src="${escapeHtml(author.header.url)}" alt="">`:'<span>あ□</span>';
     return `<a class="public-author-card" href="${escapeHtml(href)}"><span class="public-author-card-image">${header}</span><span class="public-author-card-shade"></span><span class="public-author-card-copy"><small>PUBLIC BOOKSHELF</small><strong>${escapeHtml(author.displayName||'作者')}</strong><em>${Math.max(0,Number(author.workCount)||0)}冊</em></span></a>`;
   }).join('')}</div></section>`:'';
-  const workSection=works.length?`<section class="public-discovery-block"><div class="public-discovery-heading"><div><p class="eyebrow">NEW BOOKS</p><h3>新しく公開された本</h3></div><span>${works.length}冊</span></div><div class="public-discovery-grid">${works.map(work=>{
+  const workSection=works.length?`<section class="public-discovery-block"><div class="public-discovery-heading"><div><p class="eyebrow">NEW BOOKS</p><h3>新しく公開された本</h3></div><span>${works.length}冊</span></div><div class="public-discovery-grid">${visibleWorks.map(work=>{
     const author=work.author||{},workHref=publicAuthorWorkUrl(author,work.publicationId),authorHref=publicAuthorShelfUrl(author),cover=work.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span>□</span>',detail=[work.episodeLabel,work.episodeTitle,work.subtitle].filter(Boolean).join(' ');
     return `<article class="public-discovery-book"><a class="public-discovery-cover" href="${escapeHtml(workHref)}">${cover}</a><div class="public-discovery-copy"><h4><a href="${escapeHtml(workHref)}">${escapeHtml(work.title||'Untitled')}</a></h4>${detail?`<p>${escapeHtml(detail)}</p>`:''}<a class="public-discovery-author" href="${escapeHtml(authorHref)}">${escapeHtml(author.displayName||'作者')}の本棚へ</a></div></article>`;
-  }).join('')}</div></section>`:'';
+  }).join('')}</div>${visibleWorks.length<works.length?`<button class="public-discovery-more" type="button" data-public-discovery-more>もっと見る</button>`:''}</section>`:'';
   return authorSection+workSection;
 }
 async function loadOfficialShelf({force=false}={}){
@@ -616,6 +620,7 @@ function bindOfficialShelfInteractions(host=$('#officialBooks')){
     cover.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
   });
   host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=e=>{e.stopPropagation();claimOfficialBook(button);});
+  host.querySelector('[data-public-discovery-more]')?.addEventListener('click',()=>{publicDiscoveryVisibleWorks+=publicDiscoveryPageSize();renderOfficialShelf({force:false});});
 }
 function renderOfficialShelf({force=true}={}){
   if(officialShelfRenderPromise&&!force)return officialShelfRenderPromise;
@@ -626,8 +631,8 @@ function renderOfficialShelf({force=true}={}){
       const owned=await getAllReaderBooks();
       const claimedEditions=new Set(owned.map(book=>`${String(book.workId||'')}::${String(book.editionId||'')}`));
       const discovery=publicDiscoveryHtml(publicDiscoveryData);
-      const seedBooks=items.length?items.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだ種本はありません。</strong><span>最初の種本が置かれると、ここから一冊ずつ旅立ちます。</span></div>`;
-      const seedSection=`<section class="official-seed-block"><div class="public-discovery-heading"><div><p class="eyebrow">FROM A-HAKO</p><h3>あ箱から届く本</h3></div></div><p class="official-seed-lead">あ箱から、時々一冊。受け取った本は「もっている本」に入ります。</p><div class="official-seed-grid">${seedBooks}</div></section>`;
+      const seedBooks=items.length?items.slice(0,3).map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだお知らせはありません。</strong><span>ピックアップや期間限定の本がここに並びます。</span></div>`;
+      const seedSection=`<section class="official-seed-block"><div class="public-discovery-heading"><div><p class="eyebrow">FROM A-HAKO</p><h3>あ箱から</h3></div><span>最大3件</span></div><p class="official-seed-lead">ピックアップ・期間限定の種本・運営からのお知らせ。</p><div class="official-seed-grid">${seedBooks}</div></section>`;
       host.innerHTML=(discovery||items.length)?`${seedSection}${discovery}`:`<div class="official-empty"><strong>まだ本はありません。</strong><span>公開された本がここに並びます。</span></div>`;
       bindOfficialShelfInteractions(host);
     }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
