@@ -2533,11 +2533,16 @@
     workingDocument.metadata ||= {};
     workingDocument.metadata.subtitle=subtitleInput?.value.trim() || '';
     workingDocument.metadata.seriesTitle=seriesTitleInput?.value.trim() || '';
+    const seriesSelection=String(seriesLinkSelect?.value||'');
     const linkedSeriesId=activeSeriesId();
     if(linkedSeriesId)workingDocument.metadata.seriesId=linkedSeriesId;else delete workingDocument.metadata.seriesId;
     workingDocument.metadata.episode=episodeInput?.value.trim() || '';
     const episodeNumber=Number(episodeNumberInput?.value||0);
-    if(linkedSeriesId&&Number.isInteger(episodeNumber)&&episodeNumber>=1&&episodeNumber<=9999)workingDocument.metadata.episodeNumber=episodeNumber;else delete workingDocument.metadata.episodeNumber;
+    // A new series has no seriesId until the first successful publish. Keep
+    // its authored order while moving between Toolbox and Easy instead of
+    // treating it as an unlinked standalone work.
+    const hasSeriesSelection=Boolean(linkedSeriesId||seriesSelection==='__new__');
+    if(hasSeriesSelection&&Number.isInteger(episodeNumber)&&episodeNumber>=1&&episodeNumber<=9999)workingDocument.metadata.episodeNumber=episodeNumber;else delete workingDocument.metadata.episodeNumber;
     workingDocument.metadata.episodeTitle=episodeTitleInput?.value.trim() || '';
     workingDocument.metadata.description=descriptionInput?.value.trim() || '';
     workingDocument.theme=selectedTheme;
@@ -4148,7 +4153,7 @@
     const selected=String(seriesLinkSelect?.value||'');
     const episodeNumber=Number(episodeNumberInput?.value||0);
     if(/^series_[a-f0-9]{32}$/i.test(selected))workingDocument.metadata.seriesId=selected;
-    else if(selected!=='__new__')delete workingDocument.metadata.seriesId;
+    else delete workingDocument.metadata.seriesId;
     if(selected&&Number.isInteger(episodeNumber)&&episodeNumber>=1&&episodeNumber<=9999)workingDocument.metadata.episodeNumber=episodeNumber;
     else delete workingDocument.metadata.episodeNumber;
   }
@@ -4569,6 +4574,8 @@
     const rights=$('#publishRightsConfirm');
     if(rights && !rights.checked){ rights.focus(); return; }
     const wasUpdate=currentPublishStatus()==='dirty';
+    const oldRestoreAction=document.querySelector('[data-restore-old-version]');
+    if(oldRestoreAction)oldRestoreAction.hidden=true;
     setPublishState('working');
     try{
       const result=await publishAdapter.publish(
@@ -4645,6 +4652,14 @@
         message.textContent=uiLanguage==='ja'
           ? '更新の応答がタイムアウトしました。通信状態を確認して、もう一度お試しください。'
           : 'The update timed out. Check your connection and try again.';
+      }else if(message){
+        // Validation and API errors must not be hidden behind generic retry
+        // copy or a revision-recovery action left over from an earlier error.
+        message.textContent=String(error?.message||(
+          uiLanguage==='ja'
+            ? '公開できませんでした。入力内容を確認してください。'
+            : 'Publishing failed. Check the entered information.'
+        ));
       }
     }
   }
@@ -5018,6 +5033,10 @@
   }
   function closeAdvanced(){
     syncAdvancedFieldsToScene();
+    // Work-level fields live outside the Scene inspector. Commit them before
+    // rebuilding Easy, otherwise a new series can be restored from the older
+    // document state and lose its order.
+    syncEasyShellToWorkingDocument();
     restoreEasyStateFromDocument(workingDocument);
     easySourceDirty=false;
     updateEasyFileActions();
