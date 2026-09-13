@@ -76,6 +76,12 @@
     shelfReturnLink.href=returnTo;
     shelfReturnLink.textContent='← 作者の本棚へ';
     shelfReturnLink.hidden=false;
+    if(window.matchMedia?.('(max-width:520px)').matches){
+      shelfReturnLink.style.width='max-content';
+      const fittedWidth=Math.ceil(shelfReturnLink.getBoundingClientRect().width);
+      shelfReturnLink.style.removeProperty('width');
+      if(fittedWidth)shelfReturnLink.style.setProperty('--shelf-return-expanded-width',`${fittedWidth}px`);
+    }
   }
 
   function setShelfReturnReading(reading){
@@ -932,7 +938,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.26-compact-author-shelf-return',
+    version: '0.3.27-fitted-author-shelf-return',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
