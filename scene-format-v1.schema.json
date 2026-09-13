@@ -112,8 +112,17 @@
         "seriesTitle": {
           "type": "string"
         },
+        "seriesId": {
+          "type": "string",
+          "pattern": "^series_[a-f0-9]{32}$"
+        },
         "episode": {
           "type": "string"
+        },
+        "episodeNumber": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
         },
         "episodeTitle": {
           "type": "string"
