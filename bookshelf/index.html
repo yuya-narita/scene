@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=66.2">
+  <link rel="stylesheet" href="bookshelf.css?v=66.3">
 </head>
 <body>
   <header class="topbar">
@@ -49,7 +49,7 @@
         <button id="officialTab" class="shelf-tab" type="button" data-shelf="official">あ箱の本</button>
       </nav>
       <div id="desktopDensityControl" class="desktop-density-control" aria-label="PCの列数">
-        <span>表示</span><button type="button" data-desktop-columns="3">3</button><button type="button" data-desktop-columns="4">4</button><button type="button" data-desktop-columns="5">5</button><button type="button" data-desktop-columns="6">6</button>
+        <label for="desktopColumnsSelect">表示</label><select id="desktopColumnsSelect"><option value="3">3列</option><option value="4">4列</option><option value="5">5列</option><option value="6">6列</option></select>
       </div>
     </div>
 
@@ -162,6 +162,6 @@
     <div class="scene-drop-card"><strong>.scene をここにドロップ</strong><span>Master / Distribution を自動判定して本棚に追加します</span></div>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="bookshelf.js?v=66.2"></script>
+  <script src="bookshelf.js?v=66.3"></script>
 </body>
 </html>
