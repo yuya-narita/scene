@@ -4120,8 +4120,18 @@
     if(!seriesLinkSelect)return;
     const current=preferred||activeSeriesId();
     const legacyNew=!current&&Boolean(String(seriesTitleInput?.value||'').trim());
-    seriesLinkSelect.innerHTML='<option value="">単独作品</option><option value="__new__">新しいシリーズとして登録</option>'
-      +authorSeries.map(series=>`<option value="${escapeHtml(series.seriesId)}">${escapeHtml(series.title)}（${Number(series.episodeCount)||0}話）</option>`).join('');
+    seriesLinkSelect.replaceChildren();
+    const appendSeriesOption=(value,label)=>{
+      const option=document.createElement('option');
+      option.value=String(value||'');
+      option.textContent=String(label||'');
+      seriesLinkSelect.appendChild(option);
+    };
+    appendSeriesOption('','単独作品');
+    appendSeriesOption('__new__','新しいシリーズとして登録');
+    authorSeries.forEach(series=>{
+      appendSeriesOption(series.seriesId,`${String(series.title||'無題のシリーズ')}（${Number(series.episodeCount)||0}話）`);
+    });
     if(current&&!authorSeries.some(series=>series.seriesId===current)){
       const option=document.createElement('option');option.value=current;option.textContent=`${String(seriesTitleInput?.value||'現在のシリーズ')}（紐づけ済み）`;seriesLinkSelect.appendChild(option);
     }
