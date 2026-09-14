@@ -1,4 +1,5 @@
 const API_BASE='https://scene-studio-api.a-hako.workers.dev';
+const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 const $=selector=>document.querySelector(selector);
 let shelfData=null;
 let allWorks=[];
@@ -15,6 +16,12 @@ function coverHtml(work,className='book-cover'){return `<span class="${className
 function workLabel(work){return [work?.episodeLabel,work?.episodeTitle].filter(Boolean).join(' ')||'';}
 function bookCardHtml(work,{position=0}={}){return `<button class="book-card" type="button" data-publication-id="${escapeHtml(work.publicationId)}">${coverHtml(work)}${position?`<span class="book-number">${position}冊目</span>`:''}<span class="book-copy"><h3>${escapeHtml(work.title||'Untitled')}</h3><p>${escapeHtml(workLabel(work)||work.byline||'')}</p></span></button>`;}
 function seriesCoverHtml(work){return `<span class="series-cover">${work?.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span>□</span>'}</span>`;}
+function readLaterItems(){try{const value=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(value)?value.filter(item=>item&&item.publicationId).slice(0,200):[];}catch(_){return[];}}
+function writeReadLaterItems(items){try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));return true;}catch(_){showToast('この端末に保存できませんでした。');return false;}}
+function isReadLater(publicationId){return readLaterItems().some(item=>item.publicationId===publicationId);}
+function readLaterRecord(work){const url=new URL(location.href);url.searchParams.set('book',work.publicationId);url.hash='';const author=shelfData?.author||{};return{publicationId:work.publicationId,title:work.title||'Untitled',coverUrl:work.coverUrl||'',detail:workLabel(work)||work.subtitle||'',authorName:author.displayName||work.byline||'作者',authorId:author.authorId||'',authorSlug:author.slug||'',workUrl:url.toString(),readUrl:publicPlayerUrl(work),savedAt:Date.now()};}
+function syncReadLaterButton(work){const button=$('[data-read-later-toggle]');if(!button)return;const saved=isReadLater(work.publicationId);button.classList.toggle('is-saved',saved);button.setAttribute('aria-pressed',saved?'true':'false');button.textContent=saved?'✓ 保存済み':'あとで読む';}
+function toggleReadLater(work){const items=readLaterItems(),index=items.findIndex(item=>item.publicationId===work.publicationId);if(index>=0){items.splice(index,1);if(writeReadLaterItems(items)){syncReadLaterButton(work);showToast('あとで読むから外しました。');}return;}items.unshift(readLaterRecord(work));if(writeReadLaterItems(items)){syncReadLaterButton(work);showToast('あとで読むに保存しました。');}}
 
 function publicPlayerUrl(work){
   try{
@@ -121,7 +128,9 @@ function openWork(publicationId){
   const series=shelfData?.series?.find(box=>box.episodes.some(episode=>episode.publicationId===publicationId));
   const episode=series?.episodes.find(item=>item.publicationId===publicationId);
   const context=[series?.title,episode?.episodeLabel||work.episodeLabel,episode?.episodeTitle||work.episodeTitle].filter(Boolean).join(' ／ ');
-  $('#workDialogContent').innerHTML=`<div class="work-dialog-layout">${coverHtml(work,'work-dialog-cover')}<div class="work-dialog-body"><div class="work-dialog-info"><p class="eyebrow">${escapeHtml(context||'PUBLIC BOOK')}</p><h2>${escapeHtml(work.title||'Untitled')}</h2><p class="work-byline">${escapeHtml(work.byline||shelfData.author?.displayName||'')}</p></div>${work.description?`<p class="work-description">${escapeHtml(work.description)}</p>`:''}<a class="read-link" href="${escapeHtml(publicPlayerUrl(work))}">この本を読む</a></div></div>`;
+  $('#workDialogContent').innerHTML=`<div class="work-dialog-layout">${coverHtml(work,'work-dialog-cover')}<div class="work-dialog-body"><div class="work-dialog-info"><p class="eyebrow">${escapeHtml(context||'PUBLIC BOOK')}</p><h2>${escapeHtml(work.title||'Untitled')}</h2><p class="work-byline">${escapeHtml(work.byline||shelfData.author?.displayName||'')}</p></div>${work.description?`<p class="work-description">${escapeHtml(work.description)}</p>`:''}<div class="work-dialog-actions"><button class="read-later-toggle" type="button" data-read-later-toggle aria-pressed="false">あとで読む</button><a class="read-link" href="${escapeHtml(publicPlayerUrl(work))}">この本を読む</a></div></div></div>`;
+  syncReadLaterButton(work);
+  $('[data-read-later-toggle]').onclick=()=>toggleReadLater(work);
   openDialog('workDialog');
 }
 

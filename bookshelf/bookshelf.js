@@ -47,6 +47,7 @@ let officialShelfLoaded=false;
 let officialShelfLoadPromise=null;
 let officialShelfRenderPromise=null;
 const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
+const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 let shelfScrollLockY=0;
 let authorToken='';
 let signedInAuthor=null;
@@ -80,7 +81,7 @@ async function deleteAuthorHeader(){if(!signedInAuthor?.bookshelfHeader||!confir
 async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);await queuePublishedWorkOrderSync(createdIds,{immediate:true});}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
 
 function shelfScrollShouldLock(){
-  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open);
+  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open||$('#readLaterDialog')?.open);
 }
 function syncShelfScrollLock(){
   const body=document.body;if(!body)return;
@@ -584,6 +585,20 @@ function publicAuthorWorkUrl(author,publicationId=''){
   if(publicationId)url.searchParams.set('book',String(publicationId));
   return url.toString();
 }
+function readLaterItems(){try{const value=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(value)?value.filter(item=>item&&item.publicationId).slice(0,200):[];}catch(_){return[];}}
+function writeReadLaterItems(items){try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));return true;}catch(_){toast('この端末に保存できませんでした。');return false;}}
+function safeReadLaterHref(value){try{const url=new URL(String(value||''),location.href);return url.protocol==='https:'||url.protocol==='http:'?url.toString():'';}catch(_){return'';}}
+function syncReadLaterCount(){const count=readLaterItems().length,node=$('#readLaterCount');if(node)node.textContent=String(count);}
+function renderReadLaterList(){
+  const list=$('#readLaterList');if(!list)return;
+  const items=readLaterItems();syncReadLaterCount();
+  list.innerHTML=items.length?items.map(item=>{
+    const detailHref=safeReadLaterHref(item.workUrl),readHref=safeReadLaterHref(item.readUrl)||detailHref,cover=item.coverUrl?`<img src="${escapeHtml(item.coverUrl)}" alt="" loading="lazy">`:'<span>□</span>';
+    return `<article class="read-later-item" data-read-later-id="${escapeHtml(item.publicationId)}"><a class="read-later-cover" href="${escapeHtml(detailHref||'#')}">${cover}</a><div class="read-later-copy"><h3>${escapeHtml(item.title||'Untitled')}</h3>${item.detail?`<p>${escapeHtml(item.detail)}</p>`:''}<small>${escapeHtml(item.authorName||'作者')}</small><div class="read-later-actions">${readHref?`<a href="${escapeHtml(readHref)}">読む</a>`:''}<button type="button" data-read-later-remove="${escapeHtml(item.publicationId)}">外す</button></div></div></article>`;
+  }).join(''):`<div class="read-later-empty"><span>□</span><strong>保存した本はまだありません</strong><p>作者の本棚で作品を開き、「あとで読む」を押すとここに並びます。</p></div>`;
+  list.querySelectorAll('[data-read-later-remove]').forEach(button=>button.onclick=()=>{const id=button.dataset.readLaterRemove,items=readLaterItems().filter(item=>item.publicationId!==id);if(writeReadLaterItems(items)){renderReadLaterList();toast('あとで読むから外しました。');}});
+}
+function openReadLater(){renderReadLaterList();const dialog=$('#readLaterDialog');if(dialog&&!dialog.open)dialog.showModal();syncShelfScrollLock();}
 function publicDiscoveryPageSize(){return matchMedia('(max-width:680px)').matches?8:10;}
 function publicDiscoveryHtml(data){
   const allAuthors=Array.isArray(data?.authors)?data.authors:[],authors=allAuthors.slice(0,10),works=Array.isArray(data?.works)?data.works:[];
@@ -662,6 +677,7 @@ function renderOfficialShelf({force=true}={}){
       const seedSection=`<section class="official-seed-block"><div class="public-discovery-heading"><div><p class="eyebrow">FROM A-HAKO</p><h3>あ箱から</h3></div><span>最大3件</span></div><p class="official-seed-lead">ピックアップ・期間限定の種本・運営からのお知らせ。</p><div class="official-seed-carousel" data-official-seed-carousel><div class="official-seed-grid">${seedBooks}</div>${seedDots}</div></section>`;
       host.innerHTML=(discovery||items.length)?`${seedSection}${discovery}`:`<div class="official-empty"><strong>まだ本はありません。</strong><span>公開された本がここに並びます。</span></div>`;
       bindOfficialShelfInteractions(host);
+      syncReadLaterCount();
     }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
   })();
   if(!force)officialShelfRenderPromise=job;
@@ -1653,6 +1669,7 @@ $('#archiveDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#deleteArchiveDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#bookshelfAuthorDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#seriesBoxDialog')?.addEventListener('close',syncShelfScrollLock);
+$('#readLaterDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#cancelArchiveDelete')?.addEventListener('click',()=>$('#deleteArchiveDialog')?.close());
 $('#confirmArchiveDelete')?.addEventListener('click',async()=>{const dialog=$('#deleteArchiveDialog');if(!dialog)return;let ids=[];try{ids=JSON.parse(dialog.dataset.ids||'[]');}catch(_){ids=[];}const tab=dialog.dataset.tab||currentShelfTab;if(!Array.isArray(ids)||!ids.length){dialog.close();return;}const button=$('#confirmArchiveDelete');if(button){button.disabled=true;button.textContent='削除中…';}try{for(const id of ids)await permanentlyDeleteArchivedBook(tab,id);dialog.close();await render();if($('#archiveDialog')?.open)openArchiveBox();toast(`${ids.length}冊を削除しました。`);}catch(err){console.error(err);alert(err?.message||'削除できませんでした。');}finally{if(button){button.disabled=false;button.textContent='削除する';}dialog.dataset.ids='';}});
 $('#bookshelfMenu')?.addEventListener('keydown',e=>{if(e.key==='Escape'){e.currentTarget.open=false;syncShelfScrollLock();}});
@@ -1662,6 +1679,11 @@ $('#archiveDropZone').onclick=()=>{if(matchMedia('(pointer:coarse)').matches&&!a
 $('#closeArchive').onclick=()=>$('#archiveDialog').close();
 $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
+$('#openReadLater')?.addEventListener('click',openReadLater);
+$('#closeReadLater')?.addEventListener('click',()=>$('#readLaterDialog')?.close());
+window.addEventListener('storage',event=>{if(event.key===READ_LATER_STORAGE_KEY){syncReadLaterCount();if($('#readLaterDialog')?.open)renderReadLaterList();}});
+window.addEventListener('pageshow',syncReadLaterCount);
+syncReadLaterCount();
 installSceneDrop();
 installShelfScrollGuard();
 installDesktopShelfArrowKeys();
