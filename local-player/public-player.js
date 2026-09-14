@@ -16,6 +16,7 @@
   const introCoverDim = document.getElementById('publicIntroCoverDim');
   const startButton = document.getElementById('publicStart');
   const continueButton = document.getElementById('publicContinue');
+  const shelfReturnLink = document.getElementById('publicShelfReturn');
 
   const ending = document.getElementById('publicEnding');
   const endingLabel = document.getElementById('publicEndingLabel');
@@ -46,6 +47,10 @@
   const reportEvidenceRequired=document.getElementById('publicReportEvidenceRequired');
   const reportContactRequired=document.getElementById('publicReportContactRequired');
   const reportContactHint=document.getElementById('publicReportContactHint');
+
+  function setShelfReturnReading(reading){
+    shelfReturnLink?.classList.toggle('is-reading',Boolean(reading));
+  }
 
   const LOCAL_MODE = window.__AHAKO_LOCAL_PLAYER__ === true;
   const params = new URLSearchParams(location.search);
@@ -349,6 +354,7 @@
   }
 
   function showError(error) {
+    setShelfReturnReading(false);
     console.error(error);
     host.hidden = true;
     intro.hidden = true;
@@ -770,6 +776,7 @@
   }
 
   function onEnd() {
+    setShelfReturnReading(false);
     localStorage.removeItem(storageKey());
     if(resonanceSession?.valid){
       if(player?.auto)invalidateResonance();
@@ -843,6 +850,7 @@
   }
 
   function returnToCover() {
+    setShelfReturnReading(false);
     if (player) {
       const exitingPlayer = player;
       fadePublicAudio();
@@ -876,6 +884,7 @@
   }
 
   async function ensurePlayer(startAt = 0) {
+    setShelfReturnReading(true);
     if (player) {
       const previousPlayer = player;
       removeShellListeners();
@@ -954,6 +963,7 @@
 
 
   function showIntro() {
+    setShelfReturnReading(false);
     ending.classList.remove('is-visible');
     ending.hidden = true;
 
@@ -1005,6 +1015,7 @@
   });
 
   function unloadDocument() {
+    setShelfReturnReading(false);
     // Local Player uses this when returning to the file chooser. Keep this
     // inside the public shell so Player/Core teardown follows the same path
     // as the current public Player rather than being reimplemented by loader.
