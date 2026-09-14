@@ -94,15 +94,20 @@
     }
   }
 
-  function canRestoreBookshelfFromHistory(target){
+  function canRestoreShelfFromHistory(target){
     if(history.length<=1||!document.referrer)return false;
     try{
       const destination=new URL(target,location.href),previous=new URL(document.referrer);
       const clean=path=>path.replace(/\/+$/,'');
-      return destination.origin===previous.origin&&clean(destination.pathname)===clean(previous.pathname)&&/\/bookshelf$/.test(clean(destination.pathname));
+      const destinationPath=clean(destination.pathname),previousPath=clean(previous.pathname);
+      if(destination.origin!==previous.origin||destinationPath!==previousPath)return false;
+      if(/\/bookshelf$/.test(destinationPath))return true;
+      if(!/\/author$/.test(destinationPath))return false;
+      const authorReference=url=>String(url.searchParams.get('u')||url.searchParams.get('id')||url.searchParams.get('author')||'').trim().toLowerCase();
+      return Boolean(authorReference(destination))&&authorReference(destination)===authorReference(previous);
     }catch(_){return false;}
   }
-  shelfReturnLink?.addEventListener('click',event=>{if(!canRestoreBookshelfFromHistory(shelfReturnLink.href))return;event.preventDefault();history.back();});
+  shelfReturnLink?.addEventListener('click',event=>{if(!canRestoreShelfFromHistory(shelfReturnLink.href))return;event.preventDefault();history.back();});
 
   function setShelfReturnReading(reading){
     shelfReturnLink?.classList.toggle('is-reading',Boolean(reading));
@@ -958,7 +963,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.27-fitted-author-shelf-return',
+    version: '0.3.28-instant-author-shelf-return',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },

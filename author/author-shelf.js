@@ -36,6 +36,22 @@ function publicPlayerUrl(work){
   }
 }
 
+function canRestoreBookshelfFromHistory(target){
+  if(history.length<=1||!document.referrer)return false;
+  try{
+    const destination=new URL(target,location.href),previous=new URL(document.referrer);
+    const clean=path=>path.replace(/\/+$/,'');
+    return destination.origin===previous.origin&&clean(destination.pathname)===clean(previous.pathname)&&/\/bookshelf$/.test(clean(destination.pathname));
+  }catch(_){return false;}
+}
+
+function leaveAuthorShelfForPlayer(href){
+  const target=String(href||'').trim();if(!target)return;
+  closeDialog('workDialog');
+  closeDialog('seriesDialog');
+  location.href=target;
+}
+
 function applyFutureTheme(theme){
   if(!theme||typeof theme!=='object')return;
   const safeColor=value=>/^#[0-9a-f]{6}$/i.test(String(value||''))?value:'';
@@ -131,6 +147,7 @@ function openWork(publicationId){
   $('#workDialogContent').innerHTML=`<div class="work-dialog-layout">${coverHtml(work,'work-dialog-cover')}<div class="work-dialog-body"><div class="work-dialog-info"><p class="eyebrow">${escapeHtml(context||'PUBLIC BOOK')}</p><h2>${escapeHtml(work.title||'Untitled')}</h2><p class="work-byline">${escapeHtml(work.byline||shelfData.author?.displayName||'')}</p></div>${work.description?`<p class="work-description">${escapeHtml(work.description)}</p>`:''}<div class="work-dialog-actions"><button class="read-later-toggle" type="button" data-read-later-toggle aria-pressed="false">あとで読む</button><a class="read-link" href="${escapeHtml(publicPlayerUrl(work))}">この本を読む</a></div></div></div>`;
   syncReadLaterButton(work);
   $('[data-read-later-toggle]').onclick=()=>toggleReadLater(work);
+  $('.read-link').onclick=event=>{event.preventDefault();leaveAuthorShelfForPlayer(event.currentTarget.href);};
   openDialog('workDialog');
 }
 
@@ -148,4 +165,5 @@ document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>clo
 document.querySelectorAll('dialog').forEach(dialog=>{dialog.addEventListener('cancel',()=>setTimeout(()=>document.body.classList.remove('dialog-open'),0));dialog.addEventListener('click',event=>{if(event.target===dialog)closeDialog(dialog.id);});});
 $('#retryButton').onclick=loadShelf;
 $('#shareShelfButton').onclick=shareShelf;
+$('.my-shelf-link').onclick=event=>{if(!canRestoreBookshelfFromHistory(event.currentTarget.href))return;event.preventDefault();history.back();};
 loadShelf();

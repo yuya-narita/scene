@@ -112,7 +112,12 @@ function leaveShelfForPlayer(href,dialog=null){
   prepareShelfPlayerExit(dialog);
   location.href=target;
 }
-document.addEventListener('click',event=>{if(event.target?.closest?.('#readDistribution,#relayDistribution,#readMaster'))prepareShelfPlayerExit($('#detailDialog'));},true);
+document.addEventListener('click',event=>{
+  const target=event.target;
+  if(target?.closest?.('#readDistribution,#relayDistribution,#readMaster'))prepareShelfPlayerExit($('#detailDialog'));
+  else if(target?.closest?.('.public-work-dialog-author'))prepareShelfPlayerExit($('#publicWorkDialog'));
+  else if(target?.closest?.('.public-author-card,.public-discovery-author'))prepareShelfPlayerExit();
+},true);
 
 function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(WORKS))db.createObjectStore(WORKS,{keyPath:'workId'});if(!db.objectStoreNames.contains(READER_BOOKS))db.createObjectStore(READER_BOOKS,{keyPath:'copyId'});if(!db.objectStoreNames.contains(HANDOFF))db.createObjectStore(HANDOFF,{keyPath:'key'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function tx(store,mode,fn){const db=await openDb();return new Promise((resolve,reject)=>{const t=db.transaction(store,mode);const s=t.objectStore(store);let out;try{out=fn(s);}catch(e){db.close();reject(e);return;}t.oncomplete=()=>{db.close();resolve(out)};t.onerror=()=>{db.close();reject(t.error)};});}
