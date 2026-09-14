@@ -1251,8 +1251,8 @@ html{
   .public-author-card-copy strong{font-size:16px}
   .public-discovery-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:27px 10px}
   .public-discovery-copy h4{font-size:11px}
-  .official-seed-carousel{margin-right:-14px;touch-action:pan-x pinch-zoom;overscroll-behavior-x:contain}
-  .official-seed-grid{display:flex;max-width:none;margin:0;padding:2px 14px 8px 0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-padding-left:0;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pinch-zoom;scrollbar-width:none}
+  .official-seed-carousel{margin-right:-14px;overscroll-behavior-x:contain}
+  .official-seed-grid{display:flex;max-width:none;margin:0;padding:2px 14px 8px 0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-padding-left:0;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;touch-action:auto;scrollbar-width:none}
   .official-seed-grid::-webkit-scrollbar{display:none}
   .official-seed-grid>.official-book-card{flex:0 0 min(84vw,330px);scroll-snap-align:start}
   .official-seed-dots{display:flex;align-items:center;justify-content:center;gap:2px;margin-right:14px;padding:3px 0 0}
