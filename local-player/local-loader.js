@@ -7,6 +7,7 @@
   const status=document.getElementById('localStatus');
   const ownCopyButton=document.getElementById('localOwnCopyButton');
   const backButton=document.getElementById('localBackButton');
+  const shelfReturnLink=document.getElementById('publicShelfReturn');
   const relayButton=document.getElementById('publicRelay');
   const journey=document.getElementById('publicJourney');
   const journeyMessage=document.getElementById('publicJourneyMessage');
@@ -28,6 +29,25 @@
   const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
   const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
   let currentOfficialShelfId='';
+  function hideShelfReturn(){if(shelfReturnLink)shelfReturnLink.hidden=true;}
+  function showShelfReturnForSource(){
+    if(!shelfReturnLink)return false;
+    let label='';
+    if(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master')label='← 自分の本棚へ';
+    else if(currentSourceMode==='official-shelf')label='← あ箱の本へ';
+    if(!label){hideShelfReturn();return false;}
+    shelfReturnLink.href=new URL('../bookshelf/',location.href).toString();
+    shelfReturnLink.textContent=label;
+    shelfReturnLink.hidden=false;
+    shelfReturnLink.classList.remove('is-reading');
+    if(window.matchMedia?.('(max-width:520px)').matches){
+      shelfReturnLink.style.width='max-content';
+      const fittedWidth=Math.ceil(shelfReturnLink.getBoundingClientRect().width);
+      shelfReturnLink.style.removeProperty('width');
+      if(fittedWidth)shelfReturnLink.style.setProperty('--shelf-return-expanded-width',`${fittedWidth}px`);
+    }
+    return true;
+  }
   function newBookshelfHandoffId(){
     const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);
     return 'handoff_'+Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
@@ -439,9 +459,9 @@
       if(journey)journey.hidden=true;
       if(endingOwnWrap)endingOwnWrap.hidden=true;
       await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`official-shelf:${shelfId}`,suppressObservation:true});
-      launcher.hidden=true;if(backButton)backButton.hidden=false;setStatus('');
+      launcher.hidden=true;const hasShelfReturn=showShelfReturnForSource();if(backButton)backButton.hidden=hasShelfReturn;setStatus('');
       return true;
-    }catch(error){console.error(error);currentPackage=null;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
+    }catch(error){console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
     finally{if(openButton)openButton.disabled=false;}
   }
 
@@ -907,8 +927,8 @@
       try{const map=buildAssetMap(files);doc=rewriteAssets(raw,map);await window.ScenePublicPlayer.loadDocument(doc,{sourceKey:sourceKey||`local:${file.name}:${file.size}:${file.lastModified||0}`});}
       catch(error){for(const u of assetUrls){try{URL.revokeObjectURL(u)}catch(_){}}assetUrls=previousUrls;throw error;}
       for(const u of previousUrls){try{URL.revokeObjectURL(u)}catch(_){}}
-      launcher.hidden=true;if(backButton)backButton.hidden=false;setStatus('');
-    }catch(error){console.error(error);currentPackage=null;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));}
+      launcher.hidden=true;const hasShelfReturn=showShelfReturnForSource();if(backButton)backButton.hidden=hasShelfReturn;setStatus('');
+    }catch(error){console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));}
     finally{openButton.disabled=false;fileInput.value='';}
   }
   function returnToLauncher(){
@@ -963,7 +983,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.11-bookshelf-return-fix',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.12-unified-shelf-return',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();

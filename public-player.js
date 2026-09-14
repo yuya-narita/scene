@@ -63,7 +63,11 @@
       const isProduction=url.hostname==='yuya-narita.github.io'&&path==='/scene/author';
       const isSameSite=url.origin===location.origin&&/\/author$/.test(path);
       const authorId=String(url.searchParams.get('id')||url.searchParams.get('author')||'').toLowerCase();
-      if((!isProduction&&!isSameSite)||!/^author_[a-f0-9]{32}$/.test(authorId))return '';
+      const authorSlug=String(url.searchParams.get('u')||'').trim().toLowerCase();
+      const validAuthorId=/^author_[a-f0-9]{32}$/.test(authorId);
+      const validAuthorSlug=/^[a-z0-9][a-z0-9_-]{2,29}$/.test(authorSlug);
+      if((!isProduction&&!isSameSite)||(!validAuthorId&&!validAuthorSlug))return '';
+      url.searchParams.delete('book');
       url.hash='';
       return url.toString();
     }catch(_){return '';}
