@@ -81,7 +81,7 @@ async function deleteAuthorHeader(){if(!signedInAuthor?.bookshelfHeader||!confir
 async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);await queuePublishedWorkOrderSync(createdIds,{immediate:true});}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
 
 function shelfScrollShouldLock(){
-  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open||$('#readLaterDialog')?.open);
+  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open||$('#readLaterDialog')?.open||$('#publicWorkDialog')?.open);
 }
 function syncShelfScrollLock(){
   const body=document.body;if(!body)return;
@@ -585,6 +585,21 @@ function publicAuthorWorkUrl(author,publicationId=''){
   if(publicationId)url.searchParams.set('book',String(publicationId));
   return url.toString();
 }
+function publicDiscoveryPlayerUrl(work){
+  try{
+    const playerUrl=new URL('../',location.href),rawWorkUrl=new URL(`${API_BASE}/work/${encodeURIComponent(work.publicationId)}`);
+    rawWorkUrl.searchParams.set('raw','1');playerUrl.searchParams.set('src',rawWorkUrl.toString());playerUrl.searchParams.set('returnTo',location.href);return playerUrl.toString();
+  }catch(_){return'#';}
+}
+function publicDiscoveryReadLaterRecord(work){const author=work.author||{},readUrl=publicDiscoveryPlayerUrl(work);return{publicationId:work.publicationId,title:work.title||'Untitled',coverUrl:work.coverUrl||'',detail:[work.episodeLabel,work.episodeTitle,work.subtitle].filter(Boolean).join(' '),authorName:author.displayName||'作者',authorId:author.authorId||'',authorSlug:author.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
+function syncPublicDiscoveryReadLaterButton(work){const button=$('#publicWorkDialog [data-public-work-later]');if(!button)return;const saved=readLaterItems().some(item=>item.publicationId===work.publicationId);button.classList.toggle('is-saved',saved);button.setAttribute('aria-pressed',saved?'true':'false');button.textContent=saved?'✓ 保存済み':'あとで読む';}
+function togglePublicDiscoveryReadLater(work){const items=readLaterItems(),index=items.findIndex(item=>item.publicationId===work.publicationId);if(index>=0){items.splice(index,1);if(writeReadLaterItems(items)){syncPublicDiscoveryReadLaterButton(work);syncReadLaterCount();toast('あとで読むから外しました。');}return;}items.unshift(publicDiscoveryReadLaterRecord(work));if(writeReadLaterItems(items)){syncPublicDiscoveryReadLaterButton(work);syncReadLaterCount();toast('あとで読むに保存しました。');}}
+function openPublicDiscoveryWork(publicationId){
+  const work=(publicDiscoveryData.works||[]).find(item=>item.publicationId===publicationId),dialog=$('#publicWorkDialog'),content=$('#publicWorkDialogContent');if(!work||!dialog||!content)return;
+  const author=work.author||{},authorHref=publicAuthorShelfUrl(author),context=[work.episodeLabel,work.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK',cover=work.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="">`:'<span>□</span>';
+  content.innerHTML=`<div class="public-work-dialog-layout"><div class="public-work-dialog-cover">${cover}</div><div class="public-work-dialog-body"><div class="public-work-dialog-info"><p class="eyebrow">${escapeHtml(context)}</p><h2>${escapeHtml(work.title||'Untitled')}</h2>${work.subtitle?`<p>${escapeHtml(work.subtitle)}</p>`:''}<a class="public-work-dialog-author" href="${escapeHtml(authorHref)}">${escapeHtml(author.displayName||'作者')}の本棚へ</a></div>${work.description?`<p class="public-work-dialog-description">${escapeHtml(work.description)}</p>`:''}<div class="public-work-dialog-actions"><button type="button" data-public-work-later aria-pressed="false">あとで読む</button><a href="${escapeHtml(publicDiscoveryPlayerUrl(work))}">この本を読む</a></div></div></div>`;
+  content.querySelector('[data-public-work-later]')?.addEventListener('click',()=>togglePublicDiscoveryReadLater(work));syncPublicDiscoveryReadLaterButton(work);if(!dialog.open)dialog.showModal();syncShelfScrollLock();
+}
 function readLaterItems(){try{const value=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(value)?value.filter(item=>item&&item.publicationId).slice(0,200):[];}catch(_){return[];}}
 function writeReadLaterItems(items){try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));return true;}catch(_){toast('この端末に保存できませんでした。');return false;}}
 function safeReadLaterHref(value){try{const url=new URL(String(value||''),location.href);return url.protocol==='https:'||url.protocol==='http:'?url.toString():'';}catch(_){return'';}}
@@ -609,8 +624,8 @@ function publicDiscoveryHtml(data){
     return `<a class="public-author-card" href="${escapeHtml(href)}"><span class="public-author-card-image">${header}</span><span class="public-author-card-shade"></span><span class="public-author-card-copy"><small>PUBLIC BOOKSHELF</small><strong>${escapeHtml(author.displayName||'作者')}</strong><em>${Math.max(0,Number(author.workCount)||0)}冊</em></span></a>`;
   }).join('')}</div></section>`:'';
   const workSection=works.length?`<section class="public-discovery-block"><div class="public-discovery-heading"><div><p class="eyebrow">NEW BOOKS</p><h3>新しく公開された本</h3></div><span>${works.length}冊</span></div><div class="public-discovery-grid">${visibleWorks.map(work=>{
-    const author=work.author||{},workHref=publicAuthorWorkUrl(author,work.publicationId),authorHref=publicAuthorShelfUrl(author),cover=work.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span>□</span>',detail=[work.episodeLabel,work.episodeTitle,work.subtitle].filter(Boolean).join(' ');
-    return `<article class="public-discovery-book"><a class="public-discovery-cover" href="${escapeHtml(workHref)}">${cover}</a><div class="public-discovery-copy"><h4><a href="${escapeHtml(workHref)}">${escapeHtml(work.title||'Untitled')}</a></h4>${detail?`<p>${escapeHtml(detail)}</p>`:''}<a class="public-discovery-author" href="${escapeHtml(authorHref)}">${escapeHtml(author.displayName||'作者')}の本棚へ</a></div></article>`;
+    const author=work.author||{},authorHref=publicAuthorShelfUrl(author),cover=work.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span>□</span>',detail=[work.episodeLabel,work.episodeTitle,work.subtitle].filter(Boolean).join(' '),publicationId=escapeHtml(work.publicationId);
+    return `<article class="public-discovery-book"><button class="public-discovery-cover" type="button" data-public-work-open="${publicationId}" aria-label="${escapeHtml((work.title||'Untitled')+'を開く')}">${cover}</button><div class="public-discovery-copy"><h4><button type="button" data-public-work-open="${publicationId}">${escapeHtml(work.title||'Untitled')}</button></h4>${detail?`<p>${escapeHtml(detail)}</p>`:''}<a class="public-discovery-author" href="${escapeHtml(authorHref)}">${escapeHtml(author.displayName||'作者')}の本棚へ</a></div></article>`;
   }).join('')}</div>${visibleWorks.length<works.length?`<button class="public-discovery-more" type="button" data-public-discovery-more>もっと見る</button>`:''}</section>`:'';
   return authorSection+workSection;
 }
@@ -635,6 +650,7 @@ function bindOfficialShelfInteractions(host=$('#officialBooks')){
     cover.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
   });
   host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=e=>{e.stopPropagation();claimOfficialBook(button);});
+  host.querySelectorAll('[data-public-work-open]').forEach(button=>button.addEventListener('click',()=>openPublicDiscoveryWork(button.dataset.publicWorkOpen)));
   host.querySelector('[data-public-discovery-more]')?.addEventListener('click',()=>{publicDiscoveryVisibleWorks+=publicDiscoveryPageSize();renderOfficialShelf({force:false});});
   bindOfficialSeedCarousel(host);
 }
@@ -1670,6 +1686,7 @@ $('#deleteArchiveDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#bookshelfAuthorDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#seriesBoxDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#readLaterDialog')?.addEventListener('close',syncShelfScrollLock);
+$('#publicWorkDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#cancelArchiveDelete')?.addEventListener('click',()=>$('#deleteArchiveDialog')?.close());
 $('#confirmArchiveDelete')?.addEventListener('click',async()=>{const dialog=$('#deleteArchiveDialog');if(!dialog)return;let ids=[];try{ids=JSON.parse(dialog.dataset.ids||'[]');}catch(_){ids=[];}const tab=dialog.dataset.tab||currentShelfTab;if(!Array.isArray(ids)||!ids.length){dialog.close();return;}const button=$('#confirmArchiveDelete');if(button){button.disabled=true;button.textContent='削除中…';}try{for(const id of ids)await permanentlyDeleteArchivedBook(tab,id);dialog.close();await render();if($('#archiveDialog')?.open)openArchiveBox();toast(`${ids.length}冊を削除しました。`);}catch(err){console.error(err);alert(err?.message||'削除できませんでした。');}finally{if(button){button.disabled=false;button.textContent='削除する';}dialog.dataset.ids='';}});
 $('#bookshelfMenu')?.addEventListener('keydown',e=>{if(e.key==='Escape'){e.currentTarget.open=false;syncShelfScrollLock();}});
@@ -1681,6 +1698,7 @@ $('#closeDetail').onclick=()=>$('#detailDialog').close();
 $('#closeTree').onclick=()=>$('#treeDialog').close();
 $('#openReadLater')?.addEventListener('click',openReadLater);
 $('#closeReadLater')?.addEventListener('click',()=>$('#readLaterDialog')?.close());
+$('#closePublicWork')?.addEventListener('click',()=>$('#publicWorkDialog')?.close());
 window.addEventListener('storage',event=>{if(event.key===READ_LATER_STORAGE_KEY){syncReadLaterCount();if($('#readLaterDialog')?.open)renderReadLaterList();}});
 window.addEventListener('pageshow',syncReadLaterCount);
 syncReadLaterCount();

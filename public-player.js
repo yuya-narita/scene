@@ -55,30 +55,36 @@
   const source = () => requested || DEFAULT_SCENE;
   const storageKey = () => `scene-public-progress:${source()}`;
 
-  function safeAuthorShelfReturn(raw){
+  function safeShelfReturn(raw){
     try{
       const url=new URL(String(raw||''),location.href);
-      if(url.protocol!=='https:'&&url.protocol!=='http:')return '';
+      if(url.protocol!=='https:'&&url.protocol!=='http:')return null;
       const path=url.pathname.replace(/\/+$/,'');
-      const isProduction=url.hostname==='yuya-narita.github.io'&&path==='/scene/author';
-      const isSameSite=url.origin===location.origin&&/\/author$/.test(path);
+      const isProductionAuthor=url.hostname==='yuya-narita.github.io'&&path==='/scene/author';
+      const isSameSiteAuthor=url.origin===location.origin&&/\/author$/.test(path);
+      const isProductionBookshelf=url.hostname==='yuya-narita.github.io'&&path==='/scene/bookshelf';
+      const isSameSiteBookshelf=url.origin===location.origin&&/\/bookshelf$/.test(path);
+      if(isProductionBookshelf||isSameSiteBookshelf){
+        url.hash='';
+        return {url:url.toString(),label:'← あ箱の本へ'};
+      }
       const authorId=String(url.searchParams.get('id')||url.searchParams.get('author')||'').toLowerCase();
       const authorSlug=String(url.searchParams.get('u')||'').trim().toLowerCase();
       const validAuthorId=/^author_[a-f0-9]{32}$/.test(authorId);
       const validAuthorSlug=/^[a-z0-9][a-z0-9_-]{2,29}$/.test(authorSlug);
-      if((!isProduction&&!isSameSite)||(!validAuthorId&&!validAuthorSlug))return '';
+      if((!isProductionAuthor&&!isSameSiteAuthor)||(!validAuthorId&&!validAuthorSlug))return null;
       url.searchParams.delete('book');
       url.hash='';
-      return url.toString();
-    }catch(_){return '';}
+      return {url:url.toString(),label:'← 作者の本棚へ'};
+    }catch(_){return null;}
   }
 
   function configureShelfReturn(){
     if(!shelfReturnLink)return;
-    const returnTo=safeAuthorShelfReturn(params.get('returnTo'));
+    const returnTo=safeShelfReturn(params.get('returnTo'));
     if(!returnTo){shelfReturnLink.hidden=true;return;}
-    shelfReturnLink.href=returnTo;
-    shelfReturnLink.textContent='← 作者の本棚へ';
+    shelfReturnLink.href=returnTo.url;
+    shelfReturnLink.textContent=returnTo.label;
     shelfReturnLink.hidden=false;
     if(window.matchMedia?.('(max-width:520px)').matches){
       shelfReturnLink.style.width='max-content';
