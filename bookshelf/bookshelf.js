@@ -621,6 +621,31 @@ function bindOfficialShelfInteractions(host=$('#officialBooks')){
   });
   host.querySelectorAll('[data-official-claim]').forEach(button=>button.onclick=e=>{e.stopPropagation();claimOfficialBook(button);});
   host.querySelector('[data-public-discovery-more]')?.addEventListener('click',()=>{publicDiscoveryVisibleWorks+=publicDiscoveryPageSize();renderOfficialShelf({force:false});});
+  bindOfficialSeedCarousel(host);
+}
+function bindOfficialSeedCarousel(host){
+  const carousel=host?.querySelector?.('[data-official-seed-carousel]');
+  const track=carousel?.querySelector?.('.official-seed-grid');
+  const dots=[...(carousel?.querySelectorAll?.('[data-official-seed-dot]')||[])];
+  if(!track||!dots.length)return;
+  let frame=0;
+  const cards=()=>[...track.querySelectorAll('.official-book-card')];
+  const update=()=>{
+    frame=0;
+    const list=cards();if(!list.length)return;
+    const trackLeft=track.getBoundingClientRect().left;
+    let current=0,best=Infinity;
+    list.forEach((card,index)=>{const distance=Math.abs(card.getBoundingClientRect().left-trackLeft);if(distance<best){best=distance;current=index;}});
+    dots.forEach((dot,index)=>{const active=index===current;dot.classList.toggle('is-active',active);dot.setAttribute('aria-current',active?'true':'false');});
+  };
+  track.addEventListener('scroll',()=>{if(!frame)frame=requestAnimationFrame(update);},{passive:true});
+  dots.forEach((dot,index)=>dot.addEventListener('click',e=>{
+    e.stopPropagation();
+    const card=cards()[index];if(!card)return;
+    const left=track.scrollLeft+card.getBoundingClientRect().left-track.getBoundingClientRect().left;
+    track.scrollTo({left,behavior:'smooth'});
+  }));
+  update();
 }
 function renderOfficialShelf({force=true}={}){
   if(officialShelfRenderPromise&&!force)return officialShelfRenderPromise;
@@ -631,8 +656,10 @@ function renderOfficialShelf({force=true}={}){
       const owned=await getAllReaderBooks();
       const claimedEditions=new Set(owned.map(book=>`${String(book.workId||'')}::${String(book.editionId||'')}`));
       const discovery=publicDiscoveryHtml(publicDiscoveryData);
-      const seedBooks=items.length?items.slice(0,3).map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだお知らせはありません。</strong><span>ピックアップや期間限定の本がここに並びます。</span></div>`;
-      const seedSection=`<section class="official-seed-block"><div class="public-discovery-heading"><div><p class="eyebrow">FROM A-HAKO</p><h3>あ箱から</h3></div><span>最大3件</span></div><p class="official-seed-lead">ピックアップ・期間限定の種本・運営からのお知らせ。</p><div class="official-seed-grid">${seedBooks}</div></section>`;
+      const seedItems=items.slice(0,3);
+      const seedBooks=seedItems.length?seedItems.map(item=>officialCardHtml(item,claimedEditions.has(`${String(item.workId||'')}::${String(item.editionId||'')}`))).join(''):`<div class="official-empty"><strong>まだお知らせはありません。</strong><span>ピックアップや期間限定の本がここに並びます。</span></div>`;
+      const seedDots=seedItems.length>1?`<div class="official-seed-dots" aria-label="あ箱からの表示位置">${seedItems.map((_,index)=>`<button type="button" data-official-seed-dot="${index}" class="${index===0?'is-active':''}" aria-label="${index+1}件目を表示" aria-current="${index===0?'true':'false'}"></button>`).join('')}</div>`:'';
+      const seedSection=`<section class="official-seed-block"><div class="public-discovery-heading"><div><p class="eyebrow">FROM A-HAKO</p><h3>あ箱から</h3></div><span>最大3件</span></div><p class="official-seed-lead">ピックアップ・期間限定の種本・運営からのお知らせ。</p><div class="official-seed-carousel" data-official-seed-carousel><div class="official-seed-grid">${seedBooks}</div>${seedDots}</div></section>`;
       host.innerHTML=(discovery||items.length)?`${seedSection}${discovery}`:`<div class="official-empty"><strong>まだ本はありません。</strong><span>公開された本がここに並びます。</span></div>`;
       bindOfficialShelfInteractions(host);
     }catch(e){host.innerHTML=`<div class="official-empty"><strong>棚を読み込めませんでした。</strong><span>${escapeHtml(e?.message||String(e))}</span><button type="button" id="officialRetry">もう一度</button></div>`;$('#officialRetry')?.addEventListener('click',()=>renderOfficialShelf());}
@@ -1165,7 +1192,7 @@ function installShelfSwipe(){
   let gesture=null;
   let settling=false;
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
-  const blockedTarget=target=>!!target?.closest?.('dialog[open],button:not(.book),input,select,textarea,a,summary,[contenteditable="true"]');
+  const blockedTarget=target=>!!target?.closest?.('dialog[open],button:not(.book),input,select,textarea,a,summary,[contenteditable="true"],.official-seed-carousel');
   const cleanup=()=>{if(gesture?.view)removeShelfSwipeStage(gesture.view);gesture=null;};
   window.addEventListener('touchstart',e=>{
     if(!mobile()||settling||e.touches.length!==1||pinchGesture)return;

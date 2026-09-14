@@ -1240,6 +1240,7 @@ html{
 .public-discovery-more{display:block;min-width:180px;margin:30px auto 0;padding:11px 20px;border-radius:999px;background:#fff;font-size:11px;font-weight:800}
 .official-seed-lead{margin:-7px 0 17px!important;color:#776f64!important;font-size:10px!important;text-align:left}
 .official-seed-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:16px}
+.official-seed-dots{display:none}
 @media(max-width:900px){.public-discovery-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:680px){
   .official-books{max-width:none;margin-top:24px}
@@ -1250,7 +1251,13 @@ html{
   .public-author-card-copy strong{font-size:16px}
   .public-discovery-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:27px 10px}
   .public-discovery-copy h4{font-size:11px}
-  .official-seed-grid{display:flex;max-width:none;margin:0 -14px 0 0;padding:2px 14px 13px 0;overflow-x:auto;scroll-snap-type:x proximity;overscroll-behavior-inline:contain}
+  .official-seed-carousel{margin-right:-14px;touch-action:pan-x pinch-zoom;overscroll-behavior-x:contain}
+  .official-seed-grid{display:flex;max-width:none;margin:0;padding:2px 14px 8px 0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-padding-left:0;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pinch-zoom;scrollbar-width:none}
+  .official-seed-grid::-webkit-scrollbar{display:none}
   .official-seed-grid>.official-book-card{flex:0 0 min(84vw,330px);scroll-snap-align:start}
+  .official-seed-dots{display:flex;align-items:center;justify-content:center;gap:2px;margin-right:14px;padding:3px 0 0}
+  .official-seed-dots button{position:relative;width:24px;height:24px;margin:0;padding:0;border:0;background:transparent;cursor:pointer}
+  .official-seed-dots button::after{content:"";position:absolute;left:50%;top:50%;width:7px;height:7px;border:1px solid #8c8377;border-radius:50%;background:transparent;transform:translate(-50%,-50%);transition:background-color .16s ease,transform .16s ease}
+  .official-seed-dots button.is-active::after{background:#514a41;transform:translate(-50%,-50%) scale(1.08)}
   .public-discovery-more{margin-top:24px}
 }
