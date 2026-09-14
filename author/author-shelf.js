@@ -13,8 +13,9 @@ function validAuthorId(value){return /^author_[a-f0-9]{32}$/.test(value);}
 function publicShelfShareUrl(){const author=shelfData?.author||{},reference=author.slug||author.authorId;return reference?`${API_BASE}/s/${encodeURIComponent(reference)}`:location.href;}
 function showToast(message){const toast=$('#toast');toast.textContent=message;toast.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast.hidden=true;},2400);}
 function coverHtml(work,className='book-cover'){return `<span class="${className}">${work?.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span class="book-cover-fallback">□</span>'}</span>`;}
+function ownCopyBadgeHtml(work){return work?.ownCopyAvailable===true?'<span class="own-copy-available" title="読了後に自分の一冊を受け取れます"><b aria-hidden="true">□＋</b><em>一冊</em></span>':'';}
 function workLabel(work){return [work?.episodeLabel,work?.episodeTitle].filter(Boolean).join(' ')||'';}
-function bookCardHtml(work,{position=0}={}){return `<button class="book-card" type="button" data-publication-id="${escapeHtml(work.publicationId)}">${coverHtml(work)}${position?`<span class="book-number">${position}冊目</span>`:''}<span class="book-copy"><h3>${escapeHtml(work.title||'Untitled')}</h3><p>${escapeHtml(workLabel(work)||work.byline||'')}</p></span></button>`;}
+function bookCardHtml(work,{position=0}={}){return `<button class="book-card" type="button" data-publication-id="${escapeHtml(work.publicationId)}">${coverHtml(work)}${position?`<span class="book-number">${position}冊目</span>`:''}${ownCopyBadgeHtml(work)}<span class="book-copy"><h3>${escapeHtml(work.title||'Untitled')}</h3><p>${escapeHtml(workLabel(work)||work.byline||'')}</p></span></button>`;}
 function seriesCoverHtml(work){return `<span class="series-cover">${work?.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span>□</span>'}</span>`;}
 function readLaterItems(){try{const value=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(value)?value.filter(item=>item&&item.publicationId).slice(0,200):[];}catch(_){return[];}}
 function writeReadLaterItems(items){try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));return true;}catch(_){showToast('この端末に保存できませんでした。');return false;}}
@@ -133,7 +134,7 @@ function openSeries(seriesId){
   $('#seriesDialogMeta').textContent=`全${series.episodes.length}冊。上から順番に並んでいます。`;
   $('#seriesDialogBooks').innerHTML=series.episodes.map((episode,index)=>{
     const work=workById.get(episode.publicationId)||episode;
-    return `<button class="series-dialog-row" type="button" data-publication-id="${escapeHtml(episode.publicationId)}">${coverHtml(work,'series-dialog-thumb')}<span class="series-dialog-copy"><small>${index+1}冊目${episode.episodeLabel?`・${escapeHtml(episode.episodeLabel)}`:''}</small><strong>${escapeHtml(work.title||episode.title||'Untitled')}</strong><em>${escapeHtml(episode.episodeTitle||work.episodeTitle||work.byline||'')}</em></span><span class="series-dialog-arrow">›</span></button>`;
+    return `<button class="series-dialog-row" type="button" data-publication-id="${escapeHtml(episode.publicationId)}">${coverHtml(work,'series-dialog-thumb')}<span class="series-dialog-copy"><small>${index+1}冊目${episode.episodeLabel?`・${escapeHtml(episode.episodeLabel)}`:''}</small><strong>${escapeHtml(work.title||episode.title||'Untitled')}</strong><em>${escapeHtml(episode.episodeTitle||work.episodeTitle||work.byline||'')}</em></span>${ownCopyBadgeHtml(work)}<span class="series-dialog-arrow">›</span></button>`;
   }).join('');
   document.querySelectorAll('#seriesDialogBooks .series-dialog-row').forEach(button=>button.onclick=()=>{closeDialog('seriesDialog');setTimeout(()=>openWork(button.dataset.publicationId),80);});
   openDialog('seriesDialog');
