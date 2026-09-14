@@ -876,11 +876,26 @@
     }
     return files;
   }
-  function mime(path){
+  function mime(path,data=null){
     const p=path.toLowerCase();
-    if(p.endsWith('.mp3'))return'audio/mpeg';if(p.endsWith('.wav'))return'audio/wav';if(p.endsWith('.m4a'))return'audio/mp4';if(p.endsWith('.aac'))return'audio/aac';if(p.endsWith('.ogg'))return'audio/ogg';
-    if(p.endsWith('.png'))return'image/png';if(p.endsWith('.jpg')||p.endsWith('.jpeg'))return'image/jpeg';if(p.endsWith('.webp'))return'image/webp';if(p.endsWith('.gif'))return'image/gif';if(p.endsWith('.svg'))return'image/svg+xml';
-    if(p.endsWith('.woff2'))return'font/woff2';if(p.endsWith('.woff'))return'font/woff';return'application/octet-stream';
+    if(p.endsWith('.mp3'))return'audio/mpeg';if(p.endsWith('.wav'))return'audio/wav';if(p.endsWith('.m4a')||p.endsWith('.mp4'))return'audio/mp4';if(p.endsWith('.aac'))return'audio/aac';if(p.endsWith('.ogg'))return'audio/ogg';if(p.endsWith('.opus'))return'audio/opus';if(p.endsWith('.flac'))return'audio/flac';if(p.endsWith('.webm'))return'audio/webm';
+    if(p.endsWith('.png'))return'image/png';if(p.endsWith('.jpg')||p.endsWith('.jpeg')||p.endsWith('.jfif'))return'image/jpeg';if(p.endsWith('.webp'))return'image/webp';if(p.endsWith('.gif'))return'image/gif';if(p.endsWith('.svg'))return'image/svg+xml';if(p.endsWith('.avif'))return'image/avif';if(p.endsWith('.heic'))return'image/heic';if(p.endsWith('.heif'))return'image/heif';if(p.endsWith('.bmp'))return'image/bmp';
+    if(p.endsWith('.woff2'))return'font/woff2';if(p.endsWith('.woff'))return'font/woff';
+    const b=data instanceof Uint8Array?data:new Uint8Array(data||0),ascii=(from,to)=>String.fromCharCode(...b.slice(from,to));
+    if(b.length>=8&&b[0]===0x89&&ascii(1,4)==='PNG')return'image/png';
+    if(b.length>=3&&b[0]===0xff&&b[1]===0xd8&&b[2]===0xff)return'image/jpeg';
+    if(b.length>=6&&(ascii(0,6)==='GIF87a'||ascii(0,6)==='GIF89a'))return'image/gif';
+    if(b.length>=12&&ascii(0,4)==='RIFF'&&ascii(8,12)==='WEBP')return'image/webp';
+    if(b.length>=12&&ascii(0,4)==='RIFF'&&ascii(8,12)==='WAVE')return'audio/wav';
+    if(b.length>=4&&ascii(0,4)==='OggS')return b.length>=36&&ascii(28,36)==='OpusHead'?'audio/opus':'audio/ogg';
+    if(b.length>=4&&ascii(0,4)==='fLaC')return'audio/flac';
+    if(b.length>=3&&ascii(0,3)==='ID3')return'audio/mpeg';
+    if(b.length>=2&&b[0]===0xff&&(b[1]&0xf6)===0xf0)return'audio/aac';
+    if(b.length>=2&&b[0]===0xff&&(b[1]&0xe0)===0xe0)return'audio/mpeg';
+    if(b.length>=12&&ascii(4,8)==='ftyp')return'audio/mp4';
+    if(b.length>=4&&b[0]===0x1a&&b[1]===0x45&&b[2]===0xdf&&b[3]===0xa3)return'audio/webm';
+    if(b.length){try{if(/^\s*(?:<\?xml[^>]*>\s*)?<svg[\s>]/i.test(new TextDecoder().decode(b.slice(0,512))))return'image/svg+xml';}catch(_){}}
+    return'application/octet-stream';
   }
   function jsonFile(files,name){
     const b=files.get(norm(name));if(!b)throw new Error(`${name} が .scene 内にありません。`);
@@ -888,17 +903,34 @@
   }
   function buildAssetMap(files){
     const map=new Map();
-    for(const[name,data]of files){if(!name.startsWith('assets/'))continue;const url=URL.createObjectURL(new Blob([data],{type:mime(name)}));assetUrls.push(url);map.set(norm(name),url);}
+    for(const[name,data]of files){if(!name.startsWith('assets/'))continue;const url=URL.createObjectURL(new Blob([data],{type:mime(name,data)}));assetUrls.push(url);map.set(norm(name),url);}
     return map;
   }
-  function rewriteAssets(value,map){
-    if(Array.isArray(value))return value.map(v=>rewriteAssets(v,map));
+  function packagedAssetLookup(value,map){
+    if(typeof value!=='string'||!map?.size)return'';
+    const raw=norm(value).split(/[?#]/,1)[0];
+    if(map.has(raw))return map.get(raw);
+    try{const decoded=norm(decodeURIComponent(raw));return map.get(decoded)||'';}catch(_){return'';}
+  }
+  function hostedAssetUrl(value){
+    const input=String(value||'').trim();if(!input||/^(?:https?:|blob:|data:)/i.test(input))return input;
+    let file='';
+    const normalized=input.replace(/^\.\//,'');
+    if(normalized.startsWith('assets/'))file=normalized.slice(7).split(/[?#]/,1)[0];
+    else if(normalized.startsWith('/asset/'))file=normalized.slice(7).split(/[?#]/,1)[0];
+    else if(normalized.startsWith('asset/'))file=normalized.slice(6).split(/[?#]/,1)[0];
+    else if(/^[A-Za-z0-9_-]{12,96}(?:\.[A-Za-z0-9]{1,8})?$/.test(normalized))file=normalized;
+    if(!file||file.includes('/')||file.includes('\\'))return input;
+    try{file=decodeURIComponent(file);}catch(_){}
+    return `${API_BASE}/asset/${encodeURIComponent(file)}`;
+  }
+  const MEDIA_REFERENCE_KEYS=new Set(['src','url','icon','image','logoUrl','poster']);
+  function rewriteAssets(value,map,key=''){
+    if(Array.isArray(value))return value.map(v=>rewriteAssets(v,map,key));
+    if(typeof value==='string')return packagedAssetLookup(value,map)||(MEDIA_REFERENCE_KEYS.has(key)?hostedAssetUrl(value):value);
     if(!value||typeof value!=='object')return value;
     const out={};
-    for(const[k,v]of Object.entries(value)){
-      if(typeof v==='string'&&(k==='src'||k==='url'))out[k]=map.get(norm(v))||v;
-      else out[k]=rewriteAssets(v,map);
-    }
+    for(const[k,v]of Object.entries(value))out[k]=rewriteAssets(v,map,k);
     return out;
   }
   async function openScene(file,{sourceMode='file',sourceKey=''}={}){
@@ -983,7 +1015,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.12-unified-shelf-return',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.13-media-reference-fix',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
