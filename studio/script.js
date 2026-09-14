@@ -23,6 +23,7 @@
   const episodeNumberInput = $('#episodeNumberInput');
   const episodeTitleInput = $('#episodeTitleInput');
   const descriptionInput = $('#descriptionInput');
+  const ownCopyEnabledInput = $('#ownCopyEnabled');
   const menuRelayToggleButton = $('#menuRelayToggleButton');
   const distributionExportDialog = $('#distributionExportDialog');
   const distributionRelayOn = $('#distributionRelayOn');
@@ -552,6 +553,11 @@
     if(!doc || typeof doc!=='object')return;
     doc.sharing ||= {};
     doc.sharing.relay={...(doc.sharing.relay||{}),schemaVersion:'1',enabled:Boolean(relayEnabled)};
+  }
+  function applyOwnCopyPolicyToDocument(doc){
+    if(!doc || typeof doc!=='object')return;
+    doc.sharing ||= {};
+    doc.sharing.ownCopy={...(doc.sharing.ownCopy||{}),schemaVersion:'1',enabled:Boolean(ownCopyEnabledInput?.checked)};
   }
   function refreshRelayPolicyUI(){
     if(!menuRelayToggleButton)return;
@@ -1246,7 +1252,7 @@
       alert('現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。');
       return false;
     }
-    workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput)ownCopyEnabledInput.checked=false;easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     latestPublishedId='';
     latestPublishedUrl='';
@@ -2105,7 +2111,7 @@
         typography:{ fontFamily:selectedFont }
       },
       player:{ navigation:{ allowPrevious:true } },
-      sharing:{ relay:{ schemaVersion:'1', enabled:Boolean(relayEnabled) } },
+      sharing:{ relay:{ schemaVersion:'1', enabled:Boolean(relayEnabled) }, ownCopy:{ schemaVersion:'1', enabled:Boolean(ownCopyEnabledInput?.checked) } },
       commerce:{ ownCopyGate:{ schemaVersion:'1', mode:'free' } },
       cover:{
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
@@ -2551,6 +2557,7 @@
     workingDocument.appearance.typography.fontFamily=selectedFont;
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
     applyRelayPolicyToDocument(workingDocument);
+    applyOwnCopyPolicyToDocument(workingDocument);
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
     const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
     workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
@@ -3607,6 +3614,7 @@
   function restoreEasyStateFromDocument(doc){
     relayEnabled=relayPolicyEnabled(doc);
     refreshRelayPolicyUI();
+    if(ownCopyEnabledInput)ownCopyEnabledInput.checked=doc?.sharing?.ownCopy?.enabled===true;
     titleInput.value=doc.title||'';
     authorInput.value=doc.author||'';
     if(subtitleInput)subtitleInput.value=doc.metadata?.subtitle||'';
@@ -6417,6 +6425,7 @@
   endingLinkInputs.forEach(pair=>[pair.kicker,pair.label,pair.url].forEach(el=>el?.addEventListener('change',()=>saveEndingRecent({type:'slot',kicker:pair.kicker?.value,label:pair.label?.value,url:pair.url?.value}))));
 
   languageInput?.addEventListener('change',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();});
+  ownCopyEnabledInput?.addEventListener('change',()=>{if(!workingDocument)ensureWorkingDocumentFromEasy();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);});
   if(endingLegacyEditor){
     endingLegacyEditor.open = window.matchMedia('(min-width:721px)').matches;
   }

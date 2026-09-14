@@ -24,6 +24,9 @@
   const endingRight = document.getElementById('publicEndingRight');
   const endingCoverButton = document.getElementById('publicEndingCover');
   const restartButton = document.getElementById('publicRestart');
+  const ownCopyWrap = document.getElementById('publicOwnCopyWrap');
+  const ownCopyButton = document.getElementById('publicOwnCopy');
+  const ownCopyStatus = document.getElementById('publicOwnCopyStatus');
 
   const errorPanel = document.getElementById('publicError');
   const errorTitle = document.getElementById('publicErrorTitle');
@@ -54,6 +57,9 @@
   const DEFAULT_SCENE = './works/external-signal/scene.json';
   const source = () => requested || DEFAULT_SCENE;
   const storageKey = () => `scene-public-progress:${source()}`;
+  const PUBLIC_READER_ID_KEY='ahako:public-own-copy-reader-id';
+  const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
+  const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
 
   function safeShelfReturn(raw){
     try{
@@ -536,6 +542,7 @@
     applyCover(doc);
     applyPublicCoverTypography(doc);
     buildEnding(doc);
+    syncPublicOwnCopy(doc);
     continueButton.hidden = safeProgress() <= 0;
   }
 
@@ -543,6 +550,98 @@
     const src=source();
     const m=src.match(/\/work\/([^/?#]+)/i);
     return m?decodeURIComponent(m[1]):'';
+  }
+
+  function publicOwnCopyReaderId(){
+    let id='';try{id=String(localStorage.getItem(PUBLIC_READER_ID_KEY)||'');}catch(_){}
+    if(!/^reader_[a-f0-9]{32}$/i.test(id)){
+      try{id=`reader_${crypto.randomUUID().replaceAll('-','')}`;}
+      catch(_){const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);id=`reader_${[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('')}`;}
+      try{localStorage.setItem(PUBLIC_READER_ID_KEY,id);}catch(_){}
+    }
+    return id;
+  }
+  function isIOSFamily(){
+    const ua=String(navigator.userAgent||'');
+    return /iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints||0)>1);
+  }
+  function isRealIOSSafari(){
+    if(!isIOSFamily())return false;
+    const ua=String(navigator.userAgent||'');
+    return /Version\/[\d.]+/i.test(ua)&&/Safari\/[\d.]+/i.test(ua)&&!/(CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|GSA)\//i.test(ua);
+  }
+  function needsExternalSafariHandoff(){return isIOSFamily()&&!isRealIOSSafari();}
+  function newBookshelfHandoffId(){
+    const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);
+    return `handoff_${[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('')}`;
+  }
+  function rememberBookshelfClaimSource(handoffId,token){
+    try{
+      sessionStorage.setItem(BOOKSHELF_CLAIM_SOURCE_SESSION,`${handoffId}:${token}`);
+      sessionStorage.setItem(`${BOOKSHELF_CLAIM_RETURN_PREFIX}${handoffId}`,location.href);
+    }catch(_){}
+  }
+  function publicBookshelfClaimUrl(token,{handoffId='',external=false}={}){
+    if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
+    const url=new URL('./bookshelf/',location.href);
+    url.searchParams.set('claim',String(token));
+    if(/^handoff_[a-f0-9]{24}$/i.test(handoffId))url.searchParams.set('handoff',handoffId);
+    if(external)url.searchParams.set('openExternalBrowser','1');
+    return url.toString();
+  }
+  function publicOwnCopyApiBase(){
+    try{const url=new URL(source(),location.href);return url.pathname.includes('/work/')?url.origin:'https://scene-studio-api.a-hako.workers.dev';}
+    catch(_){return 'https://scene-studio-api.a-hako.workers.dev';}
+  }
+  function syncPublicOwnCopy(doc){
+    if(!ownCopyWrap||!ownCopyButton)return;
+    const allowed=Boolean(currentWorkId())&&doc?.sharing?.ownCopy?.enabled===true;
+    ownCopyWrap.hidden=!allowed;
+    ownCopyButton.disabled=false;
+    ownCopyButton.textContent='自分の一冊を受け取る';
+    ownCopyButton.onclick=allowed?receivePublicOwnCopy:null;
+    if(ownCopyStatus)ownCopyStatus.textContent='';
+  }
+  async function receivePublicOwnCopy(){
+    const workId=currentWorkId();if(!workId||!ownCopyButton)return;
+    ownCopyButton.disabled=true;
+    if(ownCopyStatus)ownCopyStatus.textContent='自分の一冊を用意しています…';
+    try{
+      const response=await fetch(`${publicOwnCopyApiBase()}/work/${encodeURIComponent(workId)}/own-copy`,{
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+        body:JSON.stringify({readerId:publicOwnCopyReaderId()})
+      });
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok){
+        const code=String(payload?.code||'');
+        if(code==='OWN_COPY_NOT_ALLOWED')throw new Error('作者がこの作品の受け取りを停止しました。');
+        if(code==='OWN_COPY_GATE_REQUIRED')throw new Error('この作品の受け取りには購入または支援が必要です。');
+        if(code==='WORK_NOT_PUBLIC')throw new Error('この作品は現在公開されていません。');
+        throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
+      }
+      const token=String(payload?.bookshelfClaim?.token||'');
+      const external=needsExternalSafariHandoff();
+      if(external){
+        const handoffId=newBookshelfHandoffId();
+        rememberBookshelfClaimSource(handoffId,token);
+        const claimUrl=publicBookshelfClaimUrl(token,{handoffId,external:true});
+        if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
+        ownCopyButton.disabled=false;
+        ownCopyButton.textContent='Safariで本棚を開く';
+        if(ownCopyStatus)ownCopyStatus.textContent='一冊を用意しました。Safariの本棚で受け取れます。';
+        ownCopyButton.onclick=()=>{try{const target=new URL(claimUrl);location.href=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;}catch(error){console.error(error);}};
+        return;
+      }
+      const claimUrl=publicBookshelfClaimUrl(token);
+      if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
+      if(ownCopyStatus)ownCopyStatus.textContent='本棚へ入れています…';
+      location.href=claimUrl;
+    }catch(error){
+      console.error(error);
+      ownCopyButton.disabled=false;
+      ownCopyButton.textContent='もう一度試す';
+      if(ownCopyStatus)ownCopyStatus.textContent=String(error?.message||error);
+    }
   }
 
   function bindReportControls(){
@@ -963,7 +1062,7 @@
   });
 
   window.ScenePublicPlayer = {
-    version: '0.3.28-instant-author-shelf-return',
+    version: '0.3.29-public-own-copy',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },

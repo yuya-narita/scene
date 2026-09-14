@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b1016">
   <title>Scene Player</title>
   <link rel="stylesheet" href="./scene-player-core.css?v=chat-test-v08">
-  <link rel="stylesheet" href="./public-player.css?v=chat-test-v12">
+  <link rel="stylesheet" href="./public-player.css?v=69.0">
 </head>
 <body>
   <a id="publicShelfReturn" class="public-shelf-return" href="./author/" hidden>← 作者の本棚へ</a>
@@ -48,6 +48,10 @@
         <a id="publicEndingLeft" class="public-ending-box" hidden><small></small><strong></strong></a>
         <button id="publicEndingCover" class="public-ending-box public-ending-cover" type="button"><small>COVER</small><strong>表紙に戻る</strong></button>
         <a id="publicEndingRight" class="public-ending-box" hidden><small></small><strong></strong></a>
+      </div>
+      <div id="publicOwnCopyWrap" class="public-own-copy-wrap" hidden>
+        <button id="publicOwnCopy" class="public-own-copy" type="button">自分の一冊を受け取る</button>
+        <p id="publicOwnCopyStatus" class="public-own-copy-status" aria-live="polite"></p>
       </div>
 <button id="publicRestart" class="public-reread" type="button">
         もう一度読む
@@ -109,6 +113,6 @@
   </dialog>
 
   <script src="./scene-player-core.js?v=chat-test-v08"></script>
-  <script src="./public-player.js?v=68.19"></script>
+  <script src="./public-player.js?v=69.0"></script>
 </body>
 </html>

@@ -8198,6 +8198,13 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   overflow-wrap:anywhere;
   word-break:normal;
 }
+
+/* V69 — author opt-in for public own-copy issuance */
+.own-copy-policy{display:grid;grid-template-columns:22px minmax(0,1fr);align-items:start;gap:12px;margin-top:18px;padding:15px 16px;border:1px solid #ddd5c9;border-radius:14px;background:#fbf8f2;color:#242424;text-align:left;cursor:pointer}
+.own-copy-policy input{appearance:auto!important;-webkit-appearance:auto!important;width:20px!important;height:20px!important;min-width:20px!important;margin:1px 0 0!important}
+.own-copy-policy span{display:grid;gap:4px;min-width:0}
+.own-copy-policy strong{font-size:13px;line-height:1.4}
+.own-copy-policy small{color:#777067;font-size:10px;line-height:1.55}
 @media(max-width:560px){
   .publish-dialog{
     width:calc(100vw - 28px)!important;

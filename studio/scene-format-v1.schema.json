@@ -138,6 +138,28 @@
     },
     "ending": {
       "$ref": "#/$defs/ending"
+    },
+    "sharing": {
+      "type": "object",
+      "properties": {
+        "relay": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": { "type": "string" },
+            "enabled": { "type": "boolean" }
+          },
+          "additionalProperties": true
+        },
+        "ownCopy": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": { "type": "string" },
+            "enabled": { "type": "boolean" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true,
