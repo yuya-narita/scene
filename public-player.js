@@ -94,6 +94,16 @@
     }
   }
 
+  function canRestoreBookshelfFromHistory(target){
+    if(history.length<=1||!document.referrer)return false;
+    try{
+      const destination=new URL(target,location.href),previous=new URL(document.referrer);
+      const clean=path=>path.replace(/\/+$/,'');
+      return destination.origin===previous.origin&&clean(destination.pathname)===clean(previous.pathname)&&/\/bookshelf$/.test(clean(destination.pathname));
+    }catch(_){return false;}
+  }
+  shelfReturnLink?.addEventListener('click',event=>{if(!canRestoreBookshelfFromHistory(shelfReturnLink.href))return;event.preventDefault();history.back();});
+
   function setShelfReturnReading(reading){
     shelfReturnLink?.classList.toggle('is-reading',Boolean(reading));
   }

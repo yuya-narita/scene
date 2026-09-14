@@ -102,6 +102,18 @@ function syncShelfScrollLock(){
   }
 }
 
+function prepareShelfPlayerExit(dialog=null){
+  if(dialog?.open)dialog.close();
+  syncShelfScrollLock();
+  saveShelfScroll(currentShelfTab,readShelfScrollY());
+}
+function leaveShelfForPlayer(href,dialog=null){
+  const target=String(href||'').trim();if(!target)return;
+  prepareShelfPlayerExit(dialog);
+  location.href=target;
+}
+document.addEventListener('click',event=>{if(event.target?.closest?.('#readDistribution,#relayDistribution,#readMaster'))prepareShelfPlayerExit($('#detailDialog'));},true);
+
 function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(WORKS))db.createObjectStore(WORKS,{keyPath:'workId'});if(!db.objectStoreNames.contains(READER_BOOKS))db.createObjectStore(READER_BOOKS,{keyPath:'copyId'});if(!db.objectStoreNames.contains(HANDOFF))db.createObjectStore(HANDOFF,{keyPath:'key'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function tx(store,mode,fn){const db=await openDb();return new Promise((resolve,reject)=>{const t=db.transaction(store,mode);const s=t.objectStore(store);let out;try{out=fn(s);}catch(e){db.close();reject(e);return;}t.oncomplete=()=>{db.close();resolve(out)};t.onerror=()=>{db.close();reject(t.error)};});}
 function request(req){return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});}
@@ -597,8 +609,8 @@ function togglePublicDiscoveryReadLater(work){const items=readLaterItems(),index
 function openPublicDiscoveryWork(publicationId){
   const work=(publicDiscoveryData.works||[]).find(item=>item.publicationId===publicationId),dialog=$('#publicWorkDialog'),content=$('#publicWorkDialogContent');if(!work||!dialog||!content)return;
   const author=work.author||{},authorHref=publicAuthorShelfUrl(author),context=[work.episodeLabel,work.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK',cover=work.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="">`:'<span>□</span>';
-  content.innerHTML=`<div class="public-work-dialog-layout"><div class="public-work-dialog-cover">${cover}</div><div class="public-work-dialog-body"><div class="public-work-dialog-info"><p class="eyebrow">${escapeHtml(context)}</p><h2>${escapeHtml(work.title||'Untitled')}</h2>${work.subtitle?`<p>${escapeHtml(work.subtitle)}</p>`:''}<a class="public-work-dialog-author" href="${escapeHtml(authorHref)}">${escapeHtml(author.displayName||'作者')}の本棚へ</a></div>${work.description?`<p class="public-work-dialog-description">${escapeHtml(work.description)}</p>`:''}<div class="public-work-dialog-actions"><button type="button" data-public-work-later aria-pressed="false">あとで読む</button><a href="${escapeHtml(publicDiscoveryPlayerUrl(work))}">この本を読む</a></div></div></div>`;
-  content.querySelector('[data-public-work-later]')?.addEventListener('click',()=>togglePublicDiscoveryReadLater(work));syncPublicDiscoveryReadLaterButton(work);if(!dialog.open)dialog.showModal();syncShelfScrollLock();
+  content.innerHTML=`<div class="public-work-dialog-layout"><div class="public-work-dialog-cover">${cover}</div><div class="public-work-dialog-body"><div class="public-work-dialog-info"><p class="eyebrow">${escapeHtml(context)}</p><h2>${escapeHtml(work.title||'Untitled')}</h2>${work.subtitle?`<p>${escapeHtml(work.subtitle)}</p>`:''}<a class="public-work-dialog-author" href="${escapeHtml(authorHref)}">${escapeHtml(author.displayName||'作者')}の本棚へ</a></div>${work.description?`<p class="public-work-dialog-description">${escapeHtml(work.description)}</p>`:''}<div class="public-work-dialog-actions"><button type="button" data-public-work-later aria-pressed="false">あとで読む</button><a data-public-work-read href="${escapeHtml(publicDiscoveryPlayerUrl(work))}">この本を読む</a></div></div></div>`;
+  content.querySelector('[data-public-work-later]')?.addEventListener('click',()=>togglePublicDiscoveryReadLater(work));content.querySelector('[data-public-work-read]')?.addEventListener('click',event=>{event.preventDefault();leaveShelfForPlayer(event.currentTarget.href,dialog);});syncPublicDiscoveryReadLaterButton(work);if(!dialog.open)dialog.showModal();syncShelfScrollLock();
 }
 function readLaterItems(){try{const value=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(value)?value.filter(item=>item&&item.publicationId).slice(0,200):[];}catch(_){return[];}}
 function writeReadLaterItems(items){try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));return true;}catch(_){toast('この端末に保存できませんでした。');return false;}}
@@ -609,9 +621,10 @@ function renderReadLaterList(){
   const items=readLaterItems();syncReadLaterCount();
   list.innerHTML=items.length?items.map(item=>{
     const detailHref=safeReadLaterHref(item.workUrl),readHref=safeReadLaterHref(item.readUrl)||detailHref,cover=item.coverUrl?`<img src="${escapeHtml(item.coverUrl)}" alt="" loading="lazy">`:'<span>□</span>';
-    return `<article class="read-later-item" data-read-later-id="${escapeHtml(item.publicationId)}"><a class="read-later-cover" href="${escapeHtml(detailHref||'#')}">${cover}</a><div class="read-later-copy"><h3>${escapeHtml(item.title||'Untitled')}</h3>${item.detail?`<p>${escapeHtml(item.detail)}</p>`:''}<small>${escapeHtml(item.authorName||'作者')}</small><div class="read-later-actions">${readHref?`<a href="${escapeHtml(readHref)}">読む</a>`:''}<button type="button" data-read-later-remove="${escapeHtml(item.publicationId)}">外す</button></div></div></article>`;
+    return `<article class="read-later-item" data-read-later-id="${escapeHtml(item.publicationId)}"><a class="read-later-cover" href="${escapeHtml(detailHref||'#')}">${cover}</a><div class="read-later-copy"><h3>${escapeHtml(item.title||'Untitled')}</h3>${item.detail?`<p>${escapeHtml(item.detail)}</p>`:''}<small>${escapeHtml(item.authorName||'作者')}</small><div class="read-later-actions">${readHref?`<a data-read-later-read href="${escapeHtml(readHref)}">読む</a>`:''}<button type="button" data-read-later-remove="${escapeHtml(item.publicationId)}">外す</button></div></div></article>`;
   }).join(''):`<div class="read-later-empty"><span>□</span><strong>保存した本はまだありません</strong><p>作者の本棚で作品を開き、「あとで読む」を押すとここに並びます。</p></div>`;
   list.querySelectorAll('[data-read-later-remove]').forEach(button=>button.onclick=()=>{const id=button.dataset.readLaterRemove,items=readLaterItems().filter(item=>item.publicationId!==id);if(writeReadLaterItems(items)){renderReadLaterList();toast('あとで読むから外しました。');}});
+  list.querySelectorAll('[data-read-later-read]').forEach(link=>link.onclick=event=>{event.preventDefault();leaveShelfForPlayer(link.href,$('#readLaterDialog'));});
 }
 function openReadLater(){renderReadLaterList();const dialog=$('#readLaterDialog');if(dialog&&!dialog.open)dialog.showModal();syncShelfScrollLock();}
 function publicDiscoveryPageSize(){return matchMedia('(max-width:680px)').matches?8:10;}
@@ -645,7 +658,7 @@ async function loadOfficialShelf({force=false}={}){
 function bindOfficialShelfInteractions(host=$('#officialBooks')){
   if(!host)return;
   host.querySelectorAll('.official-book-cover[data-official-read]').forEach(cover=>{
-    const open=()=>{const href=officialReadUrl(cover.dataset.officialRead);if(href)location.href=href;};
+    const open=()=>{const href=officialReadUrl(cover.dataset.officialRead);if(href)leaveShelfForPlayer(href);};
     cover.onclick=open;
     cover.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
   });

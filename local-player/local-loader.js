@@ -48,6 +48,15 @@
     }
     return true;
   }
+  function canRestoreShelfFromHistory(target){
+    if(history.length<=1||!document.referrer)return false;
+    try{
+      const destination=new URL(target,location.href),previous=new URL(document.referrer);
+      const clean=path=>path.replace(/\/+$/,'');
+      return destination.origin===previous.origin&&clean(destination.pathname)===clean(previous.pathname)&&/\/bookshelf$/.test(clean(destination.pathname));
+    }catch(_){return false;}
+  }
+  shelfReturnLink?.addEventListener('click',event=>{if(!canRestoreShelfFromHistory(shelfReturnLink.href))return;event.preventDefault();history.back();});
   function newBookshelfHandoffId(){
     const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);
     return 'handoff_'+Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
@@ -1015,7 +1024,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.13-media-reference-fix',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.14-instant-shelf-return',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
