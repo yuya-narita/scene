@@ -4075,7 +4075,8 @@
     const emailForm=$('#authorAuthEmailForm'),codeForm=$('#authorAuthCodeForm');
     if(emailForm)emailForm.hidden=false;if(codeForm)codeForm.hidden=true;
     const suggested=String(authorInput?.value||'').trim();
-    const display=$('#authorAuthDisplayName');if(display&&!display.value)display.value=suggested;
+    const display=$('#authorAuthDisplayName');if(display)display.value=suggested;
+    const code=$('#authorAuthCode');if(code)code.value='';
     $('#authorAuthDialog')?.showModal();
   }
   async function requestAuthorCode(){
@@ -4090,7 +4091,12 @@
       $('#authorAuthEmailForm').hidden=true;$('#authorAuthCodeForm').hidden=false;
       setAuthorAuthStatus('メールに届いた6桁のコードを入力してください。');
       setTimeout(()=>$('#authorAuthCode')?.focus(),0);
-    }catch(error){setAuthorAuthStatus(error?.message||'認証コードを送信できませんでした。',true);}
+    }catch(error){
+      const message=error instanceof TypeError
+        ? '認証サーバーへ接続できませんでした。通信状態を確認してもう一度お試しください。'
+        : (error?.message||'認証コードを送信できませんでした。');
+      setAuthorAuthStatus(message,true);
+    }
     finally{if(button)button.disabled=false;}
   }
   async function verifyAuthorCode(){
@@ -4113,6 +4119,9 @@
   async function logoutAuthor(){
     const token=authorSessionToken;
     saveAuthorSession('',null);
+    const email=$('#authorAuthEmail');if(email)email.value='';
+    const code=$('#authorAuthCode');if(code)code.value='';
+    const display=$('#authorAuthDisplayName');if(display)display.value='';
     if(token){try{await fetch(`${SCENE_STUDIO_API_BASE}/author-auth/logout`,{method:'POST',headers:{'Authorization':`Bearer ${token}`}});}catch(_){}}
   }
 

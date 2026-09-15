@@ -8168,6 +8168,8 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
 .author-auth-form input:focus{border-color:#777;box-shadow:0 0 0 3px rgba(0,0,0,.06)}
 .author-auth-status{min-height:1.4em!important;color:#6d6962!important}
 .author-auth-status.is-error{color:#b44242!important}
+.author-auth-agreement{margin:0!important;color:#777!important;font-size:10px!important;line-height:1.7!important;text-align:left}
+.author-auth-agreement a{color:#333;text-underline-offset:2px}
 .series-link-status-ready{color:#4f7358!important}
 #seriesLinkSelect:disabled,#episodeNumberInput:disabled{opacity:.62;cursor:not-allowed}
 @media(max-width:560px){.publish-author-gate>div{grid-template-columns:minmax(0,1fr)}.publish-author-gate .publish-secondary,.publish-author-gate .publish-author-text-button{grid-column:1;grid-row:auto;width:100%;margin-top:5px}.author-auth-dialog{width:calc(100vw - 28px)!important}}
