@@ -1215,7 +1215,7 @@ html{
 .public-discovery-heading .eyebrow{margin:0 0 5px}
 .public-discovery-heading h3{margin:0;font-size:21px;letter-spacing:-.03em}
 .public-discovery-heading>span{color:#81786c;font-size:10px}
-.public-author-rail{display:flex;gap:14px;overflow-x:auto;padding:2px 2px 13px;scroll-snap-type:x proximity;overscroll-behavior-inline:contain}
+.public-author-rail{display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 13px;scroll-snap-type:inline mandatory;scroll-padding-inline:2px;overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
 .public-author-card{position:relative;overflow:hidden;flex:0 0 260px;height:142px;border:1px solid #363940;border-radius:18px;background:#1d2026;color:#fff;text-decoration:none;scroll-snap-align:start;box-shadow:0 12px 28px rgba(48,39,27,.11)}
 .public-author-card-image,.public-author-card-shade{position:absolute;inset:0}
 .public-author-card-image img{width:100%;height:100%;display:block;object-fit:cover}

@@ -1,0 +1,24 @@
+/*
+ * iPhone Safari zooms the page when a text-like form control below 16px
+ * receives focus. Keep the visual viewport stable without disabling the
+ * reader's normal pinch zoom.
+ */
+@supports (-webkit-touch-callout: none){
+  input:not([type]),
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"],
+  select,
+  textarea{
+    font-size:16px!important;
+  }
+}
