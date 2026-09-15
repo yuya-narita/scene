@@ -859,7 +859,7 @@
         saveIssuedState(info,issued);
         renderJourney(currentPackage.raw,{sent:true});
       }
-    }catch(error){console.error(error);alert(`RELAY URLを作れませんでした: ${error?.message||error}`);}
+    }catch(error){console.error(error);AhakoDialog.alert(`RELAY URLを作れませんでした: ${error?.message||error}`);}
     finally{if(relayButton)relayButton.disabled=false;if(journey){journey.classList.remove('is-sharing');journey.removeAttribute('aria-disabled');}}
   }
 

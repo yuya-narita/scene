@@ -8176,6 +8176,29 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
 .author-account-state span{width:8px;height:8px;border-radius:50%;background:#5aa16e;box-shadow:0 0 0 4px rgba(90,161,110,.12)}
 .author-account-actions{display:grid;gap:10px;margin-top:4px}
 .author-account-actions button{width:100%;min-height:48px}
+
+/* Branded replacement for browser alert / confirm / prompt */
+.app-dialog{width:min(92vw,460px);padding:0;border:0;background:transparent;color:#1b1c1f;overflow:visible}
+.app-dialog::backdrop{background:rgba(15,16,18,.4);backdrop-filter:blur(5px)}
+.app-dialog-card{display:grid;gap:13px;padding:25px 22px 18px;border:1px solid #e2e3e6;border-radius:22px;background:#fff;box-shadow:0 28px 80px rgba(0,0,0,.22)}
+.app-dialog-kicker{color:#8f9299;font:850 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em}
+.app-dialog[data-kind="confirm"] .app-dialog-kicker,.app-dialog[data-kind="prompt"] .app-dialog-kicker{color:#795d31}
+.app-dialog[data-danger="true"] .app-dialog-kicker{color:#ad3e3e}
+.app-dialog h2{margin:0;font-size:21px;line-height:1.4}
+.app-dialog p{margin:0;color:#6f737b;font-size:12px;line-height:1.75;white-space:pre-line;overflow-wrap:anywhere}
+.app-dialog-input-wrap{display:grid;gap:7px;margin-top:2px}
+.app-dialog-input-wrap[hidden]{display:none!important}
+.app-dialog-input-wrap span{color:#555a62;font-size:10px;font-weight:800}
+.app-dialog-input-wrap input{box-sizing:border-box;width:100%;min-height:49px;padding:0 14px;border:1px solid #d6d9df;border-radius:13px;background:#fff;color:#18191b;font:700 14px/1.2 inherit;outline:none}
+.app-dialog-input-wrap input:focus{border-color:#6962ef;box-shadow:0 0 0 3px rgba(105,98,239,.12)}
+.app-dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.app-dialog-actions button{min-height:47px;border-radius:13px;font-size:12px;font-weight:850}
+.app-dialog-cancel{border:1px solid #dfe1e5;background:#fff;color:#34363a}
+.app-dialog-confirm{border:1px solid #191a1c;background:#191a1c;color:#fff}
+.app-dialog[data-kind="alert"] .app-dialog-actions{grid-template-columns:1fr}
+.app-dialog[data-kind="alert"] .app-dialog-cancel{display:none}
+.app-dialog[data-danger="true"] .app-dialog-confirm{border-color:#a33;background:#a33}
+@media(max-width:560px){.app-dialog{width:calc(100vw - 28px)}.app-dialog-card{padding:23px 18px 16px;border-radius:20px}.app-dialog-actions{grid-template-columns:1fr}}
 .series-link-status-ready{color:#4f7358!important}
 #seriesLinkSelect:disabled,#episodeNumberInput:disabled{opacity:.62;cursor:not-allowed}
 @media(max-width:560px){.publish-author-gate>div{grid-template-columns:minmax(0,1fr)}.publish-author-gate .publish-secondary,.publish-author-gate .publish-author-text-button{grid-column:1;grid-row:auto;width:100%;margin-top:5px}.author-auth-dialog{width:calc(100vw - 28px)!important}}

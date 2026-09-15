@@ -855,6 +855,22 @@
     </div>
   </dialog>
 
+  <dialog id="appDialog" class="app-dialog" aria-labelledby="appDialogTitle" aria-describedby="appDialogMessage">
+    <div class="app-dialog-card">
+      <span id="appDialogKicker" class="app-dialog-kicker">NOTICE</span>
+      <h2 id="appDialogTitle">お知らせ</h2>
+      <p id="appDialogMessage"></p>
+      <label id="appDialogInputWrap" class="app-dialog-input-wrap" hidden>
+        <span id="appDialogInputLabel">入力</span>
+        <input id="appDialogInput" type="text" autocomplete="off">
+      </label>
+      <div class="app-dialog-actions">
+        <button id="appDialogCancel" class="app-dialog-cancel" type="button">キャンセル</button>
+        <button id="appDialogConfirm" class="app-dialog-confirm" type="button">OK</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="distributionExportDialog" class="distribution-export-dialog">
     <form method="dialog" class="distribution-export-card">
       <span class="distribution-export-kicker">DISTRIBUTION</span>

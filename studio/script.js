@@ -2,6 +2,65 @@
   'use strict';
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
+
+  // All Studio notices, confirmations and text requests stay inside the
+  // product UI. The backdrop and Escape key intentionally do not dismiss
+  // these dialogs, so switching away to check mail/files cannot lose state.
+  let appDialogQueue=Promise.resolve();
+  function openAppDialog({kind='alert',message='',title='',kicker='',confirmLabel='',cancelLabel='',initialValue='',inputLabel='',danger=false}={}){
+    const dialog=$('#appDialog');
+    if(!dialog || typeof dialog.showModal!=='function')return Promise.resolve(kind==='alert'?true:kind==='prompt'?null:false);
+    const english=document.documentElement.lang?.toLowerCase().startsWith('en');
+    const copy={
+      alert:{title:english?'Notice':'お知らせ',kicker:'NOTICE',confirm:english?'OK':'閉じる'},
+      confirm:{title:english?'Please confirm':'確認してください',kicker:'CONFIRM',confirm:english?'Continue':'続ける'},
+      prompt:{title:english?'Enter a value':'入力してください',kicker:'INPUT',confirm:english?'Save':'決定'}
+    }[kind]||{};
+    dialog.dataset.kind=kind;
+    dialog.dataset.danger=danger?'true':'false';
+    $('#appDialogTitle').textContent=title||copy.title;
+    $('#appDialogKicker').textContent=kicker||copy.kicker;
+    $('#appDialogMessage').textContent=String(message||'');
+    const inputWrap=$('#appDialogInputWrap'),input=$('#appDialogInput');
+    inputWrap.hidden=kind!=='prompt';
+    $('#appDialogInputLabel').textContent=inputLabel||(english?'Name':'入力');
+    input.value=String(initialValue||'');
+    const cancel=$('#appDialogCancel'),confirmButton=$('#appDialogConfirm');
+    cancel.textContent=cancelLabel||(english?'Cancel':'キャンセル');
+    confirmButton.textContent=confirmLabel||copy.confirm;
+    return new Promise(resolve=>{
+      let finished=false;
+      const finish=value=>{
+        if(finished)return;
+        finished=true;
+        confirmButton.removeEventListener('click',onConfirm);
+        cancel.removeEventListener('click',onCancel);
+        dialog.removeEventListener('cancel',onNativeCancel);
+        dialog.removeEventListener('click',onBackdrop);
+        if(dialog.open)dialog.close();
+        resolve(value);
+      };
+      const onConfirm=()=>finish(kind==='prompt'?input.value:true);
+      const onCancel=()=>finish(kind==='prompt'?null:false);
+      const onNativeCancel=event=>event.preventDefault();
+      const onBackdrop=event=>{if(event.target===dialog)event.preventDefault();};
+      confirmButton.addEventListener('click',onConfirm);
+      cancel.addEventListener('click',onCancel);
+      dialog.addEventListener('cancel',onNativeCancel);
+      dialog.addEventListener('click',onBackdrop);
+      input.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();onConfirm();}};
+      dialog.showModal();
+      requestAnimationFrame(()=>kind==='prompt'?input.focus():confirmButton.focus());
+    });
+  }
+  function queueAppDialog(options){
+    const result=appDialogQueue.then(()=>openAppDialog(options));
+    appDialogQueue=result.catch(()=>{});
+    return result;
+  }
+  function appAlert(message,options={}){return queueAppDialog({...options,kind:'alert',message});}
+  function appConfirm(message,options={}){return queueAppDialog({...options,kind:'confirm',message});}
+  function appPrompt(message,initialValue='',options={}){return queueAppDialog({...options,kind:'prompt',message,initialValue});}
   const initialFrameSelect=$('#sceneFrameSelect');
   [['handdrawn-narration','手書きナレーション枠'],['handdrawn-rounded','手書き角丸枠'],['handdrawn-double','手書き二重枠'],['handdrawn-dashed','手書き点線枠'],['handdrawn-dark','黒ベタ手書き枠'],['handdrawn-panel','半透明パネル']].forEach(([value,label])=>{
     if(initialFrameSelect&&!initialFrameSelect.querySelector(`[value="${value}"]`)){const option=document.createElement('option');option.value=value;option.textContent=label;initialFrameSelect.appendChild(option);}
@@ -806,7 +865,7 @@
         const msg=uiLanguage==='ja'
           ? `この.sceneは公開版より古いです。\n\nこのファイル: revision ${localRevision}\n公開版: revision ${remoteRevision}\n\n通常の上書き公開は停止します。\nこの古い内容へ戻したい場合は、公開画面の「この版を元に最新版を作る」を使用できます。`
           : `This .scene is older than the published version.\n\nThis file: revision ${localRevision}\nPublished: revision ${remoteRevision}\n\nNormal publishing is blocked.\nTo restore this older content, use “Create latest from this version” in the publish screen.`;
-        alert(msg);
+        appAlert(msg);
       }
     }else{
       staleRestoreRemoteRevision=0;
@@ -1088,7 +1147,7 @@
         latestPublicationStoppedAt=fresh.publication.stoppedAt; syncPublishCopyForStatus();
       }
       await refreshDraftUI(false);
-    }catch(error){ console.warn('Unpublish failed',error); alert(t('unpublish.failed')); }
+    }catch(error){ console.warn('Unpublish failed',error); appAlert(t('unpublish.failed')); }
   }
 
   async function republishDraftPublication(row){
@@ -1103,7 +1162,7 @@
         latestPublicationStoppedAt=0; syncPublishCopyForStatus();
       }
       await refreshDraftUI(false);
-    }catch(error){ console.warn('Republish failed',error); alert(t('republish.failed')); }
+    }catch(error){ console.warn('Republish failed',error); appAlert(t('republish.failed')); }
   }
 
   async function deleteHostedPublication(workId){
@@ -1218,7 +1277,7 @@
       };
       el.querySelector('[data-delete]').onclick=async()=>{
         const hasHosted=Boolean(row.publication?.id);
-        if(!confirm(hasHosted?t('draft.deleteHostedConfirm',{title:row.title||'Untitled'}):t('draft.deleteLocalConfirm',{title:row.title||'Untitled'})))return;
+        if(!await appConfirm(hasHosted?t('draft.deleteHostedConfirm',{title:row.title||'Untitled'}):t('draft.deleteLocalConfirm',{title:row.title||'Untitled'}),{danger:true,confirmLabel:uiLanguage==='ja'?'削除する':'Delete'}))return;
         try{
           if(hasHosted)await deleteHostedPublication(row.publication.id);
           await removeDraftRecord(row.id);
@@ -1227,7 +1286,7 @@
             latestPublishedAt=0; latestPublicationStoppedAt=0; localStorage.removeItem(DRAFT_LAST_KEY);
           }
           await refreshDraftUI(true);
-        }catch(error){console.warn('Delete failed',error);alert(t('draft.deleteFailed'));}
+        }catch(error){console.warn('Delete failed',error);appAlert(t('draft.deleteFailed'));}
       };
 
       list.appendChild(el);
@@ -1239,7 +1298,7 @@
     const rowsBefore=await listDraftRecords();
     const currentStored=currentDraftId ? await getDraftRecord(currentDraftId) : null;
     if(rowsBefore.length>=DRAFT_MAX && currentStored){
-      alert(uiLanguage==='ja'
+      appAlert(uiLanguage==='ja'
         ? `制作途中の作品が${DRAFT_MAX}件あります。新しく作る前に、不要な作品を1件削除してください。`
         : `You already have ${DRAFT_MAX} local works. Delete one before creating another.`);
       return false;
@@ -1249,7 +1308,7 @@
     const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
     const saved=await saveDraftNow();
     if(hadWork && !saved){
-      alert('現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。');
+      appAlert(uiLanguage==='ja'?'現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。':'The current work could not be saved automatically, so Studio did not start a new work.');
       return false;
     }
     workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput)ownCopyEnabledInput.checked=false;easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
@@ -2592,11 +2651,15 @@
     if(preset.icon && /^blob:/i.test(preset.icon))p.chat._editorManaged=true;
     scene.subText=String(preset.name||'');
   }
-  function saveCurrentChatSpeakerPreset(scene,{forceNew=false}={}){
+  async function saveCurrentChatSpeakerPreset(scene,{forceNew=false}={}){
     if(!scene)return null;
     const p=ensurePresentation(scene); p.chat ||= {}; p.text ||= {};
     const suggested=forceNew?'':String(scene.subText||'').trim();
-    const name=(prompt(forceNew?u('新しい話者名を入力','New speaker name'):u('話者名を入力','Speaker name'),suggested)||'').trim();
+    const name=String(await appPrompt(
+      forceNew?u('新しく登録する話者名を入力してください。','Enter a name for the new speaker.'):u('話者名を入力してください。','Enter the speaker name.'),
+      suggested,
+      {title:forceNew?u('話者を登録','Add speaker'):u('話者名を変更','Edit speaker name'),kicker:'SPEAKER',inputLabel:u('話者名','Speaker name'),confirmLabel:u('保存','Save')}
+    )||'').trim();
     if(!name)return null;
     const store=ensureChatSpeakerStore();
     const existingId=forceNew?'':String(p.chat.speakerId||'');
@@ -3319,7 +3382,7 @@
         {error:true}
       );
       if(assetFailure){
-        alert(
+        appAlert(
           uiLanguage==='ja'
             ? `Master .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
             : `The Master .scene must be self-contained.\n\nThis asset could not be retrieved, so export was stopped:\n${error?.assetUrl||''}`
@@ -3404,7 +3467,7 @@
             : 'Export stopped because an asset could not be embedded.',
           {error:true}
         );
-        alert(
+        appAlert(
           uiLanguage==='ja'
             ? `Master .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
             : `The Master .scene must be self-contained.\n\nThis asset could not be retrieved:\n${error?.assetUrl||''}`
@@ -3412,7 +3475,7 @@
       }else{
         const detail=(error && (error.stack||error.message)) ? String(error.stack||error.message) : String(error);
         setProjectIoStatus(`${t('io.packageFailed')} ${detail.split('\n')[0]}`,{error:true});
-        alert(`${t('io.packageFailed')}\n\n${detail}`);
+        appAlert(`${t('io.packageFailed')}\n\n${detail}`);
       }
     }
   }
@@ -3454,7 +3517,7 @@
             : 'Distribution export stopped because an asset could not be embedded.',
           {error:true}
         );
-        alert(
+        appAlert(
           uiLanguage==='ja'
             ? `Distribution .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
             : `The Distribution .scene must be self-contained.\n\nThis asset could not be retrieved:\n${error?.assetUrl||''}`
@@ -3466,7 +3529,7 @@
           {error:true}
         );
         if(error?.code==='RELAY_MASTER_NOT_PUBLISHED'||error?.code==='RELAY_SOURCE_FAILED'||error?.code==='OWNER_MISMATCH'){
-          alert(detail.split('\n')[0]);
+          appAlert(detail.split('\n')[0]);
         }
       }
     }
@@ -3493,7 +3556,7 @@
             : 'This is a Distribution .scene and cannot be edited or updated in Studio. Open the Master .scene instead.',
           {error:true}
         );
-        alert(
+        appAlert(
           uiLanguage==='ja'
             ? 'この.sceneは配布版です。\n\nPlayerで読むための完成ファイルなので、Studioでは編集・更新できません。\n編集する場合は作者のMaster .sceneを開いてください。'
             : 'This is a Distribution .scene.\n\nIt is a finished file for playback and cannot be edited or updated in Studio. Open the author Master .scene to edit.'
@@ -3574,7 +3637,7 @@
     }catch(error){
       console.error(error);
       setProjectIoStatus(t('io.packageInvalid'),{error:true});
-      alert(t('io.packageInvalid'));
+      appAlert(t('io.packageInvalid'));
     }
   }
 
@@ -3700,7 +3763,7 @@
       setProjectIoStatus(message);
     }catch(error){
       console.error(error); setProjectIoStatus(t('io.invalid'),{error:true});
-      alert(t('io.invalid'));
+      appAlert(t('io.invalid'));
     }
   }
 
@@ -4591,10 +4654,11 @@
       button.dataset.restoreOldVersionButton='1';
       button.addEventListener('click',async()=>{
         if(button.disabled)return;
-        const ok=confirm(
+        const ok=await appConfirm(
           uiLanguage==='ja'
-            ? `revision ${local} の内容を元に、公開版 revision ${remote+1} を作ります。\\n\\n現在の公開版 revision ${remote} は上書きされますが、revision番号は戻りません。続けますか？`
-            : `Create published revision ${remote+1} from the content of revision ${local}?\\n\\nThe current published revision ${remote} will be replaced, but revision numbering will not move backward. Continue?`
+            ? `revision ${local} の内容を元に、公開版 revision ${remote+1} を作ります。\n\n現在の公開版 revision ${remote} は上書きされますが、revision番号は戻りません。続けますか？`
+            : `Create published revision ${remote+1} from the content of revision ${local}?\n\nThe current published revision ${remote} will be replaced, but revision numbering will not move backward. Continue?`,
+          {danger:true,confirmLabel:uiLanguage==='ja'?'この版で公開':'Publish this version'}
         );
         if(!ok)return;
         button.disabled=true;
@@ -5169,7 +5233,7 @@
   function setExternalAsset(inputId,urlInputId,value){
     const raw=String(value||'').trim();
     if(!isExternalAssetUrl(raw)){
-      alert(t('asset.invalidUrl'));
+      appAlert(t('asset.invalidUrl'));
       return false;
     }
     const current=assetFrom(inputId).src;
@@ -5909,7 +5973,7 @@
       text.textContent=t('delete.scene.current',{n:selectedSceneIndex+1,label:translatedSceneTypeLabel(preview)});
     }
     if(typeof dialog?.showModal==='function') dialog.showModal();
-    else if(confirm(t('delete.scene.current',{n:selectedSceneIndex+1,label:translatedSceneTypeLabel(scenePreviewText(scene))}))) deleteSceneNow();
+    else appConfirm(t('delete.scene.current',{n:selectedSceneIndex+1,label:translatedSceneTypeLabel(scenePreviewText(scene))}),{danger:true,confirmLabel:u('削除する','Delete')}).then(ok=>{if(ok)deleteSceneNow();});
   }
 
   function deleteSceneNow(){
@@ -5926,7 +5990,7 @@
   coverLogoChoose?.addEventListener('click',()=>coverLogoInput?.click());
   coverLogoInput?.addEventListener('change',async()=>{
     const file=coverLogoInput.files?.[0]; if(!file)return;
-    if(file.type && file.type!=='image/png'){alert('作品ロゴは透過PNGを選んでください。');coverLogoInput.value='';return;}
+    if(file.type && file.type!=='image/png'){appAlert(u('作品ロゴは透過PNGを選んでください。','Choose a transparent PNG for the work logo.'));coverLogoInput.value='';return;}
     try{
       const snap=await snapshotPickedFile(file);
       const logoBlob=await trimTransparentPng(snap.blob);
@@ -5935,7 +5999,7 @@
       coverLogoFileName=snap.name||'logo.png';
       assetRegistry.set(coverLogoUrl,{blob:logoBlob,name:coverLogoFileName});
       refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
-    }catch(error){console.error(error);alert('作品ロゴを読み込めませんでした。');coverLogoInput.value='';}
+    }catch(error){console.error(error);appAlert(u('作品ロゴを読み込めませんでした。','Could not load the work logo.'));coverLogoInput.value='';}
   });
   coverLogoClear?.addEventListener('click',()=>{
     if(coverLogoUrl && /^blob:/i.test(coverLogoUrl))URL.revokeObjectURL(coverLogoUrl);
@@ -5954,7 +6018,7 @@
       setCoverPositionFromValue('center center');
       refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
       requestAnimationFrame(()=>openCoverPositionEditor());
-    }catch(error){console.error(error);alert('画像を読み込めませんでした。もう一度選択してください。');coverImageInput.value='';}
+    }catch(error){console.error(error);appAlert(u('画像を読み込めませんでした。もう一度選択してください。','Could not load the image. Choose it again.'));coverImageInput.value='';}
   });
   coverImageClear?.addEventListener('click',()=>{if(coverQuickImageClear)coverQuickImageClear.hidden=true;
     if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
@@ -6663,7 +6727,7 @@
     }
     const dialog=$('#sampleReplaceDialog');
     if(typeof dialog?.showModal==='function') dialog.showModal();
-    else if(confirm(u('入力中のタイトルと本文をサンプルに置き換えますか？','Replace the current title and text with the sample?'))) applySample();
+    else appConfirm(u('入力中のタイトルと本文をサンプルに置き換えますか？','Replace the current title and text with the sample?'),{confirmLabel:u('置き換える','Replace')}).then(ok=>{if(ok)applySample();});
   });
   $$('.theme-card').forEach(card=>card.addEventListener('click',()=>applyTheme(card.dataset.theme)));
   $$('.work-font-card').forEach(card=>card.addEventListener('click',()=>applyWorkFont(card.dataset.font)));
@@ -6779,7 +6843,7 @@
       if(isAudio){
         const name=(file.name||'').toLowerCase();
         const audioLike=(file.type||'').startsWith('audio/') || /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(name);
-        if(!audioLike){ alert(t('alert.audio')); input.value=''; return; }
+        if(!audioLike){ appAlert(t('alert.audio')); input.value=''; return; }
       }
       try{
         const snap=await snapshotPickedFile(file);
@@ -6793,7 +6857,7 @@
         if(onPick)onPick();updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();if(labelId)updateAssetLabel(labelId,inputId);
       }catch(error){
         console.error('Asset snapshot failed',error);
-        alert(t('common.fileReadFailed'));
+        appAlert(t('common.fileReadFailed'));
         input.value='';
       }
     });
@@ -6811,7 +6875,7 @@
   $('#sceneBackgroundRemoveFile').addEventListener('click',()=>{const oldUrl=assetFrom('sceneBackgroundInput').src;if(oldUrl&&assetRegistry.has(oldUrl))unregisterAsset(oldUrl);setAssetField('sceneBackgroundInput','','');$('#sceneBackgroundInput').value='';$('#sceneBackgroundUrlInput').value='';updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
 
   const cinemaInput=$('#cinemaBackgroundInput'), cinemaPreview=$('#cinemaBackgroundPreview'), cinemaClear=$('#cinemaBackgroundClear');
-  cinemaInput.addEventListener('change',async()=>{const file=cinemaInput.files?.[0];if(!file)return;try{const snap=await snapshotPickedFile(file);if(cinemaBackgroundUrl&&assetRegistry.has(cinemaBackgroundUrl))unregisterAsset(cinemaBackgroundUrl);cinemaBackgroundUrl=URL.createObjectURL(snap.blob);registerAsset(cinemaBackgroundUrl,snap.blob,snap.name);cinemaPreview.style.backgroundImage=`url("${cinemaBackgroundUrl}")`;cinemaPreview.hidden=false;cinemaClear.hidden=false;if(workingDocument?.scenes?.[0]){const p=ensurePresentation(workingDocument.scenes[0]);p.background={src:cinemaBackgroundUrl,transition:'fade',dim:cinemaTone==='dark'?0.48:0.72,fit:'cover',position:'center center',_editorFileName:snap.name,_editorManaged:true};}}catch(error){console.error(error);alert('画像を読み込めませんでした。もう一度選択してください。');cinemaInput.value='';}});
+  cinemaInput.addEventListener('change',async()=>{const file=cinemaInput.files?.[0];if(!file)return;try{const snap=await snapshotPickedFile(file);if(cinemaBackgroundUrl&&assetRegistry.has(cinemaBackgroundUrl))unregisterAsset(cinemaBackgroundUrl);cinemaBackgroundUrl=URL.createObjectURL(snap.blob);registerAsset(cinemaBackgroundUrl,snap.blob,snap.name);cinemaPreview.style.backgroundImage=`url("${cinemaBackgroundUrl}")`;cinemaPreview.hidden=false;cinemaClear.hidden=false;if(workingDocument?.scenes?.[0]){const p=ensurePresentation(workingDocument.scenes[0]);p.background={src:cinemaBackgroundUrl,transition:'fade',dim:cinemaTone==='dark'?0.48:0.72,fit:'cover',position:'center center',_editorFileName:snap.name,_editorManaged:true};}}catch(error){console.error(error);appAlert(u('画像を読み込めませんでした。もう一度選択してください。','Could not load the image. Choose it again.'));cinemaInput.value='';}});
   cinemaClear.addEventListener('click',()=>{if(cinemaBackgroundUrl&&assetRegistry.has(cinemaBackgroundUrl))unregisterAsset(cinemaBackgroundUrl);cinemaBackgroundUrl='';cinemaInput.value='';cinemaPreview.style.backgroundImage='';cinemaPreview.hidden=true;cinemaClear.hidden=true;if(workingDocument?.scenes?.[0]){const p=ensurePresentation(workingDocument.scenes[0]);delete p.background;}});
   $$('.cinema-tone-button').forEach(button=>button.addEventListener('click',()=>{cinemaTone=button.dataset.tone||'dark';$$('.cinema-tone-button').forEach(b=>{const on=b.dataset.tone===cinemaTone;b.classList.toggle('is-selected',on);b.setAttribute('aria-pressed',on?'true':'false');});if(workingDocument){workingDocument.appearance ||= {};workingDocument.appearance.cinemaTone=cinemaTone;}}));
 
@@ -7747,7 +7811,7 @@ function startInlineTextEdit(field='text'){
       const article=playerHost?.querySelector('.sp-scene.is-active');
       const frame=article?.querySelector('.sp-handdrawn-frame');
       const target=frame||article?.querySelector(':scope > .sp-text');
-      if(!stage||!scenes||!article||!target){alert(u('配置できるテキストがありません','There is no text to position.'));return;}
+      if(!stage||!scenes||!article||!target){appAlert(u('配置できるテキストがありません','There is no text to position.'));return;}
       const pcMode=studioPreviewDevice==='pc'&&window.matchMedia('(min-width:1100px)').matches&&document.body.classList.contains('desktop-live-edit');
       const beforeText=p.text.position?clone(p.text.position):null;
       const beforeFrame=p.frame?.position?clone(p.frame.position):null;
@@ -9885,7 +9949,7 @@ function openDesktopTextDetail(){
       });
       const addChip=document.createElement('button');addChip.type='button';addChip.className='desktop-chat-speaker-chip is-add';
       addChip.textContent=u('＋ 話者を登録','＋ Add speaker');
-      addChip.addEventListener('click',()=>{const saved=saveCurrentChatSpeakerPreset(scene,{forceNew:true});if(saved){refresh();renderDesktopLivePanel();}});
+      addChip.addEventListener('click',async()=>{const saved=await saveCurrentChatSpeakerPreset(scene,{forceNew:true});if(saved){refresh();renderDesktopLivePanel();}});
       chips.append(addChip);
       chatPanel.append(chips);
 
@@ -9912,7 +9976,7 @@ function openDesktopTextDetail(){
       const iconBtn=desktopAction(p.chat.icon?u('アイコンを変更','Change icon'):u('アイコン画像を選択','Choose icon'),()=>desktopPickFile('image/*',(url,name)=>{
         p.chat.icon=url;p.chat._editorFileName=name;p.chat._editorManaged=true;refresh();renderDesktopLivePanel();
       }),'is-primary');
-      const updateBtn=desktopAction(u('現在の設定で話者を更新','Update saved speaker'),()=>{const saved=saveCurrentChatSpeakerPreset(scene);if(saved){refresh();renderDesktopLivePanel();}},'');
+      const updateBtn=desktopAction(u('現在の設定で話者を更新','Update saved speaker'),async()=>{const saved=await saveCurrentChatSpeakerPreset(scene);if(saved){refresh();renderDesktopLivePanel();}},'');
       const forwardBtn=desktopAction(u('このScene以降をチャット化','Chat mode from this Scene onward'),()=>{
         const count=applyChatModeForward(index);
         if(count){refresh();renderDesktopLivePanel();showUndo(`${count} Sceneをチャット表示にしました`);}
@@ -10669,7 +10733,7 @@ function openDesktopTextDetail(){
         speakerChips.appendChild(chip);
       });
       const addSpeaker=makeEffectAction(u('＋ 話者','＋ Speaker'),'is-dashed');
-      addSpeaker.onclick=()=>{const saved=saveCurrentChatSpeakerPreset(scene,{forceNew:true});if(saved){refreshLivePlayer();renderLiveEditSheet('effect');}};
+      addSpeaker.onclick=async()=>{const saved=await saveCurrentChatSpeakerPreset(scene,{forceNew:true});if(saved){refreshLivePlayer();renderLiveEditSheet('effect');}};
       speakerChips.appendChild(addSpeaker);
       liveEditSheetBody.append(speakersTitle,speakerChips);
 
@@ -10715,14 +10779,14 @@ function openDesktopTextDetail(){
       const speakerManageRow=document.createElement('div');speakerManageRow.className='live-edit-choice-row live-chat-speaker-manage-row';
       const updateSpeaker=makeEffectAction(u('話者を更新','Update speaker'));
       updateSpeaker.disabled=!p.chat.speakerId;
-      updateSpeaker.onclick=()=>{const saved=saveCurrentChatSpeakerPreset(scene);if(saved){refreshLivePlayer();renderLiveEditSheet('effect');}};
+      updateSpeaker.onclick=async()=>{const saved=await saveCurrentChatSpeakerPreset(scene);if(saved){refreshLivePlayer();renderLiveEditSheet('effect');}};
       speakerManageRow.append(updateSpeaker);
 
       if(p.chat.speakerId){
         const removeSpeaker=makeEffectAction(u('話者登録を削除','Delete speaker'),'is-danger');
-        removeSpeaker.onclick=()=>{
+        removeSpeaker.onclick=async()=>{
           const id=p.chat.speakerId||'';if(!id)return;
-          const ok=confirm(u('この話者登録を削除しますか？\n作品内の既存Sceneは削除されません。','Delete this saved speaker?\nExisting Scenes in the work will not be deleted.'));
+          const ok=await appConfirm(u('この話者登録を削除しますか？\n作品内の既存Sceneは削除されません。','Delete this saved speaker?\nExisting Scenes in the work will not be deleted.'),{danger:true,confirmLabel:u('登録を削除','Delete speaker')});
           if(!ok)return;
           removeChatSpeakerPreset(id);
           delete p.chat.speakerId;
@@ -10759,7 +10823,7 @@ function openDesktopTextDetail(){
             const name=(file.name||'').toLowerCase();
             const audioLike=(file.type||'').startsWith('audio/') || /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i.test(name);
             if(!audioLike){
-              alert(t('alert.audio'));
+              appAlert(t('alert.audio'));
               input.remove();
               return;
             }
@@ -11048,9 +11112,9 @@ function openDesktopTextDetail(){
     workingDocument.scenes.splice(index+1,0,copy);
     liveEditReloadAt(index+1);showUndo('Sceneを複製しました');
   }
-  function liveEditDeleteScene(){
+  async function liveEditDeleteScene(){
     const {index}=liveEditScene();if(workingDocument.scenes.length<=1)return;
-    if(!confirm(uiLanguage==='en'?`Delete Scene ${index+1}?`:`Scene ${index+1} を削除しますか？`))return;
+    if(!await appConfirm(uiLanguage==='en'?`Delete Scene ${index+1}?`:`Scene ${index+1} を削除しますか？`,{danger:true,confirmLabel:uiLanguage==='en'?'Delete':'削除する'}))return;
     captureUndo('Scene削除を元に戻せます');
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(Math.min(index,workingDocument.scenes.length-1));showUndo('Sceneを削除しました');
@@ -12458,7 +12522,7 @@ function openDesktopTextDetail(){
     }catch(error){
       console.error('Save to Local Bookshelf failed',error);
       setProjectIoStatus(uiLanguage==='ja' ? '本棚へ保存できませんでした。Master .sceneを書き出してバックアップしてください。' : 'Could not save to Local Bookshelf. Export a Master .scene backup.',{error:true});
-      alert(uiLanguage==='ja' ? '本棚へ保存できませんでした。\n\n安全のため、Master .sceneを書き出してバックアップしてください。' : 'Could not save to Local Bookshelf.\n\nPlease export a Master .scene backup.');
+      appAlert(uiLanguage==='ja' ? '本棚へ保存できませんでした。\n\n安全のため、Master .sceneを書き出してバックアップしてください。' : 'Could not save to Local Bookshelf.\n\nPlease export a Master .scene backup.');
     }
   }
 

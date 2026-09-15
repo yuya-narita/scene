@@ -147,16 +147,16 @@ async function cleanupOrphans(){
   const count=Number(lastStats?.storage?.orphanAssetCount||0);
   const bytes=Number(lastStats?.storage?.orphanAssetBytes||0);
   if(!count){toast('お掃除対象はありません');return;}
-  if(!confirm(`未参照素材 ${count.toLocaleString('ja-JP')}件（${formatBytes(bytes)}）をR2から完全削除します。\n\n現存作品が参照している素材と、アップロードから24時間未満の素材は削除しません。\nこの操作は元に戻せません。`))return;
+  if(!await AhakoDialog.confirm(`未参照素材 ${count.toLocaleString('ja-JP')}件（${formatBytes(bytes)}）をR2から完全削除します。\n\n現存作品が参照している素材と、アップロードから24時間未満の素材は削除しません。\nこの操作は元に戻せません。`,{title:'未参照素材を削除',kicker:'CLEANUP',danger:true,confirmLabel:'完全削除する'}))return;
   els.cleanupOrphans.disabled=true;
   els.cleanupOrphans.textContent='掃除中…';
   try{
     const d=await api('/admin/orphans/cleanup',{method:'POST'});
     toast(`${Number(d.deletedCount||0).toLocaleString('ja-JP')}素材・${formatBytes(d.deletedBytes||0)}を削除しました`);
-    if(d.errors?.length)alert(`一部の素材を削除できませんでした（${d.errors.length}件）。安全のため残しています。`);
+    if(d.errors?.length)AhakoDialog.alert(`一部の素材を削除できませんでした（${d.errors.length}件）。安全のため残しています。`);
     await loadDashboard();
   }catch(e){
-    alert(`お掃除できませんでした: ${e.message}`);
+    AhakoDialog.alert(`お掃除できませんでした: ${e.message}`);
     await loadStats();
   }
 }
@@ -411,7 +411,7 @@ function renderContacts(rows){
     </article>`;
   }).join('');
 }
-async function moderate(workId,action){if(action==='delete'){if(!confirm(`【完全削除】\nworkId ${workId} の作品本体と、他作品が使用していない関連素材をR2から削除します。\nこの操作は元に戻せません。`))return false;const typed=prompt(`誤操作防止のため、削除する workId を入力してください。\n\n${workId}`,'');if(typed===null)return false;if(typed.trim()!==workId){alert('workIdが一致しないため削除を中止しました。');return false;}await api(`/admin/work/${encodeURIComponent(workId)}`,{method:'DELETE'});toast('完全削除しました');return true;}await api(`/admin/work/${encodeURIComponent(workId)}/${action}`,{method:'POST'});toast(action==='suspend'?'一時停止しました':'再公開しました');return true;}
+async function moderate(workId,action){if(action==='delete'){if(!await AhakoDialog.confirm(`workId ${workId} の作品本体と、他作品が使用していない関連素材をR2から削除します。\nこの操作は元に戻せません。`,{title:'作品を完全削除',kicker:'DELETE WORK',danger:true,confirmLabel:'入力確認へ'}))return false;const typed=await AhakoDialog.prompt(`誤操作防止のため、削除する workId を入力してください。\n\n${workId}`,'',{title:'workIdを確認',kicker:'DELETE WORK',inputLabel:'workId',confirmLabel:'完全削除する',danger:true});if(typed===null)return false;if(typed.trim()!==workId){AhakoDialog.alert('workIdが一致しないため削除を中止しました。');return false;}await api(`/admin/work/${encodeURIComponent(workId)}`,{method:'DELETE'});toast('完全削除しました');return true;}await api(`/admin/work/${encodeURIComponent(workId)}/${action}`,{method:'POST'});toast(action==='suspend'?'一時停止しました':'再公開しました');return true;}
 els.list.addEventListener('click',async e=>{
   const b=e.target.closest('button[data-group-action]');if(!b)return;
   const card=b.closest('.work-group');const action=b.dataset.groupAction;const workId=card.dataset.work;
@@ -425,35 +425,35 @@ els.list.addEventListener('click',async e=>{
       const done=await moderate(workId,action);if(done===false)return;
     }
     await loadDashboard();
-  }catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
+  }catch(err){AhakoDialog.alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 if(els.contactList)els.contactList.addEventListener('click',async e=>{
   const b=e.target.closest('button[data-contact-action]');if(!b)return;
   const card=b.closest('.contact-card'),id=card?.dataset.contactId||'',action=b.dataset.contactAction;
   if(!id)return;
-  if(action==='delete'&&!confirm('このお問い合わせを完全に削除しますか？\nこの操作は元に戻せません。'))return;
+  if(action==='delete'&&!await AhakoDialog.confirm('このお問い合わせを完全に削除しますか？\nこの操作は元に戻せません。',{title:'お問い合わせを削除',danger:true,confirmLabel:'完全削除する'}))return;
   b.disabled=true;
   try{
     if(action==='delete')await api(`/admin/contact/${encodeURIComponent(id)}`,{method:'DELETE'});
     else await api(`/admin/contact/${encodeURIComponent(id)}/${action}`,{method:'POST'});
     toast(action==='delete'?'削除しました':action==='resolve'?'対応済みにしました':'未対応へ戻しました');
     await Promise.all([loadContacts(),loadStats()]);
-  }catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
+  }catch(err){AhakoDialog.alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 if(els.authorList)els.authorList.addEventListener('click',async e=>{
   const b=e.target.closest('button[data-author-action]');if(!b)return;
   const card=b.closest('[data-author-id]'),authorId=card?.dataset.authorId||'',action=b.dataset.authorAction;
   if(!authorId)return;
-  if(action==='suspend'&&!confirm('この作者アカウントの利用を停止しますか？\n新規公開・更新・RELAY元登録ができなくなります。'))return;
+  if(action==='suspend'&&!await AhakoDialog.confirm('この作者アカウントの利用を停止しますか？\n新規公開・更新・RELAY元登録ができなくなります。',{title:'作者アカウントを停止',danger:true,confirmLabel:'利用を停止する'}))return;
   b.disabled=true;
   try{
     await api(`/admin/author/${encodeURIComponent(authorId)}/${action}`,{method:'POST'});
     toast(action==='suspend'?'作者アカウントを停止しました':'作者アカウントを再開しました');
     await loadAuthors();
-  }catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
+  }catch(err){AhakoDialog.alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 async function inspect(){const id=els.workId.value.trim();if(!id)return;els.direct.textContent='確認中…';try{const d=await api(`/admin/work/${encodeURIComponent(id)}`);els.direct.innerHTML=`<div class="report-card"><div class="meta"><span>workId</span><code>${escapeHtml(d.id)}</code><span>状態</span><strong>${escapeHtml(d.state)}</strong><span>素材</span><span>${Number(d.assets?.length||0)}件</span></div><div class="actions"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">作品を見る</a><button data-direct="suspend" class="stop">一時停止</button><button data-direct="republish">再公開</button><button data-direct="delete" class="delete">完全削除</button></div></div>`;}catch(e){els.direct.textContent=`確認できません: ${e.message}`;}}
-els.direct.addEventListener('click',async e=>{const b=e.target.closest('button[data-direct]');if(!b)return;const id=els.workId.value.trim();b.disabled=true;try{await moderate(id,b.dataset.direct);await inspect();await loadDashboard();}catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}});
+els.direct.addEventListener('click',async e=>{const b=e.target.closest('button[data-direct]');if(!b)return;const id=els.workId.value.trim();b.disabled=true;try{await moderate(id,b.dataset.direct);await inspect();await loadDashboard();}catch(err){AhakoDialog.alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}});
 if(els.cleanupOrphans)els.cleanupOrphans.addEventListener('click',cleanupOrphans);
 async function openSelectionReview({workId,editionId=''}){
   if(!workId)return;
@@ -468,7 +468,7 @@ async function openSelectionReview({workId,editionId=''}){
     if(popup)popup.location.replace(data.url);else window.open(data.url,'_blank','noopener');
   }catch(err){
     if(popup)popup.close();
-    alert(`審査用Playerを開けませんでした: ${err.message}`);
+    AhakoDialog.alert(`審査用Playerを開けませんでした: ${err.message}`);
   }
 }
 
@@ -479,30 +479,30 @@ if(els.publishedWorks)els.publishedWorks.addEventListener('click',async e=>{
   if(review){const card=review.closest('.operator-work');await openSelectionReview({workId:card?.dataset.workId||''});return;}
   const b=e.target.closest('[data-add-work-shelf]');if(!b)return;
   const card=b.closest('.operator-work'),workId=card?.dataset.workId||'',kind=card?.querySelector('[data-shelf-kind]')?.value||'seed',issueLimit=Number(card?.querySelector('[data-issue-limit]')?.value||0);
-  if(!workId||!Number.isInteger(issueLimit)||issueLimit<1){alert('作品と発行冊数を確認してください。');return;}
+  if(!workId||!Number.isInteger(issueLimit)||issueLimit<1){AhakoDialog.alert('作品と発行冊数を確認してください。');return;}
   const label=kind==='bloom'?'開花':'種本',title=card.querySelector('h3')?.textContent||'この作品';
-  if(!confirm(`「${title}」の現在公開版を凍結して、${label}として ${issueLimit}冊「あ箱の本」に追加しますか？`))return;
+  if(!await AhakoDialog.confirm(`「${title}」の現在公開版を凍結して、${label}として ${issueLimit}冊「あ箱の本」に追加しますか？`,{title:'あ箱の本へ追加',confirmLabel:'追加する'}))return;
   b.disabled=true;
   try{await api('/admin/official-shelf/from-work',{method:'POST',body:JSON.stringify({workId,kind,issueLimit})});toast(`あ箱の本に${label}を追加しました`);await loadOfficialShelfAdmin();}
-  catch(err){alert(`追加できませんでした: ${err.message}`);}finally{b.disabled=false;}
+  catch(err){AhakoDialog.alert(`追加できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 if(els.editionCandidates)els.editionCandidates.addEventListener('click',async e=>{
   const review=e.target.closest('[data-review-edition]');
   if(review){const card=review.closest('.edition-candidate');await openSelectionReview({workId:card?.dataset.workId||'',editionId:card?.querySelector('[data-edition-choice]')?.value||''});return;}
   const b=e.target.closest('[data-put-shelf]');if(!b)return;const card=b.closest('.edition-candidate');
   const workId=card?.dataset.workId||'',editionId=card?.querySelector('[data-edition-choice]')?.value||'',kind=card?.querySelector('[data-shelf-kind]')?.value||'seed',issueLimit=Number(card?.querySelector('[data-issue-limit]')?.value||0);
-  if(!workId||!editionId||!Number.isInteger(issueLimit)||issueLimit<1){alert('Editionと発行冊数を確認してください。');return;}
-  const label=kind==='bloom'?'開花':'種本';if(!confirm(`「${card.querySelector('h3')?.textContent||'この作品'}」を${label}として ${issueLimit}冊、「あ箱の本」に置きますか？`))return;
-  b.disabled=true;try{await api('/admin/official-shelf',{method:'POST',body:JSON.stringify({workId,editionId,kind,issueLimit})});toast(`あ箱の本に${label}を置きました`);await loadOfficialShelfAdmin();}catch(err){alert(`追加できませんでした: ${err.message}`);}finally{b.disabled=false;}
+  if(!workId||!editionId||!Number.isInteger(issueLimit)||issueLimit<1){AhakoDialog.alert('Editionと発行冊数を確認してください。');return;}
+  const label=kind==='bloom'?'開花':'種本';if(!await AhakoDialog.confirm(`「${card.querySelector('h3')?.textContent||'この作品'}」を${label}として ${issueLimit}冊、「あ箱の本」に置きますか？`,{title:'あ箱の本へ追加',confirmLabel:'追加する'}))return;
+  b.disabled=true;try{await api('/admin/official-shelf',{method:'POST',body:JSON.stringify({workId,editionId,kind,issueLimit})});toast(`あ箱の本に${label}を置きました`);await loadOfficialShelfAdmin();}catch(err){AhakoDialog.alert(`追加できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 if(els.officialShelfItems)els.officialShelfItems.addEventListener('click',async e=>{
   const del=e.target.closest('[data-shelf-delete]');
   if(del){
     const row=del.closest('.official-shelf-row'),title=row?.querySelector('strong')?.textContent||'この本';
-    if(!confirm(`「${title}」を「あ箱の本」から削除しますか？\n\nすでに受け取られた一冊と、その旅の履歴は削除されません。`))return;
-    del.disabled=true;try{await api(`/admin/official-shelf/${encodeURIComponent(del.dataset.shelfId)}`,{method:'DELETE'});toast('あ箱の本から削除しました');await loadOfficialShelfAdmin();}catch(err){alert(`削除できませんでした: ${err.message}`);}finally{del.disabled=false;}return;
+    if(!await AhakoDialog.confirm(`「${title}」を「あ箱の本」から削除しますか？\n\nすでに受け取られた一冊と、その旅の履歴は削除されません。`,{title:'あ箱の本から削除',danger:true,confirmLabel:'削除する'}))return;
+    del.disabled=true;try{await api(`/admin/official-shelf/${encodeURIComponent(del.dataset.shelfId)}`,{method:'DELETE'});toast('あ箱の本から削除しました');await loadOfficialShelfAdmin();}catch(err){AhakoDialog.alert(`削除できませんでした: ${err.message}`);}finally{del.disabled=false;}return;
   }
-  const b=e.target.closest('[data-shelf-action]');if(!b)return;b.disabled=true;try{await api(`/admin/official-shelf/${encodeURIComponent(b.dataset.shelfId)}/${b.dataset.shelfAction}`,{method:'POST'});toast(b.dataset.shelfAction==='stop'?'停止しました':'再開しました');await loadOfficialShelfAdmin();}catch(err){alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
+  const b=e.target.closest('[data-shelf-action]');if(!b)return;b.disabled=true;try{await api(`/admin/official-shelf/${encodeURIComponent(b.dataset.shelfId)}/${b.dataset.shelfAction}`,{method:'POST'});toast(b.dataset.shelfAction==='stop'?'停止しました':'再開しました');await loadOfficialShelfAdmin();}catch(err){AhakoDialog.alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });
 els.connect.addEventListener('click',connect);els.token.addEventListener('keydown',e=>{if(e.key==='Enter')connect();});els.refresh.addEventListener('click',loadDashboard);els.filter.addEventListener('change',loadReports);if(els.contactFilter)els.contactFilter.addEventListener('change',loadContacts);els.inspect.addEventListener('click',inspect);
 setAdminTab(sessionStorage.getItem('ahako-admin-tab')||'status',{remember:false});
