@@ -286,7 +286,7 @@
   ]);
   const LEGACY_EN_PASS4_PH = new Map([
     ['例：PREVIOUS','e.g. PREVIOUS'],['例：前の話','e.g. Previous episode'],['例：NEXT','e.g. NEXT'],['例：続き','e.g. Continue'],
-    ['例：つづく','e.g. To be continued'],['例：Yuya Narita','e.g. Yuya Narita']
+    ['例：つづく','e.g. To be continued'],['例：あ箱 花子','e.g. Hanako Ahako']
   ]);
   function translateLegacyPass4Root(root){
     if(uiLanguage!=='en'||!root)return;
@@ -4014,10 +4014,29 @@
   // ---------------------------------------------------------
   const SCENE_STUDIO_API_BASE='https://scene-studio-api.a-hako.workers.dev';
   const AUTHOR_AUTH_STORAGE_KEY='ahako-author-session-v1';
+  const AUTHOR_AUTH_PENDING_KEY='ahako-author-auth-pending-v1';
   const AUTHOR_TERMS_VERSION='author-publish-v1';
   let authorSessionToken='';
   let signedInAuthor=null;
   let authorSeries=[];
+  let authorAuthCodeRequested=false;
+
+  function readPendingAuthorAuth(){
+    try{
+      const value=JSON.parse(sessionStorage.getItem(AUTHOR_AUTH_PENDING_KEY)||'null');
+      if(value?.email&&Number(value.expiresAt||0)>Date.now())return value;
+      sessionStorage.removeItem(AUTHOR_AUTH_PENDING_KEY);
+    }catch(_){try{sessionStorage.removeItem(AUTHOR_AUTH_PENDING_KEY);}catch(__){}}
+    return null;
+  }
+  function savePendingAuthorAuth(email,expiresIn=600){
+    authorAuthCodeRequested=true;
+    try{sessionStorage.setItem(AUTHOR_AUTH_PENDING_KEY,JSON.stringify({email,expiresAt:Date.now()+Math.max(1,Number(expiresIn)||600)*1000}));}catch(_){}
+  }
+  function clearPendingAuthorAuth(){
+    authorAuthCodeRequested=false;
+    try{sessionStorage.removeItem(AUTHOR_AUTH_PENDING_KEY);}catch(_){}
+  }
 
   function readAuthorSession(){
     try{
@@ -4071,13 +4090,17 @@
     el.textContent=message;el.classList.toggle('is-error',Boolean(error));
   }
   function openAuthorAuthDialog(){
-    setAuthorAuthStatus('');
+    const pending=readPendingAuthorAuth();
+    authorAuthCodeRequested=Boolean(pending);
     const emailForm=$('#authorAuthEmailForm'),codeForm=$('#authorAuthCodeForm');
-    if(emailForm)emailForm.hidden=false;if(codeForm)codeForm.hidden=true;
+    if(emailForm)emailForm.hidden=Boolean(pending);if(codeForm)codeForm.hidden=!pending;
+    const email=$('#authorAuthEmail');if(email&&pending?.email)email.value=pending.email;
     const suggested=String(authorInput?.value||'').trim();
-    const display=$('#authorAuthDisplayName');if(display)display.value=suggested;
-    const code=$('#authorAuthCode');if(code)code.value='';
+    const display=$('#authorAuthDisplayName');if(display&&!display.value)display.value=suggested;
+    const code=$('#authorAuthCode');if(code&&!pending)code.value='';
+    setAuthorAuthStatus(pending?'認証コードは送信済みです。メールに届いた6桁のコードを入力してください。':'');
     $('#authorAuthDialog')?.showModal();
+    if(pending)setTimeout(()=>$('#authorAuthCode')?.focus(),0);
   }
   async function requestAuthorCode(){
     const email=String($('#authorAuthEmail')?.value||'').trim();
@@ -4088,6 +4111,7 @@
       const response=await fetch(`${SCENE_STUDIO_API_BASE}/author-auth/request-code`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email}),cache:'no-store'});
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok)throw new Error(payload?.error||'認証コードを送信できませんでした。');
+      savePendingAuthorAuth(email,payload.expiresIn);
       $('#authorAuthEmailForm').hidden=true;$('#authorAuthCodeForm').hidden=false;
       setAuthorAuthStatus('メールに届いた6桁のコードを入力してください。');
       setTimeout(()=>$('#authorAuthCode')?.focus(),0);
@@ -4108,7 +4132,9 @@
     try{
       const response=await fetch(`${SCENE_STUDIO_API_BASE}/author-auth/verify-code`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code,displayName}),cache:'no-store'});
       const payload=await response.json().catch(()=>null);
+      if(payload?.code==='CODE_EXPIRED')clearPendingAuthorAuth();
       if(!response.ok||!payload?.ok||!payload?.token||!payload?.author)throw new Error(payload?.error||'作者確認に失敗しました。');
+      clearPendingAuthorAuth();
       saveAuthorSession(payload.token,payload.author);
       if(authorInput&&!authorInput.value.trim())authorInput.value=payload.author.displayName||'';
       $('#authorAuthDialog')?.close();
@@ -4118,6 +4144,7 @@
   }
   async function logoutAuthor(){
     const token=authorSessionToken;
+    clearPendingAuthorAuth();
     saveAuthorSession('',null);
     const email=$('#authorAuthEmail');if(email)email.value='';
     const code=$('#authorAuthCode');if(code)code.value='';
@@ -6480,10 +6507,11 @@
   });
   $('#publishAuthorLogoutButton')?.addEventListener('click',logoutAuthor);
   $('#authorAuthClose')?.addEventListener('click',()=>$('#authorAuthDialog')?.close());
-  $('#authorAuthDialog')?.addEventListener('click',(event)=>{if(event.target===event.currentTarget)event.currentTarget.close();});
+  $('#authorAuthDialog')?.addEventListener('click',(event)=>{if(event.target===event.currentTarget&&!authorAuthCodeRequested)event.currentTarget.close();});
+  $('#authorAuthDialog')?.addEventListener('cancel',(event)=>{if(authorAuthCodeRequested)event.preventDefault();});
   $('#authorAuthEmailForm')?.addEventListener('submit',(event)=>{event.preventDefault();requestAuthorCode();});
   $('#authorAuthCodeForm')?.addEventListener('submit',(event)=>{event.preventDefault();verifyAuthorCode();});
-  $('#authorAuthResend')?.addEventListener('click',()=>{const emailForm=$('#authorAuthEmailForm'),codeForm=$('#authorAuthCodeForm');if(emailForm)emailForm.hidden=false;if(codeForm)codeForm.hidden=true;setAuthorAuthStatus('');});
+  $('#authorAuthResend')?.addEventListener('click',()=>{clearPendingAuthorAuth();const emailForm=$('#authorAuthEmailForm'),codeForm=$('#authorAuthCodeForm');if(emailForm)emailForm.hidden=false;if(codeForm)codeForm.hidden=true;setAuthorAuthStatus('');});
   $('#publishConfirmButton')?.addEventListener('click',runPublish);
   $('#publishRetryButton')?.addEventListener('click',runPublish);
   $('#publishCopyButton')?.addEventListener('click',copyPublishedUrl);
