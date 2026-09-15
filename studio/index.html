@@ -471,7 +471,7 @@
             </label>
             <label class="field" for="authorInput">
               <span class="field-label">作者名 <small>任意</small></span>
-              <input id="authorInput" type="text" list="authorHistoryList" placeholder="例：あ箱 花子">
+              <input id="authorInput" type="text" list="authorHistoryList" placeholder="例：ペンネーム">
               <datalist id="authorHistoryList"></datalist>
               <small class="field-help author-history-help">この端末で以前使った作者名を候補に表示します。</small>
             </label>
@@ -832,13 +832,26 @@
         <button class="publish-primary" type="submit">認証コードを送る</button>
       </form>
       <form id="authorAuthCodeForm" class="author-auth-form" hidden>
-        <label><span>作者名 <small>初回登録のみ</small></span><input id="authorAuthDisplayName" type="text" autocomplete="nickname" maxlength="80" placeholder="例：あ箱 花子"></label>
+        <label><span>作者名 <small>初回登録のみ</small></span><input id="authorAuthDisplayName" type="text" autocomplete="nickname" maxlength="80" placeholder="例：ペンネーム"></label>
         <label><span>6桁の認証コード</span><input id="authorAuthCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required placeholder="000000"></label>
         <p class="author-auth-agreement"><a href="../terms/" target="_blank" rel="noopener">利用規約</a>と<a href="../privacy/" target="_blank" rel="noopener">プライバシーポリシー</a>を確認し、同意して続けます。</p>
         <button class="publish-primary" type="submit">同意して確認する</button>
         <button id="authorAuthResend" class="publish-author-text-button" type="button">コードを送り直す</button>
       </form>
       <p id="authorAuthStatus" class="author-auth-status" aria-live="polite"></p>
+    </div>
+  </dialog>
+
+  <dialog id="authorAccountDialog" class="publish-dialog author-account-dialog">
+    <div class="publish-dialog-card author-account-card">
+      <button id="authorAccountClose" class="publish-dialog-close" type="button" aria-label="閉じる">×</button>
+      <span class="publish-kicker">AUTHOR ACCOUNT</span>
+      <h2 id="authorAccountName">作者アカウント</h2>
+      <p class="author-account-state"><span aria-hidden="true"></span>作者としてログイン中です</p>
+      <div class="author-account-actions">
+        <button id="authorAccountBookshelf" class="publish-primary" type="button">自分の本棚を開く</button>
+        <button id="authorAccountLogout" class="publish-secondary" type="button">ログアウト</button>
+      </div>
     </div>
   </dialog>
 

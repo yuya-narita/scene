@@ -286,7 +286,7 @@
   ]);
   const LEGACY_EN_PASS4_PH = new Map([
     ['例：PREVIOUS','e.g. PREVIOUS'],['例：前の話','e.g. Previous episode'],['例：NEXT','e.g. NEXT'],['例：続き','e.g. Continue'],
-    ['例：つづく','e.g. To be continued'],['例：あ箱 花子','e.g. Hanako Ahako']
+    ['例：つづく','e.g. To be continued'],['例：ペンネーム','e.g. Pen name']
   ]);
   function translateLegacyPass4Root(root){
     if(uiLanguage!=='en'||!root)return;
@@ -4089,6 +4089,11 @@
     const el=$('#authorAuthStatus');if(!el)return;
     el.textContent=message;el.classList.toggle('is-error',Boolean(error));
   }
+  function openAuthorAccountDialog(){
+    if(!signedInAuthor?.authorId||!authorSessionToken){openAuthorAuthDialog();return;}
+    const name=$('#authorAccountName');if(name)name.textContent=signedInAuthor.displayName||'作者アカウント';
+    const dialog=$('#authorAccountDialog');if(dialog&&!dialog.open)dialog.showModal();
+  }
   function openAuthorAuthDialog(){
     const pending=readPendingAuthorAuth();
     authorAuthCodeRequested=Boolean(pending);
@@ -6502,7 +6507,7 @@
   $('#publishRightsConfirm')?.addEventListener('change',syncPublishConfirmationAvailability);
   $('#publishAuthorLoginButton')?.addEventListener('click',openAuthorAuthDialog);
   $('#studioAuthorStatusButton')?.addEventListener('click',()=>{
-    if(signedInAuthor?.authorId&&authorSessionToken){alert(`作者「${signedInAuthor.displayName||''}」でログイン中です。\n\nログアウトは公開確認画面から行えます。`);return;}
+    if(signedInAuthor?.authorId&&authorSessionToken){openAuthorAccountDialog();return;}
     openAuthorAuthDialog();
   });
   $('#publishAuthorLogoutButton')?.addEventListener('click',logoutAuthor);
@@ -6512,6 +6517,10 @@
   $('#authorAuthEmailForm')?.addEventListener('submit',(event)=>{event.preventDefault();requestAuthorCode();});
   $('#authorAuthCodeForm')?.addEventListener('submit',(event)=>{event.preventDefault();verifyAuthorCode();});
   $('#authorAuthResend')?.addEventListener('click',()=>{clearPendingAuthorAuth();const emailForm=$('#authorAuthEmailForm'),codeForm=$('#authorAuthCodeForm');if(emailForm)emailForm.hidden=false;if(codeForm)codeForm.hidden=true;setAuthorAuthStatus('');});
+  $('#authorAccountClose')?.addEventListener('click',()=>$('#authorAccountDialog')?.close());
+  $('#authorAccountDialog')?.addEventListener('click',(event)=>{if(event.target===event.currentTarget)event.currentTarget.close();});
+  $('#authorAccountBookshelf')?.addEventListener('click',()=>{location.href='../bookshelf/';});
+  $('#authorAccountLogout')?.addEventListener('click',async()=>{await logoutAuthor();$('#authorAccountDialog')?.close();});
   $('#publishConfirmButton')?.addEventListener('click',runPublish);
   $('#publishRetryButton')?.addEventListener('click',runPublish);
   $('#publishCopyButton')?.addEventListener('click',copyPublishedUrl);
@@ -12395,8 +12404,28 @@ function openDesktopTextDetail(){
     }
   }
 
+  function hasMeaningfulBookshelfContent(){
+    const title=String(titleInput?.value||workingDocument?.title||'').trim();
+    if(title&&title.toLowerCase()!=='untitled')return true;
+    const textValues=[
+      bodyInput?.value,subtitleInput?.value,seriesTitleInput?.value,
+      episodeInput?.value,episodeTitleInput?.value,descriptionInput?.value
+    ];
+    if(textValues.some(value=>String(value||'').trim()))return true;
+    if(coverImageUrl||coverLogoUrl||assetRegistry.size)return true;
+    return (workingDocument?.scenes||[]).some(scene=>{
+      if(String(scene?.text||scene?.subText||'').trim())return true;
+      const serialized=JSON.stringify(scene||{});
+      return /\"(?:src|url)\"\s*:\s*\"[^\"]+\"/i.test(serialized);
+    });
+  }
+
   async function saveMasterBackToBookshelf(){
     try{
+      if(!openedFromBookshelf&&!hasMeaningfulBookshelfContent()){
+        location.href='../bookshelf/';
+        return;
+      }
       const result=await buildScenePackage();
       const workId=String(result?.doc?.studio?.identity?.workId||'').trim();
       if(!workId)throw new Error('bookshelf-workid-missing');

@@ -8170,6 +8170,12 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
 .author-auth-status.is-error{color:#b44242!important}
 .author-auth-agreement{margin:0!important;color:#777!important;font-size:10px!important;line-height:1.7!important;text-align:left}
 .author-auth-agreement a{color:#333;text-underline-offset:2px}
+.author-account-card{display:grid;gap:14px;text-align:center}
+.author-account-card h2{margin:0;font-size:25px;line-height:1.35;overflow-wrap:anywhere}
+.author-account-state{display:flex;align-items:center;justify-content:center;gap:8px;margin:0!important;color:#666!important;font-size:12px!important;font-weight:700}
+.author-account-state span{width:8px;height:8px;border-radius:50%;background:#5aa16e;box-shadow:0 0 0 4px rgba(90,161,110,.12)}
+.author-account-actions{display:grid;gap:10px;margin-top:4px}
+.author-account-actions button{width:100%;min-height:48px}
 .series-link-status-ready{color:#4f7358!important}
 #seriesLinkSelect:disabled,#episodeNumberInput:disabled{opacity:.62;cursor:not-allowed}
 @media(max-width:560px){.publish-author-gate>div{grid-template-columns:minmax(0,1fr)}.publish-author-gate .publish-secondary,.publish-author-gate .publish-author-text-button{grid-column:1;grid-row:auto;width:100%;margin-top:5px}.author-auth-dialog{width:calc(100vw - 28px)!important}}
