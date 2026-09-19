@@ -25,8 +25,8 @@
 
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20260906-40">
-  <link rel="stylesheet" href="./style.css?v=70.4">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20260919-object-pickup-v110">
+  <link rel="stylesheet" href="./style.css?v=70.56">
   <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -735,6 +735,14 @@
       <div id="liveEditSheetBody" class="live-edit-sheet-body"></div>
     </section>
 
+    <nav id="desktopV2Chrome" class="desktop-v2-chrome" hidden aria-label="Studio v2 writing controls">
+      <button id="desktopV2Prev" type="button" aria-label="前のScene">‹</button>
+      <strong id="desktopV2SceneLabel">Scene 1 / 1</strong>
+      <button id="desktopV2Add" type="button" class="desktop-v2-add">＋</button>
+      <button id="desktopV2Next" type="button" aria-label="次のScene">›</button>
+      <button id="desktopV2Settings" type="button" class="desktop-v2-settings" aria-expanded="false">•••</button>
+    </nav>
+
     <aside id="desktopLivePanel" class="desktop-live-panel" hidden aria-label="Desktop Live Edit">
       <div class="desktop-live-panel-head">
         <button id="desktopPrevScene" type="button">‹ 前のScene</button>
@@ -746,6 +754,21 @@
         <button id="desktopNextScene" type="button">次のScene ›</button>
       </div>
       <div id="desktopLivePanelBody" class="desktop-live-panel-body"></div>
+    </aside>
+
+    <aside id="desktopShortcutHint" class="desktop-shortcut-hint" hidden aria-label="執筆ショートカット">
+      <button id="desktopShortcutRailButton" class="desktop-shortcut-rail-button" type="button" aria-expanded="false" aria-controls="desktopShortcutHintBody" aria-label="キーボード操作のヒント">⌨</button>
+      <section id="desktopShortcutHintBody" class="desktop-shortcut-hint-body" hidden>
+        <div class="desktop-shortcut-hint-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button id="desktopShortcutHintClose" type="button" aria-label="閉じる">×</button></div>
+        <div class="desktop-shortcut-hint-list">
+          <div><kbd>Enter</kbd><span>改行</span></div>
+          <div><span><kbd>Shift</kbd> ＋ <kbd>Enter</kbd></span><span>カーソル位置で分割</span></div>
+          <div><span><kbd>Ctrl / ⌘</kbd> ＋ <kbd>Enter</kbd></span><span>次に空Scene</span></div>
+          <div><kbd>↑</kbd><span>先頭行から前Sceneを編集</span></div>
+          <div><kbd>↓</kbd><span>最終行から次Sceneを編集</span></div>
+        </div>
+        <p>分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。</p>
+      </section>
     </aside>
 
     <div id="autoRecPanel" class="auto-rec-panel">
@@ -968,6 +991,7 @@
   <div id="undoBar" class="studio-undo-bar" hidden>
     <span id="undoMessage">変更しました</span>
     <button id="undoButton" type="button">↶ 元に戻す</button>
+    <button id="redoButton" type="button" disabled>↷ やり直す</button>
   </div>
   <button id="floatingAdvancedButton" class="studio-floating-advanced" type="button" aria-label="道具箱を開く" title="道具箱" disabled hidden><span aria-hidden="true">▦</span></button>
   <button id="floatingPreviewButton" class="studio-floating-preview" type="button" aria-label="作品をプレビュー" title="作品をプレビュー"><span aria-hidden="true">▶</span></button>
@@ -1055,11 +1079,12 @@
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
 <script src="./scene-studio-i18n.js"></script>
-<script src="./scene-player-core.js?v=20260906-40"></script>
+<script src="./scene-player-core.js?v=70.66-view-point-focus-fix-v116"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
-<script src="./script.js?v=69.0"></script>
+<script src="./scene-edit-core.js?v=70.27"></script>
+<script src="./script.js?v=20260919-rich-text-list-fix-v121"></script>
 
 
 
