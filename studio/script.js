@@ -8119,11 +8119,30 @@
     let index=(workingDocument?.scenes||[]).findIndex(sc=>String(sc?.id||'')===String(sceneId));
     if(index<0)index=Math.max(0,Math.min(player?.index??selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
     const scene=workingDocument?.scenes?.[index]||null;if(!scene)return null;
-    const pre=document.createRange();pre.selectNodeContents(startEl);pre.setEnd(r.startContainer,r.startOffset);
-    const start=pre.toString().length,end=start+r.toString().length;if(end<=start)return null;
+    // V124: derive source offsets from actual text nodes, never from Range.toString().
+    // Range.toString() can inject visual newlines for display:block Rich Text (quotes etc.),
+    // which made the next toolbar action point at the wrong characters.
+    const pointOffset=(container,offset)=>{
+      let total=0,found=false;
+      const walker=document.createTreeWalker(startEl,NodeFilter.SHOW_TEXT);
+      let n;
+      while((n=walker.nextNode())){
+        if(n===container){total+=Math.max(0,Math.min(Number(offset)||0,String(n.nodeValue||'').length));found=true;break;}
+        if(container?.nodeType===Node.ELEMENT_NODE&&container.contains?.(n)){
+          // Boundary is an element: count only text children preceding its child offset.
+          const child=[...container.childNodes][Math.max(0,Number(offset)||0)]||null;
+          if(child&&child.contains?.(n)){found=true;break;}
+        }
+        total+=String(n.nodeValue||'').length;
+      }
+      if(found)return total;
+      // Element-boundary fallback: clone only DOM content, then strip table UI text.
+      try{const pre=document.createRange();pre.selectNodeContents(startEl);pre.setEnd(container,offset);const frag=pre.cloneContents();frag.querySelectorAll?.('.sp-rich-table-card').forEach(x=>x.remove());return String(frag.textContent||'').length;}catch(_){return 0;}
+    };
+    const start=pointOffset(r.startContainer,r.startOffset),end=pointOffset(r.endContainer,r.endOffset);if(end<=start)return null;
     let rect=r.getBoundingClientRect();
     if(!rect||(!rect.width&&!rect.height)){const rs=r.getClientRects();rect=rs?.[0]||startEl.getBoundingClientRect();}
-    return {start,end,rect,scene,index,el:startEl,selectedText:r.toString()};
+    return {start,end,rect,scene,index,el:startEl,selectedText:String(scene.text||'').slice(start,end)};
   }
   function updateRichToolbarState(snap){
     const bar=ensureRichSelectionToolbar(),scene=snap?.scene;if(!scene)return;
@@ -8173,8 +8192,10 @@
   function removeRichKindsInSelection(ranges,start,end,kinds){return ranges.filter(r=>!(kinds.includes(r?.kind)&&Number(r.end)>start&&Number(r.start)<end));}
   function applyRichSelectionAction(action,value=''){
     const snap=richSelectionSnapshot,scene=snap?.scene;if(!scene)return;
-    // If the selection was made while typing, commit text before applying offsets.
-    if(liveInlineEditEl&&scene===liveInlineEditSceneRef)syncInlineTextToScene();
+    // V124: commit the editable DOM first, then detach it BEFORE structural mutation.
+    // This makes scene.text the single source of truth; stale contenteditable DOM can no
+    // longer write pre-conversion text back over bullets/numbers or rebuilt ranges.
+    if(liveInlineEditEl&&scene===liveInlineEditSceneRef){syncInlineTextToScene();finishInlineTextEdit();}
     captureUndo('Rich Text編集を元に戻せます');
     let ranges=normalizeRichRanges(scene),start=Math.max(0,snap.start),end=Math.min(snap.end,String(scene.text||'').length);
     const originalStart=start,originalEnd=end;
@@ -8204,7 +8225,7 @@
       const markerRe=/^(\s*)((?:[・•●○◦▪▫◆◇▶▷*+\-])\s*|(\d+)[.)、]\s*)(.*)$/u;
       const cleanLines=oldLines.map(line=>{const m=String(line).match(markerRe);return m?(m[1]+m[4]):line;});
       const wantList=action==='bullet'||action==='number';
-      const newLines=cleanLines.map((line,i)=>wantList?((action==='number'?`${i+1}. `:'・ ')+line):line);
+      const newLines=cleanLines.map((line,i)=>wantList?((action==='number'?`${i+1}. `:'・')+line):line);
       const newBlock=newLines.join('\n');
       scene.text=before.slice(0,blockStart)+newBlock+before.slice(blockEnd);
 
@@ -8215,7 +8236,7 @@
         const m=String(oldLine).match(markerRe);
         const oldPrefix=m?(m[1].length+m[2].length):0;
         const clean=cleanLines[i];
-        const newPrefix=wantList?(action==='number'?`${i+1}. `.length:2):0;
+        const newPrefix=wantList?(action==='number'?`${i+1}. `.length:1):0;
         lineInfo.push({oldStart:oldPos,oldEnd:oldPos+oldLine.length,oldContent:oldPos+oldPrefix,newStart:newPos,newContent:newPos+newPrefix,contentLen:clean.length});
         oldPos+=oldLine.length+1;newPos+=newLines[i].length+1;
       });
@@ -8235,13 +8256,18 @@
 
       // Structural semantics are mutually exclusive per edited paragraph block.
       let off=blockStart;
-      newLines.forEach((line,i)=>{
-        const a=off,b=off+line.length;
-        if(action==='heading')ranges.push({start:a,end:b,kind:'heading',level:Math.max(1,Math.min(3,Number(value)||2))});
-        else if(action==='quote')ranges.push({start:a,end:b,kind:'quote'});
-        else ranges.push({start:a,end:b,kind:'listItem',ordered:action==='number',literalMarker:true});
-        off=b+1;
-      });
+      if(action==='quote'){
+        // One quote range for the whole selected block, matching Easy paste semantics.
+        // Per-line display:block quote spans created huge vertical gaps.
+        if(newBlock.length)ranges.push({start:blockStart,end:blockStart+newBlock.length,kind:'quote'});
+      }else{
+        newLines.forEach((line,i)=>{
+          const a=off,b=off+line.length;
+          if(action==='heading')ranges.push({start:a,end:b,kind:'heading',level:Math.max(1,Math.min(3,Number(value)||2))});
+          else ranges.push({start:a,end:b,kind:'listItem',ordered:action==='number',literalMarker:true});
+          off=b+1;
+        });
+      }
       const live=player?.currentScene;
       if(live&&String(live.id||'')===String(scene.id||'')){
         live.text=scene.text;
