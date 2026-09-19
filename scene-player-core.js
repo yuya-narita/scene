@@ -1718,7 +1718,7 @@
       emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold });
     }
 
-    _playOneShot(command) {
+    _playOneShot(command, onEnded = null) {
       if (!command.src) return;
       if (this._iosStableMediaBank && this._playIOSBankOneShot(command)) return;
       if (this._playBufferedOneShot(command)) return;
@@ -1744,6 +1744,7 @@
         audio.removeEventListener('ended', cleanup);
         audio.__spInUse = false;
         audio.loop = false;
+        if (typeof onEnded === 'function') { try { onEnded(); } catch (_) {} }
       };
       audio.addEventListener('ended', cleanup);
       this.oneshots.add(audio);
@@ -1769,7 +1770,23 @@
       const action = command.action;
       if (channel === 'oneshot') {
         // One-shots represent an event, so history reconstruction never replays them.
-        if (!reconstruct && (action === 'play' || action === 'start')) this._playOneShot(command);
+        if (!reconstruct && (action === 'play' || action === 'start')) {
+          // V52: authorable SE timing. `delay` and `repeat` were already written
+          // by Studio but the Player ignored both fields. Delay is before the
+          // first hit; repeat schedules additional hits after the previous clip
+          // duration when known (fallback 250ms), preserving one-shot semantics.
+          const delay = Math.max(0, asNumber(command.delay, 0));
+          const repeat = Math.max(1, Math.round(asNumber(command.repeat, 1)));
+          // V53: chain repeats from the actual `ended` event. The old
+          // duration probe usually had NaN before metadata loaded, fell back to
+          // 250ms and caused overlapping/incorrect repeat counts.
+          const playSeries = (remaining) => {
+            if (remaining <= 0) return;
+            this._playOneShot(command, remaining > 1 ? () => playSeries(remaining - 1) : null);
+          };
+          if (delay > 0) this._audioTimeout(() => playSeries(repeat), delay);
+          else playSeries(repeat);
+        }
         return;
       }
       if (!(channel === 'bgm' || channel === 'ambient')) return;
@@ -2648,6 +2665,9 @@
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
       this._render();
+      // V112 — keyboard reading starts immediately after START. Do not require
+      // an extra click on the Scene just to move focus from the Cover controls.
+      requestAnimationFrame(()=>this.els?.stage?.focus?.({preventScroll:true}));
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
       return true;
     }
@@ -3554,8 +3574,12 @@
       const sceneTone = state?.tone === 'light' ? 'light' : (state?.tone === 'dark' ? 'dark' : null);
       const useLightWash = sceneTone ? sceneTone === 'light' : isCinemaLight;
       const themeDefaultDim = this.document?.theme === 'cinema' ? (useLightWash ? 0.72 : 0.34) : (useLightWash ? 0.64 : 0);
-      const dim = clamp(asNumber(state.dim, themeDefaultDim), 0, 1);
-      // A Scene may explicitly choose a light paper wash or a dark veil.
+      // Rich Text Player v0.9: the veil belongs to an actual background image.
+      // Editor refreshes call this path even on paper-only Scenes; applying the
+      // cinema theme default there made the whole preview suddenly dark after
+      // changing font/size/background/Scene image/etc.
+      const hasBackground = Boolean(state?.src);
+      const dim = hasBackground ? clamp(asNumber(state.dim, themeDefaultDim), 0, 1) : 0;
       this.els.veil.style.background = useLightWash
         ? `rgba(250,247,240,${dim})`
         : `rgba(0,0,0,${dim})`;
@@ -3988,7 +4012,38 @@
 
       img.src = image.src;
       media.appendChild(img);
-      wrap.appendChild(media);
+
+      const object = document.createElement(history ? 'span' : 'div');
+      object.className = history ? 'sp-history-scene-image-object' : 'sp-scene-image-object';
+      object.appendChild(media);
+      let caption = null;
+      if (image.caption === true && String(image.alt || '').trim()) {
+        caption = document.createElement(history ? 'span' : 'div');
+        caption.className = history ? 'sp-history-scene-image-caption' : 'sp-scene-image-caption';
+        caption.textContent = String(image.alt).trim();
+        object.appendChild(caption);
+      }
+      wrap.appendChild(object);
+
+      // V89 — keep a horizontal caption clear of the lowest rotated image corner.
+      // Rotation changes the visual bounding box without changing layout height,
+      // so derive only the extra downward reach and add that to the normal gap.
+      const updateCaptionClearance = () => {
+        if (!caption) return;
+        const w = media.offsetWidth || img.getBoundingClientRect().width || 0;
+        const h = media.offsetHeight || img.getBoundingClientRect().height || 0;
+        if (!w || !h) return;
+        const rad = Math.abs(rotation) * Math.PI / 180;
+        const rotatedHeight = Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad));
+        const extraBelow = Math.max(0, (rotatedHeight - h) / 2);
+        object.style.setProperty('--sp-scene-image-caption-clearance', `${extraBelow.toFixed(2)}px`);
+      };
+      img.addEventListener('load', updateCaptionClearance, {once:true});
+      if (typeof ResizeObserver !== 'undefined' && caption) {
+        const captionResizeObserver = new ResizeObserver(updateCaptionClearance);
+        captionResizeObserver.observe(media);
+      }
+      requestAnimationFrame(updateCaptionClearance);
 
       // Data/blob/cached images can already be complete before the load event
       // is observed by this render pass.
@@ -3997,7 +4052,7 @@
         refreshHistoryGeometryAfterImageLoad();
       }
 
-      if (image.fullscreen !== false) {
+      if ((image.tapAction || (image.fullscreen === false ? 'none' : 'fullscreen')) === 'fullscreen') {
         wrap.classList.add('is-zoomable');
         wrap.setAttribute('role','button');
         wrap.setAttribute('tabindex','0');
@@ -4174,6 +4229,88 @@
       }
     }
 
+
+    _renderRichText(node, scene, displayText = null) {
+      const source = String(displayText ?? scene?.text ?? '');
+      const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
+      const tables = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table') : [];
+      if (!ranges.length && !tables.length) { node.textContent = source; return false; }
+      node.textContent = '';
+      const tableById = new Map(tables.map(t => [String(t.id||''), t]));
+      const tableRanges = ranges.filter(r => r?.kind === 'table' && tableById.has(String(r.tableId||'')))
+        .map(r => ({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)}))
+        .sort((a,b)=>a.start-b.start);
+      const normal = ranges.filter(r => r?.kind !== 'table').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
+      const appendTextRange=(from,to)=>{
+        if(to<=from)return;
+        const cuts=new Set([from,to]);
+        normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
+        const points=[...cuts].sort((a,b)=>a-b);
+        for(let i=0;i<points.length-1;i++){
+          const a=points[i],b=points[i+1]; if(b<=a)continue;
+          const span=document.createElement('span');
+          const active=normal.filter(r=>r.start<=a&&r.end>=b);
+          const segmentText=source.slice(a,b);
+          // Rich Text Player v0.18: list markers live in canonical Scene text.
+          // Never synthesize a bullet from semantic ranges; that can decorate an
+          // unrelated repeated word when offsets were re-anchored fuzzily.
+          span.textContent=segmentText;
+          active.forEach(r=>{
+            if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}
+            if(r.kind==='quote')span.classList.add('sp-rich-quote');
+            if(r.kind==='listItem')span.classList.add('sp-rich-list-item');
+            if(r.kind==='paragraph')span.classList.add('sp-rich-paragraph');
+            if(r.kind==='span'&&r.style?.bold)span.classList.add('sp-rich-bold');
+            if(r.kind==='span'&&r.style?.italic)span.classList.add('sp-rich-italic');
+            if(r.kind==='span'&&r.style?.color)span.style.color=String(r.style.color);
+            if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
+            if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
+          });
+          node.appendChild(span);
+        }
+      };
+      let cursor=0;
+      tableRanges.forEach(r=>{
+        appendTextRange(cursor,r.start);
+        const table=tableById.get(String(r.tableId||''));
+        const card=document.createElement('div'); card.className='sp-rich-table-card';
+        const wrap=document.createElement('div'); wrap.className='sp-rich-table-scroll';
+        wrap.appendChild(this._buildRichTable(table)); card.appendChild(wrap);
+        // V25: no fullscreen affordance until the viewer contract is complete.
+        // Swallow table taps so they do not accidentally advance the Scene.
+        card.addEventListener('click',(e)=>{e.stopPropagation();});
+        node.appendChild(card); cursor=Math.max(cursor,r.end);
+      });
+      appendTextRange(cursor,source.length);
+      return true;
+    }
+
+    _buildRichTable(table) {
+      const el=document.createElement('table'); el.className='sp-rich-table';
+      const rows=Array.isArray(table?.rows)?table.rows:[]; const headerRows=Math.max(0,Number(table?.headerRows)||0);
+      rows.forEach((row,ri)=>{const tr=document.createElement('tr');(Array.isArray(row)?row:[]).forEach(cell=>{const c=document.createElement(ri<headerRows?'th':'td');c.textContent=String(cell??'');tr.appendChild(c);});el.appendChild(tr);});
+      return el;
+    }
+
+    _openRichTable(table) {
+      const overlay=document.createElement('div'); overlay.className='sp-rich-table-overlay'; overlay.setAttribute('role','dialog'); overlay.setAttribute('aria-modal','true');
+      const panel=document.createElement('div'); panel.className='sp-rich-table-full';
+      const head=document.createElement('div'); head.className='sp-rich-table-full-head';
+      const title=document.createElement('strong'); title.textContent='表';
+      const close=document.createElement('button'); close.type='button'; close.textContent='×'; close.setAttribute('aria-label','閉じる');
+      head.append(title,close); const scroll=document.createElement('div'); scroll.className='sp-rich-table-full-scroll'; scroll.appendChild(this._buildRichTable(table)); panel.append(head,scroll); overlay.appendChild(panel);
+      const previousOverflow=document.documentElement.style.overflow;
+      const dismiss=()=>{document.removeEventListener('keydown',onKey,true);document.documentElement.style.overflow=previousOverflow;overlay.remove();};
+      const onKey=(e)=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();dismiss();}};
+      close.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();dismiss();});
+      overlay.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();if(e.target===overlay)dismiss();});
+      panel.addEventListener('click',e=>e.stopPropagation());
+      document.addEventListener('keydown',onKey,true);
+      document.documentElement.style.overflow='hidden';
+      document.body.appendChild(overlay);
+      requestAnimationFrame(()=>{try{close.focus({preventScroll:true});}catch(_){close.focus();}});
+    }
+
     _sceneNode(scene, active, age) {
       const article = document.createElement('article');
       article.className = `sp-scene sp-type-${scene.type}`;
@@ -4235,7 +4372,7 @@
           if (presentation.chat?.bubbleColor) bubble.style.background = presentation.chat.bubbleColor;
           const text = document.createElement('div');
           text.className = 'sp-text';
-          text.textContent = chatDisplayText(scene.text);
+          this._renderRichText(text, scene, chatDisplayText(scene.text));
           this._applyTextStyle(text, presentation.text || {}, false);
           if (presentation.chat?.bubbleTextColor) text.style.setProperty('color', String(presentation.chat.bubbleTextColor), 'important');
           bubble.appendChild(text);
@@ -4247,7 +4384,7 @@
         if (typeof scene.text === 'string' && scene.text.length) {
           const text = document.createElement('div');
           text.className = 'sp-text';
-          text.textContent = scene.text;
+          this._renderRichText(text, scene);
           this._applyTextStyle(text, presentation.text || {}, false);
           if(String(presentation.frame?.type||'').startsWith('handdrawn-')){
             const frame=document.createElement('div');
@@ -4431,7 +4568,7 @@
       // or because another Scene is revealed above/below it.
       this._playEntranceEffectOnce(article);
 
-      if (textNode && typing?.enabled && typeof scene.text === 'string' && scene.text.length) {
+      if (textNode && typing?.enabled && !scene.richText?.ranges?.length && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
         this._startTyping(scene, textNode, typing);
       }
 
