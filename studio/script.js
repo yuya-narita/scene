@@ -8192,45 +8192,59 @@
     else if(action==='font'&&value){const cur=spanCover(st=>String(st.fontFamily||'')===String(value));ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&r?.style?.fontFamily));if(!cur)ranges.push({start,end,kind:'span',style:{fontFamily:String(value)}});}
     else if(action==='size'&&value){const num=Number(value)||1,cur=spanCover(st=>Number(st.fontScale)===num);ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&Number(r?.style?.fontScale)>0));if(!cur)ranges.push({start,end,kind:'span',style:{fontScale:num}});}
     else if(action==='color'&&value)ranges.push({start,end,kind:'span',style:{color:String(value)}});
-    else if(action==='heading'&&value){const level=Math.max(1,Math.min(3,Number(value)||2));const cur=ranges.find(r=>r?.kind==='heading'&&covers(r)&&Number(r.level||2)===level);ranges=ranges.filter(r=>!(r?.kind==='heading'&&Number(r.end)>=start&&Number(r.start)<=end));if(!cur)ranges.push({start,end,kind:'heading',level});}
-    else if(action==='quote'){const cur=ranges.find(r=>r?.kind==='quote'&&covers(r));ranges=removeRichKindsInSelection(ranges,start,end,['quote']);if(!cur)ranges.push({start,end,kind:'quote'});}
-    else if(action==='bullet'||action==='number'){
-      // V122: list authoring changes the canonical text itself, unlike the other
-      // Rich Text actions. Build the selected whole lines in one pass, then remap
-      // every existing Rich Text range through the inserted marker offsets.
+    else if(action==='heading'||action==='quote'||action==='bullet'||action==='number'){
+      // V123: block Rich Text is paragraph structure, not an inline range mutation.
+      // Rebuild the selected whole-line block from canonical text in one transaction.
       const before=String(scene.text||'');
-      const first=before.lastIndexOf('\n',Math.max(0,start-1))+1;
-      const nl=before.indexOf('\n',Math.max(start,end-1));
-      const last=nl<0?before.length:nl;
-      const selectedBlock=before.slice(first,last);
-      const lines=selectedBlock.split('\n');
-      const insertions=[];
-      let rel=0;
-      const converted=lines.map((line,i)=>{
-        const existing=line.match(/^(\s*)((?:[・•●○◦▪▫◆◇▶▷*+\-])\s*|(\d+)[.)、]\s*)(.*)$/u);
-        if(existing){rel+=line.length+1;return line;}
-        const marker=action==='number'?`${i+1}. `:'・ ';
-        insertions.push({at:first+rel,len:marker.length});
-        rel+=line.length+1;
-        return marker+line;
-      }).join('\n');
-      const text=before.slice(0,first)+converted+before.slice(last);
-      const shiftPoint=(n)=>{let out=Number(n)||0;for(const ins of insertions){if(out>=ins.at)out+=ins.len;}return out;};
-      ranges=ranges.filter(r=>r?.kind!=='listItem').map(r=>({...r,start:shiftPoint(r.start),end:shiftPoint(r.end)}));
-      scene.text=text;
-      // Rebuild listItem ranges from the canonical text, exactly like Rich Paste.
-      const rebuilt=[];let off=0;
-      text.split('\n').forEach(line=>{
-        const m=String(line).match(/^\s*((?:[・•●○◦▪▫◆◇▶▷*+\-])\s*|(\d+)[.)、]\s*)(.*)$/u);
-        if(m)rebuilt.push({start:off,end:off+line.length,kind:'listItem',ordered:Boolean(m[2]),literalMarker:true});
-        off+=line.length+1;
+      const blockStart=before.lastIndexOf('\n',Math.max(0,start-1))+1;
+      const nextNl=before.indexOf('\n',Math.max(start,end-1));
+      const blockEnd=nextNl<0?before.length:nextNl;
+      const oldBlock=before.slice(blockStart,blockEnd);
+      const oldLines=oldBlock.split('\n');
+      const markerRe=/^(\s*)((?:[・•●○◦▪▫◆◇▶▷*+\-])\s*|(\d+)[.)、]\s*)(.*)$/u;
+      const cleanLines=oldLines.map(line=>{const m=String(line).match(markerRe);return m?(m[1]+m[4]):line;});
+      const wantList=action==='bullet'||action==='number';
+      const newLines=cleanLines.map((line,i)=>wantList?((action==='number'?`${i+1}. `:'・ ')+line):line);
+      const newBlock=newLines.join('\n');
+      scene.text=before.slice(0,blockStart)+newBlock+before.slice(blockEnd);
+
+      // Map old character offsets to their equivalent content positions after
+      // list markers are removed/inserted. Inline styles survive the block change.
+      const lineInfo=[];let oldPos=blockStart,newPos=blockStart;
+      oldLines.forEach((oldLine,i)=>{
+        const m=String(oldLine).match(markerRe);
+        const oldPrefix=m?(m[1].length+m[2].length):0;
+        const clean=cleanLines[i];
+        const newPrefix=wantList?(action==='number'?`${i+1}. `.length:2):0;
+        lineInfo.push({oldStart:oldPos,oldEnd:oldPos+oldLine.length,oldContent:oldPos+oldPrefix,newStart:newPos,newContent:newPos+newPrefix,contentLen:clean.length});
+        oldPos+=oldLine.length+1;newPos+=newLines[i].length+1;
       });
-      ranges.push(...rebuilt);
-      // The preview Player owns a playback copy. Keep it in sync immediately;
-      // otherwise list markers can disappear until a later full refresh.
+      const delta=newBlock.length-oldBlock.length;
+      const mapPoint=(n,bias='start')=>{
+        n=Number(n)||0;if(n<=blockStart)return n;if(n>=blockEnd)return n+delta;
+        const li=lineInfo.find(x=>n<=x.oldEnd)||lineInfo[lineInfo.length-1];
+        if(n<=li.oldContent)return li.newContent;
+        return Math.min(li.newContent+li.contentLen,li.newContent+(n-li.oldContent));
+      };
+      ranges=ranges.filter(r=>{
+        if(!r)return false;
+        // Structural marks touching the edited paragraphs are replaced below.
+        if(['heading','quote','listItem'].includes(r.kind)&&Number(r.end)>blockStart&&Number(r.start)<blockEnd)return false;
+        return true;
+      }).map(r=>({...r,start:mapPoint(r.start,'start'),end:mapPoint(r.end,'end')})).filter(r=>Number(r.end)>Number(r.start));
+
+      // Structural semantics are mutually exclusive per edited paragraph block.
+      let off=blockStart;
+      newLines.forEach((line,i)=>{
+        const a=off,b=off+line.length;
+        if(action==='heading')ranges.push({start:a,end:b,kind:'heading',level:Math.max(1,Math.min(3,Number(value)||2))});
+        else if(action==='quote')ranges.push({start:a,end:b,kind:'quote'});
+        else ranges.push({start:a,end:b,kind:'listItem',ordered:action==='number',literalMarker:true});
+        off=b+1;
+      });
       const live=player?.currentScene;
-      if(live && String(live.id||'')===String(scene.id||'')){
-        live.text=text;
+      if(live&&String(live.id||'')===String(scene.id||'')){
+        live.text=scene.text;
         live.richText={version:1,ranges:ranges.map(r=>({...r,style:r.style?{...r.style}:r.style}))};
       }
     }
