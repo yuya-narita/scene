@@ -4972,6 +4972,11 @@ body.easy-player-open #undoCompactButton,
   cursor:text;
   -webkit-tap-highlight-color:transparent;
 }
+/* Phase 4 / V72: Preview selection is an authoring gesture, not only an inline-edit gesture. */
+.live-edit-enabled .sp-scene.is-active .sp-text{
+  -webkit-user-select:text!important;
+  user-select:text!important;
+}
 
 
 /* Live Edit v0.2.6 — keyboard-aware inline writing.
@@ -5560,6 +5565,18 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
   background:#17191d;
   border-color:#17191d;
   color:#fff;
+}
+.desktop-audio-detail-tabs button .audio-tab-state-dot{
+  display:inline-block;
+  min-width:.9em;
+  margin-left:6px;
+  font-size:11px;
+  line-height:1;
+  vertical-align:1px;
+  color:currentColor;
+}
+.desktop-audio-detail-tabs button[data-audio-state="none"] .audio-tab-state-dot{
+  display:none;
 }
 .desktop-audio-intro{
   padding-top:4px!important;
@@ -8369,7 +8386,9 @@ body.toolbox-detail-open > .desktop-text-detail-overlay .desktop-text-detail-bod
   .live-edit-sheet .studio-color-square{width:100%!important;height:150px!important;}
   .live-edit-sheet .studio-color-hue{width:calc(100% - 16px)!important;margin:10px 8px 8px!important;}
 }
-\n\n/* v0.3 Aa stability v5 — cover observer fix companion + iPhone picker fit. */
+
+
+/* v0.3 Aa stability v5 — cover observer fix companion + iPhone picker fit. */
 @media (max-width:640px){
   /* Give the expanded picker enough scroll room above the fixed toolbar. */
   .live-edit-sheet-body{
@@ -10840,3 +10859,1114 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     touch-action:pan-y!important;
   }
 }
+
+/* =========================================================
+   Studio v2 phase 1 — preview IS the writing surface.
+   Keep every existing editor function, but hide the inspector until asked.
+   ========================================================= */
+.desktop-v2-chrome{display:none}
+@media (min-width:1100px){
+  body.desktop-live-edit #scenePlayer{
+    width:100%!important;
+    border-right:0!important;
+    box-shadow:none!important;
+  }
+  body.desktop-live-edit #studioPreviewViewport{
+    /* keep the selected device preview centered in the full authoring canvas */
+    left:50%!important;
+  }
+  body.desktop-live-edit .auto-rec-panel{right:14px!important}
+  body.desktop-live-edit .live-edit-toolbar{display:none!important}
+  body.desktop-live-edit #scenePlayer.live-edit-toolbar-visible .sp-footer{padding-bottom:0!important}
+
+  body.desktop-live-edit .desktop-v2-chrome{
+    position:absolute;z-index:235;top:12px;left:50%;transform:translateX(-50%);
+    display:flex!important;align-items:center;gap:5px;
+    padding:5px;border:1px solid rgba(255,255,255,.25);border-radius:999px;
+    background:rgba(20,22,26,.70);color:#fff;box-shadow:0 8px 28px rgba(0,0,0,.18);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)
+  }
+  .desktop-v2-chrome button{appearance:none;height:30px;min-width:34px;padding:0 9px;border:0;border-radius:999px;background:transparent;color:#fff;font:800 12px/1 system-ui;cursor:pointer}
+  .desktop-v2-chrome button:hover{background:rgba(255,255,255,.14)}
+  .desktop-v2-chrome button:disabled{opacity:.28;cursor:default}
+  .desktop-v2-chrome strong{min-width:86px;text-align:center;font:800 10px/1 system-ui;letter-spacing:.02em}
+  .desktop-v2-chrome .desktop-v2-add{font-size:18px}
+  .desktop-v2-chrome .desktop-v2-settings{border-left:1px solid rgba(255,255,255,.18);border-radius:0 999px 999px 0;margin-left:2px}
+
+  body.desktop-live-edit .desktop-live-panel{
+    display:flex!important;position:absolute!important;z-index:260!important;
+    inset:0 0 0 auto!important;width:min(520px,42vw)!important;min-width:420px!important;
+    padding:14px 16px 26px!important;
+    transform:translateX(102%);opacity:0;pointer-events:none;
+    transition:transform .22s ease,opacity .18s ease;
+    box-shadow:-18px 0 46px rgba(20,24,30,.16)
+  }
+  body.desktop-live-edit.desktop-v2-settings-open .desktop-live-panel{
+    transform:translateX(0);opacity:1;pointer-events:auto
+  }
+  body.desktop-live-edit .desktop-live-panel-head{display:none!important}
+  body.desktop-live-edit .desktop-live-panel-body{padding-top:4px!important}
+
+  /* The preview itself is the primary text field. The duplicate inspector
+     textarea stays available only as a fallback inside Settings. */
+  body.desktop-live-edit .desktop-live-body-card{opacity:.72}
+  body.desktop-live-edit .desktop-live-body-card::before{
+    content:'本文はプレビュー上をクリックして直接編集できます';
+    display:block;margin-bottom:4px;color:#777d85;font:700 10px/1.5 system-ui
+  }
+}
+
+/* =========================================================
+   Studio v2 layout anchor fix — 2026-09-16
+   Preview is the coordinate system for authoring chrome.
+   JS supplies the live preview rect; these rules remove legacy pane offsets.
+   ========================================================= */
+@media (min-width:1100px){
+  body.desktop-live-edit #publishFromPreviewButton.publish-preview-button{
+    right:auto!important;
+  }
+  body.desktop-live-edit .auto-rec-panel{
+    right:auto!important;
+  }
+  body.desktop-live-edit .desktop-v2-chrome{
+    margin:0!important;
+  }
+}
+
+
+/* =========================================================
+   Studio v2 preview workspace anchor fix v2
+   - Settings open: preview centers in the canvas left of inspector.
+   - Settings closed: preview returns to full-canvas center.
+   - AUTO REC belongs to the authoring controls rail, not preview geometry.
+   ========================================================= */
+@media (min-width:1100px){
+  body.desktop-live-edit .auto-rec-panel{
+    left:10px!important;
+    right:auto!important;
+    top:108px!important;
+    justify-content:flex-start!important;
+  }
+}
+
+/* Studio v2 AUTO REC utility rail fix v2 — 2026-09-16
+   Match the JS rail anchor exactly on the very first paint.
+   Device toolbar: top 70 + outer height 38 + gap 18 = 126px.
+   This removes the small vertical jump when the first interaction triggers
+   syncStudioV2FloatingChrome(). */
+@media (min-width:1100px){
+  body.desktop-live-edit .auto-rec-panel{
+    left:10px!important;
+    right:auto!important;
+    top:126px!important;
+    transform:none!important;
+    justify-content:flex-start!important;
+  }
+}
+
+
+/* === AHAKO Studio v2 / Editor tab fit-check === */
+@media (min-width:900px){
+  body.desktop-live-edit .desktop-v2-tab-shell{display:grid;gap:8px;min-width:0}
+  body.desktop-live-edit .desktop-v2-tab-rail{position:sticky;top:43px;z-index:3;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;padding:7px 0 8px;background:rgba(248,249,250,.96);backdrop-filter:blur(12px);border-bottom:1px solid #e2e5e8}
+  body.desktop-live-edit .desktop-v2-tab-rail button{appearance:none;min-width:0;height:34px;padding:0 2px;border:1px solid #d8dce0;border-radius:9px;background:#fff;color:#555b63;font:750 10px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.desktop-live-edit .desktop-v2-tab-rail button.is-active{background:#1d2024;color:#fff;border-color:#1d2024}
+  body.desktop-live-edit .desktop-v2-tab-stage{min-width:0}
+  body.desktop-live-edit .desktop-v2-tab-pane{display:none;gap:8px;min-width:0}
+  body.desktop-live-edit .desktop-v2-tab-pane.is-active{display:grid}
+  body.desktop-live-edit .desktop-v2-tab-pane>.desktop-live-card{margin:0}
+  body.desktop-live-edit .desktop-v2-frequent-note{margin:0;color:#70757d;font:600 11px/1.6 system-ui}
+  body.desktop-live-edit .desktop-v2-frequent-mock{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  body.desktop-live-edit .desktop-v2-frequent-mock button{min-height:34px;border:1px dashed #cbd0d5;border-radius:9px;background:#f7f8f9;color:#737981;font:700 11px system-ui}
+  body.desktop-live-edit .desktop-live-three{display:contents}
+}
+
+
+/* === AHAKO Studio v2 / completed 8-tab editor === */
+@media (min-width:900px){
+  body.desktop-live-edit .desktop-v2-inline-detail{
+    display:grid;gap:10px;padding:0;margin:0;overflow:visible;background:transparent;
+  }
+  body.desktop-live-edit .desktop-v2-inline-detail>.desktop-text-detail-section{
+    margin:0;border:1px solid #e0e3e6;border-radius:12px;background:#fff;padding:12px;
+  }
+  body.desktop-live-edit .desktop-v2-inline-detail>.desktop-text-detail-section>h3{margin-top:0}
+  body.desktop-live-edit .desktop-v2-tab-stage .desktop-live-detail{display:none}
+}
+
+/* =========================================================
+   Studio v2 — 8-tab dedicated layout polish v1 (2026-09-16)
+   Visual-only: no editor control/event logic is changed.
+   Each family gets one consistent inspector layout and the rail reads as tabs.
+   ========================================================= */
+@media (min-width:900px){
+  body.desktop-live-edit .desktop-v2-tab-shell{
+    gap:0!important;
+    align-content:start!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-rail{
+    position:sticky!important;
+    top:0!important;
+    z-index:12!important;
+    display:grid!important;
+    grid-template-columns:repeat(8,minmax(0,1fr))!important;
+    gap:0!important;
+    padding:10px 8px 0!important;
+    background:rgba(246,247,248,.97)!important;
+    border-bottom:1px solid #cfd4d9!important;
+    backdrop-filter:blur(14px)!important;
+    -webkit-backdrop-filter:blur(14px)!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-rail button{
+    position:relative!important;
+    height:38px!important;
+    min-width:0!important;
+    margin:0 -1px -1px 0!important;
+    padding:0 4px!important;
+    border:1px solid #d5d9de!important;
+    border-bottom-color:#cfd4d9!important;
+    border-radius:9px 9px 0 0!important;
+    background:#eef0f2!important;
+    color:#626871!important;
+    box-shadow:none!important;
+    font:750 10px/1 system-ui,-apple-system,"Segoe UI",sans-serif!important;
+    cursor:pointer!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-rail button:hover{
+    background:#f7f8f9!important;
+    color:#24272c!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-rail button.is-active{
+    z-index:2!important;
+    background:#fff!important;
+    color:#17191d!important;
+    border-color:#c7ccd2!important;
+    border-bottom-color:#fff!important;
+    font-weight:850!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-rail button.is-active::before{
+    content:"";position:absolute;left:7px;right:7px;top:0;height:3px;
+    border-radius:0 0 3px 3px;background:#1d2024;
+  }
+  body.desktop-live-edit .desktop-v2-tab-stage{
+    min-width:0!important;
+    padding:10px 8px 16px!important;
+    background:#fff!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane{
+    display:none!important;
+    min-width:0!important;
+    gap:10px!important;
+    align-content:start!important;
+    justify-content:stretch!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane.is-active{display:grid!important}
+
+  /* One visual language for every tab/card. */
+  body.desktop-live-edit .desktop-v2-tab-pane>.desktop-live-card,
+  body.desktop-live-edit .desktop-v2-inline-detail>.desktop-text-detail-section{
+    width:100%!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+    padding:12px!important;
+    border:1px solid #dde1e5!important;
+    border-radius:12px!important;
+    background:#fff!important;
+    box-shadow:none!important;
+  }
+  body.desktop-live-edit .desktop-v2-inline-detail{
+    display:grid!important;
+    gap:10px!important;
+    align-content:start!important;
+    padding:0!important;
+    margin:0!important;
+    overflow:visible!important;
+    background:transparent!important;
+  }
+  body.desktop-live-edit .desktop-v2-inline-detail>.desktop-text-detail-section{
+    display:grid!important;
+    gap:10px!important;
+  }
+  body.desktop-live-edit .desktop-v2-inline-detail>.desktop-text-detail-section>h3{
+    margin:0 0 2px!important;
+    padding:0!important;
+    color:#202329!important;
+    font:850 13px/1.25 system-ui,-apple-system,"Segoe UI",sans-serif!important;
+  }
+  body.desktop-live-edit .desktop-text-detail-two{
+    gap:10px!important;
+  }
+  body.desktop-live-edit .desktop-text-detail-field{gap:5px!important}
+  body.desktop-live-edit .desktop-text-detail-field select{
+    height:38px!important;border-radius:9px!important;
+  }
+  body.desktop-live-edit .desktop-text-detail-range{
+    gap:6px!important;padding:4px 0!important;
+  }
+  body.desktop-live-edit .desktop-text-detail-color{
+    padding:8px 10px!important;border-radius:9px!important;
+  }
+  body.desktop-live-edit .desktop-text-detail-note{
+    font-size:11px!important;line-height:1.55!important;
+  }
+
+  /* BODY — compact manuscript workstation. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-live-body-card{
+    opacity:1!important;gap:8px!important;padding:12px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-live-body-card textarea{
+    min-height:96px!important;padding:10px!important;border-radius:9px!important;
+  }
+
+  /* TEXT / EFFECT / BACKGROUND — dense two-column inspector rhythm. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="text"] .desktop-text-detail-section,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-text-detail-section,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="background"] .desktop-text-detail-section{
+    padding:12px!important;gap:10px!important;
+  }
+
+  /* BACKGROUND asset block follows the same card geometry. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="background"] .desktop-background-detail-asset{
+    margin-top:2px!important;gap:10px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="background"] .desktop-background-detail-thumb{
+    min-height:96px!important;border-radius:10px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="background"] .desktop-background-detail-thumb.has-image{
+    min-height:112px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="background"] .desktop-background-detail-asset-actions{
+    gap:7px!important;min-width:132px!important;
+  }
+
+  /* IMAGE — no floating island in a huge blank panel. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="image"]{
+    align-content:start!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="image"]>.desktop-live-card{
+    align-self:start!important;
+  }
+
+  /* AUDIO — dedicated nested tabs. Prevent legacy sticky/overlay geometry. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-v2-inline-detail{
+    gap:0!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-tabs{
+    position:relative!important;
+    top:auto!important;
+    z-index:1!important;
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:6px!important;
+    margin:0 0 10px!important;
+    padding:0!important;
+    background:transparent!important;
+    backdrop-filter:none!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-tabs button{
+    height:36px!important;
+    border:1px solid #d5d9de!important;
+    border-radius:9px!important;
+    background:#f2f3f5!important;
+    color:#626871!important;
+    font:800 11px/1 system-ui!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-tabs button.is-active{
+    background:#1d2024!important;color:#fff!important;border-color:#1d2024!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-text-detail-section{
+    padding:12px!important;gap:10px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-asset{
+    grid-template-columns:minmax(0,1fr) minmax(120px,150px)!important;
+    gap:10px!important;margin-top:2px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-file{
+    min-height:56px!important;border-radius:10px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-file-actions{
+    gap:6px!important;
+  }
+
+  /* SCENE — compact operation card at the top, same rounded geometry. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="scene"]{
+    align-content:start!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="scene"] .desktop-live-scene-ops{
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:6px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="scene"] .desktop-live-nav{
+    margin-top:2px!important;padding-top:10px!important;
+  }
+
+  /* Frequent tab is a real panel too, not a floating placeholder. */
+  body.desktop-live-edit .desktop-v2-frequent-card{gap:10px!important}
+  body.desktop-live-edit .desktop-v2-frequent-mock{gap:6px!important}
+  body.desktop-live-edit .desktop-v2-frequent-mock button{
+    min-height:36px!important;border-radius:9px!important;
+  }
+}
+
+/* =========================================================
+   Studio v2 — tab containment + compact ranges v2 (2026-09-16)
+   Layout-only hotfix. Keep all existing editor handlers/data untouched.
+   ========================================================= */
+@media (min-width:900px){
+  /* Hard containment: dynamic panels (chat / image / audio) may never widen the inspector. */
+  body.desktop-live-edit .desktop-v2-tab-shell,
+  body.desktop-live-edit .desktop-v2-tab-stage,
+  body.desktop-live-edit .desktop-v2-tab-pane,
+  body.desktop-live-edit .desktop-v2-tab-pane > *,
+  body.desktop-live-edit .desktop-v2-inline-detail,
+  body.desktop-live-edit .desktop-v2-inline-detail > *{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane{overflow:hidden!important;}
+
+  /* Sticky rail is fully opaque and masks everything scrolling underneath it. */
+  body.desktop-live-edit .desktop-v2-tab-rail{
+    top:0!important;
+    z-index:50!important;
+    background:#f6f7f8!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+    isolation:isolate!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-rail::after{
+    content:"";
+    position:absolute;
+    left:0;right:0;bottom:-11px;height:11px;
+    background:#fff;
+    border-top:1px solid #cfd4d9;
+    pointer-events:none;
+    z-index:-1;
+  }
+  body.desktop-live-edit .desktop-v2-tab-stage{padding-top:12px!important;}
+
+  /* CHAT: old full-width authoring layout now lives inside a ~500px tab. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-settings-card,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-authoring-panel{
+    width:100%!important;max-width:100%!important;min-width:0!important;overflow:hidden!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-authoring-panel{
+    padding:12px!important;gap:10px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-current-grid{
+    grid-template-columns:minmax(0,1fr)!important;gap:8px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-side-toggle,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-quick-grid,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-manage-row,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-color-row{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;min-width:0!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-side-toggle .desktop-live-action,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-quick-grid .desktop-live-action,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-manage-row .desktop-live-action{
+    min-width:0!important;min-height:38px!important;padding:6px 7px!important;font-size:10px!important;
+    white-space:normal!important;overflow-wrap:anywhere!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-color-field,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .live-chat-color.shared-picker{
+    min-width:0!important;grid-template-columns:minmax(48px,auto) 40px minmax(0,1fr)!important;gap:6px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-chat-color-code,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .live-chat-color.shared-picker code{
+    min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;
+  }
+
+  /* IMAGE: when an image is selected the legacy four-column option row must reflow inside the tab. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="image"] .desktop-scene-image-card{
+    width:100%!important;max-width:100%!important;min-width:0!important;overflow:hidden!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="image"] .desktop-scene-image-top{
+    grid-template-columns:minmax(0,1fr)!important;gap:8px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="image"] .desktop-scene-image-preview{
+    width:100%!important;max-width:100%!important;min-width:0!important;max-height:230px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="image"] .desktop-scene-image-options{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;margin-top:8px!important;align-items:stretch!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="image"] .desktop-scene-image-options > *{
+    width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="image"] .desktop-scene-image-alt{
+    grid-column:1/-1!important;
+  }
+
+  /* Compact slider rhythm in the long tabs. Larger usable track, less dead vertical space. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="text"] .desktop-text-detail-section,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .desktop-text-detail-section,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="background"] .desktop-text-detail-section,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-text-detail-section{
+    padding:10px!important;gap:7px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane:is([data-editor-tab="text"],[data-editor-tab="effect"],[data-editor-tab="background"],[data-editor-tab="audio"]) .desktop-text-detail-two{
+    gap:8px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane:is([data-editor-tab="text"],[data-editor-tab="effect"],[data-editor-tab="background"],[data-editor-tab="audio"]) .desktop-text-detail-field{
+    gap:3px!important;min-width:0!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane:is([data-editor-tab="text"],[data-editor-tab="effect"],[data-editor-tab="background"],[data-editor-tab="audio"]) .desktop-text-detail-field select{
+    height:34px!important;min-height:34px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane:is([data-editor-tab="text"],[data-editor-tab="effect"],[data-editor-tab="background"],[data-editor-tab="audio"]) .desktop-text-detail-range{
+    gap:3px!important;padding:1px 0!important;min-width:0!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane:is([data-editor-tab="text"],[data-editor-tab="effect"],[data-editor-tab="background"],[data-editor-tab="audio"]) .desktop-text-detail-range-head{
+    gap:6px!important;min-height:28px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane:is([data-editor-tab="text"],[data-editor-tab="effect"],[data-editor-tab="background"],[data-editor-tab="audio"]) .desktop-text-detail-range-head output{
+    min-width:54px!important;padding:4px 6px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane:is([data-editor-tab="text"],[data-editor-tab="effect"],[data-editor-tab="background"],[data-editor-tab="audio"]) input[type="range"]{
+    display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;
+    height:24px!important;margin:0!important;padding:0!important;box-sizing:border-box!important;
+    touch-action:none!important;cursor:pointer!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane:is([data-editor-tab="text"],[data-editor-tab="effect"],[data-editor-tab="background"],[data-editor-tab="audio"]) .desktop-range-with-number{
+    gap:7px!important;min-width:0!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane:is([data-editor-tab="text"],[data-editor-tab="effect"],[data-editor-tab="background"],[data-editor-tab="audio"]) .desktop-range-with-number > input[type="range"]{
+    min-width:0!important;width:100%!important;
+  }
+
+  /* AUDIO nested layout also obeys the same inspector width. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-tabs,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-asset,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-file,
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-file-actions{
+    width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="audio"] .desktop-audio-detail-asset{
+    grid-template-columns:minmax(0,1fr)!important;gap:7px!important;
+  }
+}
+
+/* =========================================================
+   Studio v2 — range drag + sticky tab top-mask fix v3 (2026-09-16)
+   Layout/input hit-testing only. No authoring data logic changed.
+   ========================================================= */
+@media (min-width:900px){
+  /* The inspector panel is the only vertical scroller. Keep tab contents in
+     normal flow and guarantee native range controls own their pointer drag. */
+  body.desktop-live-edit .desktop-v2-tab-pane input[type="range"]{
+    position:relative!important;
+    z-index:4!important;
+    pointer-events:auto!important;
+    touch-action:pan-y!important;
+    user-select:none!important;
+    -webkit-user-select:none!important;
+    cursor:ew-resize!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane input[type="range"]::-webkit-slider-thumb{
+    pointer-events:auto!important;
+    cursor:grab!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane input[type="range"]:active::-webkit-slider-thumb{
+    cursor:grabbing!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane .desktop-range-with-number,
+  body.desktop-live-edit .desktop-v2-tab-pane .desktop-text-detail-range{
+    position:relative!important;
+    z-index:1!important;
+    overflow:visible!important;
+  }
+
+  /* Sticky tab rail must behave like a real opaque lid. Content scrolling up
+     is masked not only under the rail, but also in the small area ABOVE it. */
+  body.desktop-live-edit .desktop-v2-tab-rail{
+    position:sticky!important;
+    top:0!important;
+    z-index:1000!important;
+    isolation:isolate!important;
+    background:#f6f7f8!important;
+    overflow:visible!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-rail::before{
+    content:"";
+    position:absolute;
+    left:-12px!important;
+    right:-12px!important;
+    top:-96px!important;
+    height:96px!important;
+    background:#f6f7f8!important;
+    pointer-events:none!important;
+    z-index:1001!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-rail::after{
+    content:"";
+    position:absolute!important;
+    left:-12px!important;
+    right:-12px!important;
+    bottom:-12px!important;
+    height:12px!important;
+    background:#fff!important;
+    border-top:1px solid #cfd4d9!important;
+    pointer-events:none!important;
+    z-index:0!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-rail > button{
+    position:relative!important;
+    z-index:1002!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-stage{
+    position:relative!important;
+    z-index:1!important;
+    overflow:hidden!important;
+  }
+}
+
+/* Studio v2 — range drag DOM-lock fix v4 (2026-09-16)
+   JS now prevents inspector rerender while a native range owns the pointer. */
+@media (min-width:900px){
+  body.desktop-live-edit .desktop-v2-tab-pane input[type="range"]{
+    touch-action:none!important;
+    pointer-events:auto!important;
+  }
+}
+
+/* Editor v2 — Cover / Ending are first-class right-panel editors, not modal overlays. */
+body.desktop-live-page-editor-open .desktop-live-panel-body{overflow:auto;}
+.desktop-v2-page-shell{min-height:100%;}
+.desktop-v2-page-shell .desktop-v2-tab-stage{padding-top:10px;}
+.desktop-v2-page-shell .desktop-v2-tab-pane{align-content:start;}
+.desktop-v2-page-shell .desktop-live-card{margin:0;border-radius:12px;border:1px solid var(--line,#d9dde3);box-shadow:none;}
+.desktop-cover-field-head{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.desktop-cover-image-ops{display:grid;grid-template-columns:1fr;gap:8px;}
+.desktop-v2-page-shell textarea.desktop-live-ending-text{min-height:120px;resize:vertical;}
+
+/* =========================================================
+   Studio v2 — Cover / Ending single-sheet editor (2026-09-16)
+   Cover and Ending deliberately do not use tabs.
+   ========================================================= */
+@media (min-width:900px){
+  body.desktop-live-page-editor-open .desktop-v2-page-single{
+    width:100%;max-width:100%;min-width:0;box-sizing:border-box;
+    display:grid;grid-template-columns:1fr;gap:10px;
+    padding:12px 12px 18px;align-content:start;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-page-single > .desktop-live-card{
+    width:100%;max-width:100%;min-width:0;box-sizing:border-box;
+    margin:0!important;border:1px solid #d7dce1!important;border-radius:12px!important;
+    box-shadow:none!important;overflow:hidden;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-page-single .desktop-live-field,
+  body.desktop-live-page-editor-open .desktop-v2-page-single .desktop-text-detail-field,
+  body.desktop-live-page-editor-open .desktop-v2-page-single .desktop-cover-image-ops,
+  body.desktop-live-page-editor-open .desktop-v2-page-single .desktop-live-scene-ops{
+    min-width:0;max-width:100%;box-sizing:border-box;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-cover-single .desktop-cover-image-ops{
+    grid-template-columns:1fr!important;gap:7px!important;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-ending-single textarea.desktop-live-ending-text{
+    min-height:100px!important;
+  }
+}
+
+/* V2 page editor: Ending SE lives natively in the single-sheet editor. */
+.desktop-ending-se-sheet{display:grid;gap:10px;min-width:0}
+.desktop-ending-se-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,.72fr);gap:8px;align-items:center}
+.desktop-ending-se-toggle{min-height:42px;display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--line,#d9dde3);border-radius:10px;min-width:0}
+.desktop-ending-se-toggle input{width:18px;height:18px;flex:0 0 auto}
+.desktop-ending-se-file{font-size:12px;color:#68707b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.desktop-ending-se-volume{display:grid;grid-template-columns:auto 52px minmax(0,1fr);gap:10px;align-items:center;min-width:0}
+.desktop-ending-se-volume output{text-align:right;font-variant-numeric:tabular-nums}
+.desktop-ending-se-volume input[type=range]{width:100%;min-width:0;margin:0;touch-action:none}
+@media(max-width:560px){.desktop-ending-se-top{grid-template-columns:1fr}.desktop-ending-se-volume{grid-template-columns:auto 48px minmax(0,1fr)}}
+
+
+/* Studio v2 — Cover / Ending sheet header + Ending SE visual unification (2026-09-16) */
+@media (min-width:900px){
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head{
+    width:100%;min-width:0;box-sizing:border-box;
+    display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+    padding:10px 12px 9px;margin:0;
+    background:#fff;border:1px solid #d7dce1;border-radius:12px;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head small{
+    display:block;margin:0;color:#7b8490;font-size:10px;line-height:1.2;
+    font-weight:600;letter-spacing:.14em;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head strong{
+    display:block;margin:0;color:#17191c;font-size:16px;line-height:1.35;font-weight:700;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-sheet{gap:8px;}
+  body.desktop-live-page-editor-open .desktop-ending-se-top{
+    display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:stretch;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-toggle,
+  body.desktop-live-page-editor-open .desktop-ending-se-top > button,
+  body.desktop-live-page-editor-open .desktop-ending-se-sheet > button{
+    min-height:40px!important;height:40px!important;box-sizing:border-box!important;
+    border:1px solid #d7dce1!important;border-radius:9px!important;
+    background:#fff!important;box-shadow:none!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-toggle{
+    padding:0 12px!important;font-size:13px;color:#17191c;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-toggle input{
+    width:17px!important;height:17px!important;margin:0!important;accent-color:#1d2024;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-file{
+    min-height:22px;display:flex;align-items:center;padding:0 2px;
+    color:#747d88;font-size:12px;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-volume{
+    min-height:42px;padding:0 2px;grid-template-columns:auto 48px minmax(0,1fr);gap:8px;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-volume input[type=range]{
+    height:24px!important;pointer-events:auto!important;touch-action:none!important;cursor:pointer!important;
+  }
+}
+
+
+/* Studio v2 — legacy-like Cover/Ending header + Ending SE layout */
+@media (min-width:900px){
+  body.desktop-live-page-editor-open .desktop-v2-page-single{gap:0!important;padding:0!important;}
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head{
+    width:calc(100% + 0px)!important;box-sizing:border-box!important;
+    padding:10px 12px 9px!important;margin:0 0 10px!important;
+    background:#fff!important;border:0!important;border-bottom:1px solid #d7dce1!important;
+    border-radius:0!important;box-shadow:none!important;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head small{font-size:9px!important;letter-spacing:.16em!important;color:#7c8794!important;}
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head strong{font-size:16px!important;line-height:1.25!important;}
+  body.desktop-live-page-editor-open .desktop-v2-page-single > .desktop-live-card{margin-left:10px!important;margin-right:10px!important;margin-bottom:10px!important;}
+
+  body.desktop-live-page-editor-open .desktop-ending-se-sheet{display:block!important;}
+  body.desktop-live-page-editor-open .desktop-ending-se-top{display:block!important;}
+  body.desktop-live-page-editor-open .desktop-ending-se-toggle{
+    display:flex!important;align-items:center!important;gap:8px!important;
+    min-height:28px!important;height:auto!important;padding:0!important;margin:0 0 14px!important;
+    border:0!important;border-radius:0!important;background:transparent!important;
+    font-size:13px!important;font-weight:500!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-toggle input{width:18px!important;height:18px!important;}
+  body.desktop-live-page-editor-open .desktop-ending-se-top > button{
+    width:auto!important;min-width:72px!important;height:38px!important;min-height:38px!important;
+    padding:0 12px!important;border:0!important;border-radius:10px!important;
+    background:#1c1f23!important;color:#fff!important;font-weight:700!important;
+    display:inline-flex!important;vertical-align:middle!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-file{
+    display:inline-flex!important;vertical-align:middle!important;align-items:center!important;
+    min-height:38px!important;padding:0 0 0 10px!important;margin:0!important;
+    color:#7b838d!important;font-size:12px!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-volume{
+    display:grid!important;grid-template-columns:auto 1fr!important;grid-template-areas:'label value' 'range range'!important;
+    gap:7px 8px!important;align-items:center!important;margin-top:12px!important;padding:0!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-volume > span{grid-area:label!important;}
+  body.desktop-live-page-editor-open .desktop-ending-se-volume > output{grid-area:value!important;text-align:right!important;font-weight:600!important;}
+  body.desktop-live-page-editor-open .desktop-ending-se-volume > input[type=range]{grid-area:range!important;width:100%!important;}
+}
+
+
+/* Studio v2 — final Cover/Ending header hierarchy + simplified Ending SE */
+@media (min-width:900px){
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    grid-auto-flow:row!important;
+    align-items:start!important;
+    justify-items:start!important;
+    gap:2px!important;
+    padding:10px 12px 9px!important;
+    margin:0 0 10px!important;
+    border:0!important;
+    border-bottom:1px solid #d7dce1!important;
+    border-radius:0!important;
+    background:#fff!important;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head > small{
+    display:block!important;
+    width:100%!important;
+    margin:0!important;
+    color:#8b949f!important;
+    font-size:9px!important;
+    line-height:1.15!important;
+    font-weight:600!important;
+    letter-spacing:.16em!important;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head > strong{
+    display:block!important;
+    width:100%!important;
+    margin:0!important;
+    color:#17191c!important;
+    font-size:16px!important;
+    line-height:1.3!important;
+    font-weight:700!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-top{
+    display:grid!important;
+    grid-template-columns:minmax(120px,auto) minmax(0,1fr)!important;
+    gap:8px!important;
+    align-items:center!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-top > button{
+    min-width:120px!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-volume{
+    margin-top:10px!important;
+  }
+}
+
+/* Studio v2 — page heading frameless + Ending SE action alignment fix (2026-09-16) */
+@media (min-width:900px){
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head{
+    width:auto!important;
+    margin:0 10px 8px!important;
+    padding:8px 2px 4px!important;
+    background:transparent!important;
+    border:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head > small{
+    margin:0 0 2px!important;
+    color:#8b949f!important;
+    font-size:9px!important;
+    line-height:1.15!important;
+    letter-spacing:.16em!important;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-page-editor-head > strong{
+    color:#17191c!important;
+    font-size:16px!important;
+    line-height:1.3!important;
+  }
+
+  body.desktop-live-page-editor-open .desktop-ending-se-top{
+    display:flex!important;
+    align-items:center!important;
+    gap:12px!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-top > button{
+    flex:0 0 120px!important;
+    width:120px!important;
+    min-width:120px!important;
+    max-width:120px!important;
+    height:40px!important;
+    padding:0 14px!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    white-space:nowrap!important;
+    overflow:visible!important;
+    line-height:1!important;
+  }
+  body.desktop-live-page-editor-open .desktop-ending-se-file{
+    flex:1 1 auto!important;
+    min-width:0!important;
+    height:40px!important;
+    padding:0!important;
+    display:flex!important;
+    align-items:center!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+}
+
+/* Studio v2 — Cover editor breathing room beside its scrollbar (2026-09-16)
+   Cover has many vertically stacked fields; trim only this page editor slightly
+   so card/input edges do not visually crowd the panel scrollbar. */
+@media (min-width:1100px){
+  body.desktop-live-page-editor-open:has(.desktop-v2-cover-single) .desktop-live-panel{
+    width:min(500px,40vw)!important;
+  }
+}
+
+/* Studio v2 — Cover editor: keep the outer inspector at 520px,
+   narrow only the cover sheet contents to leave breathing room by scrollbar. */
+@media (min-width:1100px){
+  body.desktop-live-page-editor-open:has(.desktop-v2-cover-single) .desktop-live-panel{
+    width:min(520px,42vw)!important;
+  }
+  body.desktop-live-page-editor-open .desktop-v2-cover-single{
+    width:calc(100% - 14px)!important;
+    max-width:calc(100% - 14px)!important;
+    margin-left:0!important;
+    margin-right:14px!important;
+    box-sizing:border-box!important;
+  }
+}
+
+/* =========================================================
+   Studio v2 left utility rail / keyboard hints — 2026-09-16
+   Uses the dead space beside the preview; never opens a modal.
+   ========================================================= */
+@media (min-width:1100px){
+  body.desktop-live-edit .desktop-shortcut-hint{
+    display:block!important;position:fixed;left:10px;top:174px;z-index:265;
+    width:300px;max-width:calc((100vw - var(--studio-preview-width, 430px))/2 - 26px);
+    color:#20242a;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  body.desktop-live-edit .desktop-shortcut-rail-button{
+    display:grid;place-items:center;width:42px;height:34px;padding:0;border:0;border-radius:17px;
+    background:#4a4d51;color:#fff;box-shadow:0 5px 16px rgba(0,0,0,.16);font-size:17px;cursor:pointer;
+  }
+  body.desktop-live-edit .desktop-shortcut-rail-button[aria-expanded="true"]{background:#1d2024}
+  body.desktop-live-edit .desktop-shortcut-hint-body{
+    margin-top:10px;width:100%;padding:14px;border:1px solid #d9dde1;border-radius:16px;
+    background:rgba(255,255,255,.96);box-shadow:0 10px 30px rgba(20,24,30,.10);backdrop-filter:blur(12px);
+  }
+  body.desktop-live-edit .desktop-shortcut-hint-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
+  body.desktop-live-edit .desktop-shortcut-hint-head>div{display:grid;gap:1px}
+  body.desktop-live-edit .desktop-shortcut-hint-head small{color:#8b929a;font:700 8px/1.2 system-ui;letter-spacing:.14em}
+  body.desktop-live-edit .desktop-shortcut-hint-head strong{font:750 13px/1.35 system-ui}
+  body.desktop-live-edit .desktop-shortcut-hint-head button{width:26px;height:26px;border:0;border-radius:50%;background:#f1f2f3;font-size:16px;cursor:pointer}
+  body.desktop-live-edit .desktop-shortcut-hint-list{display:grid;border:1px solid #e0e3e6;border-radius:11px;overflow:hidden;background:#fff}
+  body.desktop-live-edit .desktop-shortcut-hint-list>div{display:grid;grid-template-columns:minmax(105px,auto) 1fr;align-items:center;gap:10px;min-height:34px;padding:6px 9px;border-bottom:1px solid #eceef0;font-size:10px}
+  body.desktop-live-edit .desktop-shortcut-hint-list>div:last-child{border-bottom:0}
+  body.desktop-live-edit .desktop-shortcut-hint-list>div>span:last-child{text-align:right;color:#42474d;font-weight:650}
+  body.desktop-live-edit .desktop-shortcut-hint kbd{display:inline-block;padding:3px 7px;border:1px solid #cfd4d9;border-radius:5px;background:#f7f8f9;color:#444b52;font:650 9px/1.2 system-ui;box-shadow:0 1px 0 rgba(0,0,0,.04)}
+  body.desktop-live-edit .desktop-shortcut-hint-body>p{margin:9px 2px 0;color:#7a8087;font:600 9px/1.55 system-ui}
+}
+
+/* =========================================================
+   Studio v2 Rich Text Player v0.6
+   - Desktop Editor v2 uses detail builders as temporary DOM factories.
+     Their backdrop overlays must never remain over the preview after any
+     setting refresh (device/font/background/Scene image/etc.).
+   - Rich list semantics remain visible even when Splitter normalizes away
+     the original bullet glyph from the plain Scene text.
+   ========================================================= */
+@media (min-width:1100px){
+  body.desktop-live-edit > .desktop-text-detail-overlay{
+    display:none!important;
+    pointer-events:none!important;
+    background:transparent!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+  }
+}
+/* =========================================================
+   Studio v2 Rich Text Player v0.7
+   - Never let temporary detail-builder overlays dim or capture the desktop
+     Live Editor preview. JS also removes orphan overlays after mutations.
+   ========================================================= */
+@media (min-width:1100px){
+  body.desktop-live-edit:not(.toolbox-detail-open) .desktop-text-detail-overlay{
+    background:transparent!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+    pointer-events:none!important;
+  }
+  body.desktop-live-edit:not(.toolbox-detail-open) .desktop-text-detail-overlay .desktop-text-detail-modal{
+    pointer-events:auto;
+  }
+}
+
+
+/* Studio v2 Rich Text Player v0.8 — no accidental preview veil */
+@media (min-width:1100px){
+  body.desktop-live-edit .desktop-live-panel > .desktop-text-detail-overlay{
+    background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+  }
+  body.desktop-live-edit .desktop-live-special-shade{
+    background:rgba(246,247,248,.58)!important;
+  }
+}
+.sp-rich-table-card[contenteditable="false"]{user-select:none;-webkit-user-select:none;}
+\n\n/* Studio v2 Rich Text Player v0.9 — editable tables */\n.desktop-rich-table-editors{display:grid;gap:10px;margin-top:10px}\n.desktop-rich-table-editor{display:grid;gap:8px;padding:10px;border:1px solid #dfe2e5;border-radius:12px;background:#fafafa}\n.desktop-rich-table-editor-head{display:flex;align-items:center;justify-content:space-between;gap:10px}\n.desktop-rich-table-editor-head strong{font:800 11px/1.2 system-ui}\n.desktop-rich-table-editor-head button{min-height:30px;padding:0 10px;border:1px solid #d6d9dd;border-radius:8px;background:#fff;font:700 9px system-ui;cursor:pointer}\n.desktop-rich-table-grid{display:grid;grid-template-columns:repeat(var(--table-cols,1),minmax(70px,1fr));gap:1px;background:#d9dde1;border:1px solid #d9dde1;overflow:auto}\n.desktop-rich-table-grid input{min-width:0;height:34px;box-sizing:border-box;border:0;border-radius:0;background:#fff;padding:5px 7px;font:500 10px/1.2 system-ui}\n.desktop-rich-table-grid input.is-header{font-weight:800;background:#f0f1f2}\n
+/* Rich Text Player v0.10 — direct table editing in Live Preview */
+#scenePlayer .sp-rich-table-card.is-live-table-editing{cursor:text}
+#scenePlayer .sp-rich-table-card th[contenteditable="true"],
+#scenePlayer .sp-rich-table-card td[contenteditable="true"]{outline:2px solid currentColor;outline-offset:-2px;background:rgba(255,255,255,.72);cursor:text}
+.desktop-rich-table-preview-note{margin:.55rem 0 0;font-size:12px;opacity:.68}
+
+/* Rich Text Player v0.23 — Easy mixed-content composition preview. */
+.easy-rich-composition{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:16px;display:grid;gap:14px;font-size:15px;line-height:1.8;color:var(--text)}
+.easy-rich-composition[hidden]{display:none!important}.easy-rich-text-block{white-space:pre-wrap;overflow-wrap:anywhere}.easy-rich-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:13px;background:#fff}.easy-rich-table{width:100%;border-collapse:collapse;min-width:420px;font-size:13px;line-height:1.5}.easy-rich-table th,.easy-rich-table td{padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:left;vertical-align:top;white-space:normal}.easy-rich-table th{font-weight:800;background:#f5f6f8}.easy-rich-table tr:last-child td{border-bottom:0}.easy-rich-table th:last-child,.easy-rich-table td:last-child{border-right:0}.easy-rich-table-caption{padding:8px 11px;color:var(--muted);font-size:10px;font-weight:700;border-bottom:1px solid var(--line)}
+/* V56 — user-built Frequent Settings mini Editor */
+.desktop-v2-frequent-head{display:flex;align-items:flex-start;gap:12px;justify-content:space-between;margin-bottom:12px}.desktop-v2-frequent-head .desktop-v2-frequent-note{margin:0;flex:1}.desktop-v2-frequent-edit{border:1px solid #cfd5dc;background:#fff;border-radius:10px;padding:8px 11px;font:inherit;white-space:nowrap;cursor:pointer}.desktop-v2-frequent-edit.is-active{background:#20242a;color:#fff;border-color:#20242a}.desktop-v2-frequent-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.desktop-v2-frequent-controls .desktop-text-detail-field{margin:0;min-width:0}.desktop-v2-frequent-controls .desktop-text-detail-field>span{font-size:12px}.desktop-v2-frequent-controls select,.desktop-v2-frequent-controls input[type=color]{width:100%;min-height:40px}.desktop-v2-frequent-editor{margin:0 0 14px;padding:12px;border:1px solid #d9dee5;border-radius:12px;background:#f8f9fb}.desktop-v2-frequent-editor[hidden]{display:none}.desktop-v2-frequent-editor section+section{margin-top:12px}.desktop-v2-frequent-editor section>strong{display:block;margin-bottom:6px;font-size:13px}.desktop-v2-frequent-editor-row{display:grid;grid-template-columns:1fr 34px 34px;gap:5px;align-items:center;min-height:36px}.desktop-v2-frequent-editor-row label{display:flex;align-items:center;gap:8px;font-size:13px}.desktop-v2-frequent-editor-row button{height:30px;border:1px solid #d3d8df;background:#fff;border-radius:8px}.desktop-v2-frequent-reset{margin-top:12px;border:0;background:transparent;text-decoration:underline;font:inherit;font-size:12px;cursor:pointer}.desktop-v2-frequent-empty{grid-column:1/-1;margin:8px 0;color:#6c7480;font-size:13px}@media(max-width:720px){.desktop-v2-frequent-head{display:block}.desktop-v2-frequent-edit{margin-top:10px}.desktop-v2-frequent-controls{grid-template-columns:1fr}}
+
+/* V57: Frequent-settings editor compact rows. Keep normal editor controls untouched. */
+body.desktop-live-edit .desktop-v2-frequent-editor{padding:10px 12px}
+body.desktop-live-edit .desktop-v2-frequent-editor section+section{margin-top:14px}
+body.desktop-live-edit .desktop-v2-frequent-editor section>strong{margin-bottom:5px}
+body.desktop-live-edit .desktop-v2-frequent-editor-row{display:grid;grid-template-columns:minmax(0,1fr) 30px 30px;gap:5px;align-items:center;min-height:32px}
+body.desktop-live-edit .desktop-v2-frequent-editor-row label{display:flex;align-items:center;gap:8px;min-width:0;margin:0;font-size:13px;line-height:1.25;white-space:nowrap}
+body.desktop-live-edit .desktop-v2-frequent-editor-row label input[type=checkbox]{appearance:auto!important;-webkit-appearance:checkbox!important;box-sizing:border-box!important;flex:0 0 16px!important;width:16px!important;height:16px!important;min-width:16px!important;min-height:16px!important;max-width:16px!important;max-height:16px!important;margin:0!important;padding:0!important;border-radius:2px!important}
+body.desktop-live-edit .desktop-v2-frequent-editor-row label span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!important;height:28px!important;min-width:30px!important;min-height:28px!important;padding:0!important;line-height:1!important}
+
+/* V58 Phase 3 — compact bulk-apply scope beside text size. */
+.v58-bulk-field{min-width:0}
+.v58-bulk-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(112px,.72fr);gap:8px;align-items:center}
+.v58-bulk-row>select{min-width:0;width:100%}
+.v58-bulk-scope{font-size:12px}
+@media (max-width:760px){.v58-bulk-row{grid-template-columns:minmax(0,1fr) minmax(104px,.8fr);gap:6px}.v58-bulk-scope{font-size:11px}}
+
+/* V59 bulk-apply safety: make the locked one-shot scope visibly inert. */
+.v58-bulk-scope:disabled{opacity:.48;cursor:not-allowed;background:#f3f4f6;color:#737780}
+\n/* V60 frequent text-color palette + one-shot bulk scope */\n.v60-frequent-color{grid-column:1/-1}\n.v60-color-top{display:grid;grid-template-columns:auto minmax(68px,.55fr) minmax(112px,.8fr);gap:8px;align-items:center}\n.v60-color-top code{font-size:11px;color:#555;white-space:nowrap}\n.v60-frequent-color .text-color-palette{margin-top:8px}\n.v60-color-scope-field{max-width:100%}\n@media (max-width:760px){.v60-color-top{grid-template-columns:auto minmax(58px,.5fr) minmax(104px,.9fr);gap:6px}.v60-color-top code{font-size:10px}}\n
+/* V61 text-color UI organization */
+.v61-text-color-card{
+  margin-top:12px;padding:12px;border:1px solid #d9dee5;border-radius:12px;background:#fafbfc;
+  display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;align-items:end;
+}
+.v61-text-color-title{grid-column:1/-1;font-size:13px;margin:0 0 1px}
+.v61-text-color-card .v61-color-mode{grid-column:1/-1;margin:0}
+.v61-text-color-card .v61-color-picker{grid-column:1/-1;margin:0}
+.v61-text-color-card .v61-color-palette{grid-column:1/-1;margin:0}
+.v61-text-color-card .v61-color-scope{grid-column:1/-1;margin:0}
+.v61-after-color{margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.v61-after-color>.desktop-text-detail-field{margin:0}
+.v61-position-drag{margin:0 0 12px;width:100%}
+/* Frequent editor: color is intentionally a full-width tool block. */
+.desktop-v2-frequent-controls .v60-frequent-color{grid-column:1/-1;padding:10px;border:1px solid #e0e4e9;border-radius:10px;background:#fafbfc}
+.desktop-v2-frequent-controls .v60-frequent-color .v60-color-top{grid-template-columns:auto minmax(70px,.45fr) minmax(120px,.75fr)}
+@media(max-width:720px){.v61-text-color-card{grid-template-columns:1fr}.v61-after-color{grid-template-columns:1fr}}
+
+/* V62 text color UI polish: no duplicate outer title; shadow sits beside Text position. */
+.v62-text-color-card{margin-top:12px}
+
+
+/* V63: compact the Text-tab color card without changing its color/bulk behavior. */
+.v62-text-color-card.v61-text-color-card{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:8px 10px;
+  padding:10px;
+}
+.v62-text-color-card.v61-text-color-card .v61-color-mode{grid-column:1;margin:0}
+.v62-text-color-card.v61-text-color-card .v61-color-picker{grid-column:2;margin:0;align-self:end}
+.v62-text-color-card.v61-text-color-card .v61-color-palette{grid-column:1/-1;margin:0}
+.v62-text-color-card.v61-text-color-card .v61-color-scope{grid-column:1/-1;margin:0}
+.v62-text-color-card .desktop-text-detail-color{display:grid;grid-template-columns:auto auto minmax(54px,1fr);gap:6px;align-items:center}
+.v62-text-color-card .desktop-text-detail-color code{font-size:10px;white-space:nowrap}
+@media(max-width:430px){
+  .v62-text-color-card.v61-text-color-card{grid-template-columns:1fr}
+  .v62-text-color-card.v61-text-color-card .v61-color-mode,
+  .v62-text-color-card.v61-text-color-card .v61-color-picker{grid-column:1}
+}
+
+
+/* V64: denser Text-tab color tool. Keep all V60/V61 behavior, reduce vertical footprint. */
+.v62-text-color-card.v61-text-color-card{
+  margin-top:10px;
+  padding:8px 9px;
+  gap:5px 8px;
+  grid-template-columns:minmax(150px,1.2fr) minmax(150px,.8fr);
+}
+.v62-text-color-card.v61-text-color-card .v61-color-mode,
+.v62-text-color-card.v61-text-color-card .v61-color-picker{align-self:end}
+.v62-text-color-card .desktop-text-detail-color{min-height:34px;grid-template-columns:auto auto 1fr;gap:5px}
+.v62-text-color-card .text-color-palette{margin-top:2px;padding-top:2px;padding-bottom:0}
+.v62-text-color-card .v61-color-scope>span{font-size:11px}
+.v62-text-color-card .v61-color-scope select{min-height:34px}
+@media(max-width:430px){
+  .v62-text-color-card.v61-text-color-card{grid-template-columns:minmax(0,1fr) minmax(138px,.72fr)}
+  .v62-text-color-card.v61-text-color-card .v61-color-mode{grid-column:1}
+  .v62-text-color-card.v61-text-color-card .v61-color-picker{grid-column:2}
+}
+
+
+/* Phase 4 / V70 — selection-first Rich Text authoring */
+.rich-selection-toolbar{position:fixed;z-index:2147483600!important;display:flex;align-items:center;gap:4px;max-width:calc(100vw - 16px);padding:5px;border:1px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(24,25,28,.94);box-shadow:0 10px 30px rgba(0,0,0,.28);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.rich-selection-toolbar[hidden]{display:none!important}.rich-selection-toolbar button,.rich-selection-toolbar select{flex:0 0 auto;height:34px;min-width:34px;border:0;border-radius:8px;background:transparent;color:#fff;padding:0 8px;font:700 13px/1 system-ui}.rich-selection-toolbar button:active,.rich-selection-toolbar select:focus{background:rgba(255,255,255,.14)}.rich-selection-toolbar .rich-bold-button{font-weight:950;font-size:16px}.rich-selection-toolbar select{appearance:none;-webkit-appearance:none;max-width:62px}.rich-selection-toolbar input[type="color"]{flex:0 0 34px;width:34px;height:34px;border:0;border-radius:8px;background:transparent;padding:5px}.rich-selection-toolbar input[type="color"]::-webkit-color-swatch-wrapper{padding:0}.rich-selection-toolbar input[type="color"]::-webkit-color-swatch{border:1px solid rgba(255,255,255,.5);border-radius:50%}
+@media(max-width:600px){.rich-selection-toolbar{font-size:12px}.rich-selection-toolbar button,.rich-selection-toolbar select{height:32px;min-width:32px;padding:0 7px}}
+
+/* Phase 4 / V71 — selection toolbar: familiar for writers, readable for first-time users. */
+.rich-selection-toolbar{min-height:46px;padding:6px 7px;gap:3px;border-color:rgba(255,255,255,.16);border-radius:13px;background:rgba(28,28,30,.96);box-shadow:0 12px 36px rgba(0,0,0,.30)}
+.rich-selection-toolbar button,.rich-selection-toolbar select{height:34px;min-width:36px;border-radius:8px;padding:0 9px;font-size:13px;cursor:pointer}
+.rich-selection-toolbar select{max-width:86px;padding-right:12px}.rich-selection-toolbar select[data-rich-action="heading"]{max-width:92px}
+.rich-selection-toolbar button:hover,.rich-selection-toolbar select:hover{background:rgba(255,255,255,.10)}
+.rich-selection-toolbar .rich-toolbar-separator{flex:0 0 1px;width:1px;height:22px;margin:0 3px;background:rgba(255,255,255,.18)}
+.rich-selection-toolbar .rich-clear-button{font-size:11px;font-weight:700;color:rgba(255,255,255,.78);min-width:46px}
+.rich-selection-toolbar .rich-color-control{flex:0 0 36px;width:36px;height:34px;display:grid;place-items:center;border-radius:8px;cursor:pointer}
+.rich-selection-toolbar .rich-color-control:hover{background:rgba(255,255,255,.10)}
+.rich-selection-toolbar .rich-color-control input[type="color"]{width:30px;height:30px;padding:5px}
+@media(max-width:600px){.rich-selection-toolbar{left:8px!important;right:8px!important;width:auto!important;max-width:none;padding:6px;gap:2px}.rich-selection-toolbar button,.rich-selection-toolbar select{height:36px;min-width:36px;padding:0 8px;font-size:12px}.rich-selection-toolbar select{max-width:76px}.rich-selection-toolbar select[data-rich-action="heading"]{max-width:82px}.rich-selection-toolbar .rich-clear-button{min-width:44px}}
+
+/* Phase 4 / V75 — Rich Text toolbar must sit above the full-screen Studio Preview overlay. */
+.rich-selection-toolbar{z-index:2147483600!important;pointer-events:auto!important}
+
+
+/* Phase 4 / V76 — desktop-first Rich Text authoring toolbar polish. */
+@media (min-width:601px){
+  .rich-selection-toolbar{max-width:none!important;width:max-content!important;overflow:visible!important;overscroll-behavior:auto!important;white-space:nowrap!important;gap:5px!important;padding:7px 8px!important}
+  .rich-selection-toolbar button,.rich-selection-toolbar select{height:36px!important;min-width:42px!important;padding:0 10px!important}
+  .rich-selection-toolbar select[data-rich-action="font"]{width:92px!important;max-width:92px!important}
+  .rich-selection-toolbar select[data-rich-action="size"]{width:112px!important;max-width:112px!important}
+  .rich-selection-toolbar select[data-rich-action="heading"]{width:94px!important;max-width:94px!important}
+}
+.rich-selection-toolbar select option{color:#151515!important;background:#fff!important;font-weight:600!important}
+.rich-selection-toolbar .rich-bold-button{min-width:64px!important;font-weight:950!important;letter-spacing:.01em;border:1px solid rgba(255,255,255,.24)!important;background:rgba(255,255,255,.08)!important}
+.rich-selection-toolbar .rich-bold-button:hover{background:rgba(255,255,255,.18)!important}
+.rich-selection-toolbar select[data-rich-action="font"]{max-width:92px}
+@media(max-width:600px){.rich-selection-toolbar select[data-rich-action="font"]{max-width:82px}}
+
+
+/* Phase 4 / V77 — toolbar interaction cleanup. */
+.rich-selection-toolbar .rich-bold-button{border:0!important;background:transparent!important;box-shadow:none!important;min-width:58px!important;font-weight:950!important}
+.rich-selection-toolbar .rich-bold-button:hover,.rich-selection-toolbar .rich-bold-button:focus{background:rgba(255,255,255,.10)!important}
+.rich-selection-toolbar select[data-rich-action="list"]{width:104px!important;max-width:104px!important}
+.sp-text .sp-rich-bold{font-weight:900!important}
+@media(min-width:601px){.rich-selection-toolbar{flex-wrap:nowrap!important;overflow:visible!important;white-space:nowrap!important}.rich-selection-toolbar select[data-rich-action="list"]{width:112px!important;max-width:112px!important}}
+@media(max-width:600px){.rich-selection-toolbar select[data-rich-action="list"]{max-width:84px!important}}
+
+/* Phase 4 / V78 — explicit dropdown affordance + true first-press interaction */
+.rich-selection-toolbar .rich-dropdown{position:relative;flex:0 0 auto}
+.rich-selection-toolbar .rich-dropdown-trigger{white-space:nowrap;min-width:auto!important;padding:0 10px!important}
+.rich-selection-toolbar .rich-dropdown-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:2147483646;min-width:138px;padding:5px;border:1px solid rgba(255,255,255,.18);border-radius:10px;background:rgba(28,28,30,.98);box-shadow:0 12px 30px rgba(0,0,0,.34)}
+.rich-selection-toolbar .rich-dropdown-menu[hidden]{display:none!important}
+.rich-selection-toolbar .rich-dropdown-item{display:block!important;width:100%!important;min-width:0!important;text-align:left!important;white-space:nowrap!important;padding:0 11px!important;border:0!important;background:transparent!important;color:#fff!important}
+.rich-selection-toolbar .rich-dropdown-item:hover{background:rgba(255,255,255,.12)!important}
+@media(min-width:601px){.rich-selection-toolbar{width:max-content!important;max-width:calc(100vw - 16px)!important;overflow:visible!important}.rich-selection-toolbar .rich-dropdown-trigger{height:36px!important}}
+
+/* Phase 4 / V79 — note-like Rich Text state feedback + hover dropdowns. */
+.rich-selection-toolbar button.is-active,
+.rich-selection-toolbar .rich-dropdown-trigger.is-active{
+  color:#73d6ad!important;
+  background:rgba(115,214,173,.12)!important;
+}
+.rich-selection-toolbar .rich-bold-button.is-active{font-weight:950!important;color:#73d6ad!important}
+.rich-selection-toolbar .rich-dropdown-item{position:relative;padding-right:34px!important}
+.rich-selection-toolbar .rich-dropdown-item.is-current{color:#73d6ad!important;background:rgba(115,214,173,.10)!important;font-weight:850!important}
+.rich-selection-toolbar .rich-dropdown-item.is-current::after{content:'✓';position:absolute;right:11px;top:50%;transform:translateY(-50%);font-size:14px;font-weight:900}
+.rich-selection-toolbar .rich-dropdown-trigger::first-letter{font-weight:850}
+@media (hover:hover) and (pointer:fine){
+  .rich-selection-toolbar .rich-dropdown-trigger:hover{background:rgba(255,255,255,.10)!important}
+}
+
+/* Phase 4 / V80 — stable note-like dropdown hover + clearer active state. */
+@media (hover:hover) and (pointer:fine){
+  .rich-selection-toolbar .rich-dropdown-menu{top:100%!important;margin-top:0!important;padding-top:7px!important;}
+  .rich-selection-toolbar .rich-dropdown::after{content:'';position:absolute;left:0;right:0;top:100%;height:8px;}
+}
+.rich-selection-toolbar button.is-active,.rich-selection-toolbar .rich-dropdown-trigger.is-active{background:rgba(115,214,173,.16)!important;color:#73d6ad!important;}
+
+
+/* V85 — Scene image rotation authoring */
+.desktop-scene-image-preview{padding:14px}
+.desktop-scene-image-preview img{transition:transform .12s ease}
+.desktop-scene-image-rotation{min-height:48px;border:1px solid #d8dde2;border-radius:10px;background:#fff;padding:8px 10px;display:grid;gap:5px}
+.desktop-scene-image-rotation>span{font:700 11px system-ui;color:#575d65}
+.desktop-scene-image-rotation-row,.live-scene-image-rotation-row{display:flex;align-items:center;gap:8px}
+.desktop-scene-image-rotation-row input[type="range"],.live-scene-image-rotation-row input[type="range"]{flex:1;min-width:90px}
+.desktop-scene-image-rotation-row input[type="number"],.live-scene-image-rotation-row input[type="number"]{width:64px;min-height:34px;border:1px solid #d8dde3;border-radius:8px;padding:4px 6px;background:#f7f8f9}
+.live-scene-image-mobile-preview{padding:14px}
+.live-scene-image-mobile-preview img{transition:transform .12s ease}
+.live-scene-image-rotation{margin-top:8px}
+
+/* Phase 6 / V91 — VIEW REC recorder */
+.view-rec-open{overflow:hidden!important}.view-rec-recorder{position:fixed;inset:0;z-index:2147483645;background:rgba(10,12,15,.78);backdrop-filter:blur(10px);display:grid;place-items:center;padding:18px}.view-rec-recorder-panel{width:min(920px,96vw);height:min(820px,92dvh);background:#f7f7f5;border-radius:20px;box-shadow:0 24px 80px rgba(0,0,0,.38);display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;overflow:hidden}.view-rec-recorder-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #dfe2e5}.view-rec-recorder-title{font:800 14px system-ui;letter-spacing:.08em}.view-rec-recorder-close{width:38px;height:38px;border:0;border-radius:50%;background:#e9ebed;font-size:24px;line-height:1;cursor:pointer}.view-rec-recorder-stage{position:relative;min-height:0;overflow:hidden;background:#111;touch-action:none;display:grid;place-items:center;user-select:none}.view-rec-recorder-image{display:block;max-width:none;max-height:none;min-width:0;min-height:0;width:auto;height:auto;transform-origin:center center;will-change:transform;pointer-events:none}.view-rec-recorder-hint,.view-rec-recorder-status{font:600 12px system-ui;color:#626970;text-align:center;padding:7px 12px 0}.view-rec-recorder-status{min-height:28px;color:#2f3438}.view-rec-recorder-controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px 14px 16px}.view-rec-button,.view-rec-authoring-button{border:1px solid #ccd2d8;border-radius:10px;background:#fff;color:#202428;font:750 13px system-ui;min-height:40px;padding:0 15px;cursor:pointer}.view-rec-button.is-primary,.view-rec-authoring-button{border-color:#0a84ff;color:#0673dc}.view-rec-button.is-rec{color:#d92828}.view-rec-button.is-recording{background:#d92828;color:#fff;border-color:#d92828}.view-rec-button:disabled{opacity:.42;cursor:default}.view-rec-authoring-field{grid-column:1/-1;border:1px solid #d8dde2;border-radius:10px;background:#fff;padding:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.view-rec-authoring-meta{font:700 12px system-ui;color:#575d65}.view-rec-authoring-button{min-height:36px}.live-edit-sheet .view-rec-authoring-field{margin-top:8px}
+@media(max-width:600px){.view-rec-recorder{padding:0}.view-rec-recorder-panel{width:100vw;height:100dvh;border-radius:0}.view-rec-recorder-head{padding-top:max(10px,env(safe-area-inset-top))}.view-rec-recorder-controls{padding-bottom:max(14px,env(safe-area-inset-bottom))}.view-rec-recorder-hint{font-size:11px}.view-rec-button{flex:1 1 42%;min-height:44px}.view-rec-authoring-field{align-items:stretch}.view-rec-authoring-button{width:100%}}
+
+/* V102 — VIEW POINT authoring viewport is source-image bounded. */
+.view-rec-recorder-stage{align-self:center;justify-self:center;max-width:100%;max-height:100%;}
+
+
+/* Phase 6 / V103 — authoring pan stabilizer. */
+.view-rec-button.is-active{background:#202428;color:#fff;border-color:#202428;}

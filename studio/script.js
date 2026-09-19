@@ -8195,40 +8195,44 @@
     else if(action==='heading'&&value){const level=Math.max(1,Math.min(3,Number(value)||2));const cur=ranges.find(r=>r?.kind==='heading'&&covers(r)&&Number(r.level||2)===level);ranges=ranges.filter(r=>!(r?.kind==='heading'&&Number(r.end)>=start&&Number(r.start)<=end));if(!cur)ranges.push({start,end,kind:'heading',level});}
     else if(action==='quote'){const cur=ranges.find(r=>r?.kind==='quote'&&covers(r));ranges=removeRichKindsInSelection(ranges,start,end,['quote']);if(!cur)ranges.push({start,end,kind:'quote'});}
     else if(action==='bullet'||action==='number'){
-      // V120: rebuild list authoring from canonical line starts. The previous
-      // selection-local rebuild mixed pre/post-insertion offsets and could leave
-      // the toolbar action looking like a no-op. Markers are the source of truth.
-      let text=String(scene.text||'');
-      const first=text.lastIndexOf('\n',Math.max(0,start-1))+1;
-      const after=text.indexOf('\n',Math.max(start,end-1));
-      const last=after<0?text.length:after;
-      const lineStarts=[];let pos=first;
-      while(pos<=last){lineStarts.push(pos);const n=text.indexOf('\n',pos);if(n<0||n>=last)break;pos=n+1;}
+      // V122: list authoring changes the canonical text itself, unlike the other
+      // Rich Text actions. Build the selected whole lines in one pass, then remap
+      // every existing Rich Text range through the inserted marker offsets.
+      const before=String(scene.text||'');
+      const first=before.lastIndexOf('\n',Math.max(0,start-1))+1;
+      const nl=before.indexOf('\n',Math.max(start,end-1));
+      const last=nl<0?before.length:nl;
+      const selectedBlock=before.slice(first,last);
+      const lines=selectedBlock.split('\n');
       const insertions=[];
-      lineStarts.forEach((lineStart,i)=>{
-        const lineEnd0=text.indexOf('\n',lineStart),lineEnd=lineEnd0<0?text.length:lineEnd0;
-        const line=text.slice(lineStart,lineEnd);
-        if(/^\s*(?:[•・*-]|\d+[.)])(?:\s+|$)/.test(line))return;
-        insertions.push({at:lineStart,marker:action==='number'?`${i+1}. `:'・ '});
-      });
-      insertions.slice().sort((a,b)=>b.at-a.at).forEach(ins=>{
-        text=text.slice(0,ins.at)+ins.marker+text.slice(ins.at);
-        const d=ins.marker.length;
-        ranges.forEach(r=>{if(Number(r.start)>=ins.at)r.start=Number(r.start)+d;if(Number(r.end)>=ins.at)r.end=Number(r.end)+d;});
-        if(start>=ins.at)start+=d;if(end>=ins.at)end+=d;
-      });
+      let rel=0;
+      const converted=lines.map((line,i)=>{
+        const existing=line.match(/^(\s*)((?:[・•●○◦▪▫◆◇▶▷*+\-])\s*|(\d+)[.)、]\s*)(.*)$/u);
+        if(existing){rel+=line.length+1;return line;}
+        const marker=action==='number'?`${i+1}. `:'・ ';
+        insertions.push({at:first+rel,len:marker.length});
+        rel+=line.length+1;
+        return marker+line;
+      }).join('\n');
+      const text=before.slice(0,first)+converted+before.slice(last);
+      const shiftPoint=(n)=>{let out=Number(n)||0;for(const ins of insertions){if(out>=ins.at)out+=ins.len;}return out;};
+      ranges=ranges.filter(r=>r?.kind!=='listItem').map(r=>({...r,start:shiftPoint(r.start),end:shiftPoint(r.end)}));
       scene.text=text;
-      // Rebuild every listItem range from canonical markers so stale offsets can
-      // never survive a direct toolbar edit. Other Rich Text ranges stay intact.
-      ranges=ranges.filter(r=>r?.kind!=='listItem');
-      const rebuilt=[];let scan=0;
-      while(scan<=text.length){
-        const e0=text.indexOf('\n',scan),e=e0<0?text.length:e0,line=text.slice(scan,e);
-        const m=line.match(/^\s*((?:[•・*-])|(\d+)[.)])(?:\s+|$)/);
-        if(m)rebuilt.push({start:scan,end:e,kind:'listItem',ordered:Boolean(m[2]),literalMarker:true});
-        if(e0<0)break;scan=e0+1;
-      }
+      // Rebuild listItem ranges from the canonical text, exactly like Rich Paste.
+      const rebuilt=[];let off=0;
+      text.split('\n').forEach(line=>{
+        const m=String(line).match(/^\s*((?:[・•●○◦▪▫◆◇▶▷*+\-])\s*|(\d+)[.)、]\s*)(.*)$/u);
+        if(m)rebuilt.push({start:off,end:off+line.length,kind:'listItem',ordered:Boolean(m[2]),literalMarker:true});
+        off+=line.length+1;
+      });
       ranges.push(...rebuilt);
+      // The preview Player owns a playback copy. Keep it in sync immediately;
+      // otherwise list markers can disappear until a later full refresh.
+      const live=player?.currentScene;
+      if(live && String(live.id||'')===String(scene.id||'')){
+        live.text=text;
+        live.richText={version:1,ranges:ranges.map(r=>({...r,style:r.style?{...r.style}:r.style}))};
+      }
     }
     scene.richText.ranges=ranges.sort((a,b)=>(a.start||0)-(b.start||0)||(a.end||0)-(b.end||0));
     if(!scene.richText.ranges.length)delete scene.richText;
