@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+// V64 Phase 3: text-size/color/typeface/writing-direction bulk apply with V59 one-shot safety and atomic Undo/Redo.
+
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -201,6 +203,249 @@
   let coverLogoFileName = '';
   let coverFontFamily = 'serif';
   let endingFontFamily = 'serif';
+  // Rich Paste v0.1 — keep semantic clipboard structure beside the existing plain-text source.
+  // The existing Splitter still receives plain text; semantic ranges are mapped back after splitting.
+  let easyRichSource = { version: 1, marks: [], tables: [] };
+  let applyingRichPaste = false;
+  let easyRichTextSnapshot = '';
+
+  function normalizeIncomingRichFragment(fragment){
+    const f={text:String(fragment?.text||''),marks:(fragment?.marks||[]).map(x=>clone(x)),tables:(fragment?.tables||[]).map(x=>clone(x))};
+    if(!f.tables.length)return f;
+    let nextNo=(easyRichSource.tables||[]).length+1;
+    f.tables.sort((a,b)=>(a.start||0)-(b.start||0)).forEach(table=>{
+      const oldLabel=String(table.label||'');
+      const newLabel=`［表 ${nextNo}］`;
+      const oldId=table.id; const newId=`table-${Date.now()}-${nextNo}`;
+      const at=f.text.indexOf(oldLabel,Math.max(0,table.start||0));
+      if(at>=0){
+        const delta=newLabel.length-oldLabel.length;
+        f.text=f.text.slice(0,at)+newLabel+f.text.slice(at+oldLabel.length);
+        f.marks.forEach(m=>{
+          if(m.tableId===oldId){m.start=at;m.end=at+newLabel.length;m.tableId=newId;}
+          else if(m.start>at){m.start+=delta;m.end+=delta;}
+        });
+        f.tables.forEach(t=>{if(t!==table && t.start>at){t.start+=delta;t.end+=delta;}});
+        table.start=at;table.end=at+newLabel.length;
+      }
+      table.label=newLabel;table.id=newId;nextNo++;
+    });
+    return f;
+  }
+
+  // V25: Easy stays intentionally plain. Rich Paste semantics remain in
+  // easyRichSource, but tables are not expanded into a second document editor.
+  function renderEasyRichComposition(){
+    const host=document.getElementById('easyRichComposition');
+    if(host){host.hidden=true;host.replaceChildren();}
+  }
+
+  function reconcileRichSourceAfterPlainEdit(oldText,newText){
+    oldText=String(oldText||'');newText=String(newText||''); if(oldText===newText)return;
+    let start=0;while(start<oldText.length&&start<newText.length&&oldText[start]===newText[start])start++;
+    let oldEnd=oldText.length,newEnd=newText.length;while(oldEnd>start&&newEnd>start&&oldText[oldEnd-1]===newText[newEnd-1]){oldEnd--;newEnd--;}
+    const delta=(newEnd-start)-(oldEnd-start);
+    const adjust=x=>{
+      if(x.end<=start)return {...x};
+      if(x.start>=oldEnd)return {...x,start:x.start+delta,end:x.end+delta};
+      return null;
+    };
+    easyRichSource.marks=(easyRichSource.marks||[]).map(adjust).filter(Boolean);
+    easyRichSource.tables=(easyRichSource.tables||[]).map(adjust).filter(Boolean);
+  }
+
+  function cloneRichSource(src=easyRichSource){
+    return {version:1,marks:(src?.marks||[]).map(x=>clone(x)),tables:(src?.tables||[]).map(x=>clone(x))};
+  }
+  function resetEasyRichSource(){ easyRichSource={version:1,marks:[],tables:[]}; }
+  function richTextFromClipboardHtml(html){
+    const doc=new DOMParser().parseFromString(String(html||''),'text/html');
+    const out=[]; const marks=[]; const tables=[];
+    const push=(text)=>{ if(!text)return; out.push(text); };
+    const length=()=>out.join('').length;
+    const blockBreak=()=>{ const cur=out.join(''); if(cur && !cur.endsWith('\n\n')) push(cur.endsWith('\n')?'\n':'\n\n'); };
+    const inline=(node, inherited={})=>{
+      if(node.nodeType===Node.TEXT_NODE){
+        const text=(node.nodeValue||'').replace(/\s+/g,' '); if(!text)return;
+        const start=length();push(text);const end=length();
+        const style={...inherited}; if(Object.keys(style).length)marks.push({start,end,kind:'span',style});
+        return;
+      }
+      if(node.nodeType!==Node.ELEMENT_NODE)return;
+      const tag=node.tagName.toLowerCase();
+      if(tag==='br'){push('\n');return;}
+      const next={...inherited};
+      if(tag==='strong'||tag==='b')next.bold=true;
+      if(tag==='em'||tag==='i')next.italic=true;
+      Array.from(node.childNodes).forEach(n=>inline(n,next));
+    };
+    const walkBlock=(el)=>{
+      if(el.nodeType===Node.TEXT_NODE){ inline(el); return; }
+      if(el.nodeType!==Node.ELEMENT_NODE)return;
+      const tag=el.tagName.toLowerCase();
+      const role=(el.getAttribute?.('role')||'').toLowerCase();
+      if(tag==='table'||role==='table'||role==='grid'){
+        blockBreak(); const index=tables.length+1; const label=`［表 ${index}］`; const start=length(); push(label); const end=length();
+        const rowEls=Array.from(el.querySelectorAll('tr,[role="row"]'));
+        const rows=rowEls.map(tr=>Array.from(tr.querySelectorAll(':scope > th, :scope > td, :scope > [role="columnheader"], :scope > [role="rowheader"], :scope > [role="cell"], :scope > [role="gridcell"]')).map(c=>(c.innerText||c.textContent||'').replace(/\s+/g,' ').trim())).filter(r=>r.length);
+        const first=rowEls[0];
+        const headerCells=first?first.querySelectorAll(':scope > th, :scope > [role="columnheader"]').length:0;
+        if(rows.length){
+          tables.push({id:`table-${index}`,start,end,label,headerRows:headerCells?1:0,rows});
+          marks.push({start,end,kind:'table',tableId:`table-${index}`}); blockBreak(); return;
+        }
+        // If a clipboard advertises table/grid semantics but exposes no row structure,
+        // fall through and preserve its text instead of creating an empty table.
+        out.pop();
+      }
+      if(/^h[1-6]$/.test(tag)){
+        blockBreak();const start=length();inline(el);const end=length();marks.push({start,end,kind:'heading',level:Number(tag[1])});blockBreak();return;
+      }
+      if(tag==='blockquote'){
+        blockBreak();const start=length();Array.from(el.childNodes).forEach(n=>inline(n));const end=length();marks.push({start,end,kind:'quote'});blockBreak();return;
+      }
+      if(tag==='ul'||tag==='ol'||role==='list'){
+        blockBreak(); const ordered=tag==='ol'; let no=1;
+        const items=Array.from(el.children).filter(x=>x.tagName?.toLowerCase()==='li'||(x.getAttribute?.('role')||'').toLowerCase()==='listitem');
+        items.forEach(li=>{
+          const start=length();push(ordered?`${no++}. `:'・');Array.from(li.childNodes).forEach(n=>inline(n));const end=length();marks.push({start,end,kind:'listItem',ordered});push('\n');
+        });
+        // Some editors expose role=list but wrap listitems more deeply.
+        if(!items.length){
+          Array.from(el.querySelectorAll('[role="listitem"]')).forEach(li=>{
+            const start=length();push('・');Array.from(li.childNodes).forEach(n=>inline(n));const end=length();marks.push({start,end,kind:'listItem',ordered:false});push('\n');
+          });
+        }
+        blockBreak(); return;
+      }
+      if(tag==='li'||role==='listitem'){
+        blockBreak(); const start=length();push('・');Array.from(el.childNodes).forEach(n=>inline(n));const end=length();marks.push({start,end,kind:'listItem',ordered:false});push('\n');blockBreak();return;
+      }
+      if(tag==='p'){
+        blockBreak();const start=length();Array.from(el.childNodes).forEach(n=>inline(n));const end=length();if(end>start)marks.push({start,end,kind:'paragraph'});blockBreak();return;
+      }
+      if(['div','section','article'].includes(tag)){
+        // Rich Text Player v0.17: container elements are not paragraphs.
+        // ChatGPT/Chrome clipboard can wrap a real <ul>/<ol>/<li> inside a DIV.
+        // Treating the whole DIV as inline text flattened that nested list before
+        // the list handler ever saw it. Walk block children recursively instead.
+        blockBreak();
+        Array.from(el.childNodes).forEach(n=>{
+          if(n.nodeType===Node.ELEMENT_NODE){
+            const childTag=n.tagName?.toLowerCase?.()||'';
+            const childRole=(n.getAttribute?.('role')||'').toLowerCase();
+            if(/^(?:h[1-6]|p|div|section|article|blockquote|ul|ol|li|table)$/.test(childTag) || /^(?:table|grid|list|listitem)$/.test(childRole)) walkBlock(n);
+            else inline(n);
+          } else inline(n);
+        });
+        blockBreak();return;
+      }
+      Array.from(el.childNodes).forEach(n=>walkBlock(n));
+    };
+    Array.from(doc.body.childNodes).forEach(walkBlock);
+    let text=out.join('').replace(/\n{3,}/g,'\n\n').trim();
+    // Trim offsets by the same leading whitespace removed above.
+    const raw=out.join(''); const lead=raw.length-raw.trimStart().length;
+    const max=text.length;
+    const adjust=x=>({...x,start:Math.max(0,x.start-lead),end:Math.min(max,x.end-lead)});
+    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start)};
+  }
+  // Rich Paste v0.2 — Markdown/plain fallback for clipboard tables.
+  function richTextFromClipboardPlain(plain){
+    const src=String(plain||'').replace(/\r\n?/g,'\n'),lines=src.split('\n'),out=[],marks=[],tables=[];
+    const push=t=>{if(t)out.push(t)},length=()=>out.join('').length;
+    const blockBreak=()=>{const cur=out.join('');if(cur&&!cur.endsWith('\n\n'))push(cur.endsWith('\n')?'\n':'\n\n')};
+    const addInline=raw=>{let pos=0,m,re=/\*\*([^*\n]+)\*\*/g;while((m=re.exec(raw))){push(raw.slice(pos,m.index));const start=length();push(m[1]);const end=length();if(end>start)marks.push({start,end,kind:'span',style:{bold:true}});pos=m.index+m[0].length;}push(raw.slice(pos));};
+    const splitPipe=line=>{let x=String(line||'').trim();if(x.startsWith('|'))x=x.slice(1);if(x.endsWith('|'))x=x.slice(0,-1);return x.split('|').map(v=>v.trim().replace(/\\\|/g,'|'));};
+    const isPipeRow=line=>/^\s*\|?.+\|.+\|?\s*$/.test(line||'');
+    const isDivider=line=>isPipeRow(line)&&splitPipe(line).length>=2&&splitPipe(line).every(c=>/^:?-{3,}:?$/.test(c.replace(/\s/g,'')));
+    const isTsvRow=line=>String(line||'').split('\t').length>=2;
+    let i=0;
+    while(i<lines.length){const line=lines[i],trimmed=line.trim();let m;
+      if(isPipeRow(line)&&i+1<lines.length&&isDivider(lines[i+1])){blockBreak();const rows=[splitPipe(line)];i+=2;while(i<lines.length&&isPipeRow(lines[i])&&lines[i].trim()){rows.push(splitPipe(lines[i++]));}const n=tables.length+1,label=`［表 ${n}］`,start=length();push(label);const end=length(),id=`table-${n}`;tables.push({id,start,end,label,headerRows:1,rows});marks.push({start,end,kind:'table',tableId:id});blockBreak();continue;}
+      if(isTsvRow(line)&&i+1<lines.length&&isTsvRow(lines[i+1])){blockBreak();const rows=[];while(i<lines.length&&isTsvRow(lines[i])&&lines[i].trim())rows.push(lines[i++].split('\t').map(v=>v.trim()));const n=tables.length+1,label=`［表 ${n}］`,start=length();push(label);const end=length(),id=`table-${n}`;tables.push({id,start,end,label,headerRows:1,rows});marks.push({start,end,kind:'table',tableId:id});blockBreak();continue;}
+      if(!trimmed){blockBreak();i++;continue;}
+      if((m=trimmed.match(/^(#{1,6})\s+(.+)$/))){blockBreak();const start=length();addInline(m[2]);const end=length();marks.push({start,end,kind:'heading',level:m[1].length});blockBreak();i++;continue;}
+      if((m=trimmed.match(/^>\s?(.*)$/))){blockBreak();const start=length();addInline(m[1]);const end=length();marks.push({start,end,kind:'quote'});blockBreak();i++;continue;}
+      if((m=trimmed.match(/^(?:[-*+・•●○■□▪▫◆◇▶▷])\s*(.+)$/u))){const start=length();push('・');addInline(m[1]);const end=length();marks.push({start,end,kind:'listItem',ordered:false});push('\n');i++;continue;}
+      if((m=trimmed.match(/^(\d+)[.)]\s+(.+)$/))){const start=length();push(`${m[1]}. `);addInline(m[2]);const end=length();marks.push({start,end,kind:'listItem',ordered:true});push('\n');i++;continue;}
+      blockBreak();const start=length();addInline(trimmed);const end=length();if(end>start)marks.push({start,end,kind:'paragraph'});blockBreak();i++;
+    }
+    const raw=out.join(''),lead=raw.length-raw.trimStart().length,text=raw.trim(),max=text.length,adjust=x=>({...x,start:Math.max(0,x.start-lead),end:Math.min(max,x.end-lead)});
+    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start)};
+  }
+
+  function insertRichFragment(fragment,start,end){
+    fragment=normalizeIncomingRichFragment(fragment);
+    const old=bodyInput.value; const before=old.slice(0,start), after=old.slice(end);
+    const delta=fragment.text.length-(end-start);
+    const keepMark=m=>m.end<=start||m.start>=end;
+    const shift=m=>m.start>=end?{...m,start:m.start+delta,end:m.end+delta}:m;
+    easyRichSource.marks=(easyRichSource.marks||[]).filter(keepMark).map(shift);
+    easyRichSource.tables=(easyRichSource.tables||[]).filter(keepMark).map(shift);
+    easyRichSource.marks.push(...fragment.marks.map(m=>({...m,start:m.start+start,end:m.end+start})));
+    easyRichSource.tables.push(...fragment.tables.map(m=>({...m,start:m.start+start,end:m.end+start})));
+    applyingRichPaste=true; bodyInput.value=before+fragment.text+after; applyingRichPaste=false;
+    const caret=start+fragment.text.length; bodyInput.setSelectionRange(caret,caret);
+    easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();
+    updateCount(); easySourceDirty=true; syncEasyPublishButton(); scheduleDraftSave?.(80);
+  }
+  function semanticDataForChunk(chunkText, searchFrom=0){
+    const source=bodyInput.value;
+    let start=source.indexOf(chunkText,searchFrom);
+    if(start<0){ const compact=String(chunkText||'').trim(); start=source.indexOf(compact,searchFrom); chunkText=compact; }
+    const chunk=String(chunkText||'');
+    const ranges=[]; const tableIds=new Set();
+
+    // Fast path: exact Splitter slice.
+    if(start>=0){
+      const end=start+chunk.length;
+      (easyRichSource.marks||[]).filter(m=>m.end>start&&m.start<end).forEach(m=>{
+        const r={...m,start:Math.max(0,m.start-start),end:Math.min(end,m.end)-start};
+        if(r.end>r.start){ranges.push(r);if(r.kind==='table')tableIds.add(r.tableId);}
+      });
+    }
+
+    // Rich Paste v0.3: Splitter is allowed to trim/reflow punctuation/newlines, so an
+    // exact source substring is not guaranteed. Re-anchor semantic marks by their
+    // actual marked text. This is especially important for headings/lists/tables.
+    const key=s=>String(s||'').replace(/[\s\u3000]+/g,'').replace(/^[・•●◦▪▫\-–—]+/,'');
+    const chunkKey=key(chunk);
+    (easyRichSource.marks||[]).forEach(m=>{
+      // Rich Text Player v0.18: never fuzzy-reanchor list items by their visible word.
+      // A repeated word such as "パン屋" can appear in ordinary prose; indexOf-based
+      // re-anchoring falsely turned every occurrence into a bullet. Lists are structural:
+      // they are accepted only from the exact source slice or rebuilt from a Splitter
+      // list-block whose canonical text already contains a real list marker.
+      if(m?.kind==='listItem')return;
+      if(ranges.some(r=>r.kind===m.kind&&r.tableId===m.tableId&&r.start===Math.max(0,(m.start-(start>=0?start:0)))))return;
+      let marked=source.slice(Math.max(0,m.start),Math.max(0,m.end));
+      let needle=marked.trim();
+      if(m.kind==='table' && m.tableId){
+        const t=(easyRichSource.tables||[]).find(x=>x.id===m.tableId);
+        needle=String(t?.label||needle).trim();
+      }
+      if(!needle)return;
+      let local=chunk.indexOf(needle);
+      let localEnd=local>=0?local+needle.length:-1;
+      if(local<0){
+        const nk=key(needle);
+        if(!nk||!chunkKey.includes(nk))return;
+        // Fuzzy match: locate a distinctive visible fragment after Splitter cleanup.
+        const visible=needle.replace(/^[・•●◦▪▫\-–—]+\s*/,'').trim();
+        local=visible?chunk.indexOf(visible):-1;
+        localEnd=local>=0?local+visible.length:-1;
+      }
+      if(local>=0&&localEnd>local){
+        ranges.push({...m,start:local,end:localEnd});
+        if(m.kind==='table'&&m.tableId)tableIds.add(m.tableId);
+      }
+    });
+    // Rich Text Player v0.18: listItem has no word-based fallback.
+    ranges.sort((a,b)=>(a.start-b.start)||(a.end-b.end));
+    const tables=(easyRichSource.tables||[]).filter(t=>tableIds.has(t.id)).map(t=>({type:'table',id:t.id,headerRows:t.headerRows||0,rows:clone(t.rows||[]),display:{mode:'compact',expand:'fullscreen'}}));
+    return {next:start>=0?start+chunk.length:searchFrom,ranges,tables};
+  }
   const bodyInput = $('#bodyInput');
   const charCount = $('#charCount');
   const densitySelect = $('#densitySelect');
@@ -336,7 +581,7 @@
     ['追加','Add'],['文字','Text'],['演出','Effects'],['背景','Background'],['音','Audio'],['時間','Time'],
     ['入力中の文章を置き換えますか？','Replace the text you are editing?'],
     ['入力中のタイトルと本文をサンプルに置き換えますか？','Replace the current title and text with the sample?'],
-    ['現在のタイトルと本文をサンプルに置き換えます。置き換え後も「元に戻す」で1回だけ戻せます。','This replaces the current title and text with the sample. You can undo it once afterward.'],
+    ['現在のタイトルと本文をサンプルに置き換えます。置き換え後も「元に戻す」で履歴をさかのぼれます。','This replaces the current title and text. You can step backward through Undo history afterward.'],
     ['キャンセル','Cancel'],['サンプルに置き換える','Replace with sample'],['元に戻す','Undo'],
     ['PLAYERでは自動的に軽く表示','Shown subtly in the Player automatically'],['PLAYERでは自動的に薄く表示','Shown subtly in the Player automatically'],
     ['表紙','Cover'],['読了ページ','Ending page'],['作品情報・表紙','Work info & cover'],['作品情報','Work info'],['話数','Episode label'],
@@ -903,7 +1148,7 @@
     if(!currentDraftId)currentDraftId=createDraftId();
     localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     return {
-      id:currentDraftId,updatedAt:Date.now(),title:draftTitle(),body:bodyInput.value,
+      id:currentDraftId,updatedAt:Date.now(),title:draftTitle(),body:bodyInput.value,richSource:cloneRichSource(),
       easySourceDirty,protectedResplitPending,selectedSceneIndex,
       easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',seriesId:activeSeriesId(),episode:episodeInput?.value||'',episodeNumber:episodeNumberInput?.value||'',episodeTitle:episodeTitleInput?.value||'',description:descriptionInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
       document:workingDocument?clone(workingDocument):null,
@@ -969,7 +1214,7 @@
     latestPublishedFingerprint=row.publication?.fingerprint||'';
     latestPublishedAt=Number(row.publication?.publishedAt)||0;
     latestPublicationStoppedAt=Number(row.publication?.stoppedAt)||0;
-    titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';
+    titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';easyRichSource=row.richSource?cloneRichSource(row.richSource):{version:1,marks:[],tables:[]};easyRichTextSnapshot=bodyInput.value;renderEasyRichComposition();
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
     if(episodeNumberInput)episodeNumberInput.value=String(row.easy?.episodeNumber||row.document?.metadata?.episodeNumber||'');
@@ -1317,7 +1562,7 @@
     latestPublishedUrl='';
     latestPublishedFingerprint='';
     latestPublishedAt=0;
-    titleInput.value='';authorInput.value='';bodyInput.value='';
+    titleInput.value='';authorInput.value='';bodyInput.value='';resetEasyRichSource();easyRichTextSnapshot='';renderEasyRichComposition();
     if(densitySelect)densitySelect.value='normal';
     if(subtitleInput)subtitleInput.value='';applyRememberedWorkIdentity();if(seriesTitleInput)seriesTitleInput.value='';if(seriesLinkSelect)seriesLinkSelect.value='';if(episodeInput)episodeInput.value='';if(episodeNumberInput)episodeNumberInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';renderAuthorSeriesOptions();
     coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';
@@ -1709,7 +1954,24 @@
         colors.forEach(hex=>{
           const b=document.createElement('button');b.type='button';b.className='text-color-chip';b.style.backgroundColor=hex;b.title=hex;b.setAttribute('aria-label',`${label} ${hex}`);
           if(normalizeTextColor(currentColor)===hex)b.classList.add('is-current');
-          b.addEventListener('click',()=>{rememberTextColor(hex);onApply(hex);});chips.appendChild(b);
+          // V40: palette chips are BUTTONs, so the generic Live setting-history
+          // watcher (select/input only) never sees them. Capture the true BEFORE
+          // state on pointerdown; keep a keyboard-click fallback. One chip press
+          // must always equal exactly one Undo step, including the first color
+          // operation immediately after the Live baseline is established.
+          let undoCapturedForPress=false;
+          const captureChipUndo=()=>{
+            if(!liveEditEnabled || !workingDocument?.scenes?.length)return;
+            captureUndo('文字色の変更を元に戻せます');
+            undoCapturedForPress=true;
+            queueMicrotask(()=>showUndo('文字色の変更を元に戻せます'));
+          };
+          b.addEventListener('pointerdown',()=>{undoCapturedForPress=false;captureChipUndo();});
+          b.addEventListener('click',()=>{
+            if(!undoCapturedForPress)captureChipUndo(); // keyboard / assistive click
+            undoCapturedForPress=false;
+            rememberTextColor(hex);onApply(hex);
+          });chips.appendChild(b);
         });
       }else{
         const empty=document.createElement('small');empty.textContent=uiLanguage==='en'?'None yet':'まだなし';chips.appendChild(empty);
@@ -2140,14 +2402,90 @@
     return manifest;
   }
 
+  // V26: tables are isolated Scene-sized objects in Ahako.
+  // A table Scene owns exactly one table and contains only its internal marker.
+  // Prose before/after the marker becomes ordinary prose Scenes, so normal
+  // cursor split/merge/edit logic never has to move a table anchor around.
+  function isolateTablesIntoScenes(scene){
+    const source=String(scene?.text||'');
+    const ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
+    const tableRanges=ranges.filter(r=>r?.kind==='table').slice().sort((a,b)=>(Number(a.start)||0)-(Number(b.start)||0));
+    if(!tableRanges.length)return [scene];
+    const content=Array.isArray(scene.content)?scene.content:[];
+    const out=[];
+    const pushProse=(a,b)=>{
+      const raw=source.slice(a,b); const lead=(raw.match(/^\s*/)||[''])[0].length; const trail=(raw.match(/\s*$/)||[''])[0].length;
+      const segStart=a+lead,segEnd=Math.max(segStart,b-trail); if(segEnd<=segStart)return;
+      const segText=source.slice(segStart,segEnd);
+      const segRanges=ranges.filter(r=>r?.kind!=='table'&&(Number(r.end)||0)>segStart&&(Number(r.start)||0)<segEnd).map(r=>({
+        ...r,start:Math.max(segStart,Number(r.start)||0)-segStart,end:Math.min(segEnd,Number(r.end)||0)-segStart
+      })).filter(r=>r.end>r.start);
+      out.push({...scene,text:segText,
+        ...(segRanges.length?{richText:{version:1,ranges:segRanges}}:{richText:undefined}),
+        content:undefined
+      });
+    };
+    let cursor=0;
+    tableRanges.forEach((r,idx)=>{
+      const a=Math.max(0,Math.min(source.length,Number(r.start)||0));
+      const b=Math.max(a,Math.min(source.length,Number(r.end)||a));
+      pushProse(cursor,a);
+      const tableId=String(r.tableId||'');
+      const table=content.find(c=>c?.type==='table'&&String(c.id||'')===tableId);
+      if(table){
+        const marker=source.slice(a,b)||String(table.label||`［表 ${idx+1}］`);
+        out.push({...scene,text:marker,
+          richText:{version:1,ranges:[{...r,start:0,end:marker.length}]},
+          content:[clone(table)],
+          presentation:{...(scene.presentation||{}),display:'solo'}
+        });
+      }
+      cursor=b;
+    });
+    pushProse(cursor,source.length);
+    return out.length?out:[scene];
+  }
+
+  function sceneHasTable(scene){
+    return Boolean((Array.isArray(scene?.content)?scene.content:[]).some(c=>c?.type==='table'));
+  }
+
   function buildSceneDocument() {
     const chunks = splitBody(bodyInput.value);
     const languageSummary = SceneTextSplitter.summarizeLanguages?.(chunks) || { language: detectWorkLanguage(), languages: [detectWorkLanguage()] };
-    const scenes = chunks.map((chunk, index) => ({
-      id: makeSceneId(index), type: chunk.type || 'text', text: chunk.text,
-      ...(languageSummary.language === 'mul' && chunk.language ? { language: chunk.language } : {}),
-      presentation: { display: 'stack', effect: 'auto', text: { size: 'auto' } }
-    }));
+    let richCursor=0;
+    let scenes = chunks.map((chunk, index) => {
+      const semantic=semanticDataForChunk(chunk.text,richCursor); richCursor=semantic.next;
+      let sceneText=chunk.text;
+      // Rich Text Player v0.18: list identity comes from structure, never from a word match.
+      // Splitter preserves literal markers in list-block chunks, so derive listItem ranges
+      // directly from those lines. Ordinary prose is never allowed to gain a bullet here.
+      if(chunk.reason==='list-block'){
+        semantic.ranges = (semantic.ranges||[]).filter(r=>r?.kind!=='listItem');
+        let offset=0;
+        String(sceneText||'').split('\n').forEach(line=>{
+          const raw=String(line||'');
+          const m=raw.match(/^\s*((?:[・•●○◦▪▫◆◇▶▷*+\-])\s*|(\d+)[.)、]\s*|[①-⑳]\s*)(.*)$/u);
+          if(m){
+            const lead=raw.length-raw.trimStart().length;
+            semantic.ranges.push({start:offset+lead,end:offset+raw.length,kind:'listItem',ordered:Boolean(m[2]),literalMarker:true});
+          }
+          offset+=raw.length+1;
+        });
+      } else {
+        // Defensive cleanup for old/fuzzy Rich Paste data: non-list chunks cannot
+        // carry listItem semantics. This prevents stray bullets in repeated prose.
+        semantic.ranges = (semantic.ranges||[]).filter(r=>r?.kind!=='listItem');
+      }
+      return {
+        id: makeSceneId(index), type: chunk.type || 'text', text: sceneText,
+        ...(semantic.ranges?.length ? { richText:{version:1,ranges:semantic.ranges} } : {}),
+        ...(semantic.tables?.length ? { content:semantic.tables } : {}),
+        ...(languageSummary.language === 'mul' && chunk.language ? { language: chunk.language } : {}),
+        presentation: { display: 'stack', effect: 'auto', text: { size: 'auto' } }
+      };
+    });
+    scenes = scenes.flatMap(isolateTablesIntoScenes).map((scene,index)=>({...scene,id:makeSceneId(index)}));
     if (selectedTheme === 'cinema' && cinemaBackgroundUrl && scenes[0]) {
       scenes[0].presentation.background = { src: cinemaBackgroundUrl, transition: 'fade', dim: cinemaTone === 'dark' ? 0.48 : 0.72, fit: 'cover', position: 'center center' };
     }
@@ -2553,7 +2891,7 @@
       easySourceDirty=false;
 
       if(lastEasyReconcileDeletedCount>0){
-        undoSnapshot={
+        pushUndoSnapshot({
           label:'Easy編集によるScene削除',
           workingDocument:priorDocument,
           selectedSceneIndex:priorIndex,
@@ -2569,7 +2907,7 @@
             language:languageInput?.value ?? 'ja',
             body:priorBody
           }
-        };
+        });
         const n=lastEasyReconcileDeletedCount;
         showUndo(n===1?'Sceneを削除しました':`${n} Scenesを削除しました`);
       }
@@ -3707,7 +4045,7 @@
         if(pair.url)pair.url.value=item.url||item.href||'';
       });
     }
-    bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n');
+    bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n'); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();
     updateCount();updateCoverPreview();updateEndingPreview();
     protectedResplitPending=false;
    
@@ -4838,7 +5176,7 @@
     const btn=$('#publishFromPreviewButton');
     if(!btn)return;
     btn.hidden=!(show && !autoRecActive && !playerScreen.hidden);
-    if(!btn.hidden)syncPublishCopyForStatus();
+    if(!btn.hidden){syncPublishCopyForStatus();requestAnimationFrame(syncStudioV2FloatingChrome);}
   }
 
 
@@ -4946,7 +5284,30 @@
     }
     if(!studioPreviewGuide)guide?.remove();
   }
+  function cleanupDesktopV2BuilderOverlays(){
+    if(!document.body.classList.contains('desktop-live-edit'))return;
+    // Editor-v2 detail builders are DOM factories. Unless the user explicitly
+    // opened a toolbox detail inspector, no generated backdrop may survive.
+    if(!document.body.classList.contains('toolbox-detail-open')){
+      document.querySelectorAll('.desktop-text-detail-overlay').forEach(el=>el.remove());
+    }
+    // A stale page-editor shade is equally destructive: it dims the Player and
+    // steals taps after any preview-affecting refresh.
+    if(!document.body.classList.contains('desktop-live-special-open')){
+      document.querySelectorAll('.desktop-live-special-shade').forEach(el=>el.remove());
+    }
+  }
+  // Detail inspectors are also used as temporary DOM factories by Editor v2.
+  // If a setting refresh leaves one behind, it dims the whole authoring surface
+  // and intercepts taps. Remove such orphan factory overlays automatically.
+  const desktopV2OverlayObserver=new MutationObserver(()=>{
+    if(!document.body.classList.contains('desktop-live-edit') || document.body.classList.contains('toolbox-detail-open'))return;
+    queueMicrotask(cleanupDesktopV2BuilderOverlays);
+  });
+  desktopV2OverlayObserver.observe(document.body,{childList:true,subtree:true});
+
   function syncStudioPreviewDevice({rerender=false}={}){
+    cleanupDesktopV2BuilderOverlays();
     if(!playerScreen)return;
     ['phone','tablet','pc'].forEach(mode=>playerScreen.classList.toggle(`preview-device-${mode}`,mode===studioPreviewDevice));
     studioPreviewDeviceToolbar?.querySelectorAll?.('[data-preview-device]').forEach(button=>button.classList.toggle('is-active',button.dataset.previewDevice===studioPreviewDevice));
@@ -4957,10 +5318,19 @@
     const desktop=window.matchMedia('(min-width:1100px)').matches && document.body.classList.contains('desktop-live-edit');
     if(desktop){
       const playerRect=playerScreen.getBoundingClientRect();
-      const panelRect=desktopLivePanel?.getBoundingClientRect?.();
-      const measuredPaneWidth=panelRect && panelRect.left>playerRect.left
-        ? panelRect.left-playerRect.left
-        : Math.min(playerScreen.clientWidth||window.innerWidth,window.innerWidth/2);
+      const settingsOpen=document.body.classList.contains('desktop-v2-settings-open');
+      // v2: Settings slides in with transform. getBoundingClientRect().left
+      // follows that animation, so measuring the panel's left edge on the same
+      // frame as the click briefly reports the old/full-width canvas. Reserve
+      // the inspector's real layout width instead; the preview moves left
+      // immediately and stays there for phone / tablet / PC alike.
+      const fullCanvasWidth=playerScreen.clientWidth||window.innerWidth;
+      const inspectorWidth=settingsOpen && desktopLivePanel
+        ? Math.min(fullCanvasWidth-1, Math.round(desktopLivePanel.offsetWidth||0))
+        : 0;
+      const measuredPaneWidth=settingsOpen
+        ? Math.max(1,fullCanvasWidth-inspectorWidth)
+        : fullCanvasWidth;
       const availableWidth=Math.max(1,Math.round(measuredPaneWidth));
       const availableHeight=Math.max(1,playerScreen.clientHeight||window.innerHeight);
       // Keep a real logical viewport inside the preview. Only the finished
@@ -5002,9 +5372,52 @@
           player.refreshCurrent({document:getDocumentForPlayback(),index:player.index,preserveAudio:true});
         }
         mountStudioSafeGuide();
+        syncStudioV2FloatingChrome();
       });
     });
   }
+  function syncStudioV2FloatingChrome(){
+    if(!liveEditEnabled || !window.matchMedia('(min-width:1100px)').matches)return;
+    const rect=studioPreviewViewport?.getBoundingClientRect?.();
+    if(!rect || !rect.width || !rect.height)return;
+    const centerX=rect.left+rect.width/2;
+    const topY=Math.max(10,rect.top+12);
+
+    // All authoring chrome follows the currently visible preview, not the browser.
+    if(desktopV2Chrome && !desktopV2Chrome.hidden){
+      desktopV2Chrome.style.setProperty('position','fixed','important');
+      desktopV2Chrome.style.setProperty('left',`${Math.round(centerX)}px`,'important');
+      desktopV2Chrome.style.setProperty('top',`${Math.round(topY)}px`,'important');
+      desktopV2Chrome.style.setProperty('transform','translateX(-50%)','important');
+    }
+
+    const publish=$('#publishFromPreviewButton');
+    if(publish && !publish.hidden){
+      publish.style.setProperty('left',`${Math.round(centerX)}px`,'important');
+      publish.style.setProperty('right','auto','important');
+      publish.style.setProperty('bottom','auto','important');
+      publish.style.setProperty('top',`${Math.round(Math.max(rect.top+24,rect.bottom-112))}px`,'important');
+      publish.style.setProperty('transform','translateX(-50%)','important');
+    }
+
+    const rec=$('#autoRecPanel');
+    if(rec && !rec.hidden){
+      // AUTO REC is a workspace control, not preview chrome.
+      // Keep it in the left utility rail under the device selector regardless
+      // of preview size, inspector open/close, REC state, or bookmark sidebar.
+      const toolbarRect=studioPreviewDeviceToolbar?.getBoundingClientRect?.();
+      const railLeft=Math.max(10,Math.round(toolbarRect?.left||10));
+      const railTop=Math.round((toolbarRect?.bottom||100)+18);
+      rec.style.setProperty('position','fixed','important');
+      rec.style.setProperty('left',`${railLeft}px`,'important');
+      rec.style.setProperty('right','auto','important');
+      rec.style.setProperty('top',`${railTop}px`,'important');
+      rec.style.setProperty('transform','none','important');
+      rec.style.setProperty('justify-content','flex-start','important');
+    }
+  }
+
+  window.addEventListener('resize',()=>requestAnimationFrame(syncStudioV2FloatingChrome));
   studioPreviewDeviceToolbar?.addEventListener('pointerdown',event=>event.stopPropagation());
   studioPreviewDeviceToolbar?.addEventListener('click',event=>{
     event.preventDefault();event.stopPropagation();
@@ -5014,8 +5427,14 @@
       if(next===studioPreviewDevice)return;
       studioPreviewDevice=next;
       localStorage.setItem(STUDIO_PREVIEW_DEVICE_KEY,studioPreviewDevice);
-      syncStudioPreviewDevice({rerender:true});
+      // Device switching is a viewport-only operation. Re-rendering the current
+      // Scene here restarted presentation layers and could leave the Player dimmed.
+      syncStudioPreviewDevice({rerender:false});
       updateCoverPreview();
+      // Cover crop is device-specific, so update the real Player cover directly.
+      if(player?.els?.coverBg && coverImageUrl){
+        player.els.coverBg.style.backgroundPosition=coverPositionCss(studioPreviewDevice);
+      }
       renderDesktopLivePanel?.();
       return;
     }
@@ -5084,6 +5503,10 @@
       syncAdvancedFieldsToScene();
     }
     if(!workingDocument?.scenes?.length)return;
+
+    // V35: Live authoring starts at the boxed Scene document. Do not allow
+    // Studio Undo to cross back into the pre-boxing zero-Scene state.
+    establishSceneUndoBaseline();
 
     // v0.3.03: return to the last known-good Preview architecture.
     // The return button lives inside #playerScreen, exactly as it did when
@@ -5784,11 +6207,16 @@
       selected?.scrollIntoView?.({behavior:'smooth',block:'nearest',inline:'center'});
     });
   }
-  let undoSnapshot=null;
+  // V28: multi-step history foundation. Structural Studio operations now keep
+  // bounded Undo/Redo stacks instead of a single disposable snapshot.
+  const HISTORY_LIMIT=100;
+  let undoHistory=[];
+  let redoHistory=[];
+  let undoSnapshot=null; // compatibility alias for existing UI checks
   let undoBarTimer=null;
 
-  function captureUndo(label='変更'){
-    undoSnapshot={
+  function makeHistorySnapshot(label='変更'){
+    return {
       label,
       workingDocument:workingDocument ? clone(workingDocument) : null,
       selectedSceneIndex,
@@ -5808,10 +6236,72 @@
     };
   }
 
+  function syncHistoryUi(){
+    undoSnapshot=undoHistory.length ? undoHistory[undoHistory.length-1] : null;
+    const undoBtn=$('#undoButton'), compact=$('#undoCompactButton'), redoBtn=$('#redoButton');
+    if(undoBtn)undoBtn.disabled=!undoHistory.length;
+    if(compact){compact.hidden=false;compact.disabled=!undoHistory.length;}
+    if(redoBtn)redoBtn.disabled=!redoHistory.length;
+  }
+
+  function pushBounded(stack,snapshot){
+    if(!snapshot)return;
+    stack.push(snapshot);
+    if(stack.length>HISTORY_LIMIT)stack.splice(0,stack.length-HISTORY_LIMIT);
+  }
+
+  function historySnapshotStateKey(snapshot){
+    if(!snapshot)return '';
+    try{
+      return JSON.stringify({
+        workingDocument:snapshot.workingDocument||null,
+        selectedSceneIndex:Number(snapshot.selectedSceneIndex)||0,
+        easySourceDirty:Boolean(snapshot.easySourceDirty),
+        easy:snapshot.easy||null
+      });
+    }catch(_){ return ''; }
+  }
+
+  function pushUndoSnapshot(snapshot,{clearRedo=true}={}){
+    // V38 safety net: different event paths can observe the same BEFORE state
+    // (e.g. input + change, or static + Live controls). One user operation must
+    // never require two Ctrl/Cmd+Z presses just because identical snapshots were
+    // pushed twice.
+    const prev=undoHistory.length ? undoHistory[undoHistory.length-1] : null;
+    const sameState=prev && historySnapshotStateKey(prev)===historySnapshotStateKey(snapshot);
+    if(!sameState)pushBounded(undoHistory,snapshot);
+    if(clearRedo)redoHistory=[];
+    syncHistoryUi();
+  }
+
+  function captureUndo(label='変更'){
+    const snap=makeHistorySnapshot(label);
+    pushUndoSnapshot(snap);
+  }
+
+
+  // V35: Once a real Scene document exists, an older pre-boxing snapshot with
+  // zero Scenes must never be reachable from Live Undo. V34 diagnostics proved
+  // that this snapshot was the apparent "editing lock": Undo restored scenes=0,
+  // and Redo restored the authored document. Keep valid structural history, but
+  // cut off every history entry at/before the last zero-Scene snapshot.
+  function establishSceneUndoBaseline(){
+    if(!workingDocument?.scenes?.length)return;
+    let lastPreScene=-1;
+    for(let i=0;i<undoHistory.length;i++){
+      const count=undoHistory[i]?.workingDocument?.scenes?.length||0;
+      if(count===0)lastPreScene=i;
+    }
+    if(lastPreScene>=0){
+      undoHistory=undoHistory.slice(lastPreScene+1);
+      redoHistory=[];
+      syncHistoryUi();
+    }
+  }
+
   function showCompactUndo(){
-    if(!undoSnapshot || !playerScreen?.hidden)return;
-    const compact=$('#undoCompactButton');
-    if(compact){compact.hidden=false;compact.disabled=!undoSnapshot;}
+    if(!undoHistory.length || !playerScreen?.hidden)return;
+    syncHistoryUi();
   }
 
   function hideUndoBar(){
@@ -5845,20 +6335,18 @@
       'カーソル位置で分割しました':'undo.splitAtCursor'
     };
     if(exact[label])return t(exact[label]);
-
     const deleted=String(label||'').match(/^(\d+) Scenesを削除しました$/);
     if(deleted)return t('undo.scenesDeleted',{n:deleted[1]});
-
     return label;
   }
 
   function showUndo(label){
     scheduleDraftSave(120);
+    syncHistoryUi();
     if(!playerScreen?.hidden)return;
-    const bar=$('#undoBar'), msg=$('#undoMessage'), compact=$('#undoCompactButton');
+    const bar=$('#undoBar'), msg=$('#undoMessage');
     if(!bar)return;
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
-    if(compact){compact.hidden=false;compact.disabled=false;}
     if(msg){msg.dataset.rawLabel=label;msg.textContent=translateUndoLabel(label);}
     bar.hidden=false;
     bar.classList.remove('is-hiding');
@@ -5867,23 +6355,19 @@
   }
 
   function clearUndo(){
-    undoSnapshot=null;
+    undoHistory=[]; redoHistory=[]; undoSnapshot=null;
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
     undoBarTimer=null;
-    const bar=$('#undoBar'), compact=$('#undoCompactButton');
+    const bar=$('#undoBar');
     if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
-    if(compact){compact.hidden=false;compact.disabled=true;}
+    syncHistoryUi();
   }
 
-  function restoreUndo(){
-    if(!undoSnapshot)return;
-    const snap=undoSnapshot;
-    undoSnapshot=null;
-
+  function applyHistorySnapshot(snap){
+    if(!snap)return;
     workingDocument=snap.workingDocument ? clone(snap.workingDocument) : null;
     selectedSceneIndex=snap.selectedSceneIndex;
     easySourceDirty=snap.easySourceDirty;
-
     if(titleInput)titleInput.value=snap.easy.title;
     if(authorInput)authorInput.value=snap.easy.author;
     if(subtitleInput)subtitleInput.value=snap.easy.subtitle;
@@ -5893,21 +6377,65 @@
     if(episodeInput)episodeInput.value=snap.easy.episode;
     if(descriptionInput)descriptionInput.value=snap.easy.description||'';
     if(languageInput)languageInput.value=snap.easy.language;
-    if(bodyInput)bodyInput.value=snap.easy.body;
+    if(bodyInput){bodyInput.value=snap.easy.body;easyRichTextSnapshot=bodyInput.value;renderEasyRichComposition();}
+    updateCount(); updateCoverPreview(); updateEasyFileActions();
+    if(!advancedScreen.hidden && workingDocument?.scenes?.length)renderAdvanced();
 
-    updateCount();
-    updateCoverPreview();
-    updateEasyFileActions();
-
-    if(!advancedScreen.hidden && workingDocument?.scenes?.length){
-      renderAdvanced();
+    // V30: Undo/Redo restores the document model immediately, so Live must be
+    // redrawn from that restored model in the same turn. Previously the model
+    // changed behind the Player while the visible Player DOM stayed stale until
+    // leaving Live and reopening it from Easy.
+    if(!playerScreen?.hidden && liveEditEnabled && player && workingDocument?.scenes?.length){
+      // V32: Undo/Redo replaces the active Player DOM. If the author was
+      // directly editing that Scene, finishInlineTextEdit() necessarily removes
+      // contenteditable from the old node. Remember that editing intent and
+      // immediately bind Live Edit to the freshly rendered node again; otherwise
+      // the restored document is visible but the author appears to be locked out
+      // until another history operation happens.
+      const resumeInlineEdit=Boolean(liveInlineEditEl);
+      const resumeInlineField=liveInlineEditField==='subText'?'subText':'text';
+      finishInlineTextEdit();
+      const target=Math.max(0,Math.min(Number(selectedSceneIndex)||0,workingDocument.scenes.length-1));
+      // V44: Undo/Redo replaces workingDocument Scene objects. Any desktop
+      // inspector that is preserved across that replacement keeps callbacks
+      // closed over the pre-Undo Scene/presentation objects. The first setting
+      // change then mutates the detached object and appears to do nothing; the
+      // subsequent panel render binds fresh objects, so the second change works.
+      // Rebuild the desktop inspector immediately from the restored document.
+      liveEditRenderAt(target,{preserveSheet:true,preserveDesktopEditor:false});
+      if(resumeInlineEdit){
+        startInlineTextEdit(resumeInlineField);
+      }
     }
+  }
+
+  function finishHistoryRestore(message){
     if(undoBarTimer)window.clearTimeout(undoBarTimer);
     undoBarTimer=null;
-    const bar=$('#undoBar'), compact=$('#undoCompactButton');
-    if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
-    if(compact){compact.hidden=false;compact.disabled=true;}
+    syncHistoryUi();
+    scheduleDraftSave(80);
+    if(!playerScreen?.hidden)return;
+    const bar=$('#undoBar'), msg=$('#undoMessage');
+    if(msg){msg.dataset.rawLabel=message;msg.textContent=message;}
+    if(bar){bar.hidden=false;bar.classList.remove('is-hiding');requestAnimationFrame(()=>bar.classList.add('is-visible'));undoBarTimer=window.setTimeout(hideUndoBar,3500);}
   }
+
+  function restoreUndo(){
+    const target=undoHistory.pop();
+    pushBounded(redoHistory,makeHistorySnapshot(target.label));
+    applyHistorySnapshot(target);
+    finishHistoryRestore('元に戻しました');
+  }
+
+  function restoreRedo(){
+    if(!redoHistory.length)return;
+    const target=redoHistory.pop();
+    pushBounded(undoHistory,makeHistorySnapshot(target.label));
+    applyHistorySnapshot(target);
+    finishHistoryRestore('やり直しました');
+  }
+
+  window.__ahakoHistoryDebug=()=>({undoDepth:undoHistory.length,redoDepth:redoHistory.length,limit:HISTORY_LIMIT,undoLabels:undoHistory.map(x=>x.label),redoLabels:redoHistory.map(x=>x.label)});
 
   function moveScene(delta){
     syncAdvancedFieldsToScene();
@@ -5923,9 +6451,14 @@
   function mergePrevious(){
     if(selectedSceneIndex<=0)return;
     syncAdvancedFieldsToScene();
+    const mergePrev=workingDocument.scenes[selectedSceneIndex-1], mergeCur=workingDocument.scenes[selectedSceneIndex];
+    // V26: table Scenes stay isolated. Never merge a table anchor into prose.
+    if(sceneHasTable(mergePrev)||sceneHasTable(mergeCur)){showToast?.('表Sceneは文章Sceneと結合できません');return;}
     captureUndo('Scene結合を元に戻せます');
     const prev=workingDocument.scenes[selectedSceneIndex-1], cur=workingDocument.scenes[selectedSceneIndex];
+    const mergedRanges=window.AhakoSceneEditCore?.mergeRanges?.(prev,cur)||[];
     prev.text=`${prev.text||''}${cur.text||''}`;
+    if(mergedRanges.length)prev.richText={version:1,ranges:mergedRanges}; else delete prev.richText;
     if(cur.subText&&!prev.subText)prev.subText=cur.subText;
     workingDocument.scenes.splice(selectedSceneIndex,1);
     selectedSceneIndex-=1;
@@ -5938,13 +6471,18 @@
     if(pos<=0||pos>=text.length)return;
     syncAdvancedFieldsToScene();
     const scene=currentScene();
+    // V26: a table Scene is atomic; table cells are edited directly in preview.
+    if(sceneHasTable(scene)){showToast?.('表Sceneは分割できません');return;}
     const left=text.slice(0,pos).trimEnd(), right=text.slice(pos).trimStart();
     if(!left||!right)return;
     captureUndo('Scene分割を元に戻せます');
+    const splitRich=window.AhakoSceneEditCore?.splitRanges?.(scene,pos,left,right,text)||{left:[],right:[]};
     scene.text=left;
+    if(splitRich.left.length)scene.richText={version:1,ranges:splitRich.left}; else delete scene.richText;
     const cloneScene=clone(scene);
     cloneScene.id=nextUniqueId();
     cloneScene.text=right;
+    if(splitRich.right.length)cloneScene.richText={version:1,ranges:splitRich.right}; else delete cloneScene.richText;
     delete cloneScene.subText;
     delete cloneScene.audio;
     if(cloneScene.presentation)delete cloneScene.presentation.background;
@@ -5985,7 +6523,113 @@
     showUndo('Sceneを削除しました');
   }
 
-  bodyInput.addEventListener('input',()=>{ updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
+  bodyInput.addEventListener('paste',(event)=>{
+    const html=event.clipboardData?.getData('text/html')||'';
+    const plain=event.clipboardData?.getData('text/plain')||'';
+    const plainHasTable=/(^|\n)\s*\|?.+\|.+\|?\s*\n\s*\|?\s*:?-{3,}/m.test(plain) || /(^|\n)[^\n\t]+\t[^\n]+\n[^\n\t]+\t/m.test(plain);
+    const plainHasRich=/(^|\n)\s*(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)|\*\*[^*\n]+\*\*/m.test(plain);
+    // Rich Text Player v0.16: do not gate HTML list semantics out before parsing.
+    // Some clipboard producers expose list items as <li> or ARIA role=list/listitem
+    // without a literal <ul>/<ol> wrapper. V0.2 parsed every HTML clipboard, while
+    // later versions added this fast gate and accidentally skipped those lists.
+    const htmlHasRich=/<(h[1-6]|strong|b|blockquote|ul|ol|li|table)\b/i.test(html)
+      || /role=["'](?:table|grid|list|listitem)["']/i.test(html);
+    if(!plainHasTable&&!plainHasRich&&!htmlHasRich)return;
+    // Rich Paste v0.3: prefer the structured HTML whenever it carries semantics.
+    // V0.2 preferred plain text as soon as it *looked* table-like; that threw away
+    // HTML-only bold/list/quote information from ChatGPT and similar editors.
+    // Plain/Markdown parsing is now strictly the fallback path.
+    let fragment=htmlHasRich?richTextFromClipboardHtml(html):richTextFromClipboardPlain(plain);
+
+    // Rich Text Player v0.22: iOS can expose a structurally valid HTML table whose
+    // Japanese text is already mojibake, while text/plain contains the correct
+    // Unicode strings.  When the clipboard payload is table-only and the number
+    // of non-empty plain-text lines exactly matches the HTML table cell count,
+    // keep HTML only as the row/column blueprint and replace cell values from
+    // text/plain in document order.  No mojibake dictionary/word guessing is used.
+    if(htmlHasRich && (fragment.tables||[]).length && plain){
+      try{
+        const clipDoc=new DOMParser().parseFromString(String(html||''),'text/html');
+        const clipTables=Array.from(clipDoc.body.querySelectorAll('table,[role="table"],[role="grid"]'));
+        const bodyClone=clipDoc.body.cloneNode(true);
+        bodyClone.querySelectorAll('table,[role="table"],[role="grid"],br').forEach(el=>el.remove());
+        const outsideText=(bodyClone.textContent||'').replace(/[\s\u3000]+/g,'');
+        const plainCells=String(plain).replace(/\r\n?/g,'\n').split('\n').map(v=>v.trim()).filter(Boolean);
+        const htmlCellCount=clipTables.reduce((sum,table)=>sum+Array.from(table.querySelectorAll('tr,[role="row"]')).reduce((rowSum,tr)=>rowSum+Array.from(tr.querySelectorAll(':scope > th, :scope > td, :scope > [role="columnheader"], :scope > [role="rowheader"], :scope > [role="cell"], :scope > [role="gridcell"]')).length,0),0);
+        if(!outsideText && htmlCellCount>0 && plainCells.length===htmlCellCount){
+          let cursor=0;
+          (fragment.tables||[]).forEach(table=>{
+            table.rows=(table.rows||[]).map(row=>row.map(()=>plainCells[cursor++]??''));
+          });
+        }
+      }catch(error){
+        console.warn('Rich Paste: iOS table plain-text recovery skipped',error);
+      }
+    }
+    if(htmlHasRich && plainHasTable && !(fragment.tables||[]).length){
+      const plainFragment=richTextFromClipboardPlain(plain);
+      if((plainFragment.tables||[]).length){
+        // V0.5: the plain clipboard may expose a Markdown table while HTML keeps
+        // headings/bold/quotes. Use the plain representation as the canonical
+        // text (it contains the table placeholder), then re-anchor HTML marks
+        // by their visible text instead of replacing all HTML semantics.
+        const canonical=plainFragment;
+        const htmlText=String(fragment.text||'');
+        const targetText=String(canonical.text||'');
+        const transferred=[];
+        (fragment.marks||[]).forEach(mark=>{
+          if(mark.kind==='table')return;
+          const needle=htmlText.slice(Math.max(0,mark.start),Math.max(0,mark.end)).trim();
+          if(!needle)return;
+          let at=targetText.indexOf(needle);
+          if(at<0){
+            const compact=v=>String(v||'').replace(/[\s\u3000]+/g,'');
+            const nk=compact(needle), tk=compact(targetText);
+            if(!nk||!tk.includes(nk))return;
+            // Prefer a visible fragment so offsets remain real target-text offsets.
+            const words=needle.split(/\s+/).filter(Boolean).sort((a,b)=>b.length-a.length);
+            const anchor=words.find(w=>targetText.includes(w));
+            if(!anchor)return;
+            at=targetText.indexOf(anchor);
+            transferred.push({...mark,start:at,end:at+anchor.length});
+            return;
+          }
+          transferred.push({...mark,start:at,end:at+needle.length});
+        });
+        canonical.marks=[...(canonical.marks||[]),...transferred];
+        // Rich Text Player v0.15: when a Markdown/plain table becomes the
+        // canonical clipboard representation, ChatGPT's text/plain may omit
+        // bullets even though HTML still contains <li>.  v0.2 worked because
+        // HTML was canonical and its parser inserted the marker before Splitter.
+        // Restore only those missing markers here, while keeping the plain-table
+        // fallback and all current Player/Editor fixes.
+        const listMarks=(canonical.marks||[]).filter(m=>m?.kind==='listItem').sort((a,b)=>b.start-a.start);
+        listMarks.forEach(mark=>{
+          const at=Math.max(0,Math.min(canonical.text.length,Number(mark.start)||0));
+          const lineStart=canonical.text.lastIndexOf('\n',Math.max(0,at-1))+1;
+          const prefix=canonical.text.slice(lineStart,at);
+          const tail=canonical.text.slice(at);
+          if(/^\s*(?:[・•●○◦▪▫◆◇▶▷*+\-]|\d+[.)、])\s*/u.test(prefix+tail))return;
+          const marker=mark.ordered?'1. ':'・ ';
+          canonical.text=canonical.text.slice(0,at)+marker+canonical.text.slice(at);
+          const delta=marker.length;
+          (canonical.marks||[]).forEach(r=>{
+            if(r===mark){r.end+=delta;r.literalMarker=true;return;}
+            if(r.start>=at)r.start+=delta;
+            if(r.end>=at)r.end+=delta;
+          });
+          (canonical.tables||[]).forEach(t=>{
+            if(t.start>=at)t.start+=delta;
+            if(t.end>=at)t.end+=delta;
+          });
+        });
+        fragment=canonical;
+      }
+    }
+    if(!fragment.text)return;
+    event.preventDefault();insertRichFragment(fragment,bodyInput.selectionStart||0,bodyInput.selectionEnd||0);
+  });
+  bodyInput.addEventListener('input',()=>{ if(!applyingRichPaste)reconcileRichSourceAfterPlainEdit(easyRichTextSnapshot,bodyInput.value); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition(); updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
   $('#sceneSubTextInput').addEventListener('input',autoGrowSubText);
   coverLogoChoose?.addEventListener('click',()=>coverLogoInput?.click());
   coverLogoInput?.addEventListener('change',async()=>{
@@ -6016,15 +6660,31 @@
       coverImageFileName=snap.name||'cover';
       assetRegistry.set(coverImageUrl,{blob:snap.blob,name:coverImageFileName});
       setCoverPositionFromValue('center center');
-      refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
-      requestAnimationFrame(()=>openCoverPositionEditor());
+      refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();
+      // The desktop Live Preview is the real Player cover, not the Easy cover card.
+      // Apply the freshly-created blob URL directly in the same change event so
+      // authors never have to leave/re-enter the cover to see a selected image.
+      if(player?.els?.coverBg){
+        player.els.coverBg.style.backgroundImage=`url(\"${coverImageUrl.replace(/\"/g,'\\\"')}\")`;
+        player.els.coverBg.style.backgroundSize='cover';
+        player.els.coverBg.style.backgroundPosition=coverPositionCss(studioPreviewDevice);
+      }
+      syncEasyPublishButton();scheduleDraftSave(80);
+      requestAnimationFrame(()=>{renderDesktopLivePanel();openCoverPositionEditor();});
     }catch(error){console.error(error);appAlert(u('画像を読み込めませんでした。もう一度選択してください。','Could not load the image. Choose it again.'));coverImageInput.value='';}
   });
   coverImageClear?.addEventListener('click',()=>{if(coverQuickImageClear)coverQuickImageClear.hidden=true;
     if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
     coverImageUrl=''; coverImageFileName='';
     if(coverImageInput)coverImageInput.value='';
-    refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
+    refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();syncEasyPublishButton();scheduleDraftSave(80);
+    // Removing the cover must clear the currently displayed Player cover now,
+    // not only after leaving and returning to the cover page.
+    if(player?.els?.coverBg){
+      player.els.coverBg.style.backgroundImage='none';
+      player.els.coverBg.style.backgroundPosition='center center';
+    }
+    if(desktopLiveActive())requestAnimationFrame(()=>renderDesktopLivePanel());
   });
   // Work metadata is shell data, not Scene source. Never rebuild the Scene array here.
   [titleInput,authorInput,subtitleInput,seriesTitleInput,episodeInput,episodeNumberInput,episodeTitleInput,descriptionInput]
@@ -6413,7 +7073,13 @@
       coverQuickImageClear.hidden=!coverImageUrl;
     }
 
-    refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();
+    refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();syncEasyPublishButton();
+    // Cover position edits must be visible on the real Live Preview immediately.
+    if(player?.els?.coverBg){
+      player.els.coverBg.style.backgroundImage=coverImageUrl?`url(\"${coverImageUrl.replace(/\"/g,'\\\"')}\")`:'none';
+      player.els.coverBg.style.backgroundSize='cover';
+      player.els.coverBg.style.backgroundPosition=coverPositionCss(studioPreviewDevice);
+    }
     if(save)scheduleDraftSave(80);
   }
   if(coverPositionStage){
@@ -6538,6 +7204,148 @@
   updateCoverPreview();
   updateEndingPreview();
 
+  // V36: Scene text / presentation settings participate in Studio history.
+  // Capture in the event CAPTURE phase, before the existing handlers mutate
+  // workingDocument. Continuous controls (currently the custom color picker)
+  // create one history entry per interaction instead of one per input tick.
+  const V36_UNDO_SETTING_IDS=new Set([
+    'sceneTypeSelect','sceneDisplaySelect','sceneFlowSelect','sceneViewSelect',
+    'sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect',
+    'sceneWritingModeSelect','sceneFrameSelect','sceneFramePositionSelect',
+    'sceneWeightSelect','sceneColorSelect','sceneColorCustomInput',
+    'sceneShadowSelect','sceneFontSelect'
+  ]);
+  let v36SettingGesture=null;
+  function v36SettingLabel(id){
+    const labels={
+      sceneTypeSelect:'Scene種別',sceneDisplaySelect:'表示方法',sceneFlowSelect:'Sceneの流れ',
+      sceneViewSelect:'表示ビュー',sceneEntryMotionSelect:'入り方',sceneEffectSelect:'テキスト演出',
+      sceneSizeSelect:'文字サイズ',sceneWritingModeSelect:'書字方向',sceneFrameSelect:'文字の枠',
+      sceneFramePositionSelect:'テキスト位置',sceneWeightSelect:'文字の太さ',sceneColorSelect:'文字色',
+      sceneColorCustomInput:'文字色',sceneShadowSelect:'文字影',sceneFontSelect:'書体'
+    };
+    return `${labels[id]||'Scene設定'}の変更を元に戻せます`;
+  }
+  function v36CaptureSettingBeforeMutation(event){
+    const el=event.target;
+    const id=el?.id||'';
+    if(!V36_UNDO_SETTING_IDS.has(id) || !workingDocument?.scenes?.length)return;
+    if(event.type==='input'){
+      if(v36SettingGesture===el)return;
+      v36SettingGesture=el;
+    } else if(event.type==='change' && v36SettingGesture===el){
+      // V38: an input gesture already captured the true BEFORE state.
+      // Do not add a second, post-input snapshot on the trailing change event.
+      return;
+    }
+    captureUndo(v36SettingLabel(id));
+    queueMicrotask(()=>showUndo(v36SettingLabel(id)));
+  }
+  document.addEventListener('input',v36CaptureSettingBeforeMutation,true);
+  document.addEventListener('change',v36CaptureSettingBeforeMutation,true);
+  document.addEventListener('change',event=>{if(v36SettingGesture===event.target)v36SettingGesture=null;},false);
+  document.addEventListener('blur',event=>{if(v36SettingGesture===event.target)v36SettingGesture=null;},true);
+
+  // V37: V36 only watched the static Advanced-editor controls above. The
+  // actual Live editor builds its controls dynamically, so those changes never
+  // passed through the V36 ID list. Capture Live control mutations by editor
+  // surface instead of by static IDs. This runs in capture phase, before the
+  // control's own handler mutates workingDocument.
+  let v37LiveGesture=null;
+  function v37IsLiveSettingControl(el){
+    if(!el || !liveEditEnabled || !workingDocument?.scenes?.length)return false;
+    if(el.dataset?.historyIgnore==='true' || el.closest?.('[data-history-ignore="true"]'))return false;
+    const inDesktop=Boolean(el.closest?.('.desktop-live-page-editor, .desktop-live-panel, .desktop-live-detail-overlay'));
+    const inMobile=Boolean(el.closest?.('#liveEditSheet, .live-edit-sheet'));
+    if(!inDesktop && !inMobile)return false;
+    if(el.matches?.('textarea, [contenteditable="true"]'))return false; // body text gets its own coalesced history later
+    return el.matches?.('select, input[type="color"], input[type="range"], input[type="checkbox"], input[type="radio"]');
+  }
+  // V45: primary Undo owner for select/range/checkbox/radio controls in
+  // the Live Text tab and Text details. Palette buttons, committed color-square
+  // clicks, reset, and drag positioning are covered explicitly below/at source.
+  function v37CaptureLiveSetting(event){
+    const el=event.target;
+    if(!v37IsLiveSettingControl(el))return;
+    // V38: controls already covered by the static V36 contract must have one
+    // owner only. V37 used to capture them again because the same controls live
+    // inside the Live surface, producing duplicate history entries.
+    if(V36_UNDO_SETTING_IDS.has(el?.id||''))return;
+    if(event.type==='input'){
+      if(v37LiveGesture===el)return;
+      v37LiveGesture=el;
+    } else if(event.type==='change' && v37LiveGesture===el){
+      // The input event captured BEFORE; the trailing change occurs after the
+      // model has already mutated and must not become a second Undo step.
+      return;
+    }
+    // V46: name history entries by the active Editor v2 tab.  The Effects
+    // tab is now a first-class Undo surface (selects + timing/typewriter
+    // ranges).  Range gestures still capture only the true BEFORE state on
+    // their first input, so dragging a timing slider remains one Undo step.
+    const tab=el.closest?.('[data-editor-tab]')?.dataset?.editorTab||'';
+    const label=tab==='effect'?'演出設定の変更を元に戻せます':
+      tab==='text'?'文字設定の変更を元に戻せます':
+      tab==='image'?'Scene画像設定の変更を元に戻せます':
+      tab==='audio'?'音設定の変更を元に戻せます':'Live設定の変更を元に戻せます';
+    captureUndo(label);
+    queueMicrotask(()=>showUndo(label));
+  }
+  document.addEventListener('input',v37CaptureLiveSetting,true);
+  document.addEventListener('change',v37CaptureLiveSetting,true);
+  document.addEventListener('change',event=>{if(v37LiveGesture===event.target)v37LiveGesture=null;},false);
+  document.addEventListener('blur',event=>{if(v37LiveGesture===event.target)v37LiveGesture=null;},true);
+
+  // V47: Background tab full Undo. Background detail controls are rendered in their own overlay rather
+  // than under a data-editor-tab pane, so V46's generic Live capture does not
+  // see them. Capture the true BEFORE state for selects/ranges here. Range
+  // drags remain one history entry from first input through trailing change.
+  let v47BackgroundGesture=null;
+  function v47BackgroundDetailControl(el){
+    return Boolean(el?.closest?.('[data-undo-surface="background"]')) &&
+      el.matches?.('select, input[type="range"], input[type="checkbox"], input[type="radio"]');
+  }
+  function v47CaptureBackgroundDetail(event){
+    const el=event.target;if(!v47BackgroundDetailControl(el)||!workingDocument?.scenes?.length)return;
+    if(event.type==='input'){
+      if(v47BackgroundGesture===el)return;
+      v47BackgroundGesture=el;
+    }else if(event.type==='change'&&v47BackgroundGesture===el){
+      return;
+    }
+    captureUndo('背景設定の変更を元に戻せます');
+    queueMicrotask(()=>showUndo('背景設定の変更を元に戻せます'));
+  }
+  document.addEventListener('input',v47CaptureBackgroundDetail,true);
+  document.addEventListener('change',v47CaptureBackgroundDetail,true);
+  document.addEventListener('change',event=>{if(v47BackgroundGesture===event.target)v47BackgroundGesture=null;},false);
+  document.addEventListener('blur',event=>{if(v47BackgroundGesture===event.target)v47BackgroundGesture=null;},true);
+
+  // V49: Audio tab full Undo. The shared BGM/Ambient/SE detail inspector is
+  // generated outside the tab pane on desktop and moved into the same sheet on
+  // iPhone. Marking the shared overlay as an Audio Undo surface lets both hosts
+  // use one capture contract. Continuous range drags create one BEFORE snapshot.
+  let v49AudioGesture=null;
+  function v49AudioDetailControl(el){
+    return Boolean(el?.closest?.('[data-undo-surface="audio"]')) &&
+      el.matches?.('select, input[type="range"], input[type="checkbox"], input[type="radio"]');
+  }
+  function v49CaptureAudioDetail(event){
+    const el=event.target;if(!v49AudioDetailControl(el)||!workingDocument?.scenes?.length)return;
+    if(event.type==='input'){
+      if(v49AudioGesture===el)return;
+      v49AudioGesture=el;
+    }else if(event.type==='change'&&v49AudioGesture===el){
+      return;
+    }
+    captureUndo('音設定の変更を元に戻せます');
+    queueMicrotask(()=>showUndo('音設定の変更を元に戻せます'));
+  }
+  document.addEventListener('input',v49CaptureAudioDetail,true);
+  document.addEventListener('change',v49CaptureAudioDetail,true);
+  document.addEventListener('change',event=>{if(v49AudioGesture===event.target)v49AudioGesture=null;},false);
+  document.addEventListener('blur',event=>{if(v49AudioGesture===event.target)v49AudioGesture=null;},true);
+
   $('#sceneColorSelect')?.addEventListener('change',()=>{
     $('#sceneColorCustomField').hidden=$('#sceneColorSelect').value!=='custom';
     syncAdvancedFieldsToScene();
@@ -6605,6 +7413,7 @@
     if(e.target===e.currentTarget)e.currentTarget.close('cancel');
   });
   $('#undoButton')?.addEventListener('click',restoreUndo);
+  $('#redoButton')?.addEventListener('click',restoreRedo);
   $('#undoCompactButton')?.addEventListener('click',restoreUndo);
 
   $('#deleteSceneDialog')?.addEventListener('close',()=>{
@@ -6637,8 +7446,7 @@
     }
     const floatingPreview=$('#floatingPreviewButton');
     if(floatingPreview)floatingPreview.disabled=!hasSource;
-    const compactUndo=$('#undoCompactButton');
-    if(compactUndo){compactUndo.hidden=false;compactUndo.disabled=!undoSnapshot;}
+    syncHistoryUi();
     const menuDraftCount=$('#menuDraftCount');
     const toolbarDraftCount=$('#draftToolbarCount');
     if(menuDraftCount && toolbarDraftCount) menuDraftCount.textContent=toolbarDraftCount.textContent;
@@ -6649,10 +7457,66 @@
   updateEasyFileActions();
  
 
+  // V29: Studio history shortcuts are global. In V28 an editable-control guard
+  // swallowed Ctrl/Cmd+Z while the Live editor kept focus, which made the
+  // shortcut appear broken during normal editing. Structural history now wins
+  // whenever a Studio undo/redo entry exists. Native text undo remains the
+  // fallback only when the corresponding Studio history stack is empty.
+  document.addEventListener('keydown',(event)=>{
+    if(event.isComposing||!(event.ctrlKey||event.metaKey)||event.altKey)return;
+    const key=String(event.key||'').toLowerCase();
+    if(key!=='z'&&key!=='y')return;
+    if(key==='y' || (key==='z'&&event.shiftKey)){
+      if(!redoHistory.length){
+        // V31: In Live, never fall through to the browser's DOM/contenteditable
+        // redo when Studio has no structural redo entry. Native history can
+        // resurrect a stale Player DOM and detach Live Edit from the document.
+        if(liveEditEnabled){
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      restoreRedo();
+      return;
+    }
+    if(key==='z'&&!event.shiftKey){
+      if(!undoHistory.length){
+        // V31: Same guard for Undo. At the bottom of Studio history Ctrl/Cmd+Z
+        // is a safe no-op in Live instead of invoking browser DOM history.
+        if(liveEditEnabled){
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      restoreUndo();
+    }
+  },true);
+
+  // V33: Live authoring owns Undo/Redo completely. Browsers can dispatch
+  // native contenteditable history through beforeinput (historyUndo/historyRedo)
+  // even when the keydown path has already decided there is no Studio history.
+  // That native DOM-only history is unsafe because it mutates the rendered Player
+  // without changing workingDocument. Block it at the editing surface.
+  document.addEventListener('beforeinput',(event)=>{
+    if(!liveEditEnabled)return;
+    const type=String(event.inputType||'');
+    if(type!=='historyUndo'&&type!=='historyRedo')return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  },true);
+
+  // V35: V34 temporary Undo diagnostic removed after identifying the fault.
+
   function applySample(){
     captureUndo('サンプル置換を元に戻せます');
     titleInput.value='声のそろう通り';
-    bodyInput.value=SAMPLE;
+    bodyInput.value=SAMPLE; resetEasyRichSource(); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();
     easySourceDirty=true;
     updateCount();
     updateCoverPreview();
@@ -6826,7 +7690,7 @@
       }
     }
   }
-  ['sceneTextInput','sceneSubTextInput','sceneTypeSelect','sceneDisplaySelect','sceneFlowSelect','sceneViewSelect','sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect','sceneWritingModeSelect','sceneFrameSelect','sceneFramePositionSelect','sceneFontSelect','sceneLanguageSelect','sceneLanguageCustomInput'].forEach(id=>$('#'+id)?.addEventListener('change',()=>{
+  ['sceneTextInput','sceneSubTextInput','sceneTypeSelect','sceneDisplaySelect','sceneFlowSelect','sceneViewSelect','sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect','sceneWritingModeSelect','sceneFrameSelect','sceneFramePositionSelect','sceneWeightSelect','sceneFontSelect','sceneLanguageSelect','sceneLanguageCustomInput'].forEach(id=>$('#'+id)?.addEventListener('change',()=>{
     syncAdvancedFieldsToScene();
     updateAdvancedConditionalUI();
     renderSceneList();
@@ -6866,7 +7730,7 @@
   bindAssetInput('sceneBgmInput','sceneBgmFileLabel',()=>{$('#sceneBgmAction').value='start';});
   bindAssetInput('sceneAmbientInput','sceneAmbientFileLabel',()=>{$('#sceneAmbientAction').value='start';});
   bindAssetInput('sceneSeInput','sceneSeFileLabel',()=>{$('#sceneSeEnabled').checked=true;});
-  bindAssetInput('endingSeInput','endingSeFileLabel',()=>{if(endingSeEnabled)endingSeEnabled.checked=true;syncEndingSeToWorkingDocument();syncQuickEndingToMain();});
+  bindAssetInput('endingSeInput','endingSeFileLabel',()=>{if(endingSeEnabled)endingSeEnabled.checked=true;syncEndingSeToWorkingDocument();syncQuickEndingToMain();refreshLivePlayerDocumentChrome();if(desktopLiveActive()&&player?.ended)requestAnimationFrame(()=>renderDesktopLivePanel());});
 
   bindExternalAssetUrl({inputId:'sceneBackgroundInput',urlInputId:'sceneBackgroundUrlInput',applyId:'sceneBackgroundUrlApply',onApply:()=>{$('#sceneBackgroundMode').value='image';}});
   bindExternalAssetUrl({inputId:'sceneBgmInput',urlInputId:'sceneBgmUrlInput',applyId:'sceneBgmUrlApply',onApply:()=>{$('#sceneBgmAction').value='start';}});
@@ -6934,6 +7798,12 @@
   const desktopNextScene=$('#desktopNextScene');
   const desktopTimingButton=$('#desktopTimingButton');
   const desktopShortcutButton=$('#desktopShortcutButton');
+  const desktopV2Chrome=$('#desktopV2Chrome');
+  const desktopV2Prev=$('#desktopV2Prev');
+  const desktopV2Next=$('#desktopV2Next');
+  const desktopV2Add=$('#desktopV2Add');
+  const desktopV2Settings=$('#desktopV2Settings');
+  const desktopV2SceneLabel=$('#desktopV2SceneLabel');
   const desktopLiveMQ=window.matchMedia('(min-width:1100px)');
   const autoRecPanelForSheet=$('#autoRecPanel');
   function syncAutoRecSheetLayer(){
@@ -6980,6 +7850,10 @@
   let liveEditToolbarVisible=false;
   let liveInlineEditEl=null;
   let liveInlineEditField='text';
+  // Lock inline editing to the Scene that owned the DOM when editing began.
+  // A mouse selection can end outside the text and accidentally advance the Player;
+  // blur/input must never write that old DOM into the newly active Scene.
+  let liveInlineEditSceneRef=null;
   let liveInlineKeyboardShift=0;
   let liveInlineIntroTimer=0;
   let liveInlineDockTimer=0;
@@ -7051,6 +7925,7 @@
     playerHost.style.removeProperty('--live-inline-keyboard-shift');
   }
   function finishInlineTextEdit(){
+    hideRichSelectionToolbar();
     if(!liveInlineEditEl){
       resetInlineKeyboardShift();
       if(liveInlineToolbar)liveInlineToolbar.hidden=true;
@@ -7064,6 +7939,7 @@
     }
     liveInlineEditEl=null;
     liveInlineEditField='text';
+    liveInlineEditSceneRef=null;
     playerHost.classList.remove('live-inline-text-edit');
     document.body.classList.remove('live-inline-text-edit');
     resetInlineKeyboardShift();
@@ -7123,8 +7999,23 @@
   function syncInlineTextToScene(){
     const el=liveInlineEditEl;
     if(!el)return '';
-    const {scene}=liveEditScene();if(!scene)return '';
-    const value=el.innerText.replace(/\n$/,'');
+    const scene=liveInlineEditSceneRef;
+    if(!scene)return '';
+    let value;
+    if(liveInlineEditField==='text' && el.querySelector('.sp-rich-table-card')){
+      const copy=el.cloneNode(true);
+      const tableRanges=(Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[])
+        .filter(r=>r?.kind==='table').sort((a,b)=>(a.start||0)-(b.start||0));
+      const cards=[...copy.querySelectorAll('.sp-rich-table-card')];
+      cards.forEach((card,i)=>{
+        const r=tableRanges[i];
+        const label=r?String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)):'';
+        card.replaceWith(document.createTextNode(label||`［表 ${i+1}］`));
+      });
+      value=copy.innerText.replace(/\n$/,'');
+    }else{
+      value=el.innerText.replace(/\n$/,'');
+    }
     if(liveInlineEditField==='subText'){
       if(value.length)scene.subText=value;
       else delete scene.subText;
@@ -7135,6 +8026,24 @@
     }else{
       scene.text=value;
       if(player?.currentScene)player.currentScene.text=value;
+      // Rich Text Player v0.19: list Live Edit must never keep stale listItem offsets.
+      // Bullets/newlines are literal canonical text; semantics are rebuilt only from
+      // lines that actually begin with a list marker. No word matching is used.
+      if(Array.isArray(scene?.richText?.ranges) && scene.richText.ranges.some(r=>r?.kind==='listItem')){
+        const keep=scene.richText.ranges.filter(r=>r?.kind!=='listItem');
+        const rebuilt=[]; let offset=0;
+        String(value||'').split('\n').forEach(line=>{
+          const raw=String(line||'');
+          const m=raw.match(/^\s*((?:[・•●○◦▪▫◆◇▶▷*+\-])\s*|(\d+)[.)、]\s*|[①-⑳]\s*)(.*)$/u);
+          if(m){
+            const lead=raw.length-raw.trimStart().length;
+            rebuilt.push({start:offset+lead,end:offset+raw.length,kind:'listItem',ordered:Boolean(m[2]),literalMarker:true});
+          }
+          offset+=raw.length+1;
+        });
+        scene.richText.ranges=[...keep,...rebuilt].sort((a,b)=>(a.start||0)-(b.start||0));
+        if(player?.currentScene?.richText) player.currentScene.richText.ranges=scene.richText.ranges.map(r=>({...r}));
+      }
       el.classList.toggle('live-edit-empty-target',value.length===0);
       el.closest('.sp-scene')?.classList.toggle('live-edit-empty-scene',value.length===0);
       updateInlineAutoFit(scene,el);
@@ -7142,6 +8051,235 @@
     scheduleDraftSave(100);
     return value;
   }
+  // Phase 4 / V71 — Rich Text authoring directly from Preview selection.
+  // Selection no longer requires entering contenteditable mode first: selecting
+  // visible text in the active Preview is itself the authoring gesture.
+  let richSelectionToolbar=null;
+  let richSelectionSnapshot=null;
+  let richToolbarInteracting=false;
+  function ensureRichSelectionToolbar(){
+    if(richSelectionToolbar)return richSelectionToolbar;
+    const bar=document.createElement('div');bar.className='rich-selection-toolbar';bar.hidden=true;bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','選択した文字の書式');
+    const button=(label,action,title,extra='')=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.richAction=action;b.title=title||label;b.setAttribute('aria-label',title||label);if(extra)b.classList.add(extra);bar.appendChild(b);return b;};
+    button('B 太字','bold','太字','rich-bold-button');
+    const dropdown=(label,action,items,title)=>{
+      const wrap=document.createElement('div');wrap.className='rich-dropdown';wrap.dataset.richDropdown=action;
+      const trigger=document.createElement('button');trigger.type='button';trigger.className='rich-dropdown-trigger';trigger.textContent=label+' ▼';trigger.title=title||label;trigger.setAttribute('aria-label',title||label);trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');
+      const menu=document.createElement('div');menu.className='rich-dropdown-menu';menu.hidden=true;menu.setAttribute('role','menu');
+      items.forEach(([v,l])=>{const item=document.createElement('button');item.type='button';item.className='rich-dropdown-item';item.textContent=l;item.dataset.richValue=v;item.setAttribute('role','menuitem');menu.appendChild(item);});
+      wrap.append(trigger,menu);bar.appendChild(wrap);return wrap;
+    };
+    dropdown('書体','font',[['serif','明朝'],['sans','ゴシック'],['mono','等幅']],'書体');
+    dropdown('サイズ','size',[['0.85','小 85%'],['1','標準 100%'],['1.2','大 120%'],['1.45','特大 145%']],'文字サイズ');
+    const colorWrap=document.createElement('label');colorWrap.className='rich-color-control';colorWrap.title='文字色';
+    const color=document.createElement('input');color.type='color';color.value='#333333';color.dataset.richAction='color';color.setAttribute('aria-label','文字色');colorWrap.appendChild(color);bar.appendChild(colorWrap);
+    dropdown('見出し','heading',[['1','見出し1'],['2','見出し2'],['3','見出し3']],'見出し');
+    dropdown('リスト','list',[['bullet','・ 箇条書き'],['number','1. 番号付き']],'リスト');
+    button('❝','quote','引用');
+    const sep=document.createElement('span');sep.className='rich-toolbar-separator';sep.setAttribute('aria-hidden','true');bar.appendChild(sep);
+    button('解除','clear','選択範囲の書式を解除','rich-clear-button');
+    document.body.appendChild(bar);richSelectionToolbar=bar;
+    const closeMenus=(except=null)=>bar.querySelectorAll('.rich-dropdown').forEach(w=>{if(w===except)return;w.querySelector('.rich-dropdown-menu').hidden=true;w.querySelector('.rich-dropdown-trigger').setAttribute('aria-expanded','false');});
+    const openMenu=wrap=>{if(!wrap)return;closeMenus(wrap);const menu=wrap.querySelector('.rich-dropdown-menu'),trigger=wrap.querySelector('.rich-dropdown-trigger');menu.hidden=false;trigger.setAttribute('aria-expanded','true');};
+    // V79: note-like desktop behavior. Pointer hover previews dropdowns; touch keeps tap-to-open.
+    if(matchMedia?.('(hover:hover) and (pointer:fine)')?.matches){
+      bar.querySelectorAll('.rich-dropdown').forEach(w=>{w.addEventListener('pointerenter',()=>{richToolbarInteracting=true;openMenu(w);});});
+    }
+    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{if(!bar.matches(':hover'))richToolbarInteracting=false;},340);});
+    // V78: act on pointerdown so the first press is the action. Native <select>
+    // controls were stealing focus/selection and causing the old two-press cushion.
+    bar.addEventListener('pointerdown',e=>{
+      const trigger=e.target.closest?.('.rich-dropdown-trigger');
+      if(trigger){e.preventDefault();e.stopPropagation();const wrap=trigger.closest('.rich-dropdown'),menu=wrap.querySelector('.rich-dropdown-menu'),opening=menu.hidden;closeMenus(wrap);menu.hidden=!opening;trigger.setAttribute('aria-expanded',String(opening));return;}
+      const item=e.target.closest?.('.rich-dropdown-item');
+      if(item){e.preventDefault();e.stopPropagation();const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);return;}
+      const t=e.target.closest?.('button[data-rich-action]');
+      if(t){e.preventDefault();e.stopPropagation();closeMenus();applyRichSelectionAction(t.dataset.richAction);}
+    });
+    color.addEventListener('input',()=>{});color.addEventListener('change',()=>applyRichSelectionAction('color',color.value));
+    return bar;
+  }
+  function hideRichSelectionToolbar(){if(richSelectionToolbar)richSelectionToolbar.hidden=true;richSelectionSnapshot=null;}
+  function previewRichSelection(){
+    const sel=window.getSelection?.();
+    if(!sel||!sel.rangeCount||sel.isCollapsed||!String(sel.toString()||'').length)return null;
+    const r=sel.getRangeAt(0);
+    const ownerText=node=>{
+      const el=node?.nodeType===Node.ELEMENT_NODE?node:node?.parentElement;
+      return el?.closest?.('.sp-text')||null;
+    };
+    const startEl=ownerText(r.startContainer),endEl=ownerText(r.endContainer);
+    if(!startEl||startEl!==endEl||!playerHost.contains(startEl))return null;
+    const article=startEl.closest('.sp-scene');
+    if(!article||!article.classList.contains('is-active'))return null;
+    if(r.cloneContents().querySelector?.('.sp-rich-table-card'))return null;
+    // Bind the selection to the Scene represented by the selected DOM itself.
+    // This avoids depending on selectedSceneIndex/player.index timing while a drag is ending.
+    const sceneId=article.dataset.sceneId||'';
+    let index=(workingDocument?.scenes||[]).findIndex(sc=>String(sc?.id||'')===String(sceneId));
+    if(index<0)index=Math.max(0,Math.min(player?.index??selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
+    const scene=workingDocument?.scenes?.[index]||null;if(!scene)return null;
+    const pre=document.createRange();pre.selectNodeContents(startEl);pre.setEnd(r.startContainer,r.startOffset);
+    const start=pre.toString().length,end=start+r.toString().length;if(end<=start)return null;
+    let rect=r.getBoundingClientRect();
+    if(!rect||(!rect.width&&!rect.height)){const rs=r.getClientRects();rect=rs?.[0]||startEl.getBoundingClientRect();}
+    return {start,end,rect,scene,index,el:startEl,selectedText:r.toString()};
+  }
+  function updateRichToolbarState(snap){
+    const bar=ensureRichSelectionToolbar(),scene=snap?.scene;if(!scene)return;
+    const start=Number(snap.start)||0,end=Number(snap.end)||start,ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
+    const covers=r=>Number(r?.start)<=start&&Number(r?.end)>=end;
+    const overlap=r=>Number(r?.end)>start&&Number(r?.start)<end;
+    const spanWith=pred=>ranges.find(r=>r?.kind==='span'&&covers(r)&&pred(r.style||{}));
+    const bold=!!spanWith(st=>st.bold===true);
+    const heading=ranges.find(r=>r?.kind==='heading'&&overlap(r));
+    const list=ranges.find(r=>r?.kind==='listItem'&&overlap(r));
+    const quote=ranges.find(r=>r?.kind==='quote'&&overlap(r));
+    const font=spanWith(st=>st.fontFamily)?.style?.fontFamily||'';
+    const scale=spanWith(st=>Number(st.fontScale)>0)?.style?.fontScale;
+    const color=spanWith(st=>st.color)?.style?.color||'';
+    const setActive=(sel,on)=>{const el=bar.querySelector(sel);if(el){el.classList.toggle('is-active',!!on);el.setAttribute('aria-pressed',String(!!on));}};
+    setActive('[data-rich-action="bold"]',bold);setActive('[data-rich-action="quote"]',!!quote);
+    const labels={font:{serif:'明朝',sans:'ゴシック',mono:'等幅'},size:{'0.85':'小','1':'標準','1.2':'大','1.45':'特大'}};
+    bar.querySelectorAll('.rich-dropdown').forEach(w=>{const action=w.dataset.richDropdown,tr=w.querySelector('.rich-dropdown-trigger');let value='';
+      if(action==='font')value=String(font||''); else if(action==='size'&&scale)value=String(Number(scale)); else if(action==='heading'&&heading)value=String(heading.level||''); else if(action==='list'&&list)value=list.ordered?'number':'bullet';
+      w.classList.toggle('is-active',!!value);tr.classList.toggle('is-active',!!value);
+      if(action==='font')tr.textContent=(value?(labels.font[value]||'書体'):'書体')+' ▼';
+      if(action==='size')tr.textContent=(value?(labels.size[value]||'サイズ'):'サイズ')+' ▼';
+      if(action==='heading')tr.textContent=(value?`見出し${value}`:'見出し')+' ▼';
+      if(action==='list')tr.textContent=(value==='number'?'番号付き':value==='bullet'?'箇条書き':'リスト')+' ▼';
+      w.querySelectorAll('.rich-dropdown-item').forEach(item=>item.classList.toggle('is-current',!!value&&item.dataset.richValue===value));
+    });
+    const input=bar.querySelector('input[data-rich-action="color"]');if(input&&/^#[0-9a-f]{6}$/i.test(color))input.value=color;
+  }
+  function showRichSelectionToolbar(){
+    // Text can be selected either during direct text editing or straight from Preview.
+    // subText remains excluded because Rich Text belongs to scene.text in Format v1.
+    if(liveInlineEditEl&&liveInlineEditField!=='text')return hideRichSelectionToolbar();
+    const snap=previewRichSelection();if(!snap)return hideRichSelectionToolbar();
+    richSelectionSnapshot={start:snap.start,end:snap.end,scene:snap.scene,index:snap.index,selectedText:snap.selectedText};
+    const bar=ensureRichSelectionToolbar();bar.hidden=false;updateRichToolbarState(snap);
+    // Reset transient controls so the toolbar always reads as an action palette.
+    bar.querySelector('[data-rich-action="size"]')?.selectedIndex&&(bar.querySelector('[data-rich-action="size"]').selectedIndex=0);
+    bar.querySelector('[data-rich-action="heading"]')?.selectedIndex&&(bar.querySelector('[data-rich-action="heading"]').selectedIndex=0);
+    const rect=snap.rect,w=Math.min(bar.scrollWidth||bar.offsetWidth||460,window.innerWidth-16),h=bar.offsetHeight||48;
+    let left=Math.max(8,Math.min(window.innerWidth-w-8,rect.left+(rect.width-w)/2));
+    let top=rect.top-h-12;if(top<8)top=Math.min(window.innerHeight-h-8,rect.bottom+12);
+    bar.style.left=`${Math.round(left)}px`;bar.style.top=`${Math.round(top)}px`;
+  }
+  function normalizeRichRanges(scene){
+    if(!scene.richText)scene.richText={version:1,ranges:[]};if(!Array.isArray(scene.richText.ranges))scene.richText.ranges=[];return scene.richText.ranges;
+  }
+  function removeRichKindsInSelection(ranges,start,end,kinds){return ranges.filter(r=>!(kinds.includes(r?.kind)&&Number(r.end)>start&&Number(r.start)<end));}
+  function applyRichSelectionAction(action,value=''){
+    const snap=richSelectionSnapshot,scene=snap?.scene;if(!scene)return;
+    // If the selection was made while typing, commit text before applying offsets.
+    if(liveInlineEditEl&&scene===liveInlineEditSceneRef)syncInlineTextToScene();
+    captureUndo('Rich Text編集を元に戻せます');
+    let ranges=normalizeRichRanges(scene),start=Math.max(0,snap.start),end=Math.min(snap.end,String(scene.text||'').length);
+    const originalStart=start,originalEnd=end;
+    const covers=(r)=>Number(r?.start)<=start&&Number(r?.end)>=end;
+    const overlaps=(r)=>Number(r?.end)>start&&Number(r?.start)<end;
+    const spanCover=(pred)=>ranges.find(r=>r?.kind==='span'&&covers(r)&&pred(r.style||{}));
+    // V78: re-anchor the DOM selection to the exact selected string in canonical
+    // scene.text. Rich spans can split DOM text nodes; relying only on node offsets
+    // could shave one character from either edge when applying headings.
+    const canonical=String(scene.text||''),picked=String(snap.selectedText||'');
+    if(picked){const hits=[];let at=canonical.indexOf(picked);while(at>=0){hits.push(at);at=canonical.indexOf(picked,at+1);}if(hits.length){const best=hits.reduce((a,b)=>Math.abs(b-start)<Math.abs(a-start)?b:a,hits[0]);start=best;end=best+picked.length;}}
+    if(end<=start)return;
+    if(action==='clear')ranges=removeRichKindsInSelection(ranges,start,end,['span','heading','quote','listItem']);
+    else if(action==='bold'){const cur=spanCover(st=>st.bold===true);if(cur)ranges=ranges.filter(r=>r!==cur);else ranges.push({start,end,kind:'span',style:{bold:true}});}
+    else if(action==='font'&&value){const cur=spanCover(st=>String(st.fontFamily||'')===String(value));ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&r?.style?.fontFamily));if(!cur)ranges.push({start,end,kind:'span',style:{fontFamily:String(value)}});}
+    else if(action==='size'&&value){const num=Number(value)||1,cur=spanCover(st=>Number(st.fontScale)===num);ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&Number(r?.style?.fontScale)>0));if(!cur)ranges.push({start,end,kind:'span',style:{fontScale:num}});}
+    else if(action==='color'&&value)ranges.push({start,end,kind:'span',style:{color:String(value)}});
+    else if(action==='heading'&&value){const level=Math.max(1,Math.min(3,Number(value)||2));const cur=ranges.find(r=>r?.kind==='heading'&&covers(r)&&Number(r.level||2)===level);ranges=ranges.filter(r=>!(r?.kind==='heading'&&Number(r.end)>=start&&Number(r.start)<=end));if(!cur)ranges.push({start,end,kind:'heading',level});}
+    else if(action==='quote'){const cur=ranges.find(r=>r?.kind==='quote'&&covers(r));ranges=removeRichKindsInSelection(ranges,start,end,['quote']);if(!cur)ranges.push({start,end,kind:'quote'});}
+    else if(action==='bullet'||action==='number'){
+      // V120: rebuild list authoring from canonical line starts. The previous
+      // selection-local rebuild mixed pre/post-insertion offsets and could leave
+      // the toolbar action looking like a no-op. Markers are the source of truth.
+      let text=String(scene.text||'');
+      const first=text.lastIndexOf('\n',Math.max(0,start-1))+1;
+      const after=text.indexOf('\n',Math.max(start,end-1));
+      const last=after<0?text.length:after;
+      const lineStarts=[];let pos=first;
+      while(pos<=last){lineStarts.push(pos);const n=text.indexOf('\n',pos);if(n<0||n>=last)break;pos=n+1;}
+      const insertions=[];
+      lineStarts.forEach((lineStart,i)=>{
+        const lineEnd0=text.indexOf('\n',lineStart),lineEnd=lineEnd0<0?text.length:lineEnd0;
+        const line=text.slice(lineStart,lineEnd);
+        if(/^\s*(?:[•・*-]|\d+[.)])(?:\s+|$)/.test(line))return;
+        insertions.push({at:lineStart,marker:action==='number'?`${i+1}. `:'・ '});
+      });
+      insertions.slice().sort((a,b)=>b.at-a.at).forEach(ins=>{
+        text=text.slice(0,ins.at)+ins.marker+text.slice(ins.at);
+        const d=ins.marker.length;
+        ranges.forEach(r=>{if(Number(r.start)>=ins.at)r.start=Number(r.start)+d;if(Number(r.end)>=ins.at)r.end=Number(r.end)+d;});
+        if(start>=ins.at)start+=d;if(end>=ins.at)end+=d;
+      });
+      scene.text=text;
+      // Rebuild every listItem range from canonical markers so stale offsets can
+      // never survive a direct toolbar edit. Other Rich Text ranges stay intact.
+      ranges=ranges.filter(r=>r?.kind!=='listItem');
+      const rebuilt=[];let scan=0;
+      while(scan<=text.length){
+        const e0=text.indexOf('\n',scan),e=e0<0?text.length:e0,line=text.slice(scan,e);
+        const m=line.match(/^\s*((?:[•・*-])|(\d+)[.)])(?:\s+|$)/);
+        if(m)rebuilt.push({start:scan,end:e,kind:'listItem',ordered:Boolean(m[2]),literalMarker:true});
+        if(e0<0)break;scan=e0+1;
+      }
+      ranges.push(...rebuilt);
+    }
+    scene.richText.ranges=ranges.sort((a,b)=>(a.start||0)-(b.start||0)||(a.end||0)-(b.end||0));
+    if(!scene.richText.ranges.length)delete scene.richText;
+    scheduleDraftSave(0);hideRichSelectionToolbar();
+    try{getSelection()?.removeAllRanges();}catch(_){ }
+    if(liveInlineEditEl)finishInlineTextEdit();
+    liveEditRenderAt(Number.isInteger(snap.index)?snap.index:workingDocument.scenes.indexOf(scene),{preserveSheet:false});
+    showUndo(action==='clear'?'書式を解除しました':'文字の書式を変更しました');
+  }
+  // V73: the Player itself handles pointer/tap release. Waiting until RAF meant the
+  // native selection could already be collapsed by Player Core before we read it.
+  // Capture the Range synchronously in capture phase, then paint the toolbar from
+  // that immutable snapshot. This is also much more reliable on iOS Safari.
+  function captureRichSelectionNow(){
+    const snap=previewRichSelection();
+    if(!snap)return null;
+    richSelectionSnapshot={start:snap.start,end:snap.end,scene:snap.scene,index:snap.index,rect:snap.rect,selectedText:snap.selectedText};
+    return snap;
+  }
+  function showCapturedRichSelection(snap){
+    if(!snap)return false;
+    const bar=ensureRichSelectionToolbar();
+    bar.hidden=false;updateRichToolbarState(snap);
+    if(!richToolbarInteracting){bar.querySelectorAll('.rich-dropdown-menu').forEach(m=>m.hidden=true);bar.querySelectorAll('.rich-dropdown-trigger').forEach(t=>t.setAttribute('aria-expanded','false'));}
+    const rect=snap.rect,w=Math.min(bar.scrollWidth||bar.offsetWidth||460,window.innerWidth-16),h=bar.offsetHeight||48;
+    let left=Math.max(8,Math.min(window.innerWidth-w-8,rect.left+(rect.width-w)/2));
+    let top=rect.top-h-12;if(top<8)top=Math.min(window.innerHeight-h-8,rect.bottom+12);
+    bar.style.left=`${Math.round(left)}px`;bar.style.top=`${Math.round(top)}px`;
+    return true;
+  }
+  function captureAndShowRichSelection(){
+    const snap=captureRichSelectionNow();
+    if(snap)showCapturedRichSelection(snap);
+    return !!snap;
+  }
+  const queueRichSelectionToolbar=()=>{
+    if(richToolbarInteracting||richSelectionToolbar?.querySelector?.('.rich-dropdown-menu:not([hidden])'))return;
+    // First read immediately while the browser Selection is definitely alive.
+    if(captureAndShowRichSelection())return;
+    // Keyboard selection / iOS handles may settle just after the event.
+    requestAnimationFrame(()=>captureAndShowRichSelection());
+    setTimeout(()=>captureAndShowRichSelection(),40);
+  };
+  document.addEventListener('selectionchange',queueRichSelectionToolbar);
+  document.addEventListener('pointerup',e=>{if(e.target.closest?.('.rich-selection-toolbar'))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},true);
+  document.addEventListener('mouseup',e=>{if(e.target.closest?.('.rich-selection-toolbar'))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},true);
+  document.addEventListener('touchend',e=>{if(e.target.closest?.('.rich-selection-toolbar'))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},{capture:true,passive:true});
+
+
+  // Phase 4 / V75 — diagnostic overlay removed after confirming selection capture succeeds.
+
   function inlineCaretOffset(){
     const el=liveInlineEditEl,sel=getSelection();
     if(!el||!sel||!sel.rangeCount)return -1;
@@ -7233,6 +8371,7 @@
   }
   function liveEditSplitInlineAtCaret(){
     const {scene,index}=liveEditScene();if(!scene||!liveInlineEditEl)return;
+    if(sceneHasTable(scene)){showToast?.('表Sceneは分割できません');return;}
     // Capture the caret BEFORE syncing. Sync may update auto-fit/runtime state.
     const pos=inlineCaretOffset();
     const text=syncInlineTextToScene();
@@ -7240,12 +8379,16 @@
     const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
     if(!left||!right){showUndo('分割する位置にカーソルを置いてください');return;}
     captureUndo('Scene分割を元に戻せます');
+    const splitRich=window.AhakoSceneEditCore?.splitRanges?.(scene,pos,left,right,text)||{left:[],right:[]};
     scene.text=left;
+    if(splitRich.left.length)scene.richText={version:1,ranges:splitRich.left}; else delete scene.richText;
     // The currently visible Scene becomes Player history when we move to the
     // new Scene. Shorten that DOM now so history cannot keep the old full text.
     liveInlineEditEl.innerText=left;
     if(player?.currentScene)player.currentScene.text=left;
-    const next=clone(scene);next.id=nextUniqueId();next.text=right;delete next.subText;delete next.audio;
+    const next=clone(scene);next.id=nextUniqueId();next.text=right;
+    if(splitRich.right.length)next.richText={version:1,ranges:splitRich.right}; else delete next.richText;
+    delete next.subText;delete next.audio;
     if(next.presentation)delete next.presentation.background;
     workingDocument.scenes.splice(index+1,0,next);
     finishInlineTextEdit();
@@ -7284,12 +8427,16 @@ bindLiveKeyboardViewport();
 
 function startInlineTextEdit(field='text'){
     const {scene}=liveEditScene(); if(!scene)return;
+    // Rich Text v0.8: table-bearing Scenes are editable too. Table cards are
+    // non-editable islands and syncInlineTextToScene() restores their source
+    // placeholders before reading the edited text back into Scene data.
     finishInlineTextEdit(); closeLiveEditSheet(); setLiveToolbarVisible(true);
     const selector=field==='subText'?'.sp-subtext':'.sp-text';
     const el=playerHost.querySelector(`.sp-scene.is-active ${selector}`); if(!el)return;
 
     liveInlineEditField=field==='subText'?'subText':'text';
     liveInlineEditEl=el;
+    liveInlineEditSceneRef=scene;
     // Keep the six-key Live Edit strip available while the iOS keyboard is open.
     // This lets the author move directly from writing to typography/effects/etc.
     setLiveToolbarVisible(true);
@@ -7302,6 +8449,7 @@ function startInlineTextEdit(field='text'){
     // contenteditable=true is the most reliable option on iPhone Safari.
     // The element itself stays in the Player; no duplicate textarea/modal is created.
     el.setAttribute('contenteditable','true');
+    el.querySelectorAll('.sp-rich-table-card').forEach(card=>card.setAttribute('contenteditable','false'));
     el.setAttribute('role','textbox');
     el.setAttribute('aria-label',liveInlineEditField==='subText'?'Scene subtext':'Scene text');
     el.classList.add('live-inline-editing');
@@ -7381,6 +8529,7 @@ function startInlineTextEdit(field='text'){
     selectedSceneIndex=target;
     if(!preserveSheet||!wasOpen)closeLiveEditSheet();
     if(desktopLiveActive()&&!preserveDesktopEditor)requestAnimationFrame(renderDesktopLivePanel);
+    requestAnimationFrame(cleanupDesktopV2BuilderOverlays);
   }
   function refreshLivePlayer({preserveSheet=true,preserveDesktopEditor=false}={}){
     if(!player||!workingDocument?.scenes?.length)return;
@@ -7638,6 +8787,103 @@ function startInlineTextEdit(field='text'){
     }));
   }
   function desktopLiveActive(){ return !!(liveEditEnabled && desktopLiveMQ.matches); }
+  // Phase 6 / V99 — VIEW POINT authoring.
+  // The author chooses stable viewpoints; the reader chooses WHEN to move to the next one.
+  // No raw hand motion or timing is stored.
+  function openViewRecRecorder(image,onSave){
+    if(!image?.src)return;
+    const overlay=document.createElement('div');overlay.className='view-rec-recorder';
+    const panel=document.createElement('div');panel.className='view-rec-recorder-panel';
+    const head=document.createElement('div');head.className='view-rec-recorder-head';
+    const title=document.createElement('div');title.className='view-rec-recorder-title';title.textContent='VIEW POINT';
+    const close=document.createElement('button');close.type='button';close.className='view-rec-recorder-close';close.textContent='×';close.setAttribute('aria-label',u('閉じる','Close'));
+    head.append(title,close);
+    const stage=document.createElement('div');stage.className='view-rec-recorder-stage';
+    const img=document.createElement('img');img.className='view-rec-recorder-image';img.src=image.src;img.alt=image.alt||'';img.draggable=false;stage.appendChild(img);
+    const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('見せたい位置へ移動・ズームして「＋ 視点を追加」','Move / zoom to the view you want, then add a viewpoint');
+    const status=document.createElement('div');status.className='view-rec-recorder-status';
+    const controls=document.createElement('div');controls.className='view-rec-recorder-controls';
+    const add=document.createElement('button');add.type='button';add.className='view-rec-button is-rec';add.textContent=u('＋ 視点を追加','＋ Add viewpoint');
+    const reset=document.createElement('button');reset.type='button';reset.className='view-rec-button';reset.textContent=u('全景に戻す','Reset view');
+    const clearPoints=document.createElement('button');clearPoints.type='button';clearPoints.className='view-rec-button';clearPoints.textContent=u('視点を全削除','Clear viewpoints');
+    const save=document.createElement('button');save.type='button';save.className='view-rec-button is-primary';save.textContent=u('保存','Save');
+    const axis=document.createElement('button');axis.type='button';axis.className='view-rec-button';axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');axis.setAttribute('aria-pressed','false');
+    const axisY=document.createElement('button');axisY.type='button';axisY.className='view-rec-button';axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');axisY.setAttribute('aria-pressed','false');
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='view-rec-button';cancel.textContent=u('キャンセル','Cancel');
+    controls.append(add,reset,axis,axisY,clearPoints,save,cancel);panel.append(head,stage,hint,status,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
+
+    // V113 — reopening VIEW POINT is an edit, not an implicit destructive rebuild.
+    // Preserve the saved point sequence unless the author explicitly clears it.
+    const savedPointSet=image?.viewPoints||image?.viewRec||null;
+    const savedPoints=Array.isArray(savedPointSet?.points)?savedPointSet.points.map(point=>JSON.parse(JSON.stringify(point))):[];
+    const state={scale:1,x:0,y:0,points:savedPoints,zoomAnimRaf:0,drag:false,lastX:0,lastY:0,pinchDistance:0,pinchScale:1,axisLockX:false,axisLockY:false,dragAnchorY:0,dragAnchorX:0};
+    // V102 — the authoring viewport itself follows the source-image aspect ratio.
+    // VIEW POINT is therefore authored in image space, not in the current device/window shape.
+    const sizeStageToSource=()=>{
+      const panelBox=panel.getBoundingClientRect(),headH=head.getBoundingClientRect().height||0,hintH=hint.getBoundingClientRect().height||0,statusH=status.getBoundingClientRect().height||0,controlsH=controls.getBoundingClientRect().height||0;
+      const maxW=Math.max(1,panelBox.width),maxH=Math.max(1,panelBox.height-headH-hintH-statusH-controlsH);
+      const nw=Math.max(1,img.naturalWidth||1),nh=Math.max(1,img.naturalHeight||1),ratio=nw/nh;
+      let w=maxW,h=w/ratio;if(h>maxH){h=maxH;w=h*ratio;}
+      stage.style.width=`${Math.max(1,w)}px`;stage.style.height=`${Math.max(1,h)}px`;stage.style.justifySelf='center';
+    };
+    const clampScale=v=>Math.max(1,Math.min(5,Number(v)||1));
+    const viewport=()=>({w:Math.max(1,stage.clientWidth),h:Math.max(1,stage.clientHeight)});
+    const fitImageToStage=()=>{const vp=viewport(),nw=Math.max(1,img.naturalWidth||1),nh=Math.max(1,img.naturalHeight||1),fit=Math.min(vp.w/nw,vp.h/nh);img.style.width=`${Math.max(1,nw*fit)}px`;img.style.height=`${Math.max(1,nh*fit)}px`;};
+    const bounds=()=>{const vp=viewport(),w=Math.max(1,img.clientWidth)*state.scale,h=Math.max(1,img.clientHeight)*state.scale;return{maxX:Math.max(0,(w-vp.w)/2),maxY:Math.max(0,(h-vp.h)/2)}};
+    const clampPan=()=>{const b=bounds();state.x=Math.max(-b.maxX,Math.min(b.maxX,state.x));state.y=Math.max(-b.maxY,Math.min(b.maxY,state.y));};
+    const apply=()=>{clampPan();img.style.transform=`translate3d(${state.x}px,${state.y}px,0) scale(${state.scale})`;};
+    const gazePoint=()=>{
+      // V102 — save the visible rectangle on the ORIGINAL image.
+      // Because the authoring stage has the same aspect ratio as the source, this
+      // rectangle is stable across iPhone / tablet / desktop.
+      if(state.scale<=1.0001)return{type:'fit'};
+      const bw=Math.max(1,img.clientWidth),bh=Math.max(1,img.clientHeight),vp=viewport();
+      const cx=Math.max(0,Math.min(1,0.5-state.x/(bw*state.scale)));
+      const cy=Math.max(0,Math.min(1,0.5-state.y/(bh*state.scale)));
+      const width=Math.max(.01,Math.min(1,vp.w/(bw*state.scale)));
+      const height=Math.max(.01,Math.min(1,vp.h/(bh*state.scale)));
+      const x=Math.max(0,Math.min(1-width,cx-width/2)),y=Math.max(0,Math.min(1-height,cy-height/2));
+      return{type:'focus',rect:{x:+x.toFixed(5),y:+y.toFixed(5),width:+width.toFixed(5),height:+height.toFixed(5)}};
+    };
+    const updateStatus=()=>{status.textContent=state.points.length?u(`視点 ${state.points.length}個 · 読者タップで順番に移動`,`Viewpoints: ${state.points.length} · reader taps to advance`):u('まだ視点はありません','No viewpoints yet');save.disabled=state.points.length<1;};
+    const zoomAt=(clientX,clientY,next)=>{const r=stage.getBoundingClientRect(),vp=viewport(),old=state.scale,scale=clampScale(next);if(Math.abs(scale-old)<.0001)return;const dx=clientX-r.left-vp.w/2,dy=clientY-r.top-vp.h/2,ratio=scale/old;state.x=dx-(dx-state.x)*ratio;state.y=dy-(dy-state.y)*ratio;state.scale=scale;apply();};
+    const resetView=()=>{state.scale=1;state.x=0;state.y=0;apply();};
+    const dist=(a,b)=>Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY),center=(a,b)=>({x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2});
+    const cancelZoomAnimation=()=>{if(state.zoomAnimRaf)cancelAnimationFrame(state.zoomAnimRaf);state.zoomAnimRaf=0;};
+    const animateViewTo=(target,duration=340)=>{cancelZoomAnimation();const from={x:state.x,y:state.y,scale:state.scale},started=performance.now(),ease=t=>1-Math.pow(1-t,3);const step=now=>{const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);state.x=from.x+(target.x-from.x)*e;state.y=from.y+(target.y-from.y)*e;state.scale=from.scale+(target.scale-from.scale)*e;apply();if(q<1)state.zoomAnimRaf=requestAnimationFrame(step);else state.zoomAnimRaf=0;};state.zoomAnimRaf=requestAnimationFrame(step);};
+    const doubleTapZoomTarget=(clientX,clientY,nextScale)=>{const r=stage.getBoundingClientRect(),vp=viewport(),old=state.scale,scale=clampScale(nextScale),dx=clientX-r.left-vp.w/2,dy=clientY-r.top-vp.h/2,ratio=scale/old;return{x:dx-(dx-state.x)*ratio,y:dy-(dy-state.y)*ratio,scale};};
+    const toggleDoubleTapZoom=(x,y)=>state.scale>1.05?animateViewTo({x:0,y:0,scale:1}):animateViewTo(doubleTapZoomTarget(x,y,2));
+    let lastTapTime=0,lastTapX=0,lastTapY=0;
+    const registerTap=(x,y)=>{const now=performance.now(),near=Math.hypot(x-lastTapX,y-lastTapY)<42;if(now-lastTapTime<330&&near){lastTapTime=0;toggleDoubleTapZoom(x,y);return true;}lastTapTime=now;lastTapX=x;lastTapY=y;return false;};
+    stage.addEventListener('dblclick',e=>{e.preventDefault();toggleDoubleTapZoom(e.clientX,e.clientY);});
+    stage.addEventListener('wheel',e=>{e.preventDefault();cancelZoomAnimation();zoomAt(e.clientX,e.clientY,state.scale*Math.exp(-e.deltaY*.0015));},{passive:false});
+    stage.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')return;cancelZoomAnimation();state.drag=true;state.lastX=e.clientX;state.lastY=e.clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;stage.setPointerCapture?.(e.pointerId);});
+    stage.addEventListener('pointermove',e=>{if(!state.drag||e.pointerType==='touch')return;if(!state.axisLockY)state.x+=e.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=e.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=e.clientX;state.lastY=e.clientY;apply();});
+    const endDrag=()=>{state.drag=false;};stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',endDrag);
+    stage.addEventListener('touchstart',e=>{cancelZoomAnimation();if(e.touches.length===2){e.preventDefault();state.pinchDistance=dist(e.touches[0],e.touches[1]);state.pinchScale=state.scale;state.drag=false;}else if(e.touches.length===1){e.preventDefault();state.drag=true;state.lastX=e.touches[0].clientX;state.lastY=e.touches[0].clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;}},{passive:false});
+    stage.addEventListener('touchmove',e=>{e.preventDefault();if(e.touches.length===2&&state.pinchDistance){const c=center(e.touches[0],e.touches[1]);zoomAt(c.x,c.y,state.pinchScale*(dist(e.touches[0],e.touches[1])/state.pinchDistance));}else if(e.touches.length===1&&state.drag){const t=e.touches[0];if(!state.axisLockY)state.x+=t.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=t.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=t.clientX;state.lastY=t.clientY;apply();}},{passive:false});
+    stage.addEventListener('touchend',e=>{if(!e.touches.length){const changed=e.changedTouches&&e.changedTouches[0],wasPinch=!!state.pinchDistance;state.drag=false;state.pinchDistance=0;if(!wasPinch&&changed)registerTap(changed.clientX,changed.clientY);}},{passive:false});
+    add.onclick=()=>{cancelZoomAnimation();state.points.push(gazePoint());updateStatus();};
+    clearPoints.onclick=()=>{cancelZoomAnimation();state.points=[];updateStatus();};
+    reset.onclick=()=>{cancelZoomAnimation();resetView();};
+    axis.onclick=()=>{state.axisLockX=!state.axisLockX;if(state.axisLockX)state.axisLockY=false;axis.classList.toggle('is-active',state.axisLockX);axisY.classList.remove('is-active');axis.setAttribute('aria-pressed',String(state.axisLockX));axisY.setAttribute('aria-pressed','false');axis.textContent=state.axisLockX?u('↔ 横移動固定 ON','↔ Horizontal lock ON'):u('↔ 横移動固定','↔ Lock horizontal');axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');};
+    axisY.onclick=()=>{state.axisLockY=!state.axisLockY;if(state.axisLockY)state.axisLockX=false;axisY.classList.toggle('is-active',state.axisLockY);axis.classList.remove('is-active');axisY.setAttribute('aria-pressed',String(state.axisLockY));axis.setAttribute('aria-pressed','false');axisY.textContent=state.axisLockY?u('↕ 縦移動固定 ON','↕ Vertical lock ON'):u('↕ 縦移動固定','↕ Lock vertical');axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');};
+    save.onclick=()=>{if(!state.points.length)return;onSave?.({version:3,coordinateSpace:'source',sizing:'source-rect',bounded:true,mode:'tap',points:state.points});cleanup();};
+    const resizeObserver=('ResizeObserver' in window)?new ResizeObserver(()=>{if(!img.naturalWidth)return;sizeStageToSource();if(state.scale<=1.0001&&Math.abs(state.x)<.01&&Math.abs(state.y)<.01){fitImageToStage();apply();}}):null;resizeObserver?.observe(stage);
+    const cleanup=()=>{cancelZoomAnimation();resizeObserver?.disconnect();overlay.remove();document.documentElement.classList.remove('view-rec-open');};
+    close.onclick=cleanup;cancel.onclick=cleanup;overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});document.documentElement.classList.add('view-rec-open');
+    img.addEventListener('load',()=>{sizeStageToSource();fitImageToStage();apply();const old=image.viewPoints||image.viewRec;if(old?.points?.length)updateStatus();else if(old?.frames?.length)status.textContent=u('旧VIEW RECがあります。視点方式で録り直してください','Legacy VIEW REC found. Re-record as viewpoints.');else updateStatus();},{once:true});
+  }
+
+  function makeViewRecAuthoringField(image,onSaved){
+    const box=document.createElement('div');box.className='view-rec-authoring-field';
+    const meta=document.createElement('div');meta.className='view-rec-authoring-meta';
+    const points=(image?.viewPoints?.points||image?.viewRec?.points||[]).length,legacy=image?.viewRec?.frames?.length||0;
+    meta.textContent=points?u(`VIEW POINT：${points}視点 · タップ駆動`,`VIEW POINT: ${points} viewpoints · tap driven`):(legacy?u('VIEW REC：旧方式（録り直し推奨）','VIEW REC: legacy (re-record recommended)'):u('VIEW POINT：未設定','VIEW POINT: not set'));
+    const button=document.createElement('button');button.type='button';button.className='view-rec-authoring-button';button.textContent=points?u('VIEW POINTを再編集','Edit VIEW POINT'):u('VIEW POINTを設定','Set VIEW POINT');
+    button.onclick=()=>openViewRecRecorder(image,onSaved);box.append(meta,button);return box;
+  }
+
   function desktopMakeSelect(label,values,current,onchange){
     const wrap=document.createElement('label');wrap.className='desktop-live-field';
     const cap=document.createElement('span');cap.textContent=label;wrap.appendChild(cap);
@@ -7764,6 +9010,338 @@ function startInlineTextEdit(field='text'){
     values.forEach(([v,l,hidden])=>{const o=document.createElement('option');o.value=v;o.textContent=l;o.hidden=Boolean(hidden);select.appendChild(o);});
     select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.append(cap,select);return wrap;
   }
+
+  // V59 Phase 3 safety guard: bulk scope is a one-shot command, never a remembered
+  // preference. A Scene-size choice always applies to the current Scene first; only then
+  // can the author explicitly expand that chosen value to "from here" or "all Scenes".
+  // Bulk expansion is one atomic Undo step and the scope immediately locks back to current.
+  let v59TextSizeBulkScene=null;
+  let v59TextSizeBulkArmed=false;
+  function v59TextSizeBulkSyncScene(scene){
+    if(v59TextSizeBulkScene!==scene){
+      v59TextSizeBulkScene=scene;
+      v59TextSizeBulkArmed=false;
+    }
+  }
+  function v58MakeTextSizeBulkControl(scene,{label=null,onApplied=null}={}){
+    v59TextSizeBulkSyncScene(scene);
+    const wrap=document.createElement('div');wrap.className='desktop-text-detail-field v58-bulk-field';
+    const cap=document.createElement('span');cap.textContent=label||u('サイズ','Size');
+    const row=document.createElement('div');row.className='v58-bulk-row';
+    const value=document.createElement('select');
+    [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
+    value.value=ensurePresentation(scene).text?.size||'auto';
+
+    const scope=document.createElement('select');scope.className='v58-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('適用範囲','Apply scope'));
+    [['current',u('このScene','This Scene')],['forward',u('ここから先','From here')],['all',u('全Scene','All Scenes')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;scope.appendChild(o);});
+    scope.value='current';
+    scope.disabled=!v59TextSizeBulkArmed;
+    scope.title=scope.disabled?u('先に文字サイズを選んでください','Choose a text size first'):u('一括適用の範囲を選択','Choose bulk apply scope');
+
+    const lockScope=()=>{
+      v59TextSizeBulkArmed=false;
+      scope.value='current';
+      scope.disabled=true;
+      scope.title=u('先に文字サイズを選んでください','Choose a text size first');
+    };
+    const armScope=()=>{
+      v59TextSizeBulkScene=scene;
+      v59TextSizeBulkArmed=true;
+      scope.value='current';
+      scope.disabled=false;
+      scope.title=u('一括適用の範囲を選択','Choose bulk apply scope');
+    };
+
+    // Safety rule: changing size never reads a previous bulk scope. It always changes
+    // only this Scene, then arms the one-shot bulk selector for this chosen value.
+    value.addEventListener('change',()=>{
+      if(!workingDocument?.scenes?.length)return;
+      const undoLabel=u('文字サイズの変更を元に戻せます','Undo text size change');
+      captureUndo(undoLabel);
+      const pp=ensurePresentation(scene);pp.text ||= {};pp.text.size=value.value;
+      armScope();
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:true});
+      queueMicrotask(()=>showUndo(undoLabel));
+    });
+
+    // Selecting a wider scope is the explicit bulk command. The current Scene already
+    // has the chosen value, but including it in the target set keeps the operation simple
+    // and deterministic. One snapshot restores the entire bulk change at once.
+    scope.addEventListener('change',()=>{
+      if(scope.disabled || !v59TextSizeBulkArmed || !workingDocument?.scenes?.length)return;
+      const mode=scope.value;
+      if(mode==='current')return;
+      const index=Math.max(0,workingDocument.scenes.indexOf(scene));
+      const targets=mode==='all'?workingDocument.scenes:workingDocument.scenes.slice(index);
+      const undoLabel=u('文字サイズの一括適用を元に戻せます','Undo bulk text size apply');
+      captureUndo(undoLabel);
+      targets.forEach(sc=>{const pp=ensurePresentation(sc);pp.text ||= {};pp.text.size=value.value;});
+      lockScope();
+      scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:true});
+      queueMicrotask(()=>showUndo(undoLabel));
+      onApplied?.();
+    });
+
+    row.append(value,scope);wrap.append(cap,row);return wrap;
+  }
+  // V63 Phase 3: typeface bulk apply follows the same V59 one-shot safety contract.
+  // Choosing a typeface changes only the current Scene first. The wider scope unlocks
+  // only for that choice, is never remembered, and relocks immediately after bulk apply.
+  let v63TypefaceBulkScene=null;
+  let v63TypefaceBulkArmed=false;
+  function v63TypefaceBulkSyncScene(scene){
+    if(v63TypefaceBulkScene!==scene){v63TypefaceBulkScene=scene;v63TypefaceBulkArmed=false;}
+  }
+  function v63SetSceneTypeface(scene,value){
+    const pp=ensurePresentation(scene);pp.text ||= {};
+    if(value==='inherit')delete pp.text.fontFamily;else pp.text.fontFamily=value;
+  }
+  function v63MakeTypefaceBulkControl(scene,{label=null,onApplied=null}={}){
+    v63TypefaceBulkSyncScene(scene);
+    const wrap=document.createElement('div');wrap.className='desktop-text-detail-field v58-bulk-field v63-typeface-bulk-field';
+    const cap=document.createElement('span');cap.textContent=label||u('書体','Typeface');
+    const row=document.createElement('div');row.className='v58-bulk-row';
+    const value=document.createElement('select');
+    [['inherit',u('作品設定','Work setting')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
+    value.value=ensurePresentation(scene).text?.fontFamily||'inherit';
+    const scope=document.createElement('select');scope.className='v58-bulk-scope v63-typeface-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('書体の適用範囲','Typeface apply scope'));
+    [['current',u('このScene','This Scene')],['forward',u('ここから先','From here')],['all',u('全Scene','All Scenes')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;scope.appendChild(o);});
+    const lock=()=>{v63TypefaceBulkArmed=false;scope.value='current';scope.disabled=true;scope.title=u('先に書体を選んでください','Choose a typeface first');};
+    const arm=()=>{v63TypefaceBulkScene=scene;v63TypefaceBulkArmed=true;scope.value='current';scope.disabled=false;scope.title=u('一括適用の範囲を選択','Choose bulk apply scope');};
+    scope.value='current';scope.disabled=!v63TypefaceBulkArmed;scope.title=scope.disabled?u('先に書体を選んでください','Choose a typeface first'):u('一括適用の範囲を選択','Choose bulk apply scope');
+    value.addEventListener('change',()=>{
+      if(!workingDocument?.scenes?.length)return;
+      const undoLabel=u('書体の変更を元に戻せます','Undo typeface change');
+      captureUndo(undoLabel);v63SetSceneTypeface(scene,value.value);arm();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));
+    });
+    scope.addEventListener('change',()=>{
+      if(scope.disabled||!v63TypefaceBulkArmed||!workingDocument?.scenes?.length)return;
+      const mode=scope.value;if(mode==='current')return;
+      const index=Math.max(0,workingDocument.scenes.indexOf(scene));
+      const targets=mode==='all'?workingDocument.scenes:workingDocument.scenes.slice(index);
+      const undoLabel=u('書体の一括適用を元に戻せます','Undo bulk typeface apply');
+      captureUndo(undoLabel);targets.forEach(sc=>v63SetSceneTypeface(sc,value.value));lock();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));onApplied?.();
+    });
+    row.append(value,scope);wrap.append(cap,row);return wrap;
+  }
+  // V64 Phase 3: writing-direction bulk apply. Vertical writing is a linked preset:
+  // it also switches Scene flow to horizontal/page-turn. Returning to horizontal writing
+  // removes only the writing-mode override and deliberately preserves each Scene's flow.
+  // The wider scope is a one-shot command and one bulk action is one Undo/Redo step.
+  let v64WritingModeBulkScene=null;
+  let v64WritingModeBulkArmed=false;
+  function v64WritingModeBulkSyncScene(scene){
+    if(v64WritingModeBulkScene!==scene){v64WritingModeBulkScene=scene;v64WritingModeBulkArmed=false;}
+  }
+  function v64SetSceneWritingMode(scene,value){
+    const pp=ensurePresentation(scene);pp.text ||= {};
+    if(value==='vertical-rl'){
+      pp.text.writingMode='vertical-rl';
+      pp.flow='horizontal';
+    }else{
+      delete pp.text.writingMode;
+    }
+  }
+  function v64MakeWritingModeBulkControl(scene,{label=null,onApplied=null}={}){
+    v64WritingModeBulkSyncScene(scene);
+    const wrap=document.createElement('div');wrap.className='desktop-text-detail-field v58-bulk-field v64-writing-bulk-field';
+    const cap=document.createElement('span');cap.textContent=label||u('書字方向','Writing direction');
+    const row=document.createElement('div');row.className='v58-bulk-row';
+    const value=document.createElement('select');
+    [['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き','Vertical')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
+    value.value=ensurePresentation(scene).text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
+    const scope=document.createElement('select');scope.className='v58-bulk-scope v64-writing-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('書字方向の適用範囲','Writing direction apply scope'));
+    [['current',u('このScene','This Scene')],['forward',u('ここから先','From here')],['all',u('全Scene','All Scenes')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;scope.appendChild(o);});
+    const lock=()=>{v64WritingModeBulkArmed=false;scope.value='current';scope.disabled=true;scope.title=u('先に書字方向を選んでください','Choose a writing direction first');};
+    const arm=()=>{v64WritingModeBulkScene=scene;v64WritingModeBulkArmed=true;scope.value='current';scope.disabled=false;scope.title=u('一括適用の範囲を選択','Choose bulk apply scope');};
+    scope.value='current';scope.disabled=!v64WritingModeBulkArmed;scope.title=scope.disabled?u('先に書字方向を選んでください','Choose a writing direction first'):u('一括適用の範囲を選択','Choose bulk apply scope');
+    value.addEventListener('change',()=>{
+      if(!workingDocument?.scenes?.length)return;
+      const undoLabel=u('書字方向の変更を元に戻せます','Undo writing direction change');
+      captureUndo(undoLabel);v64SetSceneWritingMode(scene,value.value);arm();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));
+    });
+    scope.addEventListener('change',()=>{
+      if(scope.disabled||!v64WritingModeBulkArmed||!workingDocument?.scenes?.length)return;
+      const mode=scope.value;if(mode==='current')return;
+      const index=Math.max(0,workingDocument.scenes.indexOf(scene));
+      const targets=mode==='all'?workingDocument.scenes:workingDocument.scenes.slice(index);
+      const undoLabel=u('書字方向の一括適用を元に戻せます','Undo bulk writing direction apply');
+      captureUndo(undoLabel);targets.forEach(sc=>v64SetSceneWritingMode(sc,value.value));lock();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));onApplied?.();
+    });
+    row.append(value,scope);wrap.append(cap,row);return wrap;
+  }
+  // V68 Phase 3: Scene-flow bulk apply. Follows the V59 one-shot safety contract:
+  // current Scene first, wider scope unlocks only after that explicit change, and bulk
+  // application immediately relocks. One bulk command is one Undo/Redo history step.
+  let v68FlowBulkScene=null;
+  let v68FlowBulkArmed=false;
+  function v68FlowBulkSyncScene(scene){
+    if(v68FlowBulkScene!==scene){v68FlowBulkScene=scene;v68FlowBulkArmed=false;}
+  }
+  function v68SetSceneFlow(scene,value){
+    const pp=ensurePresentation(scene);
+    pp.flow=value==='horizontal'?'horizontal':'vertical';
+  }
+  function v68MakeFlowBulkControl(scene,{label=null,onApplied=null}={}){
+    v68FlowBulkSyncScene(scene);
+    const wrap=document.createElement('div');wrap.className='desktop-text-detail-field v58-bulk-field v68-flow-bulk-field';
+    const cap=document.createElement('span');cap.textContent=label||u('Sceneの流れ','Scene flow');
+    const row=document.createElement('div');row.className='v58-bulk-row';
+    const value=document.createElement('select');
+    [['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
+    value.value=ensurePresentation(scene).flow==='horizontal'?'horizontal':'vertical';
+    const scope=document.createElement('select');scope.className='v58-bulk-scope v68-flow-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('Sceneの流れの適用範囲','Scene flow apply scope'));
+    [['current',u('このScene','This Scene')],['forward',u('ここから先','From here')],['all',u('全Scene','All Scenes')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;scope.appendChild(o);});
+    const lock=()=>{v68FlowBulkArmed=false;scope.value='current';scope.disabled=true;scope.title=u('先にSceneの流れを選んでください','Choose Scene flow first');};
+    const arm=()=>{v68FlowBulkScene=scene;v68FlowBulkArmed=true;scope.value='current';scope.disabled=false;scope.title=u('一括適用の範囲を選択','Choose bulk apply scope');};
+    scope.value='current';scope.disabled=!v68FlowBulkArmed;scope.title=scope.disabled?u('先にSceneの流れを選んでください','Choose Scene flow first'):u('一括適用の範囲を選択','Choose bulk apply scope');
+    value.addEventListener('change',()=>{
+      if(!workingDocument?.scenes?.length)return;
+      const undoLabel=u('Sceneの流れの変更を元に戻せます','Undo Scene flow change');
+      captureUndo(undoLabel);v68SetSceneFlow(scene,value.value);arm();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));
+    });
+    scope.addEventListener('change',()=>{
+      if(scope.disabled||!v68FlowBulkArmed||!workingDocument?.scenes?.length)return;
+      const mode=scope.value;if(mode==='current')return;
+      const index=Math.max(0,workingDocument.scenes.indexOf(scene));
+      const targets=mode==='all'?workingDocument.scenes:workingDocument.scenes.slice(index);
+      const undoLabel=u('Sceneの流れの一括適用を元に戻せます','Undo bulk Scene flow apply');
+      captureUndo(undoLabel);targets.forEach(sc=>v68SetSceneFlow(sc,value.value));lock();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));onApplied?.();
+    });
+    row.append(value,scope);wrap.append(cap,row);return wrap;
+  }
+  // V69 Phase 3 complete: display (stack / solo / overlay) bulk apply.
+  // Uses the same one-shot safety contract as the other Phase 3 controls:
+  // change current Scene first, then explicitly expand that exact value to later/all Scenes.
+  let v69DisplayBulkScene=null;
+  let v69DisplayBulkArmed=false;
+  function v69DisplayBulkSyncScene(scene){
+    if(v69DisplayBulkScene!==scene){v69DisplayBulkScene=scene;v69DisplayBulkArmed=false;}
+  }
+  function v69SetSceneDisplay(scene,value){
+    const pp=ensurePresentation(scene);
+    pp.display=['solo','overlay'].includes(value)?value:'stack';
+  }
+  function v69MakeDisplayBulkControl(scene,{label=null,onApplied=null}={}){
+    v69DisplayBulkSyncScene(scene);
+    const wrap=document.createElement('div');wrap.className='desktop-text-detail-field v58-bulk-field v69-display-bulk-field';
+    const cap=document.createElement('span');cap.textContent=label||u('表示','Display');
+    const row=document.createElement('div');row.className='v58-bulk-row';
+    const value=document.createElement('select');
+    [['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('前Sceneに重ねる','Overlap previous Scene')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
+    value.value=ensurePresentation(scene).display||'stack';
+    const scope=document.createElement('select');scope.className='v58-bulk-scope v69-display-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('表示の適用範囲','Display apply scope'));
+    [['current',u('このScene','This Scene')],['forward',u('ここから先','From here')],['all',u('全Scene','All Scenes')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;scope.appendChild(o);});
+    const lock=()=>{v69DisplayBulkArmed=false;scope.value='current';scope.disabled=true;scope.title=u('先に表示を選んでください','Choose a display mode first');};
+    const arm=()=>{v69DisplayBulkScene=scene;v69DisplayBulkArmed=true;scope.value='current';scope.disabled=false;scope.title=u('一括適用の範囲を選択','Choose bulk apply scope');};
+    scope.value='current';scope.disabled=!v69DisplayBulkArmed;scope.title=scope.disabled?u('先に表示を選んでください','Choose a display mode first'):u('一括適用の範囲を選択','Choose bulk apply scope');
+    value.addEventListener('change',()=>{
+      if(!workingDocument?.scenes?.length)return;
+      const undoLabel=u('表示の変更を元に戻せます','Undo display change');
+      captureUndo(undoLabel);v69SetSceneDisplay(scene,value.value);arm();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));
+    });
+    scope.addEventListener('change',()=>{
+      if(scope.disabled||!v69DisplayBulkArmed||!workingDocument?.scenes?.length)return;
+      const mode=scope.value;if(mode==='current')return;
+      const index=Math.max(0,workingDocument.scenes.indexOf(scene));
+      const targets=mode==='all'?workingDocument.scenes:workingDocument.scenes.slice(index);
+      const undoLabel=u('表示の一括適用を元に戻せます','Undo bulk display apply');
+      captureUndo(undoLabel);targets.forEach(sc=>v69SetSceneDisplay(sc,value.value));lock();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));onApplied?.();
+    });
+    row.append(value,scope);wrap.append(cap,row);return wrap;
+  }
+  // V66 Phase 3: text-position preset bulk apply. This follows the V59 one-shot
+  // safety contract. Choosing a position changes only the current Scene first; only
+  // then can the author explicitly expand that exact preset to later/all Scenes.
+  // Drag-adjusted custom coordinates remain a separate per-Scene operation.
+  let v66TextPositionBulkScene=null;
+  let v66TextPositionBulkArmed=false;
+  function v66TextPositionBulkSyncScene(scene){
+    if(v66TextPositionBulkScene!==scene){v66TextPositionBulkScene=scene;v66TextPositionBulkArmed=false;}
+  }
+  function v66SetSceneTextPosition(scene,value){
+    const pp=ensurePresentation(scene);pp.text ||= {};
+    setFramePositionPreset(pp,value);
+  }
+  function v66MakeTextPositionBulkControl(scene,{label=null,onApplied=null}={}){
+    v66TextPositionBulkSyncScene(scene);
+    const wrap=document.createElement('div');wrap.className='desktop-text-detail-field v58-bulk-field v66-position-bulk-field';
+    const cap=document.createElement('span');cap.textContent=label||u('テキスト位置','Text position');
+    const row=document.createElement('div');row.className='v58-bulk-row';
+    const value=document.createElement('select');
+    FRAME_POSITION_OPTIONS.forEach(([v,l,hidden])=>{const o=document.createElement('option');o.value=v;o.textContent=l;o.hidden=Boolean(hidden);value.appendChild(o);});
+    value.value=framePositionPreset(scene);
+    const scope=document.createElement('select');scope.className='v58-bulk-scope v66-position-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('テキスト位置の適用範囲','Text position apply scope'));
+    [['current',u('このScene','This Scene')],['forward',u('ここから先','From here')],['all',u('全Scene','All Scenes')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;scope.appendChild(o);});
+    const lock=()=>{v66TextPositionBulkArmed=false;scope.value='current';scope.disabled=true;scope.title=u('先にテキスト位置を選んでください','Choose a text position first');};
+    const arm=()=>{v66TextPositionBulkScene=scene;v66TextPositionBulkArmed=true;scope.value='current';scope.disabled=false;scope.title=u('一括適用の範囲を選択','Choose bulk apply scope');};
+    scope.value='current';scope.disabled=!v66TextPositionBulkArmed;scope.title=scope.disabled?u('先にテキスト位置を選んでください','Choose a text position first'):u('一括適用の範囲を選択','Choose bulk apply scope');
+    value.addEventListener('change',()=>{
+      if(!workingDocument?.scenes?.length)return;
+      const undoLabel=u('テキスト位置の変更を元に戻せます','Undo text position change');
+      captureUndo(undoLabel);v66SetSceneTextPosition(scene,value.value);arm();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));
+    });
+    scope.addEventListener('change',()=>{
+      if(scope.disabled||!v66TextPositionBulkArmed||!workingDocument?.scenes?.length)return;
+      const mode=scope.value;if(mode==='current')return;
+      const index=Math.max(0,workingDocument.scenes.indexOf(scene));
+      const targets=mode==='all'?workingDocument.scenes:workingDocument.scenes.slice(index);
+      const undoLabel=u('テキスト位置の一括適用を元に戻せます','Undo bulk text position apply');
+      captureUndo(undoLabel);targets.forEach(sc=>v66SetSceneTextPosition(sc,value.value));lock();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));onApplied?.();
+    });
+    row.append(value,scope);wrap.append(cap,row);return wrap;
+  }
+  // V61 Phase 3: text-color bulk apply uses the same V59 one-shot safety contract.
+  // A color choice always changes only the current Scene first. Only after that choice
+  // can the author explicitly expand it to "from here" / "all Scenes". Bulk scope is
+  // never persisted and one bulk command equals one Undo/Redo step.
+  let v60TextColorBulkScene=null;
+  let v60TextColorBulkArmed=false;
+  let v60TextColorBulkValue=null;
+  function v60TextColorBulkSyncScene(scene){
+    if(v60TextColorBulkScene!==scene){v60TextColorBulkScene=scene;v60TextColorBulkArmed=false;v60TextColorBulkValue=null;}
+  }
+  function v60SetSceneTextColor(scene,color){
+    const pp=ensurePresentation(scene);pp.text ||= {};
+    const hex=normalizeTextColor(color);
+    if(hex)pp.text.color=hex;else delete pp.text.color;
+  }
+  function v60MakeTextColorScope(scene,{onApplied=null}={}){
+    v60TextColorBulkSyncScene(scene);
+    const scope=document.createElement('select');scope.className='v58-bulk-scope v60-color-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('文字色の適用範囲','Text color apply scope'));
+    [['current',u('このScene','This Scene')],['forward',u('ここから先','From here')],['all',u('全Scene','All Scenes')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;scope.appendChild(o);});
+    const lock=()=>{v60TextColorBulkArmed=false;v60TextColorBulkValue=null;scope.value='current';scope.disabled=true;scope.title=u('先に文字色を選んでください','Choose a text color first');};
+    const sync=()=>{scope.value='current';scope.disabled=!v60TextColorBulkArmed;scope.title=scope.disabled?u('先に文字色を選んでください','Choose a text color first'):u('一括適用の範囲を選択','Choose bulk apply scope');};
+    sync();
+    scope.addEventListener('change',()=>{
+      if(scope.disabled||!v60TextColorBulkArmed||!v60TextColorBulkValue||!workingDocument?.scenes?.length)return;
+      const mode=scope.value;if(mode==='current')return;
+      const index=Math.max(0,workingDocument.scenes.indexOf(scene));
+      const targets=mode==='all'?workingDocument.scenes:workingDocument.scenes.slice(index);
+      const undoLabel=u('文字色の一括適用を元に戻せます','Undo bulk text color apply');
+      captureUndo(undoLabel);targets.forEach(sc=>v60SetSceneTextColor(sc,v60TextColorBulkValue));lock();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));onApplied?.();
+    });
+    return {scope,arm(color){v60TextColorBulkScene=scene;v60TextColorBulkArmed=true;v60TextColorBulkValue=normalizeTextColor(color);sync();},lock};
+  }
+  function v60MakeFrequentTextColorControl(scene,{onApplied=null}={}){
+    const pp=ensurePresentation(scene);pp.text ||= {};
+    const wrap=document.createElement('div');wrap.className='desktop-text-detail-field v60-frequent-color';
+    const cap=document.createElement('span');cap.textContent=u('文字色','Text color');wrap.appendChild(cap);
+    const scopeCtl=v60MakeTextColorScope(scene,{onApplied});
+    const top=document.createElement('div');top.className='v60-color-top';
+    const initial=/^#[0-9a-f]{6}$/i.test(String(pp.text.color||''))?String(pp.text.color).toUpperCase():'#4A4A4A';
+    const code=document.createElement('code');code.textContent=initial;
+    const picker=makeCommittedTextColorPicker(initial,{compact:true,onPreview:c=>{code.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{
+      const undoLabel=u('文字色の変更を元に戻せます','Undo text color change');captureUndo(undoLabel);v60SetSceneTextColor(scene,c);rememberTextColor(c);code.textContent=c;scopeCtl.arm(c);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));onApplied?.();
+    }});
+    top.append(picker.root,code,scopeCtl.scope);wrap.appendChild(top);
+    const paletteHost=document.createElement('div');
+    const renderPalette=()=>{paletteHost.replaceChildren(makeTextColorPalette(ensurePresentation(scene).text?.color,hex=>{v60SetSceneTextColor(scene,hex);code.textContent=hex;scopeCtl.arm(hex);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});onApplied?.();queueMicrotask(renderPalette);}));};
+    renderPalette();wrap.appendChild(paletteHost);return wrap;
+  }
+
   function liveDetailHost(){
     // Keep the inspector in the original host. Other Studio logic uses the
     // panel hierarchy to detect/reopen the currently active detail inspector.
@@ -7815,6 +9393,17 @@ function startInlineTextEdit(field='text'){
       const pcMode=studioPreviewDevice==='pc'&&window.matchMedia('(min-width:1100px)').matches&&document.body.classList.contains('desktop-live-edit');
       const beforeText=p.text.position?clone(p.text.position):null;
       const beforeFrame=p.frame?.position?clone(p.frame.position):null;
+      // V45: drag positioning mutates continuously outside the generic
+      // select/input history watcher. Keep the true pre-drag document snapshot
+      // and publish it only when the author commits with Done/Auto.
+      const positionHistoryBefore=makeHistorySnapshot('テキスト位置の変更を元に戻せます');
+      let positionHistoryCommitted=false;
+      const commitPositionHistory=()=>{
+        if(positionHistoryCommitted)return;
+        positionHistoryCommitted=true;
+        pushUndoSnapshot(positionHistoryBefore);
+        queueMicrotask(()=>showUndo('テキスト位置の変更を元に戻せます'));
+      };
       const initialPosition=p.text.position||p.frame?.position||{};
       const setAdjustedPosition=(adjusted)=>{
         if(pcMode){
@@ -7885,9 +9474,9 @@ function startInlineTextEdit(field='text'){
         syncLivePosition(p.text.position||p.frame?.position||null);
         scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel?.();
       };
-      auto.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();finishFramePositionDrag({save:true,reset:true});});
+      auto.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();commitPositionHistory();finishFramePositionDrag({save:true,reset:true});});
       cancel.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();finishFramePositionDrag();});
-      save.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();finishFramePositionDrag({save:true});});
+      save.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();commitPositionHistory();finishFramePositionDrag({save:true});});
     }));
   }
   function makeFramePositionDragButton(scene){
@@ -8043,8 +9632,17 @@ function openDesktopEffectDetail(){
       if(before.effectTiming===null)delete p.effectTiming;else p.effectTiming=clone(before.effectTiming);
       if(before.disappear===null)delete p.disappear;else p.disappear=clone(before.disappear);
       scheduleDraftSave(40);
-      refreshLivePlayer({preserveSheet:true});
-      if(desktopLiveActive())renderDesktopLivePanel();
+      // V51: Audio Detail must reflect structural audio edits immediately.
+      // preserveAudio:true intentionally leaves the old transport sounding, which
+      // made Loop/Stop/Remove appear broken until Scene navigation. Reconstruct
+      // the current Scene audio state instead. Restore mode does not fire SE.
+      if(player && typeof player.refreshCurrent==='function'){
+        player.refreshCurrent({document:getDocumentForPlayback(),index:player.index,preserveAudio:false});
+      }else{
+        refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});
+      }
+      // Do not rebuild the right Live panel while its Audio Detail modal is open.
+      // Rebuilding reset the local sub-tab to BGM during Ambient/SE slider edits.
     };
 
     const overlay=document.createElement('div');overlay.className='desktop-text-detail-overlay desktop-effect-detail-overlay';
@@ -8077,11 +9675,11 @@ function openDesktopEffectDetail(){
     });
     basicGrid.append(
       effectSelect,
-      desktopDetailSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('前Sceneに重ねる','Overlap previous Scene')]],p.display||'stack',v=>{p.display=v;apply();}),
-      desktopDetailSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;apply();}),
+      v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
+      v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
       desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;apply();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
-      desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;apply();})
+      desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();})
     );
 
     const timing=section(u('タイミング','Timing'));
@@ -8209,6 +9807,8 @@ function enhanceDesktopTextDetailRanges(root){
 }
 
 
+
+let liveAudioDetailActiveKind='bgm';
 
 function openDesktopAudioDetail(){
     if(!liveEditEnabled && advancedScreen?.hidden)return;
@@ -8435,7 +10035,6 @@ function openDesktopAudioDetail(){
       // Apply the gain directly to the transport that is already sounding.
       if(liveVolume!=null){
         applyLiveAudioVolume(kind,liveVolume);
-        if(desktopLiveActive())renderDesktopLivePanel();
         return;
       }
 
@@ -8452,7 +10051,6 @@ function openDesktopAudioDetail(){
             // real fadeIn semantics used by the public Player.
             player?._applyAudioCommand?.({...cmd,restart:true},false);
           }catch(_){}
-          if(desktopLiveActive())renderDesktopLivePanel();
           return;
         }
       }
@@ -8495,8 +10093,10 @@ function openDesktopAudioDetail(){
 
     const overlay=document.createElement('div');
     overlay.className='desktop-text-detail-overlay desktop-audio-detail-overlay';
+    overlay.dataset.undoSurface='audio'; // V49: shared PC/iPhone Audio detail Undo surface
     const modal=document.createElement('section');
     modal.className='desktop-text-detail-modal desktop-audio-detail-modal';
+    modal.dataset.undoSurface='audio'; // survives move into iPhone Live sheet
 
     const head=document.createElement('header');
     head.className='desktop-text-detail-head';
@@ -8514,7 +10114,7 @@ function openDesktopAudioDetail(){
     tabs.className='desktop-audio-detail-tabs';
     const content=document.createElement('div');
     content.className='desktop-audio-detail-content';
-    let activeKind='bgm';
+    let activeKind=liveAudioDetailActiveKind||'bgm';
 
     const tabDefs=[
       ['bgm','BGM',u('続いていた時間','Time that kept flowing')],
@@ -8522,9 +10122,29 @@ function openDesktopAudioDetail(){
       ['se','SE',u('その時起きた音','Sound that happened then')]
     ];
 
+    const audioTabIndicator=(kind)=>{
+      const track=audioModel[kind];
+      if(kind==='se') return (track?.action==='play' && !!track?.src) ? 'own' : 'none';
+      if(track?.action==='start' && track?.src) return 'own';
+      if((track?.action==='continue' || track?.action==='volume') && inheritedPersistentState(kind)?.src) return 'inherited';
+      return 'none';
+    };
+    const updateAudioTabIndicators=()=>{
+      tabs.querySelectorAll('button[data-kind]').forEach(b=>{
+        const state=audioTabIndicator(b.dataset.kind);
+        b.dataset.audioState=state;
+        const dot=b.querySelector('.audio-tab-state-dot');
+        if(dot){
+          dot.textContent=state==='own'?'●':state==='inherited'?'○':'';
+          dot.setAttribute('aria-label',state==='own'?u('このSceneに音あり','Audio in this Scene'):state==='inherited'?u('前Sceneから継続中','Continuing from previous Scene'):'');
+        }
+      });
+    };
+
     const renderTrack=()=>{
       content.replaceChildren();
       tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('is-active',b.dataset.kind===activeKind));
+      updateAudioTabIndicators();
 
       const track=audioModel[activeKind];
       const kind=activeKind;
@@ -8571,7 +10191,30 @@ function openDesktopAudioDetail(){
       if(kind!=='se'&&(track.action==='continue'||track.action==='volume')){
         const inheritedName=inherited?._editorFileName||inherited?.src||u('現在BGM / Ambientなし','No current BGM / Ambient');
         assetText.innerHTML=`<strong>${track.action==='volume'?u('前Sceneの音を音量変更','Change previous Scene volume'):u('前Sceneを継続','Continue previous Scene')}</strong><span>${inheritedName}</span>`;
-        asset.append(assetText);
+        // V52: Audio remove/delay audit.
+        // V51: Audio detail state/transport audit. Keep active BGM/Ambient/SE tab stable,
+        // reconstruct persistent transport immediately after structural edits, and label
+        // an empty inherited source as File selection rather than Source change.
+        // V50: The tabbed Audio editor accidentally hid the source picker for
+        // BGM/Ambient while the channel was in Continue/Volume mode. Keep the
+        // inherited-state summary, but always expose a one-tap source chooser.
+        // Picking a file intentionally turns this Scene into a Start command.
+        const assetBtns=document.createElement('div');
+        assetBtns.className='desktop-audio-detail-file-actions';
+        assetBtns.append(
+          desktopAction(inherited?.src?u('音源を変更','Change audio'):u('ファイルを選択','Choose file'),()=>{
+            desktopPickFile((!desktopLiveActive() ? '' : 'audio/*'),(url,name)=>{
+              captureUndo('音源の変更を元に戻せます');
+              queueMicrotask(()=>showUndo('音源の変更を元に戻せます'));
+              track.src=url;
+              track._editorFileName=name;
+              track.action='start';
+              refreshAudioPreview(kind,{startPersistent:true});
+              renderTrack();
+            });
+          },'is-primary')
+        );
+        asset.append(assetText,assetBtns);
       }else{
         assetText.innerHTML=`<strong>${track.src?u('選択中','Selected'):u('音源未選択','No audio selected')}</strong><span>${track._editorFileName||track.src||u('ファイルを選択してください','Choose an audio file')}</span>`;
         const assetBtns=document.createElement('div');
@@ -8579,6 +10222,8 @@ function openDesktopAudioDetail(){
         assetBtns.append(
           desktopAction(track.src?u('音源を変更','Change audio'):u('ファイルを選択','Choose file'),()=>{
             desktopPickFile((!desktopLiveActive() ? '' : 'audio/*'),(url,name)=>{
+              captureUndo('音源の変更を元に戻せます');
+              queueMicrotask(()=>showUndo('音源の変更を元に戻せます'));
               track.src=url;
               track._editorFileName=name;
               if(kind==='se')track.action='play';
@@ -8587,13 +10232,22 @@ function openDesktopAudioDetail(){
               renderTrack();
             });
           },'is-primary'),
-          desktopAction(u('音源を外す','Remove audio'),()=>{
+          ...(track.src ? [desktopAction(u('音源を外す','Remove audio'),()=>{
+            captureUndo('音源を外した操作を元に戻せます');
+            queueMicrotask(()=>showUndo('音源を外した操作を元に戻せます'));
+            // V52: stop the currently sounding transport BEFORE the model is
+            // changed/reconstructed. refreshCurrent preserves audio by design,
+            // so removing only the Scene command used to leave stale sound alive.
+            try{
+              if(kind==='se') player?._stopOneShots?.();
+              else player?._stopPersistentChannel?.(kind,0);
+            }catch(_){}
             track.src='';
             track._editorFileName='';
             track.action=kind==='se'?'none':'continue';
             refreshAudioPreview(kind);
             renderTrack();
-          })
+          })] : [])
         );
         asset.append(assetText,assetBtns);
       }
@@ -8644,7 +10298,14 @@ function openDesktopAudioDetail(){
         levelGrid.append(
           desktopDetailSelect(u('ループ','Loop'),[['on','ON'],['off','OFF']],track.loop===false?'off':'on',v=>{
             track.loop=v!=='off';
-            refreshAudioPreview(kind);
+            // V53: loop is a live transport property; refreshCurrent preserves
+            // persistent audio, so set the currently sounding element directly.
+            commitAll(); scheduleDraftSave(40);
+            try{
+              const a=player?.audioEls?.[kind];
+              if(a) a.loop=track.loop;
+              if(player?.audioState?.[kind]) player.audioState[kind].loop=track.loop;
+            }catch(_){}
           })
         );
       }else if(kind==='se'){
@@ -8691,10 +10352,14 @@ function openDesktopAudioDetail(){
 
     tabDefs.forEach(([kind,label])=>{
       const b=document.createElement('button');
-      b.type='button';b.dataset.kind=kind;b.textContent=label;
-      b.addEventListener('click',()=>{activeKind=kind;renderTrack();});
+      b.type='button';b.dataset.kind=kind;
+      const labelSpan=document.createElement('span');labelSpan.textContent=label;
+      const stateDot=document.createElement('span');stateDot.className='audio-tab-state-dot';stateDot.setAttribute('aria-hidden','true');
+      b.append(labelSpan,stateDot);
+      b.addEventListener('click',()=>{activeKind=kind;liveAudioDetailActiveKind=kind;renderTrack();});
       tabs.appendChild(b);
     });
+    updateAudioTabIndicators();
 
     body.append(tabs,content);
 
@@ -8726,6 +10391,8 @@ function openDesktopAudioDetail(){
       settleLivePreviewAfterDetailSave(index);
     });
     reset.addEventListener('click',()=>{
+      captureUndo('音設定のリセットを元に戻せます');
+      queueMicrotask(()=>showUndo('音設定のリセットを元に戻せます'));
       // Reset only the adjustable parameters of the currently open channel.
       // Source and playback action are intentionally preserved; removing an
       // audio source belongs exclusively to the explicit "音源を外す" action.
@@ -8802,9 +10469,11 @@ function openDesktopBackgroundDetail(){
 
     const overlay=document.createElement('div');
     overlay.className='desktop-text-detail-overlay desktop-background-detail-overlay';
+    overlay.dataset.undoSurface='background';
 
     const modal=document.createElement('section');
     modal.className='desktop-text-detail-modal desktop-background-detail-modal';
+    modal.dataset.undoSurface='background';
     modal.setAttribute('role','dialog');
     modal.setAttribute('aria-modal','true');
 
@@ -8878,6 +10547,7 @@ function openDesktopBackgroundDetail(){
     assetActions.className='desktop-background-detail-asset-actions';
     const choose=desktopAction(explicit()?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>{
       desktopPickFile('image/*',(url,name)=>{
+        captureUndo('背景画像の変更を元に戻せます');
         const bg=ensureImageState();
         bg.src=url;bg._editorFileName=name;bg._editorManaged=true;
         if(!bg.transition)bg.transition='fade';
@@ -8892,6 +10562,7 @@ function openDesktopBackgroundDetail(){
       });
     },'is-primary');
     const clear=desktopAction(u('画像を外す','Remove image'),()=>{
+      captureUndo('背景画像の変更を元に戻せます');
       p.background={src:'',transition:'fade',_editorManaged:true};
       apply();closeDesktopBackgroundDetail();openDesktopBackgroundDetail();
     });
@@ -8900,6 +10571,7 @@ function openDesktopBackgroundDetail(){
     const sourcePositionAdjust=desktopAction(t('cover.positionAdjust'),()=>{
       const bg=explicit();
       if(!bg?.src)return;
+      captureUndo('背景位置の変更を元に戻せます');
       openSceneBackgroundPositionEditor(scene,()=>{
         scheduleDraftSave(40);
         refreshLivePlayer({preserveSheet:true});
@@ -8927,6 +10599,7 @@ function openDesktopBackgroundDetail(){
       ],sourceBg.fit||'cover',v=>{const bg=ensureImageState();bg.fit=v;apply();})
     );
     const copyPreviousPosition=desktopAction(u('前Sceneの表示位置をコピー','Copy previous Scene position'),()=>{
+      captureUndo('背景位置の変更を元に戻せます');
       if(!copyPreviousBackgroundFraming(index))return;
       apply();
       closeDesktopBackgroundDetail();
@@ -9050,6 +10723,7 @@ function openDesktopBackgroundDetail(){
 
     const previousMotion=previousFraming()?.motion;
     const copyPreviousMotion=desktopAction(u('前Sceneの動きを継続','Continue previous Scene motion'),()=>{
+      captureUndo('背景の動きの変更を元に戻せます');
       if(!previousMotion?.type||previousMotion.type==='none')return;
       const bg=ensureImageState();
       bg.motion={...clone(previousMotion),continuity:'carry'};
@@ -9194,6 +10868,7 @@ function openDesktopBackgroundDetail(){
       settleLivePreviewAfterDetailSave(index);
     });
     reset.addEventListener('click',()=>{
+      captureUndo('背景設定のリセットを元に戻せます');
       delete p.background;
       scheduleDraftSave(40);
       refreshLivePlayer({preserveSheet:true});
@@ -9235,25 +10910,29 @@ function openDesktopTextDetail(){
     const two=(parent)=>{const g=document.createElement('div');g.className='desktop-text-detail-two';parent.appendChild(g);return g;};
 
     const typography=section(u('基本','Basic'));
+    const v60ColorScopeCtl=v60MakeTextColorScope(scene,{onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}});
     const basic=two(typography);
     basic.append(
-      desktopDetailSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;apply();}),
-      desktopDetailSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;apply();}),
-      desktopDetailSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;apply();}),
-      desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();}),
-      desktopDetailSelect(u('テキスト位置','Text position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);apply();}),
-      desktopDetailSelect(u('文字色','Text color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom')),v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;apply();}),
+      v63MakeTypefaceBulkControl(scene,{label:u('書体','Typeface'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
+      v58MakeTextSizeBulkControl(scene,{label:u('サイズ','Size'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
+      v64MakeWritingModeBulkControl(scene,{label:u('書字方向','Writing direction'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
+      desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;apply();}),
+      v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
       desktopDetailSelect(u('文字影','Text shadow'),[['auto',t('effect.auto')],['none',t('shadow.none')],['soft',t('shadow.soft')],['strong',t('shadow.strong')]],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
     );
-    const colorRow=document.createElement('div');colorRow.className='desktop-text-detail-color';const colorLabel=document.createElement('span');colorLabel.textContent=t('color.custom');const colorCode=document.createElement('code');const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';colorCode.textContent=initialColor;const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{colorCode.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;colorCode.textContent=c;apply();}});colorRow.append(colorLabel,colorPicker.root,colorCode);typography.appendChild(colorRow);
-    typography.appendChild(makeTextColorPalette(p.text.color,hex=>{
-      p.text.color=hex;
-      colorCode.textContent=hex;
-      apply();
-    }));
-    typography.appendChild(makeFramePositionDragButton(scene));
+
+    // V62: text color remains a dedicated card, but avoid the duplicate outer heading.
+    // Text shadow now fills the open slot beside Text position in Basic.
+    const colorCard=document.createElement('div');colorCard.className='v61-text-color-card v62-text-color-card';
+    const colorMode=desktopDetailSelect(u('文字色','Text color'),[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom')),v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom')p.text.color=p.text.color&&!['#fff','#ffffff','#000','#000000'].includes(String(p.text.color).toLowerCase())?p.text.color:'#4a4a4a';else delete p.text.color;apply();v60ColorScopeCtl.arm(p.text.color);});
+    colorMode.classList.add('v61-color-mode');colorCard.appendChild(colorMode);
+    const colorRow=document.createElement('div');colorRow.className='desktop-text-detail-color v61-color-picker';const colorLabel=document.createElement('span');colorLabel.textContent=t('color.custom');const colorCode=document.createElement('code');const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';colorCode.textContent=initialColor;const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{colorCode.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{captureUndo('文字色の変更を元に戻せます');p.text.color=c;colorCode.textContent=c;v60ColorScopeCtl.arm(c);apply();queueMicrotask(()=>showUndo('文字色の変更を元に戻せます'));}});colorRow.append(colorLabel,colorPicker.root,colorCode);colorCard.appendChild(colorRow);
+    const colorPalette=makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;colorCode.textContent=hex;v60ColorScopeCtl.arm(hex);apply();});colorPalette.classList.add('v61-color-palette');colorCard.appendChild(colorPalette);
+    const v60ColorScopeField=document.createElement('label');v60ColorScopeField.className='desktop-text-detail-field v60-color-scope-field v61-color-scope';const v60ColorScopeLabel=document.createElement('span');v60ColorScopeLabel.textContent=u('適用範囲','Apply scope');v60ColorScopeField.append(v60ColorScopeLabel,v60ColorScopeCtl.scope);colorCard.appendChild(v60ColorScopeField);
+    typography.appendChild(colorCard);
 
     const layout=section(u('レイアウト','Layout'));
+    const dragButton=makeFramePositionDragButton(scene);dragButton.classList.add('v61-position-drag');layout.appendChild(dragButton);
     const ranges=two(layout);
     ranges.append(
       desktopDetailRange(u('行間','Line height'),{min:1.2,max:2.5,step:.05,value:Number(p.text.lineHeight)||1.85,format:v=>v.toFixed(2),oninput:v=>{p.text.lineHeight=v;apply();}}),
@@ -9288,8 +10967,10 @@ function openDesktopTextDetail(){
       settleLivePreviewAfterDetailSave(index);
     });
     reset.addEventListener('click',()=>{
+      captureUndo('文字設定のリセットを元に戻せます');
       p.text={};
       delete p.frame;
+      queueMicrotask(()=>showUndo('文字設定のリセットを元に戻せます'));
       scheduleDraftSave(50);
       refreshLivePlayer({preserveSheet:true});
       if(refreshMobileLiveDetail('text'))return;
@@ -9586,75 +11267,164 @@ function openDesktopTextDetail(){
     return modal;
   }
 
+  function mountDesktopPageEditor(mode, tabDefs){
+    desktopLivePanel.hidden=false;
+    document.body.classList.add('desktop-live-edit','desktop-live-page-editor-open');
+    document.body.classList.remove('desktop-live-special-open');
+    desktopLivePanelBody.innerHTML='';
+    const shell=document.createElement('section');shell.className='desktop-v2-tab-shell desktop-v2-page-shell';
+    const rail=document.createElement('div');rail.className='desktop-v2-tab-rail';
+    const stage=document.createElement('div');stage.className='desktop-v2-tab-stage';
+    const panes={};
+    tabDefs.forEach(([key,label,nodes])=>{
+      const pane=document.createElement('div');pane.className='desktop-v2-tab-pane';pane.dataset.editorTab=key;
+      (Array.isArray(nodes)?nodes:[nodes]).filter(Boolean).forEach(node=>pane.appendChild(node));
+      panes[key]=pane;stage.appendChild(pane);
+      const b=document.createElement('button');b.type='button';b.dataset.editorTab=key;b.textContent=label;rail.appendChild(b);
+    });
+    let active=localStorage.getItem(`ahako-editor-v2-${mode}-tab`)||tabDefs[0]?.[0];
+    if(!panes[active])active=tabDefs[0]?.[0];
+    const activate=key=>{
+      active=key;localStorage.setItem(`ahako-editor-v2-${mode}-tab`,key);
+      rail.querySelectorAll('button').forEach(b=>b.classList.toggle('is-active',b.dataset.editorTab===key));
+      Object.entries(panes).forEach(([k,pane])=>pane.classList.toggle('is-active',k===key));
+    };
+    rail.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>activate(b.dataset.editorTab)));
+    shell.append(rail,stage);desktopLivePanelBody.appendChild(shell);activate(active);
+  }
+
   function renderDesktopCoverPanel(){
-    desktopSceneLabel.textContent=t('cover.label');desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
+    desktopSceneLabel.textContent=t('cover.label');desktopPrevScene.disabled=true;desktopNextScene.disabled=false;
+    if(desktopV2Chrome)desktopV2Chrome.hidden=false;
+    if(desktopV2SceneLabel)desktopV2SceneLabel.textContent=t('cover.label');
+    if(desktopV2Prev)desktopV2Prev.disabled=true;
+    if(desktopV2Next)desktopV2Next.disabled=false;
+    if(desktopV2Add)desktopV2Add.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
 
     const textCard=desktopCard(t('toolbox.workInfo'));
-    const textNote=document.createElement('p');
-    textNote.textContent=uiLanguage==='en'?'The left side is both preview and direct editor. Text is shared with Easy Studio; checkboxes only control cover visibility.':'左はプレビュー兼直接編集です。文字内容はEasy Studioと共通。チェックで表紙への表示だけ切り替えます。';
-    Object.assign(textNote.style,{margin:'0 0 10px',fontSize:'12px',lineHeight:'1.55',color:'#737984'});
-    textCard.appendChild(textNote);
-
     const displayText=coverTextStateFromDocument();
     const visible=coverVisibilityStateFromDocument();
     [[u('作品タイトル','Work title'),'title'],[u('サブタイトル','Subtitle'),'subtitle'],[u('作者名','Author'),'author'],[u('話数','Episode label'),'episode'],[u('今回のタイトル','Episode title'),'episodeTitle']].forEach(([label,target])=>{
       const row=document.createElement('div');row.className='desktop-live-field';
-      const head=document.createElement('div');
-      Object.assign(head.style,{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px'});
+      const head=document.createElement('div');head.className='desktop-cover-field-head';
       const cap=document.createElement('span');cap.textContent=label;
       const showLabel=document.createElement('label');showLabel.className='desktop-cover-visible-check';
       const check=document.createElement('input');check.type='checkbox';check.checked=visible[target]!==false;check.dataset.coverVisibilityTarget=target;
-      const checkText=document.createElement('span');checkText.textContent=t('cover.show');
-      showLabel.append(check,checkText);head.append(cap,showLabel);
-
-      const input=document.createElement('input');
-      input.type='text';input.value=displayText[target]||'';input.dataset.coverTextTarget=target;
+      const checkText=document.createElement('span');checkText.textContent=t('cover.show');showLabel.append(check,checkText);head.append(cap,showLabel);
+      const input=document.createElement('input');input.type='text';input.value=displayText[target]||'';input.dataset.coverTextTarget=target;
       input.addEventListener('focus',()=>desktopCoverStyleTarget=target);
       input.addEventListener('input',()=>{desktopCoverStyleTarget=target;setCoverTextValue(target,input.value,{refresh:true});});
       check.addEventListener('change',()=>setCoverFieldVisible(target,check.checked,{refresh:true}));
       row.append(head,input);textCard.appendChild(row);
     });
 
-    const styleCard=desktopCard(u('選択中の文字（Aa）','Selected text (Aa)'));
+    const styleCard=desktopCard(u('表紙文字','Cover text'));
     styleCard.append(desktopMakeSelect(u('対象','Target'),[['title',u('作品タイトル','Work title')],['subtitle',u('サブタイトル','Subtitle')],['author',u('作者名','Author')],['episode',u('話数','Episode label')],['episodeTitle',u('今回のタイトル','Episode title')]],desktopCoverStyleTarget,v=>{desktopCoverStyleTarget=v;renderDesktopLivePanel();}));
-    styleCard.append(shellStyleControls(
-      ()=>{
-        workingDocument.cover||={};
-        workingDocument.cover.styles||={};
-        workingDocument.cover.styles[desktopCoverStyleTarget]||={};
-        return workingDocument.cover.styles[desktopCoverStyleTarget];
-      },
-      st=>{
-        workingDocument.cover ||= {};
-        workingDocument.cover.styles ||= {};
-        workingDocument.cover.styles[desktopCoverStyleTarget]=clone(st);
-        applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]);
-        refreshLivePlayerDocumentChrome();
-        requestAnimationFrame(()=>applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]));
-        updateCoverPreview();syncEasyPublishButton();scheduleDraftSave(70);
-      }
-    ));
-    mountDesktopSpecialModal(u('表紙','Cover'),[textCard,styleCard]);
+    styleCard.append(shellStyleControls(()=>{workingDocument.cover||={};workingDocument.cover.styles||={};workingDocument.cover.styles[desktopCoverStyleTarget]||={};return workingDocument.cover.styles[desktopCoverStyleTarget];},st=>{
+      workingDocument.cover||={};workingDocument.cover.styles||={};workingDocument.cover.styles[desktopCoverStyleTarget]=clone(st);
+      applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]);refreshLivePlayerDocumentChrome();
+      requestAnimationFrame(()=>applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]));updateCoverPreview();syncEasyPublishButton();scheduleDraftSave(70);
+    }));
+
+    const imageCard=desktopCard(u('表紙画像','Cover image'));
+    const imageOps=document.createElement('div');imageOps.className='desktop-live-scene-ops desktop-cover-image-ops';
+    imageOps.append(desktopAction(coverImageUrl?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>coverImageInput?.click()));
+    if(coverImageUrl){
+      imageOps.append(desktopAction(u('表示位置を調整','Adjust position'),()=>openCoverPositionEditor()));
+      imageOps.append(desktopAction(u('画像を外す','Remove image'),()=>coverImageClear?.click(),false,'is-danger'));
+    }
+    imageCard.appendChild(imageOps);
+    // Cover is intentionally a single-sheet editor. Unlike Scene authoring,
+    // there are too few groups to justify tabs and switching tabs hides context.
+    desktopLivePanel.hidden=false;
+    document.body.classList.add('desktop-live-edit','desktop-live-page-editor-open');
+    document.body.classList.remove('desktop-live-special-open');
+    desktopLivePanelBody.innerHTML='';
+    const shell=document.createElement('section');
+    shell.className='desktop-v2-page-single desktop-v2-cover-single';
+    const pageHead=document.createElement('header');pageHead.className='desktop-v2-page-editor-head';
+    const pageKicker=document.createElement('small');pageKicker.textContent='COVER';
+    const pageTitle=document.createElement('strong');pageTitle.textContent=u('表紙を編集','Edit cover');
+    pageHead.append(pageKicker,pageTitle);
+    shell.append(pageHead,textCard,styleCard,imageCard);
+    desktopLivePanelBody.appendChild(shell);
   }
 
   function renderDesktopEndingPanel(){
-    desktopSceneLabel.textContent=u('読了ページ','Ending page');desktopPrevScene.disabled=true;desktopNextScene.disabled=true;
+    desktopSceneLabel.textContent=u('読了ページ','Ending page');desktopPrevScene.disabled=false;desktopNextScene.disabled=true;
+    if(desktopV2Chrome)desktopV2Chrome.hidden=false;
+    if(desktopV2SceneLabel)desktopV2SceneLabel.textContent=u('読了ページ','Ending page');
+    if(desktopV2Prev)desktopV2Prev.disabled=false;if(desktopV2Next)desktopV2Next.disabled=true;if(desktopV2Add)desktopV2Add.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
     const textCard=desktopCard(u('中央の文','Center text'));const ta=document.createElement('textarea');ta.className='desktop-live-ending-text';ta.value=endingLabelInput?.value||'';ta.placeholder=u('読了','Finished');ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
-    const styleCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');styleCard.append(shellStyleControls(()=>ensureEndingStyleStore(),()=>{const st=ensureEndingStyleStore();if(['serif','sans','mono'].includes(st.fontFamily))syncEndingFontFamily(st.fontFamily,{syncStyle:true});refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
-    const seCard=desktopCard(u('読了SE','Ending SE')); const seCmd=endingSeCommand(workingDocument); const seInfo=document.createElement('div');seInfo.className='desktop-live-scene-ops'; const seBtn=desktopAction(seCmd?u('読了SEを変更','Change ending SE'):u('読了SEを追加','Add ending SE'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('center');}); seInfo.append(seBtn); seCard.appendChild(seInfo);
+    const styleCard=desktopCard(uiLanguage==='en'?'Text':'文字');styleCard.append(shellStyleControls(()=>ensureEndingStyleStore(),()=>{const st=ensureEndingStyleStore();if(['serif','sans','mono'].includes(st.fontFamily))syncEndingFontFamily(st.fontFamily,{syncStyle:true});refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
+    const seCard=desktopCard(u('読了SE','Ending SE'));
+    const seCmd=endingSeCommand(workingDocument);
+    const seInfo=document.createElement('div');seInfo.className='desktop-ending-se-sheet';
+    const seTop=document.createElement('div');seTop.className='desktop-ending-se-top';
+    const sePick=desktopAction(seCmd?u('SEを変更','Change SE'):u('SEを選ぶ','Choose SE'),()=>endingSeInput?.click());
+    seTop.append(sePick);
+    const fileName=document.createElement('div');fileName.className='desktop-ending-se-file';fileName.textContent=seCmd?String(seCmd._editorFileName||u('音源を選択済み','Audio selected')):u('未選択','Not selected');seTop.appendChild(fileName);seInfo.appendChild(seTop);
+    const volWrap=document.createElement('label');volWrap.className='desktop-ending-se-volume';
+    const volHead=document.createElement('span');volHead.textContent=u('音量','Volume');
+    const volValue=document.createElement('output');const initialVol=Math.round((seCmd?.volume??.8)*100);volValue.textContent=`${initialVol}%`;
+    const vol=document.createElement('input');vol.type='range';vol.min='0';vol.max='100';vol.step='1';vol.value=String(initialVol);vol.disabled=!seCmd;
+    vol.addEventListener('input',()=>{if(endingSeVolume)endingSeVolume.value=vol.value;if(endingSeVolumeOutput)endingSeVolumeOutput.value=`${vol.value}%`;volValue.textContent=`${vol.value}%`;syncEndingSeToWorkingDocument();refreshLivePlayerDocumentChrome();scheduleDraftSave(70);});
+    volWrap.append(volHead,volValue,vol);seInfo.appendChild(volWrap);
+    if(seCmd){seInfo.append(desktopAction(u('SEを外す','Remove SE'),()=>{const old=assetFrom('endingSeInput').src;if(old&&assetRegistry.has(old))unregisterAsset(old);setAssetField('endingSeInput','','');if(endingSeInput)endingSeInput.value='';if(endingSeEnabled)endingSeEnabled.checked=false;syncEndingSeToWorkingDocument();refreshLivePlayerDocumentChrome();syncEasyPublishButton();scheduleDraftSave(70);renderDesktopLivePanel();},'is-danger'));}
+    seCard.appendChild(seInfo);
     const linksCard=desktopCard(u('下部ボタン','Bottom buttons'));const ops=document.createElement('div');ops.className='desktop-live-scene-ops';ops.append(desktopAction(u('左ボタンを編集','Edit left button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('left');}),desktopAction(u('右ボタンを編集','Edit right button'),()=>{bringEndingQuickDialogToFront();openEndingQuickEditor('right');}));linksCard.appendChild(ops);
-    mountDesktopSpecialModal(u('読了ページ','Ending page'),[textCard,styleCard,seCard,linksCard]);
+    // Ending is also one compact sheet: text, typography, SE and buttons are
+    // edited together so the author can see the whole ending configuration.
+    desktopLivePanel.hidden=false;
+    document.body.classList.add('desktop-live-edit','desktop-live-page-editor-open');
+    document.body.classList.remove('desktop-live-special-open');
+    desktopLivePanelBody.innerHTML='';
+    const shell=document.createElement('section');
+    shell.className='desktop-v2-page-single desktop-v2-ending-single';
+    const pageHead=document.createElement('header');pageHead.className='desktop-v2-page-editor-head';
+    const pageKicker=document.createElement('small');pageKicker.textContent='ENDING';
+    const pageTitle=document.createElement('strong');pageTitle.textContent=u('読了ページを編集','Edit ending page');
+    pageHead.append(pageKicker,pageTitle);
+    shell.append(pageHead,textCard,styleCard,seCard,linksCard);
+    desktopLivePanelBody.appendChild(shell);
   }
 
   let desktopSpecialIntent=null;
 
+  // Editor v2: native range controls must keep the same DOM node for the
+  // entire pointer drag. Live-preview callbacks used to rebuild the inspector
+  // on every `input`, which detached the slider thumb immediately after the
+  // first movement and made dragging appear broken. Defer inspector rerenders
+  // until the pointer is released; preview/data updates still happen live.
+  let desktopV2RangeDragging=false;
+  let desktopV2RangeRenderPending=false;
+  const finishDesktopV2RangeDrag=()=>{
+    if(!desktopV2RangeDragging)return;
+    desktopV2RangeDragging=false;
+    if(desktopV2RangeRenderPending){
+      desktopV2RangeRenderPending=false;
+      requestAnimationFrame(()=>{ if(desktopLiveActive())renderDesktopLivePanel(); });
+    }
+  };
+  desktopLivePanel?.addEventListener('pointerdown',event=>{
+    const target=event.target instanceof Element?event.target:null;
+    if(target?.matches?.('.desktop-v2-tab-pane input[type="range"]')){
+      desktopV2RangeDragging=true;
+      desktopV2RangeRenderPending=false;
+    }
+  },true);
+  window.addEventListener('pointerup',finishDesktopV2RangeDrag,true);
+  window.addEventListener('pointercancel',finishDesktopV2RangeDrag,true);
+
   function renderDesktopLivePanel(){
+    if(desktopV2RangeDragging){desktopV2RangeRenderPending=true;return;}
     if(!desktopLivePanel)return;
     if(!desktopLiveActive()){
       desktopLivePanel.hidden=true;
-      document.body.classList.remove('desktop-live-edit');
+      if(desktopV2Chrome)desktopV2Chrome.hidden=true;
+      document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open');
       return;
     }
     // Shell-page mode must be decided by the Player's authoritative state, not
@@ -9685,6 +11455,11 @@ function openDesktopTextDetail(){
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');
     desktopSceneLabel.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     desktopPrevScene.disabled=index<=0;desktopNextScene.disabled=index>=workingDocument.scenes.length-1;
+    if(desktopV2Chrome)desktopV2Chrome.hidden=false;
+    if(desktopV2SceneLabel)desktopV2SceneLabel.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
+    if(desktopV2Prev)desktopV2Prev.disabled=index<=0;
+    if(desktopV2Next)desktopV2Next.disabled=index>=workingDocument.scenes.length-1;
+    if(desktopV2Settings)desktopV2Settings.setAttribute('aria-expanded',document.body.classList.contains('desktop-v2-settings-open')?'true':'false');
     if(desktopTimingOpen){renderDesktopTimingPanel();return;}
     if(desktopTimingButton){desktopTimingButton.classList.remove('is-active');desktopTimingButton.textContent=u('⌛ 時間','⌛ Time');}
     desktopLivePanelBody.innerHTML='';
@@ -9722,7 +11497,23 @@ function openDesktopTextDetail(){
       });
       refreshLivePlayer({preserveSheet:false,preserveDesktopEditor:true});
     };
-    ta.addEventListener('input',()=>{scene.text=ta.value;scheduleDraftSave(100);mirrorDesktopTextOnly('text',ta.value);});
+    const reconcileSceneTablesFromText=()=>{
+      const ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
+      const contents=Array.isArray(scene?.content)?scene.content:[];
+      const removedIds=new Set();
+      ranges.filter(r=>r?.kind==='table').forEach((r,i)=>{
+        const oldLabel=String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)) || `［表 ${i+1}］`;
+        const variants=[oldLabel,`［表 ${i+1}］`,`[表 ${i+1}]`];
+        if(!variants.some(label=>label&&ta.value.includes(label)))removedIds.add(String(r.tableId||''));
+      });
+      if(removedIds.size){
+        scene.richText.ranges=ranges.filter(r=>!(r?.kind==='table'&&removedIds.has(String(r.tableId||''))));
+        scene.content=contents.filter(c=>!(c?.type==='table'&&removedIds.has(String(c.id||''))));
+        if(!scene.richText.ranges.length)delete scene.richText;
+        if(!scene.content.length)delete scene.content;
+      }
+    };
+    ta.addEventListener('input',()=>{reconcileSceneTablesFromText();scene.text=ta.value;scheduleDraftSave(100);mirrorDesktopTextOnly('text',ta.value);});
     ta.addEventListener('blur',finishDesktopTextMirror);
     ta.addEventListener('keydown',e=>{
       if(e.isComposing||e.key!=='Enter')return;
@@ -9734,6 +11525,16 @@ function openDesktopTextDetail(){
       }
     });
     bodyCard.appendChild(ta);
+
+    // Rich Text Player v0.10: table cells are edited directly in Live Preview.
+    // Keep the inline [表 n] anchor in the body textarea, but do not duplicate
+    // the entire table as a long inspector form.
+    const sceneTables=(Array.isArray(scene.content)?scene.content:[]).filter(c=>c?.type==='table');
+    if(sceneTables.length){
+      const note=document.createElement('p');note.className='live-edit-note desktop-rich-table-preview-note';
+      note.textContent=u('表は左のプレビューでセルを直接クリックして編集できます。','Edit table cells directly in the preview.');
+      bodyCard.appendChild(note);
+    }
 
     // Scene subtext lives beside the main text in the Toolbox. Keep the same
     // canonical field here so Desktop Live Editor can finish one Scene without
@@ -9751,22 +11552,23 @@ function openDesktopTextDetail(){
     bodyCard.appendChild(subField);
 
     const writingActions=document.createElement('div');writingActions.className='desktop-writing-actions';
-    const writingButton=(label,hint,fn,disabled=false,cls='')=>{
+    const writingButton=(label,hint,fn,disabled=false,cls='',runOnPointer=true)=>{
       const b=document.createElement('button');b.type='button';b.className=`desktop-writing-action ${cls}`.trim();b.disabled=disabled;
       const text=document.createElement('span');text.textContent=label;const key=document.createElement('kbd');key.textContent=hint;
       b.append(text,key);
-      // When the left Live Preview is contenteditable, a normal mouse click on
-      // the inspector first blurs that editor. The blur can rebuild this panel
-      // before the click event arrives, making the button look dead. Execute on
-      // pointerdown (while the caret/selection still exists), and keep click as
-      // a keyboard-accessible fallback.
+      // Add/split need pointerdown so the caret survives. Merge does not need a
+      // caret and must run on normal click, after the textarea blur/Player sync.
+      // Running merge on pointerdown races that sync on PC and can leave the
+      // deleted split fragment occupying the following Scene in the preview.
       let ranOnPointer=false;
-      b.addEventListener('pointerdown',e=>{
-        if(b.disabled || (typeof e.button==='number' && e.button!==0))return;
-        e.preventDefault();
-        ranOnPointer=true;
-        fn();
-      });
+      if(runOnPointer){
+        b.addEventListener('pointerdown',e=>{
+          if(b.disabled || (typeof e.button==='number' && e.button!==0))return;
+          e.preventDefault();
+          ranOnPointer=true;
+          fn();
+        });
+      }
       b.addEventListener('click',e=>{
         e.preventDefault();
         if(ranOnPointer){ranOnPointer=false;return;}
@@ -9777,7 +11579,7 @@ function openDesktopTextDetail(){
     writingActions.append(
       writingButton(u('＋ 次に空Scene','+ Add empty Scene'),'Ctrl/⌘ ↵',desktopAddSceneAndFocus,false,'is-primary'),
       writingButton(u('｜↩︎ カーソル位置で分割','↵ Split at cursor'),'⇧ ↵',()=>desktopSplitFromActiveCaret(ta)),
-      writingButton(u('前Sceneと結合','Merge with previous'),'',desktopMergePrevious,index<=0)
+      writingButton(u('前Sceneと結合','Merge with previous'),'',liveEditMergePrevious,index<=0,'',false)
     );
     bodyCard.appendChild(writingActions);
 
@@ -9797,7 +11599,7 @@ function openDesktopTextDetail(){
     const textColorPicker=makeCommittedTextColorPicker(textColorActive,{
       compact:true,
       onPreview:color=>previewCurrentSceneTextColor(color),
-      onCommit:color=>{p.text.color=color;textColorActive=color;textColorMode.value='custom';refresh();}
+      onCommit:color=>{captureUndo('文字色の変更を元に戻せます');p.text.color=color;textColorActive=color;textColorMode.value='custom';refresh();queueMicrotask(()=>showUndo('文字色の変更を元に戻せます'));}
     });
     const syncTextColorPickerVisibility=()=>{textColorPicker.root.hidden=textColorMode.value!=='custom';};
     textColorMode.addEventListener('change',()=>{
@@ -9809,24 +11611,13 @@ function openDesktopTextDetail(){
       syncTextColorPickerVisibility();refresh();
     });
     textColorControl.append(textColorMode,textColorPicker.root);textColorField.append(textColorLabel,textColorControl);syncTextColorPickerVisibility();
-    const textPositionField=document.createElement('label');textPositionField.className='desktop-live-position-field';
-    const textPositionLabel=document.createElement('span');textPositionLabel.textContent=u('テキスト位置','Text position');
-    const textPositionControl=document.createElement('div');textPositionControl.className='desktop-live-position-control';
-    const textPositionSelect=document.createElement('select');
-    FRAME_POSITION_OPTIONS.forEach(([value,label,hidden])=>{const option=document.createElement('option');option.value=value;option.textContent=label;option.hidden=Boolean(hidden);textPositionSelect.appendChild(option);});
-    textPositionSelect.value=framePositionPreset(scene);
-    textPositionSelect.addEventListener('change',()=>{setFramePositionPreset(p,textPositionSelect.value);refresh();});
-    const textPositionAdjust=document.createElement('button');textPositionAdjust.type='button';textPositionAdjust.className='desktop-live-position-adjust';
-    const hasPcPosition=Boolean(scene?.presentation?.text?.position?.pc);
-    textPositionAdjust.textContent=studioPreviewDevice==='pc'?(hasPcPosition?u('PC調整済','PC set'):u('PC調整','PC adjust')):u('調整','Adjust');textPositionAdjust.disabled=typeof scene?.text!=='string'||!scene.text.length;
-    textPositionAdjust.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openFramePositionDragEditor(scene);});
-    textPositionControl.append(textPositionSelect,textPositionAdjust);textPositionField.append(textPositionLabel,textPositionControl);
     textGrid.append(
+      desktopMakeSelect(u('種類','Type'),[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],scene.type||'text',v=>{scene.type=v;refresh();}),
       desktopMakeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
       desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
       desktopMakeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;refresh();}),
-      desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
-      textPositionField,
+      desktopMakeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;refresh();}),
+      v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>renderDesktopLivePanel()}),
       textColorField
     );
     const textDetailButton=desktopDetail(t('detail.text'),'text');
@@ -9844,6 +11635,7 @@ function openDesktopTextDetail(){
     const sceneImagePreview=document.createElement('div');sceneImagePreview.className='desktop-scene-image-preview';
     if(sceneImage?.src){
       const img=document.createElement('img');img.src=sceneImage.src;img.alt=sceneImage.alt||'';
+      img.style.transform=`rotate(${Number(sceneImage.rotation)||0}deg)`;
       sceneImagePreview.appendChild(img);
     }else{
       const ph=document.createElement('div');ph.className='desktop-scene-image-placeholder';
@@ -9854,12 +11646,15 @@ function openDesktopTextDetail(){
     const sceneImagePick=desktopAction(
       sceneImage?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),
       ()=>desktopPickFile('image/*',(url,name)=>{
+        captureUndo('Scene画像の変更を元に戻せます');
         p.image={
           ...(p.image||{}),
           src:url,
           fit:'contain',
           size:p.image?.size||((p.view==='chat')?'small':'large'),
           align:p.image?.align||((p.view==='chat')?'speaker':'center'),
+          rotation:Number(p.image?.rotation)||0,
+          tapAction:p.image?.tapAction||((p.image?.fullscreen===false)?'none':'fullscreen'),
           fullscreen:p.image?.fullscreen!==false,
           alt:p.image?.alt||'',
           _editorFileName:name,
@@ -9870,7 +11665,9 @@ function openDesktopTextDetail(){
       'is-primary'
     );
     const sceneImageRemove=desktopAction(u('画像を外す','Remove image'),()=>{
-      if(p.image?.src && assetRegistry.has(p.image.src))unregisterAsset(p.image.src);
+      captureUndo('Scene画像の削除を元に戻せます');
+      // Keep the asset registered: Undo may restore this Scene image immediately.
+      // Orphan cleanup can reclaim unused assets later.
       delete p.image;
       scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();
     });
@@ -9896,21 +11693,52 @@ function openDesktopTextDetail(){
         v=>{p.image.align=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}
       );
 
-      const fullscreenField=document.createElement('label');fullscreenField.className='desktop-scene-image-check';
-      const fullscreenInput=document.createElement('input');fullscreenInput.type='checkbox';fullscreenInput.checked=sceneImage.fullscreen!==false;
-      const fullscreenText=document.createElement('span');fullscreenText.textContent=u('タップで全画面','Tap for fullscreen');
-      fullscreenInput.addEventListener('change',()=>{
-        p.image.fullscreen=fullscreenInput.checked;
-        scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});
-      });
-      fullscreenField.append(fullscreenInput,fullscreenText);
+      const rotationField=document.createElement('label');rotationField.className='desktop-scene-image-rotation';
+      const rotationTitle=document.createElement('span');rotationTitle.textContent=u('傾き','Rotation');
+      const rotationRow=document.createElement('div');rotationRow.className='desktop-scene-image-rotation-row';
+      const rotationRange=document.createElement('input');rotationRange.type='range';rotationRange.min='-20';rotationRange.max='20';rotationRange.step='1';rotationRange.value=String(Number(sceneImage.rotation)||0);
+      const rotationNumber=document.createElement('input');rotationNumber.type='number';rotationNumber.min='-20';rotationNumber.max='20';rotationNumber.step='1';rotationNumber.value=String(Number(sceneImage.rotation)||0);rotationNumber.setAttribute('aria-label',u('傾き（度）','Rotation in degrees'));
+      const applyRotation=(raw)=>{const value=Math.max(-20,Math.min(20,Number(raw)||0));p.image.rotation=value;rotationRange.value=String(value);rotationNumber.value=String(value);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});const previewImg=sceneImagePreview.querySelector('img');if(previewImg)previewImg.style.transform=`rotate(${value}deg)`;};
+      let rotationUndoCaptured=false;
+      rotationRange.addEventListener('pointerdown',()=>{rotationUndoCaptured=false;});
+      rotationRange.addEventListener('input',()=>{if(!rotationUndoCaptured){captureUndo('Scene画像の傾き変更を元に戻せます');rotationUndoCaptured=true;}applyRotation(rotationRange.value);});
+      rotationRange.addEventListener('change',()=>{rotationUndoCaptured=false;});
+      rotationNumber.addEventListener('change',()=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(rotationNumber.value);});
+      rotationRow.append(rotationRange,rotationNumber,document.createTextNode('°'));
+      rotationField.append(rotationTitle,rotationRow);
+
+      const currentTapAction=sceneImage.tapAction||((sceneImage.fullscreen===false)?'none':'fullscreen');
+      const tapActionField=desktopMakeSelect(
+        u('タップ動作','Tap action'),
+        [['none',u('なし','None')],['fullscreen',u('全画面','Fullscreen')],['viewRec','VIEW POINT']],
+        currentTapAction,
+        v=>{
+          captureUndo('Scene画像のタップ動作変更を元に戻せます');
+          p.image.tapAction=v;
+          // Keep the legacy flag synchronized for old Players / old .scene readers.
+          p.image.fullscreen=(v==='fullscreen');
+          scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();
+        }
+      );
+
+      const viewRecField=currentTapAction==='viewRec' ? makeViewRecAuthoringField(sceneImage,data=>{captureUndo('VIEW RECの記録を元に戻せます');p.image.viewPoints=data;delete p.image.viewRec;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}) : null;
+
+      const shadowField=document.createElement('label');shadowField.className='desktop-scene-image-check';
+      const shadowInput=document.createElement('input');shadowInput.type='checkbox';shadowInput.checked=sceneImage.shadow===true;
+      shadowInput.addEventListener('change',()=>{captureUndo('Scene画像の影設定変更を元に戻せます');p.image.shadow=shadowInput.checked;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
+      shadowField.append(shadowInput,document.createElement('span'));shadowField.lastChild.textContent=u('影をつける','Add shadow');
 
       const altField=document.createElement('label');altField.className='desktop-scene-image-alt';
       const altTitle=document.createElement('span');altTitle.textContent=u('画像の説明（読み上げ用・任意）','Image description (for screen readers, optional)');
       const altInput=document.createElement('input');altInput.type='text';altInput.value=sceneImage.alt||'';altInput.placeholder=u('例：面積2cm²の正方形','e.g. A square with area 2 cm²');
-      altInput.addEventListener('change',()=>{p.image.alt=altInput.value.trim();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
+      altInput.addEventListener('change',()=>{captureUndo('Scene画像の説明変更を元に戻せます');p.image.alt=altInput.value.trim();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
       altField.append(altTitle,altInput);
-      sceneImageOptions.append(sizeField,alignField,fullscreenField,altField);
+
+      const captionField=document.createElement('label');captionField.className='desktop-scene-image-check';
+      const captionInput=document.createElement('input');captionInput.type='checkbox';captionInput.checked=sceneImage.caption===true;
+      captionInput.addEventListener('change',()=>{captureUndo('Scene画像のキャプション設定変更を元に戻せます');p.image.caption=captionInput.checked;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
+      captionField.append(captionInput,document.createElement('span'));captionField.lastChild.textContent=u('説明を画像下に表示','Show description as caption');
+      sceneImageOptions.append(sizeField,alignField,rotationField,shadowField,tapActionField);if(viewRecField)sceneImageOptions.append(viewRecField);sceneImageOptions.append(altField,captionField);
       sceneImageCard.append(sceneImageOptions);
 
       const sceneImageNote=document.createElement('small');sceneImageNote.className='desktop-scene-image-note';
@@ -10047,11 +11875,11 @@ function openDesktopTextDetail(){
         replayCurrentDesktopEffect();
         renderDesktopLivePanel();
       }),
-      desktopMakeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('前Sceneに重ねる','Overlap previous Scene')]],p.display||'stack',v=>{p.display=v;refresh();}),
-      desktopMakeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;refresh();}),
+      v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderDesktopLivePanel()}),
+      v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()}),
       desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
-      desktopMakeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;refresh();})
+      desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();})
     );
     effectCard.append(effectGrid);
     effectCard.append(desktopDetail(t('detail.effect'),'effect'));
@@ -10065,10 +11893,12 @@ function openDesktopTextDetail(){
     const bgBtns=document.createElement('div');bgBtns.className='desktop-live-bg-source-row';
     bgBtns.append(
       desktopAction(u('前Sceneから継続','Continue previous Scene'),()=>{
+        captureUndo('背景設定の変更を元に戻せます');
         delete p.background;
         refresh();
       },!bg?'is-selected':''),
       desktopAction(bg?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{
+        captureUndo('背景画像の変更を元に戻せます');
         p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:p.background?.position||'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
         openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(40);
@@ -10077,12 +11907,14 @@ function openDesktopTextDetail(){
         });
       }),'is-primary'),
       desktopAction(u('背景なし','No background'),()=>{
+        captureUndo('背景設定の変更を元に戻せます');
         p.background={src:'',transition:'fade',_editorManaged:true};
         refresh();
       },bg?.src===''?'is-selected':'')
     );
     const bgPositionAction=desktopAction(t('cover.positionAdjust'),()=>{
       if(!p.background?.src)return;
+      captureUndo('背景位置の変更を元に戻せます');
       openSceneBackgroundPositionEditor(scene,()=>{
         scheduleDraftSave(40);
         refreshLivePlayer({preserveSheet:true});
@@ -10092,6 +11924,7 @@ function openDesktopTextDetail(){
     bgPositionAction.disabled=!bg?.src;
     bgPositionAction.classList.add('desktop-live-bg-position');
     const bgCopyPreviousAction=desktopAction(u('前Sceneの表示位置をコピー','Copy previous Scene position'),()=>{
+      captureUndo('背景位置の変更を元に戻せます');
       if(!copyPreviousBackgroundFraming(index))return;
       refresh();
       renderDesktopLivePanel();
@@ -10102,7 +11935,7 @@ function openDesktopTextDetail(){
     bgPositionRow.className='desktop-live-bg-position-row';
     bgPositionRow.append(bgPositionAction,bgCopyPreviousAction);
     const tone=document.createElement('div');tone.className='desktop-live-choice desktop-live-bg-tone-row';
-    tone.append(desktopAction(u('暗く','Dark'),()=>{if(p.background?.src){p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction(u('明るく','Light'),()=>{if(p.background?.src){p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
+    tone.append(desktopAction(u('暗く','Dark'),()=>{if(p.background?.src){captureUndo('背景の明るさ変更を元に戻せます');p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction(u('明るく','Light'),()=>{if(p.background?.src){captureUndo('背景の明るさ変更を元に戻せます');p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
     const bgDetailAction=desktopDetail(t('detail.background'),'background');
     bgDetailAction.classList.add('desktop-live-bg-detail');
     bgControls.append(bgBtns,bgPositionRow,tone,bgDetailAction);
@@ -10153,8 +11986,98 @@ function openDesktopTextDetail(){
     switchLabel.append(switchInput,switchTrack,switchState);
     nav.append(navText,switchLabel);sceneCard.appendChild(nav);
 
-    if(chatCard)desktopLivePanelBody.append(bodyCard,chatCard,sceneImageCard,three,sceneCard);
-    else desktopLivePanelBody.append(bodyCard,sceneImageCard,three,sceneCard);
+    // Editor v2 TAB FIT CHECK — keep the body editor always visible, and group
+    // every setting family into a single right-hand tab rail.  This build is
+    // intentionally conservative: existing controls/handlers are reused so
+    // no authoring behaviour is lost while we verify the information density.
+    const tabShell=document.createElement('section');tabShell.className='desktop-v2-tab-shell';
+    const tabRail=document.createElement('div');tabRail.className='desktop-v2-tab-rail';
+    const tabStage=document.createElement('div');tabStage.className='desktop-v2-tab-stage';
+    const panes={};
+    const makePane=(key)=>{const el=document.createElement('div');el.className='desktop-v2-tab-pane';el.dataset.editorTab=key;panes[key]=el;tabStage.appendChild(el);return el;};
+    ['frequent','body','text','effect','background','image','audio','scene'].forEach(makePane);
+
+    const frequent=desktopCard(u('よく使う設定','Frequent settings'),'desktop-v2-frequent-card');
+    const FREQUENT_KEY='ahako-editor-v2-frequent-settings-v1';
+    const FREQUENT_DEFAULT=['textSize','textColor','display','flow','textPosition'];
+    const frequentDefs={
+      typeface:{group:u('文字','Text'),label:u('書体','Typeface'),render:()=>v63MakeTypefaceBulkControl(scene,{label:u('書体','Typeface'),onApplied:()=>renderDesktopLivePanel()})},
+      textSize:{group:u('文字','Text'),label:u('文字サイズ','Text size'),render:()=>v58MakeTextSizeBulkControl(scene,{label:u('文字サイズ','Text size'),onApplied:()=>renderDesktopLivePanel()})},
+      textColor:{group:u('文字','Text'),label:u('文字色','Text color'),render:()=>v60MakeFrequentTextColorControl(scene,{onApplied:()=>renderDesktopLivePanel()})},
+      writingMode:{group:u('文字','Text'),label:u('書字方向','Writing direction'),render:()=>v64MakeWritingModeBulkControl(scene,{label:u('書字方向','Writing direction'),onApplied:()=>renderDesktopLivePanel()})},
+      textPosition:{group:u('文字','Text'),label:u('テキスト位置','Text position'),render:()=>v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>renderDesktopLivePanel()})},
+      textAlign:{group:u('文字','Text'),label:u('文字配置','Text alignment'),render:()=>desktopDetailSelect(u('文字配置','Text alignment'),[['auto',u('おまかせ','Auto')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;quickApply();})},
+      fontWeight:{group:u('文字','Text'),label:u('文字の太さ','Font weight'),render:()=>desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;quickApply();})},
+      textFrame:{group:u('演出','Effects'),label:u('文字の枠','Text frame'),render:()=>desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;quickApply();})},
+      entrance:{group:u('演出','Effects'),label:u('出かた','Entrance'),render:()=>{const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');return desktopDetailSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{ensureDesktopEffectVisibleDefaults(scene,{save:false});if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}scheduleDraftSave(40);replayCurrentDesktopEffect();renderDesktopLivePanel();});}},
+      display:{group:u('演出','Effects'),label:u('表示','Display'),render:()=>v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderDesktopLivePanel()})},
+      flow:{group:u('演出','Effects'),label:u('Sceneの流れ','Scene flow'),render:()=>v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()})},
+      entryMotion:{group:u('演出','Effects'),label:u('位置の動き','Position motion'),render:()=>desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;quickApply();})},
+      bgFit:{group:u('背景','Background'),label:u('背景の表示','Background fit'),render:()=>desktopDetailSelect(u('背景の表示','Background fit'),[['cover','cover'],['contain','contain']],p.background?.fit||'cover',v=>{p.background={...(p.background||{}),fit:v};quickApply();})},
+      bgTransition:{group:u('背景','Background'),label:u('背景の切替','Background transition'),render:()=>desktopDetailSelect(u('背景の切替','Background transition'),[['fade',u('フェード','Fade')],['cut',u('カット','Cut')],['none',u('なし','None')]],p.background?.transition||'fade',v=>{p.background={...(p.background||{}),transition:v};quickApply();})},
+      imageSize:{group:u('画像','Image'),label:u('Scene画像サイズ','Scene image size'),render:()=>desktopDetailSelect(u('Scene画像サイズ','Scene image size'),[['small',u('小','Small')],['normal',u('標準','Normal')],['large',u('大','Large')]],p.image?.size||'normal',v=>{p.image={...(p.image||{}),size:v};quickApply();})},
+      imageAlign:{group:u('画像','Image'),label:u('Scene画像配置','Scene image alignment'),render:()=>desktopDetailSelect(u('Scene画像配置','Scene image alignment'),[['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.image?.align||'center',v=>{p.image={...(p.image||{}),align:v};quickApply();})}
+    };
+    const loadFrequent=()=>{try{const a=JSON.parse(localStorage.getItem(FREQUENT_KEY)||'null');if(Array.isArray(a)){const clean=a.filter(k=>frequentDefs[k]);if(clean.length)return clean;}}catch{}return [...FREQUENT_DEFAULT];};
+    let frequentKeys=loadFrequent();
+    const saveFrequent=()=>localStorage.setItem(FREQUENT_KEY,JSON.stringify(frequentKeys));
+    const quickApply=()=>{scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel();};
+    const frequentHead=document.createElement('div');frequentHead.className='desktop-v2-frequent-head';
+    const frequentNote=document.createElement('p');frequentNote.className='desktop-v2-frequent-note';frequentNote.textContent=u('自分がよく使う設定だけを置く簡易Editorです。','A simple Editor containing only the settings you choose.');
+    const editFrequent=document.createElement('button');editFrequent.type='button';editFrequent.className='desktop-v2-frequent-edit';editFrequent.textContent=u('よく使う設定を編集','Edit frequent settings');frequentHead.append(frequentNote,editFrequent);
+    const frequentControls=document.createElement('div');frequentControls.className='desktop-v2-frequent-controls';
+    const renderFrequentControls=()=>{frequentControls.replaceChildren();frequentKeys.forEach(k=>{const d=frequentDefs[k];if(!d)return;const node=d.render();node.dataset.frequentSetting=k;frequentControls.appendChild(node);});if(!frequentControls.children.length){const empty=document.createElement('p');empty.className='desktop-v2-frequent-empty';empty.textContent=u('設定がありません。「よく使う設定を編集」から追加できます。','No settings yet. Add them from Edit frequent settings.');frequentControls.appendChild(empty);}};
+    const editor=document.createElement('div');editor.className='desktop-v2-frequent-editor';editor.hidden=true;
+    const renderFrequentEditor=()=>{editor.replaceChildren();const groups=[u('文字','Text'),u('演出','Effects'),u('背景','Background'),u('画像','Image')];groups.forEach(group=>{const sec=document.createElement('section');const h=document.createElement('strong');h.textContent=group;sec.appendChild(h);Object.entries(frequentDefs).filter(([,d])=>d.group===group).forEach(([key,d])=>{const row=document.createElement('div');row.className='desktop-v2-frequent-editor-row';const lab=document.createElement('label');const cb=document.createElement('input');cb.type='checkbox';cb.checked=frequentKeys.includes(key);cb.addEventListener('change',()=>{if(cb.checked){if(!frequentKeys.includes(key))frequentKeys.push(key);}else frequentKeys=frequentKeys.filter(x=>x!==key);saveFrequent();renderFrequentEditor();renderFrequentControls();});const tx=document.createElement('span');tx.textContent=d.label;lab.append(cb,tx);row.appendChild(lab);if(cb.checked){const i=frequentKeys.indexOf(key);const up=document.createElement('button');up.type='button';up.textContent='↑';up.disabled=i<=0;up.onclick=()=>{[frequentKeys[i-1],frequentKeys[i]]=[frequentKeys[i],frequentKeys[i-1]];saveFrequent();renderFrequentEditor();renderFrequentControls();};const down=document.createElement('button');down.type='button';down.textContent='↓';down.disabled=i>=frequentKeys.length-1;down.onclick=()=>{[frequentKeys[i+1],frequentKeys[i]]=[frequentKeys[i],frequentKeys[i+1]];saveFrequent();renderFrequentEditor();renderFrequentControls();};row.append(up,down);}sec.appendChild(row);});editor.appendChild(sec);});const reset=document.createElement('button');reset.type='button';reset.className='desktop-v2-frequent-reset';reset.textContent=u('初期状態に戻す','Restore defaults');reset.onclick=()=>{frequentKeys=[...FREQUENT_DEFAULT];saveFrequent();renderFrequentEditor();renderFrequentControls();};editor.appendChild(reset);};
+    editFrequent.onclick=()=>{editor.hidden=!editor.hidden;editFrequent.classList.toggle('is-active',!editor.hidden);if(!editor.hidden)renderFrequentEditor();};
+    renderFrequentControls();frequent.append(frequentHead,editor,frequentControls);panes.frequent.appendChild(frequent);
+
+    // Editor v2 COMPLETE 8 TABS — reuse the existing detail builders, but
+    // host their bodies directly inside each tab instead of opening a second
+    // modal.  The controls and their event handlers are unchanged.
+    const inlineExistingDetail=(kind,pane)=>{
+      const open=kind==='text'?openDesktopTextDetail:
+        kind==='effect'?openDesktopEffectDetail:
+        kind==='background'?openDesktopBackgroundDetail:
+        kind==='audio'?openDesktopAudioDetail:null;
+      if(!open)return false;
+      open();
+      const selector=kind==='effect'?'.desktop-effect-detail-overlay':
+        kind==='background'?'.desktop-background-detail-overlay':
+        kind==='audio'?'.desktop-audio-detail-overlay':'.desktop-text-detail-overlay';
+      const overlay=document.querySelector(selector);
+      const body=overlay?.querySelector('.desktop-text-detail-body');
+      if(!body){ overlay?.remove(); return false; }
+      body.classList.add('desktop-v2-inline-detail');
+      pane.appendChild(body);
+      overlay.remove();
+      return true;
+    };
+
+    panes.body.appendChild(bodyCard);
+    if(!inlineExistingDetail('text',panes.text))panes.text.appendChild(textCard);
+    if(!inlineExistingDetail('effect',panes.effect))panes.effect.appendChild(effectCard);
+    if(chatCard)panes.effect.appendChild(chatCard);
+    if(!inlineExistingDetail('background',panes.background))panes.background.appendChild(bgCard);
+    panes.image.appendChild(sceneImageCard);
+    if(!inlineExistingDetail('audio',panes.audio))panes.audio.appendChild(audioCard);
+    panes.scene.appendChild(sceneCard);
+
+    const tabDefs=[
+      ['frequent','★'],['body',u('本文','Body')],['text',u('文字','Text')],['effect',u('演出','Effects')],
+      ['background',u('背景','Background')],['image',u('画像','Image')],['audio',u('音','Audio')],['scene','Scene']
+    ];
+    let activeTab=localStorage.getItem('ahako-editor-v2-tab')||'frequent';
+    if(!panes[activeTab])activeTab='frequent';
+    const activate=(key)=>{
+      activeTab=key;localStorage.setItem('ahako-editor-v2-tab',key);
+      tabRail.querySelectorAll('button').forEach(b=>b.classList.toggle('is-active',b.dataset.editorTab===key));
+      Object.entries(panes).forEach(([k,el])=>el.classList.toggle('is-active',k===key));
+    };
+    tabDefs.forEach(([key,label])=>{const b=document.createElement('button');b.type='button';b.dataset.editorTab=key;b.textContent=label;b.addEventListener('click',()=>activate(key));tabRail.appendChild(b);});
+    tabShell.append(tabRail,tabStage);
+    desktopLivePanelBody.append(tabShell);
+    activate(activeTab);
     desktopSceneUnderlaySnapshot=desktopLivePanelBody.cloneNode(true);
     if(desktopShortcutButton)desktopShortcutButton.hidden=false;
     maybeShowDesktopWritingGuide();
@@ -10648,11 +12571,12 @@ function openDesktopTextDetail(){
         renderLiveEditSheet('text');
       });
       grid.append(
+        makeSelect(u('種類','Type'),[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],scene.type||'text',v=>{scene.type=v;rerender();}),
         makeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
         makeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
         makeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;rerender();}),
-        makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;rerender();}),
-        makeSelect(u('テキスト位置','Text position'),FRAME_POSITION_OPTIONS,framePositionPreset(scene),v=>{setFramePositionPreset(p,v);rerender();}),
+        makeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;rerender();}),
+        v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>renderLiveEditSheet('text')}),
         colorField,
         makeSelect(p.text.writingMode==='vertical-rl'?u('横位置','Horizontal position'):u('文字配置','Text alignment'),p.text.writingMode==='vertical-rl'?[['auto',u('中央（おまかせ）','Center (automatic)')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]]:[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();})
       );
@@ -10661,14 +12585,24 @@ function openDesktopTextDetail(){
         const label=document.createElement('span');label.textContent=u('任意色','Custom color');
         const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';
         const value=document.createElement('code');value.textContent=initialColor;
-        const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{value.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{p.text.color=c;value.textContent=c;rerender();}});
+        const colorPicker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{value.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{captureUndo('文字色の変更を元に戻せます');p.text.color=c;value.textContent=c;rerender();queueMicrotask(()=>showUndo('文字色の変更を元に戻せます'));}});
         custom.append(label,colorPicker.root,value);
         liveEditSheetBody.append(grid,custom);
       }else{
         liveEditSheetBody.append(grid);
       }
       liveEditSheetBody.append(makeFramePositionDragButton(scene));
-      liveEditSheetBody.append(makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;rerender();renderLiveEditSheet('text');}));
+      liveEditSheetBody.append(makeTextColorPalette(p.text.color,hex=>{
+        // V42: Undo/Redo redraws the Live editor and replaces Scene objects.
+        // Never write through the Scene/presentation object captured when this
+        // palette was rendered; resolve the current Scene at commit time.
+        const current=liveEditScene()?.scene;
+        if(!current)return;
+        const currentPresentation=ensurePresentation(current);currentPresentation.text ||= {};
+        currentPresentation.text.color=hex;
+        rerender();
+        renderLiveEditSheet('text');
+      }));
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=t('detail.text');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('text');});
       liveEditSheetBody.append(detail);return;
     }
@@ -10701,11 +12635,11 @@ function openDesktopTextDetail(){
             }
             scheduleDraftSave(80);refreshLivePlayer();
           }),
-          makeSelect(u('表示','Display'),[['stack',t('scene.display.stack')],['solo',t('scene.display.solo')],['overlay',u('前Sceneに重ねる','Overlap previous Scene')]],p.display||'stack',v=>{p.display=v;scheduleDraftSave(80);refreshLivePlayer();}),
-          makeSelect(u('Sceneの流れ','Scene flow'),[['vertical',u('縦方向（上へ送る）','Vertical (move up)')],['horizontal',u('横方向（ページ送り）','Horizontal (page flow)')]],p.flow==='horizontal'?'horizontal':'vertical',v=>{p.flow=v;scheduleDraftSave(80);refreshLivePlayer();}),
+          v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderLiveEditSheet('effect')}),
+          v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderLiveEditSheet('effect')}),
           makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
-          makeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;scheduleDraftSave(80);refreshLivePlayer();})
+          makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();})
         );
         liveEditSheetBody.append(grid);
         const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=t('detail.effect');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
@@ -10881,35 +12815,48 @@ function openDesktopTextDetail(){
 
         const current=p.image&&typeof p.image==='object'?p.image:null;
         const status=document.createElement('div');status.className='live-scene-image-mobile-preview';
-        if(current?.src){const img=document.createElement('img');img.src=current.src;img.alt=current.alt||'';status.appendChild(img);}else status.textContent=u('Scene画像なし','No Scene image');
+        if(current?.src){const img=document.createElement('img');img.src=current.src;img.alt=current.alt||'';img.style.transform=`rotate(${Number(current.rotation)||0}deg)`;status.appendChild(img);}else status.textContent=u('Scene画像なし','No Scene image');
         const pick=makeActionButton(current?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),'is-primary');
         pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{
-          p.image={...(p.image||{}),src:url,fit:'contain',size:p.image?.size||((p.view==='chat')?'small':'large'),align:p.image?.align||((p.view==='chat')?'speaker':'center'),fullscreen:p.image?.fullscreen!==false,alt:p.image?.alt||'',_editorFileName:name,_editorManaged:true};
+          captureUndo('Scene画像の変更を元に戻せます');
+          p.image={...(p.image||{}),src:url,fit:'contain',size:p.image?.size||((p.view==='chat')?'small':'large'),align:p.image?.align||((p.view==='chat')?'speaker':'center'),tapAction:p.image?.tapAction||((p.image?.fullscreen===false)?'none':'fullscreen'),fullscreen:p.image?.fullscreen!==false,alt:p.image?.alt||'',_editorFileName:name,_editorManaged:true};
           scheduleDraftSave(40);refreshLivePlayer();
           requestAnimationFrame(()=>renderMobileSceneImagePanel());
         },{keepPanel:true});
-        const remove=makeActionButton(u('画像を外す','Remove image'));remove.disabled=!current?.src;remove.onclick=()=>{if(p.image?.src&&assetRegistry.has(p.image.src))unregisterAsset(p.image.src);delete p.image;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();};
+        const remove=makeActionButton(u('画像を外す','Remove image'));remove.disabled=!current?.src;remove.onclick=()=>{captureUndo('Scene画像の削除を元に戻せます');delete p.image;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();};
         liveEditSheetBody.append(status,pick,remove);
         if(current?.src){
           const opts=document.createElement('div');opts.className='live-edit-grid live-scene-image-options';
           opts.append(
-            makeSceneImageSelect(u('表示サイズ','Display size'),[['small',u('小','Small')],['large',u('大','Large')]],current.size||((p.view==='chat')?'small':'large'),v=>{p.image.size=v;scheduleDraftSave(40);refreshLivePlayer();}),
-            makeSceneImageSelect(u('配置','Alignment'),[['speaker',u('話者に合わせる','Follow speaker')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],current.align||((p.view==='chat')?'speaker':'center'),v=>{p.image.align=v;scheduleDraftSave(40);refreshLivePlayer();})
+            makeSceneImageSelect(u('表示サイズ','Display size'),[['small',u('小','Small')],['large',u('大','Large')]],current.size||((p.view==='chat')?'small':'large'),v=>{captureUndo('Scene画像の表示サイズ変更を元に戻せます');p.image.size=v;scheduleDraftSave(40);refreshLivePlayer();}),
+            makeSceneImageSelect(u('配置','Alignment'),[['speaker',u('話者に合わせる','Follow speaker')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],current.align||((p.view==='chat')?'speaker':'center'),v=>{captureUndo('Scene画像の配置変更を元に戻せます');p.image.align=v;scheduleDraftSave(40);refreshLivePlayer();})
           );
-          const fs=document.createElement('label');fs.className='live-scene-image-check';const cb=document.createElement('input');cb.type='checkbox';cb.checked=current.fullscreen!==false;cb.onchange=()=>{p.image.fullscreen=cb.checked;scheduleDraftSave(40);refreshLivePlayer();};fs.append(cb,document.createTextNode(u('タップで全画面','Tap for fullscreen')));
-          const alt=document.createElement('label');alt.className='live-edit-field live-scene-image-alt';alt.append(u('画像の説明（任意）','Image description (optional)'));const inp=document.createElement('input');inp.type='text';inp.value=current.alt||'';inp.placeholder=u('例：面積2cm²の正方形','e.g. A square with area 2 cm²');inp.onchange=()=>{p.image.alt=inp.value.trim();scheduleDraftSave(40);refreshLivePlayer();};alt.append(inp);
-          liveEditSheetBody.append(opts,fs,alt);
+          const rotation=document.createElement('label');rotation.className='live-edit-field live-scene-image-rotation';rotation.append(u('傾き','Rotation'));
+          const rotationRow=document.createElement('div');rotationRow.className='live-scene-image-rotation-row';
+          const rotationRange=document.createElement('input');rotationRange.type='range';rotationRange.min='-20';rotationRange.max='20';rotationRange.step='1';rotationRange.value=String(Number(current.rotation)||0);
+          const rotationNumber=document.createElement('input');rotationNumber.type='number';rotationNumber.min='-20';rotationNumber.max='20';rotationNumber.step='1';rotationNumber.value=String(Number(current.rotation)||0);
+          const applyRotation=(raw)=>{const value=Math.max(-20,Math.min(20,Number(raw)||0));p.image.rotation=value;rotationRange.value=String(value);rotationNumber.value=String(value);scheduleDraftSave(40);refreshLivePlayer();const previewImg=status.querySelector('img');if(previewImg)previewImg.style.transform=`rotate(${value}deg)`;};
+          let rotationUndoCaptured=false;rotationRange.onpointerdown=()=>{rotationUndoCaptured=false;};rotationRange.oninput=()=>{if(!rotationUndoCaptured){captureUndo('Scene画像の傾き変更を元に戻せます');rotationUndoCaptured=true;}applyRotation(rotationRange.value);};rotationRange.onchange=()=>{rotationUndoCaptured=false;};rotationNumber.onchange=()=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(rotationNumber.value);};
+          rotationRow.append(rotationRange,rotationNumber,document.createTextNode('°'));rotation.append(rotationRow);
+          opts.append(rotation);
+
+          const shadow=document.createElement('label');shadow.className='live-scene-image-check';const shadowCb=document.createElement('input');shadowCb.type='checkbox';shadowCb.checked=current.shadow===true;shadowCb.onchange=()=>{captureUndo('Scene画像の影設定変更を元に戻せます');p.image.shadow=shadowCb.checked;scheduleDraftSave(40);refreshLivePlayer();};shadow.append(shadowCb,document.createTextNode(u('影をつける','Add shadow')));
+          const tapAction=makeSceneImageSelect(u('タップ動作','Tap action'),[['none',u('なし','None')],['fullscreen',u('全画面','Fullscreen')],['viewRec','VIEW POINT']],current.tapAction||((current.fullscreen===false)?'none':'fullscreen'),v=>{captureUndo('Scene画像のタップ動作変更を元に戻せます');p.image.tapAction=v;p.image.fullscreen=(v==='fullscreen');scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
+          const alt=document.createElement('label');alt.className='live-edit-field live-scene-image-alt';alt.append(u('画像の説明（任意）','Image description (optional)'));const inp=document.createElement('input');inp.type='text';inp.value=current.alt||'';inp.placeholder=u('例：面積2cm²の正方形','e.g. A square with area 2 cm²');inp.onchange=()=>{captureUndo('Scene画像の説明変更を元に戻せます');p.image.alt=inp.value.trim();scheduleDraftSave(40);refreshLivePlayer();};alt.append(inp);
+          const caption=document.createElement('label');caption.className='live-scene-image-check';const captionCb=document.createElement('input');captionCb.type='checkbox';captionCb.checked=current.caption===true;captionCb.onchange=()=>{captureUndo('Scene画像のキャプション設定変更を元に戻せます');p.image.caption=captionCb.checked;scheduleDraftSave(40);refreshLivePlayer();};caption.append(captionCb,document.createTextNode(u('説明を画像下に表示','Show description as caption')));
+          liveEditSheetBody.append(opts,shadow,tapAction);if((current.tapAction||((current.fullscreen===false)?'none':'fullscreen'))==='viewRec')liveEditSheetBody.append(makeViewRecAuthoringField(current,data=>{captureUndo('VIEW RECの記録を元に戻せます');p.image.viewPoints=data;delete p.image.viewRec;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();}));liveEditSheetBody.append(alt,caption);
         }
       };
       installVisualHeaderTabs('background');
       const actions=document.createElement('div');actions.className='live-edit-choice-row';
       const inherit=makeActionButton(u('前Sceneを継続','Continue previous Scene'),!bg?'is-selected':'');
       const clear=makeActionButton(u('背景なし','No background'),bg?.src===''?'is-selected':'');
-      inherit.onclick=()=>{delete p.background;scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
-      clear.onclick=()=>{p.background={src:'',transition:'fade',_editorManaged:true};scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
+      inherit.onclick=()=>{captureUndo('背景設定の変更を元に戻せます');delete p.background;scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
+      clear.onclick=()=>{captureUndo('背景設定の変更を元に戻せます');p.background={src:'',transition:'fade',_editorManaged:true};scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
       actions.append(inherit,clear);
       const pick=makeActionButton(bg?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),'is-primary');
       pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{
+        captureUndo('背景画像の変更を元に戻せます');
         p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
         // Open framing immediately. The shared editor is body-level, so the
         // Live Edit sheet refresh cannot hide or remove it.
@@ -10922,6 +12869,7 @@ function openDesktopTextDetail(){
       positionAdjust.disabled=!bg?.src;
       positionAdjust.onclick=()=>{
         if(!p.background?.src)return;
+        captureUndo('背景位置の変更を元に戻せます');
         openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(60);
           refreshLivePlayer({preserveSheet:true});
@@ -10931,6 +12879,7 @@ function openDesktopTextDetail(){
       copyPreviousPosition.disabled=!bg?.src||!previousEffectiveBackground(liveEditScene().index)?.src;
       copyPreviousPosition.onclick=()=>{
         const {index}=liveEditScene();
+        captureUndo('背景位置の変更を元に戻せます');
         if(!copyPreviousBackgroundFraming(index))return;
         scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');
       };
@@ -10940,6 +12889,7 @@ function openDesktopTextDetail(){
       const light=makeActionButton(u('明るく','Light'),bg?.src&&tone==='light'?'is-selected':'');
       const setTone=(next)=>{
         if(!p.background?.src)return;
+        captureUndo('背景の明るさ変更を元に戻せます');
         p.background={...p.background,tone:next,dim:next==='light'?.64:.38,_editorManaged:true};
         scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');
       };
@@ -10958,9 +12908,9 @@ function openDesktopTextDetail(){
     bgmState.textContent=bgmCmd?.action==='start'?(bgmCmd._editorFileName||u('音源あり','Audio selected')):bgmCmd?.action==='volume'?`${u('音量変更','Volume change')} ${Math.round((Number(bgmCmd.volume)||0)*100)}%`:bgmCmd?.action==='stop'?u('停止','Stop'):u('継続','Continue');bgmHead.append(bgmName,bgmState);
     const bgmButtons=document.createElement('div');bgmButtons.className='live-edit-audio-actions';
     const bgmInherit=makeActionButton(u('継続','Continue'),!bgmCmd?'is-selected':'');const bgmStop=makeActionButton(u('停止','Stop'),bgmCmd?.action==='stop'?'is-selected':'');const bgmPick=makeActionButton(bgmCmd?.action==='start'?u('変更','Change'):u('選択','Choose'),'is-primary');
-    bgmInherit.onclick=()=>{setManagedAudio(scene,'bgm',null);scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
-    bgmStop.onclick=()=>{setManagedAudio(scene,'bgm',{channel:'bgm',action:'stop',fadeOut:600});scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
-    bgmPick.onclick=()=>pickLiveFile('audio/*',(url,fileName)=>setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:fileName}));
+    bgmInherit.onclick=()=>{captureUndo('BGMの継続設定を元に戻せます');queueMicrotask(()=>showUndo('BGMの継続設定を元に戻せます'));setManagedAudio(scene,'bgm',null);scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
+    bgmStop.onclick=()=>{captureUndo('BGMの停止設定を元に戻せます');queueMicrotask(()=>showUndo('BGMの停止設定を元に戻せます'));setManagedAudio(scene,'bgm',{channel:'bgm',action:'stop',fadeOut:600});scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');};
+    bgmPick.onclick=()=>pickLiveFile('audio/*',(url,fileName)=>{captureUndo('BGM音源の変更を元に戻せます');queueMicrotask(()=>showUndo('BGM音源の変更を元に戻せます'));setManagedAudio(scene,'bgm',{channel:'bgm',action:'start',src:url,volume:.5,fadeIn:600,fadeOut:600,loop:true,restart:true,_editorFileName:fileName});scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('audio');});
     bgmButtons.append(bgmInherit,bgmStop,bgmPick);bgmRow.append(bgmHead,bgmButtons);audioWrap.append(bgmRow);
     const presetNote=document.createElement('p');presetNote.className='live-edit-note';presetNote.textContent=uiLanguage==='en'?'Adjust Ambient and SE in Audio details.':'Ambient と SE は「音の詳細設定」で調整します。';
     const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=t('detail.audio');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('audio');});
@@ -11020,16 +12970,20 @@ function openDesktopTextDetail(){
   function desktopSplitAtCursor(input){
     const {scene,index}=liveEditScene();
     if(!scene||!input)return;
+    if(sceneHasTable(scene)){showToast?.('表Sceneは分割できません');return;}
     const text=input.value;
     const pos=Number(input.selectionStart);
     if(!Number.isFinite(pos)||pos<=0||pos>=text.length){showUndo('分割する位置にカーソルを置いてください');return;}
     const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
     if(!left||!right){showUndo('分割する位置にカーソルを置いてください');return;}
     captureUndo('Scene分割を元に戻せます');
+    const splitRich=window.AhakoSceneEditCore?.splitRanges?.(scene,pos,left,right,text)||{left:[],right:[]};
     scene.text=left;
+    if(splitRich.left.length)scene.richText={version:1,ranges:splitRich.left}; else delete scene.richText;
     const cloneScene=clone(scene);
     cloneScene.id=nextUniqueId();
     cloneScene.text=right;
+    if(splitRich.right.length)cloneScene.richText={version:1,ranges:splitRich.right}; else delete cloneScene.richText;
     delete cloneScene.subText;
     delete cloneScene.audio;
     if(cloneScene.presentation)delete cloneScene.presentation.background;
@@ -11045,13 +12999,16 @@ function openDesktopTextDetail(){
   function desktopMergePrevious(){
     const {scene,index}=liveEditScene();
     if(!scene||index<=0)return;
-    captureUndo('Scene結合を元に戻せます');
     const prev=workingDocument.scenes[index-1];
+    if(sceneHasTable(prev)||sceneHasTable(scene)){showToast?.('表Sceneは文章Sceneと結合できません');return;}
+    captureUndo('Scene結合を元に戻せます');
     const before=(prev.text||'').length;
+    const mergedRanges=window.AhakoSceneEditCore?.mergeRanges?.(prev,scene)||[];
     // Merge without inserting any separator. This makes "split -> merge previous"
     // a true reverse operation: only line breaks that already belong to either
     // Scene's text are preserved.
     prev.text=`${prev.text||''}${scene.text||''}`;
+    if(mergedRanges.length)prev.richText={version:1,ranges:mergedRanges}; else delete prev.richText;
     if(scene.subText&&!prev.subText)prev.subText=scene.subText;
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(index-1);
@@ -11060,6 +13017,19 @@ function openDesktopTextDetail(){
     // Put the caret at the former Scene boundary so split -> merge feels like Undo.
     focusDesktopSceneTextarea(before);
   }
+
+  function toggleDesktopShortcutHint(force){
+    const wrap=document.getElementById('desktopShortcutHint');
+    const body=document.getElementById('desktopShortcutHintBody');
+    const rail=document.getElementById('desktopShortcutRailButton');
+    if(!wrap||!body||!rail)return;
+    const open=typeof force==='boolean'?force:body.hidden;
+    wrap.hidden=false;
+    body.hidden=!open;
+    rail.setAttribute('aria-expanded',open?'true':'false');
+  }
+  document.getElementById('desktopShortcutRailButton')?.addEventListener('click',()=>toggleDesktopShortcutHint());
+  document.getElementById('desktopShortcutHintClose')?.addEventListener('click',()=>toggleDesktopShortcutHint(false));
 
   const DESKTOP_WRITING_GUIDE_KEY='sceneStudio.desktopWritingGuideSeen.v5';
   function openDesktopWritingGuide({auto=false}={}){
@@ -11093,7 +13063,7 @@ function openDesktopTextDetail(){
       attempts+=1;
       let nowSeen=false;try{nowSeen=localStorage.getItem(DESKTOP_WRITING_GUIDE_KEY)==='1';}catch(_){}
       if(nowSeen||document.querySelector('.desktop-writing-guide-overlay'))return;
-      if(desktopLiveActive() && document.body){openDesktopWritingGuide({auto:true});return;}
+      if(desktopLiveActive() && document.body){return;}
       if(attempts<8)desktopWritingGuideTimer=setTimeout(tryOpen,250);
     };
     desktopWritingGuideTimer=setTimeout(tryOpen,180);
@@ -11121,9 +13091,12 @@ function openDesktopTextDetail(){
   }
   function liveEditMergePrevious(){
     const {scene,index}=liveEditScene();if(!scene||index<=0)return;
-    captureUndo('Scene結合を元に戻せます');
     const prev=workingDocument.scenes[index-1];
+    if(sceneHasTable(prev)||sceneHasTable(scene)){showToast?.('表Sceneは文章Sceneと結合できません');return;}
+    captureUndo('Scene結合を元に戻せます');
+    const mergedRanges=window.AhakoSceneEditCore?.mergeRanges?.(prev,scene)||[];
     prev.text=`${prev.text||''}${scene.text||''}`;
+    if(mergedRanges.length)prev.richText={version:1,ranges:mergedRanges}; else delete prev.richText;
     if(scene.subText&&!prev.subText)prev.subText=scene.subText;
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(index-1);
@@ -11161,12 +13134,16 @@ function openDesktopTextDetail(){
     const switchTrack=document.createElement('span');switchTrack.className='live-edit-mobile-switch-track';
     const switchState=document.createElement('span');switchState.className='live-edit-mobile-switch-state';switchState.textContent=allowed?'ON':'OFF';
     switchInput.addEventListener('change',()=>{
+      // V55: Scene-tab navigation setting is a document mutation too.
+      // Capture the state before applying it so one toggle = one Undo step.
+      captureUndo('過去Sceneへ戻る設定を元に戻せます');
       workingDocument.player ||= {};workingDocument.player.navigation ||= {};
       workingDocument.player.navigation.allowPrevious=switchInput.checked;
       switchState.textContent=switchInput.checked?'ON':'OFF';
       scheduleDraftSave(60);
       liveEditRenderAt(liveEditScene().index,{preserveSheet:true});
       renderLiveEditSceneMenu();
+      queueMicrotask(()=>showUndo('過去Sceneへ戻る設定を元に戻せます'));
     });
     switchLabel.append(switchInput,switchTrack,switchState);
     nav.append(label,switchLabel);
@@ -11413,10 +13390,18 @@ function openDesktopTextDetail(){
     }));
   });
   desktopPrevScene?.addEventListener('click',()=>{
+    if(player?.ended){
+      liveEditRenderAt(workingDocument.scenes.length-1,{preserveSheet:false});
+      return;
+    }
     const {index}=liveEditScene();
     if(index>0)liveEditRenderAt(index-1,{preserveSheet:false});
   });
   desktopNextScene?.addEventListener('click',()=>{
+    if(playerHost?.classList?.contains('sp-cover-open')){
+      liveEditRenderAt(0,{preserveSheet:false});
+      return;
+    }
     const {index}=liveEditScene();
     if(index<workingDocument.scenes.length-1)liveEditRenderAt(index+1,{preserveSheet:false});
   });
@@ -11425,8 +13410,42 @@ function openDesktopTextDetail(){
     liveTimingIndex=liveEditScene().index;
     renderDesktopLivePanel();
   });
-  desktopShortcutButton?.addEventListener('click',()=>openDesktopWritingGuide());
-  desktopLiveMQ.addEventListener?.('change',()=>{renderDesktopLivePanel();if(desktopLiveActive())setLiveToolbarVisible(true);});
+  desktopShortcutButton?.addEventListener('click',()=>toggleDesktopShortcutHint());
+  desktopV2Prev?.addEventListener('click',()=>{
+    // On Ending, player.index still points at the final Scene. Subtracting one
+    // here caused Ending -> Scene N-1 (e.g. 6/6 -> 5/6). Return to N/N instead.
+    if(player?.ended){
+      liveEditRenderAt(workingDocument.scenes.length-1,{preserveSheet:false});
+      return;
+    }
+    const {index}=liveEditScene();if(index>0)liveEditRenderAt(index-1,{preserveSheet:false});
+  });
+  desktopV2Next?.addEventListener('click',()=>{
+    if(playerHost?.classList?.contains('sp-cover-open')){
+      liveEditRenderAt(0,{preserveSheet:false});
+      return;
+    }
+    const {index}=liveEditScene();if(index<workingDocument.scenes.length-1)liveEditRenderAt(index+1,{preserveSheet:false});
+  });
+  desktopV2Add?.addEventListener('click',()=>{
+    if(player?.ended||playerHost?.classList?.contains('sp-cover-open'))return;
+    liveEditAddScene();
+  });
+  desktopV2Settings?.addEventListener('click',()=>{
+    const open=!document.body.classList.contains('desktop-v2-settings-open');
+    document.body.classList.toggle('desktop-v2-settings-open',open);
+    desktopV2Settings.setAttribute('aria-expanded',open?'true':'false');
+    // Recompute the authoring canvas immediately: closed = full width,
+    // open = width remaining to the left of the inspector.
+    requestAnimationFrame(()=>syncStudioPreviewDevice({rerender:false}));
+    // Re-sync once after the inspector slide transition too. This keeps all
+    // preview-anchored chrome exact even if the browser changes scrollbar width.
+    window.setTimeout(()=>syncStudioPreviewDevice({rerender:false}),240);
+  });
+  desktopLiveMQ.addEventListener?.('change',()=>{
+    if(!desktopLiveMQ.matches)document.body.classList.remove('desktop-v2-settings-open');
+    renderDesktopLivePanel();if(desktopLiveActive())setLiveToolbarVisible(true);
+  });
   function inlineCaretIsOnFirstVisualLine(){
     const el=liveInlineEditEl,sel=getSelection();
     if(!el||!sel||!sel.rangeCount||!sel.isCollapsed)return false;
@@ -12348,6 +14367,85 @@ function openDesktopTextDetail(){
       setTimeout(()=>{ if(liveEditEnabled)renderDesktopLivePanel(); },60);
       return;
     }
+  },true);
+
+  // Rich Text Player v0.10: tables are edited where they are seen.
+  // Clicking a cell in Live Preview turns only that cell into an editor and
+  // writes directly back to scene.content. The right inspector no longer needs
+  // to expose a long duplicate grid of every table cell.
+  function startPreviewTableCellEdit(card,cell){
+    const {scene}=liveEditScene(); if(!scene||!card||!cell)return false;
+    const cards=[...playerHost.querySelectorAll('.sp-scene.is-active .sp-rich-table-card')];
+    const cardIndex=Math.max(0,cards.indexOf(card));
+    const id=String(card.dataset.tableId||'');
+    const tables=(Array.isArray(scene.content)?scene.content:[]).filter(c=>c?.type==='table');
+    const table=tables.find(t=>String(t.id||'')===id)||tables[cardIndex];
+    if(!table)return false;
+    const tr=cell.closest('tr'), rows=[...card.querySelectorAll('tr')];
+    const ri=rows.indexOf(tr), cells=tr?[...tr.querySelectorAll('th,td')]:[];
+    const ci=cells.indexOf(cell);
+    if(ri<0||ci<0)return false;
+    finishInlineTextEdit(); closeLiveEditSheet(); setLiveToolbarVisible(true);
+    card.classList.add('is-live-table-editing');
+    cell.setAttribute('contenteditable','true');
+    cell.setAttribute('role','textbox');
+    cell.setAttribute('aria-label',`表 ${ri+1}行 ${ci+1}列`);
+    const save=()=>{
+      table.rows ||= [];
+      table.rows[ri] ||= [];
+      const value=cell.innerText.replace(/\n/g,' ');
+      table.rows[ri][ci]=value;
+      // Keep every live representation in sync. ScenePlayer renders from a
+      // playback clone, while Easy/Rich Paste can still own the source table.
+      const playerScene=player?.document?.scenes?.[player.index];
+      const playerTables=(Array.isArray(playerScene?.content)?playerScene.content:[]).filter(c=>c?.type==='table');
+      const playerTable=playerTables.find(t=>String(t.id||'')===String(table.id||''))||playerTables[cardIndex];
+      if(playerTable){playerTable.rows ||= [];playerTable.rows[ri] ||= [];playerTable.rows[ri][ci]=value;}
+      const sourceTable=(easyRichSource.tables||[]).find(t=>String(t.id||'')===String(table.id||''));
+      if(sourceTable){sourceTable.rows ||= [];sourceTable.rows[ri] ||= [];sourceTable.rows[ri][ci]=value;}
+      scheduleDraftSave(80);
+    };
+    const finish=()=>{
+      save(); cell.removeAttribute('contenteditable'); cell.removeAttribute('role');
+      card.classList.remove('is-live-table-editing');
+      renderDesktopLivePanel?.();
+    };
+    const abort=new AbortController(); cell._liveTableAbort?.abort(); cell._liveTableAbort=abort;
+    cell.addEventListener('input',save,{signal:abort.signal});
+    cell.addEventListener('keydown',e=>{
+      // Never let ScenePlayer interpret Backspace/Space/arrows while a table
+      // cell owns the keyboard. This listener is reinforced by the capture
+      // guard on playerHost below.
+      e.stopPropagation();
+      if(e.isComposing)return;
+      if(e.key==='Enter'){e.preventDefault();cell.blur();return;}
+      if(e.key==='Tab'){
+        e.preventDefault(); save();
+        const all=[...card.querySelectorAll('th,td')], next=all[(all.indexOf(cell)+(e.shiftKey?-1:1)+all.length)%all.length];
+        cell.removeAttribute('contenteditable'); card.classList.remove('is-live-table-editing');
+        startPreviewTableCellEdit(card,next);
+      }
+    },{signal:abort.signal});
+    cell.addEventListener('blur',finish,{once:true,signal:abort.signal});
+    try{cell.focus({preventScroll:true});}catch(_){cell.focus();}
+    const sel=getSelection(),range=document.createRange();range.selectNodeContents(cell);range.collapse(false);sel.removeAllRanges();sel.addRange(range);
+    return true;
+  }
+  // Capture keyboard events before ScenePlayer's stage handler. Without this,
+  // Backspace deletes text and then immediately navigates to the previous Scene.
+  playerHost.addEventListener('keydown',(e)=>{
+    const cell=e.target.closest?.('.sp-scene.is-active .sp-rich-table-card [contenteditable="true"]');
+    if(!cell)return;
+    e.stopImmediatePropagation();
+  },true);
+  playerHost.addEventListener('click',(e)=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
+    if(playerHost.classList.contains('sp-cover-open')||player?.ended)return;
+    const cell=e.target.closest?.('.sp-scene.is-active .sp-rich-table-card th, .sp-scene.is-active .sp-rich-table-card td');
+    if(!cell)return;
+    const card=cell.closest('.sp-rich-table-card');
+    e.preventDefault();e.stopImmediatePropagation();
+    startPreviewTableCellEdit(card,cell);
   },true);
 
   // Live Edit: main text and subtext are both direct edit targets.
