@@ -3958,6 +3958,11 @@
 
       const media = document.createElement(history ? 'span' : 'div');
       media.className = history ? 'sp-history-scene-image-media' : 'sp-scene-image-media';
+      // V125 — keep public Player Scene-image object styling in sync with Studio.
+      // Rotation is intentionally clamped to the same authoring range used by Studio.
+      const rotation = Math.max(-20, Math.min(20, Number(image.rotation) || 0));
+      media.style.setProperty('--sp-scene-image-rotation', `${rotation}deg`);
+      if (image.shadow === true) media.classList.add('has-object-shadow');
 
       const img = document.createElement('img');
       img.alt = image.alt || '';

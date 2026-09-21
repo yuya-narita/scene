@@ -2034,6 +2034,18 @@ html.sp-scene-image-open body{
 @media (max-width:600px){.sp-rich-table-overlay{padding:max(6px,env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))!important}.sp-rich-table-full{border-radius:12px!important}.sp-rich-table-full-scroll{padding:10px!important}.sp-rich-table-full .sp-rich-table{font-size:15px!important}.sp-rich-table-full .sp-rich-table th,.sp-rich-table-full .sp-rich-table td{min-width:6.5em}}
 
 
+/* V125 — Scene image rotation synced from Studio. The media box is the physical object;
+   the expand badge stays upright. Caption remains outside the rotated media box. */
+.sp-scene-image-media,
+.sp-history-scene-image-media{
+  transform:rotate(var(--sp-scene-image-rotation,0deg));
+  transform-origin:center center;
+}
+.sp-scene-image.is-zoomable .sp-scene-image-media::after,
+.sp-history-scene-image.is-zoomable .sp-history-scene-image-media::after{
+  transform:rotate(calc(-1 * var(--sp-scene-image-rotation,0deg)));
+}
+
 /* V88 — Scene image caption belongs below the image, never beside it. */
 .sp-scene-image-object,
 .sp-history-scene-image-object{
