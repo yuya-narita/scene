@@ -407,13 +407,23 @@
         // Foreground Scene images are interactive content, not the stage's
         // generic "next Scene" tap surface. Handle them here at the same level
         // as navigation so Studio and the public Player behave identically.
-        const imageTarget = e.target.closest('.sp-scene-image.is-zoomable');
+        // V127 — Scene-image interaction wins over the generic stage advance.
+        // V126 only intercepted `.is-zoomable` here, so a VIEW POINT image
+        // (`.is-view-rec`) could fall through to `this.next()` in normal playback.
+        // History has no generic next-Scene tap, which is why VIEW POINT appeared
+        // to work only from PAST. Consume both image modes at the stage boundary.
+        const imageTarget = e.target.closest('.sp-scene-image.is-zoomable, .sp-scene-image.is-view-rec');
         if (imageTarget) {
           e.preventDefault();
           e.stopPropagation();
           const currentScene = this.document?.scenes?.[this.index];
           const sceneImage = currentScene?.presentation?.image;
-          if (sceneImage?.src) this._openSceneImage(sceneImage.src, sceneImage.alt || '');
+          if (sceneImage?.src) {
+            const pointSet = sceneImage.viewPoints || sceneImage.viewRec || null;
+            const hasViewRec = sceneImage.tapAction === 'viewRec' && Array.isArray(pointSet?.points) && pointSet.points.length > 0;
+            if (hasViewRec) this._openSceneImageViewRec(sceneImage, imageTarget);
+            else this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+          }
           return;
         }
 
