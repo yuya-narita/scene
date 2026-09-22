@@ -1008,6 +1008,11 @@
     beginResonanceClock(performance.now());
     host.style.visibility = '';
     host.style.pointerEvents = '';
+    // V128 — Public Player has an outer cover/opening shell. Core focuses the
+    // stage during begin(), but openingBreath() keeps the Player hidden and the
+    // START button can retain focus. Re-focus once the readable surface is
+    // actually revealed so Enter advances Scene 1 immediately, matching Studio.
+    requestAnimationFrame(() => player?.els?.stage?.focus?.({ preventScroll: true }));
   }
 
 

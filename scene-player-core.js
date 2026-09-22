@@ -357,7 +357,7 @@
         // not fire it twice. Ignore controls/images so merely pressing UI on the
         // last Scene cannot trigger the ending sound.
         const target = e?.target;
-        const isControl = target?.closest?.('button, a, .sp-scene-image.is-zoomable');
+        const isControl = target?.closest?.('button, a, .sp-scene-image.is-zoomable, .sp-scene-image.is-view-rec');
         const isEditableText = this.host.classList.contains('live-edit-enabled')
           && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
         const atLastScene = !!this.document && !this.ended
@@ -404,27 +404,29 @@
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
 
-        // Foreground Scene images are interactive content, not the stage's
-        // generic "next Scene" tap surface. Handle them here at the same level
-        // as navigation so Studio and the public Player behave identically.
-        // V127 — Scene-image interaction wins over the generic stage advance.
-        // V126 only intercepted `.is-zoomable` here, so a VIEW POINT image
-        // (`.is-view-rec`) could fall through to `this.next()` in normal playback.
-        // History has no generic next-Scene tap, which is why VIEW POINT appeared
-        // to work only from PAST. Consume both image modes at the stage boundary.
-        const imageTarget = e.target.closest('.sp-scene-image.is-zoomable, .sp-scene-image.is-view-rec');
+        // V128 — match Studio's proven V96 image routing exactly.
+        // Never depend on decoration classes (`is-view-rec` / `is-zoomable`):
+        // the Scene document is the source of truth for the tap action.
+        const imageTarget = e.target.closest('.sp-scene-image');
         if (imageTarget) {
-          e.preventDefault();
-          e.stopPropagation();
           const currentScene = this.document?.scenes?.[this.index];
           const sceneImage = currentScene?.presentation?.image;
-          if (sceneImage?.src) {
-            const pointSet = sceneImage.viewPoints || sceneImage.viewRec || null;
-            const hasViewRec = sceneImage.tapAction === 'viewRec' && Array.isArray(pointSet?.points) && pointSet.points.length > 0;
-            if (hasViewRec) this._openSceneImageViewRec(sceneImage, imageTarget);
-            else this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+          const action = sceneImage?.tapAction || (sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
+          if (action !== 'none') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (sceneImage?.src) {
+              if (action === 'viewRec') {
+                // VIEW POINT owns this tap even if its authored point data is
+                // empty/malformed; it must never become a generic Scene advance.
+                if ((sceneImage.viewPoints?.points||sceneImage.viewRec?.points)?.length > 0) this._openSceneImageViewRec(sceneImage, imageTarget);
+                else this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+              } else if (action === 'fullscreen') {
+                this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+              }
+            }
+            return;
           }
-          return;
         }
 
         if (this.host.classList.contains('live-edit-enabled')
