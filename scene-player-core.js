@@ -217,7 +217,7 @@
         </header>
         <main class="sp-stage" tabindex="0" aria-live="polite">
           <div class="sp-scenes"></div>
-          <span class="sp-tap-hint">TAP</span>
+          <button class="sp-tap-hint" type="button" aria-label="Next scene">TAP</button>
         </main>
         <section class="sp-history" hidden aria-label="Past scenes">
           <div class="sp-history-top">
@@ -401,20 +401,17 @@
       });
       this._on(this.els.historyScroll, 'scroll', () => this._scheduleHistoryDepth(), { passive: true });
 
-      // V133 — TAP is a permanent Scene-advance safe zone. Keep its visual design
-      // unchanged, but reserve a comfortable invisible hit area around the label
-      // so large foreground images can never steal taps meant to advance.
-      const isTapAdvanceSafeZone = (e) => {
-        const hint = this.els.tapHint;
-        if (!hint) return false;
-        const x = Number(e?.clientX);
-        const y = Number(e?.clientY);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
-        const rect = hint.getBoundingClientRect();
-        const pad = 32;
-        return x >= rect.left - pad && x <= rect.right + pad
-          && y >= rect.top - pad && y <= rect.bottom + pad;
-      };
+      // V135 — TAP itself is the highest-priority Scene-advance control.
+      // Its visible design stays unchanged; CSS expands only its invisible hit area.
+      const isTapAdvanceSafeZone = (e) => !!e?.target?.closest?.('.sp-tap-hint');
+      this._on(this.els.tapHint, 'click', (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (this.historyOpen || this.ended) return;
+        this.unlockAudio(true);
+        if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
+        this.next();
+      });
 
       // V129 — Public Player can place visual/tap layers above the foreground image.
       // On iPhone Safari that means event.target is not always the .sp-scene-image
