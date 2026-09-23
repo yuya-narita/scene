@@ -403,6 +403,21 @@
       });
       this._on(this.els.historyScroll, 'scroll', () => this._scheduleHistoryDepth(), { passive: true });
 
+      // V134 — Keep Studio Preview aligned with Public / Local Player: the visible
+      // TAP label has an invisible 32px Scene-advance safe zone. Its appearance is
+      // unchanged; taps in this area must never open VIEW POINT / fullscreen.
+      const isTapAdvanceSafeZone = (e) => {
+        const hint = this.els.tapHint;
+        if (!hint) return false;
+        const x = Number(e?.clientX);
+        const y = Number(e?.clientY);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+        const rect = hint.getBoundingClientRect();
+        const pad = 32;
+        return x >= rect.left - pad && x <= rect.right + pad
+          && y >= rect.top - pad && y <= rect.bottom + pad;
+      };
+
       // Live Editor desktop selection guard. A drag that starts on editable text can
       // finish outside the text node; browsers may then synthesize a stage click.
       // Remember that gesture from pointerdown so releasing a text selection never
@@ -431,8 +446,9 @@
         // Do not depend on decoration classes (is-view-rec / is-zoomable): those
         // classes are presentation hints and can lag behind live Studio data.
         // The Scene document is the single source of truth for the tap action.
+        const inTapAdvanceSafeZone = isTapAdvanceSafeZone(e);
         const imageTarget = e.target.closest('.sp-scene-image');
-        if (imageTarget) {
+        if (imageTarget && !inTapAdvanceSafeZone) {
           const currentScene = this.document?.scenes?.[this.index];
           const sceneImage = currentScene?.presentation?.image;
           const action = sceneImage?.tapAction || (sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
