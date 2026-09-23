@@ -2104,3 +2104,25 @@ html.sp-scene-image-open body{
 .sp-scene-image-viewer.is-object-closing .sp-scene-image-viewer-shade{animation:spSceneObjectShadeOut 360ms cubic-bezier(.22,.74,.18,1) both!important;}
 @keyframes spSceneObjectShadeIn{from{opacity:0}to{opacity:1}}
 @keyframes spSceneObjectShadeOut{from{opacity:1}to{opacity:0}}
+
+/* V139 — VIEW POINT geometry parity with Studio Preview (V108/V116 baseline). */
+.sp-scene-image.is-view-rec{cursor:pointer;}
+.sp-scene-image-viewer-frame.is-view-rec-playing{cursor:default!important;touch-action:none!important;}
+.sp-scene-image-viewer-frame.is-view-rec-playing .sp-scene-image-viewer-img{pointer-events:none!important;transition:none!important;}
+.sp-scene.is-active .sp-scene-image.is-zoomable,
+.sp-scene.is-active .sp-scene-image.is-view-rec{pointer-events:auto;-webkit-tap-highlight-color:transparent;}
+.sp-scene-image-viewer-frame.is-image-bounded{
+  inset:50% auto auto 50%!important;
+  width:var(--sp-image-frame-w)!important;
+  height:var(--sp-image-frame-h)!important;
+  transform:translate(-50%,-50%)!important;
+  padding:0!important;
+  overflow:hidden!important;
+}
+.sp-scene-image-viewer-frame.is-image-bounded .sp-scene-image-viewer-img{
+  width:100%!important;
+  height:100%!important;
+  max-width:none!important;
+  max-height:none!important;
+  object-fit:contain!important;
+}
