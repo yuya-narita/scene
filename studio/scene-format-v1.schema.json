@@ -194,6 +194,11 @@
           "type": "number",
           "minimum": 0
         },
+        "cueAt": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Absolute Scene appearance cue in milliseconds from the Scene 1/audio zero point. New AUTO REC writes this alongside pause; legacy players may ignore it."
+        },
         "presentation": {
           "$ref": "#/$defs/presentation"
         },
@@ -325,6 +330,53 @@
           "type": "number",
           "minimum": 100,
           "maximum": 900
+        },
+        "position": {
+          "type": "object",
+          "properties": {
+            "preset": {
+              "enum": [
+                "auto",
+                "top-left",
+                "top",
+                "top-right",
+                "left",
+                "center",
+                "right",
+                "bottom-left",
+                "bottom",
+                "bottom-right",
+                "custom"
+              ]
+            },
+            "x": { "type": "number", "minimum": 0, "maximum": 1 },
+            "y": { "type": "number", "minimum": 0, "maximum": 1 },
+            "pc": {
+              "type": "object",
+              "description": "Optional wide-PC-only text/frame position. Phone and tablet use the common parent position.",
+              "properties": {
+                "preset": {
+                  "enum": [
+                    "auto",
+                    "top-left",
+                    "top",
+                    "top-right",
+                    "left",
+                    "center",
+                    "right",
+                    "bottom-left",
+                    "bottom",
+                    "bottom-right",
+                    "custom"
+                  ]
+                },
+                "x": { "type": "number", "minimum": 0, "maximum": 1 },
+                "y": { "type": "number", "minimum": 0, "maximum": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": true
@@ -387,8 +439,37 @@
           "properties": {
             "type": {
               "enum": [
-                "handdrawn-voice"
+                "handdrawn-voice",
+                "handdrawn-narration",
+                "handdrawn-rounded",
+                "handdrawn-double",
+                "handdrawn-dashed",
+                "handdrawn-dark",
+                "handdrawn-panel"
               ]
+            },
+            "position": {
+              "type": "object",
+              "properties": {
+                "preset": {
+                  "enum": [
+                    "auto",
+                    "top-left",
+                    "top",
+                    "top-right",
+                    "left",
+                    "center",
+                    "right",
+                    "bottom-left",
+                    "bottom",
+                    "bottom-right",
+                    "custom"
+                  ]
+                },
+                "x": { "type": "number", "minimum": 0, "maximum": 1 },
+                "y": { "type": "number", "minimum": 0, "maximum": 1 }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": true
@@ -429,6 +510,12 @@
                 "up",
                 "shatter",
                 "explode"
+              ]
+            },
+            "scope": {
+              "enum": [
+                "scene",
+                "visible"
               ]
             }
           },
@@ -474,6 +561,19 @@
             "glitch"
           ]
         },
+        "exit": {
+          "description": "Optional outgoing treatment applied to the previous background when entering this Scene.",
+          "enum": [
+            "auto",
+            "fade",
+            "dark",
+            "light",
+            "blur",
+            "zoomOut",
+            "zoomIn",
+            "afterimage"
+          ]
+        },
         "dim": {
           "type": "number",
           "minimum": 0,
@@ -491,6 +591,16 @@
         },
         "position": {
           "type": "string"
+        },
+        "positions": {
+          "type": "object",
+          "description": "Optional device-specific cover crop positions. Legacy position remains the phone/common fallback.",
+          "properties": {
+            "phone": { "type": "string" },
+            "tablet": { "type": "string" },
+            "pc": { "type": "string" }
+          },
+          "additionalProperties": false
         },
         "reveal": {
           "type": "object",
@@ -530,10 +640,15 @@
                 "parallax",
                 "breath",
                 "slowZoom",
+                "zoomOut",
                 "panLeft",
                 "panRight",
                 "panUp",
-                "panDown"
+                "panDown",
+                "panUpLeft",
+                "panUpRight",
+                "panDownLeft",
+                "panDownRight"
               ]
             },
             "duration": {
@@ -550,6 +665,13 @@
             },
             "pan": {
               "type": "number"
+            },
+            "continuity": {
+              "description": "carry keeps the motion phase continuous across a background swap when the motion type matches.",
+              "enum": [
+                "restart",
+                "carry"
+              ]
             }
           },
           "additionalProperties": true
@@ -598,7 +720,8 @@
         },
         "transitionDuration": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 10000
         }
       },
       "additionalProperties": true
@@ -706,7 +829,9 @@
             },
             "mode": {
               "enum": [
-                "absolute"
+                "absolute",
+                "interval-v2",
+                "standard-v3"
               ]
             },
             "authorOptInVersion": {
