@@ -401,6 +401,38 @@
       });
       this._on(this.els.historyScroll, 'scroll', () => this._scheduleHistoryDepth(), { passive: true });
 
+      // V129 — Public Player can place visual/tap layers above the foreground image.
+      // On iPhone Safari that means event.target is not always the .sp-scene-image
+      // even though the user's finger is physically inside the image. Studio does
+      // not have that shell-layer mismatch. Route the tap geometrically in capture
+      // phase so VIEW POINT owns the gesture before generic Scene advance can run.
+      this._on(this.els.stage, 'click', (e) => {
+        if (this.historyOpen || e.defaultPrevented) return;
+        const currentScene = this.document?.scenes?.[this.index];
+        const sceneImage = currentScene?.presentation?.image;
+        const action = sceneImage?.tapAction || (sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
+        if (!sceneImage?.src || action === 'none') return;
+
+        const activeScene = this.els.stage.querySelector('.sp-scene.is-active');
+        const imageTarget = activeScene?.querySelector('.sp-scene-image');
+        if (!imageTarget) return;
+        const rect = imageTarget.getBoundingClientRect();
+        const x = Number(e.clientX);
+        const y = Number(e.clientY);
+        if (!Number.isFinite(x) || !Number.isFinite(y)
+            || x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'viewRec') {
+          if ((sceneImage.viewPoints?.points || sceneImage.viewRec?.points)?.length > 0)
+            this._openSceneImageViewRec(sceneImage, imageTarget);
+          else this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+        } else if (action === 'fullscreen') {
+          this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+        }
+      }, true);
+
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
 
