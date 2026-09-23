@@ -2075,3 +2075,14 @@ html.sp-scene-image-open body{
 .sp-history-scene-image-caption{
   margin-top:calc(.62em + var(--sp-scene-image-caption-clearance, 0px))!important;
 }
+
+/* V136 — restore Scene image rotation lost in V135 CSS packaging. */
+.sp-scene-image-media,
+.sp-history-scene-image-media{
+  transform:rotate(var(--sp-scene-image-rotation,0deg));
+  transform-origin:center center;
+}
+.sp-scene-image.is-zoomable .sp-scene-image-media::after,
+.sp-history-scene-image.is-zoomable .sp-history-scene-image-media::after{
+  transform:rotate(calc(-1 * var(--sp-scene-image-rotation,0deg)));
+}
