@@ -959,6 +959,11 @@
     beginResonanceClock(performance.now());
     host.style.visibility = '';
     host.style.pointerEvents = '';
+    // V132 — Match the public Player's V128 input behavior. The Local Player
+    // also has an outer opening shell, so the START button can retain focus
+    // after openingBreath(). Return focus to the readable stage once it is
+    // revealed so Enter advances Scene 1 without an extra click.
+    requestAnimationFrame(() => player?.els?.stage?.focus?.({ preventScroll: true }));
   }
 
 
