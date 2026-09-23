@@ -401,6 +401,21 @@
       });
       this._on(this.els.historyScroll, 'scroll', () => this._scheduleHistoryDepth(), { passive: true });
 
+      // V133 — TAP is a permanent Scene-advance safe zone. Keep its visual design
+      // unchanged, but reserve a comfortable invisible hit area around the label
+      // so large foreground images can never steal taps meant to advance.
+      const isTapAdvanceSafeZone = (e) => {
+        const hint = this.els.tapHint;
+        if (!hint) return false;
+        const x = Number(e?.clientX);
+        const y = Number(e?.clientY);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+        const rect = hint.getBoundingClientRect();
+        const pad = 32;
+        return x >= rect.left - pad && x <= rect.right + pad
+          && y >= rect.top - pad && y <= rect.bottom + pad;
+      };
+
       // V129 — Public Player can place visual/tap layers above the foreground image.
       // On iPhone Safari that means event.target is not always the .sp-scene-image
       // even though the user's finger is physically inside the image. Studio does
@@ -408,6 +423,8 @@
       // phase so VIEW POINT owns the gesture before generic Scene advance can run.
       this._on(this.els.stage, 'click', (e) => {
         if (this.historyOpen || e.defaultPrevented) return;
+        // TAP safe zone always belongs to generic Scene advance, never image open.
+        if (isTapAdvanceSafeZone(e)) return;
         const currentScene = this.document?.scenes?.[this.index];
         const sceneImage = currentScene?.presentation?.image;
         const action = sceneImage?.tapAction || (sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
@@ -436,11 +453,15 @@
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
 
+        // V133 — even when a large image physically overlaps this area, tapping
+        // around the visible TAP hint must fall through to this handler's next().
+        const inTapAdvanceSafeZone = isTapAdvanceSafeZone(e);
+
         // V128 — match Studio's proven V96 image routing exactly.
         // Never depend on decoration classes (`is-view-rec` / `is-zoomable`):
         // the Scene document is the source of truth for the tap action.
         const imageTarget = e.target.closest('.sp-scene-image');
-        if (imageTarget) {
+        if (imageTarget && !inTapAdvanceSafeZone) {
           const currentScene = this.document?.scenes?.[this.index];
           const sceneImage = currentScene?.presentation?.image;
           const action = sceneImage?.tapAction || (sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
