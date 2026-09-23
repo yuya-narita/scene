@@ -2086,3 +2086,21 @@ html.sp-scene-image-open body{
 .sp-history-scene-image.is-zoomable .sp-history-scene-image-media::after{
   transform:rotate(calc(-1 * var(--sp-scene-image-rotation,0deg)));
 }
+
+/* V137 — restore V110 Scene-image pickup/return transition lost from public CSS packaging. */
+.sp-scene-image-transition-ghost{
+  position:fixed!important;z-index:2147483647!important;display:block!important;
+  margin:0!important;padding:0!important;max-width:none!important;max-height:none!important;
+  object-fit:contain!important;transform-origin:center center!important;pointer-events:none!important;
+  will-change:left,top,width,height,transform;filter:none!important;
+}
+.sp-scene-image-viewer.is-object-transitioning .sp-scene-image-viewer-shade{transition:opacity 360ms cubic-bezier(.22,.74,.18,1)!important;}
+.sp-scene-image-viewer.is-object-opening .sp-scene-image-viewer-shade{opacity:.88!important;}
+.sp-scene-image-viewer.is-object-closing .sp-scene-image-viewer-shade{opacity:.35!important;}
+@media (prefers-reduced-motion: reduce){.sp-scene-image-transition-ghost{display:none!important;}}
+.sp-scene-image-viewer.is-object-transitioning,
+.sp-scene-image-viewer.is-object-transitioning .sp-scene-image-viewer-frame{background:transparent!important;}
+.sp-scene-image-viewer.is-object-opening .sp-scene-image-viewer-shade{animation:spSceneObjectShadeIn 360ms cubic-bezier(.22,.74,.18,1) both!important;}
+.sp-scene-image-viewer.is-object-closing .sp-scene-image-viewer-shade{animation:spSceneObjectShadeOut 360ms cubic-bezier(.22,.74,.18,1) both!important;}
+@keyframes spSceneObjectShadeIn{from{opacity:0}to{opacity:1}}
+@keyframes spSceneObjectShadeOut{from{opacity:1}to{opacity:0}}
