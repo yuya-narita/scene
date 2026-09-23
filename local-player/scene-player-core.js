@@ -357,7 +357,7 @@
         // not fire it twice. Ignore controls/images so merely pressing UI on the
         // last Scene cannot trigger the ending sound.
         const target = e?.target;
-        const isControl = target?.closest?.('button, a, .sp-scene-image.is-zoomable');
+        const isControl = target?.closest?.('button, a, .sp-scene-image.is-zoomable, .sp-scene-image.is-view-rec');
         const isEditableText = this.host.classList.contains('live-edit-enabled')
           && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
         const atLastScene = !!this.document && !this.ended
@@ -401,20 +401,64 @@
       });
       this._on(this.els.historyScroll, 'scroll', () => this._scheduleHistoryDepth(), { passive: true });
 
+      // V129 — Public Player can place visual/tap layers above the foreground image.
+      // On iPhone Safari that means event.target is not always the .sp-scene-image
+      // even though the user's finger is physically inside the image. Studio does
+      // not have that shell-layer mismatch. Route the tap geometrically in capture
+      // phase so VIEW POINT owns the gesture before generic Scene advance can run.
+      this._on(this.els.stage, 'click', (e) => {
+        if (this.historyOpen || e.defaultPrevented) return;
+        const currentScene = this.document?.scenes?.[this.index];
+        const sceneImage = currentScene?.presentation?.image;
+        const action = sceneImage?.tapAction || (sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
+        if (!sceneImage?.src || action === 'none') return;
+
+        const activeScene = this.els.stage.querySelector('.sp-scene.is-active');
+        const imageTarget = activeScene?.querySelector('.sp-scene-image');
+        if (!imageTarget) return;
+        const rect = imageTarget.getBoundingClientRect();
+        const x = Number(e.clientX);
+        const y = Number(e.clientY);
+        if (!Number.isFinite(x) || !Number.isFinite(y)
+            || x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'viewRec') {
+          if ((sceneImage.viewPoints?.points || sceneImage.viewRec?.points)?.length > 0)
+            this._openSceneImageViewRec(sceneImage, imageTarget);
+          else this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+        } else if (action === 'fullscreen') {
+          this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+        }
+      }, true);
+
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
 
-        // Foreground Scene images are interactive content, not the stage's
-        // generic "next Scene" tap surface. Handle them here at the same level
-        // as navigation so Studio and the public Player behave identically.
-        const imageTarget = e.target.closest('.sp-scene-image.is-zoomable');
+        // V128 — match Studio's proven V96 image routing exactly.
+        // Never depend on decoration classes (`is-view-rec` / `is-zoomable`):
+        // the Scene document is the source of truth for the tap action.
+        const imageTarget = e.target.closest('.sp-scene-image');
         if (imageTarget) {
-          e.preventDefault();
-          e.stopPropagation();
           const currentScene = this.document?.scenes?.[this.index];
           const sceneImage = currentScene?.presentation?.image;
-          if (sceneImage?.src) this._openSceneImage(sceneImage.src, sceneImage.alt || '');
-          return;
+          const action = sceneImage?.tapAction || (sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
+          if (action !== 'none') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (sceneImage?.src) {
+              if (action === 'viewRec') {
+                // VIEW POINT owns this tap even if its authored point data is
+                // empty/malformed; it must never become a generic Scene advance.
+                if ((sceneImage.viewPoints?.points||sceneImage.viewRec?.points)?.length > 0) this._openSceneImageViewRec(sceneImage, imageTarget);
+                else this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+              } else if (action === 'fullscreen') {
+                this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+              }
+            }
+            return;
+          }
         }
 
         if (this.host.classList.contains('live-edit-enabled')
@@ -1718,7 +1762,7 @@
       emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold });
     }
 
-    _playOneShot(command) {
+    _playOneShot(command, onEnded = null) {
       if (!command.src) return;
       if (this._iosStableMediaBank && this._playIOSBankOneShot(command)) return;
       if (this._playBufferedOneShot(command)) return;
@@ -1744,6 +1788,7 @@
         audio.removeEventListener('ended', cleanup);
         audio.__spInUse = false;
         audio.loop = false;
+        if (typeof onEnded === 'function') { try { onEnded(); } catch (_) {} }
       };
       audio.addEventListener('ended', cleanup);
       this.oneshots.add(audio);
@@ -1769,7 +1814,23 @@
       const action = command.action;
       if (channel === 'oneshot') {
         // One-shots represent an event, so history reconstruction never replays them.
-        if (!reconstruct && (action === 'play' || action === 'start')) this._playOneShot(command);
+        if (!reconstruct && (action === 'play' || action === 'start')) {
+          // V52: authorable SE timing. `delay` and `repeat` were already written
+          // by Studio but the Player ignored both fields. Delay is before the
+          // first hit; repeat schedules additional hits after the previous clip
+          // duration when known (fallback 250ms), preserving one-shot semantics.
+          const delay = Math.max(0, asNumber(command.delay, 0));
+          const repeat = Math.max(1, Math.round(asNumber(command.repeat, 1)));
+          // V53: chain repeats from the actual `ended` event. The old
+          // duration probe usually had NaN before metadata loaded, fell back to
+          // 250ms and caused overlapping/incorrect repeat counts.
+          const playSeries = (remaining) => {
+            if (remaining <= 0) return;
+            this._playOneShot(command, remaining > 1 ? () => playSeries(remaining - 1) : null);
+          };
+          if (delay > 0) this._audioTimeout(() => playSeries(repeat), delay);
+          else playSeries(repeat);
+        }
         return;
       }
       if (!(channel === 'bgm' || channel === 'ambient')) return;
@@ -2648,6 +2709,9 @@
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
       this._render();
+      // V112 — keyboard reading starts immediately after START. Do not require
+      // an extra click on the Scene just to move focus from the Cover controls.
+      requestAnimationFrame(()=>this.els?.stage?.focus?.({preventScroll:true}));
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
       return true;
     }
@@ -3554,8 +3618,12 @@
       const sceneTone = state?.tone === 'light' ? 'light' : (state?.tone === 'dark' ? 'dark' : null);
       const useLightWash = sceneTone ? sceneTone === 'light' : isCinemaLight;
       const themeDefaultDim = this.document?.theme === 'cinema' ? (useLightWash ? 0.72 : 0.34) : (useLightWash ? 0.64 : 0);
-      const dim = clamp(asNumber(state.dim, themeDefaultDim), 0, 1);
-      // A Scene may explicitly choose a light paper wash or a dark veil.
+      // Rich Text Player v0.9: the veil belongs to an actual background image.
+      // Editor refreshes call this path even on paper-only Scenes; applying the
+      // cinema theme default there made the whole preview suddenly dark after
+      // changing font/size/background/Scene image/etc.
+      const hasBackground = Boolean(state?.src);
+      const dim = hasBackground ? clamp(asNumber(state.dim, themeDefaultDim), 0, 1) : 0;
       this.els.veil.style.background = useLightWash
         ? `rgba(250,247,240,${dim})`
         : `rgba(0,0,0,${dim})`;
@@ -3597,7 +3665,7 @@
       }
     }
 
-    _openSceneImage(src, alt='') {
+    _openSceneImage(src, alt='', options={}) {
       if (!src) return;
       let viewer = document.querySelector('.sp-scene-image-viewer');
       if (!viewer) {
@@ -3655,6 +3723,43 @@
           w: Math.max(1, frame.clientWidth),
           h: Math.max(1, frame.clientHeight)
         });
+
+        // V106 — keep authored VIEW POINT framing and reader fullscreen freedom separate.
+        // VIEW POINT starts in the V104 image-bounded viewport so portrait manga
+        // keeps the same composition on phone / tablet / PC. Plain fullscreen uses
+        // the whole device viewport from the start.
+        const fitViewerFrame = () => {
+          const host = viewer.getBoundingClientRect();
+          const nw = Math.max(1, img.naturalWidth || 1);
+          const nh = Math.max(1, img.naturalHeight || 1);
+          const availW = Math.max(1, host.width - 28);
+          const availH = Math.max(1, host.height - 36);
+          const fit = Math.min(availW / nw, availH / nh);
+          img.style.width = `${Math.max(1,nw*fit)}px`;
+          img.style.height = `${Math.max(1,nh*fit)}px`;
+          if (frame._sceneImageMode === 'viewPoint') {
+            frame.style.setProperty('--sp-image-frame-w', `${Math.max(1,nw*fit)}px`);
+            frame.style.setProperty('--sp-image-frame-h', `${Math.max(1,nh*fit)}px`);
+            frame.classList.add('is-image-bounded');
+          } else {
+            frame.classList.remove('is-image-bounded');
+            frame.style.removeProperty('--sp-image-frame-w');
+            frame.style.removeProperty('--sp-image-frame-h');
+          }
+        };
+        frame._fitSceneImageFrame = fitViewerFrame;
+        const unlockViewPointCanvas = () => {
+          if (frame._sceneImageMode !== 'viewPoint') return;
+          // V108 — the moment the reader manually zooms/pans, authored VIEW POINT
+          // playback yields for the rest of this open viewer. Reader inspection must
+          // never snap back to an authored point after a drag.
+          frame._onViewPointManualControl?.();
+          frame._sceneImageMode = 'viewPointFree';
+          frame.classList.remove('is-image-bounded');
+          frame.style.removeProperty('--sp-image-frame-w');
+          frame.style.removeProperty('--sp-image-frame-h');
+        };
+        frame._unlockViewPointCanvas = unlockViewPointCanvas;
 
         const panBounds = () => {
           const vp = viewportSize();
@@ -3728,7 +3833,10 @@
         };
 
         frame.addEventListener('touchstart',(event)=>{
+          // V109 — the close control must always win over zoom/pan gestures.
+          if(event.target.closest?.('.sp-scene-image-viewer-close')) return;
           if(event.touches.length===2){
+            frame._unlockViewPointCanvas?.();
             event.preventDefault();
             const c=center(event.touches[0],event.touches[1]);
             viewState.startDistance=distance(event.touches[0],event.touches[1]);
@@ -3831,6 +3939,8 @@
 
         // Desktop convenience: wheel to zoom, drag to pan while zoomed.
         frame.addEventListener('wheel',(event)=>{
+          if(event.target.closest?.('.sp-scene-image-viewer-close')) return;
+          frame._unlockViewPointCanvas?.();
           event.preventDefault();
           const next=viewState.scale * (event.deltaY<0 ? 1.12 : 0.89);
           zoomAt(event.clientX,event.clientY,next);
@@ -3838,7 +3948,10 @@
         },{passive:false});
 
         frame.addEventListener('pointerdown',(event)=>{
+          // Do not capture/prevent the pointer that belongs to the × button.
+          if(event.target.closest?.('.sp-scene-image-viewer-close')) return;
           if(event.pointerType==='touch' || viewState.scale<=1.01) return;
+          frame._unlockViewPointCanvas?.();
           viewState.dragging=true;
           viewState.moved=false;
           viewState.lastX=event.clientX;
@@ -3864,9 +3977,15 @@
         frame.addEventListener('pointerup',endPointer);
         frame.addEventListener('pointercancel',endPointer);
 
-        img.addEventListener('dblclick',(event)=>{
+        // V109 — listen on the fullscreen gesture canvas, not only the transformed image.
+        // After the first desktop zoom the image can move under the pointer; keeping dblclick
+        // on IMG made the second double-click unreliable. The frame is stable.
+        frame.addEventListener('dblclick',(event)=>{
+          if(event.target.closest?.('.sp-scene-image-viewer-close')) return;
+          frame._unlockViewPointCanvas?.();
           event.preventDefault();
           event.stopPropagation();
+          event.stopImmediatePropagation?.();
           if(viewState.scale>1.01) resetView({animate:true});
           else zoomAt(event.clientX,event.clientY,2.5,{animate:true});
         });
@@ -3881,7 +4000,11 @@
           }
         });
 
-        window.addEventListener('resize',()=>{ if(!viewer.hidden) applyView(); });
+        window.addEventListener('resize',()=>{
+          // V98: iPhone changes the visual viewport when the fullscreen viewer opens.
+          // The manual viewer reset must not overwrite authored VIEW REC transforms.
+          if(!viewer.hidden && !frame.classList.contains('is-view-rec-playing')) applyView();
+        });
 
         frame._sceneImageReset = resetView;
 
@@ -3889,10 +4012,50 @@
         viewer.append(shade,frame);
         document.body.appendChild(viewer);
 
-        const shut = (event) => {
+        // V110 — object continuity transition. The fullscreen viewer still owns all
+        // V109 interaction logic; this only animates the boundary between the Scene
+        // object and the viewer so the image feels picked up / put back.
+        const sceneObjectRect = (sourceEl) => {
+          const media = sourceEl?.querySelector?.('.sp-scene-image-media') || sourceEl?.closest?.('.sp-scene-image-media') || sourceEl;
+          const sourceImg = media?.querySelector?.('img') || (media?.tagName === 'IMG' ? media : null);
+          if (!sourceImg?.isConnected) return null;
+          const r = sourceImg.getBoundingClientRect();
+          if (!r.width || !r.height) return null;
+          const raw = getComputedStyle(media || sourceImg).getPropertyValue('--sp-scene-image-rotation');
+          const rotation = Number.parseFloat(raw) || 0;
+          return {left:r.left,top:r.top,width:r.width,height:r.height,rotation,sourceImg};
+        };
+        const animateObjectBoundary = (from, to, {closing=false}={}) => {
+          if (!from || !to || matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return Promise.resolve();
+          const ghost = document.createElement('img');
+          ghost.className='sp-scene-image-transition-ghost';
+          ghost.src=img.currentSrc || img.src; ghost.alt='';
+          document.body.appendChild(ghost);
+          const key = r => ({left:`${r.left}px`,top:`${r.top}px`,width:`${r.width}px`,height:`${r.height}px`,transform:`rotate(${r.rotation||0}deg)`});
+          const anim=ghost.animate([key(from),key(to)],{duration:360,easing:'cubic-bezier(.22,.74,.18,1)',fill:'forwards'});
+          return anim.finished.catch(()=>{}).then(()=>ghost.remove());
+        };
+        viewer._sceneImageSourceEl = null;
+        viewer._sceneImageOpening = false;
+        viewer._sceneImageClosing = false;
+
+        const shut = async (event) => {
           event?.preventDefault?.();
           event?.stopPropagation?.();
+          if (viewer._sceneImageClosing) return;
+          viewer._sceneImageClosing = true;
+          const source = sceneObjectRect(viewer._sceneImageSourceEl);
+          const current = img.getBoundingClientRect();
+          const from = current.width ? {left:current.left,top:current.top,width:current.width,height:current.height,rotation:0} : null;
+          if (source && from) {
+            viewer.classList.add('is-object-transitioning','is-object-closing');
+            img.style.visibility='hidden';
+            await animateObjectBoundary(from, source, {closing:true});
+          }
           viewer.hidden = true;
+          viewer.classList.remove('is-object-transitioning','is-object-closing');
+          img.style.visibility='';
+          viewer._sceneImageClosing = false;
           document.documentElement.classList.remove('sp-scene-image-open');
         };
         shade.addEventListener('click',shut);
@@ -3907,12 +4070,202 @@
 
       const img = viewer.querySelector('.sp-scene-image-viewer-img');
       const frame = viewer.querySelector('.sp-scene-image-viewer-frame');
+      if (frame) frame._sceneImageMode = options?.mode === 'viewPoint' ? 'viewPoint' : 'fullscreen';
       frame?._sceneImageReset?.();
+      viewer._sceneImageSourceEl = options?.sourceEl || null;
+      const openingSource = (()=>{
+        const el=viewer._sceneImageSourceEl;
+        const media=el?.querySelector?.('.sp-scene-image-media')||el?.closest?.('.sp-scene-image-media')||el;
+        const si=media?.querySelector?.('img')||(media?.tagName==='IMG'?media:null);
+        if(!si?.isConnected)return null; const r=si.getBoundingClientRect(); if(!r.width||!r.height)return null;
+        const rotation=Number.parseFloat(getComputedStyle(media||si).getPropertyValue('--sp-scene-image-rotation'))||0;
+        return {left:r.left,top:r.top,width:r.width,height:r.height,rotation};
+      })();
       img.src = src;
+        const syncBoundedFrame=()=>{frame?._fitSceneImageFrame?.();frame?._sceneImageReset?.();};
+        if(img.complete&&img.naturalWidth>0)requestAnimationFrame(syncBoundedFrame);
+        else img.addEventListener('load',()=>requestAnimationFrame(syncBoundedFrame),{once:true});
+        if('ResizeObserver' in window){
+          const ro=new ResizeObserver(()=>{if(!viewer.hidden&&img.naturalWidth>0)frame?._fitSceneImageFrame?.();});
+          ro.observe(viewer);viewer._imageBoundedRO?.disconnect?.();viewer._imageBoundedRO=ro;
+        }
       img.alt = alt || '';
       viewer.hidden = false;
       document.documentElement.classList.add('sp-scene-image-open');
-      viewer.querySelector('.sp-scene-image-viewer-close')?.focus({preventScroll:true});
+      if (openingSource) {
+        viewer.classList.add('is-object-transitioning','is-object-opening');
+        img.style.visibility='hidden';
+        const runOpening=()=>requestAnimationFrame(()=>requestAnimationFrame(async()=>{
+          frame?._fitSceneImageFrame?.();
+          const r=img.getBoundingClientRect();
+          const target=r.width?{left:r.left,top:r.top,width:r.width,height:r.height,rotation:0}:null;
+          if(target){
+            const ghost=document.createElement('img'); ghost.className='sp-scene-image-transition-ghost'; ghost.src=img.currentSrc||img.src; ghost.alt=''; document.body.appendChild(ghost);
+            const key=x=>({left:`${x.left}px`,top:`${x.top}px`,width:`${x.width}px`,height:`${x.height}px`,transform:`rotate(${x.rotation||0}deg)`});
+            const a=ghost.animate([key(openingSource),key(target)],{duration:360,easing:'cubic-bezier(.22,.74,.18,1)',fill:'forwards'});
+            await a.finished.catch(()=>{}); ghost.remove();
+          }
+          img.style.visibility=''; viewer.classList.remove('is-object-transitioning','is-object-opening');
+        }));
+        if(img.complete&&img.naturalWidth>0)runOpening(); else img.addEventListener('load',runOpening,{once:true});
+      }
+      // V116 — VIEW POINT must not leave keyboard focus on the × button.
+      // Otherwise Enter is also the button's native activation key and can close
+      // the viewer independently of VIEW POINT navigation.
+      const focusClose = viewer.querySelector('.sp-scene-image-viewer-close');
+      if (options?.mode === 'viewPoint' && frame) {
+        frame.tabIndex = -1;
+        frame.focus({preventScroll:true});
+      } else {
+        focusClose?.focus({preventScroll:true});
+      }
+    }
+
+    // Phase 6 / V99 — tap-driven VIEW POINT playback.
+    // The author chooses WHERE to look; the reader chooses WHEN to advance.
+    _openSceneImageViewRec(image, sourceEl=null) {
+      const pointSet=image?.viewPoints||image?.viewRec||null;
+      const rawPoints = Array.isArray(pointSet?.points) ? pointSet.points : [];
+      if (!image?.src || rawPoints.length < 1) {
+        if (image?.src) this._openSceneImage(image.src, image.alt || '', {sourceEl});
+        return;
+      }
+
+      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl});
+      const viewer = document.querySelector('.sp-scene-image-viewer');
+      const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
+      const img = viewer?.querySelector('.sp-scene-image-viewer-img');
+      if (!viewer || !frame || !img) return;
+      if (frame._viewRecCancel) frame._viewRecCancel();
+
+      const sourceSpace=pointSet?.coordinateSpace==='source';
+      const points = rawPoints.map(p=>{
+        if(sourceSpace){
+          if(p?.type==='fit')return{type:'fit'};
+          if(p?.rect){
+            const r=p.rect;return{type:'rect',x:Math.max(0,Math.min(.99,Number(r.x)||0)),y:Math.max(0,Math.min(.99,Number(r.y)||0)),width:Math.max(.01,Math.min(1,Number(r.width)||1)),height:Math.max(.01,Math.min(1,Number(r.height)||1))};
+          }
+          return{type:'focus',cx:Number.isFinite(Number(p?.cx))?Number(p.cx):.5,cy:Number.isFinite(Number(p?.cy))?Number(p.cy):.5,width:Math.max(.01,Math.min(1,Number(p?.width)||1)),height:Math.max(.01,Math.min(1,Number(p?.height)||1)),occupancy:Number.isFinite(Number(p?.occupancy))?Math.max(1,Math.min(8,Number(p.occupancy))):null};
+        }
+        // V99 compatibility: old device-relative point.
+        return{type:'legacy',cx:Number.isFinite(Number(p?.cx))?Number(p.cx):.5,cy:Number.isFinite(Number(p?.cy))?Number(p.cy):.5,scale:Math.max(1,Math.min(5,Number(p?.scale)||1))};
+      });
+      // V114 — keep the opening/first-point handoff separate from normal advancement.
+      // V112 assigned index=0 before point 1 had actually settled. That allowed the
+      // opening Enter/click to be interpreted as an advance/close. `initializing`
+      // blocks progression until point 1 is visibly in place.
+      let index=-1, raf=0, cancelled=false, moving=false, initializing=true;
+
+      const coords=(gaze)=>{
+        const bw=Math.max(1,img.clientWidth),bh=Math.max(1,img.clientHeight);
+        if(gaze.type==='fit')return{x:0,y:0,scale:1};
+        let scale=gaze.scale||1;
+        if(gaze.type==='rect'){
+          // V102 — source-rectangle playback. A focus view may never expose
+          // outside-image black space: zoom enough to cover this viewer, then
+          // center the authored source rectangle and clamp to the source edges.
+          const rw=Math.max(.01,gaze.width),rh=Math.max(.01,gaze.height);
+          // V107 — authored VIEW POINT stays in the bounded image viewport.
+          // Resolve the recorded source rectangle against that viewport exactly as V104 did.
+          // The V105 source-only scale (1/rw, 1/rh) over-amplified horizontal travel on
+          // portrait manga, especially on wide desktop screens.
+          const rectScale=Math.max(1,Math.max(frame.clientWidth/(bw*rw),frame.clientHeight/(bh*rh)));
+          scale=Math.min(12,rectScale);
+          const cx=Math.max(0,Math.min(1,gaze.x+rw/2)),cy=Math.max(0,Math.min(1,gaze.y+rh/2));
+          const rawX=(.5-cx)*bw*scale,rawY=(.5-cy)*bh*scale;
+          const maxX=Math.max(0,(bw*scale-frame.clientWidth)/2),maxY=Math.max(0,(bh*scale-frame.clientHeight)/2);
+          return{x:Math.max(-maxX,Math.min(maxX,rawX)),y:Math.max(-maxY,Math.min(maxY,rawY)),scale};
+        }
+        if(gaze.type==='focus'){
+          // Resolve the authored source-image region against THIS viewer.
+          // The same point therefore becomes a stronger zoom on a wide PC and
+          // a gentler zoom on a narrow phone when needed to show the same region.
+          const targetW=Math.max(1,bw*gaze.width),targetH=Math.max(1,bh*gaze.height);
+          const regionScale=Math.max(1,Math.min(8,Math.min(frame.clientWidth/targetW,frame.clientHeight/targetH)));
+          // V101 — preserve the authored visual occupancy as well as the source region.
+          // A huge desktop viewport must not flatten several viewpoints into the same row view.
+          // `occupancy` is the author's zoom relative to FIT, so it is device-independent.
+          scale=Math.max(regionScale, gaze.occupancy||1);
+        }
+        const cx=Number.isFinite(gaze.cx)?gaze.cx:.5,cy=Number.isFinite(gaze.cy)?gaze.cy:.5;
+        const rawX=(.5-cx)*bw*scale,rawY=(.5-cy)*bh*scale;
+        const maxX=Math.max(0,(bw*scale-frame.clientWidth)/2),maxY=Math.max(0,(bh*scale-frame.clientHeight)/2);
+        return{x:Math.max(-maxX,Math.min(maxX,rawX)),y:Math.max(-maxY,Math.min(maxY,rawY)),scale};
+      };
+      let current={x:0,y:0,scale:1};
+      const apply=(v)=>{current=v;img.style.transform=`translate3d(${v.x}px, ${v.y}px, 0) scale(${v.scale})`;frame.classList.toggle('is-zoomed',v.scale>1.01);};
+      const moveTo=(gaze,duration=420)=>{
+        if(raf)cancelAnimationFrame(raf);moving=true;
+        const from={...current},to=coords(gaze),started=performance.now(),ease=t=>1-Math.pow(1-t,3);
+        const tick=now=>{if(cancelled||viewer.hidden)return;const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);apply({x:from.x+(to.x-from.x)*e,y:from.y+(to.y-from.y)*e,scale:from.scale+(to.scale-from.scale)*e});if(q<1)raf=requestAnimationFrame(tick);else{raf=0;moving=false;}};raf=requestAnimationFrame(tick);
+      };
+      let onViewPointKey=null;
+      const cancel=()=>{cancelled=true;if(raf)cancelAnimationFrame(raf);raf=0;moving=false;frame._viewRecCancel=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing');frame.removeEventListener('click',advance,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
+      // Manual pinch / wheel / double-click hands the viewer to the reader completely.
+      // Do not resume VIEW POINT on the synthetic click that follows a drag.
+      frame._onViewPointManualControl=()=>cancel();
+      const advance=(event)=>{
+        const eventTarget=event?.target;
+        if(cancelled||viewer.hidden||frame._sceneImageMode==='viewPointFree'||eventTarget?.closest?.('.sp-scene-image-viewer-close'))return;
+        event?.preventDefault?.();event?.stopPropagation?.();event?.stopImmediatePropagation?.();
+        // Do not let the key/click that opened VIEW POINT also advance or close it.
+        if(initializing||moving)return;
+        if(index<points.length-1){
+          frame._sceneImageMode='viewPoint';
+          // V109 — do not refit/rewrite the viewport between authored points.
+          // Re-fitting here can force a layout/paint between two transforms and show up
+          // as a one-frame flash. Opening + actual resize already perform the fit.
+          index++;moveTo(points[index]);
+        }
+        // V116 — after the final authored point, the NEXT deliberate Enter/tap
+        // closes the viewer. This is intentional VIEW POINT completion, not native
+        // activation of the × button (focus is kept on the viewer frame above).
+        else{
+          const closeButton=viewer.querySelector('.sp-scene-image-viewer-close');
+          cancel();
+          closeButton?.click();
+          return;
+        }
+      };
+      frame._viewRecCancel=cancel;frame.classList.add('is-view-rec-playing');frame.addEventListener('click',advance,true);
+      // V111 — desktop keyboard parity: Enter advances VIEW POINT exactly like a tap.
+      // Once the reader takes manual zoom/pan control, VIEW POINT is cancelled, so Enter
+      // intentionally stops advancing as well.
+      onViewPointKey=(event)=>{
+        if(event.key!=='Enter'||event.repeat||cancelled||viewer.hidden||frame._sceneImageMode==='viewPointFree')return;
+        advance(event);
+      };
+      document.addEventListener('keydown',onViewPointKey,true);
+
+      const beginWhenReady=(attempt=0)=>{
+        if(cancelled||viewer.hidden)return;
+        const ready=img.naturalWidth>0&&img.clientWidth>2&&img.clientHeight>2&&frame.clientWidth>2&&frame.clientHeight>2;
+        if(!ready&&attempt<24){setTimeout(()=>beginWhenReady(attempt+1),16);return;}
+        requestAnimationFrame(()=>requestAnimationFrame(()=>{
+          if(cancelled||viewer.hidden)return;
+          frame?._fitSceneImageFrame?.();
+          apply({x:0,y:0,scale:1});
+          // V112 — opening VIEW POINT is itself the first step. The reader should
+          // not need an extra fullscreen click before keyboard/tap progression begins.
+          // Let the V110 pickup transition finish, then move straight to point 1.
+          if(index<0&&points.length){
+            // Wait for the V110 pickup animation, then establish point 1 as a real
+            // settled state. Only after that may Enter/tap advance to point 2.
+            setTimeout(()=>{
+              if(cancelled||viewer.hidden)return;
+              index=0;
+              moveTo(points[0]);
+              const release=()=>{
+                if(cancelled||viewer.hidden)return;
+                if(moving){setTimeout(release,24);return;}
+                initializing=false;
+              };
+              setTimeout(release,24);
+            },380);
+          }
+        }));
+      };
+      if(img.complete&&img.naturalWidth>0)beginWhenReady();else img.addEventListener('load',()=>beginWhenReady(),{once:true});
     }
 
     _appendSceneImage(container, scene, presentation, { history=false } = {}) {
@@ -3934,6 +4287,11 @@
 
       const media = document.createElement(history ? 'span' : 'div');
       media.className = history ? 'sp-history-scene-image-media' : 'sp-scene-image-media';
+      // V125 — keep public Player Scene-image object styling in sync with Studio.
+      // Rotation is intentionally clamped to the same authoring range used by Studio.
+      const rotation = Math.max(-20, Math.min(20, Number(image.rotation) || 0));
+      media.style.setProperty('--sp-scene-image-rotation', `${rotation}deg`);
+      if (image.shadow === true) media.classList.add('has-object-shadow');
 
       const img = document.createElement('img');
       img.alt = image.alt || '';
@@ -3988,7 +4346,38 @@
 
       img.src = image.src;
       media.appendChild(img);
-      wrap.appendChild(media);
+
+      const object = document.createElement(history ? 'span' : 'div');
+      object.className = history ? 'sp-history-scene-image-object' : 'sp-scene-image-object';
+      object.appendChild(media);
+      let caption = null;
+      if (image.caption === true && String(image.alt || '').trim()) {
+        caption = document.createElement(history ? 'span' : 'div');
+        caption.className = history ? 'sp-history-scene-image-caption' : 'sp-scene-image-caption';
+        caption.textContent = String(image.alt).trim();
+        object.appendChild(caption);
+      }
+      wrap.appendChild(object);
+
+      // V89 — keep a horizontal caption clear of the lowest rotated image corner.
+      // Rotation changes the visual bounding box without changing layout height,
+      // so derive only the extra downward reach and add that to the normal gap.
+      const updateCaptionClearance = () => {
+        if (!caption) return;
+        const w = media.offsetWidth || img.getBoundingClientRect().width || 0;
+        const h = media.offsetHeight || img.getBoundingClientRect().height || 0;
+        if (!w || !h) return;
+        const rad = Math.abs(rotation) * Math.PI / 180;
+        const rotatedHeight = Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad));
+        const extraBelow = Math.max(0, (rotatedHeight - h) / 2);
+        object.style.setProperty('--sp-scene-image-caption-clearance', `${extraBelow.toFixed(2)}px`);
+      };
+      img.addEventListener('load', updateCaptionClearance, {once:true});
+      if (typeof ResizeObserver !== 'undefined' && caption) {
+        const captionResizeObserver = new ResizeObserver(updateCaptionClearance);
+        captionResizeObserver.observe(media);
+      }
+      requestAnimationFrame(updateCaptionClearance);
 
       // Data/blob/cached images can already be complete before the load event
       // is observed by this render pass.
@@ -3997,15 +4386,20 @@
         refreshHistoryGeometryAfterImageLoad();
       }
 
-      if (image.fullscreen !== false) {
-        wrap.classList.add('is-zoomable');
+      const imageTapAction = image.tapAction || (image.fullscreen === false ? 'none' : 'fullscreen');
+      if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
+        const hasViewRec = imageTapAction === 'viewRec' && (image.viewPoints?.points||image.viewRec?.points)?.length > 0;
+        wrap.classList.add(hasViewRec ? 'is-view-rec' : 'is-zoomable');
         wrap.setAttribute('role','button');
         wrap.setAttribute('tabindex','0');
-        wrap.setAttribute('aria-label', image.alt ? `Open image: ${image.alt}` : 'Open image fullscreen');
+        wrap.setAttribute('aria-label', hasViewRec
+          ? (image.alt ? `Play VIEW REC: ${image.alt}` : 'Play VIEW REC')
+          : (image.alt ? `Open image: ${image.alt}` : 'Open image fullscreen'));
         const open = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          this._openSceneImage(image.src, image.alt || '');
+          if (hasViewRec) this._openSceneImageViewRec(image, wrap);
+          else this._openSceneImage(image.src, image.alt || '', {sourceEl:wrap});
         };
         wrap.addEventListener('click',open);
         wrap.addEventListener('keydown',(event)=>{
@@ -4174,6 +4568,88 @@
       }
     }
 
+
+    _renderRichText(node, scene, displayText = null) {
+      const source = String(displayText ?? scene?.text ?? '');
+      const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
+      const tables = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table') : [];
+      if (!ranges.length && !tables.length) { node.textContent = source; return false; }
+      node.textContent = '';
+      const tableById = new Map(tables.map(t => [String(t.id||''), t]));
+      const tableRanges = ranges.filter(r => r?.kind === 'table' && tableById.has(String(r.tableId||'')))
+        .map(r => ({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)}))
+        .sort((a,b)=>a.start-b.start);
+      const normal = ranges.filter(r => r?.kind !== 'table').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
+      const appendTextRange=(from,to)=>{
+        if(to<=from)return;
+        const cuts=new Set([from,to]);
+        normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
+        const points=[...cuts].sort((a,b)=>a-b);
+        for(let i=0;i<points.length-1;i++){
+          const a=points[i],b=points[i+1]; if(b<=a)continue;
+          const span=document.createElement('span');
+          const active=normal.filter(r=>r.start<=a&&r.end>=b);
+          const segmentText=source.slice(a,b);
+          // Rich Text Player v0.18: list markers live in canonical Scene text.
+          // Never synthesize a bullet from semantic ranges; that can decorate an
+          // unrelated repeated word when offsets were re-anchored fuzzily.
+          span.textContent=segmentText;
+          active.forEach(r=>{
+            if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}
+            if(r.kind==='quote')span.classList.add('sp-rich-quote');
+            if(r.kind==='listItem')span.classList.add('sp-rich-list-item');
+            if(r.kind==='paragraph')span.classList.add('sp-rich-paragraph');
+            if(r.kind==='span'&&r.style?.bold)span.classList.add('sp-rich-bold');
+            if(r.kind==='span'&&r.style?.italic)span.classList.add('sp-rich-italic');
+            if(r.kind==='span'&&r.style?.color)span.style.color=String(r.style.color);
+            if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
+            if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
+          });
+          node.appendChild(span);
+        }
+      };
+      let cursor=0;
+      tableRanges.forEach(r=>{
+        appendTextRange(cursor,r.start);
+        const table=tableById.get(String(r.tableId||''));
+        const card=document.createElement('div'); card.className='sp-rich-table-card';
+        const wrap=document.createElement('div'); wrap.className='sp-rich-table-scroll';
+        wrap.appendChild(this._buildRichTable(table)); card.appendChild(wrap);
+        // V25: no fullscreen affordance until the viewer contract is complete.
+        // Swallow table taps so they do not accidentally advance the Scene.
+        card.addEventListener('click',(e)=>{e.stopPropagation();});
+        node.appendChild(card); cursor=Math.max(cursor,r.end);
+      });
+      appendTextRange(cursor,source.length);
+      return true;
+    }
+
+    _buildRichTable(table) {
+      const el=document.createElement('table'); el.className='sp-rich-table';
+      const rows=Array.isArray(table?.rows)?table.rows:[]; const headerRows=Math.max(0,Number(table?.headerRows)||0);
+      rows.forEach((row,ri)=>{const tr=document.createElement('tr');(Array.isArray(row)?row:[]).forEach(cell=>{const c=document.createElement(ri<headerRows?'th':'td');c.textContent=String(cell??'');tr.appendChild(c);});el.appendChild(tr);});
+      return el;
+    }
+
+    _openRichTable(table) {
+      const overlay=document.createElement('div'); overlay.className='sp-rich-table-overlay'; overlay.setAttribute('role','dialog'); overlay.setAttribute('aria-modal','true');
+      const panel=document.createElement('div'); panel.className='sp-rich-table-full';
+      const head=document.createElement('div'); head.className='sp-rich-table-full-head';
+      const title=document.createElement('strong'); title.textContent='表';
+      const close=document.createElement('button'); close.type='button'; close.textContent='×'; close.setAttribute('aria-label','閉じる');
+      head.append(title,close); const scroll=document.createElement('div'); scroll.className='sp-rich-table-full-scroll'; scroll.appendChild(this._buildRichTable(table)); panel.append(head,scroll); overlay.appendChild(panel);
+      const previousOverflow=document.documentElement.style.overflow;
+      const dismiss=()=>{document.removeEventListener('keydown',onKey,true);document.documentElement.style.overflow=previousOverflow;overlay.remove();};
+      const onKey=(e)=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();dismiss();}};
+      close.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();dismiss();});
+      overlay.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();if(e.target===overlay)dismiss();});
+      panel.addEventListener('click',e=>e.stopPropagation());
+      document.addEventListener('keydown',onKey,true);
+      document.documentElement.style.overflow='hidden';
+      document.body.appendChild(overlay);
+      requestAnimationFrame(()=>{try{close.focus({preventScroll:true});}catch(_){close.focus();}});
+    }
+
     _sceneNode(scene, active, age) {
       const article = document.createElement('article');
       article.className = `sp-scene sp-type-${scene.type}`;
@@ -4235,7 +4711,7 @@
           if (presentation.chat?.bubbleColor) bubble.style.background = presentation.chat.bubbleColor;
           const text = document.createElement('div');
           text.className = 'sp-text';
-          text.textContent = chatDisplayText(scene.text);
+          this._renderRichText(text, scene, chatDisplayText(scene.text));
           this._applyTextStyle(text, presentation.text || {}, false);
           if (presentation.chat?.bubbleTextColor) text.style.setProperty('color', String(presentation.chat.bubbleTextColor), 'important');
           bubble.appendChild(text);
@@ -4247,7 +4723,7 @@
         if (typeof scene.text === 'string' && scene.text.length) {
           const text = document.createElement('div');
           text.className = 'sp-text';
-          text.textContent = scene.text;
+          this._renderRichText(text, scene);
           this._applyTextStyle(text, presentation.text || {}, false);
           if(String(presentation.frame?.type||'').startsWith('handdrawn-')){
             const frame=document.createElement('div');
@@ -4431,7 +4907,7 @@
       // or because another Scene is revealed above/below it.
       this._playEntranceEffectOnce(article);
 
-      if (textNode && typing?.enabled && typeof scene.text === 'string' && scene.text.length) {
+      if (textNode && typing?.enabled && !scene.richText?.ranges?.length && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
         this._startTyping(scene, textNode, typing);
       }
 
