@@ -219,7 +219,7 @@
         </header>
         <main class="sp-stage" tabindex="0" aria-live="polite">
           <div class="sp-scenes"></div>
-          <span class="sp-tap-hint">TAP</span>
+          <button class="sp-tap-hint" type="button" aria-label="Next scene">TAP</button>
         </main>
         <section class="sp-history" hidden aria-label="Past scenes">
           <div class="sp-history-top">
@@ -403,20 +403,17 @@
       });
       this._on(this.els.historyScroll, 'scroll', () => this._scheduleHistoryDepth(), { passive: true });
 
-      // V134 — Keep Studio Preview aligned with Public / Local Player: the visible
-      // TAP label has an invisible 32px Scene-advance safe zone. Its appearance is
-      // unchanged; taps in this area must never open VIEW POINT / fullscreen.
-      const isTapAdvanceSafeZone = (e) => {
-        const hint = this.els.tapHint;
-        if (!hint) return false;
-        const x = Number(e?.clientX);
-        const y = Number(e?.clientY);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
-        const rect = hint.getBoundingClientRect();
-        const pad = 32;
-        return x >= rect.left - pad && x <= rect.right + pad
-          && y >= rect.top - pad && y <= rect.bottom + pad;
-      };
+      // V135 — TAP itself is the highest-priority Scene-advance control.
+      // Its visible design stays unchanged; CSS expands only its invisible hit area.
+      const isTapAdvanceSafeZone = (e) => !!e?.target?.closest?.('.sp-tap-hint');
+      this._on(this.els.tapHint, 'click', (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (this.historyOpen || this.ended) return;
+        this.unlockAudio(true);
+        if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
+        this.next();
+      });
 
       // Live Editor desktop selection guard. A drag that starts on editable text can
       // finish outside the text node; browsers may then synthesize a stage click.
