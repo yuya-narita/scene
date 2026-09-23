@@ -195,8 +195,10 @@
 
 .sp-tap-hint{
   position:fixed;right:20px;bottom:calc(var(--sp-footer-h) + 4px + env(safe-area-inset-bottom));
-  color:var(--sp-sub);font-size:9px;font-weight:800;letter-spacing:.22em;opacity:.5;pointer-events:none
+  color:var(--sp-sub);font-size:9px;font-weight:800;letter-spacing:.22em;opacity:.5;pointer-events:auto;
+  z-index:60;background:none;border:0;padding:0;margin:0;font-family:inherit;line-height:normal;cursor:pointer;
 }
+.sp-tap-hint::before{content:"";position:absolute;inset:-32px}
 .sp-no-footer .sp-tap-hint{bottom:calc(20px + env(safe-area-inset-bottom))}
 
 .sp-footer{
@@ -665,6 +667,7 @@
   letter-spacing:.15em;
 }
 
+/* Keep frame fitting independent from transient entrance transforms. */
 .sp-handdrawn-frame.sp-frame-measuring>.sp-text,
 .sp-scene.sp-layout-measuring .sp-text{
   animation:none!important;
@@ -953,7 +956,11 @@
 .sp-scene.sp-fx-play[data-effect="emphasis"] .sp-text{animation-duration:var(--sp-effect-duration,.7s)!important}
 
 /* Background Scene transition duration. */
-.sp-bg-layer{transition-property:opacity,filter!important;transition-duration:var(--sp-bg-transition-duration,700ms),.45s!important;transition-timing-function:cubic-bezier(.37,0,.63,1),ease!important}
+.sp-bg-layer{
+  transition-property:opacity,filter!important;
+  transition-duration:var(--sp-bg-transition-duration,700ms),.45s!important;
+  transition-timing-function:cubic-bezier(.37,0,.63,1),ease!important;
+}
 
 /* Disappear motion parity with the current Studio preview.
    UP intentionally uses the same Scene-level transform as Studio.
@@ -1061,289 +1068,13 @@
 .sp-scene[data-view="void"] .sp-subtext{text-align:center!important;color:rgba(244,241,251,.42)}
 
 
-/* Local prototype — Chat Scene v0.2
-   Bubble/icon styling only. Existing text alignment decides the side:
-   align:right -> right bubble, everything else -> left bubble. */
-.sp-scene[data-view="chat"]{
-  text-align:left!important;
+/* Core fix — delayed entrance effects must stay in their FROM state
+   during presentation.effectTiming.delay.
+   Without backwards fill, the text is painted normally during the delay,
+   then jumps to the first keyframe (e.g. blur/opacity) when animation starts. */
+.sp-scene.sp-fx-play .sp-text{
+  animation-fill-mode:both!important;
 }
-.sp-scene[data-view="chat"] .sp-chat-row{
-  display:flex;
-  align-items:flex-end;
-  gap:10px;
-  width:min(72%,560px);
-  margin-left:0;
-  margin-right:auto;
-}
-.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-row{
-  flex-direction:row-reverse;
-  margin-left:auto;
-  margin-right:0;
-}
-.sp-scene[data-view="chat"] .sp-chat-icon{
-  width:42px;
-  height:42px;
-  flex:0 0 42px;
-  border-radius:50%;
-  overflow:hidden;
-  display:grid;
-  place-items:center;
-  background:var(--sp-panel);
-  border:1px solid var(--sp-line);
-  font:700 15px/1 var(--sp-font-sans);
-  color:var(--sp-sub);
-  box-shadow:0 2px 8px rgba(0,0,0,.12);
-}
-.sp-scene[data-view="chat"] .sp-chat-icon img{
-  width:100%!important;
-  height:100%!important;
-  max-width:100%!important;
-  max-height:100%!important;
-  object-fit:cover!important;
-  display:block!important;
-}
-.sp-scene[data-view="chat"] .sp-chat-body{
-  display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  min-width:0;
-  max-width:calc(100% - 52px);
-}
-.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-body{
-  align-items:flex-end;
-}
-.sp-scene[data-view="chat"] .sp-chat-speaker{
-  margin:0 8px 6px!important;
-  font-family:var(--sp-font-sans)!important;
-  font-size:12px!important;
-  line-height:1.25!important;
-  letter-spacing:.02em!important;
-  color:var(--sp-sub)!important;
-  text-align:left!important;
-}
-.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-speaker{
-  text-align:right!important;
-}
-.sp-scene[data-view="chat"] .sp-chat-bubble{
-  position:relative;
-  display:inline-block;
-  max-width:100%;
-  padding:11px 15px;
-  border-radius:18px 18px 18px 6px;
-  background:var(--sp-panel);
-  border:1px solid var(--sp-line);
-  box-shadow:0 4px 14px rgba(0,0,0,.10);
-}
-.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-bubble{
-  border-radius:18px 18px 6px 18px;
-  background:color-mix(in srgb,var(--sp-text) 12%,var(--sp-panel));
-}
-.sp-scene[data-view="chat"] .sp-chat-bubble::after{
-  content:"";
-  position:absolute;
-  left:-5px;
-  bottom:8px;
-  width:9px;
-  height:9px;
-  background:inherit;
-  border-left:1px solid var(--sp-line);
-  border-bottom:1px solid var(--sp-line);
-  transform:rotate(45deg);
-}
-.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-bubble::after{
-  left:auto;
-  right:-5px;
-  transform:rotate(225deg);
-}
-.sp-scene[data-view="chat"] .sp-chat-bubble .sp-text{
-  position:relative;
-  z-index:1;
-  margin:0!important;
-  max-width:none!important;
-  text-align:left!important;
-  font-size:clamp(16px,3.4vw,21px)!important;
-  line-height:1.55!important;
-  letter-spacing:.015em!important;
-  font-family:var(--sp-font-sans)!important;
-  font-weight:500!important;
-}
-.sp-core[data-display="solo"] .sp-scene[data-view="chat"] .sp-chat-row{
-  width:min(76%,600px);
-}
-@media(max-width:520px){
-  .sp-scene[data-view="chat"] .sp-chat-row{width:84%;gap:8px}
-  .sp-scene[data-view="chat"] .sp-chat-icon{width:36px;height:36px;flex-basis:36px}
-  .sp-scene[data-view="chat"] .sp-chat-body{max-width:calc(100% - 44px)}
-  .sp-scene[data-view="chat"] .sp-chat-bubble{padding:9px 12px}
-  .sp-scene[data-view="chat"] .sp-chat-bubble .sp-text{font-size:clamp(15px,4.1vw,18px)!important}
-  .sp-core[data-display="solo"] .sp-scene[data-view="chat"] .sp-chat-row{width:88%}
-}
-
-
-/* Local prototype v0.7 — mobile/iPhone Chat Scene player parity */
-@media (max-width: 640px){
-  .sp-scene[data-view="chat"]{
-    width:100%!important;
-    max-width:none!important;
-    padding-left:max(12px,env(safe-area-inset-left))!important;
-    padding-right:max(12px,env(safe-area-inset-right))!important;
-    box-sizing:border-box!important;
-  }
-  .sp-scene[data-view="chat"] .sp-chat-row{
-    width:min(88%,520px)!important;
-    max-width:88%!important;
-  }
-  .sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-row{
-    margin-left:auto!important;
-    margin-right:0!important;
-  }
-  .sp-scene[data-view="chat"] .sp-chat-icon{
-    width:36px!important;height:36px!important;flex:0 0 36px!important;
-  }
-  .sp-scene[data-view="chat"] .sp-chat-icon img{
-    width:100%!important;height:100%!important;object-fit:cover!important;
-  }
-  .sp-scene[data-view="chat"] .sp-chat-body{
-    max-width:calc(100% - 44px)!important;min-width:0!important;
-  }
-  .sp-scene[data-view="chat"] .sp-chat-bubble{
-    max-width:100%!important;overflow-wrap:anywhere!important;word-break:break-word!important;
-  }
-  .sp-scene[data-view="chat"] .sp-chat-speaker{
-    max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;
-  }
-}
-
-
-/* Local prototype v0.10 — history drum keeps Chat Scene presentation */
-.sp-history-item.sp-history-chat{
-  min-height:clamp(108px,20vh,184px);
-}
-.sp-history-item.sp-history-chat .sp-history-body{
-  width:100%;
-}
-.sp-history-chat-row{
-  display:flex;
-  align-items:flex-end;
-  gap:10px;
-  width:min(86%,620px);
-  max-width:86%;
-}
-.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-row{
-  margin-left:auto;
-  flex-direction:row-reverse;
-}
-.sp-history-chat-icon{
-  width:40px;
-  height:40px;
-  flex:0 0 40px;
-  border-radius:50%;
-  overflow:hidden;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:16px;
-  background:rgba(255,255,255,.72);
-  border:1px solid var(--sp-line);
-}
-.sp-history-chat-icon img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
-}
-.sp-history-chat-body{
-  min-width:0;
-  max-width:calc(100% - 50px);
-  display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  gap:5px;
-}
-.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-body{
-  align-items:flex-end;
-}
-.sp-history-chat-speaker{
-  display:block;
-  max-width:100%;
-  color:var(--sp-sub);
-  font-size:clamp(10px,2.2vw,13px);
-  line-height:1.35;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.sp-history-chat-bubble{
-  position:relative;
-  display:block;
-  width:max-content;
-  max-width:100%;
-  padding:10px 14px;
-  border:1px solid var(--sp-line);
-  border-radius:16px 16px 16px 5px;
-  background:var(--sp-panel);
-  box-shadow:0 4px 14px rgba(0,0,0,.05);
-}
-.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-bubble{
-  border-radius:16px 16px 5px 16px;
-}
-.sp-history-chat-text{
-  display:block;
-  max-width:100%;
-  white-space:pre-wrap;
-  overflow-wrap:anywhere;
-  font-family:inherit;
-  font-size:clamp(15px,3.7vw,22px);
-  line-height:1.55;
-  letter-spacing:.01em;
-}
-.sp-history-chat-bubble::after{
-  content:"";
-  position:absolute;
-  left:-6px;
-  bottom:8px;
-  width:10px;
-  height:10px;
-  background:inherit;
-  border-left:1px solid var(--sp-line);
-  border-bottom:1px solid var(--sp-line);
-  transform:rotate(45deg);
-}
-.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-bubble::after{
-  left:auto;
-  right:-6px;
-  transform:rotate(225deg);
-}
-@media (max-width:520px){
-  .sp-history-item.sp-history-chat{
-    grid-template-columns:34px minmax(0,1fr);
-    min-height:16vh;
-  }
-  .sp-history-chat-row{
-    width:92%;
-    max-width:92%;
-    gap:8px;
-  }
-  .sp-history-chat-icon{
-    width:34px;
-    height:34px;
-    flex-basis:34px;
-  }
-  .sp-history-chat-body{
-    max-width:calc(100% - 42px);
-  }
-  .sp-history-chat-bubble{
-    padding:8px 11px;
-    border-radius:14px 14px 14px 5px;
-  }
-  .sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-bubble{
-    border-radius:14px 14px 5px 14px;
-  }
-  .sp-history-chat-text{
-    font-size:clamp(14px,4.2vw,18px);
-  }
-}
-
 
 /* Local prototype v0.11 — foreground Scene image */
 .sp-scene-image{
@@ -1784,6 +1515,289 @@ html.sp-scene-image-open body{
   }
 }
 
+/* Local prototype — Chat Scene v0.2
+   Bubble/icon styling only. Existing text alignment decides the side:
+   align:right -> right bubble, everything else -> left bubble. */
+.sp-scene[data-view="chat"]{
+  text-align:left!important;
+}
+.sp-scene[data-view="chat"] .sp-chat-row{
+  display:flex;
+  align-items:flex-end;
+  gap:10px;
+  width:min(72%,560px);
+  margin-left:0;
+  margin-right:auto;
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-row{
+  flex-direction:row-reverse;
+  margin-left:auto;
+  margin-right:0;
+}
+.sp-scene[data-view="chat"] .sp-chat-icon{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  border-radius:50%;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  background:var(--sp-panel);
+  border:1px solid var(--sp-line);
+  font:700 15px/1 var(--sp-font-sans);
+  color:var(--sp-sub);
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+}
+.sp-scene[data-view="chat"] .sp-chat-icon img{
+  width:100%!important;
+  height:100%!important;
+  max-width:100%!important;
+  max-height:100%!important;
+  object-fit:cover!important;
+  display:block!important;
+}
+.sp-scene[data-view="chat"] .sp-chat-body{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  min-width:0;
+  max-width:calc(100% - 52px);
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-body{
+  align-items:flex-end;
+}
+.sp-scene[data-view="chat"] .sp-chat-speaker{
+  margin:0 8px 6px!important;
+  font-family:var(--sp-font-sans)!important;
+  font-size:12px!important;
+  line-height:1.25!important;
+  letter-spacing:.02em!important;
+  color:var(--sp-sub)!important;
+  text-align:left!important;
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-speaker{
+  text-align:right!important;
+}
+.sp-scene[data-view="chat"] .sp-chat-bubble{
+  position:relative;
+  display:inline-block;
+  max-width:100%;
+  padding:11px 15px;
+  border-radius:18px 18px 18px 6px;
+  background:var(--sp-panel);
+  border:1px solid var(--sp-line);
+  box-shadow:0 4px 14px rgba(0,0,0,.10);
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-bubble{
+  border-radius:18px 18px 6px 18px;
+  background:color-mix(in srgb,var(--sp-text) 12%,var(--sp-panel));
+}
+.sp-scene[data-view="chat"] .sp-chat-bubble::after{
+  content:"";
+  position:absolute;
+  left:-5px;
+  bottom:8px;
+  width:9px;
+  height:9px;
+  background:inherit;
+  border-left:1px solid var(--sp-line);
+  border-bottom:1px solid var(--sp-line);
+  transform:rotate(45deg);
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-bubble::after{
+  left:auto;
+  right:-5px;
+  transform:rotate(225deg);
+}
+.sp-scene[data-view="chat"] .sp-chat-bubble .sp-text{
+  position:relative;
+  z-index:1;
+  margin:0!important;
+  max-width:none!important;
+  text-align:left!important;
+  font-size:clamp(16px,3.4vw,21px)!important;
+  line-height:1.55!important;
+  letter-spacing:.015em!important;
+  font-family:var(--sp-font-sans)!important;
+  font-weight:500!important;
+}
+.sp-core[data-display="solo"] .sp-scene[data-view="chat"] .sp-chat-row{
+  width:min(76%,600px);
+}
+@media(max-width:520px){
+  .sp-scene[data-view="chat"] .sp-chat-row{width:84%;gap:8px}
+  .sp-scene[data-view="chat"] .sp-chat-icon{width:36px;height:36px;flex-basis:36px}
+  .sp-scene[data-view="chat"] .sp-chat-body{max-width:calc(100% - 44px)}
+  .sp-scene[data-view="chat"] .sp-chat-bubble{padding:9px 12px}
+  .sp-scene[data-view="chat"] .sp-chat-bubble .sp-text{font-size:clamp(15px,4.1vw,18px)!important}
+  .sp-core[data-display="solo"] .sp-scene[data-view="chat"] .sp-chat-row{width:88%}
+}
+
+
+/* Local prototype v0.7 — mobile/iPhone Chat Scene player parity */
+@media (max-width: 640px){
+  .sp-scene[data-view="chat"]{
+    width:100%!important;
+    max-width:none!important;
+    padding-left:max(12px,env(safe-area-inset-left))!important;
+    padding-right:max(12px,env(safe-area-inset-right))!important;
+    box-sizing:border-box!important;
+  }
+  .sp-scene[data-view="chat"] .sp-chat-row{
+    width:min(88%,520px)!important;
+    max-width:88%!important;
+  }
+  .sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-row{
+    margin-left:auto!important;
+    margin-right:0!important;
+  }
+  .sp-scene[data-view="chat"] .sp-chat-icon{
+    width:36px!important;height:36px!important;flex:0 0 36px!important;
+  }
+  .sp-scene[data-view="chat"] .sp-chat-icon img{
+    width:100%!important;height:100%!important;object-fit:cover!important;
+  }
+  .sp-scene[data-view="chat"] .sp-chat-body{
+    max-width:calc(100% - 44px)!important;min-width:0!important;
+  }
+  .sp-scene[data-view="chat"] .sp-chat-bubble{
+    max-width:100%!important;overflow-wrap:anywhere!important;word-break:break-word!important;
+  }
+  .sp-scene[data-view="chat"] .sp-chat-speaker{
+    max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;
+  }
+}
+
+
+/* Local prototype v0.10 — history drum keeps Chat Scene presentation */
+.sp-history-item.sp-history-chat{
+  min-height:clamp(108px,20vh,184px);
+}
+.sp-history-item.sp-history-chat .sp-history-body{
+  width:100%;
+}
+.sp-history-chat-row{
+  display:flex;
+  align-items:flex-end;
+  gap:10px;
+  width:min(86%,620px);
+  max-width:86%;
+}
+.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-row{
+  margin-left:auto;
+  flex-direction:row-reverse;
+}
+.sp-history-chat-icon{
+  width:40px;
+  height:40px;
+  flex:0 0 40px;
+  border-radius:50%;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  background:rgba(255,255,255,.72);
+  border:1px solid var(--sp-line);
+}
+.sp-history-chat-icon img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.sp-history-chat-body{
+  min-width:0;
+  max-width:calc(100% - 50px);
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:5px;
+}
+.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-body{
+  align-items:flex-end;
+}
+.sp-history-chat-speaker{
+  display:block;
+  max-width:100%;
+  color:var(--sp-sub);
+  font-size:clamp(10px,2.2vw,13px);
+  line-height:1.35;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.sp-history-chat-bubble{
+  position:relative;
+  display:block;
+  width:max-content;
+  max-width:100%;
+  padding:10px 14px;
+  border:1px solid var(--sp-line);
+  border-radius:16px 16px 16px 5px;
+  background:var(--sp-panel);
+  box-shadow:0 4px 14px rgba(0,0,0,.05);
+}
+.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-bubble{
+  border-radius:16px 16px 5px 16px;
+}
+.sp-history-chat-text{
+  display:block;
+  max-width:100%;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  font-family:inherit;
+  font-size:clamp(15px,3.7vw,22px);
+  line-height:1.55;
+  letter-spacing:.01em;
+}
+.sp-history-chat-bubble::after{
+  content:"";
+  position:absolute;
+  left:-6px;
+  bottom:8px;
+  width:10px;
+  height:10px;
+  background:inherit;
+  border-left:1px solid var(--sp-line);
+  border-bottom:1px solid var(--sp-line);
+  transform:rotate(45deg);
+}
+.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-bubble::after{
+  left:auto;
+  right:-6px;
+  transform:rotate(225deg);
+}
+@media (max-width:520px){
+  .sp-history-item.sp-history-chat{
+    grid-template-columns:34px minmax(0,1fr);
+    min-height:16vh;
+  }
+  .sp-history-chat-row{
+    width:92%;
+    max-width:92%;
+    gap:8px;
+  }
+  .sp-history-chat-icon{
+    width:34px;
+    height:34px;
+    flex-basis:34px;
+  }
+  .sp-history-chat-body{
+    max-width:calc(100% - 42px);
+  }
+  .sp-history-chat-bubble{
+    padding:8px 11px;
+    border-radius:14px 14px 14px 5px;
+  }
+  .sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-bubble{
+    border-radius:14px 14px 5px 14px;
+  }
+  .sp-history-chat-text{
+    font-size:clamp(14px,4.2vw,18px);
+  }
+}
+
 
 /* =========================================================
    A-Hako expressive text effects v1 — music / lyrics set
@@ -1907,3 +1921,186 @@ html.sp-scene-image-open body{
 }
 .sp-scene.is-disappearing.is-disappear-shatter{animation:spDisappearShatter var(--sp-disappear-fade,700ms) cubic-bezier(.18,.7,.2,1) both!important;transition:none!important}
 .sp-scene.is-disappearing.is-disappear-explode{animation:spDisappearExplode var(--sp-disappear-fade,700ms) cubic-bezier(.12,.76,.14,1) both!important;transition:none!important}
+/* Background motion v2 — subtle diagonal travel and phase continuity. */
+.sp-motion-slowZoom{animation:sp-bg-slowzoom var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-zoomOut{animation:sp-bg-zoomout var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-breath{animation:sp-bg-breath var(--sp-bg-duration,8000ms) ease-in-out var(--sp-bg-delay,0ms) infinite alternate}
+.sp-motion-panLeft{animation:sp-bg-pan-left var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panRight{animation:sp-bg-pan-right var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panUp{animation:sp-bg-pan-up var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panDown{animation:sp-bg-pan-down var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panUpLeft{animation:sp-bg-pan-up-left var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panUpRight{animation:sp-bg-pan-up-right var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panDownLeft{animation:sp-bg-pan-down-left var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-panDownRight{animation:sp-bg-pan-down-right var(--sp-bg-duration,12000ms) ease-in-out var(--sp-bg-delay,0ms) both}
+.sp-motion-parallax{animation:sp-bg-parallax var(--sp-bg-duration,9000ms) ease-in-out var(--sp-bg-delay,0ms) infinite alternate}
+@keyframes sp-bg-zoomout{from{transform:scale(var(--sp-bg-scale-from,1.08))}to{transform:scale(var(--sp-bg-scale-to,1))}}
+@keyframes sp-bg-pan-up-left{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),var(--sp-bg-pan,4%))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),calc(var(--sp-bg-pan,4%) * -1))}}
+@keyframes sp-bg-pan-up-right{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),var(--sp-bg-pan,4%))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),calc(var(--sp-bg-pan,4%) * -1))}}
+@keyframes sp-bg-pan-down-left{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),calc(var(--sp-bg-pan,4%) * -1))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),var(--sp-bg-pan,4%))}}
+@keyframes sp-bg-pan-down-right{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),calc(var(--sp-bg-pan,4%) * -1))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),var(--sp-bg-pan,4%))}}
+
+
+/* Rich Text v0.1 — semantic paste rendering */
+.sp-text .sp-rich-bold{font-weight:800}
+.sp-text .sp-rich-italic{font-style:italic}
+/* Rich Text Phase 4 — Heading semantics / Neutral visual theme (V84).
+   Meaning and appearance stay separate: .scene stores only heading + level.
+   Neutral adds a monochrome visual cue so headings are recognisable at a glance,
+   while future Literary / SF / Horror / Pop themes can fully override these classes.
+   Headings remain inline semantic ranges: no forced line break. */
+.sp-text .sp-rich-heading{
+  display:inline;
+  margin:0;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+  line-height:inherit;
+  -webkit-box-decoration-break:clone;
+  box-decoration-break:clone;
+}
+/* Neutral H1: strongest cue — a quiet ink-tinted highlight, not a card. */
+.sp-text .sp-rich-h1{
+  font-size:1.34em;
+  font-weight:850;
+  letter-spacing:.025em;
+  padding:.02em .12em .04em;
+  background:color-mix(in srgb,currentColor 9%,transparent);
+}
+/* Neutral H2: section cue — a simple monochrome underline. */
+.sp-text .sp-rich-h2{
+  font-size:1.18em;
+  font-weight:800;
+  letter-spacing:.018em;
+  padding:0 .03em .035em;
+  border-bottom:.075em solid color-mix(in srgb,currentColor 48%,transparent);
+}
+/* Neutral H3: light cue — dotted underline + restrained weight/tracking. */
+.sp-text .sp-rich-h3{
+  font-size:1.07em;
+  font-weight:750;
+  letter-spacing:.035em;
+  padding-bottom:.025em;
+  text-decoration-line:underline;
+  text-decoration-style:dotted;
+  text-decoration-thickness:.07em;
+  text-underline-offset:.16em;
+  text-decoration-color:color-mix(in srgb,currentColor 48%,transparent);
+}
+.sp-text .sp-rich-quote{display:block;margin:.45em 0;padding:.2em 0 .2em .8em;border-left:3px solid currentColor;opacity:.78}
+.sp-text .sp-rich-list-item{display:inline;padding-left:0}
+.sp-text .sp-rich-paragraph{ }
+.sp-rich-table-card{display:block;width:min(100%,34em);margin:.65em 0;padding:.55em;border:1px solid rgba(80,80,80,.22);border-radius:12px;background:rgba(255,255,255,.72);color:inherit;text-align:left;font:inherit;cursor:default}
+.sp-rich-table-scroll{overflow:hidden;max-height:10.5em}
+.sp-rich-table{width:100%;border-collapse:collapse;font-size:.62em;line-height:1.45;background:transparent}
+.sp-rich-table th,.sp-rich-table td{padding:.45em .55em;border:1px solid rgba(80,80,80,.22);vertical-align:top;white-space:normal}
+.sp-rich-table th{font-weight:800;background:rgba(80,80,80,.08)}
+.sp-rich-table-hint{display:block;margin-top:.45em;text-align:right;font-size:9px;letter-spacing:.08em;opacity:.55}
+.sp-rich-table-overlay{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.sp-rich-table-full{width:min(1100px,96vw);max-height:92dvh;display:flex;flex-direction:column;border-radius:20px;background:#fff;color:#17191d;box-shadow:0 24px 80px rgba(0,0,0,.35);overflow:hidden}
+.sp-rich-table-full-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #e5e7eb}.sp-rich-table-full-head button{width:38px;height:38px;border:0;border-radius:50%;background:#f0f1f3;font-size:24px;cursor:pointer}
+.sp-rich-table-full-scroll{overflow:auto;padding:16px}.sp-rich-table-full .sp-rich-table{min-width:520px;font-size:15px}.sp-rich-table-full .sp-rich-table th,.sp-rich-table-full .sp-rich-table td{padding:10px 12px}
+
+/* Rich Text Player v0.6 — keep list identity after Splitter punctuation cleanup. */
+.sp-text .sp-rich-list-item{display:inline;position:static;padding-left:0!important}
+.sp-text .sp-rich-list-item::before{content:none!important}
+
+
+/* Rich Text Player v0.13 — table contrast follows Player theme. */
+.sp-core[data-theme="dark"] .sp-rich-table-card,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-rich-table-card{
+  background:rgba(18,20,25,.92);
+  border-color:rgba(255,255,255,.24);
+  color:#f4f1fb;
+}
+.sp-core[data-theme="dark"] .sp-rich-table th,
+.sp-core[data-theme="dark"] .sp-rich-table td,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-rich-table th,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-rich-table td{border-color:rgba(255,255,255,.22);}
+.sp-core[data-theme="dark"] .sp-rich-table th,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-rich-table th{background:rgba(255,255,255,.10);}
+
+/* Rich Text Player v0.19 — canonical list lines own bullets + newlines. */
+.sp-text .sp-rich-list-item{display:inline!important;position:static!important;padding-left:0!important}
+.sp-text .sp-rich-list-item::before{content:none!important}
+
+
+/* Rich Text Player V24 — long-table fullscreen viewer */
+.sp-rich-table-overlay{position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;z-index:2147483646!important;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))!important;box-sizing:border-box;overscroll-behavior:contain;touch-action:pan-x pan-y}
+.sp-rich-table-full{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:16px!important;min-width:0;min-height:0}
+.sp-rich-table-full-scroll{flex:1;min-width:0;min-height:0;overflow:auto!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:16px!important}
+.sp-rich-table-full .sp-rich-table{width:max-content!important;min-width:100%!important;max-width:none!important;font-size:16px!important;line-height:1.5}
+.sp-rich-table-full .sp-rich-table th,.sp-rich-table-full .sp-rich-table td{min-width:7em;max-width:28em;white-space:normal;overflow-wrap:anywhere}
+.sp-rich-table-full-head{flex:0 0 auto;position:sticky;top:0;z-index:2}
+.sp-rich-table-expand{margin-left:auto;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:.2em .35em}
+@media (max-width:600px){.sp-rich-table-overlay{padding:max(6px,env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))!important}.sp-rich-table-full{border-radius:12px!important}.sp-rich-table-full-scroll{padding:10px!important}.sp-rich-table-full .sp-rich-table{font-size:15px!important}.sp-rich-table-full .sp-rich-table th,.sp-rich-table-full .sp-rich-table td{min-width:6.5em}}
+
+
+/* V88 — Scene image caption belongs below the image, never beside it. */
+.sp-scene-image-object,
+.sp-history-scene-image-object{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  width:max-content;
+  max-width:100%;
+  min-width:0;
+}
+.sp-scene-image-caption,
+.sp-history-scene-image-caption{
+  display:block;
+  width:100%;
+  max-width:100%;
+  margin:.62em 0 0!important;
+  padding:0 .35em;
+  box-sizing:border-box;
+  color:inherit;
+  font-family:var(--sp-font-sans,system-ui,sans-serif);
+  font-size:clamp(10px,.34em,13px);
+  line-height:1.55;
+  letter-spacing:.03em;
+  text-align:center!important;
+  opacity:.62;
+  overflow-wrap:anywhere;
+}
+/* Slightly stronger object shadow so it reads on pale Scene backgrounds. */
+.sp-scene-image-media.has-object-shadow img,
+.sp-history-scene-image-media.has-object-shadow img{
+  filter:drop-shadow(0 11px 12px rgba(20,18,16,.30)) drop-shadow(0 3px 3px rgba(20,18,16,.20))!important;
+}
+
+
+/* V89 — auto-clear caption below a rotated Scene image while keeping caption horizontal. */
+.sp-scene-image-caption,
+.sp-history-scene-image-caption{
+  margin-top:calc(.62em + var(--sp-scene-image-caption-clearance, 0px))!important;
+}
+
+/* V136 — restore Scene image rotation lost in V135 CSS packaging. */
+.sp-scene-image-media,
+.sp-history-scene-image-media{
+  transform:rotate(var(--sp-scene-image-rotation,0deg));
+  transform-origin:center center;
+}
+.sp-scene-image.is-zoomable .sp-scene-image-media::after,
+.sp-history-scene-image.is-zoomable .sp-history-scene-image-media::after{
+  transform:rotate(calc(-1 * var(--sp-scene-image-rotation,0deg)));
+}
+
+/* V137 — restore V110 Scene-image pickup/return transition lost from public CSS packaging. */
+.sp-scene-image-transition-ghost{
+  position:fixed!important;z-index:2147483647!important;display:block!important;
+  margin:0!important;padding:0!important;max-width:none!important;max-height:none!important;
+  object-fit:contain!important;transform-origin:center center!important;pointer-events:none!important;
+  will-change:left,top,width,height,transform;filter:none!important;
+}
+.sp-scene-image-viewer.is-object-transitioning .sp-scene-image-viewer-shade{transition:opacity 360ms cubic-bezier(.22,.74,.18,1)!important;}
+.sp-scene-image-viewer.is-object-opening .sp-scene-image-viewer-shade{opacity:.88!important;}
+.sp-scene-image-viewer.is-object-closing .sp-scene-image-viewer-shade{opacity:.35!important;}
+@media (prefers-reduced-motion: reduce){.sp-scene-image-transition-ghost{display:none!important;}}
+.sp-scene-image-viewer.is-object-transitioning,
+.sp-scene-image-viewer.is-object-transitioning .sp-scene-image-viewer-frame{background:transparent!important;}
+.sp-scene-image-viewer.is-object-opening .sp-scene-image-viewer-shade{animation:spSceneObjectShadeIn 360ms cubic-bezier(.22,.74,.18,1) both!important;}
+.sp-scene-image-viewer.is-object-closing .sp-scene-image-viewer-shade{animation:spSceneObjectShadeOut 360ms cubic-bezier(.22,.74,.18,1) both!important;}
+@keyframes spSceneObjectShadeIn{from{opacity:0}to{opacity:1}}
+@keyframes spSceneObjectShadeOut{from{opacity:1}to{opacity:0}}
