@@ -1939,3 +1939,14 @@ html.sp-scene-image-open body{
 @keyframes sp-bg-pan-up-right{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),var(--sp-bg-pan,4%))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),calc(var(--sp-bg-pan,4%) * -1))}}
 @keyframes sp-bg-pan-down-left{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),calc(var(--sp-bg-pan,4%) * -1))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),var(--sp-bg-pan,4%))}}
 @keyframes sp-bg-pan-down-right{from{transform:scale(var(--sp-bg-scale-to,1.06)) translate(calc(var(--sp-bg-pan,4%) * -1),calc(var(--sp-bg-pan,4%) * -1))}to{transform:scale(var(--sp-bg-scale-to,1.06)) translate(var(--sp-bg-pan,4%),var(--sp-bg-pan,4%))}}
+
+/* V136 — restore Scene image rotation lost in V135 CSS packaging. */
+.sp-scene-image-media,
+.sp-history-scene-image-media{
+  transform:rotate(var(--sp-scene-image-rotation,0deg));
+  transform-origin:center center;
+}
+.sp-scene-image.is-zoomable .sp-scene-image-media::after,
+.sp-history-scene-image.is-zoomable .sp-history-scene-image-media::after{
+  transform:rotate(calc(-1 * var(--sp-scene-image-rotation,0deg)));
+}
