@@ -4528,10 +4528,79 @@
     const el=$('#authorAuthStatus');if(!el)return;
     el.textContent=message;el.classList.toggle('is-error',Boolean(error));
   }
+  let authorStripeConnectState=null;
+  let authorStripeConnectBusy=false;
+  function setAuthorStripeStatus(message='',error=false){
+    const el=$('#authorStripeStatus');if(!el)return;
+    el.textContent=message;el.classList.toggle('is-error',Boolean(error));
+  }
+  function renderAuthorStripeConnect(){
+    const badge=$('#authorStripeBadge'),button=$('#authorStripeConnectButton'),description=$('#authorStripeDescription');
+    if(!badge||!button)return;
+    badge.classList.remove('is-ready','is-progress');
+    if(authorStripeConnectBusy){badge.textContent='確認中';button.disabled=true;return;}
+    button.disabled=false;
+    const connect=authorStripeConnectState;
+    if(connect?.chargesEnabled&&connect?.payoutsEnabled){
+      badge.textContent='設定済み';badge.classList.add('is-ready');button.textContent='Stripe設定を確認する';
+      if(description)description.textContent='販売・支援の売上を受け取れる状態です。口座情報や本人確認はStripeが管理します。';
+    }else if(connect?.accountId){
+      badge.textContent='設定途中';badge.classList.add('is-progress');button.textContent='Stripe設定を続ける';
+      if(description)description.textContent='Stripe側の登録がまだ完了していません。設定を続けてください。';
+    }else{
+      badge.textContent='未設定';button.textContent='Stripeを設定する';
+      if(description)description.textContent='作品の販売・支援を受け取るためのStripe設定です。口座情報や本人確認はStripe上で行います。';
+    }
+  }
+  async function loadAuthorStripeConnectStatus(){
+    if(!authorSessionToken||!signedInAuthor?.authorId){authorStripeConnectState=null;renderAuthorStripeConnect();return null;}
+    authorStripeConnectBusy=true;renderAuthorStripeConnect();setAuthorStripeStatus('');
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/stripe/connect/status`,{headers:authorAuthHeaders({'Accept':'application/json'}),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok)throw new Error(payload?.error||'Stripeの状態を確認できませんでした。');
+      authorStripeConnectState=payload.connect||null;
+      return authorStripeConnectState;
+    }catch(error){
+      setAuthorStripeStatus(error?.message||'Stripeの状態を確認できませんでした。',true);
+      return null;
+    }finally{authorStripeConnectBusy=false;renderAuthorStripeConnect();}
+  }
+  function stripeStudioReturnUrl(mode){
+    const u=new URL(location.href);u.searchParams.set('stripe_connect',mode);u.hash='';return u.toString();
+  }
+  async function startAuthorStripeOnboarding({silent=false}={}){
+    if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
+    if(authorStripeConnectBusy)return;
+    authorStripeConnectBusy=true;renderAuthorStripeConnect();
+    if(!silent)setAuthorStripeStatus('Stripeの設定画面を準備しています…');
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/stripe/connect/onboard`,{
+        method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Accept':'application/json'}),
+        body:JSON.stringify({refreshUrl:stripeStudioReturnUrl('refresh'),returnUrl:stripeStudioReturnUrl('return')}),cache:'no-store'
+      });
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.url)throw new Error(payload?.error||'Stripeの設定画面を開けませんでした。');
+      location.href=payload.url;
+    }catch(error){
+      authorStripeConnectBusy=false;renderAuthorStripeConnect();setAuthorStripeStatus(error?.message||'Stripeの設定画面を開けませんでした。',true);
+    }
+  }
+  async function handleStripeConnectReturn(){
+    const u=new URL(location.href),mode=u.searchParams.get('stripe_connect');
+    if(mode!=='return'&&mode!=='refresh')return;
+    u.searchParams.delete('stripe_connect');history.replaceState(null,'',u.pathname+u.search+u.hash);
+    if(mode==='refresh'){await startAuthorStripeOnboarding({silent:true});return;}
+    openAuthorAccountDialog();
+    const state=await loadAuthorStripeConnectStatus();
+    if(state?.chargesEnabled&&state?.payoutsEnabled)setAuthorStripeStatus('Stripeの設定が完了しました。');
+    else if(state?.accountId)setAuthorStripeStatus('Stripeの登録状況を確認しました。未完了の項目がある場合は「Stripe設定を続ける」から再開できます。');
+  }
   function openAuthorAccountDialog(){
     if(!signedInAuthor?.authorId||!authorSessionToken){openAuthorAuthDialog();return;}
     const name=$('#authorAccountName');if(name)name.textContent=signedInAuthor.displayName||'作者アカウント';
     const dialog=$('#authorAccountDialog');if(dialog&&!dialog.open)dialog.showModal();
+    loadAuthorStripeConnectStatus();
   }
   function openAuthorAuthDialog(){
     const pending=readPendingAuthorAuth();
@@ -7430,7 +7499,8 @@
   $('#authorAccountClose')?.addEventListener('click',()=>$('#authorAccountDialog')?.close());
   $('#authorAccountDialog')?.addEventListener('click',(event)=>{if(event.target===event.currentTarget)event.currentTarget.close();});
   $('#authorAccountBookshelf')?.addEventListener('click',()=>{location.href='../bookshelf/';});
-  $('#authorAccountLogout')?.addEventListener('click',async()=>{await logoutAuthor();$('#authorAccountDialog')?.close();});
+  $('#authorStripeConnectButton')?.addEventListener('click',()=>startAuthorStripeOnboarding());
+  $('#authorAccountLogout')?.addEventListener('click',async()=>{await logoutAuthor();authorStripeConnectState=null;renderAuthorStripeConnect();$('#authorAccountDialog')?.close();});
   $('#publishConfirmButton')?.addEventListener('click',runPublish);
   $('#publishRetryButton')?.addEventListener('click',runPublish);
   $('#publishCopyButton')?.addEventListener('click',copyPublishedUrl);
@@ -14807,7 +14877,7 @@ function openDesktopTextDetail(){
     menuOpenBookshelfButton.addEventListener('click',()=>{closeEasyMenu();location.href='../bookshelf/';});
   }
   if(openedFromBookshelf)setTimeout(openMasterFromBookshelf,120);
-  restoreAuthorSession();
+  restoreAuthorSession().then(()=>handleStripeConnectReturn());
 
   // Public, intentionally small integration surface.
   // Embed/API clients can pass a Scene Format object directly or fetch one.
