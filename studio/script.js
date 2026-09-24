@@ -7892,6 +7892,8 @@
   },{passive:false,capture:true});
   let desktopTimingOpen=false;
   let desktopSceneUnderlaySnapshot=null;
+  const DESKTOP_BODY_HEIGHT_KEY='ahako-editor-v2-body-height-v1';
+  let desktopBodyResizeObserver=null;
   let liveEditEnabled=false;
   let liveEditToolbarVisible=false;
   let liveInlineEditEl=null;
@@ -7904,6 +7906,28 @@
   let liveInlineIntroTimer=0;
   let liveInlineDockTimer=0;
   const LIVE_INLINE_HINT_KEY='sceneStudio.liveEdit.cursorHintSeen.v1';
+
+  function bindRememberedDesktopBodyHeight(textarea){
+    desktopBodyResizeObserver?.disconnect?.();
+    desktopBodyResizeObserver=null;
+    let saved=0;
+    try{saved=Number(localStorage.getItem(DESKTOP_BODY_HEIGHT_KEY))||0;}catch{}
+    if(saved>=132)textarea.style.height=`${Math.min(saved,5000)}px`;
+    if(typeof ResizeObserver!=='function'){
+      textarea.addEventListener('pointerup',()=>{
+        const height=Math.round(textarea.getBoundingClientRect().height);
+        if(height>=132){try{localStorage.setItem(DESKTOP_BODY_HEIGHT_KEY,String(Math.min(height,5000)));}catch{}}
+      });
+      return;
+    }
+    desktopBodyResizeObserver=new ResizeObserver(()=>{
+      if(!textarea.isConnected)return;
+      const height=Math.round(textarea.getBoundingClientRect().height);
+      if(height<132)return;
+      try{localStorage.setItem(DESKTOP_BODY_HEIGHT_KEY,String(Math.min(height,5000)));}catch{}
+    });
+    desktopBodyResizeObserver.observe(textarea);
+  }
 
   function liveEditScene(){
     const advancedActive=advancedScreen && !advancedScreen.hidden;
@@ -11571,6 +11595,7 @@ function openDesktopTextDetail(){
 
     const bodyCard=desktopCard(u('本文','Text'),'desktop-live-body-card');
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder=u('本文を入力','Enter text');
+    bindRememberedDesktopBodyHeight(ta);
     // Writing should feel like writing, not replaying a Scene on every key.
     // While the field is focused, update only the visible text node. This keeps
     // typography/background stable and deliberately does NOT replay entrance,
