@@ -1232,6 +1232,19 @@
     fadePublicAudio(PUBLIC_EXIT_FADE_MS);
   });
 
+  // V156: Safari/Chrome may restore the exact pre-Stripe page from BFCache.
+  // That snapshot can contain the temporary disabled "preparing checkout" UI.
+  // Re-read canonical ownership/price whenever a cached page is shown again.
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted || !documentData || !ownCopyWrap || ownCopyWrap.hidden) return;
+    const payment = String(new URL(location.href).searchParams.get('payment') || '');
+    if (payment) return; // normal Stripe return flow owns this state
+    syncPublicOwnCopy(documentData).catch((error) => {
+      console.warn('Commerce state restore failed', error);
+      if (ownCopyButton) ownCopyButton.disabled = false;
+    });
+  });
+
   window.ScenePublicPlayer = {
     version: '0.3.29-public-own-copy',
     get player(){ return player; },
