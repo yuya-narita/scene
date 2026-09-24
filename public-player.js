@@ -61,6 +61,7 @@
   const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
   const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
   const COMMERCE_ORDER_TOKEN_PREFIX='ahako:commerce-order-token:';
+  const COMMERCE_CHECKOUT_RETURN_KEY='ahako:commerce-checkout-return:v157';
 
   function safeShelfReturn(raw){
     try{
@@ -608,6 +609,36 @@
     url.searchParams.delete('order_id');
     return url.toString();
   }
+  function rememberCheckoutEndingReturn(){
+    try{
+      sessionStorage.setItem(COMMERCE_CHECKOUT_RETURN_KEY,JSON.stringify({
+        source:source(),publicationId:currentWorkId(),returnUrl:cleanCommerceReturnUrl(),at:Date.now()
+      }));
+    }catch(_){}
+  }
+  function checkoutEndingReturnPending(){
+    try{
+      const raw=sessionStorage.getItem(COMMERCE_CHECKOUT_RETURN_KEY);
+      if(!raw)return false;
+      const value=JSON.parse(raw);
+      if(!value||Date.now()-Number(value.at||0)>30*60*1000){sessionStorage.removeItem(COMMERCE_CHECKOUT_RETURN_KEY);return false;}
+      const samePublication=!value.publicationId||!currentWorkId()||String(value.publicationId)===String(currentWorkId());
+      const sameSource=!value.source||String(value.source)===String(source());
+      return samePublication&&sameSource;
+    }catch(_){return false;}
+  }
+  function clearCheckoutEndingReturn(){try{sessionStorage.removeItem(COMMERCE_CHECKOUT_RETURN_KEY);}catch(_){} }
+  function forceCheckoutReturnToEnding(){
+    if(!documentData||!checkoutEndingReturnPending())return false;
+    intro.hidden=true;
+    host.hidden=true;
+    ending.hidden=false;
+    ending.classList.add('is-visible');
+    setReportVisible(false);
+    clearCheckoutEndingReturn();
+    syncPublicOwnCopy(documentData).catch(error=>console.warn('Commerce ending restore failed',error));
+    return true;
+  }
   function rememberCommerceOrderToken(orderId,token){
     try{sessionStorage.setItem(`${COMMERCE_ORDER_TOKEN_PREFIX}${orderId}`,String(token||''));}catch(_){}
   }
@@ -703,6 +734,10 @@
       if(!checkoutResponse.ok||!checkoutPayload?.ok||!checkoutPayload?.checkoutUrl){
         throw new Error(String(checkoutPayload?.error||'Stripe決済を開始できませんでした。'));
       }
+      // Purchase exists only on the ending screen. Remember that exact UI state
+      // before leaving for Stripe so browser Back/BFCache can never strand the
+      // reader on the cover or a disabled pre-checkout snapshot.
+      rememberCheckoutEndingReturn();
       location.href=String(checkoutPayload.checkoutUrl);
     }catch(error){
       console.error(error);
@@ -916,6 +951,7 @@
     ending.hidden = true;
     setReportVisible(false);
     if(params.get('payment')){
+      clearCheckoutEndingReturn();
       ending.hidden=false;
       intro.hidden=true;
       ending.classList.add('is-visible');
@@ -923,6 +959,11 @@
         console.error(error);
         if(ownCopyStatus)ownCopyStatus.textContent=String(error?.message||error);
       });
+    }else if(checkoutEndingReturnPending()){
+      // A browser-level Back navigation may restore any older Ahako history entry
+      // (cover, player, or ending). Checkout was launched only from ending, so
+      // normalize every such return to ending instead of trusting browser history.
+      forceCheckoutReturnToEnding();
     }
   }
 
@@ -1232,18 +1273,21 @@
     fadePublicAudio(PUBLIC_EXIT_FADE_MS);
   });
 
-  // V156: Safari/Chrome may restore the exact pre-Stripe page from BFCache.
-  // That snapshot can contain the temporary disabled "preparing checkout" UI.
-  // Re-read canonical ownership/price whenever a cached page is shown again.
-  window.addEventListener('pageshow', (event) => {
-    if (!event.persisted || !documentData || !ownCopyWrap || ownCopyWrap.hidden) return;
-    const payment = String(new URL(location.href).searchParams.get('payment') || '');
-    if (payment) return; // normal Stripe return flow owns this state
+  // V157: Checkout can only start from the ending screen. Browser Back is not
+  // guaranteed to return to the same history entry (Safari/Chrome BFCache may
+  // revive cover/player snapshots), so normalize any pending checkout return to
+  // the ending screen first, then re-read canonical ownership/price.
+  window.addEventListener('pageshow', () => {
+    const payment=String(new URL(location.href).searchParams.get('payment')||'');
+    if(payment||!documentData)return;
+    if(forceCheckoutReturnToEnding())return;
+    if(!ownCopyWrap||ownCopyWrap.hidden)return;
     syncPublicOwnCopy(documentData).catch((error) => {
       console.warn('Commerce state restore failed', error);
       if (ownCopyButton) ownCopyButton.disabled = false;
     });
   });
+
 
   window.ScenePublicPlayer = {
     version: '0.3.29-public-own-copy',
