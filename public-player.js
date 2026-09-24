@@ -60,6 +60,7 @@
   const PUBLIC_READER_ID_KEY='ahako:public-own-copy-reader-id';
   const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
   const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
+  const COMMERCE_ORDER_TOKEN_PREFIX='ahako:commerce-order-token:';
 
   function safeShelfReturn(raw){
     try{
@@ -593,7 +594,36 @@
     try{const url=new URL(source(),location.href);return url.pathname.includes('/work/')?url.origin:'https://scene-studio-api.a-hako.workers.dev';}
     catch(_){return 'https://scene-studio-api.a-hako.workers.dev';}
   }
-  function syncPublicOwnCopy(doc){
+  function canonicalMasterWorkId(doc=documentData){
+    return String(doc?.studio?.identity?.workId||doc?.workId||'').trim();
+  }
+  function commerceGateMode(doc=documentData){
+    const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
+    return ['free','purchase','support'].includes(mode)?mode:'free';
+  }
+  function formatJPY(amount){return `¥${Math.max(0,Math.floor(Number(amount)||0)).toLocaleString('ja-JP')}`;}
+  function cleanCommerceReturnUrl(){
+    const url=new URL(location.href);
+    url.searchParams.delete('payment');
+    url.searchParams.delete('order_id');
+    return url.toString();
+  }
+  function rememberCommerceOrderToken(orderId,token){
+    try{sessionStorage.setItem(`${COMMERCE_ORDER_TOKEN_PREFIX}${orderId}`,String(token||''));}catch(_){}
+  }
+  function commerceOrderToken(orderId){
+    try{return String(sessionStorage.getItem(`${COMMERCE_ORDER_TOKEN_PREFIX}${orderId}`)||'');}catch(_){return '';}
+  }
+  function forgetCommerceOrderToken(orderId){try{sessionStorage.removeItem(`${COMMERCE_ORDER_TOKEN_PREFIX}${orderId}`);}catch(_){}}
+  async function fetchCanonicalCommerce(doc=documentData){
+    const workId=canonicalMasterWorkId(doc);
+    if(!workId)return null;
+    const response=await fetch(`${publicOwnCopyApiBase()}/commerce/work/${encodeURIComponent(workId)}`,{cache:'no-store'});
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok)return null;
+    return payload.commerce||null;
+  }
+  async function syncPublicOwnCopy(doc){
     if(!ownCopyWrap||!ownCopyButton)return;
     const allowed=Boolean(currentWorkId())&&doc?.sharing?.ownCopy?.enabled===true;
     ownCopyWrap.hidden=!allowed;
@@ -601,6 +631,105 @@
     ownCopyButton.textContent='自分の一冊を受け取る';
     ownCopyButton.onclick=allowed?receivePublicOwnCopy:null;
     if(ownCopyStatus)ownCopyStatus.textContent='';
+    if(!allowed)return;
+    const gate=commerceGateMode(doc);
+    if(gate==='free')return;
+    ownCopyButton.disabled=true;
+    ownCopyButton.textContent='価格を確認しています…';
+    try{
+      const commerce=await fetchCanonicalCommerce(doc);
+      if(!commerce||commerce.status!=='active'||!['purchase','support'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
+        throw new Error('販売価格を確認できませんでした。');
+      }
+      const amount=Number(commerce.amount);
+      ownCopyButton.disabled=false;
+      ownCopyButton.textContent=commerce.mode==='support'?`${formatJPY(amount)}で支援して受け取る`:`${formatJPY(amount)}で購入して受け取る`;
+      ownCopyButton.onclick=()=>purchasePublicOwnCopy(commerce);
+      if(ownCopyStatus)ownCopyStatus.textContent='決済後、この作品を自分の本棚に受け取れます。';
+    }catch(error){
+      console.warn('Commerce price lookup failed',error);
+      ownCopyButton.disabled=false;
+      ownCopyButton.textContent='購入して受け取る';
+      ownCopyButton.onclick=()=>purchasePublicOwnCopy(null);
+      if(ownCopyStatus)ownCopyStatus.textContent='価格は決済前に確認できます。';
+    }
+  }
+  async function purchasePublicOwnCopy(){
+    const publicationId=currentWorkId();if(!publicationId||!ownCopyButton)return;
+    ownCopyButton.disabled=true;
+    if(ownCopyStatus)ownCopyStatus.textContent='購入手続きを用意しています…';
+    try{
+      const orderResponse=await fetch(`${publicOwnCopyApiBase()}/commerce/order`,{
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+        body:JSON.stringify({publicationId,readerId:publicOwnCopyReaderId()})
+      });
+      const orderPayload=await orderResponse.json().catch(()=>null);
+      if(!orderResponse.ok||!orderPayload?.ok||!orderPayload?.order?.orderId||!orderPayload?.accessToken){
+        throw new Error(String(orderPayload?.error||'購入手続きを開始できませんでした。'));
+      }
+      const orderId=String(orderPayload.order.orderId);
+      const accessToken=String(orderPayload.accessToken);
+      rememberCommerceOrderToken(orderId,accessToken);
+      const checkoutResponse=await fetch(`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/checkout`,{
+        method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',
+        body:JSON.stringify({returnUrl:cleanCommerceReturnUrl()})
+      });
+      const checkoutPayload=await checkoutResponse.json().catch(()=>null);
+      if(!checkoutResponse.ok||!checkoutPayload?.ok||!checkoutPayload?.checkoutUrl){
+        throw new Error(String(checkoutPayload?.error||'Stripe決済を開始できませんでした。'));
+      }
+      location.href=String(checkoutPayload.checkoutUrl);
+    }catch(error){
+      console.error(error);
+      ownCopyButton.disabled=false;
+      if(ownCopyStatus)ownCopyStatus.textContent=String(error?.message||error);
+      await syncPublicOwnCopy(documentData);
+    }
+  }
+  async function finishPaidOwnCopy(orderId,accessToken){
+    const response=await fetch(`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/own-copy`,{
+      method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',body:'{}'
+    });
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'購入した一冊を受け取れませんでした。'));
+    const token=String(payload?.bookshelfClaim?.token||'');
+    const claimUrl=publicBookshelfClaimUrl(token);
+    if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
+    forgetCommerceOrderToken(orderId);
+    location.href=claimUrl;
+  }
+  async function handleCommerceReturn(){
+    const payment=String(params.get('payment')||'');
+    const orderId=String(params.get('order_id')||'');
+    if(!payment||!/^order_[a-f0-9]{32}$/i.test(orderId))return false;
+    const accessToken=commerceOrderToken(orderId);
+    if(payment==='cancel'){
+      if(ownCopyStatus)ownCopyStatus.textContent='購入はキャンセルされました。';
+      history.replaceState(null,'',cleanCommerceReturnUrl());
+      return true;
+    }
+    if(payment!=='success'||!/^[a-f0-9]{48}$/i.test(accessToken)){
+      if(ownCopyStatus)ownCopyStatus.textContent='購入状態を確認できませんでした。';
+      return true;
+    }
+    if(ownCopyWrap)ownCopyWrap.hidden=false;
+    if(ownCopyButton){ownCopyButton.disabled=true;ownCopyButton.textContent='決済を確認しています…';}
+    if(ownCopyStatus)ownCopyStatus.textContent='Stripeからの決済完了を確認しています…';
+    for(let i=0;i<12;i++){
+      const response=await fetch(`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}`,{
+        headers:{'X-Order-Token':accessToken},cache:'no-store'
+      });
+      const payload=await response.json().catch(()=>null);
+      if(response.ok&&payload?.ok&&payload?.order?.status==='paid'){
+        if(ownCopyStatus)ownCopyStatus.textContent='決済を確認しました。本棚に一冊を用意しています…';
+        await finishPaidOwnCopy(orderId,accessToken);
+        return true;
+      }
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    if(ownCopyButton){ownCopyButton.disabled=false;ownCopyButton.textContent='決済確認をもう一度試す';ownCopyButton.onclick=()=>handleCommerceReturn();}
+    if(ownCopyStatus)ownCopyStatus.textContent='決済確認に少し時間がかかっています。もう一度お試しください。';
+    return true;
   }
   async function receivePublicOwnCopy(){
     const workId=currentWorkId();if(!workId||!ownCopyButton)return;
@@ -758,6 +887,15 @@
     host.hidden = true;
     ending.hidden = true;
     setReportVisible(false);
+    if(params.get('payment')){
+      ending.hidden=false;
+      intro.hidden=true;
+      ending.classList.add('is-visible');
+      handleCommerceReturn().catch(error=>{
+        console.error(error);
+        if(ownCopyStatus)ownCopyStatus.textContent=String(error?.message||error);
+      });
+    }
   }
 
   function bindPublicControls() {
