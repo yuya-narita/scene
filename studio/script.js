@@ -904,19 +904,30 @@
   let protectedResplitPending = false;
 
   const DRAFT_DB_NAME='scene-studio-drafts';
-  const DRAFT_DB_VERSION=1;
+  const DRAFT_DB_VERSION=2;
   const DRAFT_STORE='drafts';
-  const DRAFT_MAX=10;
+  const DRAFT_META_STORE='draftMeta';
   const DRAFT_LAST_KEY='sceneStudio.lastDraftId';
   let currentDraftId=localStorage.getItem(DRAFT_LAST_KEY)||'';
   let draftSaveTimer=null;
   let latestDraftSummary=null;
   let autoRecProgress={nextIndex:0,recordedCount:0};
+  let draftStorageWarningShown=false;
+
+  function draftMetaFromRow(row){
+    const doc=row?.document||{},easy=row?.easy||{};
+    return {id:String(row?.id||''),draftId:String(row?.id||''),workId:String(doc?.studio?.identity?.workId||row?.publication?.id||''),title:String(row?.title||doc?.title||'Untitled'),author:String(easy.author||doc?.author||''),subtitle:String(easy.subtitle||doc?.metadata?.subtitle||''),description:String(easy.description||doc?.metadata?.description||''),seriesId:String(easy.seriesId||doc?.metadata?.seriesId||''),seriesTitle:String(easy.series||doc?.metadata?.seriesTitle||''),episode:String(easy.episode||doc?.metadata?.episode||''),episodeNumber:Number(easy.episodeNumber||doc?.metadata?.episodeNumber||0)||0,episodeTitle:String(easy.episodeTitle||doc?.metadata?.episodeTitle||''),sceneCount:Number(row?.sceneCount||doc?.scenes?.length||0),updatedAt:Number(row?.updatedAt)||Date.now(),publication:{...(row?.publication||{})},coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}}};
+  }
 
   function openDraftDB(){
     return new Promise((resolve,reject)=>{
       const req=indexedDB.open(DRAFT_DB_NAME,DRAFT_DB_VERSION);
-      req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(DRAFT_STORE))db.createObjectStore(DRAFT_STORE,{keyPath:'id'});};
+      req.onupgradeneeded=()=>{
+        const db=req.result;
+        const drafts=db.objectStoreNames.contains(DRAFT_STORE)?req.transaction.objectStore(DRAFT_STORE):db.createObjectStore(DRAFT_STORE,{keyPath:'id'});
+        const meta=db.objectStoreNames.contains(DRAFT_META_STORE)?req.transaction.objectStore(DRAFT_META_STORE):db.createObjectStore(DRAFT_META_STORE,{keyPath:'id'});
+        drafts.openCursor().onsuccess=event=>{const cursor=event.target.result;if(!cursor)return;meta.put(draftMetaFromRow(cursor.value));cursor.continue();};
+      };
       req.onsuccess=()=>resolve(req.result);
       req.onerror=()=>reject(req.error);
     });
@@ -986,7 +997,10 @@
   }
 
   async function putDraftRecord(row){
-    const {db,store}=await draftStore('readwrite');
+    const db=await openDraftDB();
+    const transaction=db.transaction([DRAFT_STORE,DRAFT_META_STORE],'readwrite');
+    const store=transaction.objectStore(DRAFT_STORE);
+    const metaStore=transaction.objectStore(DRAFT_META_STORE);
     await new Promise((resolve,reject)=>{
       const get=store.get(row.id);
       get.onerror=()=>reject(get.error);
@@ -996,16 +1010,34 @@
           ? {...row,publication:mergeDraftPublication(existing.publication,row.publication)}
           : row;
         const put=store.put(safeRow);
-        put.onsuccess=()=>resolve();
+        put.onsuccess=()=>{
+          const meta=metaStore.put(draftMetaFromRow(safeRow));
+          meta.onsuccess=()=>resolve();
+          meta.onerror=()=>reject(meta.error);
+        };
         put.onerror=()=>reject(put.error);
       };
     });
     db.close();
   }
   async function removeDraftRecord(id){
-    const {db,store}=await draftStore('readwrite');
-    await new Promise((resolve,reject)=>{const r=store.delete(id);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error);});
+    const db=await openDraftDB();
+    const transaction=db.transaction([DRAFT_STORE,DRAFT_META_STORE],'readwrite');
+    await Promise.all([DRAFT_STORE,DRAFT_META_STORE].map(name=>new Promise((resolve,reject)=>{const r=transaction.objectStore(name).delete(id);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error);}))); 
     db.close();
+  }
+  function formatStorageBytes(bytes){
+    const n=Math.max(0,Number(bytes)||0);
+    if(n<1024*1024)return `${Math.max(0.1,n/1024/1024).toFixed(1)} MB`;
+    if(n<1024*1024*1024)return `${Math.round(n/1024/1024)} MB`;
+    return `${(n/1024/1024/1024).toFixed(1)} GB`;
+  }
+  async function draftStorageSummary(){
+    if(!navigator.storage?.estimate)return null;
+    try{
+      const {usage=0,quota=0}=await navigator.storage.estimate();
+      return {usage,quota,ratio:quota?usage/quota:0,label:quota?`${formatStorageBytes(usage)} / ${formatStorageBytes(quota)}`:formatStorageBytes(usage)};
+    }catch(_){return null;}
   }
   function createDraftId(){return globalThis.crypto?.randomUUID?.()||`draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;}
 
@@ -1169,22 +1201,26 @@
       clearTimeout(draftSaveTimer);
       const row=await buildDraftRecord();
       if(!row)return true;
-      if(!await getDraftRecord(row.id)){
-        const all=await listDraftRecords();
-        if(all.length>=DRAFT_MAX && !force){
-          const ind=$('#draftSaveIndicator');
-          if(ind){ind.textContent=t('draft.full');ind.hidden=false;}
-          return false;
-        }
-      }
       await putDraftRecord(row);
       latestDraftSummary=row;
       const ind=$('#draftSaveIndicator');
       if(ind){ind.textContent=t('draft.saved');ind.hidden=false;clearTimeout(ind._hideTimer);ind._hideTimer=setTimeout(()=>ind.hidden=true,1800);}
       await refreshDraftUI(false);
+      const storage=await draftStorageSummary();
+      if(storage?.ratio>=0.85){
+        if(ind){ind.textContent=uiLanguage==='ja'?`保存済み・端末容量残りわずか（${storage.label}）`:`Saved · device storage is low (${storage.label})`;ind.hidden=false;}
+        draftStorageWarningShown=true;
+      }
       return true;
     }catch(err){
       console.warn('Draft autosave failed',err);
+      const quotaError=err?.name==='QuotaExceededError'||/quota|storage/i.test(String(err?.message||''));
+      const ind=$('#draftSaveIndicator');
+      if(ind){ind.textContent=quotaError?t('draft.full'):(uiLanguage==='ja'?'自動保存できませんでした':'Autosave failed');ind.hidden=false;}
+      if(quotaError&&!draftStorageWarningShown){
+        draftStorageWarningShown=true;
+        appAlert(uiLanguage==='ja'?'端末の保存容量が不足し、制作途中を保存できませんでした。不要な大容量作品を整理するか、Master .sceneを書き出してバックアップしてください。':'Device storage is full. Export a Master .scene backup or remove large local works.');
+      }
       return false;
     }
   }
@@ -1419,12 +1455,17 @@
 
   async function refreshDraftUI(showResume=true){
     const rows=await listDraftRecords();
+    const storage=await draftStorageSummary();
     latestDraftSummary=rows[0]||null;
 
     const label=$('#draftCountLabel');
-    if(label)label.textContent=`${rows.length} / ${DRAFT_MAX}`;
+    if(label)label.textContent=`${rows.length}件${storage?.label?` · ${storage.label}`:''}`;
     const toolbarCount=$('#draftToolbarCount');
-    if(toolbarCount)toolbarCount.textContent=`${rows.length} / ${DRAFT_MAX}`;
+    if(toolbarCount)toolbarCount.textContent=`${rows.length}件`;
+    const foot=$('.draft-manager-foot > small');
+    if(foot)foot.textContent=uiLanguage==='ja'
+      ? `制作途中は件数制限なしで端末内に自動保存されます。${storage?.label?` 現在の端末使用量 ${storage.label}。`:''}`
+      : `Draft count is unlimited and autosaved on this device.${storage?.label?` Device usage ${storage.label}.`:''}`;
 
     const list=$('#draftList');
     if(!list)return;
@@ -1539,16 +1580,6 @@
   }
 
   async function startNewDraft(){
-    // Never create an invisible/unsavable 11th work.
-    const rowsBefore=await listDraftRecords();
-    const currentStored=currentDraftId ? await getDraftRecord(currentDraftId) : null;
-    if(rowsBefore.length>=DRAFT_MAX && currentStored){
-      appAlert(uiLanguage==='ja'
-        ? `制作途中の作品が${DRAFT_MAX}件あります。新しく作る前に、不要な作品を1件削除してください。`
-        : `You already have ${DRAFT_MAX} local works. Delete one before creating another.`);
-      return false;
-    }
-
     // Never abandon the currently edited work silently.
     const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
     const saved=await saveDraftNow();
@@ -7656,10 +7687,19 @@
     const file=event.target.files?.[0];
     if(file) await importScenePackage(file);
     updateAutoRecStartLabel();
-  refreshDraftUI(true).catch(err=>console.warn('Draft UI init failed',err));
-  updateEasyFileActions();
+    refreshDraftUI(true).catch(err=>console.warn('Draft UI refresh failed',err));
+    updateEasyFileActions();
     event.target.value='';
   });
+  (async()=>{
+    const requestedDraftId=new URLSearchParams(location.search).get('draft')||'';
+    if(requestedDraftId){
+      const requested=await getDraftRecord(requestedDraftId);
+      if(requested)await restoreDraftRecord(requested);
+    }
+    await refreshDraftUI(true);
+    updateEasyFileActions();
+  })().catch(err=>console.warn('Draft UI init failed',err));
   // v0.3.03: use the original proven return interaction.
   $('#editReturnButton')?.addEventListener('click',(event)=>{
     event.preventDefault();
