@@ -623,6 +623,24 @@
     if(!response.ok||!payload?.ok)return null;
     return payload.commerce||null;
   }
+  async function fetchCommerceOwnership(){
+    const publicationId=currentWorkId();
+    if(!publicationId)return null;
+    const response=await fetch(`${publicOwnCopyApiBase()}/commerce/ownership`,{
+      method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+      body:JSON.stringify({publicationId,readerId:publicOwnCopyReaderId()})
+    });
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok)return null;
+    return payload;
+  }
+  function showAlreadyPurchased(){
+    if(!ownCopyButton)return;
+    ownCopyButton.disabled=false;
+    ownCopyButton.textContent='購入済み・本棚で読む';
+    ownCopyButton.onclick=()=>{location.href=new URL('./bookshelf/',location.href).toString();};
+    if(ownCopyStatus)ownCopyStatus.textContent='この作品は購入済みです。再購入はされません。';
+  }
   async function syncPublicOwnCopy(doc){
     if(!ownCopyWrap||!ownCopyButton)return;
     const allowed=Boolean(currentWorkId())&&doc?.sharing?.ownCopy?.enabled===true;
@@ -635,8 +653,11 @@
     const gate=commerceGateMode(doc);
     if(gate==='free')return;
     ownCopyButton.disabled=true;
-    ownCopyButton.textContent='価格を確認しています…';
+    ownCopyButton.textContent='購入状態を確認しています…';
     try{
+      const ownership=await fetchCommerceOwnership();
+      if(ownership?.owned){showAlreadyPurchased();return;}
+      ownCopyButton.textContent='価格を確認しています…';
       const commerce=await fetchCanonicalCommerce(doc);
       if(!commerce||commerce.status!=='active'||!['purchase','support'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
         throw new Error('販売価格を確認できませんでした。');
@@ -665,6 +686,10 @@
       });
       const orderPayload=await orderResponse.json().catch(()=>null);
       if(!orderResponse.ok||!orderPayload?.ok||!orderPayload?.order?.orderId||!orderPayload?.accessToken){
+        if(String(orderPayload?.code||'')==='ALREADY_OWNED'){
+          showAlreadyPurchased();
+          return;
+        }
         throw new Error(String(orderPayload?.error||'購入手続きを開始できませんでした。'));
       }
       const orderId=String(orderPayload.order.orderId);
