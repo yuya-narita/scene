@@ -681,9 +681,12 @@
       location.href=String(checkoutPayload.checkoutUrl);
     }catch(error){
       console.error(error);
+      const message=String(error?.message||error||'購入手続きを開始できませんでした。');
+      // Keep the actual checkout error visible. Re-syncing here used to overwrite
+      // it immediately with the normal price/status text, making failures look
+      // like the button simply did nothing.
       ownCopyButton.disabled=false;
-      if(ownCopyStatus)ownCopyStatus.textContent=String(error?.message||error);
-      await syncPublicOwnCopy(documentData);
+      if(ownCopyStatus)ownCopyStatus.textContent=message;
     }
   }
   async function finishPaidOwnCopy(orderId,accessToken){
