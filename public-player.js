@@ -1188,7 +1188,7 @@
     returnToCover();
   });
 
-  restartButton.addEventListener('click', () => {
+  restartButton?.addEventListener('click', () => {
     localStorage.removeItem(storageKey());
     ending.classList.remove('is-visible');
     ending.hidden = true;
