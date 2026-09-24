@@ -912,7 +912,9 @@
   let draftSaveTimer=null;
   let latestDraftSummary=null;
   let autoRecProgress={nextIndex:0,recordedCount:0};
-  let draftStorageWarningShown=false;
+  let draftStorageLowNoticeShown=false;
+  let draftStorageFailureShown=false;
+  let persistentStorageRequested=false;
 
   function draftMetaFromRow(row){
     const doc=row?.document||{},easy=row?.easy||{};
@@ -1038,6 +1040,11 @@
       const {usage=0,quota=0}=await navigator.storage.estimate();
       return {usage,quota,ratio:quota?usage/quota:0,label:quota?`${formatStorageBytes(usage)} / ${formatStorageBytes(quota)}`:formatStorageBytes(usage)};
     }catch(_){return null;}
+  }
+  async function requestPersistentDraftStorage(){
+    if(persistentStorageRequested||!navigator.storage?.persist)return;
+    persistentStorageRequested=true;
+    try{if(!await navigator.storage.persisted?.())await navigator.storage.persist();}catch(_){}
   }
   function createDraftId(){return globalThis.crypto?.randomUUID?.()||`draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;}
 
@@ -1207,9 +1214,9 @@
       if(ind){ind.textContent=t('draft.saved');ind.hidden=false;clearTimeout(ind._hideTimer);ind._hideTimer=setTimeout(()=>ind.hidden=true,1800);}
       await refreshDraftUI(false);
       const storage=await draftStorageSummary();
-      if(storage?.ratio>=0.85){
+      if(storage?.ratio>=0.9&&!draftStorageLowNoticeShown){
         if(ind){ind.textContent=uiLanguage==='ja'?`保存済み・端末容量残りわずか（${storage.label}）`:`Saved · device storage is low (${storage.label})`;ind.hidden=false;}
-        draftStorageWarningShown=true;
+        draftStorageLowNoticeShown=true;
       }
       return true;
     }catch(err){
@@ -1217,8 +1224,8 @@
       const quotaError=err?.name==='QuotaExceededError'||/quota|storage/i.test(String(err?.message||''));
       const ind=$('#draftSaveIndicator');
       if(ind){ind.textContent=quotaError?t('draft.full'):(uiLanguage==='ja'?'自動保存できませんでした':'Autosave failed');ind.hidden=false;}
-      if(quotaError&&!draftStorageWarningShown){
-        draftStorageWarningShown=true;
+      if(quotaError&&!draftStorageFailureShown){
+        draftStorageFailureShown=true;
         appAlert(uiLanguage==='ja'?'端末の保存容量が不足し、制作途中を保存できませんでした。不要な大容量作品を整理するか、Master .sceneを書き出してバックアップしてください。':'Device storage is full. Export a Master .scene backup or remove large local works.');
       }
       return false;
@@ -1455,17 +1462,16 @@
 
   async function refreshDraftUI(showResume=true){
     const rows=await listDraftRecords();
-    const storage=await draftStorageSummary();
     latestDraftSummary=rows[0]||null;
 
     const label=$('#draftCountLabel');
-    if(label)label.textContent=`${rows.length}件${storage?.label?` · ${storage.label}`:''}`;
+    if(label)label.textContent=`${rows.length}作品`;
     const toolbarCount=$('#draftToolbarCount');
     if(toolbarCount)toolbarCount.textContent=`${rows.length}件`;
     const foot=$('.draft-manager-foot > small');
     if(foot)foot.textContent=uiLanguage==='ja'
-      ? `制作途中は件数制限なしで端末内に自動保存されます。${storage?.label?` 現在の端末使用量 ${storage.label}。`:''}`
-      : `Draft count is unlimited and autosaved on this device.${storage?.label?` Device usage ${storage.label}.`:''}`;
+      ? '作品数の上限はありません。制作途中はこの端末へ自動保存されます。'
+      : 'Create as many works as you like. Drafts are autosaved on this device.';
 
     const list=$('#draftList');
     if(!list)return;
@@ -1580,6 +1586,7 @@
   }
 
   async function startNewDraft(){
+    requestPersistentDraftStorage();
     // Never abandon the currently edited work silently.
     const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
     const saved=await saveDraftNow();
@@ -7582,6 +7589,7 @@
   }
 
   async function openDraftManager(){
+    requestPersistentDraftStorage();
     await refreshDraftUI(false);
     const dialog=$('#draftManagerDialog');
     if(!dialog)return;
