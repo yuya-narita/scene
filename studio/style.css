@@ -12003,3 +12003,20 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 
 /* Phase 6 / V103 — authoring pan stabilizer. */
 .view-rec-button.is-active{background:#202428;color:#fff;border-color:#202428;}
+
+
+/* V148 — Studio commerce price settings */
+.commerce-price-card{margin:18px 0 14px;padding:16px;border:1px solid #dedfe3;border-radius:16px;background:#fff;color:#202124}
+.commerce-price-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:13px}
+.commerce-price-head>div{display:grid;gap:4px;min-width:0}.commerce-price-head strong{font-size:14px;line-height:1.35}.commerce-price-head small{font-size:10px;line-height:1.55;color:#777b83}
+.commerce-price-badge{flex:0 0 auto;padding:5px 9px;border-radius:999px;background:#eef7f0;color:#39754a;font-size:10px;font-weight:800}.commerce-price-badge.is-paid{background:#fff4df;color:#95630b}
+.commerce-price-options{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.commerce-price-options label{display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;align-items:start;padding:12px;border:1px solid #e2e3e7;border-radius:12px;background:#fafafa;cursor:pointer}
+.commerce-price-options input{appearance:auto!important;-webkit-appearance:auto!important;width:16px!important;height:16px!important;margin:1px 0 0!important}
+.commerce-price-options label:has(input:checked){border-color:#24262a;background:#fff}
+.commerce-price-options span{display:grid;gap:3px}.commerce-price-options strong{font-size:12px}.commerce-price-options small{font-size:9px;line-height:1.45;color:#7b7f87}
+.commerce-amount-field{display:grid;gap:7px;margin-top:12px;padding-top:12px;border-top:1px solid #ececef}.commerce-amount-field[hidden]{display:none!important}.commerce-amount-field>span{font-size:11px;font-weight:800;color:#555960}
+.commerce-amount-input{display:flex;align-items:center;gap:7px;min-height:46px;padding:0 12px;border:1px solid #d8d9de;border-radius:12px;background:#fff}.commerce-amount-input>span{font-size:18px;font-weight:800}.commerce-amount-input input{flex:1;min-width:0;border:0!important;outline:0!important;background:transparent!important;font-size:20px!important;font-weight:800!important;padding:0!important;box-shadow:none!important}.commerce-amount-input small{font-size:11px;color:#777b83}
+.commerce-price-status{min-height:0;margin:8px 2px 0;color:#b64040;font-size:10px;line-height:1.5}.commerce-price-status:empty{display:none}
+.own-copy-policy input:disabled{opacity:.55}.own-copy-policy:has(input:disabled){cursor:default}
+@media(max-width:520px){.commerce-price-card{margin-top:16px;padding:14px}.commerce-price-options{grid-template-columns:1fr}.commerce-price-head{align-items:center}}

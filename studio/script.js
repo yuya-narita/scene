@@ -85,6 +85,12 @@
   const episodeTitleInput = $('#episodeTitleInput');
   const descriptionInput = $('#descriptionInput');
   const ownCopyEnabledInput = $('#ownCopyEnabled');
+  const commerceModeFree = $('#commerceModeFree');
+  const commerceModePurchase = $('#commerceModePurchase');
+  const commerceAmountField = $('#commerceAmountField');
+  const commerceAmountInput = $('#commerceAmountInput');
+  const commercePriceBadge = $('#commercePriceBadge');
+  const commercePriceStatus = $('#commercePriceStatus');
   const menuRelayToggleButton = $('#menuRelayToggleButton');
   const distributionExportDialog = $('#distributionExportDialog');
   const distributionRelayOn = $('#distributionRelayOn');
@@ -844,6 +850,59 @@
     const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
     return ['free','purchase','support'].includes(mode)?mode:'free';
   }
+  function commerceDraftSettings(doc=workingDocument){
+    const saved=doc?.studio?.commerceDraft||{};
+    const gate=ownCopyGateMode(doc);
+    const mode=gate==='purchase'?'purchase':'free';
+    const raw=Number(saved.amount);
+    const amount=Number.isInteger(raw)&&raw>=100&&raw<=1000000?raw:100;
+    return {mode,amount,currency:'JPY'};
+  }
+  function currentCommerceSettings(){
+    const mode=commerceModePurchase?.checked?'purchase':'free';
+    const amount=Math.floor(Number(commerceAmountInput?.value||0));
+    return {mode,amount,currency:'JPY'};
+  }
+  function validateCommerceSettings({focus=false}={}){
+    const settings=currentCommerceSettings();
+    if(settings.mode==='free')return settings;
+    if(!Number.isInteger(settings.amount)||settings.amount<100||settings.amount>1000000){
+      if(commercePriceStatus)commercePriceStatus.textContent='販売価格は100円〜1,000,000円で入力してください。';
+      if(focus)commerceAmountInput?.focus();
+      return null;
+    }
+    if(commercePriceStatus)commercePriceStatus.textContent='';
+    return settings;
+  }
+  function renderCommercePriceUI(){
+    const paid=Boolean(commerceModePurchase?.checked);
+    if(commerceAmountField)commerceAmountField.hidden=!paid;
+    if(commercePriceBadge){
+      commercePriceBadge.textContent=paid?`¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:'無料';
+      commercePriceBadge.classList.toggle('is-paid',paid);
+    }
+    if(paid){
+      if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}
+    }else if(ownCopyEnabledInput){
+      ownCopyEnabledInput.disabled=false;
+    }
+    if(commercePriceStatus && (!paid || validateCommerceSettings()))commercePriceStatus.textContent='';
+  }
+  function applyCommerceDraftToDocument(doc){
+    if(!doc||typeof doc!=='object')return;
+    const settings=currentCommerceSettings();
+    doc.commerce ||= {};
+    doc.commerce.ownCopyGate={...(doc.commerce.ownCopyGate||{}),schemaVersion:'1',mode:settings.mode};
+    doc.studio ||= {};
+    doc.studio.commerceDraft={schemaVersion:'1',mode:settings.mode,currency:'JPY',...(settings.mode==='purchase'&&Number.isInteger(settings.amount)?{amount:settings.amount}:{})};
+  }
+  function restoreCommercePriceUI(doc){
+    const settings=commerceDraftSettings(doc);
+    if(commerceModeFree)commerceModeFree.checked=settings.mode==='free';
+    if(commerceModePurchase)commerceModePurchase.checked=settings.mode==='purchase';
+    if(commerceAmountInput)commerceAmountInput.value=String(settings.amount||100);
+    renderCommercePriceUI();
+  }
   function applyOwnCopyGateToDocument(doc){
     if(!doc || typeof doc!=='object')return;
     doc.commerce ||= {};
@@ -1124,6 +1183,20 @@
     latestPublishedId=status.id||'';
     latestPublishedUrl=status.url||'';
     latestPublicationStoppedAt=status.state==='stopped'||status.state==='suspended' ? Date.now() : 0;
+
+    // Canonical commerce lives on the Worker. When an older Master .scene is
+    // reopened, hydrate the Studio controls from the server before it can
+    // accidentally overwrite a paid work with stale local FREE settings.
+    if(status.commerce && workingDocument){
+      const mode=String(status.commerce.mode||'free')==='purchase'?'purchase':'free';
+      const amount=Math.floor(Number(status.commerce.amount||100));
+      workingDocument.commerce ||= {};
+      workingDocument.commerce.ownCopyGate={...(workingDocument.commerce.ownCopyGate||{}),schemaVersion:'1',mode};
+      workingDocument.studio ||= {};
+      workingDocument.studio.commerceDraft={schemaVersion:'1',mode,currency:'JPY',...(mode==='purchase'?{amount}: {})};
+      restoreCommercePriceUI(workingDocument);
+      if(mode==='purchase')applyOwnCopyPolicyToDocument(workingDocument);
+    }
 
     // Compare against the actual hosted scene so an imported master .scene can
     // immediately show Published vs Changes instead of guessing.
@@ -1594,7 +1667,7 @@
       appAlert(uiLanguage==='ja'?'現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。':'The current work could not be saved automatically, so Studio did not start a new work.');
       return false;
     }
-    workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput)ownCopyEnabledInput.checked=false;easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=false;ownCopyEnabledInput.disabled=false;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     latestPublishedId='';
     latestPublishedUrl='';
@@ -2547,7 +2620,8 @@
       },
       player:{ navigation:{ allowPrevious:true } },
       sharing:{ relay:{ schemaVersion:'1', enabled:Boolean(relayEnabled) }, ownCopy:{ schemaVersion:'1', enabled:Boolean(ownCopyEnabledInput?.checked) } },
-      commerce:{ ownCopyGate:{ schemaVersion:'1', mode:'free' } },
+      commerce:{ ownCopyGate:{ schemaVersion:'1', mode:commerceModePurchase?.checked?'purchase':'free' } },
+      studio:{ commerceDraft:{ schemaVersion:'1', mode:commerceModePurchase?.checked?'purchase':'free', currency:'JPY', ...(commerceModePurchase?.checked?{amount:Math.floor(Number(commerceAmountInput?.value||100))}:{}) } },
       cover:{
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
@@ -2993,6 +3067,7 @@
     workingDocument.appearance.cinemaTone=selectedTheme==='cinema' ? cinemaTone : (workingDocument.appearance.cinemaTone || 'dark');
     applyRelayPolicyToDocument(workingDocument);
     applyOwnCopyPolicyToDocument(workingDocument);
+    applyCommerceDraftToDocument(workingDocument);
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
     const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
     workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
@@ -4055,6 +4130,7 @@
     relayEnabled=relayPolicyEnabled(doc);
     refreshRelayPolicyUI();
     if(ownCopyEnabledInput)ownCopyEnabledInput.checked=doc?.sharing?.ownCopy?.enabled===true;
+    restoreCommercePriceUI(doc);
     titleInput.value=doc.title||'';
     authorInput.value=doc.author||'';
     if(subtitleInput)subtitleInput.value=doc.metadata?.subtitle||'';
@@ -4869,7 +4945,10 @@
           'X-Scene-Owner-Key':ident.ownerKey,
           'X-Scene-Revision':String(requestRevision),
           ...(restoreFromOld?{'X-Scene-Restore-From-Old':'1'}:{}),
-          'X-Publish-Rights':AUTHOR_TERMS_VERSION
+          'X-Publish-Rights':AUTHOR_TERMS_VERSION,
+          'X-Commerce-Mode':currentCommerceSettings().mode,
+          'X-Commerce-Currency':'JPY',
+          ...(currentCommerceSettings().mode==='purchase'?{'X-Commerce-Amount':String(currentCommerceSettings().amount)}:{})
         }),
         body:JSON.stringify(hostedDocument)
       };
@@ -5032,6 +5111,8 @@
 
   function openPublishDialogFromEasy(){
     if(!preparePublishFromEasy())return;
+    if(!validateCommerceSettings({focus:true}))return;
+    syncEasyShellToWorkingDocument();
     openPublishDialog();
   }
 
@@ -5144,6 +5225,8 @@
 
   async function runPublish({restoreFromOld=false}={}){
     if(!workingDocument?.scenes?.length)return;
+    if(!validateCommerceSettings({focus:true})){closePublishDialog();return;}
+    syncEasyShellToWorkingDocument();
     if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
     ensureMasterIdentity(workingDocument);
     const rights=$('#publishRightsConfirm');
@@ -7303,6 +7386,15 @@
   endingLinkInputs.forEach(pair=>[pair.kicker,pair.label,pair.url].forEach(el=>el?.addEventListener('change',()=>saveEndingRecent({type:'slot',kicker:pair.kicker?.value,label:pair.label?.value,url:pair.url?.value}))));
 
   languageInput?.addEventListener('change',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();});
+  [commerceModeFree,commerceModePurchase].forEach(el=>el?.addEventListener('change',()=>{
+    if(!workingDocument)ensureWorkingDocumentFromEasy();
+    renderCommercePriceUI();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
+  }));
+  commerceAmountInput?.addEventListener('input',()=>{
+    renderCommercePriceUI();
+    if(!workingDocument)ensureWorkingDocumentFromEasy();
+    syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(180);
+  });
   ownCopyEnabledInput?.addEventListener('change',()=>{if(!workingDocument)ensureWorkingDocumentFromEasy();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);});
   if(endingLegacyEditor){
     endingLegacyEditor.open = window.matchMedia('(min-width:721px)').matches;

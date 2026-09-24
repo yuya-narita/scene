@@ -394,6 +394,21 @@
           </label>
         </div>
       </details>
+      <section class="commerce-price-card" aria-labelledby="commercePriceTitle">
+        <div class="commerce-price-head">
+          <div><strong id="commercePriceTitle">販売設定</strong><small>読者が「自分の一冊」を受け取るときの設定です。</small></div>
+          <span id="commercePriceBadge" class="commerce-price-badge">無料</span>
+        </div>
+        <div class="commerce-price-options" role="radiogroup" aria-label="販売方法">
+          <label><input id="commerceModeFree" type="radio" name="commerceMode" value="free" checked><span><strong>無料</strong><small>そのまま本棚へ受け取れます</small></span></label>
+          <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>有料</strong><small>Stripe決済後に受け取れます</small></span></label>
+        </div>
+        <label id="commerceAmountField" class="commerce-amount-field" hidden>
+          <span>販売価格</span>
+          <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="1000000" step="1" value="100" aria-label="販売価格（円）"><small>円</small></div>
+        </label>
+        <p id="commercePriceStatus" class="commerce-price-status" aria-live="polite"></p>
+      </section>
       <button id="easyPublishButton" class="primary-button easy-publish-action easy-publish-bottom" type="button" disabled><span>公開する</span></button>
 
       <section class="project-io-section project-io-clean developer-hidden-io" aria-labelledby="projectIoTitle" hidden>
