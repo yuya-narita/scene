@@ -3989,8 +3989,6 @@
       refreshDocumentLanguages();
       renderAdvanced();
       updateAutoRecStartLabel();
-      setScreen('advanced');
-      scrollScreenToTop(advancedScreen);
       if(doc.cover?.src){
         coverImageUrl=doc.cover.src;
         coverImageFileName=doc.cover._editorFileName||'cover';
@@ -4010,6 +4008,9 @@
       await hydrateMasterPublicationState(workingDocument,{warnStale:true});
       await saveDraftNow();
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
+      // A loaded Master is already Scene-based. Open it directly in Live
+      // Studio instead of sending the author through the legacy Toolbox.
+      openPlayer({from:'easy',startAt:selectedSceneIndex});
     }catch(error){
       console.error(error);
       setProjectIoStatus(t('io.packageInvalid'),{error:true});
@@ -4129,14 +4130,13 @@
       normalizeSceneIds();
       refreshDocumentLanguages();
       renderAdvanced();
-      setScreen('advanced');
-      scrollScreenToTop(advancedScreen);
       await hydrateMasterPublicationState(workingDocument,{warnStale:true});
       await saveDraftNow();
       const localRefs=countLocalAssetRefs(doc);
       let message=t('io.imported',{name:file.name||'scene.json',n:doc.scenes.length});
       if(localRefs) message+=` ${t('io.localAssets',{n:localRefs})}`;
       setProjectIoStatus(message);
+      openPlayer({from:'easy',startAt:selectedSceneIndex});
     }catch(error){
       console.error(error); setProjectIoStatus(t('io.invalid'),{error:true});
       appAlert(t('io.invalid'));
@@ -7468,19 +7468,17 @@
     const hasDocument=Boolean(workingDocument?.scenes?.length);
     const hasSource=Boolean(hasDocument || bodyInput.value.trim());
     if(exportButton) exportButton.disabled=!hasSource;
-    if(advancedReturn) advancedReturn.hidden=!hasDocument;
+    // Toolbox is retained internally for one compatibility release, but is no
+    // longer part of the normal authoring route.
+    if(advancedReturn) advancedReturn.hidden=true;
     const menuExport=$('#menuExportPackageButton');
     if(menuExport) menuExport.disabled=!hasSource;
     const menuDistributionExport=$('#menuExportDistributionButton');
     if(menuDistributionExport) menuDistributionExport.disabled=!hasSource;
     const floatingAdvanced=$('#floatingAdvancedButton');
     if(floatingAdvanced){
-      const inAdvanced=advancedScreen && !advancedScreen.hidden;
-      floatingAdvanced.hidden=!hasDocument;
-      floatingAdvanced.disabled=!hasDocument;
-      floatingAdvanced.querySelector('span').textContent=inAdvanced?'✎':'▦';
-      floatingAdvanced.setAttribute('aria-label',inAdvanced?'Easyへ戻る':'道具箱を開く');
-      floatingAdvanced.title=inAdvanced?'Easyへ戻る':'道具箱';
+      floatingAdvanced.hidden=true;
+      floatingAdvanced.disabled=true;
     }
     const floatingPreview=$('#floatingPreviewButton');
     if(floatingPreview)floatingPreview.disabled=!hasSource;
@@ -7693,7 +7691,7 @@
   });
   $('#importPackageInput').addEventListener('change',async(event)=>{
     const file=event.target.files?.[0];
-    if(file) await importScenePackage(file);
+    if(file){closeEasyMenu();await importScenePackage(file);}
     updateAutoRecStartLabel();
     refreshDraftUI(true).catch(err=>console.warn('Draft UI refresh failed',err));
     updateEasyFileActions();
@@ -7830,8 +7828,8 @@
 
 
   // ---------------------------------------------------------
-  // Live Edit v0.1 — preview-first authoring prototype.
-  // Preview is the navigation surface; Advanced remains the detail surface.
+  // Live Studio — preview-first authoring surface.
+  // Toolbox remains an internal compatibility surface during the transition.
   // ---------------------------------------------------------
   const liveEditToolbar=$('#liveEditToolbar');
   const liveInlineToolbar=$('#liveInlineToolbar');
@@ -11124,19 +11122,21 @@ function openDesktopTextDetail(){
     return wrap;
   }
 
-  function renderDesktopTimingPanel(){
-    if(!desktopLivePanel || !workingDocument?.scenes?.length)return;
+  function timingRailIndices(total,current,limit=41){
+    if(total<=limit)return Array.from({length:total},(_,index)=>index);
+    const half=Math.floor(limit/2);
+    const start=Math.max(0,Math.min(current-half,total-limit));
+    return Array.from({length:limit},(_,offset)=>start+offset);
+  }
+
+  function buildDesktopTimingPanel(){
+    if(!workingDocument?.scenes?.length)return null;
     const {index}=liveEditScene();
     // PC timing follows the Scene currently visible in the left Live Preview.
     liveTimingIndex=Math.max(0,Math.min(index,workingDocument.scenes.length-1));
     const scene=workingDocument.scenes[liveTimingIndex];
     const seconds=liveTimingSeconds(scene);
     const recorded=liveTimingRecorded(scene);
-
-    desktopSceneLabel.textContent=`Scene ${liveTimingIndex+1} / ${workingDocument.scenes.length}`;
-    desktopTimingButton?.classList.add('is-active');
-    if(desktopTimingButton)desktopTimingButton.textContent=u('← 編集へ戻る','← Back to edit');
-    desktopLivePanelBody.innerHTML='';
 
     const wrap=document.createElement('div');
     wrap.className='desktop-timing-panel';
@@ -11148,19 +11148,20 @@ function openDesktopTextDetail(){
     railTitle.innerHTML=`<strong>${workingDocument.scenes.length} Scenes</strong><small>${u('Sceneを横送り','Scroll Scenes horizontally')}</small>`;
     const rail=document.createElement('div');
     rail.className='desktop-timing-rail';
-    workingDocument.scenes.forEach((item,idx)=>{
+    timingRailIndices(workingDocument.scenes.length,liveTimingIndex).forEach(idx=>{
+      const item=workingDocument.scenes[idx];
       const card=document.createElement('button');
       card.type='button';
       card.className='desktop-timing-scene-card'+(idx===liveTimingIndex?' is-selected':'');
-      const txt=(item.text||item.subText||u('空のScene','Empty Scene')).replace(/\\s+/g,' ').trim()||u('空のScene','Empty Scene');
+      const txt=(item.text||item.subText||u('空のScene','Empty Scene')).replace(/\s+/g,' ').trim()||u('空のScene','Empty Scene');
       card.innerHTML=`<span><b>${String(idx+1).padStart(2,'0')}</b><em>${liveTimingSeconds(item).toFixed(2)}s</em></span><strong>${txt}</strong>`;
       card.addEventListener('click',()=>{
         liveTimingIndex=idx;
         player.index=idx;
         selectedSceneIndex=idx;
         liveEditRenderAt(idx,{preserveSheet:true});
-        renderDesktopTimingPanel();
-        requestAnimationFrame(()=>rail.querySelector('.is-selected')?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'}));
+        localStorage.setItem('ahako-editor-v2-tab','timing');
+        renderDesktopLivePanel();
       });
       rail.append(card);
     });
@@ -11173,23 +11174,33 @@ function openDesktopTextDetail(){
     const left=document.createElement('div');
     left.innerHTML=`<strong>${u('AUTOタイミング','AUTO Timing')}</strong><small>${recorded?`${u('記録済み','Recorded')} · ${seconds.toFixed(2)}s`:`${u('未記録・標準','Not recorded · default')} ${DEFAULT_AUTO_SECONDS.toFixed(2)}s`}</small>`;
     const reset=document.createElement('button');reset.type='button';reset.textContent=u('標準に戻す','Reset to default');
-    reset.addEventListener('click',()=>{resetLiveTiming(liveTimingIndex);renderDesktopTimingPanel();});
+    reset.addEventListener('click',()=>{resetLiveTiming(liveTimingIndex);localStorage.setItem('ahako-editor-v2-tab','timing');renderDesktopLivePanel();});
     top.append(left,reset);
 
     const controls=document.createElement('div');
     controls.className='desktop-timing-controls';
-    const makeNudge=(d)=>{const b=document.createElement('button');b.type='button';b.textContent=d<0?String(d):`+${d}`;b.addEventListener('click',()=>{setLiveTimingSeconds(liveTimingIndex,liveTimingSeconds(workingDocument.scenes[liveTimingIndex])+d);renderDesktopTimingPanel();});return b;};
+    const makeNudge=(d)=>{const b=document.createElement('button');b.type='button';b.textContent=d<0?String(d):`+${d}`;b.addEventListener('click',()=>{setLiveTimingSeconds(liveTimingIndex,liveTimingSeconds(workingDocument.scenes[liveTimingIndex])+d);localStorage.setItem('ahako-editor-v2-tab','timing');renderDesktopLivePanel();});return b;};
     const value=document.createElement('label');value.className='desktop-timing-value';
     const input=document.createElement('input');input.type='number';input.min='0.15';input.max='60';input.step='0.05';input.value=seconds.toFixed(2);input.inputMode='decimal';
     const unit=document.createElement('span');unit.textContent=u('秒','sec');value.append(input,unit);
-    const commit=()=>{setLiveTimingSeconds(liveTimingIndex,input.value);renderDesktopTimingPanel();};
+    const commit=()=>{setLiveTimingSeconds(liveTimingIndex,input.value);localStorage.setItem('ahako-editor-v2-tab','timing');renderDesktopLivePanel();};
     input.addEventListener('change',commit);input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commit();}});
     controls.append(makeNudge(-.5),makeNudge(-.1),value,makeNudge(.1),makeNudge(.5));
     const note=document.createElement('p');note.textContent=u('AUTO RECの記録値を微調整できます。秒数は直接入力もできます。','Fine-tune AUTO REC timing. You can also enter seconds directly.');
     editor.append(top,controls,note);
     wrap.append(railWrap,buildResonanceSetting({desktop:true}),editor);
-    desktopLivePanelBody.append(wrap);
-    requestAnimationFrame(()=>rail.querySelector('.is-selected')?.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}));
+    requestAnimationFrame(()=>wrap.querySelector('.is-selected')?.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}));
+    return wrap;
+  }
+
+  function renderDesktopTimingPanel(){
+    if(!desktopLivePanel || !workingDocument?.scenes?.length)return;
+    desktopSceneLabel.textContent=`Scene ${liveEditScene().index+1} / ${workingDocument.scenes.length}`;
+    desktopTimingButton?.classList.add('is-active');
+    if(desktopTimingButton)desktopTimingButton.textContent=u('← 編集へ戻る','← Back to edit');
+    desktopLivePanelBody.innerHTML='';
+    const panel=buildDesktopTimingPanel();
+    if(panel)desktopLivePanelBody.append(panel);
   }
 
   let desktopCoverStyleTarget='title';
@@ -12087,7 +12098,7 @@ function openDesktopTextDetail(){
     const tabStage=document.createElement('div');tabStage.className='desktop-v2-tab-stage';
     const panes={};
     const makePane=(key)=>{const el=document.createElement('div');el.className='desktop-v2-tab-pane';el.dataset.editorTab=key;panes[key]=el;tabStage.appendChild(el);return el;};
-    ['frequent','body','text','effect','background','image','audio','scene'].forEach(makePane);
+    ['frequent','body','text','effect','background','image','audio','timing'].forEach(makePane);
 
     const frequent=desktopCard(u('よく使う設定','Frequent settings'),'desktop-v2-frequent-card');
     const FREQUENT_KEY='ahako-editor-v2-frequent-settings-v1';
@@ -12146,27 +12157,41 @@ function openDesktopTextDetail(){
       return true;
     };
 
-    panes.body.appendChild(bodyCard);
+    // Scene structure belongs beside the manuscript. Keeping these controls in
+    // a separate Scene tab made authors hunt through two places for one edit.
+    panes.body.append(bodyCard,sceneCard);
     if(!inlineExistingDetail('text',panes.text))panes.text.appendChild(textCard);
     if(!inlineExistingDetail('effect',panes.effect))panes.effect.appendChild(effectCard);
     if(chatCard)panes.effect.appendChild(chatCard);
     if(!inlineExistingDetail('background',panes.background))panes.background.appendChild(bgCard);
     panes.image.appendChild(sceneImageCard);
     if(!inlineExistingDetail('audio',panes.audio))panes.audio.appendChild(audioCard);
-    panes.scene.appendChild(sceneCard);
+    const timingPanel=buildDesktopTimingPanel();
+    if(timingPanel)panes.timing.appendChild(timingPanel);
 
     const tabDefs=[
       ['frequent','★'],['body',u('本文','Body')],['text',u('文字','Text')],['effect',u('演出','Effects')],
-      ['background',u('背景','Background')],['image',u('画像','Image')],['audio',u('音','Audio')],['scene','Scene']
+      ['background',u('背景','Background')],['image',u('画像','Image')],['audio',u('音','Audio')],['timing','⌛']
     ];
     let activeTab=localStorage.getItem('ahako-editor-v2-tab')||'frequent';
+    // One-time migration from the retired Scene tab.
+    if(activeTab==='scene')activeTab='body';
     if(!panes[activeTab])activeTab='frequent';
     const activate=(key)=>{
       activeTab=key;localStorage.setItem('ahako-editor-v2-tab',key);
       tabRail.querySelectorAll('button').forEach(b=>b.classList.toggle('is-active',b.dataset.editorTab===key));
       Object.entries(panes).forEach(([k,el])=>el.classList.toggle('is-active',k===key));
     };
-    tabDefs.forEach(([key,label])=>{const b=document.createElement('button');b.type='button';b.dataset.editorTab=key;b.textContent=label;b.addEventListener('click',()=>activate(key));tabRail.appendChild(b);});
+    tabDefs.forEach(([key,label])=>{
+      const b=document.createElement('button');
+      b.type='button';b.dataset.editorTab=key;b.textContent=label;
+      if(key==='timing'){
+        b.title=u('AUTOタイミング','AUTO Timing');
+        b.setAttribute('aria-label',u('AUTOタイミング','AUTO Timing'));
+      }
+      b.addEventListener('click',()=>activate(key));
+      tabRail.appendChild(b);
+    });
     tabShell.append(tabRail,tabStage);
     desktopLivePanelBody.append(tabShell);
     activate(activeTab);
@@ -12237,7 +12262,8 @@ function openDesktopTextDetail(){
     const rail=document.createElement('div');
     rail.className='live-timing-rail';
 
-    workingDocument.scenes.forEach((item,i)=>{
+    timingRailIndices(workingDocument.scenes.length,liveTimingIndex).forEach(i=>{
+      const item=workingDocument.scenes[i];
       const card=document.createElement('button');
       card.type='button';
       card.className='live-timing-scene-card';
@@ -13498,8 +13524,10 @@ function openDesktopTextDetail(){
     if(index<workingDocument.scenes.length-1)liveEditRenderAt(index+1,{preserveSheet:false});
   });
   desktopTimingButton?.addEventListener('click',()=>{
-    desktopTimingOpen=!desktopTimingOpen;
+    // Legacy header entry now opens the same dedicated timing tab.
+    desktopTimingOpen=false;
     liveTimingIndex=liveEditScene().index;
+    localStorage.setItem('ahako-editor-v2-tab','timing');
     renderDesktopLivePanel();
   });
   desktopShortcutButton?.addEventListener('click',()=>toggleDesktopShortcutHint());
@@ -14591,7 +14619,7 @@ function openDesktopTextDetail(){
   $('#autoRecRetry')?.addEventListener('click',()=>{if(liveEditEnabled)setLiveToolbarVisible(true);});
 
   function openPlayerScreenFromApi(startAt=0){
-    playerReturnTarget='advanced';
+    playerReturnTarget='easy';
     const core=ensurePlayer();
     core.load(clone(workingDocument),{startAt:Number(startAt)||0});
     core.setUILanguage?.(uiLanguage);

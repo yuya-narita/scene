@@ -11188,15 +11188,21 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
     gap:6px!important;
   }
 
-  /* SCENE — compact operation card at the top, same rounded geometry. */
-  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="scene"]{
+  /* Scene operations now live with the manuscript in the Body tab. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"]{
     align-content:start!important;
   }
-  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="scene"] .desktop-live-scene-ops{
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-live-scene-ops{
     grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:6px!important;
   }
-  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="scene"] .desktop-live-nav{
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-live-nav{
     margin-top:2px!important;padding-top:10px!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="timing"]{
+    align-content:start!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="timing"] .desktop-timing-panel{
+    padding:0 0 12px!important;
   }
 
   /* Frequent tab is a real panel too, not a floating placeholder. */
