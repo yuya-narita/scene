@@ -18,6 +18,62 @@ body{
 [hidden]{display:none!important}
 .public-player{width:100%;height:100dvh;min-height:100dvh}
 
+.public-shelf-return{
+  position:fixed;
+  top:max(12px,env(safe-area-inset-top));
+  left:max(12px,env(safe-area-inset-left));
+  z-index:120;
+  max-width:min(72vw,360px);
+  min-height:42px;
+  padding:0 16px;
+  border:1px solid var(--public-line);
+  border-radius:999px;
+  background:rgba(11,16,22,.78);
+  background:color-mix(in srgb,var(--public-bg) 78%,transparent);
+  color:var(--public-text);
+  box-shadow:0 8px 28px rgba(0,0,0,.16);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  display:flex;
+  align-items:center;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  text-decoration:none;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.02em;
+}
+@media(max-width:520px){
+  .public-shelf-return{
+    top:max(8px,env(safe-area-inset-top));
+    left:max(8px,env(safe-area-inset-left));
+    width:var(--shelf-return-expanded-width,fit-content);
+    max-width:76vw;
+    min-height:38px;
+    padding:0 13px;
+    font-size:11px;
+    justify-content:flex-start;
+    transition:width 900ms cubic-bezier(.22,1,.36,1),padding 900ms cubic-bezier(.22,1,.36,1),box-shadow 900ms ease;
+  }
+  .public-shelf-return.is-reading{
+    width:38px;
+    min-width:38px;
+    padding:0;
+    justify-content:center;
+    font-size:0;
+    box-shadow:0 5px 18px rgba(0,0,0,.12);
+  }
+  .public-shelf-return.is-reading::before{
+    content:'←';
+    font-size:18px;
+    line-height:1;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  .public-shelf-return{transition:none!important}
+}
+
 /* Lightweight hand-off screen, not a publishing-site cover. */
 .public-intro,.public-ending{
   position:fixed;
@@ -1065,8 +1121,15 @@ body{
   }
 }
 
-
-/* =========================================================
+/* V69 — author-approved public work → reader's own copy */
+.public-own-copy-wrap{width:min(520px,88vw);margin:16px auto 0;text-align:center;opacity:0;transform:translateY(8px);transition:opacity .6s ease 3.5s,transform .6s ease 3.5s}
+.public-ending.is-visible .public-own-copy-wrap{opacity:1;transform:translateY(0)}
+.public-own-copy-wrap[hidden]{display:none!important}
+.public-own-copy{width:100%;min-height:50px;padding:10px 18px;border:1px solid var(--public-line);border-radius:999px;background:var(--public-text);color:var(--public-bg);font:inherit;font-size:14px;font-weight:800;cursor:pointer}
+.public-own-copy:disabled{opacity:.55;cursor:wait}
+.public-own-copy-status{min-height:1.4em;margin:7px 0 0;color:var(--public-sub);font-size:10px;line-height:1.4}
+.public-own-copy-wrap:not([hidden]) + .public-reread{margin-top:14px!important}
+@media(max-width:520px){.public-own-copy-wrap{width:min(88vw,440px);margin-top:12px}.public-own-copy{min-height:46px;font-size:13px}.public-own-copy-status{margin-top:5px}}
    V150 — public chrome contrast + compact paid ending
    ========================================================= */
 /* Public chrome must remain readable over both authored black and light scenes.
@@ -1124,4 +1187,25 @@ body{
   .public-own-copy-wrap:not([hidden]){
     margin-top:clamp(18px,2.6vh,26px)!important;
   }
+}
+
+/* =========================================================
+   V151 — reading chrome contrast parity
+   Keep reader controls legible independently of authored Scene colors.
+   ========================================================= */
+.public-player .sp-prev,
+.public-player .sp-tap-hint,
+.public-player .sp-auto{
+  color:#777!important;
+  -webkit-text-fill-color:#777!important;
+  opacity:1!important;
+}
+.public-player .sp-auto{
+  border-color:rgba(119,119,119,.42)!important;
+}
+.public-player .sp-auto.is-on{
+  background:#777!important;
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  border-color:#777!important;
 }
