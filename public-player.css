@@ -1209,3 +1209,27 @@ body{
   -webkit-text-fill-color:#fff!important;
   border-color:#777!important;
 }
+
+/* =========================================================
+   V152 — public reading chrome neutral contrast
+   Scene-authored text/background colors must not dim reader chrome.
+   ========================================================= */
+.public-player .sp-author,
+.public-player .sp-title,
+.public-player .sp-prev,
+.public-player .sp-restart,
+.public-player .sp-tap-hint,
+.public-player .sp-auto,
+.public-report-trigger{
+  color:#9a9a9a!important;
+  -webkit-text-fill-color:#9a9a9a!important;
+  opacity:1!important;
+}
+.public-player .sp-auto{border-color:rgba(154,154,154,.58)!important}
+.public-player .sp-auto.is-on{
+  background:#9a9a9a!important;
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  border-color:#9a9a9a!important;
+}
+.public-report-trigger{font-weight:600!important}
