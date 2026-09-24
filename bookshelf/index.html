@@ -141,7 +141,7 @@
 
   <dialog id="seriesBoxDialog" class="series-box-dialog">
     <button id="closeSeriesBox" class="dialog-close" type="button" aria-label="閉じる">×</button>
-    <div class="series-box-dialog-body"><p class="eyebrow">SERIES BOX</p><h2 id="seriesBoxDialogTitle">シリーズBOXを作る</h2><label>BOX名<input id="seriesBoxTitle" maxlength="120" placeholder="例：あ箱 開発ログ"></label><p>公開済みの本を選び、つまみで順番を入れ替えます。</p><div id="seriesBookChoices" class="series-book-choices"></div><div class="series-box-actions"><button id="deleteSeriesBox" class="danger" type="button" hidden>BOXを削除</button><button id="saveSeriesBox" class="primary" type="button">保存する</button></div><p id="seriesBoxStatus" class="author-status"></p></div>
+    <div class="series-box-dialog-body"><p class="eyebrow">SERIES BOX</p><h2 id="seriesBoxDialogTitle">シリーズBOXを作る</h2><label>BOX名<input id="seriesBoxTitle" maxlength="120" placeholder="例：あ箱 開発ログ"></label><p id="seriesBoxHelp">本を選び、つまみで順番を入れ替えます。</p><div id="seriesBookChoices" class="series-book-choices"></div><div class="series-box-actions"><button id="deleteSeriesBox" class="danger" type="button" hidden>BOXを削除</button><button id="saveSeriesBox" class="primary" type="button">保存する</button></div><p id="seriesBoxStatus" class="author-status"></p></div>
   </dialog>
 
   <dialog id="archiveDialog" class="archive-dialog">
@@ -208,6 +208,6 @@
   </div>
   <div id="toast" class="toast" hidden></div>
   <script src="../ahako-dialog.js?v=70.3"></script>
-  <script src="bookshelf.js?v=70.3"></script>
+  <script src="bookshelf.js?v=139.1"></script>
 </body>
 </html>
