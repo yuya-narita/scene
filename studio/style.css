@@ -11117,6 +11117,14 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-live-body-card textarea{
     min-height:96px!important;padding:10px!important;border-radius:9px!important;
   }
+  /* The main manuscript may grow with the native bottom-right resize grip.
+     Do not cap it at the old 150px cockpit height; the inspector itself owns
+     vertical scrolling, so long Scene text can be expanded in full. */
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-live-body-card textarea:not(.desktop-live-subtext){
+    min-height:132px!important;
+    max-height:none!important;
+    resize:vertical!important;
+  }
 
   /* TEXT / EFFECT / BACKGROUND — dense two-column inspector rhythm. */
   body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="text"] .desktop-text-detail-section,
