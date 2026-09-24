@@ -11594,6 +11594,32 @@ function openDesktopTextDetail(){
     const refresh=()=>{scheduleDraftSave(70);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();};
 
     const bodyCard=desktopCard(u('本文','Text'),'desktop-live-body-card');
+    // Scene type is part of the manuscript's meaning, so keep it beside the
+    // body instead of hiding it in the typography inspector. The former quick
+    // Text card is not mounted in the current tab layout, which made these
+    // existing values look as if they had disappeared.
+    const sceneTypeControl=document.createElement('div');sceneTypeControl.className='desktop-scene-type-control';
+    const sceneTypeLabel=document.createElement('span');sceneTypeLabel.className='desktop-scene-type-label';sceneTypeLabel.textContent=u('Sceneの種類','Scene type');
+    const sceneTypeOptions=document.createElement('div');sceneTypeOptions.className='desktop-scene-type-options';sceneTypeOptions.setAttribute('role','group');sceneTypeOptions.setAttribute('aria-label',sceneTypeLabel.textContent);
+    [
+      ['text',u('テキスト','Text')],
+      ['dialogue',u('セリフ','Dialogue')],
+      ['sound',u('音だけ','Sound only')]
+    ].forEach(([value,label])=>{
+      const button=document.createElement('button');button.type='button';button.textContent=label;
+      const selected=(scene.type||'text')===value;
+      button.classList.toggle('is-selected',selected);
+      button.setAttribute('aria-pressed',selected?'true':'false');
+      button.addEventListener('click',()=>{
+        if((scene.type||'text')===value)return;
+        captureUndo(u('Sceneの種類の変更を元に戻せます','You can undo the Scene type change'));
+        scene.type=value;
+        refresh();
+        queueMicrotask(()=>showUndo(u('Sceneの種類の変更を元に戻せます','You can undo the Scene type change')));
+      });
+      sceneTypeOptions.appendChild(button);
+    });
+    sceneTypeControl.append(sceneTypeLabel,sceneTypeOptions);
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder=u('本文を入力','Enter text');
     bindRememberedDesktopBodyHeight(ta);
     // Writing should feel like writing, not replaying a Scene on every key.
@@ -11652,7 +11678,7 @@ function openDesktopTextDetail(){
         e.preventDefault();desktopAddSceneAndFocus();return;
       }
     });
-    bodyCard.appendChild(ta);
+    bodyCard.append(sceneTypeControl,ta);
 
     // Rich Text Player v0.10: table cells are edited directly in Live Preview.
     // Keep the inline [表 n] anchor in the body textarea, but do not duplicate

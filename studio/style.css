@@ -11114,6 +11114,25 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-live-body-card{
     opacity:1!important;gap:8px!important;padding:12px!important;
   }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-scene-type-control{
+    display:grid!important;gap:6px!important;min-width:0!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-scene-type-label{
+    color:#555a63!important;font:750 10px/1.25 system-ui,-apple-system,"Segoe UI",sans-serif!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-scene-type-options{
+    display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important;min-width:0!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-scene-type-options button{
+    min-width:0!important;height:34px!important;padding:0 8px!important;border:1px solid #d7d9de!important;border-radius:9px!important;
+    background:#fff!important;color:#343840!important;font:750 11px/1 system-ui,-apple-system,"Segoe UI",sans-serif!important;white-space:nowrap!important;cursor:pointer!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-scene-type-options button.is-selected{
+    border-color:#1d2024!important;background:#1d2024!important;color:#fff!important;box-shadow:0 2px 7px rgba(20,23,28,.14)!important;
+  }
+  body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-scene-type-options button:focus-visible{
+    outline:2px solid #5694ff!important;outline-offset:2px!important;
+  }
   body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="body"] .desktop-live-body-card textarea{
     min-height:96px!important;padding:10px!important;border-radius:9px!important;
   }
