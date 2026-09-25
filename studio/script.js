@@ -87,6 +87,10 @@
   const ownCopyEnabledInput = $('#ownCopyEnabled');
   const commerceModeFree = $('#commerceModeFree');
   const commerceModePurchase = $('#commerceModePurchase');
+  const commerceModeLocked = $('#commerceModeLocked');
+  const commerceLockField = $('#commerceLockField');
+  const commerceLockSceneInput = $('#commerceLockSceneInput');
+  const commerceLockUseCurrent = $('#commerceLockUseCurrent');
   const commerceAmountField = $('#commerceAmountField');
   const commerceAmountInput = $('#commerceAmountInput');
   const commercePriceBadge = $('#commercePriceBadge');
@@ -848,24 +852,34 @@
   }
   function ownCopyGateMode(doc){
     const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
-    return ['free','purchase','support'].includes(mode)?mode:'free';
+    return ['free','purchase','locked','support'].includes(mode)?mode:'free';
   }
   function commerceDraftSettings(doc=workingDocument){
     const saved=doc?.studio?.commerceDraft||{};
     const gate=ownCopyGateMode(doc);
-    const mode=gate==='purchase'?'purchase':'free';
+    const mode=gate==='locked'?'locked':(gate==='purchase'?'purchase':'free');
     const raw=Number(saved.amount);
     const amount=Number.isInteger(raw)&&raw>=100&&raw<=1000000?raw:100;
-    return {mode,amount,currency:'JPY'};
+    const lockScene=Math.max(2,Math.floor(Number(saved.lockScene||doc?.commerce?.ownCopyGate?.lockScene||2)));
+    return {mode,amount,currency:'JPY',lockScene};
   }
   function currentCommerceSettings(){
-    const mode=commerceModePurchase?.checked?'purchase':'free';
+    const mode=commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':'free');
     const amount=Math.floor(Number(commerceAmountInput?.value||0));
-    return {mode,amount,currency:'JPY'};
+    const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
+    return {mode,amount,currency:'JPY',lockScene};
   }
   function validateCommerceSettings({focus=false}={}){
     const settings=currentCommerceSettings();
     if(settings.mode==='free')return settings;
+    if(settings.mode==='locked'){
+      const count=Array.isArray(workingDocument?.scenes)?workingDocument.scenes.length:0;
+      if(!Number.isInteger(settings.lockScene)||settings.lockScene<2||settings.lockScene>count){
+        if(commercePriceStatus)commercePriceStatus.textContent=`有料開始Sceneは2〜${Math.max(2,count)}で指定してください。`;
+        if(focus)commerceLockSceneInput?.focus();
+        return null;
+      }
+    }
     if(!Number.isInteger(settings.amount)||settings.amount<100||settings.amount>1000000){
       if(commercePriceStatus)commercePriceStatus.textContent='販売価格は100円〜1,000,000円で入力してください。';
       if(focus)commerceAmountInput?.focus();
@@ -875,10 +889,12 @@
     return settings;
   }
   function renderCommercePriceUI(){
-    const paid=Boolean(commerceModePurchase?.checked);
+    const paid=Boolean(commerceModePurchase?.checked||commerceModeLocked?.checked);
+    const locked=Boolean(commerceModeLocked?.checked);
     if(commerceAmountField)commerceAmountField.hidden=!paid;
+    if(commerceLockField)commerceLockField.hidden=!locked;
     if(commercePriceBadge){
-      commercePriceBadge.textContent=paid?`¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:'無料';
+      commercePriceBadge.textContent=paid?`${locked?'LOCK · ':''}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:'無料';
       commercePriceBadge.classList.toggle('is-paid',paid);
     }
     if(paid){
@@ -892,15 +908,17 @@
     if(!doc||typeof doc!=='object')return;
     const settings=currentCommerceSettings();
     doc.commerce ||= {};
-    doc.commerce.ownCopyGate={...(doc.commerce.ownCopyGate||{}),schemaVersion:'1',mode:settings.mode};
+    doc.commerce.ownCopyGate={...(doc.commerce.ownCopyGate||{}),schemaVersion:'1',mode:settings.mode,...(settings.mode==='locked'?{lockScene:settings.lockScene}:{})};
     doc.studio ||= {};
-    doc.studio.commerceDraft={schemaVersion:'1',mode:settings.mode,currency:'JPY',...(settings.mode==='purchase'&&Number.isInteger(settings.amount)?{amount:settings.amount}:{})};
+    doc.studio.commerceDraft={schemaVersion:'1',mode:settings.mode,currency:'JPY',...((settings.mode==='purchase'||settings.mode==='locked')&&Number.isInteger(settings.amount)?{amount:settings.amount}:{}),...(settings.mode==='locked'?{lockScene:settings.lockScene}:{})};
   }
   function restoreCommercePriceUI(doc){
     const settings=commerceDraftSettings(doc);
     if(commerceModeFree)commerceModeFree.checked=settings.mode==='free';
     if(commerceModePurchase)commerceModePurchase.checked=settings.mode==='purchase';
+    if(commerceModeLocked)commerceModeLocked.checked=settings.mode==='locked';
     if(commerceAmountInput)commerceAmountInput.value=String(settings.amount||100);
+    if(commerceLockSceneInput)commerceLockSceneInput.value=String(settings.lockScene||2);
     renderCommercePriceUI();
   }
   function applyOwnCopyGateToDocument(doc){
@@ -1211,14 +1229,17 @@
     // reopened, hydrate the Studio controls from the server before it can
     // accidentally overwrite a paid work with stale local FREE settings.
     if(status.commerce && workingDocument){
-      const mode=String(status.commerce.mode||'free')==='purchase'?'purchase':'free';
+      const serverMode=String(status.commerce.mode||'free')==='purchase'?'purchase':'free';
+      const localLocked=ownCopyGateMode(workingDocument)==='locked';
+      const mode=serverMode==='purchase'&&localLocked?'locked':serverMode;
       const amount=Math.floor(Number(status.commerce.amount||100));
+      const lockScene=Math.max(2,Math.floor(Number(workingDocument?.studio?.commerceDraft?.lockScene||workingDocument?.commerce?.ownCopyGate?.lockScene||2)));
       workingDocument.commerce ||= {};
-      workingDocument.commerce.ownCopyGate={...(workingDocument.commerce.ownCopyGate||{}),schemaVersion:'1',mode};
+      workingDocument.commerce.ownCopyGate={...(workingDocument.commerce.ownCopyGate||{}),schemaVersion:'1',mode,...(mode==='locked'?{lockScene}:{})};
       workingDocument.studio ||= {};
-      workingDocument.studio.commerceDraft={schemaVersion:'1',mode,currency:'JPY',...(mode==='purchase'?{amount}: {})};
+      workingDocument.studio.commerceDraft={schemaVersion:'1',mode,currency:'JPY',...((mode==='purchase'||mode==='locked')?{amount}: {}),...(mode==='locked'?{lockScene}:{})};
       restoreCommercePriceUI(workingDocument);
-      if(mode==='purchase')applyOwnCopyPolicyToDocument(workingDocument);
+      if(mode==='purchase'||mode==='locked')applyOwnCopyPolicyToDocument(workingDocument);
     }
 
     // Compare against the actual hosted scene so an imported master .scene can
@@ -1673,7 +1694,7 @@
       appAlert(uiLanguage==='ja'?'現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。':'The current work could not be saved automatically, so Studio did not start a new work.');
       return false;
     }
-    workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=false;ownCopyEnabledInput.disabled=false;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=false;ownCopyEnabledInput.disabled=false;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceModeLocked)commerceModeLocked.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     latestPublishedId='';
     latestPublishedUrl='';
@@ -2626,8 +2647,8 @@
       },
       player:{ navigation:{ allowPrevious:true } },
       sharing:{ relay:{ schemaVersion:'1', enabled:Boolean(relayEnabled) }, ownCopy:{ schemaVersion:'1', enabled:Boolean(ownCopyEnabledInput?.checked) } },
-      commerce:{ ownCopyGate:{ schemaVersion:'1', mode:commerceModePurchase?.checked?'purchase':'free' } },
-      studio:{ commerceDraft:{ schemaVersion:'1', mode:commerceModePurchase?.checked?'purchase':'free', currency:'JPY', ...(commerceModePurchase?.checked?{amount:Math.floor(Number(commerceAmountInput?.value||100))}:{}) } },
+      commerce:{ ownCopyGate:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':'free'), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
+      studio:{ commerceDraft:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':'free'), currency:'JPY', ...((commerceModePurchase?.checked||commerceModeLocked?.checked)?{amount:Math.floor(Number(commerceAmountInput?.value||100))}:{}), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
       cover:{
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
@@ -4948,9 +4969,11 @@
           'X-Scene-Revision':String(requestRevision),
           ...(restoreFromOld?{'X-Scene-Restore-From-Old':'1'}:{}),
           'X-Publish-Rights':AUTHOR_TERMS_VERSION,
-          'X-Commerce-Mode':currentCommerceSettings().mode,
+          'X-Commerce-Mode':currentCommerceSettings().mode==='locked'?'purchase':currentCommerceSettings().mode,
+          'X-Commerce-Access':currentCommerceSettings().mode==='locked'?'preview_lock':'full',
+          ...(currentCommerceSettings().mode==='locked'?{'X-Commerce-Lock-Scene':String(currentCommerceSettings().lockScene)}:{}),
           'X-Commerce-Currency':'JPY',
-          ...(currentCommerceSettings().mode==='purchase'?{'X-Commerce-Amount':String(currentCommerceSettings().amount)}:{})
+          ...((currentCommerceSettings().mode==='purchase'||currentCommerceSettings().mode==='locked')?{'X-Commerce-Amount':String(currentCommerceSettings().amount)}:{})
         }),
         body:JSON.stringify(hostedDocument)
       };
@@ -7388,7 +7411,9 @@
   endingLinkInputs.forEach(pair=>[pair.kicker,pair.label,pair.url].forEach(el=>el?.addEventListener('change',()=>saveEndingRecent({type:'slot',kicker:pair.kicker?.value,label:pair.label?.value,url:pair.url?.value}))));
 
   languageInput?.addEventListener('change',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();});
-  [commerceModeFree,commerceModePurchase].forEach(el=>el?.addEventListener('change',()=>{
+  commerceLockUseCurrent?.addEventListener('click',()=>{if(commerceLockSceneInput){commerceLockSceneInput.value=String(Math.max(2,(Number(selectedSceneIndex)||0)+1));renderCommercePriceUI();markDirty?.();}});
+  commerceLockSceneInput?.addEventListener('input',()=>{renderCommercePriceUI();markDirty?.();});
+  [commerceModeFree,commerceModePurchase,commerceModeLocked].forEach(el=>el?.addEventListener('change',()=>{
     if(!workingDocument)ensureWorkingDocumentFromEasy();
     renderCommercePriceUI();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
   }));

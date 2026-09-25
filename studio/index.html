@@ -401,12 +401,19 @@
         </div>
         <div class="commerce-price-options" role="radiogroup" aria-label="販売方法">
           <label><input id="commerceModeFree" type="radio" name="commerceMode" value="free" checked><span><strong>無料</strong><small>そのまま本棚へ受け取れます</small></span></label>
-          <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>有料</strong><small>Stripe決済後に受け取れます</small></span></label>
+          <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>MY COPY販売</strong><small>最後まで読めます。読了後に購入して受け取れます</small></span></label>
+          <label><input id="commerceModeLocked" type="radio" name="commerceMode" value="locked"><span><strong>有料ロック</strong><small>指定Sceneから先は購入後に読めます</small></span></label>
         </div>
         <label id="commerceAmountField" class="commerce-amount-field" hidden>
           <span>販売価格</span>
           <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="1000000" step="1" value="100" aria-label="販売価格（円）"><small>円</small></div>
         </label>
+        <div id="commerceLockField" class="commerce-amount-field" hidden>
+          <span>ここから有料</span>
+          <div class="commerce-amount-input"><span>Scene</span><input id="commerceLockSceneInput" type="number" inputmode="numeric" min="2" step="1" value="2" aria-label="有料開始Scene"><small>から</small></div>
+          <button id="commerceLockUseCurrent" type="button" class="secondary-button">現在のSceneから有料</button>
+          <small id="commerceLockHint">指定したSceneの直前まで試し読みできます。</small>
+        </div>
         <p id="commercePriceStatus" class="commerce-price-status" aria-live="polite"></p>
       </section>
       <button id="easyPublishButton" class="primary-button easy-publish-action easy-publish-bottom" type="button" disabled><span>公開する</span></button>
