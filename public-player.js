@@ -598,6 +598,7 @@
   function canonicalMasterWorkId(doc=documentData){
     return String(doc?.studio?.identity?.workId||doc?.workId||'').trim();
   }
+  function commercePreviewLocked(doc=documentData){return doc?.commerce?.ownCopyGate?.access==='preview_lock';}
   function commerceGateMode(doc=documentData){
     const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
     return ['free','purchase','support'].includes(mode)?mode:'free';
@@ -749,7 +750,7 @@
       if(ownCopyStatus)ownCopyStatus.textContent=message;
     }
   }
-  async function finishPaidOwnCopy(orderId,accessToken){
+  async function finishPaidOwnCopy(orderId,accessToken,{continueReading=false}={}){
     const response=await fetch(`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/own-copy`,{
       method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',body:'{}'
     });
@@ -759,6 +760,12 @@
     const claimUrl=publicBookshelfClaimUrl(token);
     if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
     forgetCommerceOrderToken(orderId);
+    if(continueReading){
+      try{sessionStorage.setItem(`ahako:paid-claim:${currentWorkId()}`,token);}catch(_){}
+      const accessSrc=`${publicOwnCopyApiBase()}/work/${encodeURIComponent(currentWorkId())}/access?reader_id=${encodeURIComponent(publicOwnCopyReaderId())}`;
+      const next=new URL(cleanCommerceReturnUrl());next.searchParams.set('src',accessSrc);next.searchParams.set('paid_continue','1');
+      location.replace(next.toString());return;
+    }
     location.href=claimUrl;
   }
   async function handleCommerceReturn(){
@@ -785,7 +792,7 @@
       const payload=await response.json().catch(()=>null);
       if(response.ok&&payload?.ok&&payload?.order?.status==='paid'){
         if(ownCopyStatus)ownCopyStatus.textContent='決済を確認しました。本棚に一冊を用意しています…';
-        await finishPaidOwnCopy(orderId,accessToken);
+        await finishPaidOwnCopy(orderId,accessToken,{continueReading:commercePreviewLocked(documentData)});
         return true;
       }
       await new Promise(resolve=>setTimeout(resolve,1000));
@@ -940,6 +947,16 @@
     const doc = hydratePublicAudio(await response.json());
     ScenePlayerCore.validate(doc);
     documentData = doc;
+    if(commercePreviewLocked(doc)&&!params.get('payment')){
+      try{
+        const ownership=await fetchCommerceOwnership();
+        if(ownership?.owned){
+          const accessSrc=`${publicOwnCopyApiBase()}/work/${encodeURIComponent(currentWorkId())}/access?reader_id=${encodeURIComponent(publicOwnCopyReaderId())}`;
+          const next=new URL(location.href);next.searchParams.set('src',accessSrc);next.searchParams.set('paid_continue','1');
+          location.replace(next.toString());return;
+        }
+      }catch(error){console.warn('Paid access probe failed',error);}
+    }
     applyDocumentMeta(doc);
     if(!analyticsViewSent && currentWorkId()){
       analyticsViewSent=true;
@@ -964,6 +981,9 @@
       // (cover, player, or ending). Checkout was launched only from ending, so
       // normalize every such return to ending instead of trusting browser history.
       forceCheckoutReturnToEnding();
+    }else if(params.get('paid_continue')==='1'){
+      history.replaceState(null,'',(()=>{const u=new URL(location.href);u.searchParams.delete('paid_continue');return u.toString();})());
+      ensurePlayer(Math.max(0,safeProgress()));
     }
   }
 
@@ -1036,12 +1056,13 @@
 
   function onEnd() {
     setShelfReturnReading(false);
-    localStorage.removeItem(storageKey());
+    if(!commercePreviewLocked(documentData))localStorage.removeItem(storageKey());
     if(resonanceSession?.valid){
       if(player?.auto)invalidateResonance();
       else if(resonanceSession.samples.length===(documentData?.scenes?.length||1)-1)recordResonanceBoundary((documentData?.scenes?.length||1)-1);
     }
     renderResonanceResult(resonanceScore());
+    if(commercePreviewLocked(documentData)&&ownCopyStatus)ownCopyStatus.textContent='試し読みはここまでです。購入すると、この続きから読めます。';
     if(!analyticsCompleted){
       analyticsCompleted=true;
       sendAnalytics('complete',{index:Array.isArray(documentData?.scenes)?documentData.scenes.length-1:0});
