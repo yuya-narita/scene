@@ -583,13 +583,20 @@
       sessionStorage.setItem(`${BOOKSHELF_CLAIM_RETURN_PREFIX}${handoffId}`,location.href);
     }catch(_){}
   }
-  function publicBookshelfClaimUrl(token,{handoffId='',external=false}={}){
+  function publicBookshelfClaimUrl(token,{handoffId='',external=false,paidPublicationId=''}={}){
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
     const url=new URL('./bookshelf/',location.href);
     url.searchParams.set('claim',String(token));
     if(/^handoff_[a-f0-9]{24}$/i.test(handoffId))url.searchParams.set('handoff',handoffId);
     if(external)url.searchParams.set('openExternalBrowser','1');
+    if(/^[A-Za-z0-9_-]{12,80}$/.test(String(paidPublicationId||'')))url.searchParams.set('paidPublicationId',String(paidPublicationId));
     return url.toString();
+  }
+  function pendingPaidClaimToken(publicationId=currentWorkId()){
+    try{
+      const token=String(sessionStorage.getItem(`ahako:paid-claim:${publicationId}`)||'');
+      return /^[a-f0-9]{48}$/i.test(token)?token:'';
+    }catch(_){return '';}
   }
   function publicOwnCopyApiBase(){
     try{const url=new URL(source(),location.href);return url.pathname.includes('/work/')?url.origin:'https://scene-studio-api.a-hako.workers.dev';}
@@ -666,11 +673,37 @@
     if(!response.ok||!payload?.ok)return null;
     return payload;
   }
+  async function freshOwnedBookshelfClaim(publicationId){
+    const response=await fetch(`${publicOwnCopyApiBase()}/commerce/ownership/claim`,{
+      method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+      body:JSON.stringify({publicationId,readerId:publicOwnCopyReaderId()})
+    });
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok||!payload?.bookshelfClaim?.token){
+      throw new Error(String(payload?.error||'購入済みの一冊を本棚へ用意できませんでした。'));
+    }
+    return String(payload.bookshelfClaim.token);
+  }
   function showAlreadyPurchased(){
     if(!ownCopyButton)return;
     ownCopyButton.disabled=false;
     ownCopyButton.textContent='購入済み・本棚で読む';
-    ownCopyButton.onclick=()=>{location.href=new URL('./bookshelf/',location.href).toString();};
+    const publicationId=currentWorkId();
+    ownCopyButton.onclick=async()=>{
+      ownCopyButton.disabled=true;
+      if(ownCopyStatus)ownCopyStatus.textContent='購入済みのMY COPYを本棚へ用意しています…';
+      try{
+        let token=pendingPaidClaimToken(publicationId);
+        if(!token)token=await freshOwnedBookshelfClaim(publicationId);
+        const claimUrl=publicBookshelfClaimUrl(token,{paidPublicationId:publicationId});
+        if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
+        location.href=claimUrl;
+      }catch(error){
+        console.error(error);
+        ownCopyButton.disabled=false;
+        if(ownCopyStatus)ownCopyStatus.textContent=String(error?.message||error);
+      }
+    };
     if(ownCopyStatus)ownCopyStatus.textContent='この作品は購入済みです。再購入はされません。';
   }
   async function syncPublicOwnCopy(doc){
@@ -757,7 +790,7 @@
     const payload=await response.json().catch(()=>null);
     if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'購入した一冊を受け取れませんでした。'));
     const token=String(payload?.bookshelfClaim?.token||'');
-    const claimUrl=publicBookshelfClaimUrl(token);
+    const claimUrl=publicBookshelfClaimUrl(token,{paidPublicationId:currentWorkId()});
     if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
     forgetCommerceOrderToken(orderId);
     if(continueReading){
@@ -952,7 +985,11 @@
         const ownership=await fetchCommerceOwnership();
         if(ownership?.owned){
           const accessSrc=`${publicOwnCopyApiBase()}/work/${encodeURIComponent(currentWorkId())}/access?reader_id=${encodeURIComponent(publicOwnCopyReaderId())}`;
-          const next=new URL(location.href);next.searchParams.set('src',accessSrc);next.searchParams.set('paid_continue','1');
+          // V187: an ordinary revisit from あ箱の本 must still open on the cover.
+          // paid_continue is reserved only for the immediate Stripe success path.
+          const next=new URL(location.href);
+          next.searchParams.set('src',accessSrc);
+          next.searchParams.delete('paid_continue');
           location.replace(next.toString());return;
         }
       }catch(error){console.warn('Paid access probe failed',error);}
@@ -1089,8 +1126,8 @@
           .public-ending.is-preview-lock .public-ending-actions{display:none!important;}
           .public-preview-lock-marker{text-align:center;margin:0 auto 34px;max-width:520px;padding:0 24px;}
           .public-preview-lock-marker small{display:block;font:600 11px/1.4 system-ui,sans-serif;letter-spacing:.28em;color:#9b978f;margin-bottom:18px;}
-          .public-preview-lock-marker strong{display:block;font:500 22px/1.75 system-ui,sans-serif;color:inherit;}
-          .public-ending.is-preview-lock .public-own-copy-wrap{width:min(680px,calc(100vw - 48px));margin-left:auto;margin-right:auto;}
+          .public-preview-lock-marker strong{display:block;font:500 clamp(17px,4.5vw,22px)/1.75 system-ui,sans-serif;color:inherit;white-space:nowrap;}
+          .public-ending.is-preview-lock .public-own-copy-wrap{width:min(680px,calc(100vw - 48px));margin-left:auto;margin-right:auto;transform:translateY(-14px);}
         `;
         document.head.appendChild(style);
       }
