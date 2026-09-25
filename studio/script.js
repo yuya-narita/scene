@@ -2501,7 +2501,7 @@
       if(meta.seriesId)manifest.series.id=meta.seriesId;
       if(meta.seriesTitle)manifest.series.title=meta.seriesTitle;
       if(meta.episode)manifest.series.episode=meta.episode;
-      if(meta.episodeNumber)manifest.series.episodeNumber=meta.episodeNumber;
+      // V180: Series BOX position is not authored episode metadata.
     }
     if(coverPath){
       manifest.cover={
@@ -3052,12 +3052,9 @@
     const linkedSeriesId=activeSeriesId();
     if(linkedSeriesId)workingDocument.metadata.seriesId=linkedSeriesId;else delete workingDocument.metadata.seriesId;
     workingDocument.metadata.episode=episodeInput?.value.trim() || '';
-    const episodeNumber=Number(episodeNumberInput?.value||0);
-    // A new series has no seriesId until the first successful publish. Keep
-    // its authored order while moving between Toolbox and Easy instead of
-    // treating it as an unlinked standalone work.
-    const hasSeriesSelection=Boolean(linkedSeriesId||seriesSelection==='__new__');
-    if(hasSeriesSelection&&Number.isInteger(episodeNumber)&&episodeNumber>=1&&episodeNumber<=9999)workingDocument.metadata.episodeNumber=episodeNumber;else delete workingDocument.metadata.episodeNumber;
+    // V180: authored "話数" is the free-text metadata.episode above.
+    // Series order is managed only by Series BOX.
+    delete workingDocument.metadata.episodeNumber;
     workingDocument.metadata.episodeTitle=episodeTitleInput?.value.trim() || '';
     workingDocument.metadata.description=descriptionInput?.value.trim() || '';
     workingDocument.theme=selectedTheme;
@@ -4797,11 +4794,10 @@
     if(!workingDocument)return;
     workingDocument.metadata ||= {};
     const selected=String(seriesLinkSelect?.value||'');
-    const episodeNumber=Number(episodeNumberInput?.value||0);
     if(/^series_[a-f0-9]{32}$/i.test(selected))workingDocument.metadata.seriesId=selected;
     else delete workingDocument.metadata.seriesId;
-    if(selected&&Number.isInteger(episodeNumber)&&episodeNumber>=1&&episodeNumber<=9999)workingDocument.metadata.episodeNumber=episodeNumber;
-    else delete workingDocument.metadata.episodeNumber;
+    // V180: Series BOX owns ordering. Do not author/order by episodeNumber.
+    delete workingDocument.metadata.episodeNumber;
   }
   async function ensureSeriesIdentityForPublish(doc){
     // V66: Series membership is managed visually from the Created Bookshelf.
