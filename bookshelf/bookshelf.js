@@ -87,7 +87,7 @@ function setAuthorHeaderStatus(message,error=false){const node=$('#authorHeaderS
 async function uploadAuthorHeader(file){if(!file)return;const allowed=new Set(['image/jpeg','image/png','image/webp']);if(!allowed.has(file.type)){setAuthorHeaderStatus('JPEG・PNG・WebP画像を選んでください。',true);return;}if(file.size>8*1024*1024){setAuthorHeaderStatus('画像は8MB以下にしてください。',true);return;}setAuthorHeaderStatus('画像を登録しています…');try{const payload=await authorRequest('/author/bookshelf/header',{method:'POST',headers:{'Content-Type':file.type,'X-File-Name':encodeURIComponent(file.name||'bookshelf-header')},body:file});saveAuthorSession(authorToken,payload.author);syncAuthorHeaderUI();setAuthorHeaderStatus('ヘッダー画像を登録しました。位置も調整できます。');}catch(error){setAuthorHeaderStatus(error.message||'画像を登録できませんでした。',true);}}
 async function saveAuthorHeaderPosition(){if(!signedInAuthor?.bookshelfHeader)return;setAuthorHeaderStatus('表示位置を保存しています…');try{const x=headerPositionValue('#authorHeaderDesktopX'),y=headerPositionValue('#authorHeaderDesktopY'),body={desktopX:x,desktopY:y,mobileX:x,mobileY:y};const payload=await authorRequest('/author/bookshelf/header',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});saveAuthorSession(authorToken,payload.author);syncAuthorHeaderUI();setAuthorHeaderStatus('画像の表示位置を保存しました。');}catch(error){setAuthorHeaderStatus(error.message||'位置を保存できませんでした。',true);}}
 async function deleteAuthorHeader(){if(!signedInAuthor?.bookshelfHeader||!await AhakoDialog.confirm('公開本棚のヘッダー画像を削除しますか？'))return;setAuthorHeaderStatus('画像を削除しています…');try{const payload=await authorRequest('/author/bookshelf/header',{method:'DELETE'});saveAuthorSession(authorToken,payload.author);syncAuthorHeaderUI();setAuthorHeaderStatus('ヘッダー画像を削除しました。');}catch(error){setAuthorHeaderStatus(error.message||'画像を削除できませんでした。',true);}}
-async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);await queuePublishedWorkOrderSync(createdIds,{immediate:true});}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
+async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];mergeServerPublishedWorksIntoCreatedCache();rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);await queuePublishedWorkOrderSync(createdIds,{immediate:true});}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
 
 function shelfScrollShouldLock(){
   return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open||$('#readLaterDialog')?.open||$('#publicWorkDialog')?.open);
@@ -434,6 +434,36 @@ function newOwnedSeriesId(){
 }
 function seriesBookIds(series,shelf){return shelf==='owned'?(series?.copyIds||[]):(series?.episodes||[]).map(item=>item.workId);}
 function shelfIdOf(w){if(w?.role==='distribution')return String(w.copyId||'');if(w?.role==='studio-draft')return `draft:${String(w.draftId||w.id||'')}`;return String(w?.workId||'');}
+function serverPublishedWorkView(work){
+  const workId=String(work?.workId||'').trim();
+  if(!workId)return null;
+  const publicationId=String(work?.publicationId||work?.publicId||'').trim();
+  const authorName=String(work?.authorName||work?.byline||signedInAuthor?.displayName||signedInAuthor?.name||'作者未設定');
+  return {
+    id:workId,workId,publicationId,publicId:publicationId,role:'server-published',serverOnly:true,
+    title:String(work?.title||'Untitled'),author:authorName,
+    subtitle:String(work?.subtitle||''),description:String(work?.description||''),
+    seriesId:String(work?.seriesId||''),seriesTitle:String(work?.seriesTitle||work?.series||''),
+    episode:String(work?.episode||work?.episodeLabel||''),episodeNumber:Number(work?.episodeNumber||0)||0,
+    episodeTitle:String(work?.episodeTitle||''),sceneCount:Number(work?.sceneCount||work?.scenes||0)||0,
+    updatedAt:String(work?.updatedAt||work?.publishedAt||work?.createdAt||''),coverUrl:String(work?.coverUrl||''),
+    coverPresentation:work?.coverPresentation||{fontFamily:'',styles:{},visibility:{}}
+  };
+}
+function mergeServerPublishedWorksIntoCreatedCache(){
+  if(!authorToken||!Array.isArray(authorWorks)||!authorWorks.length)return;
+  const created=Array.isArray(shelfDataCache.created)?shelfDataCache.created:[];
+  const localIds=new Set(created.map(item=>String(item?.workId||'')).filter(Boolean));
+  const remote=[];
+  for(const work of authorWorks){
+    const view=serverPublishedWorkView(work);
+    if(!view||localIds.has(view.workId))continue;
+    remote.push(view);localIds.add(view.workId);
+  }
+  shelfDataCache.created=[...created,...remote];
+  shelfCounts.created=shelfDataCache.created.length;
+  const tab=$('#createdTab');if(tab)tab.textContent=`つくった本${shelfCounts.created?` ${shelfCounts.created}`:''}`;
+}
 function orderedShelfBooks(books,tab){
   const archiveKey=SHELF_ARCHIVE_KEYS[tab],orderKey=SHELF_ORDER_KEYS[tab];
   const archived=new Set(readIdList(archiveKey));
@@ -1054,6 +1084,9 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
   const readers=await Promise.all(readerRows.map(async w=>({...await hydrateStoredBookMetadata({...w,role:'distribution'}),role:'distribution'})));
   shelfCounts={owned:readers.length,created:masters.length};
   shelfDataCache={owned:readers,created:masters};
+  mergeServerPublishedWorksIntoCreatedCache();
+  masters.splice(0,masters.length,...shelfDataCache.created);
+  shelfCounts.created=masters.length;
   if(!currentShelfTab)currentShelfTab=chooseFirstShelf();
   if(!visibleShelfTabs().includes(currentShelfTab))currentShelfTab='owned';
   syncCreatedTabVisibility();
@@ -1497,6 +1530,18 @@ function detailIdentityHtml(w,isReader){
 
 async function openDetail(role,id){
   const cached=shelfDataCache.created.find(item=>shelfIdOf(item)===id)||null;
+  if(role==='server-published'){
+    const w=cached;if(!w)return;currentWorkId=id;
+    const publishedWork=authorWorks.find(work=>work.workId===w.workId)||w;
+    const publicationId=String(publishedWork?.publicationId||publishedWork?.publicId||w.publicationId||'').trim();
+    const cover=w.coverUrl?`<div class="detail-cover"><img src="${escapeHtml(w.coverUrl)}" alt=""></div>`:`<div class="detail-cover"><div class="cover-fallback">□</div></div>`;
+    $('#detailContent').innerHTML=`<div class="detail-hero">${cover}${detailIdentityHtml(w,false)}</div>${detailWorkInfoHtml(w)}<div class="actions master-primary-actions"><button id="readMaster" class="edit" type="button">読む</button></div><section id="masterSignalPanel" class="master-signal-panel is-compact"><button id="toggleMasterSignal" class="master-signal-summary" type="button" aria-expanded="false"><span><small>WORK SIGNAL</small><strong>作品の力</strong><em>読者の行動から見る</em></span><b aria-hidden="true">›</b></button><div id="masterSignalDetails" class="master-signal-details" hidden><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><button id="viewJourney" class="journey master-journey-button" type="button">旅を見る</button></div></section><p class="detail-note">公開済みの作品です。この端末には編集用Masterがないため、公開作品として表示しています。</p>`;
+    $('#detailDialog').showModal();syncShelfScrollLock();loadStrengths(w);
+    const signalToggle=$('#toggleMasterSignal'),signalDetails=$('#masterSignalDetails'),signalPanel=$('#masterSignalPanel');if(signalToggle&&signalDetails)signalToggle.onclick=()=>{const open=signalToggle.getAttribute('aria-expanded')==='true';signalToggle.setAttribute('aria-expanded',String(!open));signalDetails.hidden=open;signalPanel?.classList.toggle('is-open',!open);};
+    $('#readMaster').onclick=()=>{try{if(!publicationId){toast('公開作品IDを確認できませんでした。');return;}const playerUrl=new URL('../',location.href),rawWorkUrl=new URL(`${API_BASE}/work/${encodeURIComponent(publicationId)}`);rawWorkUrl.searchParams.set('raw','1');playerUrl.searchParams.set('src',rawWorkUrl.toString());playerUrl.searchParams.set('returnTo',location.href);location.href=playerUrl.toString();}catch(error){console.error(error);toast('公開作品を開けませんでした。');}};
+    $('#viewJourney').onclick=()=>loadJourney(w);
+    return;
+  }
   if(role==='studio-draft'){
     const w=cached;if(!w)return;currentWorkId=id;
     const publishedWork=authorWorks.find(work=>work.workId===w.workId)||null;
