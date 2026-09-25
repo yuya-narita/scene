@@ -537,9 +537,10 @@ async function importBookshelfClaimFromLocation(){
   let u;try{u=new URL(location.href);}catch(_){return false;}
   const token=String(u.searchParams.get('claim')||'').trim();
   if(!token)return false;
+  const paidPublicationId=String(u.searchParams.get('paidPublicationId')||'').trim();
   // Remove LINE's external-browser hint and the bearer token from visible URL
   // as soon as the page owns a copy of it in memory.
-  u.searchParams.delete('claim');u.searchParams.delete('handoff');u.searchParams.delete('openExternalBrowser');
+  u.searchParams.delete('claim');u.searchParams.delete('handoff');u.searchParams.delete('openExternalBrowser');u.searchParams.delete('paidPublicationId');
   const cleanUrl=u.pathname+(u.search||'')+(u.hash||'');
   if(!validBookshelfClaimToken(token)){history.replaceState(null,'',cleanUrl);throw new Error('本棚への受取リンクを確認できませんでした。');}
   const response=await fetch(`${API_BASE}/bookshelf-claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({token})});
@@ -553,6 +554,11 @@ async function importBookshelfClaimFromLocation(){
   }
   const file=await distributionFileFromClaimScene(payload.scene);
   await addDistribution(file,{silent:true});
+  // V187: only clear the pending paid claim after the self-contained MY COPY
+  // has actually been written to readerBooks. If packing/saving fails, keep it retryable.
+  if(/^[A-Za-z0-9_-]{12,80}$/.test(paidPublicationId)){
+    try{sessionStorage.removeItem(`ahako:paid-claim:${paidPublicationId}`);}catch(_){}
+  }
   applyShelfTab('owned');
   history.replaceState(null,'',cleanUrl);
   try{
