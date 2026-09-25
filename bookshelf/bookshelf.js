@@ -140,8 +140,6 @@ async function getAllReaderBooks(){const db=await openDb();try{return await requ
 async function putReaderBook(rec){const db=await openDb();try{await request(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).put(rec));}finally{db.close();}}
 async function getReaderBook(id){const db=await openDb();try{return await request(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).get(id));}finally{db.close();}}
 async function deleteReaderBook(id){const db=await openDb();try{await request(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).delete(id));}finally{db.close();}}
-
-
 // V163: paid MY COPY validity is server-authoritative.
 // Only an explicit refund revocation is destructive; legacy/free/relay copies
 // and temporary API failures are left untouched.
@@ -518,14 +516,12 @@ function authoredCoverOverlayHtml(w){
   return fields.length?`<span class="shelf-cover-authored">${fields.join('')}</span>`:'';
 }
 function bookCardHtml(w,{archived=false}={}){
-  const isPublishedCreated=w.role!=='distribution'&&authorWorks.some(work=>work.workId===w.workId);
-  const cardRole=w.role;
-  const badge=w.role==='distribution'?'MY COPY':isPublishedCreated?'MASTER':w.role==='studio-draft'?'DRAFT':'MASTER',id=shelfIdOf(w);
+  const badge=w.role==='distribution'?'MY COPY':w.role==='studio-draft'?'DRAFT':'MASTER',id=shelfIdOf(w);
   const image=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="" draggable="false">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false">`:`<div class="cover-fallback">□</div>`);
-  if(archived)return`<label class="archive-item" data-role="${cardRole}" data-id="${escapeHtml(id)}"><input class="archive-check" type="checkbox" aria-label="${escapeHtml(w.title)}を選択"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div></label>`;
+  if(archived)return`<label class="archive-item" data-role="${w.role}" data-id="${escapeHtml(id)}"><input class="archive-check" type="checkbox" aria-label="${escapeHtml(w.title)}を選択"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div></label>`;
   const episode=String(w.episode||'').trim();
   const episodeTitle=String(w.episodeTitle||'').trim();
-  return`<button class="book" data-role="${cardRole}" data-id="${escapeHtml(id)}" draggable="true" type="button"><div class="cover">${image}${authoredCoverOverlayHtml(w)}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><div class="book-work-info">${episode?`<p class="book-series">${escapeHtml(episode)}</p>`:''}${episodeTitle?`<p class="book-subtitle">${escapeHtml(episodeTitle)}</p>`:''}</div><p class="book-facts">${escapeHtml(w.author||'作者未設定')}</p></div></button>`;
+  return`<button class="book" data-role="${w.role}" data-id="${escapeHtml(id)}" draggable="true" type="button"><div class="cover">${image}${authoredCoverOverlayHtml(w)}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><div class="book-work-info">${episode?`<p class="book-series">${escapeHtml(episode)}</p>`:''}${episodeTitle?`<p class="book-subtitle">${escapeHtml(episodeTitle)}</p>`:''}</div><p class="book-facts">${escapeHtml(w.author||'作者未設定')}</p></div></button>`;
 }
 
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -1502,15 +1498,6 @@ async function openDetail(role,id){
   const cached=shelfDataCache.created.find(item=>shelfIdOf(item)===id)||null;
   if(role==='studio-draft'){
     const w=cached;if(!w)return;currentWorkId=id;
-    const isPublished=authorWorks.some(work=>work.workId===w.workId);
-    if(isPublished){
-      $('#detailContent').innerHTML=`<div class="detail-hero"><div class="detail-cover"><div class="cover-fallback">□</div></div>${detailIdentityHtml(w,false)}</div>${detailWorkInfoHtml(w)}<div class="actions master-primary-actions"><button id="editWork" class="edit" type="button">Studioで編集</button></div><section id="masterSignalPanel" class="master-signal-panel is-compact"><button id="toggleMasterSignal" class="master-signal-summary" type="button" aria-expanded="false"><span><small>WORK SIGNAL</small><strong>作品の力</strong><em>読者の行動から見る</em></span><b aria-hidden="true">›</b></button><div id="masterSignalDetails" class="master-signal-details" hidden><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><button id="viewJourney" class="journey master-journey-button" type="button">旅を見る</button></div></section><div class="detail-management master-management"><button id="removeWork" class="danger compact-danger" type="button">段ボール箱にしまう</button></div><p class="detail-note">公開中の作品です。Studioの制作データから編集できます。</p>`;
-      $('#detailDialog').showModal();syncShelfScrollLock();loadStrengths(w);
-      const signalToggle=$('#toggleMasterSignal'),signalDetails=$('#masterSignalDetails'),signalPanel=$('#masterSignalPanel');if(signalToggle&&signalDetails)signalToggle.onclick=()=>{const open=signalToggle.getAttribute('aria-expanded')==='true';signalToggle.setAttribute('aria-expanded',String(!open));signalDetails.hidden=open;signalPanel?.classList.toggle('is-open',!open);};
-      $('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);
-      $('#removeWork').onclick=async()=>{if(!await AhakoDialog.confirm(`「${w.title}」を段ボール箱にしまいますか？\n\n制作途中データは削除されず、あとから本棚へ戻せます。`))return;archiveBookId('created',id);$('#detailDialog').close();await render();toast('段ボール箱にしまいました。');};
-      return;
-    }
     $('#detailContent').innerHTML=`<div class="detail-hero"><div class="detail-cover"><div class="cover-fallback">□</div></div>${detailIdentityHtml(w,false)}</div>${detailWorkInfoHtml(w)}<div class="actions master-primary-actions"><button id="editWork" class="edit" type="button">Studioで続きを作る</button></div><div class="detail-management master-management"><button id="removeWork" class="danger compact-danger" type="button">段ボール箱にしまう</button></div><p class="detail-note">Studioの制作途中データです。本棚と同じ端末内の作品を表示しています。</p>`;
     $('#detailDialog').showModal();syncShelfScrollLock();
     $('#editWork').onclick=()=>editInStudio(w);
