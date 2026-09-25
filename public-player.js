@@ -1131,7 +1131,8 @@
           .public-preview-lock-marker strong{display:block;font:500 clamp(17px,4.5vw,22px)/1.75 system-ui,sans-serif;color:inherit;white-space:nowrap;}
           .public-ending.is-preview-lock .public-own-copy-wrap{width:min(680px,calc(100vw - 48px));margin-left:auto;margin-right:auto;transform:translateY(-32px);}
           .public-ending.is-preview-lock #publicOwnCopyStatus{white-space:nowrap;font-size:clamp(10px,2.8vw,12px);}
-          .public-ending.is-purchased:not(.is-preview-lock) .public-own-copy-wrap{transform:translateY(-28px);}
+          .public-ending.is-purchased:not(.is-preview-lock) .public-ending-actions{transform:translateY(-8px)!important;}
+          .public-ending.is-purchased:not(.is-preview-lock) .public-own-copy-wrap{transform:translateY(-64px)!important;}
         `;
         document.head.appendChild(style);
       }
@@ -1395,7 +1396,7 @@
 
 
   window.ScenePublicPlayer = {
-    version: '0.3.30-public-own-copy-v188',
+    version: '0.3.30-public-own-copy-v189',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
