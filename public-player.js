@@ -696,9 +696,9 @@
       }
       const amount=Number(commerce.amount);
       ownCopyButton.disabled=false;
-      ownCopyButton.textContent=commerce.mode==='support'?`${formatJPY(amount)}で支援して受け取る`:`${formatJPY(amount)}で購入して受け取る`;
+      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='support'?`${formatJPY(amount)}で支援して受け取る`:`${formatJPY(amount)}で購入して受け取る`);
       ownCopyButton.onclick=()=>purchasePublicOwnCopy(commerce);
-      if(ownCopyStatus)ownCopyStatus.textContent='決済後、この作品を自分の本棚に受け取れます。';
+      if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':'決済後、この作品を自分の本棚に受け取れます。';
     }catch(error){
       console.warn('Commerce price lookup failed',error);
       ownCopyButton.disabled=false;
@@ -983,7 +983,10 @@
       forceCheckoutReturnToEnding();
     }else if(params.get('paid_continue')==='1'){
       history.replaceState(null,'',(()=>{const u=new URL(location.href);u.searchParams.delete('paid_continue');return u.toString();})());
-      ensurePlayer(Math.max(0,safeProgress()));
+      const paidLockScene=Math.floor(Number(documentData?.commerce?.ownCopyGate?.lockScene||0));
+      const paidStartIndex=paidLockScene>=2&&documentData?.scenes?.[paidLockScene-1]?paidLockScene-1:Math.max(0,safeProgress());
+      localStorage.setItem(storageKey(),String(paidStartIndex));
+      ensurePlayer(paidStartIndex);
     }
   }
 
@@ -1054,6 +1057,46 @@
     if(Number.isInteger(index)&&index>=0)recordResonanceBoundary(index,e.detail?.at);
   }
 
+  function applyPreviewLockEnding(){
+    if(!ending)return;
+    const locked=commercePreviewLocked(documentData);
+    ending.classList.toggle('is-preview-lock',locked);
+    let marker=document.getElementById('publicPreviewLockMarker');
+    if(locked){
+      if(!marker){
+        marker=document.createElement('div');
+        marker.id='publicPreviewLockMarker';
+        marker.className='public-preview-lock-marker';
+        marker.innerHTML='<small>PREVIEW END</small><strong>ここから先は、購入すると読めます。</strong>';
+        const inner=ending.querySelector('.public-ending-inner')||ending;
+        inner.insertBefore(marker,ownCopyWrap||inner.firstChild);
+      }
+      marker.hidden=false;
+      if(endingLabel)endingLabel.hidden=true;
+      if(endingLeft)endingLeft.hidden=true;
+      if(endingRight)endingRight.hidden=true;
+      if(endingCoverButton)endingCoverButton.hidden=true;
+      if(ownCopyButton&&!ownCopyButton.disabled){
+        const amount=String(ownCopyButton.textContent||'').match(/¥[\d,]+/)?.[0]||'';
+        if(amount)ownCopyButton.textContent=`${amount}で続きを読む`;
+      }
+      if(ownCopyStatus)ownCopyStatus.textContent='購入すると、この続きから再開します。MY COPYも本棚に届きます。';
+      if(!document.getElementById('publicPreviewLockStyle')){
+        const style=document.createElement('style');
+        style.id='publicPreviewLockStyle';
+        style.textContent=`
+          .public-ending.is-preview-lock .public-ending-inner{justify-content:center!important;}
+          .public-ending.is-preview-lock .public-ending-actions{display:none!important;}
+          .public-preview-lock-marker{text-align:center;margin:0 auto 34px;max-width:520px;padding:0 24px;}
+          .public-preview-lock-marker small{display:block;font:600 11px/1.4 system-ui,sans-serif;letter-spacing:.28em;color:#9b978f;margin-bottom:18px;}
+          .public-preview-lock-marker strong{display:block;font:500 22px/1.75 system-ui,sans-serif;color:inherit;}
+          .public-ending.is-preview-lock .public-own-copy-wrap{width:min(680px,calc(100vw - 48px));margin-left:auto;margin-right:auto;}
+        `;
+        document.head.appendChild(style);
+      }
+    }else if(marker){marker.hidden=true;}
+  }
+
   function onEnd() {
     setShelfReturnReading(false);
     if(!commercePreviewLocked(documentData))localStorage.removeItem(storageKey());
@@ -1062,7 +1105,7 @@
       else if(resonanceSession.samples.length===(documentData?.scenes?.length||1)-1)recordResonanceBoundary((documentData?.scenes?.length||1)-1);
     }
     renderResonanceResult(resonanceScore());
-    if(commercePreviewLocked(documentData)&&ownCopyStatus)ownCopyStatus.textContent='試し読みはここまでです。購入すると、この続きから読めます。';
+    applyPreviewLockEnding();
     if(!analyticsCompleted){
       analyticsCompleted=true;
       sendAnalytics('complete',{index:Array.isArray(documentData?.scenes)?documentData.scenes.length-1:0});
