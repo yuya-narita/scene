@@ -959,19 +959,27 @@
       if(manifest.package!=='scene-package')throw new Error(`未対応 package: ${manifest.package||'(なし)'}`);
       if(String(manifest.packageVersion||'')!=='1.0')throw new Error(`未対応 Scene Package version: ${manifest.packageVersion||'(なし)'}`);
       let raw=jsonFile(files,manifest.entry||'scene.json');
-      // V166: a MY COPY can contain an older shell appearance snapshot even when
-      // the work body is valid.  The public route is the visual reference.
-      // Sync only top-level theme/appearance; keep the owned Scene body, Edition
-      // and Distribution identity untouched. Failure is deliberately non-fatal.
-      if(syncPublicAppearance&&raw?.distribution?.copyId&&raw?.workId){
+      // V167: MY COPY stores the Master workId, while /work/:id expects the
+      // publicationId. V166 queried /work/<masterWorkId>, so the visual sync was
+      // silently skipped (404) and old copies could render the whole Player chrome
+      // with a stale light theme over a dark Scene. Resolve Master -> publication
+      // first, then copy only the visual theme contract from the live publication.
+      // The owned body, Edition, copyId, RELAY and journey identity stay untouched.
+      if(syncPublicAppearance&&raw?.distribution?.copyId&&(raw?.distribution?.workId||raw?.workId)){
         try{
-          const response=await fetch(`${API_BASE}/work/${encodeURIComponent(String(raw.workId))}?raw=1`,{cache:'no-store'});
-          if(response.ok){
-            const canonical=await response.json();
-            if(canonical&&typeof canonical==='object'){
-              raw=JSON.parse(JSON.stringify(raw));
-              if(canonical.theme!==undefined)raw.theme=canonical.theme;
-              if(canonical.appearance!==undefined)raw.appearance=JSON.parse(JSON.stringify(canonical.appearance));
+          const masterWorkId=String(raw?.distribution?.workId||raw?.workId||'').trim();
+          const lookup=await fetch(`${API_BASE}/publication/${encodeURIComponent(masterWorkId)}`,{cache:'no-store'});
+          const identity=lookup.ok?await lookup.json():null;
+          const publicationId=identity?.ok&&identity?.exists?String(identity.id||'').trim():'';
+          if(publicationId){
+            const response=await fetch(`${API_BASE}/work/${encodeURIComponent(publicationId)}?raw=1`,{cache:'no-store'});
+            if(response.ok){
+              const canonical=await response.json();
+              if(canonical&&typeof canonical==='object'){
+                raw=JSON.parse(JSON.stringify(raw));
+                if(canonical.theme!==undefined)raw.theme=canonical.theme;
+                if(canonical.appearance!==undefined)raw.appearance=JSON.parse(JSON.stringify(canonical.appearance));
+              }
             }
           }
         }catch(error){console.warn('MY COPY appearance sync skipped',error);}
