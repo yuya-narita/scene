@@ -142,9 +142,9 @@ async function getReaderBook(id){const db=await openDb();try{return await reques
 async function deleteReaderBook(id){const db=await openDb();try{await request(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).delete(id));}finally{db.close();}}
 
 
-// V162: server-authoritative status for paid MY COPY.
-// Legacy/free/relay copies may be unknown to commerce, so only an explicit
-// refund revocation is destructive.
+// V163: paid MY COPY validity is server-authoritative.
+// Only an explicit refund revocation is destructive; legacy/free/relay copies
+// and temporary API failures are left untouched.
 async function fetchMyCopyStatus(copyId){
   if(!/^copy_[a-f0-9]{32}$/i.test(String(copyId||'')))return null;
   const response=await fetch(`${API_BASE}/commerce/copy-status`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({copyId})});
@@ -157,9 +157,9 @@ function isRefundRevokedCopyStatus(status){
 async function assertMyCopyImportable(copyId){
   try{
     const status=await fetchMyCopyStatus(copyId);
-    if(isRefundRevokedCopyStatus(status))throw new Error('返金済みのMY COPYは本棚へ戻せません。');
+    if(isRefundRevokedCopyStatus(status))throw new Error('REFUND_REVOKED_COPY');
   }catch(error){
-    if(error?.message==='返金済みのMY COPYは本棚へ戻せません。')throw error;
+    if(error?.message==='REFUND_REVOKED_COPY')throw error;
     console.warn('MY COPY status check skipped during import',copyId,error);
   }
 }
@@ -519,12 +519,13 @@ function authoredCoverOverlayHtml(w){
 }
 function bookCardHtml(w,{archived=false}={}){
   const isPublishedCreated=w.role!=='distribution'&&authorWorks.some(work=>work.workId===w.workId);
+  const cardRole=w.role;
   const badge=w.role==='distribution'?'MY COPY':isPublishedCreated?'MASTER':w.role==='studio-draft'?'DRAFT':'MASTER',id=shelfIdOf(w);
   const image=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="" draggable="false">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false">`:`<div class="cover-fallback">□</div>`);
-  if(archived)return`<label class="archive-item" data-role="${w.role}" data-id="${escapeHtml(id)}"><input class="archive-check" type="checkbox" aria-label="${escapeHtml(w.title)}を選択"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div></label>`;
+  if(archived)return`<label class="archive-item" data-role="${cardRole}" data-id="${escapeHtml(id)}"><input class="archive-check" type="checkbox" aria-label="${escapeHtml(w.title)}を選択"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div></label>`;
   const episode=String(w.episode||'').trim();
   const episodeTitle=String(w.episodeTitle||'').trim();
-  return`<button class="book" data-role="${w.role}" data-id="${escapeHtml(id)}" draggable="true" type="button"><div class="cover">${image}${authoredCoverOverlayHtml(w)}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><div class="book-work-info">${episode?`<p class="book-series">${escapeHtml(episode)}</p>`:''}${episodeTitle?`<p class="book-subtitle">${escapeHtml(episodeTitle)}</p>`:''}</div><p class="book-facts">${escapeHtml(w.author||'作者未設定')}</p></div></button>`;
+  return`<button class="book" data-role="${cardRole}" data-id="${escapeHtml(id)}" draggable="true" type="button"><div class="cover">${image}${authoredCoverOverlayHtml(w)}<span class="badge ${w.role==='distribution'?'reader-badge':''}">${badge}</span></div><div class="book-meta"><h3>${escapeHtml(w.title)}</h3><div class="book-work-info">${episode?`<p class="book-series">${escapeHtml(episode)}</p>`:''}${episodeTitle?`<p class="book-subtitle">${escapeHtml(episodeTitle)}</p>`:''}</div><p class="book-facts">${escapeHtml(w.author||'作者未設定')}</p></div></button>`;
 }
 
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -1501,6 +1502,15 @@ async function openDetail(role,id){
   const cached=shelfDataCache.created.find(item=>shelfIdOf(item)===id)||null;
   if(role==='studio-draft'){
     const w=cached;if(!w)return;currentWorkId=id;
+    const isPublished=authorWorks.some(work=>work.workId===w.workId);
+    if(isPublished){
+      $('#detailContent').innerHTML=`<div class="detail-hero"><div class="detail-cover"><div class="cover-fallback">□</div></div>${detailIdentityHtml(w,false)}</div>${detailWorkInfoHtml(w)}<div class="actions master-primary-actions"><button id="editWork" class="edit" type="button">Studioで編集</button></div><section id="masterSignalPanel" class="master-signal-panel is-compact"><button id="toggleMasterSignal" class="master-signal-summary" type="button" aria-expanded="false"><span><small>WORK SIGNAL</small><strong>作品の力</strong><em>読者の行動から見る</em></span><b aria-hidden="true">›</b></button><div id="masterSignalDetails" class="master-signal-details" hidden><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><button id="viewJourney" class="journey master-journey-button" type="button">旅を見る</button></div></section><div class="detail-management master-management"><button id="removeWork" class="danger compact-danger" type="button">段ボール箱にしまう</button></div><p class="detail-note">公開中の作品です。Studioの制作データから編集できます。</p>`;
+      $('#detailDialog').showModal();syncShelfScrollLock();loadStrengths(w);
+      const signalToggle=$('#toggleMasterSignal'),signalDetails=$('#masterSignalDetails'),signalPanel=$('#masterSignalPanel');if(signalToggle&&signalDetails)signalToggle.onclick=()=>{const open=signalToggle.getAttribute('aria-expanded')==='true';signalToggle.setAttribute('aria-expanded',String(!open));signalDetails.hidden=open;signalPanel?.classList.toggle('is-open',!open);};
+      $('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);
+      $('#removeWork').onclick=async()=>{if(!await AhakoDialog.confirm(`「${w.title}」を段ボール箱にしまいますか？\n\n制作途中データは削除されず、あとから本棚へ戻せます。`))return;archiveBookId('created',id);$('#detailDialog').close();await render();toast('段ボール箱にしまいました。');};
+      return;
+    }
     $('#detailContent').innerHTML=`<div class="detail-hero"><div class="detail-cover"><div class="cover-fallback">□</div></div>${detailIdentityHtml(w,false)}</div>${detailWorkInfoHtml(w)}<div class="actions master-primary-actions"><button id="editWork" class="edit" type="button">Studioで続きを作る</button></div><div class="detail-management master-management"><button id="removeWork" class="danger compact-danger" type="button">段ボール箱にしまう</button></div><p class="detail-note">Studioの制作途中データです。本棚と同じ端末内の作品を表示しています。</p>`;
     $('#detailDialog').showModal();syncShelfScrollLock();
     $('#editWork').onclick=()=>editInStudio(w);
@@ -1581,7 +1591,7 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTi
 function zipU16(v,o,x){v.setUint16(o,x,true)}function zipU32(v,o,x){v.setUint32(o,x>>>0,true)}function crc32(bytes){let c=0xffffffff;for(const b of bytes){c^=b;for(let k=0;k<8;k++)c=(c>>>1)^((c&1)?0xedb88320:0)}return(c^0xffffffff)>>>0}
 async function makeStoreZip(entries){const locals=[],centrals=[];let offset=0;for(const e of entries){const nb=te.encode(e.name),data=e.bytes instanceof Uint8Array?e.bytes:new Uint8Array(e.bytes),crc=crc32(data);const l=new Uint8Array(30+nb.length+data.length),lv=new DataView(l.buffer);zipU32(lv,0,0x04034b50);zipU16(lv,4,20);zipU16(lv,6,0x0800);zipU16(lv,8,0);zipU32(lv,14,crc);zipU32(lv,18,data.length);zipU32(lv,22,data.length);zipU16(lv,26,nb.length);l.set(nb,30);l.set(data,30+nb.length);locals.push(l);const c=new Uint8Array(46+nb.length),cv=new DataView(c.buffer);zipU32(cv,0,0x02014b50);zipU16(cv,4,20);zipU16(cv,6,20);zipU16(cv,8,0x0800);zipU32(cv,16,crc);zipU32(cv,20,data.length);zipU32(cv,24,data.length);zipU16(cv,28,nb.length);zipU32(cv,42,offset);c.set(nb,46);centrals.push(c);offset+=l.length;}const centralOffset=offset,centralSize=centrals.reduce((n,x)=>n+x.length,0),end=new Uint8Array(22),ev=new DataView(end.buffer);zipU32(ev,0,0x06054b50);zipU16(ev,8,entries.length);zipU16(ev,10,entries.length);zipU32(ev,12,centralSize);zipU32(ev,16,centralOffset);return new Blob([...locals,...centrals,end],{type:'application/zip'});}
 async function backupShelf(){const works=await getAllWorks(),readerBooks=await getAllReaderBooks();if(!works.length&&!readerBooks.length){toast('バックアップする本がありません。');return;}const meta={format:'ahako-local-bookshelf-backup',version:'4',privateBackup:true,exportedAt:new Date().toISOString(),works:works.map(w=>({workId:w.workId,title:w.title,fileName:w.fileName})),readerBooks:readerBooks.map(w=>({copyId:w.copyId,title:w.title,fileName:w.fileName})),layout:{createdOrder:readIdList(SHELF_ORDER_KEYS.created),ownedOrder:readIdList(SHELF_ORDER_KEYS.owned),archivedCreated:readIdList(SHELF_ARCHIVE_KEYS.created),archivedOwned:readIdList(SHELF_ARCHIVE_KEYS.owned),ownedSeriesBoxes:readOwnedSeriesBoxes(),ownedSeriesBoxOrder:readIdList(OWNED_SERIES_BOX_ORDER_KEY)}};const entries=[{name:'bookshelf.json',bytes:te.encode(JSON.stringify(meta,null,2))}];for(const w of works)entries.push({name:`masters/${w.workId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});for(const w of readerBooks)entries.push({name:`distributions/${w.copyId}.scene`,bytes:new Uint8Array(await w.blob.arrayBuffer())});downloadBlob(await makeStoreZip(entries),`ahako_bookshelf_backup_${new Date().toISOString().slice(0,10)}.zip`);toast(`${works.length+readerBooks.length}冊をバックアップしました。`);}
-async function restoreShelf(file){const entries=await readZipEntries(file);const metaBytes=entries.get('bookshelf.json');if(!metaBytes)throw new Error('あ箱 本棚のバックアップではありません。');const meta=parseJson(metaBytes);if(meta.format!=='ahako-local-bookshelf-backup')throw new Error('バックアップ形式が違います。');let n=0;for(const item of meta.works||[]){const bytes=entries.get(`masters/${item.workId}.scene`);if(!bytes)continue;await addMaster(new File([bytes],item.fileName||`${item.title||item.workId}.scene`),{silent:true});n++;}for(const item of meta.readerBooks||[]){const bytes=entries.get(`distributions/${item.copyId}.scene`);if(!bytes)continue;await addDistribution(new File([bytes],item.fileName||`${item.title||item.copyId}_distribution.scene`),{silent:true});n++;}if(meta.layout&&typeof meta.layout==='object'){writeIdList(SHELF_ORDER_KEYS.created,Array.isArray(meta.layout.createdOrder)?meta.layout.createdOrder:[]);writeIdList(SHELF_ORDER_KEYS.owned,Array.isArray(meta.layout.ownedOrder)?meta.layout.ownedOrder:[]);writeIdList(SHELF_ARCHIVE_KEYS.created,Array.isArray(meta.layout.archivedCreated)?meta.layout.archivedCreated:[]);writeIdList(SHELF_ARCHIVE_KEYS.owned,Array.isArray(meta.layout.archivedOwned)?meta.layout.archivedOwned:[]);if(Array.isArray(meta.layout.ownedSeriesBoxes))writeOwnedSeriesBoxes(meta.layout.ownedSeriesBoxes);if(Array.isArray(meta.layout.ownedSeriesBoxOrder))writeIdList(OWNED_SERIES_BOX_ORDER_KEY,meta.layout.ownedSeriesBoxOrder);}await render();toast(`${n}冊を復元しました。`);}
+async function restoreShelf(file){const entries=await readZipEntries(file);const metaBytes=entries.get('bookshelf.json');if(!metaBytes)throw new Error('あ箱 本棚のバックアップではありません。');const meta=parseJson(metaBytes);if(meta.format!=='ahako-local-bookshelf-backup')throw new Error('バックアップ形式が違います。');let n=0,refundSkipped=0;for(const item of meta.works||[]){const bytes=entries.get(`masters/${item.workId}.scene`);if(!bytes)continue;await addMaster(new File([bytes],item.fileName||`${item.title||item.workId}.scene`),{silent:true});n++;}for(const item of meta.readerBooks||[]){const bytes=entries.get(`distributions/${item.copyId}.scene`);if(!bytes)continue;try{await addDistribution(new File([bytes],item.fileName||`${item.title||item.copyId}_distribution.scene`),{silent:true});n++;}catch(error){if(error?.message==='REFUND_REVOKED_COPY'){refundSkipped++;continue;}throw error;}}if(meta.layout&&typeof meta.layout==='object'){writeIdList(SHELF_ORDER_KEYS.created,Array.isArray(meta.layout.createdOrder)?meta.layout.createdOrder:[]);writeIdList(SHELF_ORDER_KEYS.owned,Array.isArray(meta.layout.ownedOrder)?meta.layout.ownedOrder:[]);writeIdList(SHELF_ARCHIVE_KEYS.created,Array.isArray(meta.layout.archivedCreated)?meta.layout.archivedCreated:[]);writeIdList(SHELF_ARCHIVE_KEYS.owned,Array.isArray(meta.layout.archivedOwned)?meta.layout.archivedOwned:[]);if(Array.isArray(meta.layout.ownedSeriesBoxes))writeOwnedSeriesBoxes(meta.layout.ownedSeriesBoxes);if(Array.isArray(meta.layout.ownedSeriesBoxOrder))writeIdList(OWNED_SERIES_BOX_ORDER_KEY,meta.layout.ownedSeriesBoxOrder);}await render();toast(refundSkipped?`${n}冊を復元しました・返金済み ${refundSkipped}冊は除外しました`:`${n}冊を復元しました。`);}
 
 async function exportStorageBox(){
   const archivedCreated=readIdList(SHELF_ARCHIVE_KEYS.created),archivedOwned=readIdList(SHELF_ARCHIVE_KEYS.owned);
@@ -1605,7 +1615,7 @@ async function importStorageBox(file){
   const entries=await readZipEntries(file),metaBytes=entries.get('box.json');
   if(!metaBytes)throw new Error('あ箱の段ボールZIPではありません。');
   const meta=parseJson(metaBytes);if(meta.format!=='ahako-storage-box')throw new Error('段ボールZIPの形式が違います。');
-  let added=0,skipped=0;
+  let added=0,skipped=0,refundSkipped=0;
   const createdToArchive=[],ownedToArchive=[];
   for(const item of meta.works||[]){
     if(await getWork(item.workId)){skipped++;continue;}
@@ -1616,14 +1626,19 @@ async function importStorageBox(file){
   for(const item of meta.readerBooks||[]){
     if(await getReaderBook(item.copyId)){skipped++;continue;}
     const bytes=entries.get(`distributions/${item.copyId}.scene`);if(!bytes)continue;
-    const id=await addDistribution(new File([bytes],item.fileName||`${item.title||item.copyId}_distribution.scene`),{silent:true});
-    ownedToArchive.push(id);added++;
+    try{
+      const id=await addDistribution(new File([bytes],item.fileName||`${item.title||item.copyId}_distribution.scene`),{silent:true});
+      ownedToArchive.push(id);added++;
+    }catch(error){
+      if(error?.message==='REFUND_REVOKED_COPY'){refundSkipped++;continue;}
+      throw error;
+    }
   }
   for(const id of createdToArchive)archiveBookId('created',id);
   for(const id of ownedToArchive)archiveBookId('owned',id);
   await render();
   if($('#archiveDialog')?.open)openArchiveBox();
-  const parts=[];if(added)parts.push(`${added}冊を箱に入れました`);if(skipped)parts.push(`${skipped}冊は既にあるためスキップ`);
+  const parts=[];if(added)parts.push(`${added}冊を箱に入れました`);if(skipped)parts.push(`${skipped}冊は既にあるためスキップ`);if(refundSkipped)parts.push(`返金済み ${refundSkipped}冊は除外`);
   toast(parts.join('・')||'読み込める本がありませんでした。');
 }
 
