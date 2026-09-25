@@ -349,21 +349,63 @@ function showClaimHandoff(){
   return true;
 }
 function safeClaimFileBase(v){return String(v||'book').replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,' ').trim().slice(0,80)||'book';}
+async function packRemoteAssetsIntoScene(scene){
+  // V173 — MY COPY must survive publication stop/delete.  Materialize every
+  // Ahako /asset URL into the Distribution package before it enters the shelf.
+  const doc=JSON.parse(JSON.stringify(scene||{}));
+  const apiOrigin=new URL(API_BASE,location.href).origin;
+  const assetUrls=new Set();
+  function collect(value){
+    if(typeof value==='string'){
+      try{const u=new URL(value,location.href);if(u.origin===apiOrigin&&/^\/asset\//.test(u.pathname))assetUrls.add(u.href);}catch(_){}
+      return;
+    }
+    if(Array.isArray(value)){value.forEach(collect);return;}
+    if(value&&typeof value==='object')Object.values(value).forEach(collect);
+  }
+  collect(doc);
+  const replacements=new Map(),assets=[];
+  let index=0;
+  for(const url of assetUrls){
+    const res=await fetch(url,{cache:'no-store'});
+    if(!res.ok)throw new Error(`MY_COPY_ASSET_FETCH_${res.status}`);
+    const bytes=new Uint8Array(await res.arrayBuffer());
+    const u=new URL(url);
+    const raw=(u.pathname.split('/').pop()||`asset_${++index}`).replace(/[^A-Za-z0-9._-]/g,'_');
+    let name=`assets/${raw}`;
+    while(assets.some(item=>item.name===name))name=`assets/${index++}_${raw}`;
+    replacements.set(url,`./${name}`);
+    assets.push({name,bytes});
+  }
+  function rewrite(value){
+    if(typeof value==='string'){
+      try{const u=new URL(value,location.href);return replacements.get(u.href)||value;}catch(_){return value;}
+    }
+    if(Array.isArray(value))return value.map(rewrite);
+    if(value&&typeof value==='object')for(const key of Object.keys(value))value[key]=rewrite(value[key]);
+    return value;
+  }
+  rewrite(doc);
+  return {scene:doc,assets};
+}
 async function distributionFileFromClaimScene(scene){
   const copyId=String(scene?.distribution?.copyId||'').trim();
   const workId=String(scene?.distribution?.workId||scene?.workId||'').trim();
   const editionId=String(scene?.edition?.editionId||'').trim();
   if(!/^copy_[a-f0-9]{32}$/i.test(copyId)||!/^[A-Za-z0-9_-]{12,80}$/.test(workId)||!/^edition_[a-f0-9]{32}$/i.test(editionId))throw new Error('受け取った一冊を確認できませんでした。');
+  const packed=await packRemoteAssetsIntoScene(scene);
   const manifest={
     package:'scene-package',packageVersion:'1.0',entry:'scene.json',packageRole:'distribution',
     workId,editionId,copyId,
     issuedAt:String(scene?.distribution?.issuedAt||scene?.edition?.issuedAt||new Date().toISOString()),
     relayEnabled:scene?.sharing?.relay?.enabled!==false,
+    selfContained:true,
     title:String(scene?.title||'Untitled'),author:String(scene?.author||'')
   };
   const blob=await makeStoreZip([
-    {name:'scene.json',bytes:te.encode(JSON.stringify(scene,null,2))},
-    {name:'manifest.json',bytes:te.encode(JSON.stringify(manifest,null,2))}
+    {name:'scene.json',bytes:te.encode(JSON.stringify(packed.scene,null,2))},
+    {name:'manifest.json',bytes:te.encode(JSON.stringify(manifest,null,2))},
+    ...packed.assets
   ]);
   return new File([blob],`${safeClaimFileBase(scene?.title||'book')}_distribution.scene`,{type:'application/octet-stream'});
 }
