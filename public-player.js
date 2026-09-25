@@ -686,6 +686,7 @@
   }
   function showAlreadyPurchased(){
     if(!ownCopyButton)return;
+    if(ending)ending.classList.add('is-purchased');
     ownCopyButton.disabled=false;
     ownCopyButton.textContent='購入済み・本棚で読む';
     const publicationId=currentWorkId();
@@ -711,6 +712,7 @@
     const allowed=Boolean(currentWorkId())&&doc?.sharing?.ownCopy?.enabled===true;
     ownCopyWrap.hidden=!allowed;
     ownCopyButton.disabled=false;
+    if(ending)ending.classList.remove('is-purchased');
     ownCopyButton.textContent='自分の一冊を受け取る';
     ownCopyButton.onclick=allowed?receivePublicOwnCopy:null;
     if(ownCopyStatus)ownCopyStatus.textContent='';
@@ -1127,7 +1129,9 @@
           .public-preview-lock-marker{text-align:center;margin:0 auto 34px;max-width:520px;padding:0 24px;}
           .public-preview-lock-marker small{display:block;font:600 11px/1.4 system-ui,sans-serif;letter-spacing:.28em;color:#9b978f;margin-bottom:18px;}
           .public-preview-lock-marker strong{display:block;font:500 clamp(17px,4.5vw,22px)/1.75 system-ui,sans-serif;color:inherit;white-space:nowrap;}
-          .public-ending.is-preview-lock .public-own-copy-wrap{width:min(680px,calc(100vw - 48px));margin-left:auto;margin-right:auto;transform:translateY(-14px);}
+          .public-ending.is-preview-lock .public-own-copy-wrap{width:min(680px,calc(100vw - 48px));margin-left:auto;margin-right:auto;transform:translateY(-32px);}
+          .public-ending.is-preview-lock #publicOwnCopyStatus{white-space:nowrap;font-size:clamp(10px,2.8vw,12px);}
+          .public-ending.is-purchased:not(.is-preview-lock) .public-own-copy-wrap{transform:translateY(-28px);}
         `;
         document.head.appendChild(style);
       }
@@ -1391,7 +1395,7 @@
 
 
   window.ScenePublicPlayer = {
-    version: '0.3.29-public-own-copy',
+    version: '0.3.30-public-own-copy-v188',
     get player(){ return player; },
     get document(){ return documentData; },
     get source(){ return source(); },
