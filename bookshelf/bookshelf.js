@@ -270,6 +270,96 @@ function studioDraftMetaFromRow(row){
 }
 function openStudioDraftDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(STUDIO_DRAFT_DB_NAME,STUDIO_DRAFT_DB_VERSION);req.onupgradeneeded=()=>{const db=req.result;const drafts=db.objectStoreNames.contains(STUDIO_DRAFT_STORE)?req.transaction.objectStore(STUDIO_DRAFT_STORE):db.createObjectStore(STUDIO_DRAFT_STORE,{keyPath:'id'});const meta=db.objectStoreNames.contains(STUDIO_DRAFT_META_STORE)?req.transaction.objectStore(STUDIO_DRAFT_META_STORE):db.createObjectStore(STUDIO_DRAFT_META_STORE,{keyPath:'id'});if(!db.objectStoreNames.contains(STUDIO_DRAFT_RECOVERY_STORE))db.createObjectStore(STUDIO_DRAFT_RECOVERY_STORE,{keyPath:'recoveryId'});if(!db.objectStoreNames.contains(STUDIO_DRAFT_VERSION_STORE)){const versions=db.createObjectStore(STUDIO_DRAFT_VERSION_STORE,{keyPath:'snapshotId'});versions.createIndex('draftId','draftId',{unique:false});}drafts.openCursor().onsuccess=event=>{const cursor=event.target.result;if(!cursor)return;meta.put(studioDraftMetaFromRow(cursor.value));cursor.continue();};};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});}
 async function getAllStudioDraftMeta(){try{const db=await openStudioDraftDb();try{return await request(db.transaction(STUDIO_DRAFT_META_STORE,'readonly').objectStore(STUDIO_DRAFT_META_STORE).getAll());}finally{db.close();}}catch(error){console.warn('Studio drafts could not be read by Bookshelf',error);return[];}}
+
+async function getRecoveryRows(){
+  const out=[];
+  try{
+    const db=await openDb();
+    try{
+      for(const [store,kind] of [[WORK_RECOVERY,'master'],[READER_RECOVERY,'reader']]){
+        if(!db.objectStoreNames.contains(store))continue;
+        const rows=await request(db.transaction(store,'readonly').objectStore(store).getAll());
+        for(const item of rows||[])out.push({kind,item});
+      }
+    }finally{db.close();}
+  }catch(error){console.warn('Bookshelf recovery rows could not be read',error);}
+  try{
+    const db=await openStudioDraftDb();
+    try{
+      if(db.objectStoreNames.contains(STUDIO_DRAFT_RECOVERY_STORE)){
+        const rows=await request(db.transaction(STUDIO_DRAFT_RECOVERY_STORE,'readonly').objectStore(STUDIO_DRAFT_RECOVERY_STORE).getAll());
+        for(const item of rows||[])out.push({kind:'draft',item});
+      }
+      if(db.objectStoreNames.contains(STUDIO_DRAFT_VERSION_STORE)){
+        const rows=await request(db.transaction(STUDIO_DRAFT_VERSION_STORE,'readonly').objectStore(STUDIO_DRAFT_VERSION_STORE).getAll());
+        for(const item of rows||[])out.push({kind:'version',item});
+      }
+    }finally{db.close();}
+  }catch(error){console.warn('Studio recovery rows could not be read',error);}
+  return out.sort((a,b)=>Number(b.item?.deletedAt||b.item?.savedAt||b.item?.createdAt||0)-Number(a.item?.deletedAt||a.item?.savedAt||a.item?.createdAt||0));
+}
+function recoveryTitle(entry){
+  const item=entry?.item||{},row=item.row||item.snapshot||item.draft||item.meta||{};
+  return String(row?.title||row?.document?.title||item?.meta?.title||item?.workId||item?.copyId||item?.draftId||'名称未設定');
+}
+function recoveryTime(entry){
+  const item=entry?.item||{},raw=Number(item.deletedAt||item.savedAt||item.createdAt||0);
+  if(!raw)return '';
+  try{return new Date(raw).toLocaleString('ja-JP');}catch(_){return '';}
+}
+async function restoreRecoveryEntry(entry){
+  const {kind,item}=entry||{};
+  if(kind==='master'&&item?.row){await putWork(item.row);return;}
+  if(kind==='reader'&&item?.row){await putReaderBook(item.row);return;}
+  if(kind==='draft'){
+    const row=item?.row,meta=item?.meta;
+    if(!row&&!meta)throw new Error('復旧できる下書き本体がありません。');
+    const db=await openStudioDraftDb();
+    try{
+      const stores=[STUDIO_DRAFT_STORE,STUDIO_DRAFT_META_STORE],t=db.transaction(stores,'readwrite');
+      if(row)t.objectStore(STUDIO_DRAFT_STORE).put(row);
+      if(meta)t.objectStore(STUDIO_DRAFT_META_STORE).put(meta);else if(row)t.objectStore(STUDIO_DRAFT_META_STORE).put(studioDraftMetaFromRow(row));
+      await new Promise((resolve,reject)=>{t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Draft restore aborted'));});
+    }finally{db.close();}
+    return;
+  }
+  if(kind==='version'){
+    const row=item?.row||item?.snapshot||item?.draft;
+    if(!row)throw new Error('この世代には復旧できる下書き本体がありません。');
+    const db=await openStudioDraftDb();
+    try{
+      const t=db.transaction([STUDIO_DRAFT_STORE,STUDIO_DRAFT_META_STORE],'readwrite');
+      t.objectStore(STUDIO_DRAFT_STORE).put(row);
+      t.objectStore(STUDIO_DRAFT_META_STORE).put(studioDraftMetaFromRow(row));
+      await new Promise((resolve,reject)=>{t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Draft version restore aborted'));});
+    }finally{db.close();}
+    return;
+  }
+  throw new Error('この復旧データには本体がありません。');
+}
+async function openHiddenRecovery(){
+  const rows=await getRecoveryRows();
+  let dialog=document.getElementById('hiddenRecoveryDialog');
+  if(!dialog){
+    dialog=document.createElement('dialog');dialog.id='hiddenRecoveryDialog';dialog.className='detail-dialog';
+    dialog.innerHTML='<div style="min-width:min(560px,86vw);max-height:76vh;overflow:auto;padding:22px"><div style="display:flex;justify-content:space-between;gap:16px;align-items:start"><div><small style="letter-spacing:.16em;color:#888">SAFETY RECOVERY</small><h2 style="margin:.35em 0 .25em">復旧データ</h2><p style="margin:0;color:#777;font-size:13px">テスト用の隠し入口です。通常の本棚には表示されません。</p></div><button type="button" data-close style="border:0;background:none;font-size:24px;cursor:pointer">×</button></div><div data-list style="margin-top:20px"></div></div>';
+    document.body.appendChild(dialog);dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.addEventListener('close',syncShelfScrollLock);
+  }
+  const list=dialog.querySelector('[data-list]');
+  if(!rows.length)list.innerHTML='<p style="padding:28px 0;color:#888;text-align:center">復旧データはまだありません。</p>';
+  else list.innerHTML=rows.map((entry,i)=>{const labels={master:'Master',reader:'MY COPY',draft:'下書き',version:'下書き世代'};return `<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #e7e1d8"><div><small style="color:#8b8176">${labels[entry.kind]||entry.kind}</small><strong style="display:block;margin-top:3px">${escapeHtml(recoveryTitle(entry))}</strong><span style="font-size:12px;color:#999">${escapeHtml(recoveryTime(entry))}</span></div><button type="button" data-restore="${i}" style="padding:8px 13px">戻す</button></div>`;}).join('');
+  list.querySelectorAll('[data-restore]').forEach(button=>button.onclick=async()=>{const entry=rows[Number(button.dataset.restore)];button.disabled=true;try{await restoreRecoveryEntry(entry);await render();toast('復旧しました。');dialog.close();}catch(error){console.error(error);AhakoDialog.alert(error?.message||'復旧できませんでした。');}finally{button.disabled=false;}});
+  if(!dialog.open)dialog.showModal();syncShelfScrollLock();
+}
+function installHiddenRecoveryEntry(){
+  const dialog=$('#archiveDialog');if(!dialog||dialog.querySelector('[data-hidden-recovery]'))return;
+  const hint=Array.from(dialog.querySelectorAll('small,p,span,div')).find(el=>String(el.textContent||'').trim()==='STORAGE BOX')||dialog.querySelector('h2');
+  if(!hint)return;
+  hint.style.cursor='default';hint.title='';
+  let taps=0,timer=0;
+  hint.addEventListener('click',()=>{clearTimeout(timer);taps++;if(taps>=5){taps=0;openHiddenRecovery();return;}timer=setTimeout(()=>{taps=0;},1400);});
+  hint.dataset.hiddenRecovery='1';
+}
 async function deleteStudioDraft(draftId){if(!draftId)return;const db=await openStudioDraftDb();try{const t=db.transaction([STUDIO_DRAFT_STORE,STUDIO_DRAFT_META_STORE,STUDIO_DRAFT_RECOVERY_STORE],'readwrite'),drafts=t.objectStore(STUDIO_DRAFT_STORE),meta=t.objectStore(STUDIO_DRAFT_META_STORE),recovery=t.objectStore(STUDIO_DRAFT_RECOVERY_STORE),rowReq=drafts.get(draftId),metaReq=meta.get(draftId),[row,metaRow]=await Promise.all([request(rowReq),request(metaReq)]);if(row||metaRow)recovery.put({recoveryId:`${draftId}:${Date.now()}`,draftId,deletedAt:Date.now(),row,meta:metaRow});drafts.delete(draftId);meta.delete(draftId);await new Promise((resolve,reject)=>{t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Draft delete aborted'));});}finally{db.close();}}
 
 async function inflateRaw(bytes){if(typeof DecompressionStream!=='function')throw new Error('このブラウザでは圧縮.sceneを展開できません。');const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));return new Uint8Array(await new Response(stream).arrayBuffer());}
@@ -2034,6 +2124,7 @@ function setArchiveDock(open){
 }
 function openArchiveBox(){
   if(currentShelfTab==='official')return;
+  installHiddenRecoveryEntry();
   const list=$('#archiveList'),restoreSelected=$('#restoreSelectedButton'),deleteSelected=$('#deleteSelectedButton'),selectedCount=$('#archiveSelectedCount');
   list.innerHTML=activeArchivedBooks.length?activeArchivedBooks.map(w=>bookCardHtml(w,{archived:true})).join(''):'<div class="archive-empty">箱の中は空です。</div>';
   const checks=()=>Array.from(list.querySelectorAll('.archive-check:checked'));
