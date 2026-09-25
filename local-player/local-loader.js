@@ -238,7 +238,7 @@
       const rec=await readerBookFromBookshelf(copyId);
       clearBookshelfOpenHandoff();
       const file=new File([rec.blob],rec.fileName||`${rec.title||'book'}_distribution.scene`,{type:'application/octet-stream'});
-      await openScene(file,{sourceMode:'bookshelf',sourceKey:`bookshelf:${copyId}`});
+      await openScene(file,{sourceMode:'bookshelf',sourceKey:`bookshelf:${copyId}`,syncPublicAppearance:true});
       return true;
     }catch(error){
       console.error(error);
@@ -942,7 +942,7 @@
     for(const[k,v]of Object.entries(value))out[k]=rewriteAssets(v,map,k);
     return out;
   }
-  async function openScene(file,{sourceMode='file',sourceKey=''}={}){
+  async function openScene(file,{sourceMode='file',sourceKey='',syncPublicAppearance=false}={}){
     if(!file)return;
     currentSourceMode=sourceMode;
     if(endingOwnWrap)endingOwnWrap.hidden=true;
@@ -958,7 +958,24 @@
       const manifest=jsonFile(files,'manifest.json');
       if(manifest.package!=='scene-package')throw new Error(`未対応 package: ${manifest.package||'(なし)'}`);
       if(String(manifest.packageVersion||'')!=='1.0')throw new Error(`未対応 Scene Package version: ${manifest.packageVersion||'(なし)'}`);
-      const raw=jsonFile(files,manifest.entry||'scene.json');
+      let raw=jsonFile(files,manifest.entry||'scene.json');
+      // V166: a MY COPY can contain an older shell appearance snapshot even when
+      // the work body is valid.  The public route is the visual reference.
+      // Sync only top-level theme/appearance; keep the owned Scene body, Edition
+      // and Distribution identity untouched. Failure is deliberately non-fatal.
+      if(syncPublicAppearance&&raw?.distribution?.copyId&&raw?.workId){
+        try{
+          const response=await fetch(`${API_BASE}/work/${encodeURIComponent(String(raw.workId))}?raw=1`,{cache:'no-store'});
+          if(response.ok){
+            const canonical=await response.json();
+            if(canonical&&typeof canonical==='object'){
+              raw=JSON.parse(JSON.stringify(raw));
+              if(canonical.theme!==undefined)raw.theme=canonical.theme;
+              if(canonical.appearance!==undefined)raw.appearance=JSON.parse(JSON.stringify(canonical.appearance));
+            }
+          }
+        }catch(error){console.warn('MY COPY appearance sync skipped',error);}
+      }
       currentPackage={files:new Map(files),manifest:JSON.parse(JSON.stringify(manifest)),raw:JSON.parse(JSON.stringify(raw))};
       if(relayButton)relayButton.hidden=true;
       renderJourney(raw);
