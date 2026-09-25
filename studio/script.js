@@ -5276,9 +5276,9 @@
       // Never leave a hosted work detached from its local record.
       await saveDraftNow({force:true});
 
-      // A Master Scene is one logical work per device. Clean duplicate shelf
-      // rows that point at this same master/publication, then refresh the shelf.
-      await pruneSiblingDraftsForCurrentMaster();
+      // V177: never delete local drafts automatically after publish.
+      // Multiple drafts may intentionally share a Master/publication while the author
+      // is testing or recovering a work. Draft deletion must be an explicit user action.
       await refreshDraftUI(false);
 
       // Keep the newest master snapshot ready for an explicit user action.
