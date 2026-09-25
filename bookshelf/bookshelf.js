@@ -243,7 +243,10 @@ async function pruneRevokedReaderBooks(books){
     try{
       const status=await fetchMyCopyStatus(copyId);
       if(isRefundRevokedCopyStatus(status)){
-        await deleteReaderBook(copyId);
+        // V177: entitlement reconciliation must never destroy the local MY COPY blob.
+        // Hide a revoked copy from the shelf, but keep its bytes recoverable in IndexedDB.
+        // Explicit user deletion from the cardboard box is the only path that physically
+        // deletes a readerBooks record. This also protects against a bad/stale status reply.
         writeOwnedSeriesBoxes(ownedSeriesBoxes.map(box=>({...box,copyIds:(box.copyIds||[]).filter(id=>id!==copyId)})));
         writeIdList(SHELF_ARCHIVE_KEYS.owned,readIdList(SHELF_ARCHIVE_KEYS.owned).filter(id=>id!==copyId));
         writeIdList(SHELF_ORDER_KEYS.owned,readIdList(SHELF_ORDER_KEYS.owned).filter(id=>id!==copyId));
