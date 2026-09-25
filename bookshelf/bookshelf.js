@@ -141,30 +141,44 @@ async function putReaderBook(rec){const db=await openDb();try{await request(db.t
 async function getReaderBook(id){const db=await openDb();try{return await request(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).get(id));}finally{db.close();}}
 async function deleteReaderBook(id){const db=await openDb();try{await request(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).delete(id));}finally{db.close();}}
 
-// V161: paid MY COPY can be revoked by a successful refund.
-// The work itself remains publicly readable; only the locally saved MY COPY is removed.
+
+// V162: server-authoritative status for paid MY COPY.
+// Legacy/free/relay copies may be unknown to commerce, so only an explicit
+// refund revocation is destructive.
+async function fetchMyCopyStatus(copyId){
+  if(!/^copy_[a-f0-9]{32}$/i.test(String(copyId||'')))return null;
+  const response=await fetch(`${API_BASE}/commerce/copy-status`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({copyId})});
+  if(!response.ok)return null;
+  return response.json().catch(()=>null);
+}
+function isRefundRevokedCopyStatus(status){
+  return status?.active===false&&status?.status==='revoked_refund'&&status?.reason==='refund';
+}
+async function assertMyCopyImportable(copyId){
+  try{
+    const status=await fetchMyCopyStatus(copyId);
+    if(isRefundRevokedCopyStatus(status))throw new Error('返金済みのMY COPYは本棚へ戻せません。');
+  }catch(error){
+    if(error?.message==='返金済みのMY COPYは本棚へ戻せません。')throw error;
+    console.warn('MY COPY status check skipped during import',copyId,error);
+  }
+}
 async function pruneRevokedReaderBooks(books){
   const kept=[];
   for(const book of Array.isArray(books)?books:[]){
     const copyId=String(book?.copyId||'').trim();
     if(!/^copy_[a-f0-9]{32}$/i.test(copyId)){kept.push(book);continue;}
     try{
-      const response=await fetch(`${API_BASE}/commerce/copy-status`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({copyId})});
-      if(!response.ok){kept.push(book);continue;}
-      const status=await response.json().catch(()=>null);
-      // Only remove an explicit refund revocation. Missing/unknown/server errors must never
-      // destroy a legitimate local book (legacy/free/relay copies may not have a grant).
-      if(status?.active===false&&status?.status==='revoked'&&status?.reason==='refund'){
+      const status=await fetchMyCopyStatus(copyId);
+      if(isRefundRevokedCopyStatus(status)){
         await deleteReaderBook(copyId);
-        writeOwnedSeriesBoxes(ownedSeriesBoxes.map(box=>({...box,copyIds:box.copyIds.filter(id=>id!==copyId)})));
+        writeOwnedSeriesBoxes(ownedSeriesBoxes.map(box=>({...box,copyIds:(box.copyIds||[]).filter(id=>id!==copyId)})));
         writeIdList(SHELF_ARCHIVE_KEYS.owned,readIdList(SHELF_ARCHIVE_KEYS.owned).filter(id=>id!==copyId));
         writeIdList(SHELF_ORDER_KEYS.owned,readIdList(SHELF_ORDER_KEYS.owned).filter(id=>id!==copyId));
-        copyJourneyCache.delete(copyId);
+        for(const key of Array.from(copyJourneyCache.keys()))if(String(key).endsWith(`|${copyId}`))copyJourneyCache.delete(key);
         continue;
       }
-    }catch(error){
-      console.warn('MY COPY refund status could not be checked',copyId,error);
-    }
+    }catch(error){console.warn('MY COPY refund status could not be checked',copyId,error);}
     kept.push(book);
   }
   return kept;
@@ -205,7 +219,7 @@ async function inspectDistribution(file){
   const authorSlug=/^[a-z0-9][a-z0-9_-]{2,29}$/.test(rawAuthorSlug)?rawAuthorSlug:'';
   return{role:'distribution',copyId,workId,editionId,title:String(doc.title||manifest.title||'Untitled'),subtitle:String(doc?.metadata?.subtitle||doc?.subtitle||manifest?.subtitle||''),description:String(doc?.metadata?.description||doc?.description||manifest?.description||''),seriesId:String(doc?.metadata?.seriesId||manifest?.series?.id||''),seriesTitle:String(doc?.metadata?.seriesTitle||manifest?.series?.title||''),episode:String(doc?.metadata?.episode||manifest?.series?.episode||''),episodeNumber:Number(doc?.metadata?.episodeNumber||manifest?.series?.episodeNumber||0)||0,episodeTitle:String(doc?.metadata?.episodeTitle||manifest?.episodeTitle||''),author:String(doc.author||manifest.author||''),authorId,authorSlug,sceneCount:Array.isArray(doc.scenes)?doc.scenes.length:0,relayEnabled:doc?.sharing?.relay?.enabled!==false,issuedAt:String(doc?.distribution?.issuedAt||doc?.edition?.issuedAt||''),coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}},coverBlob,coverUrl,blob:new Blob([await file.arrayBuffer()],{type:'application/octet-stream'})};
 }
-async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!old){const order=readIdList(SHELF_ORDER_KEYS.owned).filter(id=>id!==info.copyId);writeIdList(SHELF_ORDER_KEYS.owned,[info.copyId,...order]);}if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
+async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);await assertMyCopyImportable(info.copyId);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!old){const order=readIdList(SHELF_ORDER_KEYS.owned).filter(id=>id!==info.copyId);writeIdList(SHELF_ORDER_KEYS.owned,[info.copyId,...order]);}if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
 
 
 async function hydrateStoredBookMetadata(w){
@@ -504,7 +518,8 @@ function authoredCoverOverlayHtml(w){
   return fields.length?`<span class="shelf-cover-authored">${fields.join('')}</span>`:'';
 }
 function bookCardHtml(w,{archived=false}={}){
-  const badge=w.role==='distribution'?'MY COPY':w.role==='studio-draft'?'DRAFT':'MASTER',id=shelfIdOf(w);
+  const isPublishedCreated=w.role!=='distribution'&&authorWorks.some(work=>work.workId===w.workId);
+  const badge=w.role==='distribution'?'MY COPY':isPublishedCreated?'MASTER':w.role==='studio-draft'?'DRAFT':'MASTER',id=shelfIdOf(w);
   const image=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="" draggable="false">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false">`:`<div class="cover-fallback">□</div>`);
   if(archived)return`<label class="archive-item" data-role="${w.role}" data-id="${escapeHtml(id)}"><input class="archive-check" type="checkbox" aria-label="${escapeHtml(w.title)}を選択"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div></label>`;
   const episode=String(w.episode||'').trim();
