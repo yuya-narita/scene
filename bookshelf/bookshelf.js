@@ -134,7 +134,34 @@ async function restoreServerPublishedMasters(){
   }
   return restored;
 }
-async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];await restoreServerPublishedMasters();mergeServerPublishedWorksIntoCreatedCache();rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);await queuePublishedWorkOrderSync(createdIds,{immediate:true});}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
+async function syncRecoveredMasterSeriesMetadata(){
+  if(!Array.isArray(authorWorks)||!authorWorks.length)return 0;
+  let changed=0;
+  for(const work of authorWorks){
+    const workId=String(work?.workId||'').trim();if(!workId)continue;
+    const row=await getWork(workId);if(!row?.serverRecovered||!row?.blob)continue;
+    try{
+      const entries=await readZipEntries(row.blob),sceneBytes=entries.get('scene.json');if(!sceneBytes)continue;
+      const doc=parseJson(sceneBytes);doc.metadata ||= {};
+      const seriesId=String(work?.seriesId||'').trim(),seriesTitle=String(work?.seriesTitle||'').trim(),episodeNumber=Number(work?.episodeNumber||0)||0;
+      if(seriesId&&episodeNumber>=1&&episodeNumber<=9999){
+        doc.metadata.seriesId=seriesId;doc.metadata.seriesTitle=seriesTitle;doc.metadata.episodeNumber=episodeNumber;
+        if(work?.episodeLabel||work?.episode)doc.metadata.episode=String(work.episodeLabel||work.episode);
+        if(work?.episodeTitle)doc.metadata.episodeTitle=String(work.episodeTitle);
+        doc.publication ||= {};doc.publication.series={seriesId,title:seriesTitle,episodeNumber};
+      }else{
+        delete doc.metadata.seriesId;delete doc.metadata.seriesTitle;delete doc.metadata.episodeNumber;
+        if(doc.publication&&typeof doc.publication==='object')delete doc.publication.series;
+      }
+      const out=[];for(const [name,bytes] of entries){if(name!=='scene.json')out.push({name,bytes});}
+      out.push({name:'scene.json',bytes:te.encode(JSON.stringify(doc,null,2))});
+      const blob=await makeStoreZip(out);
+      await putWork({...row,blob,seriesId,seriesTitle,episodeNumber,episode:String(work?.episodeLabel||work?.episode||''),episodeTitle:String(work?.episodeTitle||''),updatedAt:row.updatedAt||new Date().toISOString()});changed++;
+    }catch(error){console.warn('Recovered Master series sync skipped',workId,error);}
+  }
+  return changed;
+}
+async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];await restoreServerPublishedMasters();await syncRecoveredMasterSeriesMetadata();mergeServerPublishedWorksIntoCreatedCache();rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);await queuePublishedWorkOrderSync(createdIds,{immediate:true});}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
 
 function shelfScrollShouldLock(){
   return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open||$('#readLaterDialog')?.open||$('#publicWorkDialog')?.open);
