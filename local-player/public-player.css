@@ -1115,3 +1115,30 @@ body{
     max-height:none!important;
   }
 }
+
+/* =========================================================
+   V168 — Local Player reading chrome parity with Public Player
+   The public route already has V150–V152 neutral contrast rules.
+   Local Player had diverged before those rules, so MY COPY chrome
+   (title / audio / TAP / AUTO / report) rendered visibly dimmer.
+   Keep authored Scene content untouched; only reader chrome is aligned.
+   ========================================================= */
+.public-player .sp-author,
+.public-player .sp-title,
+.public-player .sp-prev,
+.public-player .sp-restart,
+.public-player .sp-tap-hint,
+.public-player .sp-auto,
+.public-report-trigger{
+  color:#9a9a9a!important;
+  -webkit-text-fill-color:#9a9a9a!important;
+  opacity:1!important;
+}
+.public-player .sp-auto{border-color:rgba(154,154,154,.58)!important}
+.public-player .sp-auto.is-on{
+  background:#9a9a9a!important;
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  border-color:#9a9a9a!important;
+}
+.public-report-trigger{font-weight:600!important}
