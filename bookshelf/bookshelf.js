@@ -140,6 +140,35 @@ async function getAllReaderBooks(){const db=await openDb();try{return await requ
 async function putReaderBook(rec){const db=await openDb();try{await request(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).put(rec));}finally{db.close();}}
 async function getReaderBook(id){const db=await openDb();try{return await request(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).get(id));}finally{db.close();}}
 async function deleteReaderBook(id){const db=await openDb();try{await request(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).delete(id));}finally{db.close();}}
+
+// V161: paid MY COPY can be revoked by a successful refund.
+// The work itself remains publicly readable; only the locally saved MY COPY is removed.
+async function pruneRevokedReaderBooks(books){
+  const kept=[];
+  for(const book of Array.isArray(books)?books:[]){
+    const copyId=String(book?.copyId||'').trim();
+    if(!/^copy_[a-f0-9]{32}$/i.test(copyId)){kept.push(book);continue;}
+    try{
+      const response=await fetch(`${API_BASE}/commerce/copy-status`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({copyId})});
+      if(!response.ok){kept.push(book);continue;}
+      const status=await response.json().catch(()=>null);
+      // Only remove an explicit refund revocation. Missing/unknown/server errors must never
+      // destroy a legitimate local book (legacy/free/relay copies may not have a grant).
+      if(status?.active===false&&status?.status==='revoked'&&status?.reason==='refund'){
+        await deleteReaderBook(copyId);
+        writeOwnedSeriesBoxes(ownedSeriesBoxes.map(box=>({...box,copyIds:box.copyIds.filter(id=>id!==copyId)})));
+        writeIdList(SHELF_ARCHIVE_KEYS.owned,readIdList(SHELF_ARCHIVE_KEYS.owned).filter(id=>id!==copyId));
+        writeIdList(SHELF_ORDER_KEYS.owned,readIdList(SHELF_ORDER_KEYS.owned).filter(id=>id!==copyId));
+        copyJourneyCache.delete(copyId);
+        continue;
+      }
+    }catch(error){
+      console.warn('MY COPY refund status could not be checked',copyId,error);
+    }
+    kept.push(book);
+  }
+  return kept;
+}
 async function setHandoff(workId){const db=await openDb();try{await request(db.transaction(HANDOFF,'readwrite').objectStore(HANDOFF).put({key:'studio',workId,createdAt:new Date().toISOString()}));}finally{db.close();}}
 
 function studioDraftMetaFromRow(row){
@@ -1008,7 +1037,8 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
       mastersByWorkId.set(meta.workId,merged);
     }else masters.push(draftView);
   }
-  const readers=await Promise.all((await getAllReaderBooks()).map(async w=>({...await hydrateStoredBookMetadata({...w,role:'distribution'}),role:'distribution'})));
+  const readerRows=await pruneRevokedReaderBooks(await getAllReaderBooks());
+  const readers=await Promise.all(readerRows.map(async w=>({...await hydrateStoredBookMetadata({...w,role:'distribution'}),role:'distribution'})));
   shelfCounts={owned:readers.length,created:masters.length};
   shelfDataCache={owned:readers,created:masters};
   if(!currentShelfTab)currentShelfTab=chooseFirstShelf();
