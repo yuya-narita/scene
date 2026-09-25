@@ -963,9 +963,12 @@
   let protectedResplitPending = false;
 
   const DRAFT_DB_NAME='scene-studio-drafts';
-  const DRAFT_DB_VERSION=2;
+  const DRAFT_DB_VERSION=3;
   const DRAFT_STORE='drafts';
   const DRAFT_META_STORE='draftMeta';
+  const DRAFT_RECOVERY_STORE='draftRecovery';
+  const DRAFT_VERSION_STORE='draftVersions';
+  const DRAFT_VERSION_LIMIT=10;
   const DRAFT_LAST_KEY='sceneStudio.lastDraftId';
   let currentDraftId=localStorage.getItem(DRAFT_LAST_KEY)||'';
   let draftSaveTimer=null;
@@ -987,6 +990,8 @@
         const db=req.result;
         const drafts=db.objectStoreNames.contains(DRAFT_STORE)?req.transaction.objectStore(DRAFT_STORE):db.createObjectStore(DRAFT_STORE,{keyPath:'id'});
         const meta=db.objectStoreNames.contains(DRAFT_META_STORE)?req.transaction.objectStore(DRAFT_META_STORE):db.createObjectStore(DRAFT_META_STORE,{keyPath:'id'});
+        if(!db.objectStoreNames.contains(DRAFT_RECOVERY_STORE))db.createObjectStore(DRAFT_RECOVERY_STORE,{keyPath:'recoveryId'});
+        if(!db.objectStoreNames.contains(DRAFT_VERSION_STORE)){const versions=db.createObjectStore(DRAFT_VERSION_STORE,{keyPath:'snapshotId'});versions.createIndex('draftId','draftId',{unique:false});}
         drafts.openCursor().onsuccess=event=>{const cursor=event.target.result;if(!cursor)return;meta.put(draftMetaFromRow(cursor.value));cursor.continue();};
       };
       req.onsuccess=()=>resolve(req.result);
@@ -1059,9 +1064,10 @@
 
   async function putDraftRecord(row){
     const db=await openDraftDB();
-    const transaction=db.transaction([DRAFT_STORE,DRAFT_META_STORE],'readwrite');
+    const transaction=db.transaction([DRAFT_STORE,DRAFT_META_STORE,DRAFT_VERSION_STORE],'readwrite');
     const store=transaction.objectStore(DRAFT_STORE);
     const metaStore=transaction.objectStore(DRAFT_META_STORE);
+    const versionStore=transaction.objectStore(DRAFT_VERSION_STORE);
     await new Promise((resolve,reject)=>{
       const get=store.get(row.id);
       get.onerror=()=>reject(get.error);
@@ -1073,7 +1079,18 @@
         const put=store.put(safeRow);
         put.onsuccess=()=>{
           const meta=metaStore.put(draftMetaFromRow(safeRow));
-          meta.onsuccess=()=>resolve();
+          meta.onsuccess=()=>{
+            const now=Date.now();
+            versionStore.put({snapshotId:`${safeRow.id}:${now}:${Math.random().toString(36).slice(2,7)}`,draftId:safeRow.id,savedAt:now,row:safeRow});
+            const index=versionStore.index('draftId');
+            const req=index.getAll(IDBKeyRange.only(safeRow.id));
+            req.onsuccess=()=>{
+              const snapshots=(req.result||[]).sort((a,b)=>(b.savedAt||0)-(a.savedAt||0));
+              snapshots.slice(DRAFT_VERSION_LIMIT).forEach(item=>versionStore.delete(item.snapshotId));
+              resolve();
+            };
+            req.onerror=()=>resolve();
+          };
           meta.onerror=()=>reject(meta.error);
         };
         put.onerror=()=>reject(put.error);
@@ -1082,9 +1099,15 @@
     db.close();
   }
   async function removeDraftRecord(id){
+    if(!id)return;
     const db=await openDraftDB();
-    const transaction=db.transaction([DRAFT_STORE,DRAFT_META_STORE],'readwrite');
-    await Promise.all([DRAFT_STORE,DRAFT_META_STORE].map(name=>new Promise((resolve,reject)=>{const r=transaction.objectStore(name).delete(id);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error);}))); 
+    const transaction=db.transaction([DRAFT_STORE,DRAFT_META_STORE,DRAFT_RECOVERY_STORE],'readwrite');
+    const drafts=transaction.objectStore(DRAFT_STORE),meta=transaction.objectStore(DRAFT_META_STORE),recovery=transaction.objectStore(DRAFT_RECOVERY_STORE);
+    const rowReq=drafts.get(id),metaReq=meta.get(id);
+    const [row,metaRow]=await Promise.all([rowReq,metaReq].map(r=>new Promise((resolve,reject)=>{r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error);})));
+    if(row||metaRow)recovery.put({recoveryId:`${id}:${Date.now()}`,draftId:id,deletedAt:Date.now(),row,meta:metaRow});
+    drafts.delete(id);meta.delete(id);
+    await new Promise((resolve,reject)=>{transaction.oncomplete=()=>resolve();transaction.onerror=()=>reject(transaction.error);transaction.onabort=()=>reject(transaction.error||new Error('Draft delete aborted'));});
     db.close();
   }
   function formatStorageBytes(bytes){
@@ -1406,25 +1429,8 @@
     return Math.max(0,Math.floor(Number(row?.document?.studio?.identity?.revision)||0));
   }
   async function pruneSiblingDraftsForCurrentMaster(){
-    if(!currentDraftId||!workingDocument)return 0;
-    const workId=String(workingDocument?.studio?.identity?.workId||'').trim();
-    const publicationId=String(latestPublishedId||'').trim();
-    if(!workId && !publicationId)return 0;
-
-    const rows=await listDraftRecords();
-    let removed=0;
-    for(const row of rows){
-      if(row.id===currentDraftId)continue;
-      const sameMaster=workId && draftMasterWorkId(row)===workId;
-      const samePublication=publicationId && String(row?.publication?.id||'')===publicationId;
-      if(!sameMaster && !samePublication)continue;
-
-      // One logical Master Scene = one shelf row per device. Keep the current
-      // working row and remove older local duplicates only.
-      await removeDraftRecord(row.id);
-      removed++;
-    }
-    return removed;
+    // V181 safety rule: never delete sibling drafts automatically.
+    return 0;
   }
 
   function draftPublicationUrl(row){
@@ -14842,10 +14848,12 @@ function openDesktopTextDetail(){
   // Master files stay in IndexedDB on this origin. No work payload is sent
   // to the A-Hako API by this integration.
   const BOOKSHELF_DB_NAME='ahako-local-bookshelf';
-  const BOOKSHELF_DB_VERSION=2;
+  const BOOKSHELF_DB_VERSION=3;
   const BOOKSHELF_WORKS_STORE='works';
   const BOOKSHELF_READER_STORE='readerBooks';
   const BOOKSHELF_HANDOFF_STORE='handoff';
+  const BOOKSHELF_WORK_RECOVERY_STORE='workRecovery';
+  const BOOKSHELF_READER_RECOVERY_STORE='readerRecovery';
   const openedFromBookshelf=new URLSearchParams(location.search).get('from')==='bookshelf';
 
   function openBookshelfDb(){
@@ -14856,6 +14864,8 @@ function openDesktopTextDetail(){
         if(!db.objectStoreNames.contains(BOOKSHELF_WORKS_STORE))db.createObjectStore(BOOKSHELF_WORKS_STORE,{keyPath:'workId'});
         if(!db.objectStoreNames.contains(BOOKSHELF_READER_STORE))db.createObjectStore(BOOKSHELF_READER_STORE,{keyPath:'copyId'});
         if(!db.objectStoreNames.contains(BOOKSHELF_HANDOFF_STORE))db.createObjectStore(BOOKSHELF_HANDOFF_STORE,{keyPath:'key'});
+        if(!db.objectStoreNames.contains(BOOKSHELF_WORK_RECOVERY_STORE))db.createObjectStore(BOOKSHELF_WORK_RECOVERY_STORE,{keyPath:'recoveryId'});
+        if(!db.objectStoreNames.contains(BOOKSHELF_READER_RECOVERY_STORE))db.createObjectStore(BOOKSHELF_READER_RECOVERY_STORE,{keyPath:'recoveryId'});
       };
       req.onsuccess=()=>resolve(req.result);
       req.onerror=()=>reject(req.error);
