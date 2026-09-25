@@ -563,7 +563,7 @@ function serverPublishedWorkView(work){
     title:String(work?.title||'Untitled'),author:authorName,
     subtitle:String(work?.subtitle||''),description:String(work?.description||''),
     seriesId:String(work?.seriesId||''),seriesTitle:String(work?.seriesTitle||work?.series||''),
-    episode:String(work?.episode||work?.episodeLabel||''),episodeNumber:Number(work?.episodeNumber||0)||0,
+    episode:String(work?.episode||work?.episodeLabel||''),episodeNumber:Number(work?.position||work?.episodeNumber||0)||0,
     episodeTitle:String(work?.episodeTitle||''),sceneCount:Number(work?.sceneCount||work?.scenes||0)||0,
     updatedAt:String(work?.updatedAt||work?.publishedAt||work?.createdAt||''),coverUrl:String(work?.coverUrl||''),
     coverPresentation:work?.coverPresentation||{fontFamily:'',styles:{},visibility:{}}
