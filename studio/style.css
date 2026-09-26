@@ -12020,3 +12020,18 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .commerce-price-status{min-height:0;margin:8px 2px 0;color:#b64040;font-size:10px;line-height:1.5}.commerce-price-status:empty{display:none}
 .own-copy-policy input:disabled{opacity:.55}.own-copy-policy:has(input:disabled){cursor:default}
 @media(max-width:520px){.commerce-price-card{margin-top:16px;padding:14px}.commerce-price-options{grid-template-columns:1fr}.commerce-price-head{align-items:center}}
+
+/* V194: paid-lock boundary is selected in Live Editor */
+.commerce-lock-summary{display:flex;align-items:center;gap:8px;min-height:46px;padding:0 12px;border:1px solid #d8d9de;border-radius:12px;background:#fff}
+.commerce-lock-summary strong{font-size:20px;font-weight:800}.commerce-lock-summary small{margin-left:auto;font-size:11px;color:#777b83}
+.commerce-lock-hint,.commerce-lock-guide{font-family:inherit;font-size:11px;line-height:1.5;color:#555960}
+.commerce-lock-guide{color:#777b83}
+.live-commerce-lock{min-width:auto!important;padding:7px 10px!important;border:1px solid #d8d9de!important;border-radius:999px!important;background:#fff!important;color:#555960!important;font:inherit!important;font-size:11px!important;font-weight:700!important;white-space:nowrap}
+.live-commerce-lock.is-current-lock{background:#fff4df!important;border-color:#e7c985!important;color:#95630b!important}
+.live-commerce-lock:disabled{opacity:.45;cursor:not-allowed}
+
+/* V195: Easy numeric paid-lock boundary + free-only own-copy policy */
+.commerce-lock-scene-input{display:flex;align-items:center;gap:8px;margin:7px 0 5px;font:600 12px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--muted,#666)}
+.commerce-lock-scene-input input{width:96px;min-height:38px;padding:8px 10px;border:1px solid #d9dde4;border-radius:10px;background:#fff;color:#17181b;font:700 15px/1 system-ui,-apple-system,"Segoe UI",sans-serif}
+.commerce-lock-hint,.commerce-lock-guide{font-family:system-ui,-apple-system,"Segoe UI",sans-serif!important;font-size:12px!important;font-weight:400!important;line-height:1.45!important}
+.commerce-price-card .own-copy-policy[hidden]{display:none!important}

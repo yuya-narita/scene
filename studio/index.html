@@ -388,10 +388,6 @@
             </div>
             </section>
           </div>
-          <label class="own-copy-policy">
-            <input id="ownCopyEnabled" type="checkbox">
-            <span><strong>自分の一冊を許可する</strong><small>読了した人が、この作品を自分の本棚へ受け取れます。</small></span>
-          </label>
         </div>
       </details>
       <section class="commerce-price-card" aria-labelledby="commercePriceTitle">
@@ -404,15 +400,20 @@
           <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>MY COPY販売</strong><small>最後まで読めます。読了後に購入して受け取れます</small></span></label>
           <label><input id="commerceModeLocked" type="radio" name="commerceMode" value="locked"><span><strong>有料ロック</strong><small>指定Sceneから先は購入後に読めます</small></span></label>
         </div>
+        <label id="commerceOwnCopyPolicy" class="own-copy-policy">
+          <input id="ownCopyEnabled" type="checkbox">
+          <span><strong>自分の一冊を許可する</strong><small>読了した人が、この作品を自分の本棚へ受け取れます。</small></span>
+        </label>
         <label id="commerceAmountField" class="commerce-amount-field" hidden>
           <span>販売価格</span>
           <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="1000000" step="1" value="100" aria-label="販売価格（円）"><small>円</small></div>
         </label>
         <div id="commerceLockField" class="commerce-amount-field" hidden>
           <span>有料開始位置</span>
-          <div class="commerce-amount-input"><span>Scene</span><input id="commerceLockSceneInput" type="number" inputmode="numeric" min="2" step="1" value="2" aria-label="有料開始Scene"><small>から ¥<span id="commerceLockPriceEcho">100</span></small></div>
-          <small id="commerceLockHint">Scene 1 まで無料で読めます。</small>
-          <button id="commerceLockUseCurrent" type="button" class="secondary-button">このSceneから有料にする</button>
+          <div class="commerce-lock-scene-input"><span>Scene</span><input id="commerceLockSceneInput" type="number" inputmode="numeric" min="2" step="1" value="2" aria-label="有料開始Scene"></div>
+          <div class="commerce-lock-summary"><strong id="commerceLockSceneEcho">Scene 2</strong><small>から ¥<span id="commerceLockPriceEcho">100</span></small></div>
+          <small id="commerceLockHint" class="commerce-lock-hint">Scene 1 まで無料で読めます。</small>
+          <small class="commerce-lock-guide">数字で直接指定するか、Live Editorでプレビューを見ながら指定できます。</small>
         </div>
         <p id="commercePriceStatus" class="commerce-price-status" aria-live="polite"></p>
       </section>
@@ -549,7 +550,7 @@
       <section class="scene-inspector">
         <div class="scene-inspector-head">
           <div><span id="selectedSceneNumber" class="scene-number">Scene 1</span><code id="selectedSceneId">s001</code></div>
-          <div class="scene-move-actions"><button id="moveUpButton" type="button">↑</button><button id="moveDownButton" type="button">↓</button></div>
+          <div class="scene-move-actions"><button id="liveCommerceLockButton" type="button" class="live-commerce-lock" hidden>🔒 このSceneから有料</button><button id="moveUpButton" type="button">↑</button><button id="moveDownButton" type="button">↓</button></div>
         </div>
 
         <label class="adv-field"><span>本文</span><textarea id="sceneTextInput" rows="7"></textarea></label>

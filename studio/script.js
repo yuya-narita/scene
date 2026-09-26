@@ -85,12 +85,15 @@
   const episodeTitleInput = $('#episodeTitleInput');
   const descriptionInput = $('#descriptionInput');
   const ownCopyEnabledInput = $('#ownCopyEnabled');
+  const commerceOwnCopyPolicy = $('#commerceOwnCopyPolicy');
   const commerceModeFree = $('#commerceModeFree');
   const commerceModePurchase = $('#commerceModePurchase');
   const commerceModeLocked = $('#commerceModeLocked');
   const commerceLockField = $('#commerceLockField');
   const commerceLockSceneInput = $('#commerceLockSceneInput');
   const commerceLockUseCurrent = $('#commerceLockUseCurrent');
+  const commerceLockSceneEcho = $('#commerceLockSceneEcho');
+  const liveCommerceLockButton = $('#liveCommerceLockButton');
   const commerceLockHint = $('#commerceLockHint');
   const commerceLockPriceEcho = $('#commerceLockPriceEcho');
   const commerceAmountField = $('#commerceAmountField');
@@ -899,12 +902,14 @@
       const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
       const freeUntil=Math.max(1,lockScene-1);
       if(commerceLockHint)commerceLockHint.textContent=`Scene ${freeUntil} まで無料で読めます。`;
+      if(commerceLockSceneEcho)commerceLockSceneEcho.textContent=`Scene ${lockScene}`;
       if(commerceLockPriceEcho)commerceLockPriceEcho.textContent=Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP');
     }
     if(commercePriceBadge){
       commercePriceBadge.textContent=paid?`${locked?'LOCK · ':''}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:'無料';
       commercePriceBadge.classList.toggle('is-paid',paid);
     }
+    if(commerceOwnCopyPolicy)commerceOwnCopyPolicy.hidden=paid;
     if(paid){
       if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}
     }else if(ownCopyEnabledInput){
@@ -6230,6 +6235,16 @@
     $('#sceneLanguageSelect').value=!sceneLang?'auto':(commonSceneLang.includes(sceneLang)?sceneLang:'custom');
     $('#sceneLanguageCustomInput').value=commonSceneLang.includes(sceneLang)?'':sceneLang;
     $('#sceneLanguageCustomField').hidden=$('#sceneLanguageSelect').value!=='custom';
+    if(liveCommerceLockButton){
+      const locked=Boolean(commerceModeLocked?.checked);
+      const sceneNo=(Number(selectedSceneIndex)||0)+1;
+      const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
+      liveCommerceLockButton.hidden=!locked;
+      liveCommerceLockButton.disabled=locked && sceneNo<2;
+      liveCommerceLockButton.classList.toggle('is-current-lock',locked && sceneNo===lockScene);
+      liveCommerceLockButton.textContent=locked && sceneNo===lockScene ? '🔒 有料開始Scene' : '🔒 このSceneから有料';
+      liveCommerceLockButton.title=sceneNo<2?'Scene 1 は無料範囲として残します。':'';
+    }
     $('#moveUpButton').disabled=selectedSceneIndex===0; $('#moveDownButton').disabled=selectedSceneIndex===workingDocument.scenes.length-1;
     $('#mergePreviousButton').disabled=selectedSceneIndex===0; $('#deleteSceneButton').disabled=workingDocument.scenes.length<=1;
     updateAutoTimingFields();
@@ -7419,11 +7434,21 @@
   endingLinkInputs.forEach(pair=>[pair.kicker,pair.label,pair.url].forEach(el=>el?.addEventListener('change',()=>saveEndingRecent({type:'slot',kicker:pair.kicker?.value,label:pair.label?.value,url:pair.url?.value}))));
 
   languageInput?.addEventListener('change',()=>{syncEasyShellToWorkingDocument();syncEasyPublishButton();});
-  commerceLockUseCurrent?.addEventListener('click',()=>{if(commerceLockSceneInput){commerceLockSceneInput.value=String(Math.max(2,(Number(selectedSceneIndex)||0)+1));renderCommercePriceUI();markDirty?.();}});
-  commerceLockSceneInput?.addEventListener('input',()=>{renderCommercePriceUI();markDirty?.();});
+  liveCommerceLockButton?.addEventListener('click',()=>{
+    const sceneNo=(Number(selectedSceneIndex)||0)+1;
+    if(!commerceModeLocked?.checked || sceneNo<2 || !commerceLockSceneInput)return;
+    commerceLockSceneInput.value=String(sceneNo);
+    renderCommercePriceUI();
+    syncEasyShellToWorkingDocument();
+    loadSceneIntoFields();
+    syncEasyPublishButton();
+    scheduleDraftSave(80);
+    markDirty?.();
+  });
+  commerceLockSceneInput?.addEventListener('input',()=>{renderCommercePriceUI();if(!workingDocument)ensureWorkingDocumentFromEasy();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(120);markDirty?.();});
   [commerceModeFree,commerceModePurchase,commerceModeLocked].forEach(el=>el?.addEventListener('change',()=>{
     if(!workingDocument)ensureWorkingDocumentFromEasy();
-    renderCommercePriceUI();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
+    renderCommercePriceUI();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(80);
   }));
   commerceAmountInput?.addEventListener('input',()=>{
     renderCommercePriceUI();
@@ -12319,6 +12344,23 @@ function openDesktopTextDetail(){
     addOp(t('edit.merge'),liveEditMergePrevious,index===0);
     addOp(t('scene.duplicate'),liveEditDuplicateScene);
     addOp(t('edit.delete'),liveEditDeleteScene,workingDocument.scenes.length<=1,'is-danger');
+    if(commerceModeLocked?.checked){
+      const sceneNo=index+1;
+      const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
+      const lockOp=desktopAction(sceneNo===lockScene?u('🔒 有料開始Scene','🔒 Paid starts here'):u('🔒 このSceneから有料','🔒 Paid from this Scene'),()=>{
+        if(sceneNo<2||!commerceModeLocked?.checked||!commerceLockSceneInput)return;
+        commerceLockSceneInput.value=String(sceneNo);
+        renderCommercePriceUI();
+        syncEasyShellToWorkingDocument();
+        syncEasyPublishButton();
+        scheduleDraftSave(80);
+        markDirty?.();
+        renderDesktopLivePanel();
+      },sceneNo===lockScene?'is-selected':'');
+      lockOp.disabled=sceneNo<2;
+      lockOp.title=sceneNo<2?u('Scene 1 は無料範囲として残します。','Scene 1 remains free.'):'';
+      ops.appendChild(lockOp);
+    }
     sceneCard.appendChild(ops);
 
     const nav=document.createElement('div');nav.className='desktop-live-nav';
