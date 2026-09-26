@@ -85,13 +85,14 @@
   const episodeTitleInput = $('#episodeTitleInput');
   const descriptionInput = $('#descriptionInput');
   const ownCopyEnabledInput = $('#ownCopyEnabled');
-  const ownCopyPolicyField = $('#ownCopyPolicyField');
   const commerceModeFree = $('#commerceModeFree');
   const commerceModePurchase = $('#commerceModePurchase');
   const commerceModeLocked = $('#commerceModeLocked');
   const commerceLockField = $('#commerceLockField');
   const commerceLockSceneInput = $('#commerceLockSceneInput');
   const commerceLockUseCurrent = $('#commerceLockUseCurrent');
+  const commerceLockHint = $('#commerceLockHint');
+  const commerceLockPriceEcho = $('#commerceLockPriceEcho');
   const commerceAmountField = $('#commerceAmountField');
   const commerceAmountInput = $('#commerceAmountInput');
   const commercePriceBadge = $('#commercePriceBadge');
@@ -894,7 +895,12 @@
     const locked=Boolean(commerceModeLocked?.checked);
     if(commerceAmountField)commerceAmountField.hidden=!paid;
     if(commerceLockField)commerceLockField.hidden=!locked;
-    if(ownCopyPolicyField)ownCopyPolicyField.hidden=paid;
+    if(locked){
+      const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
+      const freeUntil=Math.max(1,lockScene-1);
+      if(commerceLockHint)commerceLockHint.textContent=`Scene ${freeUntil} まで無料で読めます。`;
+      if(commerceLockPriceEcho)commerceLockPriceEcho.textContent=Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP');
+    }
     if(commercePriceBadge){
       commercePriceBadge.textContent=paid?`${locked?'LOCK · ':''}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:'無料';
       commercePriceBadge.classList.toggle('is-paid',paid);
