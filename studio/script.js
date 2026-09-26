@@ -94,6 +94,8 @@
   const commerceLockUseCurrent = $('#commerceLockUseCurrent');
   const commerceLockSceneEcho = $('#commerceLockSceneEcho');
   const liveCommerceLockButton = $('#liveCommerceLockButton');
+  const liveCommerceLockSection = $('#liveCommerceLockSection');
+  const liveCommerceLockState = $('#liveCommerceLockState');
   const commerceLockHint = $('#commerceLockHint');
   const commerceLockPriceEcho = $('#commerceLockPriceEcho');
   const commerceAmountField = $('#commerceAmountField');
@@ -6239,10 +6241,12 @@
       const locked=Boolean(commerceModeLocked?.checked);
       const sceneNo=(Number(selectedSceneIndex)||0)+1;
       const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
+      if(liveCommerceLockSection) liveCommerceLockSection.hidden=!locked;
       liveCommerceLockButton.hidden=!locked;
       liveCommerceLockButton.disabled=locked && sceneNo<2;
       liveCommerceLockButton.classList.toggle('is-current-lock',locked && sceneNo===lockScene);
-      liveCommerceLockButton.textContent=locked && sceneNo===lockScene ? '🔒 有料開始Scene' : '🔒 このSceneから有料';
+      liveCommerceLockButton.textContent=locked && sceneNo===lockScene ? `🔒 Scene ${sceneNo} から有料設定中` : '🔒 このSceneから有料にする';
+      if(liveCommerceLockState) liveCommerceLockState.textContent=locked ? `現在：Scene ${lockScene} から有料` : '';
       liveCommerceLockButton.title=sceneNo<2?'Scene 1 は無料範囲として残します。':'';
     }
     $('#moveUpButton').disabled=selectedSceneIndex===0; $('#moveDownButton').disabled=selectedSceneIndex===workingDocument.scenes.length-1;
@@ -12336,6 +12340,66 @@ function openDesktopTextDetail(){
     audioCard.append(audioGrid,audioQuickNote,desktopDetail(t('detail.audio'),'audio'));
     three.append(textCard,effectCard,bgCard,audioCard);
 
+    let liveCommerceLockCard=null;
+    const liveCommerce=commerceDraftSettings(workingDocument);
+    if(liveCommerce.mode==='locked'){
+      const sceneNo=index+1;
+      const lockScene=Math.max(2,Math.floor(Number(liveCommerce.lockScene||2)));
+      const lockCard=desktopCard(u('🔒 有料開始位置','🔒 Paid start'),'desktop-live-commerce-lock-card');
+      const lockStatus=document.createElement('div');lockStatus.className='desktop-live-commerce-lock-status';
+      lockStatus.innerHTML=`<strong>Scene ${lockScene} から ¥${Math.max(0,Math.floor(Number(liveCommerce.amount||0))).toLocaleString('ja-JP')}</strong><small>Scene ${Math.max(1,lockScene-1)} まで無料</small>`;
+      const lockOp=desktopAction(sceneNo===lockScene?u(`🔒 Scene ${sceneNo} から有料設定中`,`🔒 Paid from Scene ${sceneNo}`):u('🔒 このSceneから有料にする','🔒 Make this the paid start'),()=>{
+        if(sceneNo<2||liveCommerce.mode!=='locked'||!commerceLockSceneInput)return;
+        commerceLockSceneInput.value=String(sceneNo);
+
+        // V200: update the canonical in-memory document immediately.  The Live
+        // Editor is rendered from workingDocument, so waiting for the Easy-shell
+        // round trip made the button look unchanged until the author left/reopened
+        // the editor even though the Easy value had already been saved.
+        workingDocument.commerce ||= {};
+        workingDocument.commerce.ownCopyGate={
+          ...(workingDocument.commerce.ownCopyGate||{}),
+          schemaVersion:'1', mode:'locked', lockScene:sceneNo
+        };
+        workingDocument.studio ||= {};
+        workingDocument.studio.commerceDraft={
+          ...(workingDocument.studio.commerceDraft||{}),
+          schemaVersion:'1', mode:'locked', currency:'JPY',
+          amount:Math.max(100,Math.floor(Number(commerceAmountInput?.value||liveCommerce.amount||100))),
+          lockScene:sceneNo
+        };
+
+        // Give feedback in the currently visible card before rebuilding the panel.
+        lockStatus.innerHTML=`<strong>Scene ${sceneNo} から ¥${Math.max(0,Math.floor(Number(workingDocument.studio.commerceDraft.amount||100))).toLocaleString('ja-JP')}</strong><small>Scene ${Math.max(1,sceneNo-1)} まで無料</small>`;
+        lockOp.textContent=u(`🔒 Scene ${sceneNo} から有料設定中`,`🔒 Paid from Scene ${sceneNo}`);
+        lockOp.classList.add('is-selected');
+        lockCard.classList.add('is-just-set');
+
+        renderCommercePriceUI();
+        syncEasyShellToWorkingDocument();
+        syncEasyPublishButton();
+        scheduleDraftSave(80);
+        markDirty?.();
+
+        requestAnimationFrame(()=>{
+          renderDesktopLivePanel();
+          requestAnimationFrame(()=>{
+            const card=document.querySelector('.desktop-live-commerce-lock-card');
+            if(card){
+              card.classList.add('is-just-set');
+              card.scrollIntoView({block:'nearest',behavior:'smooth'});
+              setTimeout(()=>card.classList.remove('is-just-set'),900);
+            }
+          });
+        });
+      },sceneNo===lockScene?'is-selected':'');
+      lockOp.classList.add('desktop-live-commerce-lock-action');
+      lockOp.disabled=sceneNo<2;
+      lockOp.title=sceneNo<2?u('Scene 1 は無料範囲として残します。','Scene 1 remains free.'):'';
+      lockCard.append(lockStatus,lockOp);
+      liveCommerceLockCard=lockCard;
+    }
+
     const sceneCard=desktopCard(uiLanguage==='en'?'Scene actions (•••)':'Scene操作（•••）','desktop-live-scene-card');
     const ops=document.createElement('div');ops.className='desktop-live-scene-ops';
     const addOp=(label,fn,disabled=false,cls='')=>{const b=desktopAction(label,fn,cls);b.disabled=disabled;ops.appendChild(b);};
@@ -12344,23 +12408,6 @@ function openDesktopTextDetail(){
     addOp(t('edit.merge'),liveEditMergePrevious,index===0);
     addOp(t('scene.duplicate'),liveEditDuplicateScene);
     addOp(t('edit.delete'),liveEditDeleteScene,workingDocument.scenes.length<=1,'is-danger');
-    if(commerceModeLocked?.checked){
-      const sceneNo=index+1;
-      const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
-      const lockOp=desktopAction(sceneNo===lockScene?u('🔒 有料開始Scene','🔒 Paid starts here'):u('🔒 このSceneから有料','🔒 Paid from this Scene'),()=>{
-        if(sceneNo<2||!commerceModeLocked?.checked||!commerceLockSceneInput)return;
-        commerceLockSceneInput.value=String(sceneNo);
-        renderCommercePriceUI();
-        syncEasyShellToWorkingDocument();
-        syncEasyPublishButton();
-        scheduleDraftSave(80);
-        markDirty?.();
-        renderDesktopLivePanel();
-      },sceneNo===lockScene?'is-selected':'');
-      lockOp.disabled=sceneNo<2;
-      lockOp.title=sceneNo<2?u('Scene 1 は無料範囲として残します。','Scene 1 remains free.'):'';
-      ops.appendChild(lockOp);
-    }
     sceneCard.appendChild(ops);
 
     const nav=document.createElement('div');nav.className='desktop-live-nav';
@@ -12449,7 +12496,9 @@ function openDesktopTextDetail(){
 
     // Scene structure belongs beside the manuscript. Keeping these controls in
     // a separate Scene tab made authors hunt through two places for one edit.
-    panes.body.append(bodyCard,sceneCard);
+    panes.body.append(bodyCard);
+    panes.body.appendChild(sceneCard);
+    if(liveCommerceLockCard)panes.body.appendChild(liveCommerceLockCard);
     if(!inlineExistingDetail('text',panes.text))panes.text.appendChild(textCard);
     if(!inlineExistingDetail('effect',panes.effect))panes.effect.appendChild(effectCard);
     if(chatCard)panes.effect.appendChild(chatCard);

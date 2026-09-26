@@ -408,13 +408,13 @@
           <span>販売価格</span>
           <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="1000000" step="1" value="100" aria-label="販売価格（円）"><small>円</small></div>
         </label>
-        <div id="commerceLockField" class="commerce-amount-field" hidden>
+        <label id="commerceLockField" class="commerce-amount-field" hidden>
           <span>有料開始位置</span>
-          <div class="commerce-lock-scene-input"><span>Scene</span><input id="commerceLockSceneInput" type="number" inputmode="numeric" min="2" step="1" value="2" aria-label="有料開始Scene"></div>
-          <div class="commerce-lock-summary"><strong id="commerceLockSceneEcho">Scene 2</strong><small>から ¥<span id="commerceLockPriceEcho">100</span></small></div>
+          <div class="commerce-amount-input"><span>Scene</span><input id="commerceLockSceneInput" type="number" inputmode="numeric" min="2" step="1" value="2" aria-label="有料開始Scene"><small>から ¥<span id="commerceLockPriceEcho">100</span></small></div>
+          <span id="commerceLockSceneEcho" hidden>Scene 2</span>
           <small id="commerceLockHint" class="commerce-lock-hint">Scene 1 まで無料で読めます。</small>
           <small class="commerce-lock-guide">数字で直接指定するか、Live Editorでプレビューを見ながら指定できます。</small>
-        </div>
+        </label>
         <p id="commercePriceStatus" class="commerce-price-status" aria-live="polite"></p>
       </section>
       <button id="easyPublishButton" class="primary-button easy-publish-action easy-publish-bottom" type="button" disabled><span>公開する</span></button>
@@ -550,8 +550,12 @@
       <section class="scene-inspector">
         <div class="scene-inspector-head">
           <div><span id="selectedSceneNumber" class="scene-number">Scene 1</span><code id="selectedSceneId">s001</code></div>
-          <div class="scene-move-actions"><button id="liveCommerceLockButton" type="button" class="live-commerce-lock" hidden>🔒 このSceneから有料</button><button id="moveUpButton" type="button">↑</button><button id="moveDownButton" type="button">↓</button></div>
+          <div class="scene-move-actions"><button id="moveUpButton" type="button">↑</button><button id="moveDownButton" type="button">↓</button></div>
         </div>
+        <section id="liveCommerceLockSection" class="live-commerce-lock-section" hidden>
+          <div><strong>有料開始位置</strong><small id="liveCommerceLockState">未指定</small></div>
+          <button id="liveCommerceLockButton" type="button" class="live-commerce-lock">🔒 このSceneから有料にする</button>
+        </section>
 
         <label class="adv-field"><span>本文</span><textarea id="sceneTextInput" rows="7"></textarea></label>
         <label class="adv-field subtext-field"><span>サブテキスト <small>任意</small></span><textarea id="sceneSubTextInput" rows="2" placeholder="補足が必要なSceneだけ"></textarea></label>

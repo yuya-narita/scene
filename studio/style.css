@@ -12035,3 +12035,30 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .commerce-lock-scene-input input{width:96px;min-height:38px;padding:8px 10px;border:1px solid #d9dde4;border-radius:10px;background:#fff;color:#17181b;font:700 15px/1 system-ui,-apple-system,"Segoe UI",sans-serif}
 .commerce-lock-hint,.commerce-lock-guide{font-family:system-ui,-apple-system,"Segoe UI",sans-serif!important;font-size:12px!important;font-weight:400!important;line-height:1.45!important}
 .commerce-price-card .own-copy-policy[hidden]{display:none!important}
+
+/* V196 paid-lock UI cleanup */
+.commerce-lock-summary-editable strong{display:flex;align-items:center;gap:7px}
+.commerce-lock-summary-editable input{width:64px;border:0;border-bottom:1px solid #cfd2d8;background:transparent;padding:3px 2px;text-align:center;color:inherit;font:inherit;font-weight:800;outline:none}
+.commerce-lock-summary-editable input:focus{border-bottom-color:#222}
+.commerce-lock-scene-input{display:none!important}
+.live-commerce-lock-section{margin:8px 0 14px;padding:12px;border:1px solid #e2d4b6;border-radius:12px;background:#fffaf0}
+.live-commerce-lock-section>div{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:9px}
+.live-commerce-lock-section>div strong{font-size:12px}.live-commerce-lock-section>div small{font-size:11px;color:#8a6a2c}
+.live-commerce-lock-section .live-commerce-lock{width:100%;border-radius:10px!important;padding:10px 12px!important}
+.live-commerce-lock-section .live-commerce-lock.is-current-lock{background:#f3d99e!important;border-color:#d6aa4b!important;color:#5d4109!important}
+.desktop-live-commerce-lock-card{border-color:#e2d4b6!important;background:#fffaf0!important}
+.desktop-live-commerce-lock-status{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-bottom:8px}
+.desktop-live-commerce-lock-status strong{font-size:13px}.desktop-live-commerce-lock-status small{font-size:10px;color:#8a6a2c}
+.desktop-live-commerce-lock-action{width:100%!important;min-height:38px!important;border-color:#d6aa4b!important;background:#fff!important;color:#76520c!important;font-weight:700!important}
+.desktop-live-commerce-lock-action.is-selected{background:#f3d99e!important;border-color:#c9982e!important;color:#513704!important;box-shadow:inset 0 0 0 1px rgba(201,152,46,.18)}
+
+/* V197: paid-lock UI refinement */
+.desktop-live-commerce-lock-card{margin-top:10px!important;margin-bottom:10px!important;border:2px solid #d3a33c!important;background:#fff8e8!important;box-shadow:0 4px 14px rgba(117,82,12,.10)!important}
+.desktop-live-commerce-lock-card>strong:first-child{color:#68490d!important;font-size:12px!important}
+.desktop-live-commerce-lock-status strong{font-size:14px!important;color:#2b2418!important}
+.desktop-live-commerce-lock-action.is-selected{background:#2b2418!important;color:#fff!important;border-color:#2b2418!important}
+
+/* V199: paid-lock Live Editor feedback */
+.desktop-live-commerce-lock-card{transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease}
+.desktop-live-commerce-lock-card.is-just-set{background:#fff8e8;border-color:#c99425;box-shadow:0 0 0 2px rgba(201,148,37,.14)}
+.desktop-live-commerce-lock-action.is-selected{font-weight:700;background:#fff3cf;border-color:#b98213}
