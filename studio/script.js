@@ -85,6 +85,7 @@
   const episodeTitleInput = $('#episodeTitleInput');
   const descriptionInput = $('#descriptionInput');
   const ownCopyEnabledInput = $('#ownCopyEnabled');
+  const ownCopyPolicyField = $('#ownCopyPolicyField');
   const commerceModeFree = $('#commerceModeFree');
   const commerceModePurchase = $('#commerceModePurchase');
   const commerceModeLocked = $('#commerceModeLocked');
@@ -893,6 +894,7 @@
     const locked=Boolean(commerceModeLocked?.checked);
     if(commerceAmountField)commerceAmountField.hidden=!paid;
     if(commerceLockField)commerceLockField.hidden=!locked;
+    if(ownCopyPolicyField)ownCopyPolicyField.hidden=paid;
     if(commercePriceBadge){
       commercePriceBadge.textContent=paid?`${locked?'LOCK · ':''}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:'無料';
       commercePriceBadge.classList.toggle('is-paid',paid);

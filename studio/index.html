@@ -388,10 +388,6 @@
             </div>
             </section>
           </div>
-          <label class="own-copy-policy">
-            <input id="ownCopyEnabled" type="checkbox">
-            <span><strong>自分の一冊を許可する</strong><small>読了した人が、この作品を自分の本棚へ受け取れます。</small></span>
-          </label>
         </div>
       </details>
       <section class="commerce-price-card" aria-labelledby="commercePriceTitle">
@@ -404,6 +400,10 @@
           <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>MY COPY販売</strong><small>最後まで読めます。読了後に購入して受け取れます</small></span></label>
           <label><input id="commerceModeLocked" type="radio" name="commerceMode" value="locked"><span><strong>有料ロック</strong><small>指定Sceneから先は購入後に読めます</small></span></label>
         </div>
+        <label id="ownCopyPolicyField" class="own-copy-policy">
+          <input id="ownCopyEnabled" type="checkbox">
+          <span><strong>自分の一冊を許可する</strong><small>読了した人が、この作品を自分の本棚へ受け取れます。</small></span>
+        </label>
         <label id="commerceAmountField" class="commerce-amount-field" hidden>
           <span>販売価格</span>
           <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="1000000" step="1" value="100" aria-label="販売価格（円）"><small>円</small></div>
