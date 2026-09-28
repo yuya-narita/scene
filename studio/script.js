@@ -15117,6 +15117,15 @@ function openDesktopTextDetail(){
     }
   };
 
+  // CAGE receives a read-only snapshot. It cannot alter Studio's draft or player.
+  window.SceneStudioAPI.cageSnapshot=()=>({
+    draftId:currentDraftId,
+    sceneIndex:playerScreen.hidden?selectedSceneIndex:(player?.index??-1),
+    scenes:workingDocument?.scenes?.map(scene=>({id:String(scene.id||''),text:String(scene.text||'')}))||[],
+    easyText:String(document.querySelector('#bodyInput')?.value||''),
+    mode:!playerScreen.hidden?'preview':(advancedScreen.hidden?'easy':'advanced')
+  });
+
   window.SceneStudioDebug={getSceneDocument:()=>clone(workingDocument||buildSceneDocument()),validateSceneFormatV1:(value)=>validateSceneFormatV1(value),exportSceneDocument,exportScenePackage,importScenePackage,getPlayer:()=>player,splitJapanese:(text,options={})=>JapaneseSceneSplitter.splitDetailed(text,options),splitEnglish:(text,options={})=>EnglishSceneSplitter.splitDetailed(text,options),splitAuto:(text,options={})=>SceneTextSplitter.splitDetailed(text,options),splitMultilingual:(text,options={})=>SceneTextSplitter.splitMultilingualDetailed(text,options),summarizeLanguages:(chunks)=>SceneTextSplitter.summarizeLanguages(chunks),detectWorkLanguage:(text)=>SceneTextSplitter.detectLanguage(text),getUILanguage:()=>uiLanguage,setUILanguage};
   if(densitySelect)densitySelect.value='normal';
   applyStaticUITranslations(); applyTheme('light'); updateCount();
