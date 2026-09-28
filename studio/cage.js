@@ -16,7 +16,7 @@
   const playerHost=document.querySelector('#scenePlayer');
   const api='https://scene-studio-api.a-hako.workers.dev/cage/read';
   // Preview safety valve. Server-side CAGE_DAILY_LIMIT controls the actual daily allowance.
-  const previewReadLimit=20;
+  const previewReadLimit=120;
   const scenesPerRead=6;
   let busy=false;
   let previewSteps=0,autoAttempts=0,autoTimer=null,bubbleTimer=null,endingPending=false;

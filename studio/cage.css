@@ -1,8 +1,7 @@
 /* CAGE lives in Studio only. The cage is a visual boundary, not a player control. */
 .cage-home{position:fixed;z-index:90;left:max(12px,env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom));font-family:system-ui,-apple-system,sans-serif;color:#272933}
-.cage-home[hidden],.cage-panel[hidden],.cage-reaction[hidden],.cage-question[hidden]{display:none!important}
+.cage-home[hidden],.cage-panel[hidden],.cage-reaction[hidden]{display:none!important}
 .cage-toggle{display:flex;align-items:center;gap:7px;padding:5px 9px 5px 5px;min-height:50px;border:1px solid #b5b8c2;border-radius:14px;background:#f9f8f3;box-shadow:0 3px 18px #1112;color:#383943;cursor:pointer}
-.cage-toggle:disabled{opacity:1;color:#383943;cursor:default}
 .cage-name{font-size:10px;letter-spacing:.09em;font-weight:750}
 .cage-bars{position:relative;display:block;width:40px;height:38px;border:1px solid #89909c;border-radius:5px;background:repeating-linear-gradient(90deg,transparent 0 8px,#a3a9b6 8px 9px);overflow:hidden}
 .cage-creature{position:absolute;left:9px;bottom:3px;width:23px;height:25px;border-radius:42% 45% 38% 42%;background:#252836;box-shadow:0 1px 5px #0006}
@@ -14,8 +13,6 @@
 .cage-panel button{cursor:pointer}.cage-panel header button{border:0;background:none;font-size:24px;line-height:1;color:#555}
 .cage-status,.cage-caption{font-size:11px;line-height:1.55;color:#727681}.cage-status{margin:12px 0}.cage-caption{margin:8px 0 0}
 .cage-reaction{padding:11px 12px;margin:12px 0;border-radius:10px;background:#e8edf2;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
-.cage-question{padding:0 3px 11px;margin:0 0 10px;border-bottom:1px solid #d6d9df;color:#343b4b;font-size:13px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
-.cage-question:before{content:'気になってること';display:block;margin-bottom:5px;color:#777e8b;font-size:10px}
 #cageRead{display:block;width:100%;min-height:43px;border:0;border-radius:10px;background:#303644;color:#fff;font-size:12px;font-weight:700}
 #cageRead:disabled{opacity:.55;cursor:default}.cage-panel details{margin-top:12px;font-size:11px;color:#646b78}.cage-panel summary{cursor:pointer}
 #cageTrail{padding:6px 0;line-height:1.55}#cageTrail p{margin:5px 0;border-top:1px solid #ddd;padding-top:5px}
@@ -28,3 +25,12 @@
 .cage-follow input{width:17px;height:17px;min-height:0;margin:0;accent-color:#343a49}
 .cage-follow small{width:100%;padding-left:23px;font-size:10px;color:#757b87}
 @media(max-width:600px){body.easy-player-open .cage-home{bottom:calc(66px + env(safe-area-inset-bottom))}.cage-panel{max-height:46vh}}
+/* Watercolor portraits keep the handwritten feel at the actual Studio size. */
+.cage-bars{width:48px;height:48px;border-color:#928b80;background:#eee9df;overflow:hidden}
+.cage-bars img{display:block;width:100%;height:100%;object-fit:cover}
+.cage-bars:after{content:"";position:absolute;inset:0;border-left:1px solid #787a7d;border-right:1px solid #787a7d;background:linear-gradient(90deg,transparent 29%,#777c8166 30%,transparent 32%,transparent 64%,#777c8166 65%,transparent 67%);pointer-events:none}
+.cage-readers{display:flex;gap:10px;margin:14px 0 4px}
+.cage-reader{display:flex;flex-direction:column;align-items:center;gap:3px;width:54px;color:#51545a;font-size:10px;line-height:1.3;white-space:nowrap}
+.cage-reader img{display:block;width:48px;height:48px;object-fit:cover;border:1px solid #c6c1b7;border-radius:7px}
+.cage-reader.is-active img{outline:2px solid #343b47;outline-offset:2px}
+.cage-reader.is-pending{opacity:.7}
