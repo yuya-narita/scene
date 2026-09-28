@@ -40,3 +40,5 @@
   .cage-toggle .cage-name{display:none}
   .cage-aside{max-width:min(224px,calc(100vw - 28px));margin-bottom:12px;padding:8px 10px;font-size:12px;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;background:#f9f8f3f2}
 }
+.cage-toggle.cage-has-reaction{position:relative}
+.cage-toggle.cage-has-reaction:after{content:"";position:absolute;right:-4px;top:-4px;width:10px;height:10px;border-radius:50%;border:2px solid #f9f8f3;background:#ae6a49}

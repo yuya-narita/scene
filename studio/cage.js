@@ -62,11 +62,19 @@
     read.textContent=source.mode==='easy'?'本文を読んで':'今のSceneを読んで';
     read.disabled=busy||!source.text||(source.mode==='preview'&&playerHost?.classList.contains('sp-cover-open'));
   }
-  function speak(value,sceneId,ending=false){
-    if(!value||preview.hidden||getSource().sceneId!==sceneId)return;
-    aside.textContent=value;aside.hidden=false;
+  function speak(value,sceneId,ending=false,sceneIndex=-1){
+    if(!value||preview.hidden)return;
+    const current=getSource();
+    // A reply can arrive after the author has moved on. Never show a future
+    // Scene's reaction on an earlier Scene, but keep recent replies visible.
+    if(current.mode==='preview'?(current.sceneIndex<sceneIndex):current.sceneId!==sceneId)return;
+    aside.textContent=current.mode==='preview'&&current.sceneIndex>sceneIndex&&sceneIndex>=0
+      ?`Scene ${sceneIndex+1}を読んで：${value}`:value;
+    aside.hidden=false;
+    toggle.classList.add('cage-has-reaction');
+    toggle.setAttribute('aria-label','CAGEの新しい反応を開く');
     clearTimeout(bubbleTimer);
-    bubbleTimer=setTimeout(()=>{aside.hidden=true;},ending?20000:8500);
+    bubbleTimer=setTimeout(()=>{aside.hidden=true;},ending?25000:16000);
   }
   function signedInToken(){
     try{return String(JSON.parse(localStorage.getItem('ahako-author-session-v1')||'null')?.token||'');}
@@ -117,7 +125,8 @@
       const result=clean(data);
       // Reject a fabricated quotation: the cited phrase must occur in the submitted text.
       if(result.anchor&&!currentScene.includes(result.anchor))throw new Error('読んだ箇所を確認できなかった。もう一度試して。');
-      const shouldSpeak=Boolean(data.speak&&focus&&(ending||end-Number(memory.lastSpokenIndex??-100)>=12));
+      const shouldSpeak=!automatic&&Boolean(result.reaction||result.question)
+        ||Boolean(data.speak&&focus&&(ending||end-Number(memory.lastSpokenIndex??-100)>=12));
       if(source.mode==='preview'){
         state.continuity={lastIndex:end,summary:string(data.storyMemory,900)||memory.summary,hash:await fingerprint(timeline(snap.scenes,end)),lastSpokenIndex:shouldSpeak?end:memory.lastSpokenIndex};
       }
@@ -130,12 +139,12 @@
       state.attention=result.attention;
       save(source.draftId,state);
       showState();
-      if(shouldSpeak)speak(result.reaction||result.question,source.sceneId,ending);
+      if(shouldSpeak)speak(result.reaction||result.question,source.sceneId,ending,end);
       if(!result.reaction&&!result.question)status.textContent='読んだ。今は黙っている。';
     }catch(error){status.textContent=error.message||'読み込めなかった。';if(automatic)follow.checked=false;}
     finally{busy=false;read.disabled=false;if(endingPending){endingPending=false;readEnding();}else if(automatic&&follow.checked)schedulePreviewRead();}
   }
-  toggle.addEventListener('click',()=>{if(preview.hidden)return;panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden)showState();});
+  toggle.addEventListener('click',()=>{if(preview.hidden)return;panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden){toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-label','CAGEを開く');showState();}});
   document.querySelector('#cageClose').addEventListener('click',()=>{panel.hidden=true;toggle.setAttribute('aria-expanded','false');});
   read.addEventListener('click',()=>observe(false));
   function readEnding(){
@@ -147,7 +156,7 @@
     observe(true,true);
   }
   playerHost?.addEventListener('sceneplayer:end',()=>{clearTimeout(autoTimer);readEnding();});
-  aside.addEventListener('click',()=>{aside.hidden=true;panel.hidden=false;toggle.setAttribute('aria-expanded','true');showState();});
+  aside.addEventListener('click',()=>{aside.hidden=true;panel.hidden=false;toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-expanded','true');toggle.setAttribute('aria-label','CAGEを開く');showState();});
   function schedulePreviewRead(){
     clearTimeout(autoTimer);
     if(!follow.checked||preview.hidden||autoAttempts>=previewReadLimit||busy)return;
@@ -164,7 +173,7 @@
   }
   follow.addEventListener('change',()=>{if(follow.checked)schedulePreviewRead();else clearTimeout(autoTimer);});
   playerHost?.addEventListener('sceneplayer:scenechange',()=>{
-    previewSteps++;aside.hidden=true;
+    previewSteps++;
     if(matchMedia('(max-width:600px)').matches){panel.hidden=true;toggle.setAttribute('aria-expanded','false');}
     schedulePreviewRead();if(!panel.hidden)showState();
   });
@@ -177,7 +186,7 @@
     root.hidden=Boolean(preview.hidden&&document.querySelector('#editorScreen')?.hidden&&document.querySelector('#advancedScreen')?.hidden);
     followRow.hidden=preview.hidden;
     toggle.disabled=preview.hidden;
-    if(preview.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');aside.hidden=true;clearTimeout(autoTimer);follow.checked=false;endingPending=false;autoAttempts=0;previewSteps=0;}
+    if(preview.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');aside.hidden=true;clearTimeout(bubbleTimer);clearTimeout(autoTimer);toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-label','CAGEを開く');follow.checked=false;endingPending=false;autoAttempts=0;previewSteps=0;}
     if(!root.hidden&&!panel.hidden)showState();
   };
   const observer=new MutationObserver(visible);
