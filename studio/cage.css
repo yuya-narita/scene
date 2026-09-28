@@ -1,6 +1,6 @@
 /* CAGE lives in Studio only. The cage is a visual boundary, not a player control. */
 .cage-home{position:fixed;z-index:90;left:max(12px,env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom));font-family:system-ui,-apple-system,sans-serif;color:#272933}
-.cage-home[hidden],.cage-panel[hidden],.cage-reaction[hidden]{display:none!important}
+.cage-home[hidden],.cage-panel[hidden],.cage-reaction[hidden],.cage-question[hidden]{display:none!important}
 .cage-toggle{display:flex;align-items:center;gap:7px;padding:5px 9px 5px 5px;min-height:50px;border:1px solid #b5b8c2;border-radius:14px;background:#f9f8f3;box-shadow:0 3px 18px #1112;color:#383943;cursor:pointer}
 .cage-toggle:disabled{opacity:1;color:#383943;cursor:default}
 .cage-name{font-size:10px;letter-spacing:.09em;font-weight:750}
@@ -14,6 +14,8 @@
 .cage-panel button{cursor:pointer}.cage-panel header button{border:0;background:none;font-size:24px;line-height:1;color:#555}
 .cage-status,.cage-caption{font-size:11px;line-height:1.55;color:#727681}.cage-status{margin:12px 0}.cage-caption{margin:8px 0 0}
 .cage-reaction{padding:11px 12px;margin:12px 0;border-radius:10px;background:#e8edf2;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.cage-question{padding:0 3px 11px;margin:0 0 10px;border-bottom:1px solid #d6d9df;color:#343b4b;font-size:13px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.cage-question:before{content:'気になってること';display:block;margin-bottom:5px;color:#777e8b;font-size:10px}
 #cageRead{display:block;width:100%;min-height:43px;border:0;border-radius:10px;background:#303644;color:#fff;font-size:12px;font-weight:700}
 #cageRead:disabled{opacity:.55;cursor:default}.cage-panel details{margin-top:12px;font-size:11px;color:#646b78}.cage-panel summary{cursor:pointer}
 #cageTrail{padding:6px 0;line-height:1.55}#cageTrail p{margin:5px 0;border-top:1px solid #ddd;padding-top:5px}

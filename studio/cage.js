@@ -6,6 +6,7 @@
   const toggle=document.querySelector('#cageToggle');
   const status=document.querySelector('#cageStatus');
   const reaction=document.querySelector('#cageReaction');
+  const question=document.querySelector('#cageQuestion');
   const read=document.querySelector('#cageRead');
   const trail=document.querySelector('#cageTrail');
   const aside=document.querySelector('#cageAside');
@@ -46,6 +47,8 @@
     status.textContent=latest?`読んだScene ${state.observations.length}件 ・ 引っかかり ${state.lambdas.length}件 ・ 問い ${state.jumps.length}件`:'まだ読んでいない。';
     reaction.hidden=!latest?.reaction;
     reaction.textContent=latest?.reaction||'';
+    question.hidden=!latest?.question;
+    question.textContent=latest?.question||'';
     trail.replaceChildren();
     for(const item of state.observations.slice(-5).reverse()){
       const p=document.createElement('p');
@@ -83,7 +86,7 @@
     const state=load(source.draftId);
     const seen=state.observations.find(x=>x.hash===hash);
     if(seen){
-      if(!automatic){reaction.textContent=seen.reaction||'この箇所は読んだ。今は黙っている。';reaction.hidden=false;status.textContent='前に読んだ箇所の記録を表示中。';speak(seen.reaction,source.sceneId);}
+      if(!automatic){reaction.textContent=seen.reaction||'この箇所は読んだ。今は黙っている。';reaction.hidden=false;question.textContent=seen.question||'';question.hidden=!seen.question;status.textContent='前に読んだ箇所の記録を表示中。';speak(seen.reaction||seen.question,source.sceneId);}
       return;
     }
     busy=true;read.disabled=true;status.textContent='読んでいる…';
@@ -103,8 +106,8 @@
       state.attention=result.attention;
       save(source.draftId,state);
       showState();
-      speak(result.reaction,source.sceneId);
-      if(!result.reaction)status.textContent='読んだ。今は黙っている。';
+      speak(result.reaction||result.question,source.sceneId);
+      if(!result.reaction&&!result.question)status.textContent='読んだ。今は黙っている。';
     }catch(error){status.textContent=error.message||'読み込めなかった。';if(automatic)follow.checked=false;}
     finally{busy=false;read.disabled=false;}
   }
