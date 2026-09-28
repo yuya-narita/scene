@@ -20,7 +20,13 @@
   const scenesPerRead=6;
   let busy=false;
   let previewSteps=0,autoAttempts=0,autoTimer=null,endingPending=false,bubbleSceneIndex=-1;
-  const getSnapshot=()=>window.SceneStudioAPI.cageSnapshot();
+  // Preview text is immutable while the Player is open. Reuse its Scene list;
+  // cageSnapshot otherwise maps every Scene on every tap and timer callback.
+  let previewSnapshot=null;
+  const getSnapshot=()=>{
+    if(!preview.hidden)return previewSnapshot||(previewSnapshot=window.SceneStudioAPI.cageSnapshot());
+    return window.SceneStudioAPI.cageSnapshot();
+  };
   const day=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   function getSource(){
     const snap=getSnapshot();
@@ -59,7 +65,7 @@
     trail.replaceChildren();
     const spoken=state.observations.filter(available);
     if(!spoken.length){const empty=document.createElement('p');empty.textContent='まだ話していない。';trail.append(empty);}
-    for(const item of spoken.slice().reverse()){
+    for(const item of spoken.slice(-30).reverse()){
       const button=document.createElement('button');
       button.type='button';button.className='cage-history-item';
       const label=document.createElement('small');label.textContent=item.sceneIndex<0?'本文':`Scene ${item.sceneIndex+1}`;
@@ -158,7 +164,7 @@
       if(result.sigma)state.sigmas.push({at,sceneId:source.sceneId,text:result.sigma,provisional:true});
       state.attention=result.attention;
       save(source.draftId,state);
-      showState();
+      if(!panel.hidden)showState();
       if(shouldSpeak)speak(result.reaction||result.question,source.sceneId,ending,end);
       if(!result.reaction&&!result.question)status.textContent='読んだ。今は黙っている。';
     }catch(error){status.textContent=error.message||'読み込めなかった。';if(automatic)follow.checked=false;}
@@ -192,7 +198,10 @@
     },waitMs);
   }
   follow.addEventListener('change',()=>{if(follow.checked)schedulePreviewRead();else clearTimeout(autoTimer);showState();});
-  playerHost?.addEventListener('sceneplayer:scenechange',()=>{
+  playerHost?.addEventListener('sceneplayer:load',()=>{previewSnapshot=null;});
+  playerHost?.addEventListener('sceneplayer:restart',()=>{previewSnapshot=null;});
+  playerHost?.addEventListener('sceneplayer:scenechange',(event)=>{
+    if(previewSnapshot)previewSnapshot.sceneIndex=Number(event.detail?.index??previewSnapshot.sceneIndex);
     previewSteps++;
     if(matchMedia('(max-width:600px)').matches){panel.hidden=true;toggle.setAttribute('aria-expanded','false');}
     const source=getSource();
@@ -201,7 +210,8 @@
     if(previouslySpoken)speak(previouslySpoken.reaction||previouslySpoken.question,previouslySpoken.sceneId,previouslySpoken.ending,previouslySpoken.sceneIndex);
     schedulePreviewRead();if(!panel.hidden)showState();
   });
-  playerHost?.addEventListener('sceneplayer:coverstart',()=>{
+  playerHost?.addEventListener('sceneplayer:coverstart',(event)=>{
+    if(previewSnapshot)previewSnapshot.sceneIndex=Number(event.detail?.index??0);
     if(matchMedia('(max-width:600px)').matches){panel.hidden=true;toggle.setAttribute('aria-expanded','false');}
     aside.hidden=true;
     schedulePreviewRead();
@@ -210,7 +220,7 @@
     root.hidden=Boolean(preview.hidden&&document.querySelector('#editorScreen')?.hidden&&document.querySelector('#advancedScreen')?.hidden);
     followRow.hidden=preview.hidden;
     toggle.disabled=preview.hidden;
-    if(preview.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');aside.hidden=true;clearTimeout(autoTimer);toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-label','CAGEを開く');follow.checked=false;endingPending=false;autoAttempts=0;previewSteps=0;}
+    if(preview.hidden){previewSnapshot=null;panel.hidden=true;toggle.setAttribute('aria-expanded','false');aside.hidden=true;clearTimeout(autoTimer);toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-label','CAGEを開く');follow.checked=false;endingPending=false;autoAttempts=0;previewSteps=0;}
     if(!root.hidden&&!panel.hidden)showState();
   };
   const observer=new MutationObserver(visible);
