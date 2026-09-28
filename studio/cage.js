@@ -5,6 +5,9 @@
   const panel=document.querySelector('#cagePanel');
   const toggle=document.querySelector('#cageToggle');
   const status=document.querySelector('#cageStatus');
+  const wavePlot=document.querySelector('#cageWavePlot');
+  const waveButton=document.querySelector('#cageWaveButton');
+  const waveLabel=document.querySelector('#cageWaveLabel');
   const reaction=document.querySelector('#cageReaction');
   const question=document.querySelector('#cageQuestion');
   const questionLabel=document.querySelector('#cageQuestionLabel');
@@ -71,6 +74,65 @@
     }
     return true;
   }
+  function renderWave(state,snap){
+    const svg=(name,attrs)=>{
+      const node=document.createElementNS('http://www.w3.org/2000/svg',name);
+      for(const [key,value] of Object.entries(attrs))node.setAttribute(key,String(value));
+      return node;
+    };
+    wavePlot.replaceChildren();
+    wavePlot.append(svg('line',{x1:8,y1:68,x2:272,y2:68,class:'cage-wave-base'}));
+    const scenes=snap.scenes||[];
+    if(!scenes.length){waveLabel.textContent='Sceneを読むとここに波が残る。';waveButton.disabled=true;return;}
+    const indices=new Map(scenes.map((scene,index)=>[String(scene.id),index]));
+    const latest=new Map();
+    for(const item of state.observations){
+      const index=indices.get(item.sceneId);
+      if(index===undefined||item.sceneStamp&&item.sceneStamp!==sceneStamp(scenes[index].text))continue;
+      if(!item.sceneStamp&&rewrittenSceneIds.has(item.sceneId))continue;
+      latest.set(item.sceneId,{item,index});
+    }
+    const bins=new Map();
+    for(const value of latest.values()){
+      const item=value.item;
+      const score=Math.min(4,Number(Boolean(item.lambda))+Number(Boolean(item.question))+2*Number(Boolean(item.spoken&&item.reaction)));
+      const bin=Math.floor(value.index/6);
+      if(!bins.has(bin)||score>=bins.get(bin).score)bins.set(bin,{...value,score,bin});
+    }
+    const count=Math.ceil(scenes.length/6);
+    const xAt=bin=>count===1?140:8+264*bin/(count-1);
+    const points=[...bins.values()].sort((a,b)=>a.bin-b.bin).map(point=>({...point,x:xAt(point.bin),y:68-point.score*13}));
+    if(snap.mode==='preview'&&snap.sceneIndex>=0){
+      const here=xAt(Math.floor(snap.sceneIndex/6));
+      wavePlot.append(svg('line',{x1:here,y1:7,x2:here,y2:69,class:'cage-wave-current'}));
+    }
+    if(points.length){
+      const half=Math.min(8,Math.max(1.2,116/count));
+      const sections=[];let section=[];
+      for(const point of points){
+        if(section.length&&point.bin>section.at(-1).bin+1){sections.push(section);section=[];}
+        section.push(point);
+      }
+      if(section.length)sections.push(section);
+      const waves=sections.map(part=>part.length===1
+        ?`M${(part[0].x-half).toFixed(2)} 68 L${part[0].x.toFixed(2)} ${part[0].y} L${(part[0].x+half).toFixed(2)} 68 Z`
+        :`M${part[0].x.toFixed(2)} 68 ${part.map(point=>`L${point.x.toFixed(2)} ${point.y}`).join(' ')} L${part.at(-1).x.toFixed(2)} 68 Z`).join(' ');
+      wavePlot.append(svg('path',{d:waves,class:'cage-wave-peaks'}));
+      for(const point of points)wavePlot.append(svg('circle',{cx:point.x,cy:point.y,r:point.item.manual?3:2.5,class:point.item.manual?'cage-wave-dot is-manual':'cage-wave-dot'}));
+    }
+    waveLabel.textContent=points.length?`${points.length}地点に記録あり ・ 山をタップするとSceneへ`:'まだ反応の記録はない。';
+    waveButton.disabled=!points.length;
+    waveButton.onclick=event=>{
+      if(!points.length)return;
+      const rect=wavePlot.getBoundingClientRect();
+      const x=event.detail===0?xAt(Math.floor(Math.max(0,snap.sceneIndex)/6)):(event.clientX-rect.left)*280/Math.max(1,rect.width);
+      const nearest=points.reduce((best,point)=>Math.abs(point.x-x)<Math.abs(best.x-x)?point:best,points[0]);
+      if(goToObservation(nearest.item)){
+        const parts=[nearest.item.spoken&&nearest.item.reaction?'発言':'',nearest.item.question?'問い':'',nearest.item.lambda?'引っかかり':''].filter(Boolean);
+        waveLabel.textContent=`Scene ${getSource().sceneIndex+1} ・ ${parts.join('・')||'静かに読んだ'}`;
+      }
+    };
+  }
   function showState(){
     const source=getSource();
     const state=load(source.draftId);
@@ -82,6 +144,7 @@
     const lastQuestion=selectedQuestion?.sceneId===source.sceneId&&currentRevision(selectedQuestion,source)?selectedQuestion:state.observations.findLast(item=>asked(item)&&withinTimeline(item)&&currentRevision(item,source));
     const readCount=Math.max(state.observations.filter(item=>!item.manual).length,continuity(state).lastIndex+1);
     status.textContent=latest?`Scene ${readCount}まで読んだ ・ 引っかかり ${state.lambdas.length}件 ・ 問い ${state.jumps.length}件`:'まだ読んでいない。';
+    renderWave(state,getSnapshot());
     reaction.hidden=!lastSpoken?.reaction;
     reaction.textContent=lastSpoken?.reaction||'';
     questionLabel.hidden=!lastQuestion;
@@ -170,6 +233,9 @@
   async function observe(automatic=false,ending=false){
     if(preview.hidden)return;
     if(busy)return;
+    // Live Edit may update workingDocument before Player emits refresh.
+    // A deliberate question always reads the latest draft, not the preview cache.
+    if(!automatic)previewSnapshot=window.SceneStudioAPI.cageSnapshot();
     const source=getSource();
     if(!source.text||source.mode==='preview'&&playerHost?.classList.contains('sp-cover-open')){
       if(!automatic)status.textContent='Sceneが表示されてから読ませて。';return;
@@ -195,7 +261,7 @@
     const manual=!automatic;
     busy=true;read.disabled=true;status.textContent='読んでいる…';
     try{
-      const start=source.mode==='preview'?(manual?Math.max(0,source.sceneIndex-scenesPerRead+1):ending?Math.min(memory.lastIndex+1,source.sceneIndex):memory.lastIndex+1):source.sceneIndex;
+      const start=source.mode==='preview'?(manual?source.sceneIndex:ending?Math.min(memory.lastIndex+1,source.sceneIndex):memory.lastIndex+1):source.sceneIndex;
       if(source.mode==='preview'&&start>source.sceneIndex){
         if(!automatic)status.textContent='ここまでは読んだ。今は黙っている。';
         return;
@@ -207,9 +273,10 @@
       // while inference is in flight. The bubble identifies the Scene later.
       const focus=true;
       const currentScene=manual?source.text:source.mode==='preview'?batch.at(-1)?.text||'':source.text;
-      const revisiting=manual&&source.mode==='preview'&&memory.lastIndex>=source.sceneIndex;
-      const prior=state.observations.filter(x=>!x.manual&&(source.mode!=='preview'||x.sceneIndex<start)).slice(-4);
-      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:batch,storyMemory:revisiting?'':memory.summary,focus,ending,manual,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:revisiting||source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
+      // Manual asks must be about the current draft. Older summaries and
+      // hypotheses can still name objects removed by a rewrite.
+      const prior=manual?[]:state.observations.filter(x=>!x.manual&&x.sceneIndex<start&&x.sceneStamp&&snap.scenes[x.sceneIndex]?.id===x.sceneId&&x.sceneStamp===sceneStamp(snap.scenes[x.sceneIndex].text)).slice(-4);
+      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:manual?[]:batch,storyMemory:manual?'':memory.summary,focus,ending,manual,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:manual||source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(string(data.error,130)||`読み込みに失敗しました（${response.status}）。`);
       const now=getSource();

@@ -79,3 +79,15 @@
 #cageQuestionTrail .cage-history-item{display:grid;gap:3px;width:100%;padding:9px 10px;border:1px solid #e0ddd6;border-radius:9px;background:#fffdf9;text-align:left;color:#323741;line-height:1.45;cursor:pointer}
 #cageQuestionTrail .cage-history-item small{color:#85828a;font-size:10px}
 #cageQuestionTrail .cage-history-item span{font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif CJK JP",serif;font-size:12px;white-space:normal;overflow-wrap:anywhere}
+#cageWave{margin:10px 0 12px;padding:9px 10px 8px;border:1px solid #ded9ce;border-radius:10px;background:#fdfbf6}
+#cageWave summary{color:#4e5661;font-size:11px;font-weight:700;list-style-position:inside}
+#cageWaveButton{display:block;width:100%;height:86px;margin:6px 0 2px;padding:0;border:0;background:transparent;cursor:pointer}
+#cageWaveButton:disabled{cursor:default}
+#cageWaveButton:focus-visible{outline:2px solid #6c7889;outline-offset:2px;border-radius:4px}
+#cageWavePlot{display:block;width:100%;height:82px;overflow:visible}
+.cage-wave-base{stroke:#d7d3cb;stroke-width:1}
+.cage-wave-current{stroke:#b88a6d;stroke-width:1;stroke-dasharray:2 3}
+.cage-wave-peaks{fill:#d7dee5a6;stroke:#596779;stroke-width:1.7;stroke-linejoin:round;stroke-linecap:round}
+.cage-wave-dot{fill:#596779;stroke:#fdfbf6;stroke-width:1}
+.cage-wave-dot.is-manual{fill:#fdfbf6;stroke:#596779;stroke-width:1.3}
+.cage-wave-label,.cage-wave-note{display:block;font-size:10px;line-height:1.45;color:#777b81}
