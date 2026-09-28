@@ -85,8 +85,13 @@
     // A reply can arrive after the author has moved on. Never show a future
     // Scene's reaction on an earlier Scene, but keep recent replies visible.
     if(current.mode==='preview'?(current.sceneIndex<sceneIndex):current.sceneId!==sceneId)return;
-    aside.textContent=current.mode==='preview'&&current.sceneIndex>sceneIndex&&sceneIndex>=0
+    const written=current.mode==='preview'&&current.sceneIndex>sceneIndex&&sceneIndex>=0
       ?`Scene ${sceneIndex+1}を読んで：${value}`:value;
+    const ink=document.createElement('span');
+    ink.className='cage-written';
+    ink.textContent=written;
+    ink.style.setProperty('--cage-write-time',`${Math.min(1600,Math.max(480,written.length*24))}ms`);
+    aside.replaceChildren(ink);
     bubbleSceneIndex=sceneIndex;
     aside.hidden=false;
     aside.classList.remove('cage-pop');

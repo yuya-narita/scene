@@ -58,3 +58,15 @@
   .cage-aside{position:relative;z-index:3;max-width:min(228px,calc(100vw - 32px));box-shadow:0 9px 24px #0003}
   .cage-panel{max-height:min(52vh,430px)}
 }
+/* The sentence is drawn by Studio. No extra model call or remote font. */
+.cage-aside,.cage-reaction,#cageQuestion,#cageTrail .cage-history-item span{
+  font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif CJK JP",serif;
+  font-weight:500;
+}
+.cage-aside{background:#fbf7eeeF;border-color:#cbbda9}
+.cage-written{display:block;white-space:pre-wrap;animation:cage-ink-write var(--cage-write-time,850ms) ease-out both}
+@keyframes cage-ink-write{
+  from{clip-path:inset(0 100% 0 0);opacity:.45}
+  to{clip-path:inset(0 0 0 0);opacity:1}
+}
+@media(prefers-reduced-motion:reduce){.cage-written{animation:none}}
