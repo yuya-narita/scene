@@ -14,6 +14,8 @@
   const preview=document.querySelector('#playerScreen');
   const playerHost=document.querySelector('#scenePlayer');
   const api='https://scene-studio-api.a-hako.workers.dev/cage/read';
+  // Preview safety valve. Server-side CAGE_DAILY_LIMIT controls the actual daily allowance.
+  const previewReadLimit=12;
   let busy=false;
   let previewSteps=0,autoAttempts=0,autoTimer=null,bubbleTimer=null;
   const getSnapshot=()=>window.SceneStudioAPI.cageSnapshot();
@@ -66,7 +68,7 @@
   function string(value,max){return typeof value==='string'?value.trim().slice(0,max):'';}
   function clean(value){
     const v=value&&typeof value==='object'?value:{};
-    return {reaction:string(v.reaction,100),lambda:string(v.lambda,180),question:string(v.question,180),sigma:string(v.sigma,180),attention:Array.isArray(v.attention)?v.attention.filter(x=>typeof x==='string').slice(0,4).map(x=>x.slice(0,70)):[],anchor:string(v.anchor,120)};
+    return {reaction:string(v.reaction,500),lambda:string(v.lambda,180),question:string(v.question,180),sigma:string(v.sigma,180),attention:Array.isArray(v.attention)?v.attention.filter(x=>typeof x==='string').slice(0,4).map(x=>x.slice(0,70)):[],anchor:string(v.anchor,120)};
   }
   async function observe(automatic=false){
     if(preview.hidden)return;
@@ -112,7 +114,7 @@
   aside.addEventListener('click',()=>{aside.hidden=true;panel.hidden=false;toggle.setAttribute('aria-expanded','true');showState();});
   function schedulePreviewRead(){
     clearTimeout(autoTimer);
-    if(!follow.checked||preview.hidden||autoAttempts>=2||busy)return;
+    if(!follow.checked||preview.hidden||autoAttempts>=previewReadLimit||busy)return;
     const source=getSource();
     if(!source.text||playerHost?.classList.contains('sp-cover-open'))return;
     // A pause between attempts keeps the daily allowance for a later Scene.
