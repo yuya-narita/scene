@@ -16,8 +16,8 @@
   const playerHost=document.querySelector('#scenePlayer');
   const api='https://scene-studio-api.a-hako.workers.dev/cage/read';
   // Preview safety valve. Server-side CAGE_DAILY_LIMIT controls the actual daily allowance.
-  const previewReadLimit=12;
-  const previewSceneInterval=9;
+  const previewReadLimit=20;
+  const scenesPerRead=6;
   let busy=false;
   let previewSteps=0,autoAttempts=0,autoTimer=null,bubbleTimer=null;
   const getSnapshot=()=>window.SceneStudioAPI.cageSnapshot();
@@ -33,6 +33,8 @@
     try{const value=JSON.parse(localStorage.getItem(key(draftId))||'null');return value?.version===1?value:{version:1,observations:[],lambdas:[],jumps:[],sigmas:[],attention:[]};}
     catch{return {version:1,observations:[],lambdas:[],jumps:[],sigmas:[],attention:[]};}
   }
+  function continuity(state){return state.continuity&&typeof state.continuity==='object'?state.continuity:{lastIndex:-1,summary:'',hash:''};}
+  function timeline(scenes,end){return scenes.slice(0,end+1).map(s=>`${s.id}:${s.text}`).join('\n');}
   function save(id,state){
     for(const name of ['observations','lambdas','jumps','sigmas'])state[name]=state[name].slice(-80);
     localStorage.setItem(key(id),JSON.stringify(state));
@@ -45,8 +47,9 @@
     const source=getSource();
     const state=load(source.draftId);
     const latest=state.observations.at(-1);
-    status.textContent=latest?`読んだScene ${state.observations.length}件 ・ 引っかかり ${state.lambdas.length}件 ・ 問い ${state.jumps.length}件`:'まだ読んでいない。';
-    reaction.hidden=!latest?.reaction;
+    const readCount=Math.max(state.observations.length,continuity(state).lastIndex+1);
+    status.textContent=latest?`読んだScene ${readCount}件 ・ 引っかかり ${state.lambdas.length}件 ・ 問い ${state.jumps.length}件`:'まだ読んでいない。';
+    reaction.hidden=!latest?.reaction||latest.spoken===false;
     reaction.textContent=latest?.reaction||'';
     question.hidden=!latest?.question;
     question.textContent=latest?.question||'';
@@ -85,21 +88,41 @@
     if(!token){status.textContent='読むには作者ログインが必要です。';if(automatic)follow.checked=false;return;}
     const hash=await fingerprint(`${source.sceneId}:${source.text}`);
     const state=load(source.draftId);
+    const snap=getSnapshot();
+    let memory=continuity(state);
+    if(source.mode==='preview'&&memory.lastIndex>=0){
+      const currentHash=await fingerprint(timeline(snap.scenes,memory.lastIndex));
+      if(currentHash!==memory.hash){memory={lastIndex:-1,summary:'',hash:''};state.continuity=memory;}
+    }
     const seen=state.observations.find(x=>x.hash===hash);
-    if(seen){
+    if(seen&&source.mode!=='preview'){
       if(!automatic){reaction.textContent=seen.reaction||'この箇所は読んだ。今は黙っている。';reaction.hidden=false;question.textContent=seen.question||'';question.hidden=!seen.question;status.textContent='前に読んだ箇所の記録を表示中。';speak(seen.reaction||seen.question,source.sceneId);}
       return;
     }
     busy=true;read.disabled=true;status.textContent='読んでいる…';
     try{
-      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:source.text,sceneId:source.sceneId,sceneIndex:source.sceneIndex,mode:source.mode,truncated:source.truncated,history:state.observations.slice(-4).map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:state.attention.slice(-4)})});
+      const start=source.mode==='preview'?memory.lastIndex+1:source.sceneIndex;
+      if(source.mode==='preview'&&start>source.sceneIndex){
+        if(!automatic)status.textContent='ここまでは読んだ。今は黙っている。';
+        return;
+      }
+      const end=source.mode==='preview'?Math.min(source.sceneIndex,start+scenesPerRead-1):source.sceneIndex;
+      const batch=source.mode==='preview'?snap.scenes.slice(start,end+1).map((item,i)=>({index:start+i,text:String(item.text||'').slice(0,450)})):[];
+      const focus=end===source.sceneIndex;
+      const currentScene=source.mode==='preview'?batch.at(-1)?.text||'':source.text;
+      const prior=state.observations.filter(x=>source.mode!=='preview'||x.sceneIndex<start).slice(-4);
+      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:batch,storyMemory:memory.summary,focus,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(string(data.error,130)||`読み込みに失敗しました（${response.status}）。`);
       const result=clean(data);
       // Reject a fabricated quotation: the cited phrase must occur in the submitted text.
-      if(result.anchor&&!source.text.includes(result.anchor))throw new Error('読んだ箇所を確認できなかった。もう一度試して。');
+      if(result.anchor&&!currentScene.includes(result.anchor))throw new Error('読んだ箇所を確認できなかった。もう一度試して。');
+      const shouldSpeak=Boolean(data.speak&&focus&&(end-Number(memory.lastSpokenIndex??-100)>=12));
+      if(source.mode==='preview'){
+        state.continuity={lastIndex:end,summary:string(data.storyMemory,900)||memory.summary,hash:await fingerprint(timeline(snap.scenes,end)),lastSpokenIndex:shouldSpeak?end:memory.lastSpokenIndex};
+      }
       const at=new Date().toISOString();
-      const entry={at,day:day(),hash,sceneId:source.sceneId,sceneIndex:source.sceneIndex,...result};
+      const entry={at,day:day(),hash:await fingerprint(`${snap.scenes[end]?.id||source.sceneId}:${currentScene}`),sceneId:String(snap.scenes[end]?.id||source.sceneId),sceneIndex:end,...result,spoken:shouldSpeak};
       state.observations.push(entry);
       if(result.lambda)state.lambdas.push({at,sceneId:source.sceneId,anchor:result.anchor,text:result.lambda});
       if(result.question)state.jumps.push({at,sceneId:source.sceneId,question:result.question,lambda:result.lambda});
@@ -107,10 +130,10 @@
       state.attention=result.attention;
       save(source.draftId,state);
       showState();
-      speak(result.reaction||result.question,source.sceneId);
+      if(shouldSpeak)speak(result.reaction||result.question,source.sceneId);
       if(!result.reaction&&!result.question)status.textContent='読んだ。今は黙っている。';
     }catch(error){status.textContent=error.message||'読み込めなかった。';if(automatic)follow.checked=false;}
-    finally{busy=false;read.disabled=false;}
+    finally{busy=false;read.disabled=false;if(automatic&&follow.checked)schedulePreviewRead();}
   }
   toggle.addEventListener('click',()=>{if(preview.hidden)return;panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden)showState();});
   document.querySelector('#cageClose').addEventListener('click',()=>{panel.hidden=true;toggle.setAttribute('aria-expanded','false');});
@@ -121,14 +144,16 @@
     if(!follow.checked||preview.hidden||autoAttempts>=previewReadLimit||busy)return;
     const source=getSource();
     if(!source.text||playerHost?.classList.contains('sp-cover-open'))return;
-    // A pause between attempts keeps the daily allowance for a later Scene.
-    if(autoAttempts>0&&previewSteps<previewSceneInterval)return;
+    const gap=source.sceneIndex-continuity(load(source.draftId)).lastIndex;
+    const lastScene=source.sceneIndex===getSnapshot().scenes.length-1;
+    if(gap<=0)return;
+    const waitMs=gap<scenesPerRead&&autoAttempts>0&&!lastScene?12000:950;
     autoTimer=setTimeout(()=>{
       if(preview.hidden||!follow.checked||busy||getSource().sceneId!==source.sceneId)return;
-      autoAttempts++;previewSteps=0;observe(true);
-    },950);
+      autoAttempts++;observe(true);
+    },waitMs);
   }
-  follow.addEventListener('change',()=>{if(follow.checked){previewSteps=3;schedulePreviewRead();}else clearTimeout(autoTimer);});
+  follow.addEventListener('change',()=>{if(follow.checked)schedulePreviewRead();else clearTimeout(autoTimer);});
   playerHost?.addEventListener('sceneplayer:scenechange',()=>{previewSteps++;aside.hidden=true;schedulePreviewRead();if(!panel.hidden)showState();});
   const visible=()=>{
     root.hidden=Boolean(preview.hidden&&document.querySelector('#editorScreen')?.hidden&&document.querySelector('#advancedScreen')?.hidden);
