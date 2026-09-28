@@ -56,7 +56,7 @@
     const latest=state.observations.at(-1);
     const available=item=>item.spoken&&(item.reaction||item.question)&&(source.mode!=='preview'||item.sceneIndex<=source.sceneIndex);
     const lastSpoken=state.observations.findLast(available);
-    const readCount=Math.max(state.observations.length,continuity(state).lastIndex+1);
+    const readCount=Math.max(state.observations.filter(item=>!item.manual).length,continuity(state).lastIndex+1);
     status.textContent=latest?`Scene ${readCount}まで読んだ ・ 引っかかり ${state.lambdas.length}件 ・ 問い ${state.jumps.length}件`:'まだ読んでいない。';
     reaction.hidden=!lastSpoken?.reaction;
     reaction.textContent=lastSpoken?.reaction||'';
@@ -126,48 +126,41 @@
       const currentHash=await fingerprint(timeline(snap.scenes,memory.lastIndex));
       if(currentHash!==memory.hash){memory={lastIndex:-1,summary:'',hash:''};state.continuity=memory;}
     }
-    const seen=state.observations.find(x=>x.hash===hash);
-    if(seen&&source.mode!=='preview'){
-      if(!automatic){reaction.textContent=seen.reaction||'この箇所は読んだ。今は黙っている。';reaction.hidden=false;question.textContent=seen.question||'';question.hidden=!seen.question;status.textContent='前に読んだ箇所の記録を表示中。';speak(seen.reaction||seen.question,source.sceneId);}
-      return;
-    }
-    if(!automatic&&source.mode==='preview'){
-      const previous=state.observations.findLast(x=>x.sceneIndex===source.sceneIndex&&x.spoken&&(x.reaction||x.question));
-      if(previous){speak(previous.reaction||previous.question,previous.sceneId,previous.ending,previous.sceneIndex);return;}
-      if(memory.lastIndex>=source.sceneIndex){status.textContent='このSceneは黙って読んだ。';return;}
-    }
+    const manual=!automatic;
     busy=true;read.disabled=true;status.textContent='読んでいる…';
     try{
-      const start=source.mode==='preview'?(ending?Math.min(memory.lastIndex+1,source.sceneIndex):memory.lastIndex+1):source.sceneIndex;
+      const start=source.mode==='preview'?(manual?Math.max(0,source.sceneIndex-scenesPerRead+1):ending?Math.min(memory.lastIndex+1,source.sceneIndex):memory.lastIndex+1):source.sceneIndex;
       if(source.mode==='preview'&&start>source.sceneIndex){
         if(!automatic)status.textContent='ここまでは読んだ。今は黙っている。';
         return;
       }
-      const end=source.mode==='preview'?(ending?source.sceneIndex:Math.min(source.sceneIndex,start+scenesPerRead-1)):source.sceneIndex;
+      const end=source.mode==='preview'?(manual||ending?source.sceneIndex:Math.min(source.sceneIndex,start+scenesPerRead-1)):source.sceneIndex;
       const batch=source.mode==='preview'?snap.scenes.slice(Math.max(start,end-scenesPerRead+1),end+1).map((item,i)=>({index:Math.max(start,end-scenesPerRead+1)+i,text:String(item.text||'').slice(0,450)})):[];
       // Read each batch from its own position, even if the author advances
       // while inference is in flight. The bubble identifies the Scene later.
       const focus=true;
-      const currentScene=source.mode==='preview'?batch.at(-1)?.text||'':source.text;
-      const prior=state.observations.filter(x=>source.mode!=='preview'||x.sceneIndex<start).slice(-4);
-      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:batch,storyMemory:memory.summary,focus,ending,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
+      const currentScene=manual?source.text:source.mode==='preview'?batch.at(-1)?.text||'':source.text;
+      const revisiting=manual&&source.mode==='preview'&&memory.lastIndex>=source.sceneIndex;
+      const prior=state.observations.filter(x=>!x.manual&&(source.mode!=='preview'||x.sceneIndex<start)).slice(-4);
+      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:batch,storyMemory:revisiting?'':memory.summary,focus,ending,manual,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:revisiting||source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(string(data.error,130)||`読み込みに失敗しました（${response.status}）。`);
       const result=clean(data);
       // Reject a fabricated quotation: the cited phrase must occur in the submitted text.
       if(result.anchor&&!currentScene.includes(result.anchor))throw new Error('読んだ箇所を確認できなかった。もう一度試して。');
-      const shouldSpeak=(!automatic&&Boolean(result.reaction||result.question))
+      if(manual&&!result.reaction)throw new Error('今のSceneについて、うまく言葉にできなかった。もう一度聞いて。');
+      const shouldSpeak=(manual&&Boolean(result.reaction||result.question))
         ||Boolean(data.speak&&(ending||end-Number(memory.lastSpokenIndex??-100)>=12));
-      if(source.mode==='preview'){
+      if(source.mode==='preview'&&!manual){
         state.continuity={lastIndex:end,summary:string(data.storyMemory,900)||memory.summary,hash:await fingerprint(timeline(snap.scenes,end)),lastSpokenIndex:shouldSpeak?end:memory.lastSpokenIndex};
       }
       const at=new Date().toISOString();
-      const entry={at,day:day(),hash:await fingerprint(`${snap.scenes[end]?.id||source.sceneId}:${currentScene}`),sceneId:String(snap.scenes[end]?.id||source.sceneId),sceneIndex:end,...result,spoken:shouldSpeak,ending};
+      const entry={at,day:day(),hash,sceneId:String(snap.scenes[end]?.id||source.sceneId),sceneIndex:end,...result,spoken:shouldSpeak,ending,manual};
       state.observations.push(entry);
       if(result.lambda)state.lambdas.push({at,sceneId:source.sceneId,anchor:result.anchor,text:result.lambda});
       if(result.question)state.jumps.push({at,sceneId:source.sceneId,question:result.question,lambda:result.lambda});
       if(result.sigma)state.sigmas.push({at,sceneId:source.sceneId,text:result.sigma,provisional:true});
-      state.attention=result.attention;
+      if(!manual)state.attention=result.attention;
       save(source.draftId,state);
       if(!panel.hidden)showState();
       if(shouldSpeak)speak(result.reaction||result.question,source.sceneId,ending,end);
