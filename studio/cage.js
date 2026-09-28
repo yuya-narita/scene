@@ -17,6 +17,7 @@
   const api='https://scene-studio-api.a-hako.workers.dev/cage/read';
   // Preview safety valve. Server-side CAGE_DAILY_LIMIT controls the actual daily allowance.
   const previewReadLimit=12;
+  const previewSceneInterval=9;
   let busy=false;
   let previewSteps=0,autoAttempts=0,autoTimer=null,bubbleTimer=null;
   const getSnapshot=()=>window.SceneStudioAPI.cageSnapshot();
@@ -121,7 +122,7 @@
     const source=getSource();
     if(!source.text||playerHost?.classList.contains('sp-cover-open'))return;
     // A pause between attempts keeps the daily allowance for a later Scene.
-    if(autoAttempts>0&&previewSteps<3)return;
+    if(autoAttempts>0&&previewSteps<previewSceneInterval)return;
     autoTimer=setTimeout(()=>{
       if(preview.hidden||!follow.checked||busy||getSource().sceneId!==source.sceneId)return;
       autoAttempts++;previewSteps=0;observe(true);
