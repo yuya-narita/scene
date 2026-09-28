@@ -19,7 +19,7 @@
   const previewReadLimit=120;
   const scenesPerRead=6;
   let busy=false;
-  let previewSteps=0,autoAttempts=0,autoTimer=null,bubbleTimer=null,endingPending=false;
+  let previewSteps=0,autoAttempts=0,autoTimer=null,endingPending=false,bubbleSceneIndex=-1;
   const getSnapshot=()=>window.SceneStudioAPI.cageSnapshot();
   const day=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   function getSource(){
@@ -36,7 +36,8 @@
   function continuity(state){return state.continuity&&typeof state.continuity==='object'?state.continuity:{lastIndex:-1,summary:'',hash:''};}
   function timeline(scenes,end){return scenes.slice(0,end+1).map(s=>`${s.id}:${s.text}`).join('\n');}
   function save(id,state){
-    for(const name of ['observations','lambdas','jumps','sigmas'])state[name]=state[name].slice(-80);
+    state.observations=state.observations.slice(-400);
+    for(const name of ['lambdas','jumps','sigmas'])state[name]=state[name].slice(-80);
     localStorage.setItem(key(id),JSON.stringify(state));
   }
   async function fingerprint(input){
@@ -47,19 +48,29 @@
     const source=getSource();
     const state=load(source.draftId);
     const latest=state.observations.at(-1);
+    const available=item=>item.spoken&&(item.reaction||item.question)&&(source.mode!=='preview'||item.sceneIndex<=source.sceneIndex);
+    const lastSpoken=state.observations.findLast(available);
     const readCount=Math.max(state.observations.length,continuity(state).lastIndex+1);
-    status.textContent=latest?`読んだScene ${readCount}件 ・ 引っかかり ${state.lambdas.length}件 ・ 問い ${state.jumps.length}件`:'まだ読んでいない。';
-    reaction.hidden=!latest?.reaction||latest.spoken===false;
-    reaction.textContent=latest?.reaction||'';
-    question.hidden=!latest?.question;
-    question.textContent=latest?.question||'';
+    status.textContent=latest?`Scene ${readCount}まで読んだ ・ 引っかかり ${state.lambdas.length}件 ・ 問い ${state.jumps.length}件`:'まだ読んでいない。';
+    reaction.hidden=!lastSpoken?.reaction;
+    reaction.textContent=lastSpoken?.reaction||'';
+    question.hidden=!lastSpoken?.question;
+    question.textContent=lastSpoken?.question||'';
     trail.replaceChildren();
-    for(const item of state.observations.slice(-5).reverse()){
-      const p=document.createElement('p');
-      p.textContent=`${new Date(item.at).toLocaleDateString('ja-JP')} ${item.sceneIndex<0?'本文':`Scene ${item.sceneIndex+1}`}：${item.question||item.lambda||item.reaction||'黙って読んだ'}`;
-      trail.append(p);
+    const spoken=state.observations.filter(available);
+    if(!spoken.length){const empty=document.createElement('p');empty.textContent='まだ話していない。';trail.append(empty);}
+    for(const item of spoken.slice().reverse()){
+      const button=document.createElement('button');
+      button.type='button';button.className='cage-history-item';
+      const label=document.createElement('small');label.textContent=item.sceneIndex<0?'本文':`Scene ${item.sceneIndex+1}`;
+      const words=document.createElement('span');words.textContent=item.reaction||item.question;
+      button.append(label,words);
+      button.addEventListener('click',()=>speak(item.reaction||item.question,item.sceneId,item.ending,item.sceneIndex));
+      trail.append(button);
     }
-    read.textContent=source.mode==='easy'?'本文を読んで':'今のSceneを読んで';
+    read.textContent=source.mode==='easy'?'本文について聞く':'このSceneについて聞く';
+    read.hidden=source.mode==='preview'&&follow.checked;
+    document.querySelector('.cage-caption').hidden=source.mode==='preview'&&follow.checked;
     read.disabled=busy||!source.text||(source.mode==='preview'&&playerHost?.classList.contains('sp-cover-open'));
   }
   function speak(value,sceneId,ending=false,sceneIndex=-1){
@@ -70,11 +81,13 @@
     if(current.mode==='preview'?(current.sceneIndex<sceneIndex):current.sceneId!==sceneId)return;
     aside.textContent=current.mode==='preview'&&current.sceneIndex>sceneIndex&&sceneIndex>=0
       ?`Scene ${sceneIndex+1}を読んで：${value}`:value;
+    bubbleSceneIndex=sceneIndex;
     aside.hidden=false;
+    aside.classList.remove('cage-pop');
+    void aside.offsetWidth;
+    aside.classList.add('cage-pop');
     toggle.classList.add('cage-has-reaction');
     toggle.setAttribute('aria-label','CAGEの新しい反応を開く');
-    clearTimeout(bubbleTimer);
-    bubbleTimer=setTimeout(()=>{aside.hidden=true;},ending?25000:16000);
   }
   function signedInToken(){
     try{return String(JSON.parse(localStorage.getItem('ahako-author-session-v1')||'null')?.token||'');}
@@ -107,6 +120,11 @@
       if(!automatic){reaction.textContent=seen.reaction||'この箇所は読んだ。今は黙っている。';reaction.hidden=false;question.textContent=seen.question||'';question.hidden=!seen.question;status.textContent='前に読んだ箇所の記録を表示中。';speak(seen.reaction||seen.question,source.sceneId);}
       return;
     }
+    if(!automatic&&source.mode==='preview'){
+      const previous=state.observations.findLast(x=>x.sceneIndex===source.sceneIndex&&x.spoken&&(x.reaction||x.question));
+      if(previous){speak(previous.reaction||previous.question,previous.sceneId,previous.ending,previous.sceneIndex);return;}
+      if(memory.lastIndex>=source.sceneIndex){status.textContent='このSceneは黙って読んだ。';return;}
+    }
     busy=true;read.disabled=true;status.textContent='読んでいる…';
     try{
       const start=source.mode==='preview'?(ending?Math.min(memory.lastIndex+1,source.sceneIndex):memory.lastIndex+1):source.sceneIndex;
@@ -116,7 +134,9 @@
       }
       const end=source.mode==='preview'?(ending?source.sceneIndex:Math.min(source.sceneIndex,start+scenesPerRead-1)):source.sceneIndex;
       const batch=source.mode==='preview'?snap.scenes.slice(Math.max(start,end-scenesPerRead+1),end+1).map((item,i)=>({index:Math.max(start,end-scenesPerRead+1)+i,text:String(item.text||'').slice(0,450)})):[];
-      const focus=end===source.sceneIndex;
+      // Read each batch from its own position, even if the author advances
+      // while inference is in flight. The bubble identifies the Scene later.
+      const focus=true;
       const currentScene=source.mode==='preview'?batch.at(-1)?.text||'':source.text;
       const prior=state.observations.filter(x=>source.mode!=='preview'||x.sceneIndex<start).slice(-4);
       const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:batch,storyMemory:memory.summary,focus,ending,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
@@ -125,8 +145,8 @@
       const result=clean(data);
       // Reject a fabricated quotation: the cited phrase must occur in the submitted text.
       if(result.anchor&&!currentScene.includes(result.anchor))throw new Error('読んだ箇所を確認できなかった。もう一度試して。');
-      const shouldSpeak=!automatic&&Boolean(result.reaction||result.question)
-        ||Boolean(data.speak&&focus&&(ending||end-Number(memory.lastSpokenIndex??-100)>=12));
+      const shouldSpeak=(!automatic&&Boolean(result.reaction||result.question))
+        ||Boolean(data.speak&&(ending||end-Number(memory.lastSpokenIndex??-100)>=12));
       if(source.mode==='preview'){
         state.continuity={lastIndex:end,summary:string(data.storyMemory,900)||memory.summary,hash:await fingerprint(timeline(snap.scenes,end)),lastSpokenIndex:shouldSpeak?end:memory.lastSpokenIndex};
       }
@@ -144,7 +164,7 @@
     }catch(error){status.textContent=error.message||'読み込めなかった。';if(automatic)follow.checked=false;}
     finally{busy=false;read.disabled=false;if(endingPending){endingPending=false;readEnding();}else if(automatic&&follow.checked)schedulePreviewRead();}
   }
-  toggle.addEventListener('click',()=>{if(preview.hidden)return;panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden){toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-label','CAGEを開く');showState();}});
+  toggle.addEventListener('click',()=>{if(preview.hidden)return;panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden){aside.hidden=true;toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-label','CAGEを開く');showState();}});
   document.querySelector('#cageClose').addEventListener('click',()=>{panel.hidden=true;toggle.setAttribute('aria-expanded','false');});
   read.addEventListener('click',()=>observe(false));
   function readEnding(){
@@ -171,10 +191,14 @@
       autoAttempts++;observe(true);
     },waitMs);
   }
-  follow.addEventListener('change',()=>{if(follow.checked)schedulePreviewRead();else clearTimeout(autoTimer);});
+  follow.addEventListener('change',()=>{if(follow.checked)schedulePreviewRead();else clearTimeout(autoTimer);showState();});
   playerHost?.addEventListener('sceneplayer:scenechange',()=>{
     previewSteps++;
     if(matchMedia('(max-width:600px)').matches){panel.hidden=true;toggle.setAttribute('aria-expanded','false');}
+    const source=getSource();
+    if(source.sceneIndex<bubbleSceneIndex)aside.hidden=true;
+    const previouslySpoken=load(source.draftId).observations.findLast(item=>item.sceneIndex===source.sceneIndex&&item.sceneId===source.sceneId&&item.spoken&&(item.reaction||item.question));
+    if(previouslySpoken)speak(previouslySpoken.reaction||previouslySpoken.question,previouslySpoken.sceneId,previouslySpoken.ending,previouslySpoken.sceneIndex);
     schedulePreviewRead();if(!panel.hidden)showState();
   });
   playerHost?.addEventListener('sceneplayer:coverstart',()=>{
@@ -186,7 +210,7 @@
     root.hidden=Boolean(preview.hidden&&document.querySelector('#editorScreen')?.hidden&&document.querySelector('#advancedScreen')?.hidden);
     followRow.hidden=preview.hidden;
     toggle.disabled=preview.hidden;
-    if(preview.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');aside.hidden=true;clearTimeout(bubbleTimer);clearTimeout(autoTimer);toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-label','CAGEを開く');follow.checked=false;endingPending=false;autoAttempts=0;previewSteps=0;}
+    if(preview.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');aside.hidden=true;clearTimeout(autoTimer);toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-label','CAGEを開く');follow.checked=false;endingPending=false;autoAttempts=0;previewSteps=0;}
     if(!root.hidden&&!panel.hidden)showState();
   };
   const observer=new MutationObserver(visible);

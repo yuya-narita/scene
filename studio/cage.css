@@ -42,3 +42,19 @@
 }
 .cage-toggle.cage-has-reaction{position:relative}
 .cage-toggle.cage-has-reaction:after{content:"";position:absolute;right:-4px;top:-4px;width:10px;height:10px;border-radius:50%;border:2px solid #f9f8f3;background:#ae6a49}
+.cage-aside.cage-pop{animation:cage-appear .32s cubic-bezier(.2,.8,.3,1) both}
+@keyframes cage-appear{from{opacity:0;transform:translateY(12px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.cage-aside.cage-pop{animation:none}}
+#cageHistory{margin-top:15px;border-top:1px solid #ddd;padding-top:10px}
+#cageHistory summary{font-size:12px;font-weight:700;color:#3d4149}
+#cageTrail{display:grid;gap:6px;margin-top:8px}
+#cageTrail .cage-history-item{display:grid;gap:3px;width:100%;padding:9px 10px;border:1px solid #e0ddd6;border-radius:9px;background:#fffdf9;text-align:left;color:#323741;line-height:1.45;cursor:pointer}
+#cageTrail .cage-history-item small{color:#85828a;font-size:10px}
+#cageTrail .cage-history-item span{font-size:12px;white-space:normal;overflow-wrap:anywhere}
+#cageRead[hidden],.cage-caption[hidden]{display:none!important}
+#cageFollowRow{margin:12px 0 8px}
+@media(max-width:600px){
+  .cage-home{max-width:calc(100vw - 24px)}
+  .cage-aside{position:relative;z-index:3;max-width:min(228px,calc(100vw - 32px));box-shadow:0 9px 24px #0003}
+  .cage-panel{max-height:min(52vh,430px)}
+}
