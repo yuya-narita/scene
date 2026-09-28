@@ -34,3 +34,9 @@
 .cage-reader img{display:block;width:48px;height:48px;object-fit:cover;border:1px solid #c6c1b7;border-radius:7px}
 .cage-reader.is-active img{outline:2px solid #343b47;outline-offset:2px}
 .cage-reader.is-pending{opacity:.7}
+@media(max-width:600px){
+  .cage-toggle{width:49px;height:49px;min-height:0;padding:3px;gap:0;border-radius:12px}
+  .cage-toggle .cage-bars{width:41px;height:41px;flex:none}
+  .cage-toggle .cage-name{display:none}
+  .cage-aside{max-width:min(224px,calc(100vw - 28px));margin-bottom:12px;padding:8px 10px;font-size:12px;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;background:#f9f8f3f2}
+}

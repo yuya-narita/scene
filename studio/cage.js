@@ -163,7 +163,16 @@
     },waitMs);
   }
   follow.addEventListener('change',()=>{if(follow.checked)schedulePreviewRead();else clearTimeout(autoTimer);});
-  playerHost?.addEventListener('sceneplayer:scenechange',()=>{previewSteps++;aside.hidden=true;schedulePreviewRead();if(!panel.hidden)showState();});
+  playerHost?.addEventListener('sceneplayer:scenechange',()=>{
+    previewSteps++;aside.hidden=true;
+    if(matchMedia('(max-width:600px)').matches){panel.hidden=true;toggle.setAttribute('aria-expanded','false');}
+    schedulePreviewRead();if(!panel.hidden)showState();
+  });
+  playerHost?.addEventListener('sceneplayer:coverstart',()=>{
+    if(matchMedia('(max-width:600px)').matches){panel.hidden=true;toggle.setAttribute('aria-expanded','false');}
+    aside.hidden=true;
+    schedulePreviewRead();
+  });
   const visible=()=>{
     root.hidden=Boolean(preview.hidden&&document.querySelector('#editorScreen')?.hidden&&document.querySelector('#advancedScreen')?.hidden);
     followRow.hidden=preview.hidden;
