@@ -1,0 +1,28 @@
+/* CAGE lives in Studio only. The cage is a visual boundary, not a player control. */
+.cage-home{position:fixed;z-index:90;left:max(12px,env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom));font-family:system-ui,-apple-system,sans-serif;color:#272933}
+.cage-home[hidden],.cage-panel[hidden],.cage-reaction[hidden]{display:none!important}
+.cage-toggle{display:flex;align-items:center;gap:7px;padding:5px 9px 5px 5px;min-height:50px;border:1px solid #b5b8c2;border-radius:14px;background:#f9f8f3;box-shadow:0 3px 18px #1112;color:#383943;cursor:pointer}
+.cage-toggle:disabled{opacity:1;color:#383943;cursor:default}
+.cage-name{font-size:10px;letter-spacing:.09em;font-weight:750}
+.cage-bars{position:relative;display:block;width:40px;height:38px;border:1px solid #89909c;border-radius:5px;background:repeating-linear-gradient(90deg,transparent 0 8px,#a3a9b6 8px 9px);overflow:hidden}
+.cage-creature{position:absolute;left:9px;bottom:3px;width:23px;height:25px;border-radius:42% 45% 38% 42%;background:#252836;box-shadow:0 1px 5px #0006}
+.cage-creature:before,.cage-creature:after{content:'';position:absolute;top:-5px;width:7px;height:10px;background:#252836;border-radius:90% 5% 40% 15%}
+.cage-creature:before{left:1px;transform:rotate(-24deg)}.cage-creature:after{right:1px;transform:rotate(24deg) scaleX(-1)}
+.cage-creature i{position:absolute;top:9px;width:4px;height:4px;border-radius:50%;background:#e6ebff}.cage-creature i:first-child{left:6px}.cage-creature i:last-child{right:5px}
+.cage-panel{position:absolute;bottom:calc(100% + 9px);left:0;width:min(310px,calc(100vw - 24px));max-height:min(65vh,520px);overflow:auto;padding:14px;border:1px solid #cdd0d7;border-radius:17px;background:#f9f8f3;box-shadow:0 12px 36px #0003;box-sizing:border-box}
+.cage-panel header{display:flex;align-items:center;justify-content:space-between}.cage-panel header strong{font-size:13px}.cage-panel header small{font-size:10px;font-weight:500;color:#777}
+.cage-panel button{cursor:pointer}.cage-panel header button{border:0;background:none;font-size:24px;line-height:1;color:#555}
+.cage-status,.cage-caption{font-size:11px;line-height:1.55;color:#727681}.cage-status{margin:12px 0}.cage-caption{margin:8px 0 0}
+.cage-reaction{padding:11px 12px;margin:12px 0;border-radius:10px;background:#e8edf2;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+#cageRead{display:block;width:100%;min-height:43px;border:0;border-radius:10px;background:#303644;color:#fff;font-size:12px;font-weight:700}
+#cageRead:disabled{opacity:.55;cursor:default}.cage-panel details{margin-top:12px;font-size:11px;color:#646b78}.cage-panel summary{cursor:pointer}
+#cageTrail{padding:6px 0;line-height:1.55}#cageTrail p{margin:5px 0;border-top:1px solid #ddd;padding-top:5px}
+@media(max-width:600px){.cage-home{bottom:calc(10px + env(safe-area-inset-bottom))}.cage-panel{max-height:58vh}}
+/* Author preview is stacked above Studio; CAGE needs its own upper layer. */
+.cage-home{z-index:2147483005}
+.cage-aside{max-width:min(240px,calc(100vw - 28px));margin-bottom:9px;padding:9px 12px;border:1px solid #c7ccd5;border-radius:13px;background:#f9f8f3;color:#252934;box-shadow:0 5px 20px #0002;font-size:13px;line-height:1.5;overflow-wrap:anywhere;cursor:pointer}
+.cage-aside[hidden],.cage-follow[hidden]{display:none!important}
+.cage-follow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:11px;color:#373e4a;font-size:11px;cursor:pointer}
+.cage-follow input{width:17px;height:17px;min-height:0;margin:0;accent-color:#343a49}
+.cage-follow small{width:100%;padding-left:23px;font-size:10px;color:#757b87}
+@media(max-width:600px){body.easy-player-open .cage-home{bottom:calc(66px + env(safe-area-inset-bottom))}.cage-panel{max-height:46vh}}

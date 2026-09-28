@@ -27,6 +27,7 @@
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="stylesheet" href="./scene-player-core.css?v=20260919-object-pickup-v110">
   <link rel="stylesheet" href="./style.css?v=70.59">
+  <link rel="stylesheet" href="./cage.css?v=4">
   <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -240,6 +241,19 @@
 </head>
 <body>
 <main id="app">
+  <aside id="cageHome" class="cage-home" aria-label="CAGE 最初の読者" hidden>
+    <div id="cageAside" class="cage-aside" hidden role="status" aria-live="polite"></div>
+    <button id="cageToggle" class="cage-toggle" type="button" aria-label="CAGEを開く" aria-expanded="false"><span class="cage-bars" aria-hidden="true"><span class="cage-creature"><i></i><i></i></span></span><span class="cage-name">CAGE</span></button>
+    <section id="cagePanel" class="cage-panel" hidden aria-label="CAGEの読書記録">
+      <header><strong>CAGE <small>最初の読者</small></strong><button id="cageClose" type="button" aria-label="閉じる">×</button></header>
+      <p id="cageStatus" class="cage-status" role="status">まだ読んでいない。</p>
+      <div id="cageReaction" class="cage-reaction" hidden></div>
+      <button id="cageRead" type="button">このSceneを読んで</button>
+      <label id="cageFollowRow" class="cage-follow" hidden><input id="cageFollow" type="checkbox"> プレビューを一緒に読む <small>Sceneを進めると、時々反応します</small></label>
+      <p class="cage-caption">選んだSceneだけを送信します。感想が出ない時は黙ります。</p>
+      <details><summary>読書のあと</summary><div id="cageTrail"></div></details>
+    </section>
+  </aside>
   <header id="studioSharedHeader" class="studio-shared-header">
     <div class="studio-shared-center">
       <strong class="ahako-brand" aria-label="あ箱"><span class="ahako-a">あ</span><span class="ahako-box" aria-hidden="true">□</span></strong>
@@ -1130,6 +1144,7 @@
 <script src="./scene-text-splitter.js"></script>
 <script src="./scene-edit-core.js?v=70.27"></script>
 <script src="./script.js?v=146"></script>
+<script src="./cage.js?v=4"></script>
 
 
 
