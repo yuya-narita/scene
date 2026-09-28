@@ -22,6 +22,7 @@
   const scenesPerRead=6;
   let busy=false;
   let previewSteps=0,autoAttempts=0,autoTimer=null,endingPending=false,bubbleSceneIndex=-1;
+  let selectedQuestion=null;
   // Preview text is immutable while the Player is open. Reuse its Scene list;
   // cageSnapshot otherwise maps every Scene on every tap and timer callback.
   let previewSnapshot=null;
@@ -52,6 +53,13 @@
     const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(input));
     return Array.from(new Uint8Array(bytes)).map(x=>x.toString(16).padStart(2,'0')).join('');
   }
+  function goToObservation(item){
+    if(getSource().mode!=='preview'||!window.SceneStudioAPI?.cageGoToScene?.(item.sceneId)){
+      status.textContent='元のSceneを開けなかった。Sceneが削除・変更されているかもしれません。';
+      return false;
+    }
+    return true;
+  }
   function showState(){
     const source=getSource();
     const state=load(source.draftId);
@@ -60,13 +68,13 @@
     const spoken=item=>item.spoken&&Boolean(item.reaction)&&withinTimeline(item);
     const asked=item=>Boolean(item.question)&&withinTimeline(item);
     const lastSpoken=state.observations.findLast(spoken);
-    const lastQuestion=state.observations.findLast(asked);
+    const lastQuestion=selectedQuestion?.sceneId===source.sceneId?selectedQuestion:state.observations.findLast(asked);
     const readCount=Math.max(state.observations.filter(item=>!item.manual).length,continuity(state).lastIndex+1);
     status.textContent=latest?`Scene ${readCount}まで読んだ ・ 引っかかり ${state.lambdas.length}件 ・ 問い ${state.jumps.length}件`:'まだ読んでいない。';
     reaction.hidden=!lastSpoken?.reaction;
     reaction.textContent=lastSpoken?.reaction||'';
     questionLabel.hidden=!lastQuestion;
-    questionLabel.textContent=lastQuestion?`CAGEが残した問い ・ ${lastQuestion.sceneIndex<0?'本文':`Scene ${lastQuestion.sceneIndex+1}`}`:'';
+    questionLabel.textContent=lastQuestion?`CAGEが残した問い ・ ${lastQuestion.sceneIndex<0?'本文':`Scene ${selectedQuestion===lastQuestion?source.sceneIndex+1:lastQuestion.sceneIndex+1}`}`:'';
     question.hidden=!lastQuestion;
     question.textContent=lastQuestion?.question||'';
     trail.replaceChildren();
@@ -78,7 +86,11 @@
       const label=document.createElement('small');label.textContent=item.sceneIndex<0?'本文':`Scene ${item.sceneIndex+1}`;
       const words=document.createElement('span');words.textContent=item.reaction;
       button.append(label,words);
-      button.addEventListener('click',()=>speak(item.reaction,item.sceneId,item.ending,item.sceneIndex));
+      button.addEventListener('click',()=>{
+        if(!goToObservation(item))return;
+        selectedQuestion=null;
+        speak(item.reaction,item.sceneId,item.ending,getSource().sceneIndex);
+      });
       trail.append(button);
     }
     questionTrail.replaceChildren();
@@ -91,7 +103,9 @@
       const words=document.createElement('span');words.textContent=item.question;
       button.append(label,words);
       button.addEventListener('click',()=>{
-        questionLabel.hidden=false;questionLabel.textContent=`CAGEが残した問い ・ ${label.textContent}`;
+        if(!goToObservation(item))return;
+        selectedQuestion=item;
+        questionLabel.hidden=false;questionLabel.textContent=`CAGEが残した問い ・ Scene ${getSource().sceneIndex+1}`;
         question.hidden=false;question.textContent=item.question;
       });
       questionTrail.append(button);
