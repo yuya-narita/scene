@@ -19,7 +19,7 @@
   const previewReadLimit=20;
   const scenesPerRead=6;
   let busy=false;
-  let previewSteps=0,autoAttempts=0,autoTimer=null,bubbleTimer=null;
+  let previewSteps=0,autoAttempts=0,autoTimer=null,bubbleTimer=null,endingPending=false;
   const getSnapshot=()=>window.SceneStudioAPI.cageSnapshot();
   const day=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   function getSource(){
@@ -62,11 +62,11 @@
     read.textContent=source.mode==='easy'?'本文を読んで':'今のSceneを読んで';
     read.disabled=busy||!source.text||(source.mode==='preview'&&playerHost?.classList.contains('sp-cover-open'));
   }
-  function speak(value,sceneId){
+  function speak(value,sceneId,ending=false){
     if(!value||preview.hidden||getSource().sceneId!==sceneId)return;
     aside.textContent=value;aside.hidden=false;
     clearTimeout(bubbleTimer);
-    bubbleTimer=setTimeout(()=>{aside.hidden=true;},8500);
+    bubbleTimer=setTimeout(()=>{aside.hidden=true;},ending?20000:8500);
   }
   function signedInToken(){
     try{return String(JSON.parse(localStorage.getItem('ahako-author-session-v1')||'null')?.token||'');}
@@ -77,7 +77,7 @@
     const v=value&&typeof value==='object'?value:{};
     return {reaction:string(v.reaction,500),lambda:string(v.lambda,180),question:string(v.question,180),sigma:string(v.sigma,180),attention:Array.isArray(v.attention)?v.attention.filter(x=>typeof x==='string').slice(0,4).map(x=>x.slice(0,70)):[],anchor:string(v.anchor,120)};
   }
-  async function observe(automatic=false){
+  async function observe(automatic=false,ending=false){
     if(preview.hidden)return;
     if(busy)return;
     const source=getSource();
@@ -101,28 +101,28 @@
     }
     busy=true;read.disabled=true;status.textContent='読んでいる…';
     try{
-      const start=source.mode==='preview'?memory.lastIndex+1:source.sceneIndex;
+      const start=source.mode==='preview'?(ending?Math.min(memory.lastIndex+1,source.sceneIndex):memory.lastIndex+1):source.sceneIndex;
       if(source.mode==='preview'&&start>source.sceneIndex){
         if(!automatic)status.textContent='ここまでは読んだ。今は黙っている。';
         return;
       }
-      const end=source.mode==='preview'?Math.min(source.sceneIndex,start+scenesPerRead-1):source.sceneIndex;
-      const batch=source.mode==='preview'?snap.scenes.slice(start,end+1).map((item,i)=>({index:start+i,text:String(item.text||'').slice(0,450)})):[];
+      const end=source.mode==='preview'?(ending?source.sceneIndex:Math.min(source.sceneIndex,start+scenesPerRead-1)):source.sceneIndex;
+      const batch=source.mode==='preview'?snap.scenes.slice(Math.max(start,end-scenesPerRead+1),end+1).map((item,i)=>({index:Math.max(start,end-scenesPerRead+1)+i,text:String(item.text||'').slice(0,450)})):[];
       const focus=end===source.sceneIndex;
       const currentScene=source.mode==='preview'?batch.at(-1)?.text||'':source.text;
       const prior=state.observations.filter(x=>source.mode!=='preview'||x.sceneIndex<start).slice(-4);
-      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:batch,storyMemory:memory.summary,focus,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
+      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:batch,storyMemory:memory.summary,focus,ending,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(string(data.error,130)||`読み込みに失敗しました（${response.status}）。`);
       const result=clean(data);
       // Reject a fabricated quotation: the cited phrase must occur in the submitted text.
       if(result.anchor&&!currentScene.includes(result.anchor))throw new Error('読んだ箇所を確認できなかった。もう一度試して。');
-      const shouldSpeak=Boolean(data.speak&&focus&&(end-Number(memory.lastSpokenIndex??-100)>=12));
+      const shouldSpeak=Boolean(data.speak&&focus&&(ending||end-Number(memory.lastSpokenIndex??-100)>=12));
       if(source.mode==='preview'){
         state.continuity={lastIndex:end,summary:string(data.storyMemory,900)||memory.summary,hash:await fingerprint(timeline(snap.scenes,end)),lastSpokenIndex:shouldSpeak?end:memory.lastSpokenIndex};
       }
       const at=new Date().toISOString();
-      const entry={at,day:day(),hash:await fingerprint(`${snap.scenes[end]?.id||source.sceneId}:${currentScene}`),sceneId:String(snap.scenes[end]?.id||source.sceneId),sceneIndex:end,...result,spoken:shouldSpeak};
+      const entry={at,day:day(),hash:await fingerprint(`${snap.scenes[end]?.id||source.sceneId}:${currentScene}`),sceneId:String(snap.scenes[end]?.id||source.sceneId),sceneIndex:end,...result,spoken:shouldSpeak,ending};
       state.observations.push(entry);
       if(result.lambda)state.lambdas.push({at,sceneId:source.sceneId,anchor:result.anchor,text:result.lambda});
       if(result.question)state.jumps.push({at,sceneId:source.sceneId,question:result.question,lambda:result.lambda});
@@ -130,14 +130,23 @@
       state.attention=result.attention;
       save(source.draftId,state);
       showState();
-      if(shouldSpeak)speak(result.reaction||result.question,source.sceneId);
+      if(shouldSpeak)speak(result.reaction||result.question,source.sceneId,ending);
       if(!result.reaction&&!result.question)status.textContent='読んだ。今は黙っている。';
     }catch(error){status.textContent=error.message||'読み込めなかった。';if(automatic)follow.checked=false;}
-    finally{busy=false;read.disabled=false;if(automatic&&follow.checked)schedulePreviewRead();}
+    finally{busy=false;read.disabled=false;if(endingPending){endingPending=false;readEnding();}else if(automatic&&follow.checked)schedulePreviewRead();}
   }
   toggle.addEventListener('click',()=>{if(preview.hidden)return;panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden)showState();});
   document.querySelector('#cageClose').addEventListener('click',()=>{panel.hidden=true;toggle.setAttribute('aria-expanded','false');});
   read.addEventListener('click',()=>observe(false));
+  function readEnding(){
+    if(!follow.checked||preview.hidden)return;
+    const source=getSource(),snap=getSnapshot();
+    if(source.mode!=='preview'||source.sceneIndex!==snap.scenes.length-1||!source.text)return;
+    if(load(source.draftId).observations.some(item=>item.ending&&item.sceneId===source.sceneId))return;
+    if(busy){endingPending=true;return;}
+    observe(true,true);
+  }
+  playerHost?.addEventListener('sceneplayer:end',()=>{clearTimeout(autoTimer);readEnding();});
   aside.addEventListener('click',()=>{aside.hidden=true;panel.hidden=false;toggle.setAttribute('aria-expanded','true');showState();});
   function schedulePreviewRead(){
     clearTimeout(autoTimer);
@@ -159,7 +168,7 @@
     root.hidden=Boolean(preview.hidden&&document.querySelector('#editorScreen')?.hidden&&document.querySelector('#advancedScreen')?.hidden);
     followRow.hidden=preview.hidden;
     toggle.disabled=preview.hidden;
-    if(preview.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');aside.hidden=true;clearTimeout(autoTimer);follow.checked=false;autoAttempts=0;previewSteps=0;}
+    if(preview.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');aside.hidden=true;clearTimeout(autoTimer);follow.checked=false;endingPending=false;autoAttempts=0;previewSteps=0;}
     if(!root.hidden&&!panel.hidden)showState();
   };
   const observer=new MutationObserver(visible);
