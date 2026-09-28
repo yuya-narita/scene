@@ -23,9 +23,9 @@
   let busy=false;
   let previewSteps=0,autoAttempts=0,autoTimer=null,endingPending=false,bubbleSceneIndex=-1;
   let selectedQuestion=null;
-  // Preview text is immutable while the Player is open. Reuse its Scene list;
-  // cageSnapshot otherwise maps every Scene on every tap and timer callback.
+  // Cache the preview document until the Live Editor refreshes a Scene.
   let previewSnapshot=null;
+  const rewrittenSceneIds=new Set();
   const getSnapshot=()=>{
     if(!preview.hidden)return previewSnapshot||(previewSnapshot=window.SceneStudioAPI.cageSnapshot());
     return window.SceneStudioAPI.cageSnapshot();
@@ -44,6 +44,17 @@
   }
   function continuity(state){return state.continuity&&typeof state.continuity==='object'?state.continuity:{lastIndex:-1,summary:'',hash:''};}
   function timeline(scenes,end){return scenes.slice(0,end+1).map(s=>`${s.id}:${s.text}`).join('\n');}
+  function sceneStamp(value){
+    const text=String(value||'').trim().slice(0,2500);
+    let hash=2166136261;
+    for(let i=0;i<text.length;i++)hash=Math.imul(hash^text.charCodeAt(i),16777619);
+    return `${text.length}:${hash>>>0}`;
+  }
+  function currentRevision(item,source){
+    if(item.sceneId!==source.sceneId)return true;
+    if(item.sceneStamp)return item.sceneStamp===sceneStamp(source.text);
+    return !rewrittenSceneIds.has(source.sceneId);
+  }
   function save(id,state){
     state.observations=state.observations.slice(-400);
     for(const name of ['lambdas','jumps','sigmas'])state[name]=state[name].slice(-80);
@@ -65,10 +76,10 @@
     const state=load(source.draftId);
     const latest=state.observations.at(-1);
     const withinTimeline=item=>source.mode!=='preview'||item.sceneIndex<=source.sceneIndex;
-    const spoken=item=>item.spoken&&Boolean(item.reaction)&&withinTimeline(item);
-    const asked=item=>Boolean(item.question)&&withinTimeline(item);
-    const lastSpoken=state.observations.findLast(spoken);
-    const lastQuestion=selectedQuestion?.sceneId===source.sceneId?selectedQuestion:state.observations.findLast(asked);
+    const spoken=item=>item.spoken&&Boolean(item.reaction);
+    const asked=item=>Boolean(item.question);
+    const lastSpoken=state.observations.findLast(item=>spoken(item)&&withinTimeline(item)&&currentRevision(item,source));
+    const lastQuestion=selectedQuestion?.sceneId===source.sceneId&&currentRevision(selectedQuestion,source)?selectedQuestion:state.observations.findLast(item=>asked(item)&&withinTimeline(item)&&currentRevision(item,source));
     const readCount=Math.max(state.observations.filter(item=>!item.manual).length,continuity(state).lastIndex+1);
     status.textContent=latest?`Scene ${readCount}まで読んだ ・ 引っかかり ${state.lambdas.length}件 ・ 問い ${state.jumps.length}件`:'まだ読んでいない。';
     reaction.hidden=!lastSpoken?.reaction;
@@ -83,11 +94,16 @@
     for(const item of utterances.slice(-30).reverse()){
       const button=document.createElement('button');
       button.type='button';button.className='cage-history-item';
-      const label=document.createElement('small');label.textContent=item.sceneIndex<0?'本文':`Scene ${item.sceneIndex+1}`;
+      const label=document.createElement('small');label.textContent=item.sceneIndex<0?'本文':`Scene ${item.sceneIndex+1}${!currentRevision(item,source)?' ・ 旧稿':''}`;
       const words=document.createElement('span');words.textContent=item.reaction;
       button.append(label,words);
       button.addEventListener('click',()=>{
         if(!goToObservation(item))return;
+        if(!currentRevision(item,getSource())){
+          aside.hidden=true;
+          status.textContent='これは書き直す前の発言。今のSceneについて聞くと、新しく読みます。';
+          return;
+        }
         selectedQuestion=null;
         speak(item.reaction,item.sceneId,item.ending,getSource().sceneIndex);
       });
@@ -99,20 +115,26 @@
     for(const item of questions.slice(-40).reverse()){
       const button=document.createElement('button');
       button.type='button';button.className='cage-history-item';
-      const label=document.createElement('small');label.textContent=item.sceneIndex<0?'本文':`Scene ${item.sceneIndex+1}`;
+      const label=document.createElement('small');label.textContent=item.sceneIndex<0?'本文':`Scene ${item.sceneIndex+1}${!currentRevision(item,source)?' ・ 旧稿':''}`;
       const words=document.createElement('span');words.textContent=item.question;
       button.append(label,words);
       button.addEventListener('click',()=>{
         if(!goToObservation(item))return;
+        if(!currentRevision(item,getSource())){
+          selectedQuestion=null;
+          status.textContent='これは書き直す前の問い。今の本文への問いではありません。';
+          return;
+        }
         selectedQuestion=item;
         questionLabel.hidden=false;questionLabel.textContent=`CAGEが残した問い ・ Scene ${getSource().sceneIndex+1}`;
         question.hidden=false;question.textContent=item.question;
       });
       questionTrail.append(button);
     }
-    read.textContent=source.mode==='easy'?'本文について聞く':'このSceneについて聞く';
-    read.hidden=source.mode==='preview'&&follow.checked;
-    document.querySelector('.cage-caption').hidden=source.mode==='preview'&&follow.checked;
+    const revised=rewrittenSceneIds.has(source.sceneId)&&!state.observations.some(item=>item.sceneId===source.sceneId&&item.sceneStamp===sceneStamp(source.text));
+    read.textContent=source.mode==='easy'?'本文について聞く':revised?'書き直したSceneについて聞く':'このSceneについて聞く';
+    read.hidden=source.mode==='preview'&&follow.checked&&!revised;
+    document.querySelector('.cage-caption').hidden=source.mode==='preview'&&follow.checked&&!revised;
     read.disabled=busy||!source.text||(source.mode==='preview'&&playerHost?.classList.contains('sp-cover-open'));
   }
   function speak(value,sceneId,ending=false,sceneIndex=-1){
@@ -158,6 +180,14 @@
     const state=load(source.draftId);
     const snap=getSnapshot();
     let memory=continuity(state);
+    const dirtyFrom=Number(state.dirtyFrom);
+    if(Number.isInteger(dirtyFrom)&&dirtyFrom>=0&&dirtyFrom<=memory.lastIndex){
+      const checkpoint=state.observations.findLast(item=>!item.manual&&item.sceneIndex<dirtyFrom&&item.storyMemory);
+      const lastIndex=checkpoint?checkpoint.sceneIndex:dirtyFrom-1;
+      memory={lastIndex,summary:checkpoint?.storyMemory||'',hash:lastIndex>=0?await fingerprint(timeline(snap.scenes,lastIndex)):'',lastSpokenIndex:Math.min(Number(memory.lastSpokenIndex??-100),lastIndex)};
+      state.continuity=memory;
+      delete state.dirtyFrom;
+    }
     if(source.mode==='preview'&&memory.lastIndex>=0){
       const currentHash=await fingerprint(timeline(snap.scenes,memory.lastIndex));
       if(currentHash!==memory.hash){memory={lastIndex:-1,summary:'',hash:''};state.continuity=memory;}
@@ -171,7 +201,8 @@
         return;
       }
       const end=source.mode==='preview'?(manual||ending?source.sceneIndex:Math.min(source.sceneIndex,start+scenesPerRead-1)):source.sceneIndex;
-      const batch=source.mode==='preview'?snap.scenes.slice(Math.max(start,end-scenesPerRead+1),end+1).map((item,i)=>({index:Math.max(start,end-scenesPerRead+1)+i,text:String(item.text||'').slice(0,450)})):[];
+      const batchStart=!manual&&!memory.summary?Math.max(0,end-scenesPerRead+1):Math.max(start,end-scenesPerRead+1);
+      const batch=source.mode==='preview'?snap.scenes.slice(batchStart,end+1).map((item,i)=>({index:batchStart+i,text:String(item.text||'').slice(0,450)})):[];
       // Read each batch from its own position, even if the author advances
       // while inference is in flight. The bubble identifies the Scene later.
       const focus=true;
@@ -181,6 +212,11 @@
       const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:batch,storyMemory:revisiting?'':memory.summary,focus,ending,manual,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:revisiting||source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(string(data.error,130)||`読み込みに失敗しました（${response.status}）。`);
+      const now=getSource();
+      if(source.mode==='preview'&&now.sceneId===source.sceneId&&sceneStamp(now.text)!==sceneStamp(source.text)){
+        status.textContent='読んでいる間に本文が変わった。新しい本文でもう一度聞いて。';
+        return;
+      }
       const result=clean(data);
       // Reject a fabricated quotation: the cited phrase must occur in the submitted text.
       if(result.anchor&&!currentScene.includes(result.anchor))throw new Error('読んだ箇所を確認できなかった。もう一度試して。');
@@ -191,11 +227,12 @@
         state.continuity={lastIndex:end,summary:string(data.storyMemory,900)||memory.summary,hash:await fingerprint(timeline(snap.scenes,end)),lastSpokenIndex:shouldSpeak?end:memory.lastSpokenIndex};
       }
       const at=new Date().toISOString();
-      const entry={at,day:day(),hash,sceneId:String(snap.scenes[end]?.id||source.sceneId),sceneIndex:end,...result,spoken:shouldSpeak,ending,manual};
+      const entry={at,day:day(),hash,sceneId:String(snap.scenes[end]?.id||source.sceneId),sceneIndex:end,sceneStamp:sceneStamp(snap.scenes[end]?.text||currentScene),storyMemory:manual?'':string(data.storyMemory,900),...result,spoken:shouldSpeak,ending,manual};
       state.observations.push(entry);
       if(result.lambda)state.lambdas.push({at,sceneId:source.sceneId,anchor:result.anchor,text:result.lambda});
       if(result.question)state.jumps.push({at,sceneId:source.sceneId,question:result.question,lambda:result.lambda});
       if(result.sigma)state.sigmas.push({at,sceneId:source.sceneId,text:result.sigma,provisional:true});
+      if(!manual&&Number.isInteger(state.dirtyFrom)&&end>=state.dirtyFrom)delete state.dirtyFrom;
       if(!manual)state.attention=result.attention;
       save(source.draftId,state);
       if(!panel.hidden)showState();
@@ -234,13 +271,29 @@
   follow.addEventListener('change',()=>{if(follow.checked)schedulePreviewRead();else clearTimeout(autoTimer);showState();});
   playerHost?.addEventListener('sceneplayer:load',()=>{previewSnapshot=null;});
   playerHost?.addEventListener('sceneplayer:restart',()=>{previewSnapshot=null;});
+  playerHost?.addEventListener('sceneplayer:refresh',(event)=>{
+    const index=Number(event.detail?.index??-1);
+    const previous=previewSnapshot?.scenes[index];
+    previewSnapshot=null;
+    const current=getSource();
+    if(previous?.id===current.sceneId&&sceneStamp(previous.text)!==sceneStamp(current.text)){
+      rewrittenSceneIds.add(current.sceneId);
+      const state=load(current.draftId);
+      state.dirtyFrom=Math.min(Number.isInteger(state.dirtyFrom)?state.dirtyFrom:index,index);
+      save(current.draftId,state);
+      selectedQuestion=null;
+      aside.hidden=true;
+      clearTimeout(autoTimer);
+    }
+    if(!panel.hidden)showState();
+  });
   playerHost?.addEventListener('sceneplayer:scenechange',(event)=>{
     if(previewSnapshot)previewSnapshot.sceneIndex=Number(event.detail?.index??previewSnapshot.sceneIndex);
     previewSteps++;
     if(matchMedia('(max-width:600px)').matches){panel.hidden=true;toggle.setAttribute('aria-expanded','false');}
     const source=getSource();
     if(source.sceneIndex<bubbleSceneIndex)aside.hidden=true;
-    const previouslySpoken=load(source.draftId).observations.findLast(item=>item.sceneIndex===source.sceneIndex&&item.sceneId===source.sceneId&&item.spoken&&item.reaction);
+    const previouslySpoken=load(source.draftId).observations.findLast(item=>item.sceneId===source.sceneId&&item.spoken&&item.reaction&&currentRevision(item,source));
     if(previouslySpoken)speak(previouslySpoken.reaction,previouslySpoken.sceneId,previouslySpoken.ending,previouslySpoken.sceneIndex);
     schedulePreviewRead();if(!panel.hidden)showState();
   });
