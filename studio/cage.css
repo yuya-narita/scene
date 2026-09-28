@@ -70,3 +70,12 @@
   to{clip-path:inset(0 0 0 0);opacity:1}
 }
 @media(prefers-reduced-motion:reduce){.cage-written{animation:none}}
+.cage-question-label{display:block;margin:9px 0 3px;color:#6d665d;font-size:10px;letter-spacing:.03em}
+.cage-question-label[hidden],#cageQuestion[hidden]{display:none!important}
+#cageQuestion{margin:0 0 7px;line-height:1.55;color:#383d48;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+#cageQuestionHistory{margin-top:10px;border-top:1px solid #ddd;padding-top:10px}
+#cageQuestionHistory summary{font-size:12px;font-weight:700;color:#3d4149}
+#cageQuestionTrail{display:grid;gap:6px;margin-top:8px}
+#cageQuestionTrail .cage-history-item{display:grid;gap:3px;width:100%;padding:9px 10px;border:1px solid #e0ddd6;border-radius:9px;background:#fffdf9;text-align:left;color:#323741;line-height:1.45;cursor:pointer}
+#cageQuestionTrail .cage-history-item small{color:#85828a;font-size:10px}
+#cageQuestionTrail .cage-history-item span{font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif CJK JP",serif;font-size:12px;white-space:normal;overflow-wrap:anywhere}

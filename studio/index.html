@@ -27,7 +27,7 @@
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="stylesheet" href="./scene-player-core.css?v=20260919-object-pickup-v110">
   <link rel="stylesheet" href="./style.css?v=70.59">
-  <link rel="stylesheet" href="./cage.css?v=11">
+  <link rel="stylesheet" href="./cage.css?v=12">
   <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
   <style id="studioPreviewDeviceStyles">
     /* Studio-only authoring viewport. These rules never enter the published Player. */
@@ -249,11 +249,13 @@
       <div class="cage-readers" aria-label="読者たち"><span class="cage-reader is-active"><img src="./cage-icons/cage.png" alt=""><span>CAGE</span></span><span class="cage-reader is-pending"><img src="./cage-icons/coral.png" alt=""><span>準備中</span></span><span class="cage-reader is-pending"><img src="./cage-icons/blue.png" alt=""><span>準備中</span></span></div>
       <p id="cageStatus" class="cage-status" role="status">まだ読んでいない。</p>
       <div id="cageReaction" class="cage-reaction" hidden></div>
+      <small id="cageQuestionLabel" class="cage-question-label" hidden>CAGEが残した問い</small>
       <div id="cageQuestion" class="cage-question" hidden></div>
       <label id="cageFollowRow" class="cage-follow" hidden><input id="cageFollow" type="checkbox"> プレビューを一緒に読む <small>通過したSceneを順に読み、気になった時に話します</small></label>
       <button id="cageRead" type="button">このSceneについて聞く</button>
       <p class="cage-caption">自動読書をオフにした時は、ボタンで今のSceneを読ませられます。</p>
       <details id="cageHistory"><summary>話したことを振り返る</summary><div id="cageTrail"></div></details>
+      <details id="cageQuestionHistory"><summary>問いを振り返る</summary><div id="cageQuestionTrail"></div></details>
     </section>
   </aside>
   <header id="studioSharedHeader" class="studio-shared-header">
@@ -1146,7 +1148,7 @@
 <script src="./scene-text-splitter.js"></script>
 <script src="./scene-edit-core.js?v=70.27"></script>
 <script src="./script.js?v=146"></script>
-<script src="./cage.js?v=16"></script>
+<script src="./cage.js?v=17"></script>
 
 
 
