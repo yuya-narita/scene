@@ -60,6 +60,7 @@
   }
   function save(id,state){
     state.observations=state.observations.slice(-400);
+    state.memories=(state.memories||[]).slice(-3500);
     for(const name of ['lambdas','jumps','sigmas'])state[name]=state[name].slice(-80);
     localStorage.setItem(key(id),JSON.stringify(state));
   }
@@ -228,7 +229,20 @@
   function string(value,max){return typeof value==='string'?value.trim().slice(0,max):'';}
   function clean(value){
     const v=value&&typeof value==='object'?value:{};
-    return {reaction:string(v.reaction,500),lambda:string(v.lambda,180),question:string(v.question,180),sigma:string(v.sigma,180),attention:Array.isArray(v.attention)?v.attention.filter(x=>typeof x==='string').slice(0,4).map(x=>x.slice(0,70)):[],anchor:string(v.anchor,120)};
+    return {reaction:string(v.reaction,500),lambda:string(v.lambda,180),question:string(v.question,180),sigma:string(v.sigma,180),attention:Array.isArray(v.attention)?v.attention.filter(x=>typeof x==='string').slice(0,4).map(x=>x.slice(0,70)):[],anchor:string(v.anchor,120),facts:Array.isArray(v.facts)?v.facts.slice(0,4):[]};
+  }
+  function relevantFacts(state,scenes,before,query){
+    const grams=text=>{
+      const value=String(text||'').replace(/[\s、。！？「」『』（）・]/g,'');
+      const set=new Set();for(let i=0;i<value.length-2;i++)set.add(value.slice(i,i+3));return set;
+    };
+    const queryGrams=grams(query);
+    return (state.memories||state.observations.flatMap(entry=>Array.isArray(entry.facts)?entry.facts:[]))
+      .filter(fact=>Number.isInteger(fact.sceneIndex)&&fact.sceneIndex>=0&&fact.sceneIndex<before&&fact.sceneIndex<scenes.length&&scenes[fact.sceneIndex]?.id===fact.sceneId&&sceneStamp(scenes[fact.sceneIndex].text)===fact.sceneStamp&&scenes[fact.sceneIndex].text.includes(fact.quote))
+      .map(fact=>({...fact,score:[...grams(`${fact.quote}${fact.note}`)].filter(g=>queryGrams.has(g)).length}))
+      .filter(fact=>fact.score>=2)
+      .sort((a,b)=>b.score-a.score||b.sceneIndex-a.sceneIndex).slice(0,5)
+      .map(({sceneIndex,quote,note,kind})=>({sceneIndex,quote,note,kind}));
   }
   async function observe(automatic=false,ending=false){
     if(preview.hidden)return;
@@ -278,7 +292,8 @@
       // Manual asks must be about the current draft. Older summaries and
       // hypotheses can still name objects removed by a rewrite.
       const prior=manual?[]:state.observations.filter(x=>!x.manual&&x.sceneIndex<start&&x.sceneStamp&&snap.scenes[x.sceneIndex]?.id===x.sceneId&&x.sceneStamp===sceneStamp(snap.scenes[x.sceneIndex].text)).slice(-4);
-      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:manual?[]:batch,storyMemory:manual?'':memory.summary,focus,ending,manual,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:manual||source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
+      const longMemory=manual?[]:relevantFacts(state,snap.scenes,batchStart,batch.map(x=>x.text).join(' '));
+      const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({scene:currentScene,sceneId:source.sceneId,sceneIndex:end,mode:source.mode,truncated:source.truncated,contextScenes:manual?[]:batch,storyMemory:manual?'':memory.summary,longMemory,focus,ending,manual,history:prior.map(x=>({lambda:x.lambda,question:x.question,sigma:x.sigma,anchor:x.anchor})),attention:manual||source.mode==='preview'&&start===0?[]:state.attention.slice(-4)})});
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(string(data.error,130)||`読み込みに失敗しました（${response.status}）。`);
       const now=getSource();
@@ -287,6 +302,10 @@
         return;
       }
       const result=clean(data);
+      result.facts=manual?[]:result.facts.filter(fact=>{
+        const item=batch.find(x=>x.index===fact.sceneIndex);
+        return item&&typeof fact.quote==='string'&&item.text.includes(fact.quote)&&typeof fact.note==='string';
+      }).map(fact=>({sceneIndex:fact.sceneIndex,sceneId:String(snap.scenes[fact.sceneIndex]?.id||''),sceneStamp:sceneStamp(snap.scenes[fact.sceneIndex]?.text),quote:string(fact.quote,80),note:string(fact.note,100),kind:string(fact.kind,20)}));
       // Reject a fabricated quotation: the cited phrase must occur in the submitted text.
       if(result.anchor&&!currentScene.includes(result.anchor))throw new Error('読んだ箇所を確認できなかった。もう一度試して。');
       if(manual&&!result.reaction)throw new Error('今のSceneについて、うまく言葉にできなかった。もう一度聞いて。');
@@ -298,6 +317,12 @@
       const at=new Date().toISOString();
       const entry={at,day:day(),hash,sceneId:String(snap.scenes[end]?.id||source.sceneId),sceneIndex:end,sceneStamp:sceneStamp(snap.scenes[end]?.text||currentScene),storyMemory:manual?'':string(data.storyMemory,900),...result,spoken:shouldSpeak,ending,manual};
       state.observations.push(entry);
+      if(!manual&&result.facts.length){
+        state.memories ||= state.observations.slice(0,-1).flatMap(item=>Array.isArray(item.facts)?item.facts:[]);
+        for(const fact of result.facts){
+          if(!state.memories.some(item=>item.sceneId===fact.sceneId&&item.sceneStamp===fact.sceneStamp&&item.quote===fact.quote))state.memories.push(fact);
+        }
+      }
       if(result.lambda)state.lambdas.push({at,sceneId:source.sceneId,anchor:result.anchor,text:result.lambda});
       if(result.question)state.jumps.push({at,sceneId:source.sceneId,question:result.question,lambda:result.lambda});
       if(result.sigma)state.sigmas.push({at,sceneId:source.sceneId,text:result.sigma,provisional:true});
@@ -373,7 +398,8 @@
     schedulePreviewRead();
   });
   const visible=()=>{
-    root.hidden=Boolean(preview.hidden&&document.querySelector('#editorScreen')?.hidden&&document.querySelector('#advancedScreen')?.hidden);
+    // The reading companion belongs to Live Studio and its preview.
+    root.hidden=Boolean(preview.hidden&&document.querySelector('#advancedScreen')?.hidden);
     followRow.hidden=preview.hidden;
     toggle.disabled=preview.hidden;
     if(preview.hidden){previewSnapshot=null;panel.hidden=true;toggle.setAttribute('aria-expanded','false');aside.hidden=true;clearTimeout(autoTimer);toggle.classList.remove('cage-has-reaction');toggle.setAttribute('aria-label','CAGEを開く');follow.checked=false;endingPending=false;autoAttempts=0;previewSteps=0;}

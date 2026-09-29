@@ -1331,6 +1331,8 @@
         stoppedAt:latestPublicationStoppedAt||0
       },
       recProgress:clone(autoRecProgress),
+      theme:selectedTheme,
+      cinemaBackground:cinemaBackgroundUrl||'',
       cover:{url:coverImageUrl||'',name:coverImageFileName||'',position:coverPositionCss('phone'),positions:coverPositionsForDocument(),logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||''},
       assets:serializeDraftAssets()
     };
@@ -1400,6 +1402,11 @@
     renderAuthorSeriesOptions({preferred:String(row.easy?.seriesId||row.document?.metadata?.seriesId||'')});
     if(densitySelect)densitySelect.value='normal';
     coverImageUrl=map.get(row.cover?.url)||row.cover?.url||'';coverImageFileName=row.cover?.name||'';setCoverPositionFromValue(row.document?.cover?.position||row.cover?.position||'center center',row.document?.cover?.positions||row.cover?.positions);
+    cinemaBackgroundUrl=map.get(row.cinemaBackground)||row.cinemaBackground||((row.document?.theme==='cinema')?(row.document.scenes||[]).map(s=>s.presentation?.background?.src).find(Boolean)||'':'');
+    applyTheme(row.theme||row.document?.theme||'light');
+    const restoredCinemaPreview=$('#cinemaBackgroundPreview'),restoredCinemaClear=$('#cinemaBackgroundClear');
+    if(restoredCinemaPreview){restoredCinemaPreview.hidden=!cinemaBackgroundUrl;restoredCinemaPreview.style.backgroundImage=cinemaBackgroundUrl?`url("${cinemaBackgroundUrl}")`:'';}
+    if(restoredCinemaClear)restoredCinemaClear.hidden=!cinemaBackgroundUrl;
     coverLogoUrl=map.get(row.cover?.logoUrl)||row.cover?.logoUrl||row.document?.cover?.logo?.src||'';coverLogoFileName=row.cover?.logoName||row.document?.cover?.logo?._editorFileName||'';
     coverFontFamily=['serif','sans','mono'].includes(workingDocument?.cover?.fontFamily)?workingDocument.cover.fontFamily:'serif';
     endingFontFamily=effectiveEndingFontFamily(workingDocument);
@@ -6893,8 +6900,8 @@
     if(coverQuickLogoClear)coverQuickLogoClear.hidden=true;
     refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
   });
-  coverImageInput?.addEventListener('change',async()=>{
-    const file=coverImageInput.files?.[0]; if(!file)return;
+  async function applyCoverImageFile(file,editPosition=true){
+    if(!file)return;
     try{
       const snap=await snapshotPickedFile(file);
       if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
@@ -6912,9 +6919,10 @@
         player.els.coverBg.style.backgroundPosition=coverPositionCss(studioPreviewDevice);
       }
       syncEasyPublishButton();scheduleDraftSave(80);
-      requestAnimationFrame(()=>{renderDesktopLivePanel();openCoverPositionEditor();});
+      requestAnimationFrame(()=>{renderDesktopLivePanel();if(editPosition)openCoverPositionEditor();});
     }catch(error){console.error(error);appAlert(u('画像を読み込めませんでした。もう一度選択してください。','Could not load the image. Choose it again.'));coverImageInput.value='';}
-  });
+  }
+  coverImageInput?.addEventListener('change',()=>applyCoverImageFile(coverImageInput.files?.[0]));
   coverImageClear?.addEventListener('click',()=>{if(coverQuickImageClear)coverQuickImageClear.hidden=true;
     if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
     coverImageUrl=''; coverImageFileName='';
@@ -8011,7 +8019,32 @@
   $('#sceneBackgroundRemoveFile').addEventListener('click',()=>{const oldUrl=assetFrom('sceneBackgroundInput').src;if(oldUrl&&assetRegistry.has(oldUrl))unregisterAsset(oldUrl);setAssetField('sceneBackgroundInput','','');$('#sceneBackgroundInput').value='';$('#sceneBackgroundUrlInput').value='';updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
 
   const cinemaInput=$('#cinemaBackgroundInput'), cinemaPreview=$('#cinemaBackgroundPreview'), cinemaClear=$('#cinemaBackgroundClear');
-  cinemaInput.addEventListener('change',async()=>{const file=cinemaInput.files?.[0];if(!file)return;try{const snap=await snapshotPickedFile(file);if(cinemaBackgroundUrl&&assetRegistry.has(cinemaBackgroundUrl))unregisterAsset(cinemaBackgroundUrl);cinemaBackgroundUrl=URL.createObjectURL(snap.blob);registerAsset(cinemaBackgroundUrl,snap.blob,snap.name);cinemaPreview.style.backgroundImage=`url("${cinemaBackgroundUrl}")`;cinemaPreview.hidden=false;cinemaClear.hidden=false;if(workingDocument?.scenes?.[0]){const p=ensurePresentation(workingDocument.scenes[0]);p.background={src:cinemaBackgroundUrl,transition:'fade',dim:cinemaTone==='dark'?0.48:0.72,fit:'cover',position:'center center',_editorFileName:snap.name,_editorManaged:true};}}catch(error){console.error(error);appAlert(u('画像を読み込めませんでした。もう一度選択してください。','Could not load the image. Choose it again.'));cinemaInput.value='';}});
+  async function applyCinemaImageFile(file){
+    if(!file)return;
+    try{
+      const snap=await snapshotPickedFile(file);
+      if(cinemaBackgroundUrl&&assetRegistry.has(cinemaBackgroundUrl))unregisterAsset(cinemaBackgroundUrl);
+      cinemaBackgroundUrl=URL.createObjectURL(snap.blob);
+      registerAsset(cinemaBackgroundUrl,snap.blob,snap.name);
+      cinemaPreview.style.backgroundImage=`url("${cinemaBackgroundUrl}")`;
+      cinemaPreview.hidden=false;cinemaClear.hidden=false;
+      if(workingDocument?.scenes?.[0]){
+        const p=ensurePresentation(workingDocument.scenes[0]);
+        p.background={src:cinemaBackgroundUrl,transition:'fade',dim:cinemaTone==='dark'?0.48:0.72,fit:'cover',position:'center center',_editorFileName:snap.name,_editorManaged:true};
+      }
+      syncEasyPublishButton();scheduleDraftSave(80);
+    }catch(error){console.error(error);appAlert(u('画像を読み込めませんでした。もう一度選択してください。','Could not load the image. Choose it again.'));cinemaInput.value='';}
+  }
+  cinemaInput.addEventListener('change',()=>applyCinemaImageFile(cinemaInput.files?.[0]));
+  window.addEventListener('scene-studio:apply-illustration',(event)=>{
+    const file=event.detail?.file;
+    if(!(file instanceof Blob))return;
+    if(event.detail?.destination==='cover')applyCoverImageFile(file,false);
+    if(event.detail?.destination==='background'){
+      applyTheme('cinema');
+      applyCinemaImageFile(file);
+    }
+  });
   cinemaClear.addEventListener('click',()=>{if(cinemaBackgroundUrl&&assetRegistry.has(cinemaBackgroundUrl))unregisterAsset(cinemaBackgroundUrl);cinemaBackgroundUrl='';cinemaInput.value='';cinemaPreview.style.backgroundImage='';cinemaPreview.hidden=true;cinemaClear.hidden=true;if(workingDocument?.scenes?.[0]){const p=ensurePresentation(workingDocument.scenes[0]);delete p.background;}});
   $$('.cinema-tone-button').forEach(button=>button.addEventListener('click',()=>{cinemaTone=button.dataset.tone||'dark';$$('.cinema-tone-button').forEach(b=>{const on=b.dataset.tone===cinemaTone;b.classList.toggle('is-selected',on);b.setAttribute('aria-pressed',on?'true':'false');});if(workingDocument){workingDocument.appearance ||= {};workingDocument.appearance.cinemaTone=cinemaTone;}}));
 
