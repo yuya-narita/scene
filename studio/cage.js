@@ -267,7 +267,9 @@
         return;
       }
       const end=source.mode==='preview'?(manual||ending?source.sceneIndex:Math.min(source.sceneIndex,start+scenesPerRead-1)):source.sceneIndex;
-      const batchStart=!manual&&!memory.summary?Math.max(0,end-scenesPerRead+1):Math.max(start,end-scenesPerRead+1);
+      // A single new Scene still needs nearby earlier prose to resolve
+      // references such as a stain being described as an animal.
+      const batchStart=manual?end:!memory.summary?Math.max(0,end-scenesPerRead+1):Math.max(0,end-scenesPerRead+1,Math.min(start,end-2));
       const batch=source.mode==='preview'?snap.scenes.slice(batchStart,end+1).map((item,i)=>({index:batchStart+i,text:String(item.text||'').slice(0,450)})):[];
       // Read each batch from its own position, even if the author advances
       // while inference is in flight. The bubble identifies the Scene later.
