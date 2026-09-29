@@ -890,20 +890,62 @@
       }
       const checkoutUrl=`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/checkout`;
       const checkoutInit={method:'POST',headers:checkoutHeaders,cache:'no-store',body:JSON.stringify(checkoutBody)};
-      const raceTest=selectedPaymentMethod==='author_balance'&&new URLSearchParams(location.search).get('ahakoBalanceRace')==='1';
+      const testParams=new URLSearchParams(location.search);
+      const raceTest=selectedPaymentMethod==='author_balance'&&(
+        testParams.get('ahakoBalanceRace')==='1'||
+        testParams.get('ahakoBalanceFault')==='double_request'
+      );
       let checkoutResponse,checkoutPayload;
       if(raceTest){
         // Sandbox resilience test: fire the exact same balance-purchase request twice concurrently.
+        // V15 accepts both the explicit race flag and the older double_request fault URL so the
+        // test cannot silently fall back to a normal single purchase.
         const [a,b]=await Promise.all([
           fetch(checkoutUrl,{...checkoutInit}),
           fetch(checkoutUrl,{...checkoutInit})
         ]);
         const [pa,pb]=await Promise.all([a.json().catch(()=>null),b.json().catch(()=>null)]);
-        const candidates=[{r:a,p:pa},{r:b,p:pb}];
-        const success=candidates.find(x=>x.r.ok&&x.p?.ok&&x.p?.paid===true);
-        if(success){checkoutResponse=success.r;checkoutPayload=success.p;}
-        else {checkoutResponse=a;checkoutPayload=pa||pb;}
-        console.info('[AHAKO race test]',{first:{status:a.status,payload:pa},second:{status:b.status,payload:pb}});
+        const candidates=[{label:'A',r:a,p:pa},{label:'B',r:b,p:pb}];
+        const paid=candidates.filter(x=>x.r.ok&&x.p?.ok&&x.p?.paid===true);
+        const blocked=candidates.filter(x=>x.p?.code==='BALANCE_PURCHASE_BUSY'||x.p?.code==='ORDER_ALREADY_PAID');
+        console.info('[AHAKO V15 race test]',{
+          first:{status:a.status,payload:pa},
+          second:{status:b.status,payload:pb},
+          paidCount:paid.length,
+          blockedCount:blocked.length
+        });
+        if(paid.length===1){
+          checkoutResponse=paid[0].r;
+          checkoutPayload={
+            ...paid[0].p,
+            raceTest:{
+              ok:true,
+              paidCount:paid.length,
+              blockedCount:blocked.length,
+              first:{status:a.status,code:String(pa?.code||''),paid:pa?.paid===true},
+              second:{status:b.status,code:String(pb?.code||''),paid:pb?.paid===true}
+            }
+          };
+        }else{
+          const representative=paid[0]||candidates[0];
+          checkoutResponse=representative.r;
+          checkoutPayload={
+            ok:false,
+            error:`二重購入テスト異常: 成功 ${paid.length} 件 / ブロック ${blocked.length} 件`,
+            code:'BALANCE_PURCHASE_RACE_TEST_FAILED',
+            diagnostic:{
+              stage:'double_request_race',
+              message:'同一Orderへ同時に2本送信した結果が想定外です。',
+              stripeCode:'',
+              stripeStatus:null,
+              requestA:{status:a.status,code:String(pa?.code||''),paid:pa?.paid===true},
+              requestB:{status:b.status,code:String(pb?.code||''),paid:pb?.paid===true},
+              paidCount:paid.length,
+              blockedCount:blocked.length,
+              orderId
+            }
+          };
+        }
       }else{
         checkoutResponse=await fetch(checkoutUrl,checkoutInit);
         checkoutPayload=await checkoutResponse.json().catch(()=>null);
@@ -920,7 +962,7 @@
       if(checkoutPayload?.paid===true&&checkoutPayload?.paymentRail==='connected_balance'){
         const before=Number.isFinite(Number(checkoutPayload.availableBefore))?Number(checkoutPayload.availableBefore):displayedBalance;
         const after=Number.isFinite(Number(checkoutPayload.availableAfter))?Number(checkoutPayload.availableAfter):Math.max(0,Number(before||0)-Number(checkoutPayload.amount||orderPayload.order.amount||0));
-        if(ownCopyStatus)ownCopyStatus.textContent='売上残高から購入しました。';
+        if(ownCopyStatus)ownCopyStatus.textContent=checkoutPayload?.raceTest?.ok?'二重購入テスト：1件だけ成功しました。':'売上残高から購入しました。';
         await showBalancePurchaseModal({mode:'success',amount:Number(checkoutPayload.amount||orderPayload.order.amount),available:Number(before||0),after});
         if(ownCopyStatus)ownCopyStatus.textContent='MY COPYを本棚へ用意しています…';
         await finishPaidOwnCopy(orderId,accessToken,{continueReading:commercePreviewLocked(documentData)});
