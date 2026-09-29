@@ -245,6 +245,9 @@
     #easyIllustrationResult{display:grid;gap:11px}#easyIllustrationResult[hidden]{display:none}
     #easyIllustrationPreview{display:block;width:min(100%,300px);max-height:350px;object-fit:contain;border-radius:10px;background:#e9e6e1}
     .easy-illustration-actions{display:flex;flex-wrap:wrap;gap:7px}
+    .easy-illustration-gallery{display:flex;gap:8px;overflow-x:auto;padding:3px 2px 8px}.easy-illustration-gallery:empty{display:none}
+    .easy-illustration .easy-illustration-gallery button{flex:none;width:70px;height:82px;padding:3px;border-radius:8px}.easy-illustration-gallery button[aria-pressed="true"]{border-color:#292b30;box-shadow:0 0 0 1px #292b30 inset}
+    .easy-illustration-gallery img{display:block;width:100%;height:55px;object-fit:cover;border-radius:5px}.easy-illustration-gallery span{display:block;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .easy-illustration .easy-illustration-readers{display:flex;flex-wrap:wrap;gap:8px}
     .easy-illustration .easy-illustration-reader{display:flex;align-items:center;gap:8px;min-height:56px;padding:5px 10px 5px 5px;border-color:#dedad4;background:#fffdf9;text-align:left}
     .easy-illustration-reader img{display:block;width:43px;height:43px;object-fit:cover;border-radius:9px}
@@ -370,9 +373,11 @@
           <div class="easy-illustration-actions">
             <button id="easyIllustrationCover" type="button">表紙に使う</button>
             <button id="easyIllustrationBackground" type="button">背景に使う</button>
-            <button id="easyIllustrationDiscard" type="button">使わない</button>
+            <button id="easyIllustrationDownload" type="button">画像を保存</button>
+            <button id="easyIllustrationDiscard" type="button">履歴から削除</button>
           </div>
         </div>
+        <div id="easyIllustrationGallery" class="easy-illustration-gallery" aria-label="生成した画像の履歴"></div>
       </section>
 
       <section class="theme-section">
@@ -1196,7 +1201,7 @@
 <script src="./scene-edit-core.js?v=70.27"></script>
 <script src="./script.js?v=148"></script>
 <script src="./cage.js?v=25"></script>
-<script src="./easy-illustration.js?v=5"></script>
+<script src="./easy-illustration.js?v=6"></script>
 
 
 
