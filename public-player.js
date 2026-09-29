@@ -858,6 +858,7 @@
       rememberCommerceOrderToken(orderId,accessToken);
       const authorToken=authorSessionTokenForPurchase();
       let useAuthorBalance=false;
+      let selectedPaymentMethod='card';
       let displayedBalance=null;
       if(authorToken){
         if(ownCopyStatus)ownCopyStatus.textContent='売上残高を確認しています…';
@@ -870,14 +871,23 @@
             if(ownCopyStatus)ownCopyStatus.textContent='購入をキャンセルしました。';
             return;
           }
-          useAuthorBalance=choice==='balance';
+          selectedPaymentMethod=choice==='balance'?'author_balance':'card';
+          useAuthorBalance=selectedPaymentMethod==='author_balance';
         }
       }
       const checkoutHeaders={'Content-Type':'application/json','X-Order-Token':accessToken};
-      if(useAuthorBalance)checkoutHeaders.Authorization=`Bearer ${authorToken}`;
+      if(selectedPaymentMethod==='author_balance'){
+        checkoutHeaders.Authorization=`Bearer ${authorToken}`;
+        checkoutHeaders['X-Ahako-Payment-Method']='author_balance';
+      }
+      const checkoutBody={
+        returnUrl:cleanCommerceReturnUrl(),
+        paymentMethod:selectedPaymentMethod,
+        useAuthorBalance:selectedPaymentMethod==='author_balance'
+      };
       const checkoutResponse=await fetch(`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/checkout`,{
         method:'POST',headers:checkoutHeaders,cache:'no-store',
-        body:JSON.stringify({returnUrl:cleanCommerceReturnUrl(),useAuthorBalance})
+        body:JSON.stringify(checkoutBody)
       });
       const checkoutPayload=await checkoutResponse.json().catch(()=>null);
       if(!checkoutResponse.ok||!checkoutPayload?.ok){
@@ -896,6 +906,23 @@
         await showBalancePurchaseModal({mode:'success',amount:Number(checkoutPayload.amount||orderPayload.order.amount),available:Number(before||0),after});
         if(ownCopyStatus)ownCopyStatus.textContent='MY COPYを本棚へ用意しています…';
         await finishPaidOwnCopy(orderId,accessToken,{continueReading:commercePreviewLocked(documentData)});
+        return;
+      }
+      if(selectedPaymentMethod==='author_balance'){
+        await showBalanceDiagnosticModal({
+          error:'売上残高を選択したのにカード決済URLが返されました。',
+          diagnostic:{
+            stage:'client_checkout_guard',
+            message:`残高購入要求に対してWorkerが通常Checkoutを返しました。 paymentMethod=${selectedPaymentMethod}, useAuthorBalance=${String(useAuthorBalance)}`,
+            stripeCode:'',
+            stripeStatus:null,
+            availableBefore:displayedBalance,
+            orderAmount:Number(orderPayload.order.amount),
+            orderId
+          }
+        });
+        ownCopyButton.disabled=false;
+        if(ownCopyStatus)ownCopyStatus.textContent='残高購入の診断情報を表示しました。';
         return;
       }
       if(!checkoutPayload?.checkoutUrl){
