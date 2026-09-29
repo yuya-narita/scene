@@ -812,7 +812,7 @@
     ensureBalancePurchaseModalStyle();
     const d=payload?.diagnostic||{};
     const stage=String(d.stage||'unknown');
-    const stageLabel=stage==='account_debit'?'Account Debit':stage==='transfer_or_finalize'?'Transfer / Order確定':stage;
+    const stageLabel=stage==='account_debit'?'Account Debit':stage==='transfer_or_finalize'?'Transfer / Order確定':stage==='self_purchase_guard'?'自作品チェック':stage;
     const yen=v=>Number.isFinite(Number(v))?formatJPY(Number(v)):'—';
     const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     return new Promise(resolve=>{
