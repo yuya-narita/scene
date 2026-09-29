@@ -237,12 +237,25 @@
     .studio-author-status{position:absolute;top:6px;right:54px;max-width:190px;height:34px;padding:0 12px;border:1px solid rgba(120,120,120,.28);border-radius:999px;background:rgba(255,255,255,.86);color:#25272b;font:700 11px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
     .studio-author-status.is-signed-in::before{content:'●';margin-right:6px;color:#4e9a62;font-size:8px}
     @media(max-width:600px){.studio-author-status{top:7px;right:50px;max-width:118px;height:31px;padding:0 9px;font-size:9px}.author-auth-dialog input{font-size:16px!important}}
-    .easy-illustration{display:grid;gap:11px;padding:15px;border:1px solid #dedbd5;border-radius:16px;background:#fbfaf7;color:#292b30}
+    .easy-illustration{border:1px solid #dedbd5;border-radius:13px;background:#fbfaf7;color:#292b30}
+    .easy-illustration>summary{display:flex;align-items:center;gap:9px;min-height:48px;padding:7px 12px;list-style:none;cursor:pointer;font:700 12px/1.4 system-ui,sans-serif}
+    .easy-illustration>summary::-webkit-details-marker,#easyIllustrationResult>summary::-webkit-details-marker{display:none}
+    .easy-illustration>summary img{width:32px;height:32px;border-radius:8px;object-fit:cover}
+    .easy-illustration>summary .easy-illustration-count{margin-left:auto;color:#75747a;font-size:11px;font-weight:500;white-space:nowrap}
+    .easy-illustration>summary:after{content:"⌄";font-size:16px;color:#76757a}
+    .easy-illustration[open]>summary:after{transform:rotate(180deg)}
+    .easy-illustration-content{display:grid;gap:11px;padding:0 13px 13px}
     .easy-illustration>div:first-child{display:grid;gap:4px}.easy-illustration strong{font-size:14px}.easy-illustration small{font-size:11px;color:#74747a}
     .easy-illustration button{min-height:39px;padding:8px 14px;border:1px solid #bfc0c2;border-radius:11px;background:#fff;color:#292b30;font:700 12px/1.4 system-ui,sans-serif;cursor:pointer}
-    .easy-illustration button:disabled{opacity:.55;cursor:default}.easy-illustration>button{justify-self:start;background:#292b30;color:#fff;border-color:#292b30}
+    .easy-illustration button:disabled{opacity:.55;cursor:default}#easyIllustrationGenerate{justify-self:start;background:#292b30;color:#fff;border-color:#292b30}
     .easy-illustration p{margin:0;color:#63656a;font-size:11px;line-height:1.5}.easy-illustration p:empty{display:none}
-    #easyIllustrationResult{display:grid;gap:11px}#easyIllustrationResult[hidden]{display:none}
+    #easyIllustrationResult[hidden]{display:none}
+    #easyIllustrationResult{border-top:1px solid #e7e3dd;padding-top:8px}
+    #easyIllustrationResult>summary{display:flex;align-items:center;gap:9px;min-height:49px;list-style:none;cursor:pointer;font:700 12px/1.4 system-ui,sans-serif}
+    #easyIllustrationResult>summary img{width:43px;height:43px;object-fit:cover;border-radius:6px}
+    #easyIllustrationResult>summary:after{content:"見る ›";margin-left:auto;color:#62646b;font-size:11px}
+    #easyIllustrationResult[open]>summary:after{content:"閉じる ⌃"}
+    .easy-illustration-expanded{display:grid;gap:11px;padding-top:8px}
     #easyIllustrationPreview{display:block;width:min(100%,300px);max-height:350px;object-fit:contain;border-radius:10px;background:#e9e6e1}
     .easy-illustration-actions{display:flex;flex-wrap:wrap;gap:7px}
     .easy-illustration-gallery{display:flex;gap:8px;overflow-x:auto;padding:3px 2px 8px}.easy-illustration-gallery:empty{display:none}
@@ -359,8 +372,10 @@
         </div>
       </label>
 
-      <section class="easy-illustration" aria-label="作品から一枚描く">
-        <div><strong>この子が思い浮かべた一枚</strong><small>本文の冒頭・中盤・末尾から抜粋をCloudflareのAIへ送り、一枚生成します。確認してから使えます。</small></div>
+      <details class="easy-illustration" id="easyIllustrationPanel">
+        <summary><img src="./cage-icons/cage.png" alt=""><span>この子に一枚描いてもらう</span><span id="easyIllustrationCount" class="easy-illustration-count"></span></summary>
+        <div class="easy-illustration-content">
+        <p>本文の冒頭・中盤・末尾から抜粋をCloudflareのAIへ送ります。</p>
         <div class="easy-illustration-readers" role="group" aria-label="絵を思い浮かべる子">
           <button class="easy-illustration-reader is-selected" type="button" data-illustrator="cage" aria-pressed="true"><img src="./cage-icons/cage.png" alt=""><span><strong>CAGE</strong><small>墨のにじみ</small></span></button>
           <button class="easy-illustration-reader" type="button" data-illustrator="coral" aria-pressed="false"><img src="./cage-icons/coral.png" alt=""><span><strong>珊瑚色の子</strong><small>光の劇場アニメ</small></span></button>
@@ -368,7 +383,9 @@
         </div>
         <button id="easyIllustrationGenerate" type="button">この子に思い浮かべてもらう</button>
         <p id="easyIllustrationStatus" role="status" aria-live="polite"></p>
-        <div id="easyIllustrationResult" hidden>
+        <details id="easyIllustrationResult" hidden>
+          <summary><img id="easyIllustrationThumb" alt=""><span id="easyIllustrationResultLabel">描いた一枚</span></summary>
+          <div class="easy-illustration-expanded">
           <div id="easyIllustrationPaper" class="easy-illustration-paper" data-illustrator="cage"><div class="easy-illustration-figure"><img id="easyIllustrationPreview" alt="生成した作品のイメージ"></div><span id="easyIllustrationByline">CAGEが思い浮かべた景色</span></div>
           <div class="easy-illustration-actions">
             <button id="easyIllustrationCover" type="button">表紙に使う</button>
@@ -376,9 +393,11 @@
             <button id="easyIllustrationDownload" type="button">画像を保存</button>
             <button id="easyIllustrationDiscard" type="button">履歴から削除</button>
           </div>
-        </div>
+          </div>
+        </details>
         <div id="easyIllustrationGallery" class="easy-illustration-gallery" aria-label="生成した画像の履歴"></div>
-      </section>
+        </div>
+      </details>
 
       <section class="theme-section">
         <div class="section-heading"><span>雰囲気</span><small>あとから変えられます</small></div>
@@ -1201,7 +1220,7 @@
 <script src="./scene-edit-core.js?v=70.27"></script>
 <script src="./script.js?v=148"></script>
 <script src="./cage.js?v=25"></script>
-<script src="./easy-illustration.js?v=6"></script>
+<script src="./easy-illustration.js?v=7"></script>
 
 
 
