@@ -808,6 +808,34 @@
     });
   }
 
+  function showBalanceDiagnosticModal(payload){
+    ensureBalancePurchaseModalStyle();
+    const d=payload?.diagnostic||{};
+    const stage=String(d.stage||'unknown');
+    const stageLabel=stage==='account_debit'?'Account Debit':stage==='transfer_or_finalize'?'Transfer / Order確定':stage;
+    const yen=v=>Number.isFinite(Number(v))?formatJPY(Number(v)):'—';
+    const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    return new Promise(resolve=>{
+      const overlay=document.createElement('div');overlay.className='ahako-balance-modal';
+      overlay.innerHTML=`<div class="ahako-balance-card" role="dialog" aria-modal="true" aria-label="残高購入エラー">
+        <h2>残高購入エラー</h2>
+        <div class="ahako-balance-rows">
+          <div class="ahako-balance-row"><span>失敗した段階</span><strong>${esc(stageLabel)}</strong></div>
+          <div class="ahako-balance-row"><span>利用可能残高</span><strong>${yen(d.availableBefore)}</strong></div>
+          <div class="ahako-balance-row"><span>購入金額</span><strong>${yen(d.orderAmount)}</strong></div>
+          <div class="ahako-balance-row"><span>Stripe code</span><strong>${esc(d.stripeCode||'—')}</strong></div>
+          <div class="ahako-balance-row"><span>HTTP status</span><strong>${esc(d.stripeStatus||'—')}</strong></div>
+        </div>
+        <p class="ahako-balance-note" style="word-break:break-word"><strong>内容</strong><br>${esc(d.message||payload?.error||'不明なエラー')}</p>
+        <p class="ahako-balance-note" style="word-break:break-all"><strong>Order</strong><br>${esc(d.orderId||'—')}</p>
+        <div class="ahako-balance-actions"><button data-choice="close">閉じる</button></div>
+      </div>`;
+      const close=()=>{overlay.remove();resolve();};
+      overlay.addEventListener('click',e=>{if(e.target.closest('[data-choice="close"]')||e.target===overlay)close();});
+      document.body.appendChild(overlay);
+    });
+  }
+
   async function purchasePublicOwnCopy(){
     const publicationId=currentWorkId();if(!publicationId||!ownCopyButton)return;
     ownCopyButton.disabled=true;
@@ -853,6 +881,12 @@
       });
       const checkoutPayload=await checkoutResponse.json().catch(()=>null);
       if(!checkoutResponse.ok||!checkoutPayload?.ok){
+        if(checkoutPayload?.diagnostic){
+          await showBalanceDiagnosticModal(checkoutPayload);
+          ownCopyButton.disabled=false;
+          if(ownCopyStatus)ownCopyStatus.textContent='残高購入の診断情報を表示しました。';
+          return;
+        }
         throw new Error(String(checkoutPayload?.error||'Stripe決済を開始できませんでした。'));
       }
       if(checkoutPayload?.paid===true&&checkoutPayload?.paymentRail==='connected_balance'){
