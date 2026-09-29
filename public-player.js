@@ -878,7 +878,6 @@
       const checkoutHeaders={'Content-Type':'application/json','X-Order-Token':accessToken};
       if(selectedPaymentMethod==='author_balance'){
         checkoutHeaders.Authorization=`Bearer ${authorToken}`;
-        checkoutHeaders['X-Ahako-Payment-Method']='author_balance';
       }
       const checkoutBody={
         returnUrl:cleanCommerceReturnUrl(),
