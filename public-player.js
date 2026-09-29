@@ -884,6 +884,10 @@
         paymentMethod:selectedPaymentMethod,
         useAuthorBalance:selectedPaymentMethod==='author_balance'
       };
+      if(selectedPaymentMethod==='author_balance'){
+        const fault=new URLSearchParams(location.search).get('ahakoBalanceFault');
+        if(fault==='after_debit'||fault==='after_transfer')checkoutBody.balanceFaultTest=fault;
+      }
       const checkoutResponse=await fetch(`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/checkout`,{
         method:'POST',headers:checkoutHeaders,cache:'no-store',
         body:JSON.stringify(checkoutBody)
