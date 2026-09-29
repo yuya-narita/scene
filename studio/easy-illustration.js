@@ -1,7 +1,7 @@
 (()=>{
   'use strict';
   const $=id=>document.getElementById(id);
-  const body=$('bodyInput'),title=$('titleInput'),generate=$('easyIllustrationGenerate'),status=$('easyIllustrationStatus'),result=$('easyIllustrationResult'),preview=$('easyIllustrationPreview'),paper=$('easyIllustrationPaper'),byline=$('easyIllustrationByline'),gallery=$('easyIllustrationGallery'),count=$('easyIllustrationCount'),thumb=$('easyIllustrationThumb'),resultLabel=$('easyIllustrationResultLabel');
+  const body=$('bodyInput'),title=$('titleInput'),generate=$('easyIllustrationGenerate'),status=$('easyIllustrationStatus'),result=$('easyIllustrationResult'),preview=$('easyIllustrationPreview'),paper=$('easyIllustrationPaper'),byline=$('easyIllustrationByline'),gallery=$('easyIllustrationGallery'),count=$('easyIllustrationCount');
   if(!body||!generate||!result||!preview||!gallery)return;
   const names={cage:'CAGE',coral:'珊瑚色の子',blue:'青い子'};
   let illustrator='cage',selected=null,items=[];
@@ -33,7 +33,7 @@
   };
   const select=(item,reveal=false)=>{
     selected=item;
-    if(!item){preview.removeAttribute('src');thumb?.removeAttribute('src');result.hidden=true;result.open=false;paper?.classList.remove('is-revealing');}
+    if(!item){preview.removeAttribute('src');result.hidden=true;paper?.classList.remove('is-revealing');}
     else{
       paper.dataset.illustrator=item.illustrator;
       byline.textContent=`${names[item.illustrator]||'この子'}が思い浮かべた景色`;
@@ -41,16 +41,14 @@
       paper.classList.remove('is-revealing');
       preview.onload=reveal?()=>{void paper.offsetWidth;paper.classList.add('is-revealing');}:null;
       preview.src=urlFor(item);
-      if(thumb)thumb.src=urlFor(item);
-      if(resultLabel)resultLabel.textContent=`${names[item.illustrator]||'この子'}が描いた一枚`;
-      result.hidden=false;result.open=false;
+      result.hidden=false;
     }
     render();
   };
   storage('readonly',store=>store.getAll()).then(saved=>{
     const known=new Set(items.map(item=>item.id));
     items=[...items,...saved.filter(item=>!known.has(item.id))].sort((a,b)=>b.createdAt-a.createdAt);
-    render();
+    if(!selected&&items.length)select(items[0]);else render();
   }).catch(()=>{});
   for(const reader of document.querySelectorAll('.easy-illustration-reader'))reader.addEventListener('click',()=>{
     if(generate.disabled)return;
@@ -59,7 +57,7 @@
     for(const item of document.querySelectorAll('.easy-illustration-reader')){
       const chosen=item===reader;item.classList.toggle('is-selected',chosen);item.setAttribute('aria-pressed',String(chosen));
     }
-    status.textContent=`${names[next]}を選びました。前の絵は下の履歴から選べます。`;
+    status.textContent=`${names[next]}を選びました。前の絵は履歴から選べます。`;
   });
   const excerpt=text=>{
     const value=text.trim();if(value.length<=3300)return value;

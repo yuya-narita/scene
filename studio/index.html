@@ -249,13 +249,8 @@
     .easy-illustration button{min-height:39px;padding:8px 14px;border:1px solid #bfc0c2;border-radius:11px;background:#fff;color:#292b30;font:700 12px/1.4 system-ui,sans-serif;cursor:pointer}
     .easy-illustration button:disabled{opacity:.55;cursor:default}#easyIllustrationGenerate{justify-self:start;background:#292b30;color:#fff;border-color:#292b30}
     .easy-illustration p{margin:0;color:#63656a;font-size:11px;line-height:1.5}.easy-illustration p:empty{display:none}
+    #easyIllustrationResult{display:grid;gap:10px;border-top:1px solid #e7e3dd;padding-top:10px}
     #easyIllustrationResult[hidden]{display:none}
-    #easyIllustrationResult{border-top:1px solid #e7e3dd;padding-top:8px}
-    #easyIllustrationResult>summary{display:flex;align-items:center;gap:9px;min-height:49px;list-style:none;cursor:pointer;font:700 12px/1.4 system-ui,sans-serif}
-    #easyIllustrationResult>summary img{width:43px;height:43px;object-fit:cover;border-radius:6px}
-    #easyIllustrationResult>summary:after{content:"見る ›";margin-left:auto;color:#62646b;font-size:11px}
-    #easyIllustrationResult[open]>summary:after{content:"閉じる ⌃"}
-    .easy-illustration-expanded{display:grid;gap:11px;padding-top:8px}
     #easyIllustrationPreview{display:block;width:min(100%,300px);max-height:350px;object-fit:contain;border-radius:10px;background:#e9e6e1}
     .easy-illustration-actions{display:flex;flex-wrap:wrap;gap:7px}
     .easy-illustration-gallery{display:flex;gap:8px;overflow-x:auto;padding:3px 2px 8px}.easy-illustration-gallery:empty{display:none}
@@ -383,9 +378,8 @@
         </div>
         <button id="easyIllustrationGenerate" type="button">この子に思い浮かべてもらう</button>
         <p id="easyIllustrationStatus" role="status" aria-live="polite"></p>
-        <details id="easyIllustrationResult" hidden>
-          <summary><img id="easyIllustrationThumb" alt=""><span id="easyIllustrationResultLabel">描いた一枚</span></summary>
-          <div class="easy-illustration-expanded">
+        <div id="easyIllustrationGallery" class="easy-illustration-gallery" aria-label="生成した画像の履歴"></div>
+        <div id="easyIllustrationResult" hidden>
           <div id="easyIllustrationPaper" class="easy-illustration-paper" data-illustrator="cage"><div class="easy-illustration-figure"><img id="easyIllustrationPreview" alt="生成した作品のイメージ"></div><span id="easyIllustrationByline">CAGEが思い浮かべた景色</span></div>
           <div class="easy-illustration-actions">
             <button id="easyIllustrationCover" type="button">表紙に使う</button>
@@ -393,9 +387,7 @@
             <button id="easyIllustrationDownload" type="button">画像を保存</button>
             <button id="easyIllustrationDiscard" type="button">履歴から削除</button>
           </div>
-          </div>
-        </details>
-        <div id="easyIllustrationGallery" class="easy-illustration-gallery" aria-label="生成した画像の履歴"></div>
+        </div>
         </div>
       </details>
 
@@ -1220,7 +1212,7 @@
 <script src="./scene-edit-core.js?v=70.27"></script>
 <script src="./script.js?v=148"></script>
 <script src="./cage.js?v=25"></script>
-<script src="./easy-illustration.js?v=7"></script>
+<script src="./easy-illustration.js?v=8"></script>
 
 
 
