@@ -1,7 +1,7 @@
 (()=>{
   'use strict';
   const $=id=>document.getElementById(id);
-  const body=$('bodyInput'),title=$('titleInput'),generate=$('easyIllustrationGenerate'),status=$('easyIllustrationStatus'),result=$('easyIllustrationResult'),preview=$('easyIllustrationPreview'),paper=$('easyIllustrationPaper'),byline=$('easyIllustrationByline'),gallery=$('easyIllustrationGallery'),count=$('easyIllustrationCount');
+  const body=$('bodyInput'),title=$('titleInput'),generate=$('easyIllustrationGenerate'),status=$('easyIllustrationStatus'),result=$('easyIllustrationResult'),preview=$('easyIllustrationPreview'),paper=$('easyIllustrationPaper'),byline=$('easyIllustrationByline'),gallery=$('easyIllustrationGallery'),count=$('easyIllustrationCount'),resultLabel=$('easyIllustrationResultLabel');
   if(!body||!generate||!result||!preview||!gallery)return;
   const names={cage:'CAGE',coral:'珊瑚色の子',blue:'青い子'};
   let illustrator='cage',selected=null,items=[];
@@ -28,20 +28,20 @@
       button.title=`${names[item.illustrator]||'生成画像'} ${new Date(item.createdAt).toLocaleString()}`;
       const img=document.createElement('img');img.src=urlFor(item);img.alt='';
       const label=document.createElement('span');label.textContent=names[item.illustrator]||'生成画像';
-      button.append(img,label);button.addEventListener('click',()=>select(item));gallery.append(button);
+      button.append(img,label);button.addEventListener('click',()=>{select(item);result.showModal();});gallery.append(button);
     }
   };
   const select=(item,reveal=false)=>{
     selected=item;
-    if(!item){preview.removeAttribute('src');result.hidden=true;paper?.classList.remove('is-revealing');}
+    if(!item){preview.removeAttribute('src');paper?.classList.remove('is-revealing');}
     else{
       paper.dataset.illustrator=item.illustrator;
       byline.textContent=`${names[item.illustrator]||'この子'}が思い浮かべた景色`;
+      if(resultLabel)resultLabel.textContent=`${names[item.illustrator]||'この子'}が描いた一枚`;
       preview.alt=`${names[item.illustrator]||'この子'}が思い浮かべた作品のイメージ`;
       paper.classList.remove('is-revealing');
       preview.onload=reveal?()=>{void paper.offsetWidth;paper.classList.add('is-revealing');}:null;
       preview.src=urlFor(item);
-      result.hidden=false;
     }
     render();
   };
@@ -81,9 +81,9 @@
       const binary=atob(data.image),bytes=Uint8Array.from(binary,char=>char.charCodeAt(0));
       const type=data.mimeType==='image/png'?'image/png':'image/jpeg';
       const item={id:crypto.randomUUID(),illustrator:requestedIllustrator,createdAt:Date.now(),blob:new Blob([bytes],{type})};
-      items.unshift(item);select(item,true);
-      try{await storage('readwrite',store=>store.put(item));status.textContent='絵を端末の履歴に残しました。画像を保存することもできます。';}
-      catch(_){status.textContent='絵を表示しました。端末の履歴に保存できなかったので「画像を保存」を押してください。';}
+      items.unshift(item);select(item);
+      try{await storage('readwrite',store=>store.put(item));status.textContent='一枚描けました。サムネイルを押して確認できます。';}
+      catch(_){status.textContent='一枚描けました。端末の履歴に保存できなかったので、サムネイルから画像を保存してください。';}
     }catch(error){status.textContent=error.message||'画像を描けませんでした。';}
     finally{generate.disabled=false;}
   });
@@ -93,6 +93,7 @@
     const file=new File([selected.blob],`${selected.illustrator}-illustration.${type}`,{type:selected.blob.type});
     window.dispatchEvent(new CustomEvent('scene-studio:apply-illustration',{detail:{file,destination}}));
     status.textContent=destination==='cover'?'表紙に設定しました。絵は履歴にも残っています。':'CINEMAの背景に設定しました。絵は履歴にも残っています。';
+    result.close();
   };
   $('easyIllustrationCover')?.addEventListener('click',()=>apply('cover'));
   $('easyIllustrationBackground')?.addEventListener('click',()=>apply('background'));
@@ -104,10 +105,16 @@
   });
   $('easyIllustrationDiscard')?.addEventListener('click',async()=>{
     if(!selected||!confirm('この画像を端末の履歴から削除しますか？'))return;
-    const removed=selected;items=items.filter(item=>item.id!==removed.id);select(items[0]||null);
+    const removed=selected;result.close();items=items.filter(item=>item.id!==removed.id);select(items[0]||null);
     try{await storage('readwrite',store=>store.delete(removed.id));}catch(_){}
     const oldUrl=urls.get(removed.id);if(oldUrl){URL.revokeObjectURL(oldUrl);urls.delete(removed.id);}
     status.textContent='画像を履歴から削除しました。';
+  });
+  $('easyIllustrationClose')?.addEventListener('click',()=>result.close());
+  result.addEventListener('click',event=>{
+    if(event.target!==result)return;
+    const rect=result.getBoundingClientRect();
+    if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)result.close();
   });
   window.addEventListener('pagehide',()=>{for(const url of urls.values())URL.revokeObjectURL(url);urls.clear();});
 })();

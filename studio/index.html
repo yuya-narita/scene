@@ -239,7 +239,7 @@
     @media(max-width:600px){.studio-author-status{top:7px;right:50px;max-width:118px;height:31px;padding:0 9px;font-size:9px}.author-auth-dialog input{font-size:16px!important}}
     .easy-illustration{border:1px solid #dedbd5;border-radius:13px;background:#fbfaf7;color:#292b30}
     .easy-illustration>summary{display:flex;align-items:center;gap:9px;min-height:48px;padding:7px 12px;list-style:none;cursor:pointer;font:700 12px/1.4 system-ui,sans-serif}
-    .easy-illustration>summary::-webkit-details-marker,#easyIllustrationResult>summary::-webkit-details-marker{display:none}
+    .easy-illustration>summary::-webkit-details-marker{display:none}
     .easy-illustration>summary img{width:32px;height:32px;border-radius:8px;object-fit:cover}
     .easy-illustration>summary .easy-illustration-count{margin-left:auto;color:#75747a;font-size:11px;font-weight:500;white-space:nowrap}
     .easy-illustration>summary:after{content:"⌄";font-size:16px;color:#76757a}
@@ -249,8 +249,16 @@
     .easy-illustration button{min-height:39px;padding:8px 14px;border:1px solid #bfc0c2;border-radius:11px;background:#fff;color:#292b30;font:700 12px/1.4 system-ui,sans-serif;cursor:pointer}
     .easy-illustration button:disabled{opacity:.55;cursor:default}#easyIllustrationGenerate{justify-self:start;background:#292b30;color:#fff;border-color:#292b30}
     .easy-illustration p{margin:0;color:#63656a;font-size:11px;line-height:1.5}.easy-illustration p:empty{display:none}
-    #easyIllustrationResult{display:grid;gap:10px;border-top:1px solid #e7e3dd;padding-top:10px}
-    #easyIllustrationResult[hidden]{display:none}
+    #easyIllustrationResult{width:min(92vw,620px);max-height:calc(100dvh - 32px);padding:18px;border:1px solid #dcd6cc;border-radius:16px;background:#fbfaf7;box-shadow:0 25px 80px #17191d77;color:#292b30;overflow:auto}
+    #easyIllustrationResult:not([open]){display:none}
+    #easyIllustrationResult::backdrop{background:#11141bb8}
+    .easy-illustration-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;font:700 13px/1.5 system-ui,sans-serif}
+    #easyIllustrationClose{min-width:42px;min-height:42px;border:1px solid #c9c4be;border-radius:50%;background:#fff;color:#292b30;font-size:22px;cursor:pointer}
+    .easy-illustration-modal-body{display:grid;gap:14px;justify-items:center}
+    #easyIllustrationResult .easy-illustration-paper{width:min(100%,520px)}
+    #easyIllustrationResult #easyIllustrationPreview{max-height:60dvh}
+    #easyIllustrationResult .easy-illustration-actions{justify-content:center}
+    #easyIllustrationResult .easy-illustration-actions button{min-height:42px;padding:8px 12px;border:1px solid #bfc0c2;border-radius:10px;background:#fff;color:#292b30;font:700 12px/1.4 system-ui,sans-serif;cursor:pointer}
     #easyIllustrationPreview{display:block;width:min(100%,300px);max-height:350px;object-fit:contain;border-radius:10px;background:#e9e6e1}
     .easy-illustration-actions{display:flex;flex-wrap:wrap;gap:7px}
     .easy-illustration-gallery{display:flex;gap:8px;overflow-x:auto;padding:3px 2px 8px}.easy-illustration-gallery:empty{display:none}
@@ -379,7 +387,11 @@
         <button id="easyIllustrationGenerate" type="button">この子に思い浮かべてもらう</button>
         <p id="easyIllustrationStatus" role="status" aria-live="polite"></p>
         <div id="easyIllustrationGallery" class="easy-illustration-gallery" aria-label="生成した画像の履歴"></div>
-        <div id="easyIllustrationResult" hidden>
+        </div>
+      </details>
+      <dialog id="easyIllustrationResult" aria-label="生成画像の確認">
+        <div class="easy-illustration-modal-head"><span id="easyIllustrationResultLabel">描いた一枚</span><button id="easyIllustrationClose" type="button" aria-label="閉じる">×</button></div>
+        <div class="easy-illustration-modal-body">
           <div id="easyIllustrationPaper" class="easy-illustration-paper" data-illustrator="cage"><div class="easy-illustration-figure"><img id="easyIllustrationPreview" alt="生成した作品のイメージ"></div><span id="easyIllustrationByline">CAGEが思い浮かべた景色</span></div>
           <div class="easy-illustration-actions">
             <button id="easyIllustrationCover" type="button">表紙に使う</button>
@@ -388,8 +400,7 @@
             <button id="easyIllustrationDiscard" type="button">履歴から削除</button>
           </div>
         </div>
-        </div>
-      </details>
+      </dialog>
 
       <section class="theme-section">
         <div class="section-heading"><span>雰囲気</span><small>あとから変えられます</small></div>
@@ -1212,7 +1223,7 @@
 <script src="./scene-edit-core.js?v=70.27"></script>
 <script src="./script.js?v=148"></script>
 <script src="./cage.js?v=25"></script>
-<script src="./easy-illustration.js?v=8"></script>
+<script src="./easy-illustration.js?v=9"></script>
 
 
 
