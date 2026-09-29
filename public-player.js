@@ -888,11 +888,26 @@
         const fault=new URLSearchParams(location.search).get('ahakoBalanceFault');
         if(fault==='after_debit'||fault==='after_transfer')checkoutBody.balanceFaultTest=fault;
       }
-      const checkoutResponse=await fetch(`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/checkout`,{
-        method:'POST',headers:checkoutHeaders,cache:'no-store',
-        body:JSON.stringify(checkoutBody)
-      });
-      const checkoutPayload=await checkoutResponse.json().catch(()=>null);
+      const checkoutUrl=`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/checkout`;
+      const checkoutInit={method:'POST',headers:checkoutHeaders,cache:'no-store',body:JSON.stringify(checkoutBody)};
+      const raceTest=selectedPaymentMethod==='author_balance'&&new URLSearchParams(location.search).get('ahakoBalanceRace')==='1';
+      let checkoutResponse,checkoutPayload;
+      if(raceTest){
+        // Sandbox resilience test: fire the exact same balance-purchase request twice concurrently.
+        const [a,b]=await Promise.all([
+          fetch(checkoutUrl,{...checkoutInit}),
+          fetch(checkoutUrl,{...checkoutInit})
+        ]);
+        const [pa,pb]=await Promise.all([a.json().catch(()=>null),b.json().catch(()=>null)]);
+        const candidates=[{r:a,p:pa},{r:b,p:pb}];
+        const success=candidates.find(x=>x.r.ok&&x.p?.ok&&x.p?.paid===true);
+        if(success){checkoutResponse=success.r;checkoutPayload=success.p;}
+        else {checkoutResponse=a;checkoutPayload=pa||pb;}
+        console.info('[AHAKO race test]',{first:{status:a.status,payload:pa},second:{status:b.status,payload:pb}});
+      }else{
+        checkoutResponse=await fetch(checkoutUrl,checkoutInit);
+        checkoutPayload=await checkoutResponse.json().catch(()=>null);
+      }
       if(!checkoutResponse.ok||!checkoutPayload?.ok){
         if(checkoutPayload?.diagnostic){
           await showBalanceDiagnosticModal(checkoutPayload);
