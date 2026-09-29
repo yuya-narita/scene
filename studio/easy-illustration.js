@@ -6,15 +6,27 @@
   const status=document.getElementById('easyIllustrationStatus');
   const result=document.getElementById('easyIllustrationResult');
   const preview=document.getElementById('easyIllustrationPreview');
+  const paper=document.getElementById('easyIllustrationPaper');
+  const byline=document.getElementById('easyIllustrationByline');
+  const readers=[...document.querySelectorAll('.easy-illustration-reader')];
   if(!body||!generate||!result||!preview)return;
   const cover=document.getElementById('easyIllustrationCover');
   const background=document.getElementById('easyIllustrationBackground');
   const discard=document.getElementById('easyIllustrationDiscard');
-  let file=null,source='',objectUrl='';
+  const names={cage:'CAGE',coral:'珊瑚色の子',blue:'青い子'};
+  let file=null,source='',objectUrl='',illustrator='cage';
   const clear=()=>{
     if(objectUrl)URL.revokeObjectURL(objectUrl);
-    file=null;source='';objectUrl='';preview.removeAttribute('src');result.hidden=true;
+    file=null;source='';objectUrl='';preview.removeAttribute('src');result.hidden=true;paper?.classList.remove('is-revealing');
   };
+  for(const reader of readers)reader.addEventListener('click',()=>{
+    if(generate.disabled)return;
+    const next=reader.dataset.illustrator;
+    if(!names[next]||next===illustrator)return;
+    illustrator=next;clear();
+    for(const item of readers){const chosen=item===reader;item.classList.toggle('is-selected',chosen);item.setAttribute('aria-pressed',String(chosen));}
+    status.textContent=`${names[next]}に絵を思い浮かべてもらいます。`;
+  });
   const excerpt=text=>{
     const value=text.trim();
     if(value.length<=3300)return value;
@@ -32,16 +44,20 @@
     try{
       const response=await fetch('https://scene-studio-api.a-hako.workers.dev/cage/illustrate',{
         method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
-        body:JSON.stringify({title:title?.value||'',excerpt:excerpt(text)})
+        body:JSON.stringify({title:title?.value||'',excerpt:excerpt(text),illustrator})
       });
       const data=await response.json().catch(()=>({}));
       if(!response.ok||!data.ok||typeof data.image!=='string')throw new Error(data.error||'画像を描けませんでした。');
       if(body.value.trim()!==text){status.textContent='生成中に本文が変わったので、この絵は適用しませんでした。';return;}
       const binary=atob(data.image);
       const bytes=Uint8Array.from(binary,char=>char.charCodeAt(0));
-      file=new File([bytes],'cage-illustration.jpg',{type:'image/jpeg'});
+      file=new File([bytes],`${illustrator}-illustration.jpg`,{type:'image/jpeg'});
       source=text;
       objectUrl=URL.createObjectURL(file);
+      if(paper)paper.dataset.illustrator=illustrator;
+      if(byline)byline.textContent=`${names[illustrator]}が思い浮かべた景色`;
+      preview.alt=`${names[illustrator]}が思い浮かべた作品のイメージ`;
+      preview.onload=()=>{paper?.classList.remove('is-revealing');void paper?.offsetWidth;paper?.classList.add('is-revealing');};
       preview.src=objectUrl;
       result.hidden=false;
       status.textContent='気に入ったら使い道を選んでください。';

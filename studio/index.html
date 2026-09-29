@@ -245,6 +245,22 @@
     #easyIllustrationResult{display:grid;gap:11px}#easyIllustrationResult[hidden]{display:none}
     #easyIllustrationPreview{display:block;width:min(100%,300px);max-height:350px;object-fit:contain;border-radius:10px;background:#e9e6e1}
     .easy-illustration-actions{display:flex;flex-wrap:wrap;gap:7px}
+    .easy-illustration .easy-illustration-readers{display:flex;flex-wrap:wrap;gap:8px}
+    .easy-illustration .easy-illustration-reader{display:flex;align-items:center;gap:8px;min-height:56px;padding:5px 10px 5px 5px;border-color:#dedad4;background:#fffdf9;text-align:left}
+    .easy-illustration-reader img{display:block;width:43px;height:43px;object-fit:cover;border-radius:9px}
+    .easy-illustration-reader span{display:grid;gap:2px}.easy-illustration-reader strong{font-size:11px}.easy-illustration-reader small{font-size:10px}
+    .easy-illustration .easy-illustration-reader.is-selected{border-color:#444249;box-shadow:0 0 0 1px #444249 inset}
+    .easy-illustration-paper{position:relative;display:grid;gap:9px;width:min(100%,320px);padding:12px 12px 10px;border:1px solid #e6ddcc;border-radius:4px;background:radial-gradient(circle at 22% 16%,rgba(180,155,120,.1),transparent 48%),#f4efe4;box-shadow:0 13px 25px rgba(68,53,31,.13);overflow:hidden}
+    .easy-illustration-paper[data-illustrator="coral"]{border-color:#efd8c9;background:#fff1e8}
+    .easy-illustration-paper[data-illustrator="blue"]{border-color:#c5d6df;background:#e8f1f3}
+    .easy-illustration-figure{position:relative;overflow:hidden;background:#ede8de}
+    #easyIllustrationPreview{width:100%;max-height:340px;object-fit:contain;border-radius:0;background:transparent}
+    .easy-illustration-paper>span{font:12px/1.5 serif;color:#65615c;text-align:right}
+    .easy-illustration-paper.is-revealing .easy-illustration-figure{animation:easy-image-wash 2.3s ease-out both}
+    .easy-illustration-paper.is-revealing:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 25% 45%,rgba(250,247,238,.94),transparent 60%),radial-gradient(circle at 75% 30%,rgba(250,247,238,.88),transparent 65%),#f4efe4;animation:easy-paper-fade 2.6s ease-out forwards}
+    @keyframes easy-image-wash{0%{opacity:0;filter:blur(22px);transform:scale(1.035)}50%{opacity:.7;filter:blur(7px)}100%{opacity:1;filter:blur(0);transform:scale(1)}}
+    @keyframes easy-paper-fade{0%{opacity:1}55%{opacity:.55}100%{opacity:0}}
+    @media(prefers-reduced-motion:reduce){.easy-illustration-paper.is-revealing .easy-illustration-figure,.easy-illustration-paper.is-revealing:after{animation:none}.easy-illustration-paper.is-revealing:after{display:none}}
 </style>
 </head>
 <body>
@@ -338,11 +354,16 @@
       </label>
 
       <section class="easy-illustration" aria-label="作品から一枚描く">
-        <div><strong>作品から一枚描く</strong><small>本文の冒頭・中盤・末尾から抜粋をCloudflareのAIへ送り、一枚生成します。確認してから使えます。</small></div>
-        <button id="easyIllustrationGenerate" type="button">一枚描いてみる</button>
+        <div><strong>この子が思い浮かべた一枚</strong><small>本文の冒頭・中盤・末尾から抜粋をCloudflareのAIへ送り、一枚生成します。確認してから使えます。</small></div>
+        <div class="easy-illustration-readers" role="group" aria-label="絵を思い浮かべる子">
+          <button class="easy-illustration-reader is-selected" type="button" data-illustrator="cage" aria-pressed="true"><img src="./cage-icons/cage.png" alt=""><span><strong>CAGE</strong><small>水彩とにじみ</small></span></button>
+          <button class="easy-illustration-reader" type="button" data-illustrator="coral" aria-pressed="false"><img src="./cage-icons/coral.png" alt=""><span><strong>珊瑚色の子</strong><small>あたたかな絵具</small></span></button>
+          <button class="easy-illustration-reader" type="button" data-illustrator="blue" aria-pressed="false"><img src="./cage-icons/blue.png" alt=""><span><strong>青い子</strong><small>青いインク</small></span></button>
+        </div>
+        <button id="easyIllustrationGenerate" type="button">この子に思い浮かべてもらう</button>
         <p id="easyIllustrationStatus" role="status" aria-live="polite"></p>
         <div id="easyIllustrationResult" hidden>
-          <img id="easyIllustrationPreview" alt="生成した作品のイメージ">
+          <div id="easyIllustrationPaper" class="easy-illustration-paper" data-illustrator="cage"><div class="easy-illustration-figure"><img id="easyIllustrationPreview" alt="生成した作品のイメージ"></div><span id="easyIllustrationByline">CAGEが思い浮かべた景色</span></div>
           <div class="easy-illustration-actions">
             <button id="easyIllustrationCover" type="button">表紙に使う</button>
             <button id="easyIllustrationBackground" type="button">背景に使う</button>
@@ -1172,7 +1193,7 @@
 <script src="./scene-edit-core.js?v=70.27"></script>
 <script src="./script.js?v=148"></script>
 <script src="./cage.js?v=25"></script>
-<script src="./easy-illustration.js?v=1"></script>
+<script src="./easy-illustration.js?v=2"></script>
 
 
 
