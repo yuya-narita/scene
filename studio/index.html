@@ -259,6 +259,7 @@
     #easyIllustrationResult #easyIllustrationPreview{max-height:60dvh}
     #easyIllustrationResult .easy-illustration-actions{justify-content:center}
     #easyIllustrationResult .easy-illustration-actions button{min-height:42px;padding:8px 12px;border:1px solid #bfc0c2;border-radius:10px;background:#fff;color:#292b30;font:700 12px/1.4 system-ui,sans-serif;cursor:pointer}
+    #easyIllustrationDiscard{border-color:#e2a9a4!important;background:#fff4f2!important;color:#a53330!important}
     #easyIllustrationPreview{display:block;width:min(100%,300px);max-height:350px;object-fit:contain;border-radius:10px;background:#e9e6e1}
     .easy-illustration-actions{display:flex;flex-wrap:wrap;gap:7px}
     .easy-illustration-gallery{display:flex;gap:8px;overflow-x:auto;padding:3px 2px 8px}.easy-illustration-gallery:empty{display:none}
@@ -269,6 +270,16 @@
     .easy-illustration-reader img{display:block;width:43px;height:43px;object-fit:cover;border-radius:9px}
     .easy-illustration-reader span{display:grid;gap:2px}.easy-illustration-reader strong{font-size:11px}.easy-illustration-reader small{font-size:10px}
     .easy-illustration .easy-illustration-reader.is-selected{border-color:#444249;box-shadow:0 0 0 1px #444249 inset}
+    @media(max-width:600px){
+      .easy-illustration .easy-illustration-readers{gap:6px;flex-wrap:nowrap}
+      .easy-illustration .easy-illustration-reader{flex:1 1 0;min-width:0;min-height:52px;padding:4px;gap:4px}
+      .easy-illustration-reader img{width:38px;height:38px;flex:none}
+      .easy-illustration-reader span{min-width:0}
+      .easy-illustration-reader strong,.easy-illustration-reader small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      #easyIllustrationResult{width:calc(100vw - 28px);padding:12px}
+      #easyIllustrationResult .easy-illustration-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;width:100%}
+      #easyIllustrationResult .easy-illustration-actions button{min-width:0;padding:6px 2px;font-size:10px;white-space:nowrap}
+    }
     .easy-illustration-paper{position:relative;display:grid;gap:9px;width:min(100%,320px);padding:12px 12px 10px;border:1px solid #e6ddcc;border-radius:4px;background:radial-gradient(circle at 22% 16%,rgba(180,155,120,.1),transparent 48%),#f4efe4;box-shadow:0 13px 25px rgba(68,53,31,.13);overflow:hidden}
     .easy-illustration-paper[data-illustrator="coral"]{border-color:#f4cdbb;background:linear-gradient(160deg,#fff0df,#fce4e4 65%,#f7d9cf)}
     .easy-illustration-paper[data-illustrator="blue"]{border-color:#202c38;background:#18232e;box-shadow:0 14px 30px rgba(8,20,32,.27)}
@@ -380,9 +391,9 @@
         <div class="easy-illustration-content">
         <p>本文の冒頭・中盤・末尾から抜粋をCloudflareのAIへ送ります。</p>
         <div class="easy-illustration-readers" role="group" aria-label="絵を思い浮かべる子">
-          <button class="easy-illustration-reader is-selected" type="button" data-illustrator="cage" aria-pressed="true"><img src="./cage-icons/cage.png" alt=""><span><strong>CAGE</strong><small>墨のにじみ</small></span></button>
-          <button class="easy-illustration-reader" type="button" data-illustrator="coral" aria-pressed="false"><img src="./cage-icons/coral.png" alt=""><span><strong>珊瑚色の子</strong><small>光の劇場アニメ</small></span></button>
-          <button class="easy-illustration-reader" type="button" data-illustrator="blue" aria-pressed="false"><img src="./cage-icons/blue.png" alt=""><span><strong>青い子</strong><small>実写シネマ</small></span></button>
+          <button class="easy-illustration-reader is-selected" type="button" data-illustrator="cage" aria-label="CAGE、墨絵" aria-pressed="true"><img src="./cage-icons/cage.png" alt=""><span><strong>CAGE</strong><small>墨絵</small></span></button>
+          <button class="easy-illustration-reader" type="button" data-illustrator="coral" aria-label="珊瑚色の子、アニメ" aria-pressed="false"><img src="./cage-icons/coral.png" alt=""><span><strong>珊瑚</strong><small>アニメ</small></span></button>
+          <button class="easy-illustration-reader" type="button" data-illustrator="blue" aria-label="青い子、実写" aria-pressed="false"><img src="./cage-icons/blue.png" alt=""><span><strong>青</strong><small>実写</small></span></button>
         </div>
         <button id="easyIllustrationGenerate" type="button">この子に思い浮かべてもらう</button>
         <p id="easyIllustrationStatus" role="status" aria-live="polite"></p>
@@ -1223,7 +1234,7 @@
 <script src="./scene-edit-core.js?v=70.27"></script>
 <script src="./script.js?v=148"></script>
 <script src="./cage.js?v=25"></script>
-<script src="./easy-illustration.js?v=9"></script>
+<script src="./easy-illustration.js?v=10"></script>
 
 
 
