@@ -762,13 +762,29 @@
       const orderId=String(orderPayload.order.orderId);
       const accessToken=String(orderPayload.accessToken);
       rememberCommerceOrderToken(orderId,accessToken);
+      let authorToken='';
+      try{authorToken=String(JSON.parse(localStorage.getItem('ahako-author-session-v1')||'null')?.token||'');}catch(_){}
+      let useAuthorBalance=false;
+      if(authorToken){
+        useAuthorBalance=window.confirm('作者の売上残高が足りる場合は、売上残高から購入します。残高が足りない場合は通常のカード決済へ進みます。');
+      }
+      const checkoutHeaders={'Content-Type':'application/json','X-Order-Token':accessToken};
+      if(useAuthorBalance)checkoutHeaders.Authorization=`Bearer ${authorToken}`;
       const checkoutResponse=await fetch(`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/checkout`,{
-        method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',
-        body:JSON.stringify({returnUrl:cleanCommerceReturnUrl()})
+        method:'POST',headers:checkoutHeaders,cache:'no-store',
+        body:JSON.stringify({returnUrl:cleanCommerceReturnUrl(),useAuthorBalance})
       });
       const checkoutPayload=await checkoutResponse.json().catch(()=>null);
-      if(!checkoutResponse.ok||!checkoutPayload?.ok||!checkoutPayload?.checkoutUrl){
+      if(!checkoutResponse.ok||!checkoutPayload?.ok){
         throw new Error(String(checkoutPayload?.error||'Stripe決済を開始できませんでした。'));
+      }
+      if(checkoutPayload?.paid===true&&checkoutPayload?.paymentRail==='connected_balance'){
+        if(ownCopyStatus)ownCopyStatus.textContent='売上残高から購入しました。MY COPYを本棚へ用意しています…';
+        await finishPaidOwnCopy(orderId,accessToken,{continueReading:commercePreviewLocked(documentData)});
+        return;
+      }
+      if(!checkoutPayload?.checkoutUrl){
+        throw new Error('Stripe決済を開始できませんでした。');
       }
       // Purchase exists only on the ending screen. Remember that exact UI state
       // before leaving for Stripe so browser Back/BFCache can never strand the
