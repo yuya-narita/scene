@@ -64,27 +64,6 @@
     const middle=Math.floor(value.length/2);
     return [value.slice(0,1050),value.slice(middle-525,middle+525),value.slice(-1050)].join('\n［中略］\n');
   };
-  const addCageSeal=async blob=>{
-    const source=URL.createObjectURL(blob);
-    try{
-      const img=new Image();
-      await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=source;});
-      const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
-      const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas unavailable');
-      ctx.drawImage(img,0,0);
-      const size=Math.round(Math.min(canvas.width,canvas.height)*.072);
-      const margin=Math.round(size*.36);
-      const x=canvas.width-size-margin,y=canvas.height-size-margin;
-      ctx.fillStyle='rgba(249,243,225,.91)';ctx.fillRect(x-4,y-4,size+8,size+8);
-      ctx.strokeStyle='#a7352b';ctx.lineWidth=Math.max(2,size*.045);ctx.strokeRect(x+3,y+3,size-6,size-6);
-      ctx.fillStyle='#a7352b';ctx.textAlign='center';ctx.textBaseline='middle';
-      ctx.font=`bold ${Math.round(size*.71)}px "Yu Mincho","Hiragino Mincho ProN",serif`;
-      ctx.fillText('影',x+size/2,y+size/2+2);
-      const output=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.95));
-      if(!output)throw new Error('Image export unavailable');
-      return output;
-    }finally{URL.revokeObjectURL(source);}
-  };
   generate.addEventListener('click',async()=>{
     const text=body.value.trim();
     if(text.length<20){status.textContent='先に本文を20文字以上貼ってください。';body.focus();return;}
@@ -101,13 +80,10 @@
       if(!response.ok||!data.ok||typeof data.image!=='string')throw new Error(data.error||'画像を描けませんでした。');
       const binary=atob(data.image),bytes=Uint8Array.from(binary,char=>char.charCodeAt(0));
       const type=data.mimeType==='image/png'?'image/png':'image/jpeg';
-      let blob=new Blob([bytes],{type}),sealApplied=false;
-      if(requestedIllustrator==='cage'){
-        try{blob=await addCageSeal(blob);sealApplied=true;}catch(_){/* retain the original image */}
-      }
+      const blob=new Blob([bytes],{type});
       const item={id:crypto.randomUUID(),illustrator:requestedIllustrator,createdAt:Date.now(),blob};
       items.unshift(item);select(item);
-      try{await storage('readwrite',store=>store.put(item));status.textContent=sealApplied||requestedIllustrator!=='cage'?'一枚描けました。サムネイルを押して確認できます。':'一枚描けました。印を入れられなかったので画像を確認してください。';}
+      try{await storage('readwrite',store=>store.put(item));status.textContent='一枚描けました。サムネイルを押して確認できます。';}
       catch(_){status.textContent='一枚描けました。端末の履歴に保存できなかったので、サムネイルから画像を保存してください。';}
     }catch(error){status.textContent=error.message||'画像を描けませんでした。';}
     finally{generate.disabled=false;}
