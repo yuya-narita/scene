@@ -33,6 +33,26 @@
     const middle=Math.floor(value.length/2);
     return [value.slice(0,1050),value.slice(middle-525,middle+525),value.slice(-1050)].join('\n［中略］\n');
   };
+  const asInk=async original=>{
+    const url=URL.createObjectURL(original);
+    try{
+      const image=await new Promise((resolve,reject)=>{
+        const node=new Image();node.onload=()=>resolve(node);node.onerror=reject;node.src=url;
+      });
+      const canvas=document.createElement('canvas');
+      canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+      const context=canvas.getContext('2d');
+      context.drawImage(image,0,0);
+      const pixels=context.getImageData(0,0,canvas.width,canvas.height);
+      for(let i=0;i<pixels.data.length;i+=4){
+        const gray=Math.max(0,Math.min(255,(pixels.data[i]*.2126+pixels.data[i+1]*.7152+pixels.data[i+2]*.0722-128)*1.13+128));
+        pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=gray;
+      }
+      context.putImageData(pixels,0,0);
+      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.9));
+      return blob?new File([blob],original.name,{type:'image/jpeg'}):original;
+    }finally{URL.revokeObjectURL(url);}
+  };
   body.addEventListener('input',()=>{if(file){clear();status.textContent='本文が変わったので、生成画像の候補を閉じました。';}});
   generate.addEventListener('click',async()=>{
     const text=body.value.trim();
@@ -51,7 +71,9 @@
       if(body.value.trim()!==text){status.textContent='生成中に本文が変わったので、この絵は適用しませんでした。';return;}
       const binary=atob(data.image);
       const bytes=Uint8Array.from(binary,char=>char.charCodeAt(0));
-      file=new File([bytes],`${illustrator}-illustration.jpg`,{type:'image/jpeg'});
+      const original=new File([bytes],`${illustrator}-illustration.jpg`,{type:'image/jpeg'});
+      file=illustrator==='cage'?await asInk(original):original;
+      if(body.value.trim()!==text){file=null;status.textContent='生成中に本文が変わったので、この絵は適用しませんでした。';return;}
       source=text;
       objectUrl=URL.createObjectURL(file);
       if(paper)paper.dataset.illustrator=illustrator;
