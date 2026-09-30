@@ -31,7 +31,7 @@
         <button class="admin-tab" type="button" data-admin-tab="reports">報告 <span id="reportTabBadge" class="tab-badge" hidden>0</span></button>
         <button class="admin-tab" type="button" data-admin-tab="contacts">お問い合わせ <span id="contactTabBadge" class="tab-badge" hidden>0</span></button>
         <button class="admin-tab" type="button" data-admin-tab="authors">作者</button>
-        <button class="admin-tab" type="button" data-admin-tab="audit">決済監査</button>
+        <button class="admin-tab" type="button" data-admin-tab="audit">決済監査 <span id="auditTabBadge" class="tab-badge" hidden>0</span></button>
         <button class="admin-tab" type="button" data-admin-tab="maintenance">保守</button>
       </nav>
 
@@ -159,7 +159,7 @@
 
       <div class="admin-tab-panel" data-admin-panel="audit">
       <section class="panel payment-audit-panel">
-        <div class="section-head"><div><small>PAYMENT AUDIT</small><h2>決済監査</h2></div><small class="muted-note">Stripe実績とOrderを再照合・読み取り専用</small></div>
+        <div class="section-head"><div><small>PAYMENT AUDIT</small><h2>決済監査</h2></div><small class="muted-note">Stripe実績とOrderを再照合・金銭系は自動修復しません</small></div>
         <p class="selection-lead">最近の確定済み注文を自動でStripeと照合します。普段は件数だけ確認し、異常がある注文だけ開いて調査します。監査によって決済や権利が変更されることはありません。</p>
         <div class="audit-orders-head"><strong>自動監査</strong><button id="auditOrdersReloadButton" type="button">再監査</button></div>
         <div class="audit-dashboard" aria-live="polite">

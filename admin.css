@@ -86,3 +86,10 @@
 
 /* Payment audit auto dashboard V1 */
 .audit-dashboard{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 6px}.audit-dashboard>div{padding:14px;border:1px solid var(--line,#d9dde3);border-radius:14px;background:var(--panel,#fff)}.audit-dashboard small{display:block;font-size:.72rem;opacity:.65}.audit-dashboard strong{display:block;margin-top:3px;font-size:1.55rem}.audit-dashboard .is-ok strong{color:#27813d}.audit-dashboard .is-alert strong{color:#b42318}.audit-all-clear{display:flex;align-items:center;gap:10px;padding:15px 16px;border:1px solid #b9ddc0;border-radius:14px;background:#edf7ef;color:#1f6530}.audit-all-clear span{font-size:.82rem}.audit-alert-section{display:grid;gap:10px}.audit-list-title{display:flex;align-items:center;gap:8px;color:#9f2823}.audit-list-title span{font-size:.78rem}.audit-order-row.is-alert{border-color:#e5b7b4;background:#fff7f7}.audit-order-row.is-pending{opacity:.72}.audit-reason{background:#ffe2e0!important;color:#9f2823!important}.audit-normal{margin-top:12px}.audit-normal>summary{cursor:pointer;padding:9px 2px;font-size:.84rem;opacity:.72}.audit-normal-list{display:grid;gap:8px;margin-top:6px}.audit-order-row.is-ok .audit-order-run{opacity:.75}@media(max-width:640px){.audit-dashboard{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.audit-dashboard>div{padding:10px}.audit-dashboard strong{font-size:1.25rem}.audit-all-clear{align-items:flex-start;flex-direction:column;gap:3px}}
+
+/* Payment recovery V1 */
+.audit-recovery{display:grid;gap:7px;margin:12px 0;padding:14px 15px;border-radius:12px}
+.audit-recovery strong{font-size:.95rem}.audit-recovery span{font-size:.8rem;line-height:1.55}
+.audit-recovery button{justify-self:start;width:auto;margin-top:3px}
+.audit-recovery.is-safe{background:#eef7ff;border:1px solid #b8d8f1;color:#174e78}
+.audit-recovery.is-blocked{background:#fff4e8;border:1px solid #edc994;color:#765018}
