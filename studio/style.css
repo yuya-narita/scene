@@ -12377,3 +12377,55 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
     flex-basis:18px!important;
   }
 }
+
+/* AHAKO commerce header V10 — exact collapsed-card height + title restore */
+
+/* Match the surrounding collapsed Easy card height exactly. */
+.commerce-price-card-simple:not(:has(details[open])){
+  height:68px!important;
+  min-height:68px!important;
+}
+.commerce-price-card-simple:not(:has(details[open])) .commerce-price-summary{
+  height:68px!important;
+  min-height:68px!important;
+  padding-top:8px!important;
+  padding-bottom:8px!important;
+}
+
+/* Restore the visual weight of the section title. */
+.commerce-summary-title strong{
+  font-size:15px!important;
+  font-weight:700!important;
+  line-height:1.2!important;
+}
+.commerce-summary-title small{
+  font-size:9px!important;
+  line-height:1.2!important;
+}
+
+/* Keep the badge strong without making the outer card taller. */
+.commerce-price-card-simple .commerce-summary-value{
+  min-height:36px!important;
+}
+
+@media(max-width:620px){
+  .commerce-price-card-simple:not(:has(details[open])){
+    height:64px!important;
+    min-height:64px!important;
+  }
+  .commerce-price-card-simple:not(:has(details[open])) .commerce-price-summary{
+    height:64px!important;
+    min-height:64px!important;
+    padding-top:7px!important;
+    padding-bottom:7px!important;
+  }
+  .commerce-summary-title strong{
+    font-size:14px!important;
+  }
+  .commerce-summary-title small{
+    font-size:8px!important;
+  }
+  .commerce-price-card-simple .commerce-summary-value{
+    min-height:34px!important;
+  }
+}
