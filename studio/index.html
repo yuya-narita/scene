@@ -493,37 +493,34 @@
           </div>
         </div>
       </details>
-      <section class="commerce-price-card" aria-labelledby="commercePriceTitle">
-        <div class="commerce-price-head">
-          <div><strong id="commercePriceTitle">販売設定</strong><small>読者が「自分の一冊」を受け取るときの設定です。</small></div>
-          <span id="commercePriceBadge" class="commerce-price-badge">無料</span>
-        </div>
-        <div class="commerce-price-options" role="radiogroup" aria-label="販売方法">
-          <label><input id="commerceModeFree" type="radio" name="commerceMode" value="free" checked><span><strong>無料</strong><small>最後まで無料。読了後、100円でMY COPYを本棚に残せます</small></span></label>
-          <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>MY COPY販売</strong><small>最後まで読めます。読了後に購入して受け取れます</small></span></label>
-          <label><input id="commerceModeLocked" type="radio" name="commerceMode" value="locked"><span><strong>有料ロック</strong><small>指定Sceneから先は購入後に読めます</small></span></label>
-        </div>
-        <input id="ownCopyEnabled" type="checkbox" checked hidden aria-hidden="true">
-        <div id="commerceFreeNote" class="commerce-free-note">
-          <strong>無料作品のMY COPY</strong>
-          <span>読むのは最後まで無料です。読了後、残したい読者だけ100円でMY COPYを本棚に残せます。発行料はあ箱に入ります。</span>
-        </div>
-        <label id="commerceSupportPolicy" class="own-copy-policy commerce-support-policy">
-          <input id="commerceSupportEnabled" type="checkbox">
-          <span><strong>作者への支援を受け付ける</strong><small>ONにすると100円MY COPYの代わりに支援導線になります。支援は100円〜、MY COPY込みです。</small></span>
-        </label>
-        <label id="commerceAmountField" class="commerce-amount-field" hidden>
-          <span>販売価格</span>
-          <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="1000000" step="100" value="100" aria-label="販売価格（円）"><small>円</small></div>
-        </label>
-        <label id="commerceLockField" class="commerce-amount-field" hidden>
-          <span>有料開始位置</span>
-          <div class="commerce-amount-input"><span>Scene</span><input id="commerceLockSceneInput" type="number" inputmode="numeric" min="2" step="1" value="2" aria-label="有料開始Scene"><small>から ¥<span id="commerceLockPriceEcho">100</span></small></div>
-          <span id="commerceLockSceneEcho" hidden>Scene 2</span>
-          <small id="commerceLockHint" class="commerce-lock-hint">Scene 1 まで無料で読めます。</small>
-          <small class="commerce-lock-guide">数字で直接指定するか、Live Editorでプレビューを見ながら指定できます。</small>
-        </label>
-        <p id="commercePriceStatus" class="commerce-price-status" aria-live="polite"></p>
+      <section class="commerce-price-card commerce-price-card-simple" aria-labelledby="commercePriceTitle">
+        <details id="commerceSettingsDetails">
+          <summary class="commerce-price-head commerce-price-summary">
+            <div><strong id="commercePriceTitle">販売設定</strong><small>読者が「自分の一冊」を受け取るときの設定です。</small></div>
+            <span id="commercePriceBadge" class="commerce-price-badge">無料 + MY COPY ¥100</span>
+          </summary>
+          <div class="commerce-settings-body">
+            <div class="commerce-price-options commerce-price-options-2x2" role="radiogroup" aria-label="販売方法">
+              <label><input id="commerceModeFree" type="radio" name="commerceMode" value="free" checked><span><strong>無料</strong><small>最後まで無料。読了後、100円でMY COPY</small></span></label>
+              <label><input id="commerceSupportEnabled" type="radio" name="commerceMode" value="support"><span><strong>支援</strong><small>最後まで無料。100円〜の支援でMY COPY込み</small></span></label>
+              <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>MY COPY販売</strong><small>最後まで読めます。読了後に購入して受け取れます</small></span></label>
+              <label><input id="commerceModeLocked" type="radio" name="commerceMode" value="locked"><span><strong>有料ロック</strong><small>指定Sceneから先は購入後に読めます</small></span></label>
+            </div>
+            <input id="ownCopyEnabled" type="checkbox" checked hidden aria-hidden="true">
+            <label id="commerceAmountField" class="commerce-amount-field" hidden>
+              <span>販売価格</span>
+              <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="1000000" step="100" value="100" aria-label="販売価格（円）"><small>円</small></div>
+            </label>
+            <label id="commerceLockField" class="commerce-amount-field" hidden>
+              <span>有料開始位置</span>
+              <div class="commerce-amount-input"><span>Scene</span><input id="commerceLockSceneInput" type="number" inputmode="numeric" min="2" step="1" value="2" aria-label="有料開始Scene"><small>から ¥<span id="commerceLockPriceEcho">100</span></small></div>
+              <span id="commerceLockSceneEcho" hidden>Scene 2</span>
+              <small id="commerceLockHint" class="commerce-lock-hint">Scene 1 まで無料で読めます。</small>
+              <small class="commerce-lock-guide">数字で直接指定するか、Live Editorでプレビューを見ながら指定できます。</small>
+            </label>
+            <p id="commercePriceStatus" class="commerce-price-status" aria-live="polite"></p>
+          </div>
+        </details>
       </section>
       <button id="easyPublishButton" class="primary-button easy-publish-action easy-publish-bottom" type="button" disabled><span>公開する</span></button>
 

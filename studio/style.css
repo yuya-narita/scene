@@ -12072,3 +12072,22 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .commerce-free-note{display:grid;gap:4px;margin-top:14px;padding:12px 14px;border:1px solid #e5e1d8;border-radius:14px;background:#faf9f6}
 .commerce-free-note strong{font-size:13px}
 .commerce-free-note span{font-size:11px;line-height:1.55;color:#777d87}
+
+/* AHAKO commerce UI simple V3 */
+.commerce-price-card-simple{padding:0!important;overflow:hidden}
+.commerce-price-card-simple details{border:0}
+.commerce-price-summary{list-style:none;cursor:pointer;padding:16px 18px!important}
+.commerce-price-summary::-webkit-details-marker{display:none}
+.commerce-price-summary::after{content:"⌄";font-size:17px;color:#8b8f96;margin-left:4px;transition:transform .18s ease}
+.commerce-price-card-simple details[open] .commerce-price-summary::after{transform:rotate(180deg)}
+.commerce-settings-body{padding:0 18px 18px;border-top:1px solid #eef0f2}
+.commerce-price-options-2x2{grid-template-columns:repeat(2,minmax(0,1fr))!important;padding-top:14px}
+.commerce-price-options-2x2 label{min-height:58px}
+.commerce-price-options-2x2 label span{display:grid;gap:2px}
+.commerce-price-options-2x2 label small{line-height:1.35}
+@media(max-width:620px){
+ .commerce-price-summary{padding:14px!important}
+ .commerce-price-summary small{display:none}
+ .commerce-settings-body{padding:0 14px 14px}
+ .commerce-price-options-2x2{grid-template-columns:1fr!important}
+}

@@ -873,8 +873,8 @@
     return {mode,amount,currency:'JPY',lockScene};
   }
   function currentCommerceSettings(){
-    const support=Boolean(commerceModeFree?.checked&&commerceSupportEnabled?.checked);
-    const copy=Boolean(commerceModeFree?.checked&&!support);
+    const support=Boolean(commerceSupportEnabled?.checked);
+    const copy=Boolean(commerceModeFree?.checked);
     const mode=commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(support?'support':'copy'));
     const amount=(mode==='support'||mode==='copy')?100:Math.floor(Number(commerceAmountInput?.value||0));
     const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
@@ -902,9 +902,9 @@
   function renderCommercePriceUI(){
     const paid=Boolean(commerceModePurchase?.checked||commerceModeLocked?.checked);
     const locked=Boolean(commerceModeLocked?.checked);
-    const support=Boolean(commerceModeFree?.checked&&commerceSupportEnabled?.checked);
-    const copy=Boolean(commerceModeFree?.checked&&!support);
-    if(commerceSupportPolicy)commerceSupportPolicy.hidden=!commerceModeFree?.checked;
+    const support=Boolean(commerceSupportEnabled?.checked);
+    const copy=Boolean(commerceModeFree?.checked);
+    if(commerceSupportPolicy)commerceSupportPolicy.hidden=true;
     if(commerceAmountField)commerceAmountField.hidden=!paid;
     if(commerceLockField)commerceLockField.hidden=!locked;
     if(locked){
@@ -915,7 +915,7 @@
       if(commerceLockPriceEcho)commerceLockPriceEcho.textContent=Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP');
     }
     if(commercePriceBadge){
-      commercePriceBadge.textContent=paid?`${locked?'LOCK · ':''}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(support?'無料 + 支援':(copy?'無料 + MY COPY ¥100':'無料'));
+      commercePriceBadge.textContent=paid?`${locked?'LOCK · ':''}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(support?'無料 + 支援':'無料 + MY COPY ¥100');
       commercePriceBadge.classList.toggle('is-paid',paid);
       commercePriceBadge.classList.toggle('is-support',support);
     }
@@ -935,7 +935,7 @@
   }
   function restoreCommercePriceUI(doc){
     const settings=commerceDraftSettings(doc);
-    if(commerceModeFree)commerceModeFree.checked=['free','support','copy'].includes(settings.mode);
+    if(commerceModeFree)commerceModeFree.checked=['free','copy'].includes(settings.mode);
     if(commerceModePurchase)commerceModePurchase.checked=settings.mode==='purchase';
     if(commerceModeLocked)commerceModeLocked.checked=settings.mode==='locked';
     if(commerceSupportEnabled)commerceSupportEnabled.checked=settings.mode==='support';
@@ -7468,20 +7468,11 @@
     markDirty?.();
   });
   commerceLockSceneInput?.addEventListener('input',()=>{renderCommercePriceUI();if(!workingDocument)ensureWorkingDocumentFromEasy();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(120);markDirty?.();});
-  [commerceModeFree,commerceModePurchase,commerceModeLocked].forEach(el=>el?.addEventListener('change',()=>{
+  [commerceModeFree,commerceSupportEnabled,commerceModePurchase,commerceModeLocked].forEach(el=>el?.addEventListener('change',()=>{
     if(!workingDocument)ensureWorkingDocumentFromEasy();
-    if(!commerceModeFree?.checked){if(commerceSupportEnabled)commerceSupportEnabled.checked=false;}
     if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}
     renderCommercePriceUI();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(80);
   }));
-  commerceSupportEnabled?.addEventListener('change',()=>{
-    if(!workingDocument)ensureWorkingDocumentFromEasy();
-    if(commerceSupportEnabled.checked){
-      if(commerceModeFree)commerceModeFree.checked=true;
-      if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}
-    }
-    renderCommercePriceUI();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(80);markDirty?.();
-  });
   commerceAmountInput?.addEventListener('input',()=>{
     renderCommercePriceUI();
     if(!workingDocument)ensureWorkingDocumentFromEasy();
