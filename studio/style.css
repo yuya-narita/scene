@@ -12091,3 +12091,25 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
  .commerce-settings-body{padding:0 14px 14px}
  .commerce-price-options-2x2{grid-template-columns:1fr!important}
 }
+
+/* AHAKO commerce UI compact V4 */
+.commerce-price-summary{justify-content:flex-start!important}
+.commerce-summary-copy{display:grid!important;gap:4px;min-width:0}
+.commerce-summary-value{
+  display:block!important;
+  margin:0!important;padding:0!important;border:0!important;border-radius:0!important;
+  background:transparent!important;color:#6f7780!important;
+  font-size:10px!important;font-weight:500!important;line-height:1.25!important;white-space:nowrap
+}
+.commerce-price-card-simple details[open] .commerce-summary-value{display:none!important}
+.commerce-price-summary::after{margin-left:auto!important}
+
+@media(max-width:620px){
+  /* Easy bottom area: remove the awkward large gaps between info → commerce → publish. */
+  .easy-panel .commerce-price-card-simple{margin-top:14px!important;margin-bottom:0!important}
+  .easy-panel .commerce-price-card-simple + #easyPublishButton{margin-top:18px!important}
+  .easy-panel #easyPublishButton{margin-bottom:0!important}
+  .commerce-price-summary{min-height:0!important;padding:13px 14px!important}
+  .commerce-summary-copy{gap:3px}
+  .commerce-summary-value{font-size:10px!important}
+}

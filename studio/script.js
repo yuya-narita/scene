@@ -915,7 +915,7 @@
       if(commerceLockPriceEcho)commerceLockPriceEcho.textContent=Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP');
     }
     if(commercePriceBadge){
-      commercePriceBadge.textContent=paid?`${locked?'LOCK · ':''}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(support?'無料 + 支援':'無料 + MY COPY ¥100');
+      commercePriceBadge.textContent=paid?`${locked?'有料ロック・':'MY COPY・'}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(support?'無料・支援':'無料・MY COPY ¥100');
       commercePriceBadge.classList.toggle('is-paid',paid);
       commercePriceBadge.classList.toggle('is-support',support);
     }
