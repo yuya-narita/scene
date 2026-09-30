@@ -25,13 +25,15 @@ function renderPaymentAudit(audit){
   const rows=checks.map(row=>`<div class="audit-check ${row.ok===false?'is-mismatch':'is-ok'}"><span>${row.ok===false?'×':'✓'}</span><code>${escapeHtml(row.name||'check')}</code><div><small>期待</small><b>${escapeHtml(auditValue(row.expected))}</b></div><div><small>実際</small><b>${escapeHtml(auditValue(row.actual))}</b></div></div>`).join('');
   const errorHtml=errors.length?`<div class="audit-errors"><strong>取得エラー</strong>${errors.map(e=>`<p>${escapeHtml(typeof e==='string'?e:JSON.stringify(e))}</p>`).join('')}</div>`:'';
   let recoveryHtml='';
+  const sandboxTestHtml=ok?`<div class="audit-test-tools"><strong>Sandbox破壊テスト</strong><span>お金は動かさず、この注文のMY COPY参照だけを意図的に欠損させます。</span><button type="button" data-test-missing-entitlement="${escapeHtml(audit.orderId||'')}">MY COPY欠損を発生</button></div>`:'';
   if(!ok&&audit?.safeRecoveryAction==='REISSUE_ENTITLEMENT'){
     recoveryHtml=`<div class="audit-recovery is-safe"><strong>MY COPY権利だけが不足しています</strong><span>Stripeの金銭照合は正常です。再実行時にも再監査してから権利だけを発行します。</span><button type="button" data-recover-entitlement="${escapeHtml(audit.orderId||'')}">MY COPYを再発行</button></div>`;
   }else if(!ok){
     recoveryHtml=`<div class="audit-recovery is-blocked"><strong>RECOVERY_REQUIRED</strong><span>金銭系または原因不明の不一致です。自動で返金・送金・reversalは行いません。</span></div>`;
   }
-  els.auditOrderResult.innerHTML=`<div class="audit-verdict ${ok?'is-ok':'is-mismatch'}"><small>${ok?'AUDIT OK':'MISMATCH'}</small><strong>${ok?'✓ 一致しています':'⚠ 不一致を検出'}</strong><span>${escapeHtml(audit.orderId||'')}</span></div><div class="audit-summary"><div><small>注文額</small><strong>${yen(audit.amount)}</strong></div><div><small>作者</small><strong>${yen(audit.expectedSellerAmount)}</strong></div><div><small>あ箱</small><strong>${yen(audit.expectedPlatformFee)}</strong></div><div><small>決済経路</small><strong>${escapeHtml(audit.paymentRail||'–')}</strong></div><div><small>Order状態</small><strong>${escapeHtml(audit.orderStatus||'–')}</strong></div><div><small>不一致</small><strong>${mismatches.length}</strong></div></div>${recoveryHtml}${errorHtml}<div class="audit-checks">${rows||'<div class="empty">照合項目がありません。</div>'}</div><small class="audit-time">監査日時 ${escapeHtml(formatJstDate(audit.checkedAt))}</small>`;
+  els.auditOrderResult.innerHTML=`<div class="audit-verdict ${ok?'is-ok':'is-mismatch'}"><small>${ok?'AUDIT OK':'MISMATCH'}</small><strong>${ok?'✓ 一致しています':'⚠ 不一致を検出'}</strong><span>${escapeHtml(audit.orderId||'')}</span></div><div class="audit-summary"><div><small>注文額</small><strong>${yen(audit.amount)}</strong></div><div><small>作者</small><strong>${yen(audit.expectedSellerAmount)}</strong></div><div><small>あ箱</small><strong>${yen(audit.expectedPlatformFee)}</strong></div><div><small>決済経路</small><strong>${escapeHtml(audit.paymentRail||'–')}</strong></div><div><small>Order状態</small><strong>${escapeHtml(audit.orderStatus||'–')}</strong></div><div><small>不一致</small><strong>${mismatches.length}</strong></div></div>${sandboxTestHtml}${recoveryHtml}${errorHtml}<div class="audit-checks">${rows||'<div class="empty">照合項目がありません。</div>'}</div><small class="audit-time">監査日時 ${escapeHtml(formatJstDate(audit.checkedAt))}</small>`;
   els.auditOrderResult.querySelectorAll('[data-recover-entitlement]').forEach(button=>button.addEventListener('click',()=>recoverEntitlement(button.dataset.recoverEntitlement,button)));
+  els.auditOrderResult.querySelectorAll('[data-test-missing-entitlement]').forEach(button=>button.addEventListener('click',()=>injectMissingEntitlement(button.dataset.testMissingEntitlement,button)));
 }
 function paymentRailLabel(value){const v=String(value||'card');return (v==='balance'||v==='connected_balance')?'残高':'カード';}
 function auditOrderCard(row,{kind='alert',audit=null,error=''}={}){
@@ -50,6 +52,21 @@ async function fetchPaymentAudit(orderId){
   const data=await r.json().catch(()=>({}));
   if(data?.audit)return {audit:data.audit,httpStatus:r.status};
   throw new Error(data?.error||`HTTP ${r.status}`);
+}
+async function injectMissingEntitlement(orderId,button){
+  if(!/^order_[a-f0-9]{32}$/.test(String(orderId||'')))return;
+  if(!confirm('Sandbox破壊テストです。お金は動かさず、この注文のMY COPY参照だけを欠損させます。続けますか？'))return;
+  const original=button?.textContent||'MY COPY欠損を発生';
+  if(button){button.disabled=true;button.textContent='事故発生中…';}
+  try{
+    await api(`/admin/commerce/order/${encodeURIComponent(orderId)}/test-missing-entitlement`,{method:'POST',body:'{}'});
+    toast('MY COPY欠損を発生させました。監査します');
+    if(els.auditOrderId)els.auditOrderId.value=orderId;
+    await runPaymentAudit();
+    await loadAuditOrders();
+  }catch(e){
+    toast(`破壊テスト失敗: ${e.message}`);
+  }finally{if(button){button.disabled=false;button.textContent=original;}}
 }
 async function recoverEntitlement(orderId,button){
   if(!/^order_[a-f0-9]{32}$/.test(String(orderId||'')))return;

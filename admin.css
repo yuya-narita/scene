@@ -93,3 +93,7 @@
 .audit-recovery button{justify-self:start;width:auto;margin-top:3px}
 .audit-recovery.is-safe{background:#eef7ff;border:1px solid #b8d8f1;color:#174e78}
 .audit-recovery.is-blocked{background:#fff4e8;border:1px solid #edc994;color:#765018}
+
+.audit-test-tools{display:grid;gap:7px;margin:12px 0;padding:14px 15px;border:1px dashed #c7a45a;border-radius:12px;background:#fffaf0}
+.audit-test-tools strong{font-size:.9rem}.audit-test-tools span{font-size:.78rem;line-height:1.55;color:#6f6043}
+.audit-test-tools button{justify-self:start;width:auto;margin-top:3px}
