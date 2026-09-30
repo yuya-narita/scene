@@ -12067,3 +12067,8 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .commerce-support-policy{background:#f5f9ff;border-color:#d4e2f3}
 .commerce-support-policy[hidden]{display:none!important}
 .commerce-price-badge.is-support{background:#edf5ff;color:#356b9b}
+
+/* AHAKO free default MY COPY V2 */
+.commerce-free-note{display:grid;gap:4px;margin-top:14px;padding:12px 14px;border:1px solid #e5e1d8;border-radius:14px;background:#faf9f6}
+.commerce-free-note strong{font-size:13px}
+.commerce-free-note span{font-size:11px;line-height:1.55;color:#777d87}

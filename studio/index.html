@@ -499,17 +499,18 @@
           <span id="commercePriceBadge" class="commerce-price-badge">無料</span>
         </div>
         <div class="commerce-price-options" role="radiogroup" aria-label="販売方法">
-          <label><input id="commerceModeFree" type="radio" name="commerceMode" value="free" checked><span><strong>無料</strong><small>最後まで無料で読めます</small></span></label>
+          <label><input id="commerceModeFree" type="radio" name="commerceMode" value="free" checked><span><strong>無料</strong><small>最後まで無料。読了後、100円でMY COPYを本棚に残せます</small></span></label>
           <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>MY COPY販売</strong><small>最後まで読めます。読了後に購入して受け取れます</small></span></label>
           <label><input id="commerceModeLocked" type="radio" name="commerceMode" value="locked"><span><strong>有料ロック</strong><small>指定Sceneから先は購入後に読めます</small></span></label>
         </div>
-        <label id="commerceOwnCopyPolicy" class="own-copy-policy">
-          <input id="ownCopyEnabled" type="checkbox">
-          <span><strong>100円でMY COPYを発行する</strong><small>読者は無料で読めます。読了後、100円でMY COPYを本棚に残せます。発行料はあ箱に入ります。</small></span>
-        </label>
+        <input id="ownCopyEnabled" type="checkbox" checked hidden aria-hidden="true">
+        <div id="commerceFreeNote" class="commerce-free-note">
+          <strong>無料作品のMY COPY</strong>
+          <span>読むのは最後まで無料です。読了後、残したい読者だけ100円でMY COPYを本棚に残せます。発行料はあ箱に入ります。</span>
+        </div>
         <label id="commerceSupportPolicy" class="own-copy-policy commerce-support-policy">
           <input id="commerceSupportEnabled" type="checkbox">
-          <span><strong>作者への支援を受け付ける</strong><small>無料で読めます。読了後、読者が100円単位で作者を支援できます。支援するとMY COPYも届きます。</small></span>
+          <span><strong>作者への支援を受け付ける</strong><small>ONにすると100円MY COPYの代わりに支援導線になります。支援は100円〜、MY COPY込みです。</small></span>
         </label>
         <label id="commerceAmountField" class="commerce-amount-field" hidden>
           <span>販売価格</span>
