@@ -861,12 +861,12 @@
   }
   function ownCopyGateMode(doc){
     const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
-    return ['free','purchase','locked','support'].includes(mode)?mode:'free';
+    return ['free','purchase','locked','support','copy'].includes(mode)?mode:'free';
   }
   function commerceDraftSettings(doc=workingDocument){
     const saved=doc?.studio?.commerceDraft||{};
     const gate=ownCopyGateMode(doc);
-    const mode=gate==='locked'?'locked':(gate==='purchase'?'purchase':(gate==='support'?'support':'free'));
+    const mode=gate==='locked'?'locked':(gate==='purchase'?'purchase':(gate==='support'?'support':(gate==='copy'?'copy':'free')));
     const raw=Number(saved.amount);
     const amount=Number.isInteger(raw)&&raw>=100&&raw<=1000000?raw:100;
     const lockScene=Math.max(2,Math.floor(Number(saved.lockScene||doc?.commerce?.ownCopyGate?.lockScene||2)));
@@ -874,14 +874,15 @@
   }
   function currentCommerceSettings(){
     const support=Boolean(commerceModeFree?.checked&&commerceSupportEnabled?.checked);
-    const mode=commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(support?'support':'free'));
-    const amount=mode==='support'?100:Math.floor(Number(commerceAmountInput?.value||0));
+    const copy=Boolean(commerceModeFree?.checked&&ownCopyEnabledInput?.checked&&!support);
+    const mode=commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(support?'support':(copy?'copy':'free')));
+    const amount=(mode==='support'||mode==='copy')?100:Math.floor(Number(commerceAmountInput?.value||0));
     const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
     return {mode,amount,currency:'JPY',lockScene};
   }
   function validateCommerceSettings({focus=false}={}){
     const settings=currentCommerceSettings();
-    if(settings.mode==='free'||settings.mode==='support')return settings;
+    if(settings.mode==='free'||settings.mode==='support'||settings.mode==='copy')return settings;
     if(settings.mode==='locked'){
       const count=Array.isArray(workingDocument?.scenes)?workingDocument.scenes.length:0;
       if(!Number.isInteger(settings.lockScene)||settings.lockScene<2||settings.lockScene>count){
@@ -902,6 +903,7 @@
     const paid=Boolean(commerceModePurchase?.checked||commerceModeLocked?.checked);
     const locked=Boolean(commerceModeLocked?.checked);
     const support=Boolean(commerceModeFree?.checked&&commerceSupportEnabled?.checked);
+    const copy=Boolean(commerceModeFree?.checked&&ownCopyEnabledInput?.checked&&!support);
     if(commerceSupportPolicy)commerceSupportPolicy.hidden=!commerceModeFree?.checked;
     if(commerceAmountField)commerceAmountField.hidden=!paid;
     if(commerceLockField)commerceLockField.hidden=!locked;
@@ -913,15 +915,15 @@
       if(commerceLockPriceEcho)commerceLockPriceEcho.textContent=Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP');
     }
     if(commercePriceBadge){
-      commercePriceBadge.textContent=paid?`${locked?'LOCK · ':''}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(support?'無料 + 支援':'無料');
+      commercePriceBadge.textContent=paid?`${locked?'LOCK · ':''}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(support?'無料 + 支援':(copy?'無料 + MY COPY ¥100':'無料'));
       commercePriceBadge.classList.toggle('is-paid',paid);
       commercePriceBadge.classList.toggle('is-support',support);
     }
     if(commerceOwnCopyPolicy)commerceOwnCopyPolicy.hidden=paid;
-    if(paid||support){
-      if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}
-    }else if(ownCopyEnabledInput){
-      ownCopyEnabledInput.disabled=false;
+    if(ownCopyEnabledInput){
+      if(paid){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}
+      else if(support){ownCopyEnabledInput.checked=false;ownCopyEnabledInput.disabled=true;}
+      else ownCopyEnabledInput.disabled=false;
     }
     if(commercePriceStatus && (!paid || validateCommerceSettings()))commercePriceStatus.textContent='';
   }
@@ -931,14 +933,15 @@
     doc.commerce ||= {};
     doc.commerce.ownCopyGate={...(doc.commerce.ownCopyGate||{}),schemaVersion:'1',mode:settings.mode,...(settings.mode==='locked'?{lockScene:settings.lockScene}:{})};
     doc.studio ||= {};
-    doc.studio.commerceDraft={schemaVersion:'1',mode:settings.mode,currency:'JPY',...((settings.mode==='purchase'||settings.mode==='locked'||settings.mode==='support')&&Number.isInteger(settings.amount)?{amount:settings.amount}:{}),...(settings.mode==='locked'?{lockScene:settings.lockScene}:{})};
+    doc.studio.commerceDraft={schemaVersion:'1',mode:settings.mode,currency:'JPY',...((settings.mode==='purchase'||settings.mode==='locked'||settings.mode==='support'||settings.mode==='copy')&&Number.isInteger(settings.amount)?{amount:settings.amount}:{}),...(settings.mode==='locked'?{lockScene:settings.lockScene}:{})};
   }
   function restoreCommercePriceUI(doc){
     const settings=commerceDraftSettings(doc);
-    if(commerceModeFree)commerceModeFree.checked=settings.mode==='free'||settings.mode==='support';
+    if(commerceModeFree)commerceModeFree.checked=['free','support','copy'].includes(settings.mode);
     if(commerceModePurchase)commerceModePurchase.checked=settings.mode==='purchase';
     if(commerceModeLocked)commerceModeLocked.checked=settings.mode==='locked';
     if(commerceSupportEnabled)commerceSupportEnabled.checked=settings.mode==='support';
+    if(ownCopyEnabledInput&&!commerceModePurchase?.checked&&!commerceModeLocked?.checked)ownCopyEnabledInput.checked=settings.mode==='copy';
     if(commerceAmountInput)commerceAmountInput.value=String(settings.amount||100);
     if(commerceLockSceneInput)commerceLockSceneInput.value=String(settings.lockScene||2);
     renderCommercePriceUI();
@@ -960,7 +963,8 @@
   function applyOwnCopyPolicyToDocument(doc){
     if(!doc || typeof doc!=='object')return;
     doc.sharing ||= {};
-    doc.sharing.ownCopy={...(doc.sharing.ownCopy||{}),schemaVersion:'1',enabled:Boolean(ownCopyEnabledInput?.checked)};
+    const mode=currentCommerceSettings().mode;
+    doc.sharing.ownCopy={...(doc.sharing.ownCopy||{}),schemaVersion:'1',enabled:mode!=='free'};
   }
   function refreshRelayPolicyUI(){
     if(!menuRelayToggleButton)return;
@@ -1252,7 +1256,7 @@
     // accidentally overwrite a paid work with stale local FREE settings.
     if(status.commerce && workingDocument){
       const rawServerMode=String(status.commerce.mode||'free');
-      const serverMode=rawServerMode==='purchase'?'purchase':(rawServerMode==='support'?'support':'free');
+      const serverMode=rawServerMode==='purchase'?'purchase':(rawServerMode==='support'?'support':(rawServerMode==='copy'?'copy':'free'));
       const localLocked=ownCopyGateMode(workingDocument)==='locked';
       const mode=serverMode==='purchase'&&localLocked?'locked':serverMode;
       const amount=Math.floor(Number(status.commerce.amount||100));
@@ -1260,9 +1264,9 @@
       workingDocument.commerce ||= {};
       workingDocument.commerce.ownCopyGate={...(workingDocument.commerce.ownCopyGate||{}),schemaVersion:'1',mode,...(mode==='locked'?{lockScene}:{})};
       workingDocument.studio ||= {};
-      workingDocument.studio.commerceDraft={schemaVersion:'1',mode,currency:'JPY',...((mode==='purchase'||mode==='locked'||mode==='support')?{amount}: {}),...(mode==='locked'?{lockScene}:{})};
+      workingDocument.studio.commerceDraft={schemaVersion:'1',mode,currency:'JPY',...((mode==='purchase'||mode==='locked'||mode==='support'||mode==='copy')?{amount}: {}),...(mode==='locked'?{lockScene}:{})};
       restoreCommercePriceUI(workingDocument);
-      if(mode==='purchase'||mode==='locked'||mode==='support')applyOwnCopyPolicyToDocument(workingDocument);
+      if(mode==='purchase'||mode==='locked'||mode==='support'||mode==='copy')applyOwnCopyPolicyToDocument(workingDocument);
     }
 
     // Compare against the actual hosted scene so an imported master .scene can
@@ -2677,8 +2681,8 @@
       },
       player:{ navigation:{ allowPrevious:true } },
       sharing:{ relay:{ schemaVersion:'1', enabled:Boolean(relayEnabled) }, ownCopy:{ schemaVersion:'1', enabled:Boolean(ownCopyEnabledInput?.checked) } },
-      commerce:{ ownCopyGate:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'support':'free')), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
-      studio:{ commerceDraft:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'support':'free')), currency:'JPY', ...((commerceModePurchase?.checked||commerceModeLocked?.checked)?{amount:Math.floor(Number(commerceAmountInput?.value||100))}:(commerceSupportEnabled?.checked?{amount:100}:{})), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
+      commerce:{ ownCopyGate:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'support':(ownCopyEnabledInput?.checked?'copy':'free'))), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
+      studio:{ commerceDraft:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'support':(ownCopyEnabledInput?.checked?'copy':'free'))), currency:'JPY', ...((commerceModePurchase?.checked||commerceModeLocked?.checked)?{amount:Math.floor(Number(commerceAmountInput?.value||100))}:((commerceSupportEnabled?.checked||ownCopyEnabledInput?.checked)?{amount:100}:{})), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
       cover:{
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
@@ -5003,7 +5007,7 @@
           'X-Commerce-Access':currentCommerceSettings().mode==='locked'?'preview_lock':'full',
           ...(currentCommerceSettings().mode==='locked'?{'X-Commerce-Lock-Scene':String(currentCommerceSettings().lockScene)}:{}),
           'X-Commerce-Currency':'JPY',
-          ...((currentCommerceSettings().mode==='purchase'||currentCommerceSettings().mode==='locked'||currentCommerceSettings().mode==='support')?{'X-Commerce-Amount':String(currentCommerceSettings().amount)}:{})
+          ...((currentCommerceSettings().mode==='purchase'||currentCommerceSettings().mode==='locked'||currentCommerceSettings().mode==='support'||currentCommerceSettings().mode==='copy')?{'X-Commerce-Amount':String(currentCommerceSettings().amount)}:{})
         }),
         body:JSON.stringify(hostedDocument)
       };
@@ -7468,12 +7472,15 @@
   commerceLockSceneInput?.addEventListener('input',()=>{renderCommercePriceUI();if(!workingDocument)ensureWorkingDocumentFromEasy();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(120);markDirty?.();});
   [commerceModeFree,commerceModePurchase,commerceModeLocked].forEach(el=>el?.addEventListener('change',()=>{
     if(!workingDocument)ensureWorkingDocumentFromEasy();
-    if(!commerceModeFree?.checked&&commerceSupportEnabled)commerceSupportEnabled.checked=false;
+    if(!commerceModeFree?.checked){if(commerceSupportEnabled)commerceSupportEnabled.checked=false;}
     renderCommercePriceUI();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(80);
   }));
   commerceSupportEnabled?.addEventListener('change',()=>{
     if(!workingDocument)ensureWorkingDocumentFromEasy();
-    if(commerceSupportEnabled.checked&&commerceModeFree)commerceModeFree.checked=true;
+    if(commerceSupportEnabled.checked){
+      if(commerceModeFree)commerceModeFree.checked=true;
+      if(ownCopyEnabledInput)ownCopyEnabledInput.checked=false;
+    }
     renderCommercePriceUI();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(80);markDirty?.();
   });
   commerceAmountInput?.addEventListener('input',()=>{
@@ -7481,7 +7488,7 @@
     if(!workingDocument)ensureWorkingDocumentFromEasy();
     syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(180);
   });
-  ownCopyEnabledInput?.addEventListener('change',()=>{if(!workingDocument)ensureWorkingDocumentFromEasy();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);});
+  ownCopyEnabledInput?.addEventListener('change',()=>{if(!workingDocument)ensureWorkingDocumentFromEasy();if(ownCopyEnabledInput.checked){if(commerceModeFree)commerceModeFree.checked=true;if(commerceSupportEnabled)commerceSupportEnabled.checked=false;}renderCommercePriceUI();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);markDirty?.();});
   if(endingLegacyEditor){
     endingLegacyEditor.open = window.matchMedia('(min-width:721px)').matches;
   }
