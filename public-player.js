@@ -608,7 +608,7 @@
   function commercePreviewLocked(doc=documentData){return doc?.commerce?.ownCopyGate?.access==='preview_lock';}
   function commerceGateMode(doc=documentData){
     const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
-    return ['free','purchase','support'].includes(mode)?mode:'free';
+    return ['free','purchase','support','copy'].includes(mode)?mode:'free';
   }
   function formatJPY(amount){return `¥${Math.max(0,Math.floor(Number(amount)||0)).toLocaleString('ja-JP')}`;}
   function cleanCommerceReturnUrl(){
@@ -726,14 +726,14 @@
       if(ownership?.owned){showAlreadyPurchased();return;}
       ownCopyButton.textContent='価格を確認しています…';
       const commerce=await fetchCanonicalCommerce(doc);
-      if(!commerce||commerce.status!=='active'||!['purchase','support'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
+      if(!commerce||commerce.status!=='active'||!['purchase','support','copy'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
         throw new Error('販売価格を確認できませんでした。');
       }
       const amount=Number(commerce.amount);
       ownCopyButton.disabled=false;
-      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='support'?'作者を支援する':`${formatJPY(amount)}で購入して受け取る`);
+      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='support'?'作者を支援する':(commerce.mode==='copy'?'100円でMY COPYを本棚に残す':`${formatJPY(amount)}で購入して受け取る`));
       ownCopyButton.onclick=()=>purchasePublicOwnCopy(commerce);
-      if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':(commerce.mode==='support'?'100円から支援できます。支援するとMY COPYも本棚に届きます。':'決済後、この作品を自分の本棚に受け取れます。');
+      if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':(commerce.mode==='support'?'100円から支援できます。支援するとMY COPYも本棚に届きます。':(commerce.mode==='copy'?'100円の発行料で、この作品をMY COPYとして本棚に残せます。':'決済後、この作品を自分の本棚に受け取れます。'));
     }catch(error){
       console.warn('Commerce price lookup failed',error);
       ownCopyButton.disabled=false;
@@ -802,11 +802,12 @@
       const shortage=Math.max(0,Number(amount)-Number(available));
       const success=mode==='success';
       const support=commerceMode==='support';
-      const dialogLabel=support?(success?'支援完了':'支援方法'):(success?'購入完了':'購入方法');
-      const heading=support?(success?'作者を支援しました':'支援方法を選ぶ'):(success?'売上残高で購入しました':'購入方法を選ぶ');
-      const amountLabel=support?'支援金額':'作品価格';
-      const afterLabel=support?'支援後残高':'購入後残高';
-      const balanceAction=support?`${formatJPY(amount)}を売上残高から支援する`:`${formatJPY(amount)}を売上残高から支払う`;
+      const copy=commerceMode==='copy';
+      const dialogLabel=support?(success?'支援完了':'支援方法'):(copy?(success?'MY COPY発行完了':'支払い方法'):(success?'購入完了':'購入方法'));
+      const heading=support?(success?'作者を支援しました':'支援方法を選ぶ'):(copy?(success?'MY COPYを発行しました':'MY COPYの支払い方法'):(success?'売上残高で購入しました':'購入方法を選ぶ'));
+      const amountLabel=support?'支援金額':(copy?'MY COPY発行料':'作品価格');
+      const afterLabel=support?'支援後残高':(copy?'支払い後残高':'購入後残高');
+      const balanceAction=support?`${formatJPY(amount)}を売上残高から支援する`:(copy?`${formatJPY(amount)}を売上残高から支払う`:`${formatJPY(amount)}を売上残高から支払う`);
       const cardAction=support?'カードで支援する':'カードで支払う';
       overlay.innerHTML=`<div class="ahako-balance-card" role="dialog" aria-modal="true" aria-label="${dialogLabel}">
         <h2>${heading}</h2>
@@ -921,6 +922,7 @@
   async function purchasePublicOwnCopy(commerce=null){
     const publicationId=currentWorkId();if(!publicationId||!ownCopyButton)return;
     const supportMode=String(commerce?.mode||'')==='support';
+    const copyMode=String(commerce?.mode||'')==='copy';
     let supportAmount=null;
     if(supportMode){
       supportAmount=await showSupportAmountModal();
@@ -955,7 +957,7 @@
         const balance=await fetchAuthorPurchaseBalance(authorToken);
         if(balance?.connected){
           displayedBalance=Math.max(0,Number(balance.available)||0);
-          const choice=await showBalancePurchaseModal({amount:Number(orderPayload.order.amount),available:displayedBalance,commerceMode:supportMode?'support':'purchase'});
+          const choice=await showBalancePurchaseModal({amount:Number(orderPayload.order.amount),available:displayedBalance,commerceMode:supportMode?'support':(copyMode?'copy':'purchase')});
           if(choice==='cancel'){
             ownCopyButton.disabled=false;
             if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'支援をキャンセルしました。':'購入をキャンセルしました。';
@@ -1006,7 +1008,7 @@
         const before=Number.isFinite(Number(checkoutPayload.availableBefore))?Number(checkoutPayload.availableBefore):displayedBalance;
         const after=Number.isFinite(Number(checkoutPayload.availableAfter))?Number(checkoutPayload.availableAfter):Math.max(0,Number(before||0)-Number(checkoutPayload.amount||orderPayload.order.amount||0));
         if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'売上残高から支援しました。':'売上残高から購入しました。';
-        await showBalancePurchaseModal({mode:'success',amount:Number(checkoutPayload.amount||orderPayload.order.amount),available:Number(before||0),after,commerceMode:supportMode?'support':'purchase'});
+        await showBalancePurchaseModal({mode:'success',amount:Number(checkoutPayload.amount||orderPayload.order.amount),available:Number(before||0),after,commerceMode:supportMode?'support':(copyMode?'copy':'purchase')});
         if(ownCopyStatus)ownCopyStatus.textContent='MY COPYを本棚へ用意しています…';
         await finishPaidOwnCopy(orderId,accessToken,{continueReading:commercePreviewLocked(documentData)});
         return;
