@@ -160,10 +160,15 @@
       <div class="admin-tab-panel" data-admin-panel="audit">
       <section class="panel payment-audit-panel">
         <div class="section-head"><div><small>PAYMENT AUDIT</small><h2>決済監査</h2></div><small class="muted-note">Stripe実績とOrderを再照合・読み取り専用</small></div>
-        <p class="selection-lead">最近の注文から［監査］を押すだけで、注文額・作者取り分・あ箱取り分・Stripe決済/送金・MY COPY権利を照合します。監査によって決済や権利が変更されることはありません。</p>
-        <div class="audit-orders-head"><strong>最近の注文</strong><button id="auditOrdersReloadButton" type="button">更新</button></div>
+        <p class="selection-lead">最近の確定済み注文を自動でStripeと照合します。普段は件数だけ確認し、異常がある注文だけ開いて調査します。監査によって決済や権利が変更されることはありません。</p>
+        <div class="audit-orders-head"><strong>自動監査</strong><button id="auditOrdersReloadButton" type="button">再監査</button></div>
+        <div class="audit-dashboard" aria-live="polite">
+          <div class="is-ok"><small>正常</small><strong id="auditOkCount">–</strong></div>
+          <div class="is-alert"><small>要確認</small><strong id="auditAlertCount">–</strong></div>
+          <div><small>未監査</small><strong id="auditPendingCount">–</strong></div>
+        </div>
         <p id="auditOrdersStatus" class="status"></p>
-        <div id="auditOrdersList" class="audit-orders-list"><div class="empty">読み込み中…</div></div>
+        <div id="auditOrdersList" class="audit-orders-list"><div class="empty">監査を開始しています…</div></div>
         <details class="audit-manual"><summary>Order IDを直接入力</summary>
         <div class="payment-audit-form">
           <input id="auditOrderIdInput" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="order_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">

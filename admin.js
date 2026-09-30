@@ -4,7 +4,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
 let lastStats=null;
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),authorCount:$('#authorCount'),authorList:$('#authorList'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems'),auditOrderId:$('#auditOrderIdInput'),auditOrderButton:$('#auditOrderButton'),auditOrderStatus:$('#auditOrderStatus'),auditOrderResult:$('#auditOrderResult'),auditOrdersList:$('#auditOrdersList'),auditOrdersStatus:$('#auditOrdersStatus'),auditOrdersReload:$('#auditOrdersReloadButton')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),authorCount:$('#authorCount'),authorList:$('#authorList'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems'),auditOrderId:$('#auditOrderIdInput'),auditOrderButton:$('#auditOrderButton'),auditOrderStatus:$('#auditOrderStatus'),auditOrderResult:$('#auditOrderResult'),auditOrdersList:$('#auditOrdersList'),auditOrdersStatus:$('#auditOrdersStatus'),auditOrdersReload:$('#auditOrdersReloadButton'),auditOkCount:$('#auditOkCount'),auditAlertCount:$('#auditAlertCount'),auditPendingCount:$('#auditPendingCount')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){const r=await fetch(API+path,{...options,headers:{...headers(),...(options.headers||{})},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok){const e=new Error(data.error||`HTTP ${r.status}`);e.status=r.status;throw e;}return data;}
@@ -27,35 +27,77 @@ function renderPaymentAudit(audit){
   els.auditOrderResult.innerHTML=`<div class="audit-verdict ${ok?'is-ok':'is-mismatch'}"><small>${ok?'AUDIT OK':'MISMATCH'}</small><strong>${ok?'✓ 一致しています':'⚠ 不一致を検出'}</strong><span>${escapeHtml(audit.orderId||'')}</span></div><div class="audit-summary"><div><small>注文額</small><strong>${yen(audit.amount)}</strong></div><div><small>作者</small><strong>${yen(audit.expectedSellerAmount)}</strong></div><div><small>あ箱</small><strong>${yen(audit.expectedPlatformFee)}</strong></div><div><small>決済経路</small><strong>${escapeHtml(audit.paymentRail||'–')}</strong></div><div><small>Order状態</small><strong>${escapeHtml(audit.orderStatus||'–')}</strong></div><div><small>不一致</small><strong>${mismatches.length}</strong></div></div>${errorHtml}<div class="audit-checks">${rows||'<div class="empty">照合項目がありません。</div>'}</div><small class="audit-time">監査日時 ${escapeHtml(formatJstDate(audit.checkedAt))}</small>`;
 }
 function paymentRailLabel(value){return String(value||'card')==='balance'?'残高':'カード';}
-function renderAuditOrders(rows){
-  if(!els.auditOrdersList)return;
-  if(!Array.isArray(rows)||!rows.length){els.auditOrdersList.innerHTML='<div class="empty">注文はまだありません。</div>';return;}
-  els.auditOrdersList.innerHTML=rows.map(row=>`<div class="audit-order-row" data-order-id="${escapeHtml(row.orderId||'')}"><div class="audit-order-main"><strong>${yen(row.amount)}</strong><span class="audit-order-status is-${escapeHtml(row.status||'unknown')}">${escapeHtml(row.status||'unknown')}</span><span>${escapeHtml(row.mode||'–')}</span><span>${escapeHtml(paymentRailLabel(row.paymentRail))}</span></div><code>${escapeHtml(row.orderId||'')}</code><div class="audit-order-meta"><span>${escapeHtml(formatJstDate(row.paidAt||row.updatedAt||row.createdAt))}</span><span>${escapeHtml(row.workId||'')}</span></div><button class="audit-order-run" type="button" data-audit-order="${escapeHtml(row.orderId||'')}">監査</button></div>`).join('');
-  els.auditOrdersList.querySelectorAll('[data-audit-order]').forEach(button=>button.addEventListener('click',()=>{
+function auditOrderCard(row,{kind='alert',audit=null,error=''}={}){
+  const mismatchCount=Array.isArray(audit?.mismatches)?audit.mismatches.length:0;
+  const reason=error?error:(mismatchCount?`不一致 ${mismatchCount}件`:(audit?.errors?.length?`取得エラー ${audit.errors.length}件`:''));
+  return `<div class="audit-order-row is-${escapeHtml(kind)}" data-order-id="${escapeHtml(row.orderId||'')}"><div class="audit-order-main"><strong>${yen(row.amount)}</strong><span class="audit-order-status is-${escapeHtml(row.status||'unknown')}">${escapeHtml(row.status||'unknown')}</span><span>${escapeHtml(row.mode||'–')}</span><span>${escapeHtml(paymentRailLabel(row.paymentRail))}</span>${reason?`<span class="audit-reason">${escapeHtml(reason)}</span>`:''}</div><code>${escapeHtml(row.orderId||'')}</code><div class="audit-order-meta"><span>${escapeHtml(formatJstDate(row.paidAt||row.updatedAt||row.createdAt))}</span><span>${escapeHtml(row.workId||'')}</span></div><button class="audit-order-run" type="button" data-audit-order="${escapeHtml(row.orderId||'')}">詳細</button></div>`;
+}
+function bindAuditDetailButtons(){
+  els.auditOrdersList?.querySelectorAll('[data-audit-order]').forEach(button=>button.addEventListener('click',()=>{
     if(els.auditOrderId)els.auditOrderId.value=button.dataset.auditOrder||'';
     runPaymentAudit();
   }));
 }
+async function fetchPaymentAudit(orderId){
+  const r=await fetch(API+`/admin/commerce/order/${encodeURIComponent(orderId)}/audit`,{method:'GET',headers:headers(),cache:'no-store'});
+  const data=await r.json().catch(()=>({}));
+  if(data?.audit)return {audit:data.audit,httpStatus:r.status};
+  throw new Error(data?.error||`HTTP ${r.status}`);
+}
+async function mapWithConcurrency(items,limit,fn){
+  const results=new Array(items.length);let next=0;
+  async function worker(){while(true){const i=next++;if(i>=items.length)return;try{results[i]=await fn(items[i],i);}catch(error){results[i]={error};}}}
+  await Promise.all(Array.from({length:Math.min(limit,Math.max(1,items.length))},()=>worker()));
+  return results;
+}
+function renderAutomaticAudit(rows,results,skipped){
+  const ok=[];const alerts=[];
+  rows.forEach((row,i)=>{
+    const result=results[i]||{};
+    if(result.error){alerts.push({row,error:String(result.error?.message||result.error)});return;}
+    if(result.audit?.status==='ok')ok.push({row,audit:result.audit});
+    else alerts.push({row,audit:result.audit,error:''});
+  });
+  if(els.auditOkCount)els.auditOkCount.textContent=String(ok.length);
+  if(els.auditAlertCount)els.auditAlertCount.textContent=String(alerts.length);
+  if(els.auditPendingCount)els.auditPendingCount.textContent=String(skipped.length);
+  const alertHtml=alerts.length
+    ?`<div class="audit-alert-section"><div class="audit-list-title"><strong>要確認</strong><span>${alerts.length}件</span></div>${alerts.map(x=>auditOrderCard(x.row,{kind:'alert',audit:x.audit,error:x.error})).join('')}</div>`
+    :`<div class="audit-all-clear"><strong>✓ 要確認なし</strong><span>確定済み注文はすべて一致しています。</span></div>`;
+  const okHtml=ok.length?`<details class="audit-normal"><summary>正常 ${ok.length}件を表示</summary><div class="audit-normal-list">${ok.map(x=>auditOrderCard(x.row,{kind:'ok',audit:x.audit})).join('')}</div></details>`:'';
+  const skippedHtml=skipped.length?`<details class="audit-normal"><summary>未監査 ${skipped.length}件を表示</summary><div class="audit-normal-list">${skipped.map(row=>auditOrderCard(row,{kind:'pending'})).join('')}</div></details>`:'';
+  els.auditOrdersList.innerHTML=alertHtml+okHtml+skippedHtml;
+  bindAuditDetailButtons();
+  return {ok:ok.length,alerts:alerts.length,skipped:skipped.length};
+}
 async function loadAuditOrders(){
   if(!els.auditOrdersList)return;
-  els.auditOrdersStatus.textContent='最近の注文を読み込み中…';
+  if(els.auditOrdersReload)els.auditOrdersReload.disabled=true;
+  if(els.auditOkCount)els.auditOkCount.textContent='…';if(els.auditAlertCount)els.auditAlertCount.textContent='…';if(els.auditPendingCount)els.auditPendingCount.textContent='…';
+  els.auditOrdersStatus.textContent='最近の注文を取得しています…';
+  els.auditOrdersList.innerHTML='<div class="empty">監査を開始しています…</div>';
   try{
     const data=await api('/admin/commerce/orders?limit=30');
-    renderAuditOrders(data.orders||[]);
-    els.auditOrdersStatus.textContent=`${(data.orders||[]).length}件表示`;
-  }catch(e){els.auditOrdersStatus.textContent=`注文一覧を取得できませんでした: ${e.message}`;els.auditOrdersList.innerHTML='<div class="empty">読み込みに失敗しました。</div>';}
+    const all=Array.isArray(data.orders)?data.orders:[];
+    const auditable=all.filter(row=>['paid','refunded'].includes(String(row.status||'').toLowerCase()));
+    const skipped=all.filter(row=>!['paid','refunded'].includes(String(row.status||'').toLowerCase()));
+    els.auditOrdersStatus.textContent=`確定済み ${auditable.length}件を自動監査中…`;
+    const results=await mapWithConcurrency(auditable,4,async row=>await fetchPaymentAudit(row.orderId));
+    const summary=renderAutomaticAudit(auditable,results,skipped);
+    els.auditOrdersStatus.textContent=`監査完了：正常 ${summary.ok}件 / 要確認 ${summary.alerts}件 / 未監査 ${summary.skipped}件`;
+  }catch(e){
+    els.auditOrdersStatus.textContent=`自動監査できませんでした: ${e.message}`;
+    els.auditOrdersList.innerHTML='<div class="empty">読み込みに失敗しました。</div>';
+    if(els.auditOkCount)els.auditOkCount.textContent='–';if(els.auditAlertCount)els.auditAlertCount.textContent='–';if(els.auditPendingCount)els.auditPendingCount.textContent='–';
+  }finally{if(els.auditOrdersReload)els.auditOrdersReload.disabled=false;}
 }
 async function runPaymentAudit(){
   const orderId=String(els.auditOrderId?.value||'').trim().toLowerCase();
-  if(!/^order_[a-f0-9]{32}$/.test(orderId)){
-    els.auditOrderStatus.textContent='Order IDを確認してください。';return;
-  }
+  if(!/^order_[a-f0-9]{32}$/.test(orderId)){els.auditOrderStatus.textContent='Order IDを確認してください。';return;}
   els.auditOrderButton.disabled=true;els.auditOrderButton.textContent='監査中…';els.auditOrderStatus.textContent='Stripeと照合しています…';els.auditOrderResult.innerHTML='';
   try{
-    const r=await fetch(API+`/admin/commerce/order/${encodeURIComponent(orderId)}/audit`,{method:'GET',headers:headers(),cache:'no-store'});
-    const data=await r.json().catch(()=>({}));
-    if(data?.audit){renderPaymentAudit(data.audit);els.auditOrderStatus.textContent=data.audit.status==='ok'?'監査完了：一致':'監査完了：不一致があります';return;}
-    throw new Error(data?.error||`HTTP ${r.status}`);
+    const {audit}=await fetchPaymentAudit(orderId);
+    renderPaymentAudit(audit);els.auditOrderStatus.textContent=audit.status==='ok'?'監査完了：一致':'監査完了：不一致があります';
   }catch(e){els.auditOrderStatus.textContent=`監査できませんでした: ${e.message}`;}
   finally{els.auditOrderButton.disabled=false;els.auditOrderButton.textContent='監査する';}
 }
