@@ -887,8 +887,8 @@
         return null;
       }
     }
-    if(!Number.isInteger(settings.amount)||settings.amount<100||settings.amount>1000000){
-      if(commercePriceStatus)commercePriceStatus.textContent='販売価格は100円〜1,000,000円で入力してください。';
+    if(!Number.isInteger(settings.amount)||settings.amount<100||settings.amount>1000000||settings.amount%100!==0){
+      if(commercePriceStatus)commercePriceStatus.textContent='販売価格は100円〜1,000,000円の100円単位で入力してください。';
       if(focus)commerceAmountInput?.focus();
       return null;
     }
