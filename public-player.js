@@ -793,7 +793,7 @@
     `;
     document.head.appendChild(style);
   }
-  function showBalancePurchaseModal({amount,available,mode='choice',after=null}){
+  function showBalancePurchaseModal({amount,available,mode='choice',after=null,commerceMode='purchase'}){
     ensureBalancePurchaseModalStyle();
     return new Promise(resolve=>{
       const overlay=document.createElement('div');overlay.className='ahako-balance-modal';
@@ -801,21 +801,28 @@
       const remaining=Math.max(0,Number(available)-Number(amount));
       const shortage=Math.max(0,Number(amount)-Number(available));
       const success=mode==='success';
-      overlay.innerHTML=`<div class="ahako-balance-card" role="dialog" aria-modal="true" aria-label="${success?'購入完了':'購入方法'}">
-        <h2>${success?'売上残高で購入しました':'購入方法を選ぶ'}</h2>
+      const support=commerceMode==='support';
+      const dialogLabel=support?(success?'支援完了':'支援方法'):(success?'購入完了':'購入方法');
+      const heading=support?(success?'作者を支援しました':'支援方法を選ぶ'):(success?'売上残高で購入しました':'購入方法を選ぶ');
+      const amountLabel=support?'支援金額':'作品価格';
+      const afterLabel=support?'支援後残高':'購入後残高';
+      const balanceAction=support?`${formatJPY(amount)}を売上残高から支援する`:`${formatJPY(amount)}を売上残高から支払う`;
+      const cardAction=support?'カードで支援する':'カードで支払う';
+      overlay.innerHTML=`<div class="ahako-balance-card" role="dialog" aria-modal="true" aria-label="${dialogLabel}">
+        <h2>${heading}</h2>
         <div class="ahako-balance-rows">
-          ${success?`<div class="ahako-balance-row"><span>購入前残高</span><strong>${formatJPY(available)}</strong></div>
-          <div class="ahako-balance-row"><span>作品価格</span><strong>${formatJPY(amount)}</strong></div>
-          <div class="ahako-balance-row"><span>購入後残高</span><strong>${formatJPY(after==null?remaining:after)}</strong></div>`:
-          `<div class="ahako-balance-row"><span>作品価格</span><strong>${formatJPY(amount)}</strong></div>
+          ${success?`<div class="ahako-balance-row"><span>${support?'支援前残高':'購入前残高'}</span><strong>${formatJPY(available)}</strong></div>
+          <div class="ahako-balance-row"><span>${amountLabel}</span><strong>${formatJPY(amount)}</strong></div>
+          <div class="ahako-balance-row"><span>${afterLabel}</span><strong>${formatJPY(after==null?remaining:after)}</strong></div>`:
+          `<div class="ahako-balance-row"><span>${amountLabel}</span><strong>${formatJPY(amount)}</strong></div>
           <div class="ahako-balance-row"><span>利用可能残高</span><strong>${formatJPY(available)}</strong></div>
-          <div class="ahako-balance-row"><span>${enough?'購入後残高':'不足額'}</span><strong>${formatJPY(enough?remaining:shortage)}</strong></div>`}
+          <div class="ahako-balance-row"><span>${enough?afterLabel:'不足額'}</span><strong>${formatJPY(enough?remaining:shortage)}</strong></div>`}
         </div>
-        <p class="ahako-balance-note">${success?'MY COPYを本棚に受け取れます。':(enough?'売上残高はStripeで確認した利用可能額です。':'売上残高が足りないため、残高からは購入できません。')}</p>
+        <p class="ahako-balance-note">${success?(support?'支援が完了しました。MY COPYを本棚に受け取れます。':'MY COPYを本棚に受け取れます。'):(enough?'売上残高はStripeで確認した利用可能額です。':`売上残高が足りないため、残高からは${support?'支援':'購入'}できません。`)}</p>
         <div class="ahako-balance-actions">
           ${success?'<button data-choice="done">本棚で見る</button>':
-            (enough?`<button data-choice="balance">${formatJPY(amount)}を売上残高から支払う</button><button class="secondary" data-choice="card">カードで支払う</button><button class="ghost" data-choice="cancel">キャンセル</button>`:
-            `<button data-choice="card">カードで支払う</button><button class="ghost" data-choice="cancel">キャンセル</button>`)}
+            (enough?`<button data-choice="balance">${balanceAction}</button><button class="secondary" data-choice="card">${cardAction}</button><button class="ghost" data-choice="cancel">キャンセル</button>`:
+            `<button data-choice="card">${cardAction}</button><button class="ghost" data-choice="cancel">キャンセル</button>`)}
         </div></div>`;
       const finish=value=>{overlay.remove();resolve(value);};
       overlay.addEventListener('click',event=>{
@@ -948,10 +955,10 @@
         const balance=await fetchAuthorPurchaseBalance(authorToken);
         if(balance?.connected){
           displayedBalance=Math.max(0,Number(balance.available)||0);
-          const choice=await showBalancePurchaseModal({amount:Number(orderPayload.order.amount),available:displayedBalance});
+          const choice=await showBalancePurchaseModal({amount:Number(orderPayload.order.amount),available:displayedBalance,commerceMode:supportMode?'support':'purchase'});
           if(choice==='cancel'){
             ownCopyButton.disabled=false;
-            if(ownCopyStatus)ownCopyStatus.textContent='購入をキャンセルしました。';
+            if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'支援をキャンセルしました。':'購入をキャンセルしました。';
             return;
           }
           selectedPaymentMethod=choice==='balance'?'author_balance':'card';
@@ -963,7 +970,7 @@
               const consentChoice=await showAccountDebitConsentModal({amount:Number(orderPayload.order.amount)});
               if(consentChoice!=='accept'){
                 ownCopyButton.disabled=false;
-                if(ownCopyStatus)ownCopyStatus.textContent='売上残高からの購入をキャンセルしました。';
+                if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'売上残高からの支援をキャンセルしました。':'売上残高からの購入をキャンセルしました。';
                 return;
               }
               if(ownCopyStatus)ownCopyStatus.textContent='同意を保存しています…';
@@ -990,7 +997,7 @@
         if(checkoutPayload?.diagnostic){
           await showBalanceDiagnosticModal(checkoutPayload);
           ownCopyButton.disabled=false;
-          if(ownCopyStatus)ownCopyStatus.textContent='残高購入の診断情報を表示しました。';
+          if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'残高支援の診断情報を表示しました。':'残高購入の診断情報を表示しました。';
           return;
         }
         throw new Error(String(checkoutPayload?.error||'Stripe決済を開始できませんでした。'));
@@ -998,8 +1005,8 @@
       if(checkoutPayload?.paid===true&&checkoutPayload?.paymentRail==='connected_balance'){
         const before=Number.isFinite(Number(checkoutPayload.availableBefore))?Number(checkoutPayload.availableBefore):displayedBalance;
         const after=Number.isFinite(Number(checkoutPayload.availableAfter))?Number(checkoutPayload.availableAfter):Math.max(0,Number(before||0)-Number(checkoutPayload.amount||orderPayload.order.amount||0));
-        if(ownCopyStatus)ownCopyStatus.textContent='売上残高から購入しました。';
-        await showBalancePurchaseModal({mode:'success',amount:Number(checkoutPayload.amount||orderPayload.order.amount),available:Number(before||0),after});
+        if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'売上残高から支援しました。':'売上残高から購入しました。';
+        await showBalancePurchaseModal({mode:'success',amount:Number(checkoutPayload.amount||orderPayload.order.amount),available:Number(before||0),after,commerceMode:supportMode?'support':'purchase'});
         if(ownCopyStatus)ownCopyStatus.textContent='MY COPYを本棚へ用意しています…';
         await finishPaidOwnCopy(orderId,accessToken,{continueReading:commercePreviewLocked(documentData)});
         return;
@@ -1018,7 +1025,7 @@
           }
         });
         ownCopyButton.disabled=false;
-        if(ownCopyStatus)ownCopyStatus.textContent='残高購入の診断情報を表示しました。';
+        if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'残高支援の診断情報を表示しました。':'残高購入の診断情報を表示しました。';
         return;
       }
       if(!checkoutPayload?.checkoutUrl){
