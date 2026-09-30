@@ -12113,3 +12113,25 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
   .commerce-summary-copy{gap:3px}
   .commerce-summary-value{font-size:10px!important}
 }
+
+/* AHAKO commerce UI compact V5 */
+.commerce-summary-value{
+  display:inline-flex!important;
+  width:max-content!important;
+  align-items:center;
+  margin-top:2px!important;
+  padding:4px 8px!important;
+  border-radius:999px!important;
+  background:#eef7ee!important;
+  color:#397348!important;
+  font-size:10px!important;
+  font-weight:700!important;
+  line-height:1.15!important;
+}
+.commerce-price-card-simple details[open] .commerce-summary-value{display:none!important}
+
+@media(max-width:620px){
+  /* Tighten only Work info/cover -> commerce. Keep breathing room before Publish. */
+  .easy-panel .commerce-price-card-simple{margin-top:6px!important;margin-bottom:0!important}
+  .easy-panel .commerce-price-card-simple + #easyPublishButton{margin-top:34px!important}
+}
