@@ -12158,3 +12158,75 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
     padding:11px 13px!important;
   }
 }
+
+/* AHAKO commerce header V7 — mock #2 */
+.commerce-price-card-simple{
+  border-color:#c8dfcf!important;
+  background:linear-gradient(90deg,#f7fcf8 0%,#ffffff 42%,#fbfefc 100%)!important;
+  box-shadow:0 5px 18px rgba(38,102,60,.06)!important;
+}
+.commerce-price-card-simple .commerce-price-summary{
+  min-height:72px!important;
+  padding:12px 16px!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:12px!important;
+}
+.commerce-summary-icon{
+  width:40px;height:40px;flex:0 0 40px;
+  display:grid;place-items:center;
+  border-radius:50%;
+  background:#eaf6ed;color:#176b3a;
+}
+.commerce-summary-title{
+  min-width:0;display:grid;gap:3px;
+}
+.commerce-summary-title strong{
+  font-size:14px!important;line-height:1.2!important;color:#171a1d;
+}
+.commerce-summary-title small{
+  font-size:10px;line-height:1.25;color:#7b838b;white-space:nowrap;
+}
+.commerce-price-card-simple .commerce-summary-value{
+  display:inline-flex!important;
+  min-height:38px;
+  align-items:center!important;
+  justify-content:center;
+  margin:0 4px 0 auto!important;
+  padding:0 17px!important;
+  border-radius:20px!important;
+  font-size:11px!important;
+  font-weight:800!important;
+  line-height:1!important;
+  white-space:nowrap;
+}
+.commerce-price-card-simple details[open] .commerce-summary-value{display:inline-flex!important}
+.commerce-price-card-simple .commerce-price-summary::after{
+  content:"›"!important;
+  transform:none!important;
+  margin-left:0!important;
+  font-size:24px!important;
+  line-height:1!important;
+  color:#5f6a64!important;
+}
+.commerce-price-card-simple details[open] .commerce-price-summary::after{
+  content:"⌃"!important;
+  font-size:15px!important;
+}
+.commerce-badge-free{background:#197a43!important;color:#fff!important}
+.commerce-badge-support{background:#2f72a7!important;color:#fff!important}
+.commerce-badge-purchase{background:#b87412!important;color:#fff!important}
+.commerce-badge-locked{background:#a85a17!important;color:#fff!important}
+
+@media(max-width:620px){
+  .easy-panel .commerce-price-card-simple{margin-top:0!important}
+  .commerce-price-card-simple .commerce-price-summary{
+    min-height:64px!important;padding:10px 12px!important;gap:9px!important;
+  }
+  .commerce-summary-icon{width:34px;height:34px;flex-basis:34px}
+  .commerce-summary-icon svg{width:17px;height:17px}
+  .commerce-summary-title small{display:none}
+  .commerce-price-card-simple .commerce-summary-value{
+    min-height:32px;padding:0 11px!important;font-size:9px!important;
+  }
+}
