@@ -915,7 +915,8 @@
       if(commerceLockPriceEcho)commerceLockPriceEcho.textContent=Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP');
     }
     if(commercePriceBadge){
-      commercePriceBadge.textContent=paid?`${locked?'LOCK · ':'MY COPY · '}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(support?'支援':'MY COPY ¥100');
+      const commerceBadgeText=commercePriceBadge?.querySelector('.commerce-badge-text');
+    if(commerceBadgeText)commerceBadgeText.textContent=paid?`${locked?'有料ロック ':'MY COPY販売 '}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(support?'無料・支援 ¥100〜':'無料・MY COPY ¥100');
     commercePriceBadge.classList.remove('commerce-badge-free','commerce-badge-support','commerce-badge-purchase','commerce-badge-locked');
     commercePriceBadge.classList.add(locked?'commerce-badge-locked':(commerceModePurchase?.checked?'commerce-badge-purchase':(support?'commerce-badge-support':'commerce-badge-free')));
       commercePriceBadge.classList.toggle('is-paid',paid);

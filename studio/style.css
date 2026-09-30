@@ -12230,3 +12230,60 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
     min-height:32px;padding:0 11px!important;font-size:9px!important;
   }
 }
+
+/* AHAKO commerce header V8 — approved visual #2 */
+.commerce-price-card-simple{
+  background:#fff!important;
+  border:1px solid #dfe3e6!important;
+  box-shadow:0 5px 16px rgba(20,28,34,.055)!important;
+}
+.commerce-price-card-simple .commerce-price-summary{
+  min-height:88px!important;
+  padding:14px 18px!important;
+  gap:13px!important;
+}
+.commerce-summary-icon{
+  width:44px!important;height:44px!important;flex:0 0 44px!important;
+  background:#f4f5f6!important;color:#111!important;
+}
+.commerce-summary-title{gap:4px!important}
+.commerce-summary-title strong{font-size:15px!important}
+.commerce-summary-title small{
+  display:block!important;
+  font-size:10px!important;color:#737b84!important;
+}
+.commerce-price-card-simple .commerce-summary-value{
+  min-height:48px!important;
+  padding:0 22px!important;
+  gap:9px!important;
+  border-radius:26px!important;
+  font-size:12px!important;
+  box-shadow:0 4px 12px rgba(20,105,57,.12);
+}
+.commerce-book-icon{width:24px;height:24px;flex:0 0 24px}
+.commerce-price-card-simple details[open] .commerce-summary-value{display:inline-flex!important}
+.commerce-price-card-simple .commerce-price-summary::after{
+  content:"›"!important;font-size:27px!important;color:#505960!important;
+}
+.commerce-price-card-simple details[open] .commerce-price-summary::after{
+  content:"⌃"!important;font-size:16px!important;
+}
+/* Approved state palette */
+.commerce-badge-free{background:#168444!important;color:#fff!important}
+.commerce-badge-support{background:#1468e8!important;color:#fff!important;box-shadow:0 4px 12px rgba(20,104,232,.13)!important}
+.commerce-badge-purchase{background:#f39a08!important;color:#fff!important;box-shadow:0 4px 12px rgba(243,154,8,.13)!important}
+.commerce-badge-locked{background:#ef5a45!important;color:#fff!important;box-shadow:0 4px 12px rgba(239,90,69,.13)!important}
+
+@media(max-width:620px){
+  .commerce-price-card-simple .commerce-price-summary{
+    min-height:78px!important;padding:12px 13px!important;gap:9px!important;
+  }
+  .commerce-summary-icon{width:38px!important;height:38px!important;flex-basis:38px!important}
+  .commerce-summary-title{gap:3px!important}
+  .commerce-summary-title strong{font-size:13px!important}
+  .commerce-summary-title small{display:block!important;font-size:8px!important;white-space:nowrap}
+  .commerce-price-card-simple .commerce-summary-value{
+    min-height:38px!important;padding:0 12px!important;gap:6px!important;font-size:9px!important;
+  }
+  .commerce-book-icon{width:19px;height:19px;flex-basis:19px}
+}
