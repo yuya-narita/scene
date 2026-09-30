@@ -731,9 +731,9 @@
       }
       const amount=Number(commerce.amount);
       ownCopyButton.disabled=false;
-      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='support'?`${formatJPY(amount)}で支援して受け取る`:`${formatJPY(amount)}で購入して受け取る`);
+      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='support'?'作者を支援する':`${formatJPY(amount)}で購入して受け取る`);
       ownCopyButton.onclick=()=>purchasePublicOwnCopy(commerce);
-      if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':'決済後、この作品を自分の本棚に受け取れます。';
+      if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':(commerce.mode==='support'?'100円から支援できます。支援するとMY COPYも本棚に届きます。':'決済後、この作品を自分の本棚に受け取れます。');
     }catch(error){
       console.warn('Commerce price lookup failed',error);
       ownCopyButton.disabled=false;
@@ -786,6 +786,9 @@
       .ahako-balance-actions button{appearance:none;width:100%;min-height:48px;border-radius:999px;border:1px solid #211e1a;background:#211e1a;color:#fff;font:inherit;font-weight:700;cursor:pointer}
       .ahako-balance-actions button.secondary{background:#fff;color:#211e1a}
       .ahako-balance-actions button.ghost{border-color:transparent;background:transparent;color:#777067;min-height:40px}
+      .ahako-support-presets{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin:4px 0 16px}
+      .ahako-support-presets button{min-height:48px;border:1px solid rgba(32,29,25,.18);border-radius:12px;background:#fff;color:#211e1a;font:inherit;font-weight:800;cursor:pointer}
+      .ahako-support-custom{display:grid;gap:7px;margin:0 0 10px;font-size:13px}.ahako-support-custom>div{display:flex;align-items:center;gap:8px}.ahako-support-custom input{width:100%;box-sizing:border-box;min-height:48px;border:1px solid rgba(32,29,25,.18);border-radius:12px;padding:0 14px;font:inherit;font-size:16px}.ahako-support-custom small{color:#777067}.ahako-support-error{min-height:1.4em;margin:0 0 8px;color:#b42318;font-size:12px}
       @media(max-width:520px){.ahako-balance-card{padding:20px;border-radius:16px}.ahako-balance-modal{padding:16px}}
     `;
     document.head.appendChild(style);
@@ -875,14 +878,56 @@
     });
   }
 
-  async function purchasePublicOwnCopy(){
+  function showSupportAmountModal(){
+    ensureBalancePurchaseModalStyle();
+    return new Promise(resolve=>{
+      const overlay=document.createElement('div');overlay.className='ahako-balance-modal';
+      overlay.innerHTML=`<div class="ahako-balance-card ahako-support-card" role="dialog" aria-modal="true" aria-label="作者を支援する">
+        <h2>作者を支援する</h2>
+        <p class="ahako-balance-note">支援すると、この作品のMY COPYも本棚に届きます。</p>
+        <div class="ahako-support-presets">
+          ${[100,300,500,1000].map(amount=>`<button type="button" data-support-amount="${amount}">${formatJPY(amount)}</button>`).join('')}
+        </div>
+        <label class="ahako-support-custom"><span>金額指定</span><div><input inputmode="numeric" type="number" min="100" max="100000" step="100" placeholder="100"><b>円</b></div><small>100円〜100,000円・100円単位</small></label>
+        <p class="ahako-support-error" aria-live="polite"></p>
+        <div class="ahako-balance-actions"><button type="button" data-choice="custom">この金額で支援</button><button type="button" class="ghost" data-choice="cancel">キャンセル</button></div>
+      </div>`;
+      const input=overlay.querySelector('input');
+      const error=overlay.querySelector('.ahako-support-error');
+      const finish=value=>{overlay.remove();resolve(value);};
+      const validate=value=>{
+        const amount=Number(value);
+        if(!Number.isInteger(amount)||amount<100||amount>100000||amount%100!==0){if(error)error.textContent='100円単位で、100円〜100,000円を指定してください。';return null;}
+        return amount;
+      };
+      overlay.addEventListener('click',event=>{
+        const preset=event.target.closest('[data-support-amount]');
+        if(preset){finish(Number(preset.dataset.supportAmount));return;}
+        const button=event.target.closest('[data-choice]');
+        if(button?.dataset.choice==='cancel'||event.target===overlay){finish(null);return;}
+        if(button?.dataset.choice==='custom'){const amount=validate(input?.value);if(amount!==null)finish(amount);}
+      });
+      document.body.appendChild(overlay);
+    });
+  }
+
+  async function purchasePublicOwnCopy(commerce=null){
     const publicationId=currentWorkId();if(!publicationId||!ownCopyButton)return;
+    const supportMode=String(commerce?.mode||'')==='support';
+    let supportAmount=null;
+    if(supportMode){
+      supportAmount=await showSupportAmountModal();
+      if(supportAmount===null){if(ownCopyStatus)ownCopyStatus.textContent='支援をキャンセルしました。';return;}
+    }
     ownCopyButton.disabled=true;
-    if(ownCopyStatus)ownCopyStatus.textContent='購入手続きを用意しています…';
+    if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'支援手続きを用意しています…':'購入手続きを用意しています…';
     try{
+      const authorToken=authorSessionTokenForPurchase();
+      const orderHeaders={'Content-Type':'application/json'};
+      if(supportMode&&authorToken)orderHeaders.Authorization=`Bearer ${authorToken}`;
       const orderResponse=await fetch(`${publicOwnCopyApiBase()}/commerce/order`,{
-        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
-        body:JSON.stringify({publicationId,readerId:publicOwnCopyReaderId()})
+        method:'POST',headers:orderHeaders,cache:'no-store',
+        body:JSON.stringify({publicationId,readerId:publicOwnCopyReaderId(),...(supportMode?{supportAmount}: {})})
       });
       const orderPayload=await orderResponse.json().catch(()=>null);
       if(!orderResponse.ok||!orderPayload?.ok||!orderPayload?.order?.orderId||!orderPayload?.accessToken){
@@ -895,7 +940,6 @@
       const orderId=String(orderPayload.order.orderId);
       const accessToken=String(orderPayload.accessToken);
       rememberCommerceOrderToken(orderId,accessToken);
-      const authorToken=authorSessionTokenForPurchase();
       let useAuthorBalance=false;
       let selectedPaymentMethod='card';
       let displayedBalance=null;
