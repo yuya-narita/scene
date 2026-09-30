@@ -755,6 +755,20 @@
     if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'売上残高を確認できませんでした。'));
     return payload;
   }
+
+  const ACCOUNT_DEBIT_CONSENT_VERSION='account-debit-v1';
+  async function fetchAccountDebitConsent(authorToken){
+    const response=await fetch(`${publicOwnCopyApiBase()}/stripe/connect/account-debit-consent`,{headers:{'Accept':'application/json','Authorization':`Bearer ${authorToken}`},cache:'no-store'});
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'Account Debitの同意状態を確認できませんでした。'));
+    return payload;
+  }
+  async function acceptAccountDebitConsent(authorToken){
+    const response=await fetch(`${publicOwnCopyApiBase()}/stripe/connect/account-debit-consent`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${authorToken}`},cache:'no-store',body:JSON.stringify({accepted:true,version:ACCOUNT_DEBIT_CONSENT_VERSION})});
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok||payload?.accepted!==true)throw new Error(String(payload?.error||'Account Debitへの同意を保存できませんでした。'));
+    return payload;
+  }
   function ensureBalancePurchaseModalStyle(){
     if(document.getElementById('ahakoBalancePurchaseStyle'))return;
     const style=document.createElement('style');style.id='ahakoBalancePurchaseStyle';
@@ -766,6 +780,8 @@
       .ahako-balance-row{display:flex;justify-content:space-between;gap:18px;padding:7px 0;font-size:14px}
       .ahako-balance-row strong{font-size:16px;white-space:nowrap}
       .ahako-balance-note{font-size:12px;line-height:1.7;color:#777067;margin:0 0 18px}
+      .ahako-consent-box{margin:0 0 18px;padding:14px;border:1px solid rgba(32,29,25,.12);border-radius:12px;background:#faf9f7;font-size:12px;line-height:1.75;color:#504a43}
+      .ahako-consent-check{display:flex;align-items:flex-start;gap:9px;margin:0 0 18px;font-size:13px;line-height:1.6;cursor:pointer}.ahako-consent-check input{margin-top:3px;flex:0 0 auto}
       .ahako-balance-actions{display:grid;gap:9px}
       .ahako-balance-actions button{appearance:none;width:100%;min-height:48px;border-radius:999px;border:1px solid #211e1a;background:#211e1a;color:#fff;font:inherit;font-weight:700;cursor:pointer}
       .ahako-balance-actions button.secondary{background:#fff;color:#211e1a}
@@ -804,6 +820,29 @@
         if(button)finish(button.dataset.choice);
         else if(event.target===overlay)finish('cancel');
       });
+      document.body.appendChild(overlay);
+    });
+  }
+
+  function showAccountDebitConsentModal({amount}){
+    ensureBalancePurchaseModalStyle();
+    return new Promise(resolve=>{
+      const overlay=document.createElement('div');overlay.className='ahako-balance-modal';
+      overlay.innerHTML=`<div class="ahako-balance-card" role="dialog" aria-modal="true" aria-label="売上残高の利用について">
+        <h2>売上残高の利用について</h2>
+        <div class="ahako-consent-box">
+          あ箱で作品を購入するとき、あなたが「売上残高から支払う」を選んだ場合に限り、表示された購入金額をStripeの利用可能な売上残高から引き落とします。<br><br>
+          自動購入や、購入時に表示されていない金額の引き落としには使用しません。Stripe連携口座が変わった場合や、この同意内容が更新された場合は、もう一度確認します。
+        </div>
+        <label class="ahako-consent-check"><input type="checkbox" data-consent-check><span>上記を確認し、作品購入時のAccount Debit（売上残高からの支払い）に同意します。</span></label>
+        <div class="ahako-balance-rows"><div class="ahako-balance-row"><span>今回の購入金額</span><strong>${formatJPY(amount)}</strong></div></div>
+        <div class="ahako-balance-actions"><button data-choice="accept" disabled>同意して売上残高で支払う</button><button class="ghost" data-choice="cancel">キャンセル</button></div>
+      </div>`;
+      const check=overlay.querySelector('[data-consent-check]');
+      const accept=overlay.querySelector('[data-choice="accept"]');
+      check?.addEventListener('change',()=>{if(accept)accept.disabled=!check.checked;});
+      const finish=value=>{overlay.remove();resolve(value);};
+      overlay.addEventListener('click',event=>{const button=event.target.closest('[data-choice]');if(button&&!button.disabled)finish(button.dataset.choice);else if(event.target===overlay)finish('cancel');});
       document.body.appendChild(overlay);
     });
   }
@@ -873,6 +912,20 @@
           }
           selectedPaymentMethod=choice==='balance'?'author_balance':'card';
           useAuthorBalance=selectedPaymentMethod==='author_balance';
+          if(useAuthorBalance){
+            if(ownCopyStatus)ownCopyStatus.textContent='売上残高の利用同意を確認しています…';
+            const consent=await fetchAccountDebitConsent(authorToken);
+            if(consent?.accepted!==true||String(consent?.version||'')!==ACCOUNT_DEBIT_CONSENT_VERSION){
+              const consentChoice=await showAccountDebitConsentModal({amount:Number(orderPayload.order.amount)});
+              if(consentChoice!=='accept'){
+                ownCopyButton.disabled=false;
+                if(ownCopyStatus)ownCopyStatus.textContent='売上残高からの購入をキャンセルしました。';
+                return;
+              }
+              if(ownCopyStatus)ownCopyStatus.textContent='同意を保存しています…';
+              await acceptAccountDebitConsent(authorToken);
+            }
+          }
         }
       }
       const checkoutHeaders={'Content-Type':'application/json','X-Order-Token':accessToken};
