@@ -608,7 +608,7 @@
   function commercePreviewLocked(doc=documentData){return doc?.commerce?.ownCopyGate?.access==='preview_lock';}
   function commerceGateMode(doc=documentData){
     const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
-    return ['free','purchase','support','copy'].includes(mode)?mode:'free';
+    return ['free','purchase','support'].includes(mode)?mode:'free';
   }
   function formatJPY(amount){return `¥${Math.max(0,Math.floor(Number(amount)||0)).toLocaleString('ja-JP')}`;}
   function cleanCommerceReturnUrl(){
@@ -726,14 +726,14 @@
       if(ownership?.owned){showAlreadyPurchased();return;}
       ownCopyButton.textContent='価格を確認しています…';
       const commerce=await fetchCanonicalCommerce(doc);
-      if(!commerce||commerce.status!=='active'||!['purchase','support','copy'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
+      if(!commerce||commerce.status!=='active'||!['purchase','support'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
         throw new Error('販売価格を確認できませんでした。');
       }
       const amount=Number(commerce.amount);
       ownCopyButton.disabled=false;
-      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='support'?'作者を支援する':(commerce.mode==='copy'?'100円でMY COPYを本棚に残す':`${formatJPY(amount)}で購入して受け取る`));
+      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='support'?`${formatJPY(amount)}で支援して受け取る`:`${formatJPY(amount)}で購入して受け取る`);
       ownCopyButton.onclick=()=>purchasePublicOwnCopy(commerce);
-      if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':(commerce.mode==='support'?'100円から支援できます。支援するとMY COPYも本棚に届きます。':(commerce.mode==='copy'?'100円の発行料で、この作品をMY COPYとして本棚に残せます。':'決済後、この作品を自分の本棚に受け取れます。'));
+      if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':'決済後、この作品を自分の本棚に受け取れます。';
     }catch(error){
       console.warn('Commerce price lookup failed',error);
       ownCopyButton.disabled=false;
@@ -755,20 +755,6 @@
     if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'売上残高を確認できませんでした。'));
     return payload;
   }
-
-  const ACCOUNT_DEBIT_CONSENT_VERSION='account-debit-v1';
-  async function fetchAccountDebitConsent(authorToken){
-    const response=await fetch(`${publicOwnCopyApiBase()}/stripe/connect/account-debit-consent`,{headers:{'Accept':'application/json','Authorization':`Bearer ${authorToken}`},cache:'no-store'});
-    const payload=await response.json().catch(()=>null);
-    if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'Account Debitの同意状態を確認できませんでした。'));
-    return payload;
-  }
-  async function acceptAccountDebitConsent(authorToken){
-    const response=await fetch(`${publicOwnCopyApiBase()}/stripe/connect/account-debit-consent`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${authorToken}`},cache:'no-store',body:JSON.stringify({accepted:true,version:ACCOUNT_DEBIT_CONSENT_VERSION})});
-    const payload=await response.json().catch(()=>null);
-    if(!response.ok||!payload?.ok||payload?.accepted!==true)throw new Error(String(payload?.error||'Account Debitへの同意を保存できませんでした。'));
-    return payload;
-  }
   function ensureBalancePurchaseModalStyle(){
     if(document.getElementById('ahakoBalancePurchaseStyle'))return;
     const style=document.createElement('style');style.id='ahakoBalancePurchaseStyle';
@@ -780,20 +766,15 @@
       .ahako-balance-row{display:flex;justify-content:space-between;gap:18px;padding:7px 0;font-size:14px}
       .ahako-balance-row strong{font-size:16px;white-space:nowrap}
       .ahako-balance-note{font-size:12px;line-height:1.7;color:#777067;margin:0 0 18px}
-      .ahako-consent-box{margin:0 0 18px;padding:14px;border:1px solid rgba(32,29,25,.12);border-radius:12px;background:#faf9f7;font-size:12px;line-height:1.75;color:#504a43}
-      .ahako-consent-check{display:flex;align-items:flex-start;gap:9px;margin:0 0 18px;font-size:13px;line-height:1.6;cursor:pointer}.ahako-consent-check input{margin-top:3px;flex:0 0 auto}
       .ahako-balance-actions{display:grid;gap:9px}
       .ahako-balance-actions button{appearance:none;width:100%;min-height:48px;border-radius:999px;border:1px solid #211e1a;background:#211e1a;color:#fff;font:inherit;font-weight:700;cursor:pointer}
       .ahako-balance-actions button.secondary{background:#fff;color:#211e1a}
       .ahako-balance-actions button.ghost{border-color:transparent;background:transparent;color:#777067;min-height:40px}
-      .ahako-support-presets{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin:4px 0 16px}
-      .ahako-support-presets button{min-height:48px;border:1px solid rgba(32,29,25,.18);border-radius:12px;background:#fff;color:#211e1a;font:inherit;font-weight:800;cursor:pointer}
-      .ahako-support-custom{display:grid;gap:7px;margin:0 0 10px;font-size:13px}.ahako-support-custom>div{display:flex;align-items:center;gap:8px}.ahako-support-custom input{width:100%;box-sizing:border-box;min-height:48px;border:1px solid rgba(32,29,25,.18);border-radius:12px;padding:0 14px;font:inherit;font-size:16px}.ahako-support-custom small{color:#777067}.ahako-support-error{min-height:1.4em;margin:0 0 8px;color:#b42318;font-size:12px}
       @media(max-width:520px){.ahako-balance-card{padding:20px;border-radius:16px}.ahako-balance-modal{padding:16px}}
     `;
     document.head.appendChild(style);
   }
-  function showBalancePurchaseModal({amount,available,mode='choice',after=null,commerceMode='purchase'}){
+  function showBalancePurchaseModal({amount,available,mode='choice',after=null}){
     ensureBalancePurchaseModalStyle();
     return new Promise(resolve=>{
       const overlay=document.createElement('div');overlay.className='ahako-balance-modal';
@@ -801,29 +782,21 @@
       const remaining=Math.max(0,Number(available)-Number(amount));
       const shortage=Math.max(0,Number(amount)-Number(available));
       const success=mode==='success';
-      const support=commerceMode==='support';
-      const copy=commerceMode==='copy';
-      const dialogLabel=support?(success?'支援完了':'支援方法'):(copy?(success?'MY COPY発行完了':'支払い方法'):(success?'購入完了':'購入方法'));
-      const heading=support?(success?'作者を支援しました':'支援方法を選ぶ'):(copy?(success?'MY COPYを発行しました':'MY COPYの支払い方法'):(success?'売上残高で購入しました':'購入方法を選ぶ'));
-      const amountLabel=support?'支援金額':(copy?'MY COPY発行料':'作品価格');
-      const afterLabel=support?'支援後残高':(copy?'支払い後残高':'購入後残高');
-      const balanceAction=support?`${formatJPY(amount)}を売上残高から支援する`:(copy?`${formatJPY(amount)}を売上残高から支払う`:`${formatJPY(amount)}を売上残高から支払う`);
-      const cardAction=support?'カードで支援する':'カードで支払う';
-      overlay.innerHTML=`<div class="ahako-balance-card" role="dialog" aria-modal="true" aria-label="${dialogLabel}">
-        <h2>${heading}</h2>
+      overlay.innerHTML=`<div class="ahako-balance-card" role="dialog" aria-modal="true" aria-label="${success?'購入完了':'購入方法'}">
+        <h2>${success?'売上残高で購入しました':'購入方法を選ぶ'}</h2>
         <div class="ahako-balance-rows">
-          ${success?`<div class="ahako-balance-row"><span>${support?'支援前残高':'購入前残高'}</span><strong>${formatJPY(available)}</strong></div>
-          <div class="ahako-balance-row"><span>${amountLabel}</span><strong>${formatJPY(amount)}</strong></div>
-          <div class="ahako-balance-row"><span>${afterLabel}</span><strong>${formatJPY(after==null?remaining:after)}</strong></div>`:
-          `<div class="ahako-balance-row"><span>${amountLabel}</span><strong>${formatJPY(amount)}</strong></div>
+          ${success?`<div class="ahako-balance-row"><span>購入前残高</span><strong>${formatJPY(available)}</strong></div>
+          <div class="ahako-balance-row"><span>作品価格</span><strong>${formatJPY(amount)}</strong></div>
+          <div class="ahako-balance-row"><span>購入後残高</span><strong>${formatJPY(after==null?remaining:after)}</strong></div>`:
+          `<div class="ahako-balance-row"><span>作品価格</span><strong>${formatJPY(amount)}</strong></div>
           <div class="ahako-balance-row"><span>利用可能残高</span><strong>${formatJPY(available)}</strong></div>
-          <div class="ahako-balance-row"><span>${enough?afterLabel:'不足額'}</span><strong>${formatJPY(enough?remaining:shortage)}</strong></div>`}
+          <div class="ahako-balance-row"><span>${enough?'購入後残高':'不足額'}</span><strong>${formatJPY(enough?remaining:shortage)}</strong></div>`}
         </div>
-        <p class="ahako-balance-note">${success?(support?'支援が完了しました。MY COPYを本棚に受け取れます。':'MY COPYを本棚に受け取れます。'):(enough?'売上残高はStripeで確認した利用可能額です。':`売上残高が足りないため、残高からは${support?'支援':'購入'}できません。`)}</p>
+        <p class="ahako-balance-note">${success?'MY COPYを本棚に受け取れます。':(enough?'売上残高はStripeで確認した利用可能額です。':'売上残高が足りないため、残高からは購入できません。')}</p>
         <div class="ahako-balance-actions">
           ${success?'<button data-choice="done">本棚で見る</button>':
-            (enough?`<button data-choice="balance">${balanceAction}</button><button class="secondary" data-choice="card">${cardAction}</button><button class="ghost" data-choice="cancel">キャンセル</button>`:
-            `<button data-choice="card">${cardAction}</button><button class="ghost" data-choice="cancel">キャンセル</button>`)}
+            (enough?`<button data-choice="balance">${formatJPY(amount)}を売上残高から支払う</button><button class="secondary" data-choice="card">カードで支払う</button><button class="ghost" data-choice="cancel">キャンセル</button>`:
+            `<button data-choice="card">カードで支払う</button><button class="ghost" data-choice="cancel">キャンセル</button>`)}
         </div></div>`;
       const finish=value=>{overlay.remove();resolve(value);};
       overlay.addEventListener('click',event=>{
@@ -831,29 +804,6 @@
         if(button)finish(button.dataset.choice);
         else if(event.target===overlay)finish('cancel');
       });
-      document.body.appendChild(overlay);
-    });
-  }
-
-  function showAccountDebitConsentModal({amount}){
-    ensureBalancePurchaseModalStyle();
-    return new Promise(resolve=>{
-      const overlay=document.createElement('div');overlay.className='ahako-balance-modal';
-      overlay.innerHTML=`<div class="ahako-balance-card" role="dialog" aria-modal="true" aria-label="売上残高の利用について">
-        <h2>売上残高の利用について</h2>
-        <div class="ahako-consent-box">
-          あ箱で作品を購入するとき、あなたが「売上残高から支払う」を選んだ場合に限り、表示された購入金額をStripeの利用可能な売上残高から引き落とします。<br><br>
-          自動購入や、購入時に表示されていない金額の引き落としには使用しません。Stripe連携口座が変わった場合や、この同意内容が更新された場合は、もう一度確認します。
-        </div>
-        <label class="ahako-consent-check"><input type="checkbox" data-consent-check><span>上記を確認し、作品購入時のAccount Debit（売上残高からの支払い）に同意します。</span></label>
-        <div class="ahako-balance-rows"><div class="ahako-balance-row"><span>今回の購入金額</span><strong>${formatJPY(amount)}</strong></div></div>
-        <div class="ahako-balance-actions"><button data-choice="accept" disabled>同意して売上残高で支払う</button><button class="ghost" data-choice="cancel">キャンセル</button></div>
-      </div>`;
-      const check=overlay.querySelector('[data-consent-check]');
-      const accept=overlay.querySelector('[data-choice="accept"]');
-      check?.addEventListener('change',()=>{if(accept)accept.disabled=!check.checked;});
-      const finish=value=>{overlay.remove();resolve(value);};
-      overlay.addEventListener('click',event=>{const button=event.target.closest('[data-choice]');if(button&&!button.disabled)finish(button.dataset.choice);else if(event.target===overlay)finish('cancel');});
       document.body.appendChild(overlay);
     });
   }
@@ -886,57 +836,14 @@
     });
   }
 
-  function showSupportAmountModal(){
-    ensureBalancePurchaseModalStyle();
-    return new Promise(resolve=>{
-      const overlay=document.createElement('div');overlay.className='ahako-balance-modal';
-      overlay.innerHTML=`<div class="ahako-balance-card ahako-support-card" role="dialog" aria-modal="true" aria-label="作者を支援する">
-        <h2>作者を支援する</h2>
-        <p class="ahako-balance-note">支援すると、この作品のMY COPYも本棚に届きます。</p>
-        <div class="ahako-support-presets">
-          ${[100,300,500,1000].map(amount=>`<button type="button" data-support-amount="${amount}">${formatJPY(amount)}</button>`).join('')}
-        </div>
-        <label class="ahako-support-custom"><span>金額指定</span><div><input inputmode="numeric" type="number" min="100" max="100000" step="100" placeholder="100"><b>円</b></div><small>100円〜100,000円・100円単位</small></label>
-        <p class="ahako-support-error" aria-live="polite"></p>
-        <div class="ahako-balance-actions"><button type="button" data-choice="custom">この金額で支援</button><button type="button" class="ghost" data-choice="cancel">キャンセル</button></div>
-      </div>`;
-      const input=overlay.querySelector('input');
-      const error=overlay.querySelector('.ahako-support-error');
-      const finish=value=>{overlay.remove();resolve(value);};
-      const validate=value=>{
-        const amount=Number(value);
-        if(!Number.isInteger(amount)||amount<100||amount>100000||amount%100!==0){if(error)error.textContent='100円単位で、100円〜100,000円を指定してください。';return null;}
-        return amount;
-      };
-      overlay.addEventListener('click',event=>{
-        const preset=event.target.closest('[data-support-amount]');
-        if(preset){finish(Number(preset.dataset.supportAmount));return;}
-        const button=event.target.closest('[data-choice]');
-        if(button?.dataset.choice==='cancel'||event.target===overlay){finish(null);return;}
-        if(button?.dataset.choice==='custom'){const amount=validate(input?.value);if(amount!==null)finish(amount);}
-      });
-      document.body.appendChild(overlay);
-    });
-  }
-
-  async function purchasePublicOwnCopy(commerce=null){
+  async function purchasePublicOwnCopy(){
     const publicationId=currentWorkId();if(!publicationId||!ownCopyButton)return;
-    const supportMode=String(commerce?.mode||'')==='support';
-    const copyMode=String(commerce?.mode||'')==='copy';
-    let supportAmount=null;
-    if(supportMode){
-      supportAmount=await showSupportAmountModal();
-      if(supportAmount===null){if(ownCopyStatus)ownCopyStatus.textContent='支援をキャンセルしました。';return;}
-    }
     ownCopyButton.disabled=true;
-    if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'支援手続きを用意しています…':'購入手続きを用意しています…';
+    if(ownCopyStatus)ownCopyStatus.textContent='購入手続きを用意しています…';
     try{
-      const authorToken=authorSessionTokenForPurchase();
-      const orderHeaders={'Content-Type':'application/json'};
-      if(supportMode&&authorToken)orderHeaders.Authorization=`Bearer ${authorToken}`;
       const orderResponse=await fetch(`${publicOwnCopyApiBase()}/commerce/order`,{
-        method:'POST',headers:orderHeaders,cache:'no-store',
-        body:JSON.stringify({publicationId,readerId:publicOwnCopyReaderId(),...(supportMode?{supportAmount}: {})})
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+        body:JSON.stringify({publicationId,readerId:publicOwnCopyReaderId()})
       });
       const orderPayload=await orderResponse.json().catch(()=>null);
       if(!orderResponse.ok||!orderPayload?.ok||!orderPayload?.order?.orderId||!orderPayload?.accessToken){
@@ -949,6 +856,7 @@
       const orderId=String(orderPayload.order.orderId);
       const accessToken=String(orderPayload.accessToken);
       rememberCommerceOrderToken(orderId,accessToken);
+      const authorToken=authorSessionTokenForPurchase();
       let useAuthorBalance=false;
       let selectedPaymentMethod='card';
       let displayedBalance=null;
@@ -957,28 +865,14 @@
         const balance=await fetchAuthorPurchaseBalance(authorToken);
         if(balance?.connected){
           displayedBalance=Math.max(0,Number(balance.available)||0);
-          const choice=await showBalancePurchaseModal({amount:Number(orderPayload.order.amount),available:displayedBalance,commerceMode:supportMode?'support':(copyMode?'copy':'purchase')});
+          const choice=await showBalancePurchaseModal({amount:Number(orderPayload.order.amount),available:displayedBalance});
           if(choice==='cancel'){
             ownCopyButton.disabled=false;
-            if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'支援をキャンセルしました。':'購入をキャンセルしました。';
+            if(ownCopyStatus)ownCopyStatus.textContent='購入をキャンセルしました。';
             return;
           }
           selectedPaymentMethod=choice==='balance'?'author_balance':'card';
           useAuthorBalance=selectedPaymentMethod==='author_balance';
-          if(useAuthorBalance){
-            if(ownCopyStatus)ownCopyStatus.textContent='売上残高の利用同意を確認しています…';
-            const consent=await fetchAccountDebitConsent(authorToken);
-            if(consent?.accepted!==true||String(consent?.version||'')!==ACCOUNT_DEBIT_CONSENT_VERSION){
-              const consentChoice=await showAccountDebitConsentModal({amount:Number(orderPayload.order.amount)});
-              if(consentChoice!=='accept'){
-                ownCopyButton.disabled=false;
-                if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'売上残高からの支援をキャンセルしました。':'売上残高からの購入をキャンセルしました。';
-                return;
-              }
-              if(ownCopyStatus)ownCopyStatus.textContent='同意を保存しています…';
-              await acceptAccountDebitConsent(authorToken);
-            }
-          }
         }
       }
       const checkoutHeaders={'Content-Type':'application/json','X-Order-Token':accessToken};
@@ -993,13 +887,34 @@
       const checkoutUrl=`${publicOwnCopyApiBase()}/commerce/order/${encodeURIComponent(orderId)}/checkout`;
       const checkoutInit={method:'POST',headers:checkoutHeaders,cache:'no-store',body:JSON.stringify(checkoutBody)};
       let checkoutResponse,checkoutPayload;
-      checkoutResponse=await fetch(checkoutUrl,checkoutInit);
-      checkoutPayload=await checkoutResponse.json().catch(()=>null);
+      // Sandbox-only regression harness: when ?ahakoDoublePurchaseRegression=1 is
+      // present and author-balance payment is selected, fire the exact same
+      // checkout request twice concurrently. Production behavior is unchanged.
+      const doublePurchaseRegression=selectedPaymentMethod==='author_balance'
+        &&new URLSearchParams(location.search).get('ahakoDoublePurchaseRegression')==='1';
+      if(doublePurchaseRegression){
+        const [a,b]=await Promise.all([fetch(checkoutUrl,checkoutInit),fetch(checkoutUrl,checkoutInit)]);
+        const [pa,pb]=await Promise.all([a.json().catch(()=>null),b.json().catch(()=>null)]);
+        const pairs=[[a,pa],[b,pb]];
+        const success=pairs.find(([r,p])=>r.ok&&p?.ok&&p?.paid===true&&p?.paymentRail==='connected_balance');
+        const blocked=pairs.find(([r,p])=>!r.ok&&['BALANCE_PURCHASE_BUSY','ORDER_ALREADY_PAID','ORDER_NOT_PAYABLE'].includes(String(p?.code||'')));
+        console.info('[AHAKO double-purchase regression]',pairs.map(([r,p])=>({status:r.status,ok:p?.ok,code:p?.code,paid:p?.paid,orderId:p?.orderId})));
+        if(success&&blocked){
+          [checkoutResponse,checkoutPayload]=success;
+          setTimeout(()=>alert(`二重決済回帰テスト PASS\n成功: 1件\nブロック: ${String(blocked[1]?.code||blocked[0]?.status)}\n\n決済監査でDebit/Transfer/MY COPYが各1件か確認してください。`),0);
+        }else{
+          const summary=pairs.map(([r,p],i)=>`#${i+1} HTTP ${r.status} / ${String(p?.code||'OK')} / paid=${String(p?.paid===true)}`).join('\n');
+          throw new Error(`二重決済回帰テスト 要確認\n${summary}`);
+        }
+      }else{
+        checkoutResponse=await fetch(checkoutUrl,checkoutInit);
+        checkoutPayload=await checkoutResponse.json().catch(()=>null);
+      }
       if(!checkoutResponse.ok||!checkoutPayload?.ok){
         if(checkoutPayload?.diagnostic){
           await showBalanceDiagnosticModal(checkoutPayload);
           ownCopyButton.disabled=false;
-          if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'残高支援の診断情報を表示しました。':'残高購入の診断情報を表示しました。';
+          if(ownCopyStatus)ownCopyStatus.textContent='残高購入の診断情報を表示しました。';
           return;
         }
         throw new Error(String(checkoutPayload?.error||'Stripe決済を開始できませんでした。'));
@@ -1007,8 +922,8 @@
       if(checkoutPayload?.paid===true&&checkoutPayload?.paymentRail==='connected_balance'){
         const before=Number.isFinite(Number(checkoutPayload.availableBefore))?Number(checkoutPayload.availableBefore):displayedBalance;
         const after=Number.isFinite(Number(checkoutPayload.availableAfter))?Number(checkoutPayload.availableAfter):Math.max(0,Number(before||0)-Number(checkoutPayload.amount||orderPayload.order.amount||0));
-        if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'売上残高から支援しました。':'売上残高から購入しました。';
-        await showBalancePurchaseModal({mode:'success',amount:Number(checkoutPayload.amount||orderPayload.order.amount),available:Number(before||0),after,commerceMode:supportMode?'support':(copyMode?'copy':'purchase')});
+        if(ownCopyStatus)ownCopyStatus.textContent='売上残高から購入しました。';
+        await showBalancePurchaseModal({mode:'success',amount:Number(checkoutPayload.amount||orderPayload.order.amount),available:Number(before||0),after});
         if(ownCopyStatus)ownCopyStatus.textContent='MY COPYを本棚へ用意しています…';
         await finishPaidOwnCopy(orderId,accessToken,{continueReading:commercePreviewLocked(documentData)});
         return;
@@ -1027,7 +942,7 @@
           }
         });
         ownCopyButton.disabled=false;
-        if(ownCopyStatus)ownCopyStatus.textContent=supportMode?'残高支援の診断情報を表示しました。':'残高購入の診断情報を表示しました。';
+        if(ownCopyStatus)ownCopyStatus.textContent='残高購入の診断情報を表示しました。';
         return;
       }
       if(!checkoutPayload?.checkoutUrl){
