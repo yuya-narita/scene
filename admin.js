@@ -157,9 +157,9 @@ function localJstDay(){
   const get=t=>parts.find(p=>p.type===t)?.value||'';return `${get('year')}-${get('month')}-${get('day')}`;
 }
 function renderDailyReconciliation(r){
-  if(!els.dailyReconResult)return;const ok=r?.status==='ok',t=r?.totals||{},checks=Array.isArray(r?.checks)?r.checks:[],bad=checks.filter(x=>x?.ok===false),orphans=Array.isArray(r?.stripe?.orphanObjects)?r.stripe.orphanObjects:[],orders=Array.isArray(r?.mismatchedOrders)?r.mismatchedOrders:[];
+  if(!els.dailyReconResult)return;const ok=r?.status==='ok',t=r?.totals||{},checks=Array.isArray(r?.checks)?r.checks:[],bad=checks.filter(x=>x?.ok===false),orphans=Array.isArray(r?.stripe?.orphanObjects)?r.stripe.orphanObjects:[],unexplained=Array.isArray(r?.stripe?.unexplainedBalanceDebits)?r.stripe.unexplainedBalanceDebits:[],orders=Array.isArray(r?.mismatchedOrders)?r.mismatchedOrders:[];
   const checkHtml=checks.map(x=>`<div class="daily-recon-check ${x.ok?'is-ok':'is-alert'}"><span>${x.ok?'✓':'×'}</span><code>${escapeHtml(x.name||'')}</code><b>${escapeHtml(auditValue(x.actual))}</b><small>期待 ${escapeHtml(auditValue(x.expected))}</small></div>`).join('');
-  const problemHtml=(orphans.length||orders.length)?`<div class="daily-recon-problems">${orphans.map(x=>`<div><strong>Stripe孤立取引</strong><code>${escapeHtml(x.id||'')}</code><span>${escapeHtml(x.orderId||'')}</span></div>`).join('')}${orders.map(x=>`<div><strong>注文監査 要確認</strong><code>${escapeHtml(x.orderId||'')}</code><button type="button" data-daily-order="${escapeHtml(x.orderId||'')}">詳細</button></div>`).join('')}</div>`:'';
+  const problemHtml=(orphans.length||unexplained.length||orders.length)?`<div class="daily-recon-problems">${unexplained.map(x=>`<div><strong>⚠ 未説明の残高Debit ${yen(x.amount)}</strong><code>${escapeHtml(x.id||'')}</code><span>${escapeHtml(x.orderId||'')}</span><button type="button" data-daily-order="${escapeHtml(x.orderId||'')}">詳細</button></div>`).join('')}${orphans.map(x=>`<div><strong>Stripe孤立取引</strong><code>${escapeHtml(x.id||'')}</code><span>${escapeHtml(x.orderId||'')}</span></div>`).join('')}${orders.map(x=>`<div><strong>注文監査 要確認</strong><code>${escapeHtml(x.orderId||'')}</code><button type="button" data-daily-order="${escapeHtml(x.orderId||'')}">詳細</button></div>`).join('')}</div>`:'';
   els.dailyReconResult.innerHTML=`<div class="daily-recon-verdict ${ok?'is-ok':'is-alert'}"><small>${escapeHtml(r.day||'')} · JST</small><strong>${ok?'✓ 日次照合 一致':'⚠ 日次照合 要確認'}</strong><span>差異 ${bad.length}項目</span></div><div class="daily-recon-grid"><div><small>注文</small><strong>${Number(t.orderCount||0)}件</strong></div><div><small>売上総額</small><strong>${yen(t.grossAmount)}</strong></div><div><small>カード</small><strong>${yen(t.cardAmount)}</strong></div><div><small>売上残高</small><strong>${yen(t.balanceAmount)}</strong></div><div><small>作者配分</small><strong>${yen(t.sellerGross)}</strong></div><div><small>あ箱取り分</small><strong>${yen(t.platformGross)}</strong></div><div><small>返金</small><strong>${yen(t.refundAmount)}</strong></div><div><small>純額</small><strong>${yen(t.netAmount)}</strong></div><div><small>MY COPY</small><strong>${Number(t.entitlementCount||0)}件</strong></div></div>${problemHtml}<details class="daily-recon-details" ${ok?'':'open'}><summary>照合項目 ${checks.length}件</summary><div class="daily-recon-checks">${checkHtml}</div></details><small class="audit-time">照合日時 ${escapeHtml(formatJstDate(r.checkedAt))}</small>`;
   els.dailyReconResult.querySelectorAll('[data-daily-order]').forEach(b=>b.addEventListener('click',()=>{if(els.auditOrderId)els.auditOrderId.value=b.dataset.dailyOrder||'';runPaymentAudit();}));
 }
@@ -182,9 +182,10 @@ async function loadAuditOrders(){
   try{
     const data=await api('/admin/commerce/orders?limit=30');
     const all=Array.isArray(data.orders)?data.orders:[];
-    const auditable=all.filter(row=>['paid','refunded'].includes(String(row.status||'').toLowerCase()));
-    const skipped=all.filter(row=>!['paid','refunded'].includes(String(row.status||'').toLowerCase()));
-    els.auditOrdersStatus.textContent=`確定済み ${auditable.length}件を自動監査中…`;
+    const shouldAudit=row=>['paid','refunded'].includes(String(row.status||'').toLowerCase())||String(row.paymentRail||'')==='connected_balance'||Boolean(row.balanceDebitCapturedAt)||String(row.recoveryState||'')==='RECOVERY_REQUIRED';
+    const auditable=all.filter(shouldAudit);
+    const skipped=all.filter(row=>!shouldAudit(row));
+    els.auditOrdersStatus.textContent=`決済痕跡あり ${auditable.length}件を自動監査中…`;
     const results=await mapWithConcurrency(auditable,4,async row=>await fetchPaymentAudit(row.orderId));
     const summary=renderAutomaticAudit(auditable,results,skipped);
     els.auditOrdersStatus.textContent=`監査完了：正常 ${summary.ok}件 / 要確認 ${summary.alerts}件 / 未監査 ${summary.skipped}件`;
