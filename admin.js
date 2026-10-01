@@ -25,7 +25,8 @@ function renderPaymentAudit(audit){
   const rows=checks.map(row=>`<div class="audit-check ${row.ok===false?'is-mismatch':'is-ok'}"><span>${row.ok===false?'×':'✓'}</span><code>${escapeHtml(row.name||'check')}</code><div><small>期待</small><b>${escapeHtml(auditValue(row.expected))}</b></div><div><small>実際</small><b>${escapeHtml(auditValue(row.actual))}</b></div></div>`).join('');
   const errorHtml=errors.length?`<div class="audit-errors"><strong>取得エラー</strong>${errors.map(e=>`<p>${escapeHtml(typeof e==='string'?e:JSON.stringify(e))}</p>`).join('')}</div>`:'';
   let recoveryHtml='';
-  const sandboxTestHtml=ok?`<div class="audit-test-tools"><strong>Sandbox破壊テスト</strong><span>お金は動かさず、この注文のMY COPY参照だけを意図的に欠損させます。</span><button type="button" data-test-missing-entitlement="${escapeHtml(audit.orderId||'')}">MY COPY欠損を発生</button></div>`:'';
+  const canSandboxRefund=ok&&String(audit?.paymentRail||'')==='card'&&String(audit?.orderStatus||'')==='paid';
+  const sandboxTestHtml=ok?`<div class="audit-test-tools"><strong>Sandbox破壊テスト</strong><span>MY COPY欠損はお金を動かしません。カード全額返金テストはStripe Sandbox上で実際に返金し、成功Webhook後にMY COPYを失効させます。</span><button type="button" data-test-missing-entitlement="${escapeHtml(audit.orderId||'')}">MY COPY欠損を発生</button>${canSandboxRefund?`<button type="button" data-test-full-refund="${escapeHtml(audit.orderId||'')}">カード全額返金テスト</button>`:''}</div>`:'';
   if(!ok&&audit?.safeRecoveryAction==='REISSUE_ENTITLEMENT'){
     recoveryHtml=`<div class="audit-recovery is-safe"><strong>MY COPY権利だけが不足しています</strong><span>Stripeの金銭照合は正常です。再実行時にも再監査してから権利だけを発行します。</span><button type="button" data-recover-entitlement="${escapeHtml(audit.orderId||'')}">MY COPYを再発行</button></div>`;
   }else if(!ok){
@@ -34,6 +35,7 @@ function renderPaymentAudit(audit){
   els.auditOrderResult.innerHTML=`<div class="audit-verdict ${ok?'is-ok':'is-mismatch'}"><small>${ok?'AUDIT OK':'MISMATCH'}</small><strong>${ok?'✓ 一致しています':'⚠ 不一致を検出'}</strong><span>${escapeHtml(audit.orderId||'')}</span></div><div class="audit-summary"><div><small>注文額</small><strong>${yen(audit.amount)}</strong></div><div><small>作者</small><strong>${yen(audit.expectedSellerAmount)}</strong></div><div><small>あ箱</small><strong>${yen(audit.expectedPlatformFee)}</strong></div><div><small>決済経路</small><strong>${escapeHtml(audit.paymentRail||'–')}</strong></div><div><small>Order状態</small><strong>${escapeHtml(audit.orderStatus||'–')}</strong></div><div><small>不一致</small><strong>${mismatches.length}</strong></div></div>${sandboxTestHtml}${recoveryHtml}${errorHtml}<div class="audit-checks">${rows||'<div class="empty">照合項目がありません。</div>'}</div><small class="audit-time">監査日時 ${escapeHtml(formatJstDate(audit.checkedAt))}</small>`;
   els.auditOrderResult.querySelectorAll('[data-recover-entitlement]').forEach(button=>button.addEventListener('click',()=>recoverEntitlement(button.dataset.recoverEntitlement,button)));
   els.auditOrderResult.querySelectorAll('[data-test-missing-entitlement]').forEach(button=>button.addEventListener('click',()=>injectMissingEntitlement(button.dataset.testMissingEntitlement,button)));
+  els.auditOrderResult.querySelectorAll('[data-test-full-refund]').forEach(button=>button.addEventListener('click',()=>testFullCardRefund(button.dataset.testFullRefund,button)));
 }
 function paymentRailLabel(value){const v=String(value||'card');return (v==='balance'||v==='connected_balance')?'残高':'カード';}
 function auditOrderCard(row,{kind='alert',audit=null,error=''}={}){
@@ -66,6 +68,24 @@ async function injectMissingEntitlement(orderId,button){
     await loadAuditOrders();
   }catch(e){
     toast(`破壊テスト失敗: ${e.message}`);
+  }finally{if(button){button.disabled=false;button.textContent=original;}}
+}
+async function testFullCardRefund(orderId,button){
+  if(!/^order_[a-f0-9]{32}$/.test(String(orderId||'')))return;
+  if(!confirm('Stripe Sandboxでこのカード注文を全額返金します。作者への送金取消とあ箱のapplication fee返金も実行されます。返金成功後はMY COPYも失効します。\n\nこの操作は元に戻せません。続けますか？'))return;
+  const original=button?.textContent||'カード全額返金テスト';
+  if(button){button.disabled=true;button.textContent='返金処理中…';}
+  try{
+    const data=await api(`/admin/commerce/order/${encodeURIComponent(orderId)}/refund`,{method:'POST',body:'{}'});
+    toast(data.reused?'すでに返金済みです':'Stripeへ全額返金を送信しました');
+    if(els.auditOrderId)els.auditOrderId.value=orderId;
+    if(els.auditOrderStatus)els.auditOrderStatus.textContent='返金Webhookの反映を確認しています…';
+    await new Promise(resolve=>setTimeout(resolve,1800));
+    await runPaymentAudit();
+    await loadAuditOrders();
+  }catch(e){
+    toast(`返金テスト失敗: ${e.message}`);
+    if(els.auditOrderStatus)els.auditOrderStatus.textContent=`返金テスト失敗：${e.message}`;
   }finally{if(button){button.disabled=false;button.textContent=original;}}
 }
 async function recoverEntitlement(orderId,button){
