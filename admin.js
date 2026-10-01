@@ -172,7 +172,7 @@ function renderDailyReconciliation(r){
       const res=await fetch(API+`/admin/commerce/order/${encodeURIComponent(orderId)}/recover-unexplained-debit`,{method:'POST',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({chargeId})});
       const data=await res.json().catch(()=>({}));
       if(!res.ok||!data?.ok)throw new Error(data?.error||data?.code||`HTTP ${res.status}`);
-      alert(data?.status==='succeeded'?`返金成功: ${yen(amount)}`:`返金を開始しました: ${data?.status||'pending'}`);
+      alert(`Stripe確認済み返金: ${yen(amount)}\nRefund: ${data?.refundId||'取得不可'}\nDebit返金済額: ${yen(data?.verifiedBy?.chargeAmountRefunded||amount)}`);
       await runDailyReconciliation();
       if(typeof loadAuditOrders==='function')loadAuditOrders();
     }catch(e){alert(`復旧できませんでした: ${e.message}`);b.disabled=false;b.textContent=original;}
