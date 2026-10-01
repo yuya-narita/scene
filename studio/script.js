@@ -3268,9 +3268,29 @@
     }
     return b;
   }
+  function applyWebBoardTimeModeForward(fromIndex,mode,threadId=''){
+    if(!workingDocument?.scenes?.length)return 0;
+    const start=Math.max(0,Number(fromIndex)||0);
+    const source=workingDocument.scenes[start];
+    const targetThread=String(threadId||source?.presentation?.webBoard?.threadId||'');
+    let changed=0;
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation||{};
+      if(pr.view!=='web-board')break;
+      if(targetThread && String(pr.webBoard?.threadId||'')!==targetThread)break;
+      const lt=ensureLogTime(sc);
+      if(lt.mode!==mode){lt.mode=mode;changed++;}
+      if(mode==='edit')lt.editedAt=boardNowString();
+    }
+    scheduleDraftSave(40);
+    return changed;
+  }
   function applyWebBoardModeForward(fromIndex){
     if(!workingDocument?.scenes?.length)return 0;
     let changed=0,postNo=1;
+    const start=Math.max(0,Number(fromIndex)||0);
+    const sourceScene=workingDocument.scenes[start];
+    const inheritedTimeMode=ensureLogTime(sourceScene).mode||'none';
     const threadId=boardRandomThreadId();
     // Number from the start of the board run, not the absolute Scene index.
     for(let i=0;i<Math.max(0,Number(fromIndex)||0);i++){
@@ -3283,6 +3303,7 @@
       if(pr.view!=='web-board'){pr.view='web-board';changed++;}
       pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};
       const b=initWebBoardMeta(sc,i);b.number=postNo++;b.threadId=threadId;b.replyThreadId='';
+      const lt=ensureLogTime(sc);lt.mode=inheritedTimeMode;if(inheritedTimeMode==='edit')lt.editedAt=boardNowString();
     }
     scheduleDraftSave(40);return changed;
   }
@@ -12431,7 +12452,7 @@ function openDesktopTextDetail(){
       );
       const threadRef=desktopMakeSelect(u('アンカー参照先','Anchor thread'),webBoardThreadOptions(String(p.webBoard.threadId||'')),p.webBoard.replyThreadId||'',v=>{p.webBoard.replyThreadId=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
       const lt=ensureLogTime(scene);
-      const timeMode=desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      const timeMode=desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();applyWebBoardTimeModeForward(index,v,String(p.webBoard?.threadId||''));scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
       const workTimeWrap=document.createElement('label');workTimeWrap.className='desktop-web-board-field';
       const workTimeLabel=document.createElement('span');workTimeLabel.textContent=u('作品時刻','Work time');
       const workTimeInput=document.createElement('input');workTimeInput.type='text';workTimeInput.value=lt.workTime||'';workTimeInput.placeholder='2026/10/01 10:10:07';workTimeInput.disabled=lt.mode!=='work';
@@ -13299,7 +13320,7 @@ function openDesktopTextDetail(){
           addBoardField(u('アンカー','Reply'),'replyTo','121');
           board.append(makeSelect(u('アンカー参照先','Anchor thread'),webBoardThreadOptions(String(p.webBoard.threadId||'')),p.webBoard.replyThreadId||'',v=>{p.webBoard.replyThreadId=v;scheduleDraftSave(40);refreshLivePlayer();}));
           const lt=ensureLogTime(scene);
-          board.append(makeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
+          board.append(makeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();applyWebBoardTimeModeForward(index,v,String(p.webBoard?.threadId||''));scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
           if(lt.mode==='work'){
             const tw=document.createElement('label');tw.className='live-edit-field';tw.append(u('作品時刻','Work time'));const ti=document.createElement('input');ti.type='text';ti.value=lt.workTime||'';ti.placeholder='2026/10/01 10:10:07';ti.addEventListener('keydown',e=>e.stopPropagation());ti.addEventListener('keyup',e=>e.stopPropagation());const commitWorkTime=()=>{lt.workTime=ti.value;touchLogTime(scene);scheduleDraftSave(80);};ti.addEventListener('input',commitWorkTime);ti.addEventListener('change',()=>{commitWorkTime();refreshLivePlayer();});ti.addEventListener('blur',()=>{commitWorkTime();refreshLivePlayer();});tw.appendChild(ti);board.appendChild(tw);
           }
