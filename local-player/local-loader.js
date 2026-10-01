@@ -224,7 +224,14 @@
       if(!db.objectStoreNames.contains(READER_BOOKS))throw new Error('読者本棚がまだありません。');
       const rec=await idbRequest(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).get(copyId));
       if(!rec?.blob)throw new Error('この一冊は本棚に見つかりませんでした。');
-      return rec;
+      // iOS Safari can keep an IndexedDB Blob as a backing-store reference.
+      // Once the DB connection is closed, reading that Blob on the next async
+      // step may fail with NotFoundError ("The object can not be found here.").
+      // Materialize the bytes while the IndexedDB connection is still alive.
+      // Desktop browsers also take this path, so bookshelf -> Player uses one
+      // deterministic handoff on every platform.
+      const bytes=await rec.blob.arrayBuffer();
+      return {...rec,sceneBytes:bytes,blob:null};
     }finally{db.close();}
   }
   async function openBookshelfCopy(copyId){
@@ -237,7 +244,7 @@
     try{
       const rec=await readerBookFromBookshelf(copyId);
       clearBookshelfOpenHandoff();
-      const file=new File([rec.blob],rec.fileName||`${rec.title||'book'}_distribution.scene`,{type:'application/octet-stream'});
+      const file=new File([rec.sceneBytes],rec.fileName||`${rec.title||'book'}_distribution.scene`,{type:'application/octet-stream'});
       await openScene(file,{sourceMode:'bookshelf',sourceKey:`bookshelf:${copyId}`,syncPublicAppearance:true});
       return true;
     }catch(error){
@@ -1049,7 +1056,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.14-instant-shelf-return',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.15-ios-idb-blob-materialize',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
