@@ -861,28 +861,28 @@
   }
   function ownCopyGateMode(doc){
     const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
-    return ['free','purchase','locked','support','copy'].includes(mode)?mode:'free';
+    return ['free','purchase','locked','reader_price','support','copy'].includes(mode)?(mode==='support'?'reader_price':mode):'free';
   }
   function commerceDraftSettings(doc=workingDocument){
     const saved=doc?.studio?.commerceDraft||{};
     const gate=ownCopyGateMode(doc);
-    const mode=gate==='locked'?'locked':(gate==='purchase'?'purchase':(gate==='support'?'support':(gate==='copy'?'copy':'free')));
+    const mode=gate==='locked'?'locked':(gate==='purchase'?'purchase':(gate==='reader_price'?'reader_price':(gate==='copy'?'copy':'free')));
     const raw=Number(saved.amount);
-    const amount=Number.isInteger(raw)&&raw>=100&&raw<=1000000?raw:100;
+    const amount=Number.isInteger(raw)&&raw>=100&&raw<=100000?raw:100;
     const lockScene=Math.max(2,Math.floor(Number(saved.lockScene||doc?.commerce?.ownCopyGate?.lockScene||2)));
     return {mode,amount,currency:'JPY',lockScene};
   }
   function currentCommerceSettings(){
-    const support=Boolean(commerceSupportEnabled?.checked);
+    const readerPrice=Boolean(commerceSupportEnabled?.checked);
     const copy=Boolean(commerceModeFree?.checked);
-    const mode=commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(support?'support':'copy'));
-    const amount=(mode==='support'||mode==='copy')?100:Math.floor(Number(commerceAmountInput?.value||0));
+    const mode=commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(readerPrice?'reader_price':'copy'));
+    const amount=(mode==='reader_price'||mode==='copy')?100:Math.floor(Number(commerceAmountInput?.value||0));
     const lockScene=Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)));
     return {mode,amount,currency:'JPY',lockScene};
   }
   function validateCommerceSettings({focus=false}={}){
     const settings=currentCommerceSettings();
-    if(settings.mode==='free'||settings.mode==='support'||settings.mode==='copy')return settings;
+    if(settings.mode==='free'||settings.mode==='reader_price'||settings.mode==='copy')return settings;
     if(settings.mode==='locked'){
       const count=Array.isArray(workingDocument?.scenes)?workingDocument.scenes.length:0;
       if(!Number.isInteger(settings.lockScene)||settings.lockScene<2||settings.lockScene>count){
@@ -891,8 +891,8 @@
         return null;
       }
     }
-    if(!Number.isInteger(settings.amount)||settings.amount<100||settings.amount>1000000||settings.amount%100!==0){
-      if(commercePriceStatus)commercePriceStatus.textContent='販売価格は100円〜1,000,000円の100円単位で入力してください。';
+    if(!Number.isInteger(settings.amount)||settings.amount<100||settings.amount>100000||settings.amount%100!==0){
+      if(commercePriceStatus)commercePriceStatus.textContent='販売価格は100円〜100,000円の100円単位で入力してください。';
       if(focus)commerceAmountInput?.focus();
       return null;
     }
@@ -902,7 +902,7 @@
   function renderCommercePriceUI(){
     const paid=Boolean(commerceModePurchase?.checked||commerceModeLocked?.checked);
     const locked=Boolean(commerceModeLocked?.checked);
-    const support=Boolean(commerceSupportEnabled?.checked);
+    const readerPrice=Boolean(commerceSupportEnabled?.checked);
     const copy=Boolean(commerceModeFree?.checked);
     if(commerceSupportPolicy)commerceSupportPolicy.hidden=true;
     if(commerceAmountField)commerceAmountField.hidden=!paid;
@@ -916,11 +916,11 @@
     }
     if(commercePriceBadge){
       const commerceBadgeText=commercePriceBadge?.querySelector('.commerce-badge-text');
-    if(commerceBadgeText)commerceBadgeText.textContent=paid?`${locked?'有料ロック ':'MY COPY販売 '}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(support?'無料・支援 ¥100〜':'無料・MY COPY ¥100');
+    if(commerceBadgeText)commerceBadgeText.textContent=paid?`${locked?'有料ロック ':'作者価格 '}¥${Math.max(0,Math.floor(Number(commerceAmountInput?.value||0))).toLocaleString('ja-JP')}`:(readerPrice?'読者価格 ¥100〜':'無料・MY COPY ¥100');
     commercePriceBadge.classList.remove('commerce-badge-free','commerce-badge-support','commerce-badge-purchase','commerce-badge-locked');
-    commercePriceBadge.classList.add(locked?'commerce-badge-locked':(commerceModePurchase?.checked?'commerce-badge-purchase':(support?'commerce-badge-support':'commerce-badge-free')));
+    commercePriceBadge.classList.add(locked?'commerce-badge-locked':(commerceModePurchase?.checked?'commerce-badge-purchase':(readerPrice?'commerce-badge-support':'commerce-badge-free')));
       commercePriceBadge.classList.toggle('is-paid',paid);
-      commercePriceBadge.classList.toggle('is-support',support);
+      commercePriceBadge.classList.toggle('is-support',readerPrice);
     }
     if(ownCopyEnabledInput){
       ownCopyEnabledInput.checked=true;
@@ -934,14 +934,14 @@
     doc.commerce ||= {};
     doc.commerce.ownCopyGate={...(doc.commerce.ownCopyGate||{}),schemaVersion:'1',mode:settings.mode,...(settings.mode==='locked'?{lockScene:settings.lockScene}:{})};
     doc.studio ||= {};
-    doc.studio.commerceDraft={schemaVersion:'1',mode:settings.mode,currency:'JPY',...((settings.mode==='purchase'||settings.mode==='locked'||settings.mode==='support'||settings.mode==='copy')&&Number.isInteger(settings.amount)?{amount:settings.amount}:{}),...(settings.mode==='locked'?{lockScene:settings.lockScene}:{})};
+    doc.studio.commerceDraft={schemaVersion:'1',mode:settings.mode,currency:'JPY',...((settings.mode==='purchase'||settings.mode==='locked'||settings.mode==='reader_price'||settings.mode==='copy')&&Number.isInteger(settings.amount)?{amount:settings.amount}:{}),...(settings.mode==='locked'?{lockScene:settings.lockScene}:{})};
   }
   function restoreCommercePriceUI(doc){
     const settings=commerceDraftSettings(doc);
     if(commerceModeFree)commerceModeFree.checked=['free','copy'].includes(settings.mode);
     if(commerceModePurchase)commerceModePurchase.checked=settings.mode==='purchase';
     if(commerceModeLocked)commerceModeLocked.checked=settings.mode==='locked';
-    if(commerceSupportEnabled)commerceSupportEnabled.checked=settings.mode==='support';
+    if(commerceSupportEnabled)commerceSupportEnabled.checked=settings.mode==='reader_price';
     if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}
     if(commerceAmountInput)commerceAmountInput.value=String(settings.amount||100);
     if(commerceLockSceneInput)commerceLockSceneInput.value=String(settings.lockScene||2);
@@ -1257,7 +1257,7 @@
     // accidentally overwrite a paid work with stale local FREE settings.
     if(status.commerce && workingDocument){
       const rawServerMode=String(status.commerce.mode||'free');
-      const serverMode=rawServerMode==='purchase'?'purchase':(rawServerMode==='support'?'support':(rawServerMode==='copy'?'copy':'free'));
+      const serverMode=rawServerMode==='purchase'?'purchase':((rawServerMode==='reader_price'||rawServerMode==='support')?'reader_price':(rawServerMode==='copy'?'copy':'free'));
       const localLocked=ownCopyGateMode(workingDocument)==='locked';
       const mode=serverMode==='purchase'&&localLocked?'locked':serverMode;
       const amount=Math.floor(Number(status.commerce.amount||100));
@@ -1265,9 +1265,9 @@
       workingDocument.commerce ||= {};
       workingDocument.commerce.ownCopyGate={...(workingDocument.commerce.ownCopyGate||{}),schemaVersion:'1',mode,...(mode==='locked'?{lockScene}:{})};
       workingDocument.studio ||= {};
-      workingDocument.studio.commerceDraft={schemaVersion:'1',mode,currency:'JPY',...((mode==='purchase'||mode==='locked'||mode==='support'||mode==='copy')?{amount}: {}),...(mode==='locked'?{lockScene}:{})};
+      workingDocument.studio.commerceDraft={schemaVersion:'1',mode,currency:'JPY',...((mode==='purchase'||mode==='locked'||mode==='reader_price'||mode==='copy')?{amount}: {}),...(mode==='locked'?{lockScene}:{})};
       restoreCommercePriceUI(workingDocument);
-      if(mode==='purchase'||mode==='locked'||mode==='support'||mode==='copy')applyOwnCopyPolicyToDocument(workingDocument);
+      if(mode==='purchase'||mode==='locked'||mode==='reader_price'||mode==='copy')applyOwnCopyPolicyToDocument(workingDocument);
     }
 
     // Compare against the actual hosted scene so an imported master .scene can
@@ -2682,8 +2682,8 @@
       },
       player:{ navigation:{ allowPrevious:true } },
       sharing:{ relay:{ schemaVersion:'1', enabled:Boolean(relayEnabled) }, ownCopy:{ schemaVersion:'1', enabled:true } },
-      commerce:{ ownCopyGate:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'support':'copy')), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
-      studio:{ commerceDraft:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'support':'copy')), currency:'JPY', ...((commerceModePurchase?.checked||commerceModeLocked?.checked)?{amount:Math.floor(Number(commerceAmountInput?.value||100))}:{amount:100}), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
+      commerce:{ ownCopyGate:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'reader_price':'copy')), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
+      studio:{ commerceDraft:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'reader_price':'copy')), currency:'JPY', ...((commerceModePurchase?.checked||commerceModeLocked?.checked)?{amount:Math.floor(Number(commerceAmountInput?.value||100))}:{amount:100}), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
       cover:{
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
@@ -4788,13 +4788,13 @@
     const connect=authorStripeConnectState;
     if(connect?.chargesEnabled&&connect?.payoutsEnabled){
       badge.textContent='設定済み';badge.classList.add('is-ready');button.textContent='Stripe設定を確認する';
-      if(description)description.textContent='販売・支援の売上を受け取れる状態です。口座情報や本人確認はStripeが管理します。';
+      if(description)description.textContent='作品の売上を受け取れる状態です。口座情報や本人確認はStripeが管理します。';
     }else if(connect?.accountId){
       badge.textContent='設定途中';badge.classList.add('is-progress');button.textContent='Stripe設定を続ける';
       if(description)description.textContent='Stripe側の登録がまだ完了していません。設定を続けてください。';
     }else{
       badge.textContent='未設定';button.textContent='Stripeを設定する';
-      if(description)description.textContent='作品の販売・支援を受け取るためのStripe設定です。口座情報や本人確認はStripe上で行います。';
+      if(description)description.textContent='作品の売上を受け取るためのStripe設定です。口座情報や本人確認はStripe上で行います。';
     }
   }
   async function loadAuthorStripeConnectStatus(){
@@ -5118,7 +5118,7 @@
           'X-Commerce-Access':currentCommerceSettings().mode==='locked'?'preview_lock':'full',
           ...(currentCommerceSettings().mode==='locked'?{'X-Commerce-Lock-Scene':String(currentCommerceSettings().lockScene)}:{}),
           'X-Commerce-Currency':'JPY',
-          ...((currentCommerceSettings().mode==='purchase'||currentCommerceSettings().mode==='locked'||currentCommerceSettings().mode==='support'||currentCommerceSettings().mode==='copy')?{'X-Commerce-Amount':String(currentCommerceSettings().amount)}:{})
+          ...((currentCommerceSettings().mode==='purchase'||currentCommerceSettings().mode==='locked'||currentCommerceSettings().mode==='reader_price'||currentCommerceSettings().mode==='copy')?{'X-Commerce-Amount':String(currentCommerceSettings().amount)}:{})
         }),
         body:JSON.stringify(hostedDocument)
       };

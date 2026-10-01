@@ -608,7 +608,7 @@
   function commercePreviewLocked(doc=documentData){return doc?.commerce?.ownCopyGate?.access==='preview_lock';}
   function commerceGateMode(doc=documentData){
     const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
-    return ['free','purchase','support'].includes(mode)?mode:'free';
+    return ['free','purchase','reader_price','support'].includes(mode)?(mode==='support'?'reader_price':mode):'free';
   }
   function formatJPY(amount){return `¥${Math.max(0,Math.floor(Number(amount)||0)).toLocaleString('ja-JP')}`;}
   function cleanCommerceReturnUrl(){
@@ -726,12 +726,12 @@
       if(ownership?.owned){showAlreadyPurchased();return;}
       ownCopyButton.textContent='価格を確認しています…';
       const commerce=await fetchCanonicalCommerce(doc);
-      if(!commerce||commerce.status!=='active'||!['purchase','support'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
+      if(!commerce||commerce.status!=='active'||!['purchase','reader_price','support'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
         throw new Error('販売価格を確認できませんでした。');
       }
       const amount=Number(commerce.amount);
       ownCopyButton.disabled=false;
-      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='support'?`${formatJPY(amount)}で支援して受け取る`:`${formatJPY(amount)}で購入して受け取る`);
+      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:((commerce.mode==='reader_price'||commerce.mode==='support')?'価格を決めてMY COPYを受け取る':`${formatJPY(amount)}で購入して受け取る`);
       ownCopyButton.onclick=()=>purchasePublicOwnCopy(commerce);
       if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':'決済後、この作品を自分の本棚に受け取れます。';
     }catch(error){
@@ -836,14 +836,53 @@
     });
   }
 
-  async function purchasePublicOwnCopy(){
+  function chooseReaderPrice(){
+    ensureBalancePurchaseModalStyle();
+    return new Promise(resolve=>{
+      const overlay=document.createElement('div');overlay.className='ahako-balance-modal';
+      overlay.innerHTML=`<div class="ahako-balance-card" role="dialog" aria-modal="true" aria-label="MY COPYの価格">
+        <h2>この一冊に、いくら付けますか？</h2>
+        <p class="ahako-balance-note">100円以上・100円単位で、読者がMY COPYの価格を決められます。</p>
+        <div class="ahako-balance-actions">
+          <button data-price="100">¥100</button><button class="secondary" data-price="300">¥300</button>
+          <button class="secondary" data-price="500">¥500</button><button class="secondary" data-price="1000">¥1,000</button>
+        </div>
+        <div class="ahako-balance-row" style="margin-top:12px"><span>自由入力</span><strong><input data-reader-price type="number" inputmode="numeric" min="100" max="100000" step="100" value="100" style="width:110px"> 円</strong></div>
+        <p data-reader-price-error class="ahako-balance-note" style="min-height:1.4em"></p>
+        <div class="ahako-balance-actions"><button data-choice="custom">この価格にする</button><button class="ghost" data-choice="cancel">キャンセル</button></div>
+      </div>`;
+      const finish=value=>{overlay.remove();resolve(value);};
+      overlay.addEventListener('click',event=>{
+        const preset=event.target.closest('[data-price]');
+        if(preset){finish(Number(preset.dataset.price));return;}
+        const choice=event.target.closest('[data-choice]')?.dataset.choice;
+        if(choice==='cancel'||event.target===overlay){finish(null);return;}
+        if(choice==='custom'){
+          const value=Number(overlay.querySelector('[data-reader-price]')?.value);
+          const error=overlay.querySelector('[data-reader-price-error]');
+          if(!Number.isInteger(value)||value<100||value>100000||value%100!==0){if(error)error.textContent='100円〜100,000円の100円単位で入力してください。';return;}
+          finish(value);
+        }
+      });
+      document.body.appendChild(overlay);
+    });
+  }
+
+  async function purchasePublicOwnCopy(commerceHint=null){
     const publicationId=currentWorkId();if(!publicationId||!ownCopyButton)return;
     ownCopyButton.disabled=true;
     if(ownCopyStatus)ownCopyStatus.textContent='購入手続きを用意しています…';
     try{
+      if(!commerceHint)commerceHint=await fetchCanonicalCommerce(documentData).catch(()=>null);
+      const readerPriceMode=['reader_price','support'].includes(String(commerceHint?.mode||''));
+      let readerAmount=null;
+      if(readerPriceMode){
+        readerAmount=await chooseReaderPrice();
+        if(readerAmount==null){ownCopyButton.disabled=false;if(ownCopyStatus)ownCopyStatus.textContent='購入をキャンセルしました。';return;}
+      }
       const orderResponse=await fetch(`${publicOwnCopyApiBase()}/commerce/order`,{
         method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
-        body:JSON.stringify({publicationId,readerId:publicOwnCopyReaderId()})
+        body:JSON.stringify({publicationId,readerId:publicOwnCopyReaderId(),...(readerAmount!=null?{readerAmount}:{})})
       });
       const orderPayload=await orderResponse.json().catch(()=>null);
       if(!orderResponse.ok||!orderPayload?.ok||!orderPayload?.order?.orderId||!orderPayload?.accessToken){
@@ -1027,7 +1066,7 @@
       if(!response.ok||!payload?.ok){
         const code=String(payload?.code||'');
         if(code==='OWN_COPY_NOT_ALLOWED')throw new Error('作者がこの作品の受け取りを停止しました。');
-        if(code==='OWN_COPY_GATE_REQUIRED')throw new Error('この作品の受け取りには購入または支援が必要です。');
+        if(code==='OWN_COPY_GATE_REQUIRED')throw new Error('この作品の受け取りには購入が必要です。');
         if(code==='WORK_NOT_PUBLIC')throw new Error('この作品は現在公開されていません。');
         throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
       }

@@ -508,14 +508,14 @@
           <div class="commerce-settings-body">
             <div class="commerce-price-options commerce-price-options-2x2" role="radiogroup" aria-label="販売方法">
               <label><input id="commerceModeFree" type="radio" name="commerceMode" value="free" checked><span><strong>無料</strong><small>最後まで無料。読了後、100円でMY COPY</small></span></label>
-              <label><input id="commerceSupportEnabled" type="radio" name="commerceMode" value="support"><span><strong>支援</strong><small>最後まで無料。100円〜の支援でMY COPY込み</small></span></label>
-              <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>MY COPY販売</strong><small>最後まで読めます。読了後に購入して受け取れます</small></span></label>
+              <label><input id="commerceSupportEnabled" type="radio" name="commerceMode" value="reader_price"><span><strong>読者価格</strong><small>最後まで無料。MY COPYの価格を読者が決めます</small></span></label>
+              <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>作者価格</strong><small>最後まで無料。MY COPYの価格をあなたが決めます</small></span></label>
               <label><input id="commerceModeLocked" type="radio" name="commerceMode" value="locked"><span><strong>有料ロック</strong><small>指定Sceneから先は購入後に読めます</small></span></label>
             </div>
             <input id="ownCopyEnabled" type="checkbox" checked hidden aria-hidden="true">
             <label id="commerceAmountField" class="commerce-amount-field" hidden>
               <span>販売価格</span>
-              <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="1000000" step="100" value="100" aria-label="販売価格（円）"><small>円</small></div>
+              <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="100000" step="100" value="100" aria-label="販売価格（円）"><small>円</small></div>
             </label>
             <label id="commerceLockField" class="commerce-amount-field" hidden>
               <span>有料開始位置</span>
@@ -1024,7 +1024,7 @@
           <strong>売上の受け取り</strong>
           <span id="authorStripeBadge" class="author-stripe-badge">確認中</span>
         </div>
-        <p id="authorStripeDescription">作品の販売・支援を受け取るためのStripe設定です。口座情報や本人確認はStripe上で行います。</p>
+        <p id="authorStripeDescription">作品の売上を受け取るためのStripe設定です。口座情報や本人確認はStripe上で行います。</p>
         <button id="authorStripeConnectButton" class="publish-secondary" type="button">Stripeを設定する</button>
         <small id="authorStripeStatus" class="author-stripe-status" aria-live="polite"></small>
       </section>
