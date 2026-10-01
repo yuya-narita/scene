@@ -171,7 +171,22 @@ function renderDailyReconciliation(r){
     try{
       const res=await fetch(API+`/admin/commerce/order/${encodeURIComponent(orderId)}/recover-unexplained-debit`,{method:'POST',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({chargeId})});
       const data=await res.json().catch(()=>({}));
-      if(!res.ok||!data?.ok)throw new Error(data?.error||data?.code||`HTTP ${res.status}`);
+      if(!res.ok||!data?.ok){
+        const detail=[
+          `HTTP ${res.status}`,
+          data?.code ? `code: ${data.code}` : '',
+          data?.error ? `error: ${data.error}` : '',
+          data?.reason ? `reason: ${data.reason}` : '',
+          data?.message ? `message: ${data.message}` : '',
+          data?.stripeCode ? `Stripe code: ${data.stripeCode}` : '',
+          data?.stripeMessage ? `Stripe: ${data.stripeMessage}` : '',
+          data?.refundId ? `Refund: ${data.refundId}` : '',
+          data?.refundStatus ? `Refund status: ${data.refundStatus}` : '',
+          data?.chargeAmountRefunded != null ? `Debit amount_refunded: ${yen(data.chargeAmountRefunded)}` : '',
+          data?.verifiedBy?.chargeAmountRefunded != null ? `Debit amount_refunded: ${yen(data.verifiedBy.chargeAmountRefunded)}` : ''
+        ].filter(Boolean).join('\n');
+        throw new Error(detail||`HTTP ${res.status}`);
+      }
       alert(`Stripe確認済み返金: ${yen(amount)}\nRefund: ${data?.refundId||'取得不可'}\nDebit返金済額: ${yen(data?.verifiedBy?.chargeAmountRefunded||amount)}`);
       await runDailyReconciliation();
       if(typeof loadAuditOrders==='function')loadAuditOrders();
