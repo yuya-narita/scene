@@ -231,7 +231,11 @@ async function runPaymentAudit(){
   els.auditOrderButton.disabled=true;els.auditOrderButton.textContent='監査中…';els.auditOrderStatus.textContent='Stripeと照合しています…';els.auditOrderResult.innerHTML='';
   try{
     const {audit}=await fetchPaymentAudit(orderId);
-    renderPaymentAudit(audit);els.auditOrderStatus.textContent=audit.status==='ok'?'監査完了：一致':'監査完了：不一致があります';
+    renderPaymentAudit(audit);
+    els.auditOrderStatus.textContent=audit.status==='ok'?'監査完了：一致':'監査完了：不一致があります';
+    // FINAL: the detail audit is live Stripe evidence. Rebuild the automatic-audit
+    // list immediately so stale cards/counters cannot continue showing an old result.
+    await loadAuditOrders();
   }catch(e){els.auditOrderStatus.textContent=`監査できませんでした: ${e.message}`;}
   finally{els.auditOrderButton.disabled=false;els.auditOrderButton.textContent='監査する';}
 }
