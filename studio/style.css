@@ -12429,3 +12429,12 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
     min-height:34px!important;
   }
 }
+
+/* Web Expression v0.4 — board editor */
+.desktop-web-board-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.desktop-web-board-field{display:flex;flex-direction:column;gap:5px;font-size:12px}
+.desktop-web-board-field input{width:100%;box-sizing:border-box;border:1px solid #d7d7d7;border-radius:8px;padding:9px 10px;background:#fff;color:#222}
+.desktop-web-board-note{display:block;margin-top:10px;color:#777;line-height:1.5}
+@media(max-width:700px){.desktop-web-board-grid{grid-template-columns:1fr}}
+.live-web-board-fields{display:grid;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(127,127,127,.2)}
+.live-web-board-fields input{width:100%;box-sizing:border-box;border:1px solid #d7d7d7;border-radius:8px;padding:9px 10px;background:#fff;color:#222}

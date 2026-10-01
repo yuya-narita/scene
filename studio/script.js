@@ -3197,6 +3197,95 @@
     if(i>=0)store.splice(i,1);
     scheduleDraftSave(40);
   }
+  function ensureLogTime(scene){
+    const pr=ensurePresentation(scene);
+    pr.logTime ||= {};
+    const lt=pr.logTime;
+    // Backward compatibility: v0.2 board date becomes the work-time value.
+    if(!lt.mode){
+      if(pr.view==='web-board' && String(pr.webBoard?.date||'').trim())lt.mode='work';
+      else lt.mode='none';
+    }
+    if(lt.workTime===undefined)lt.workTime=String(pr.webBoard?.date||'');
+    if(lt.editedAt===undefined)lt.editedAt='';
+    return lt;
+  }
+  function touchLogTime(scene){
+    const lt=ensureLogTime(scene);
+    if(lt.mode==='edit')lt.editedAt=boardNowString();
+    return lt;
+  }
+  function boardNowString(){
+    const d=new Date();
+    const z=n=>String(n).padStart(2,'0');
+    const wd=['日','月','火','水','木','金','土'][d.getDay()];
+    return `${d.getFullYear()}/${z(d.getMonth()+1)}/${z(d.getDate())}(${wd}) ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`;
+  }
+  function boardRandomId(){
+    const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    let out='';
+    if(globalThis.crypto?.getRandomValues){const a=new Uint8Array(8);crypto.getRandomValues(a);for(const n of a)out+=chars[n%chars.length];}
+    else for(let i=0;i<8;i++)out+=chars[Math.floor(Math.random()*chars.length)];
+    return out;
+  }
+  function boardRandomThreadId(){
+    return `thread-${Date.now().toString(36)}-${boardRandomId().slice(0,5)}`;
+  }
+  function ensureAllWebBoardThreads(){
+    if(!workingDocument?.scenes?.length)return;
+    let active='';
+    for(let i=0;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation||{};
+      if(pr.view!=='web-board'){active='';continue;}
+      pr.webBoard ||= {};
+      if(pr.webBoard.threadId)active=String(pr.webBoard.threadId);
+      else {if(!active)active=boardRandomThreadId();pr.webBoard.threadId=active;}
+      if(pr.webBoard.replyThreadId===undefined)pr.webBoard.replyThreadId='';
+    }
+  }
+  function webBoardThreadOptions(currentThreadId){
+    ensureAllWebBoardThreads();
+    const ids=[];
+    for(const sc of workingDocument?.scenes||[]){const id=String(sc?.presentation?.webBoard?.threadId||'');if(id&&!ids.includes(id))ids.push(id);}
+    const out=[['',u('現在のスレッド','Current thread')]];
+    ids.forEach((id,i)=>{if(id!==currentThreadId)out.push([id,`${u('スレッド','Thread')} ${i+1}`]);});
+    return out;
+  }
+  function initWebBoardMeta(scene,index,{forceNumber=false}={}){
+    const pr=ensurePresentation(scene);pr.webBoard ||= {};
+    const b=pr.webBoard;
+    if(forceNumber || b.number===undefined || b.number==='' || Number(b.number)<=0)b.number=(Number(index)||0)+1;
+    if(!String(b.name||'').trim())b.name='名無しさん';
+    if(!String(b.date||'').trim())b.date=boardNowString();
+    if(!String(b.userId||'').trim())b.userId=boardRandomId();
+    if(b.email===undefined)b.email='';
+    if(b.replyTo===undefined)b.replyTo='';
+    if(b.replyThreadId===undefined)b.replyThreadId='';
+    if(!String(b.threadId||'').trim()){
+      const prev=workingDocument?.scenes?.[Math.max(0,(Number(index)||0)-1)];
+      const prevId=prev?.presentation?.view==='web-board'?String(prev.presentation.webBoard?.threadId||''):'';
+      b.threadId=prevId||boardRandomThreadId();
+    }
+    return b;
+  }
+  function applyWebBoardModeForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;
+    let changed=0,postNo=1;
+    const threadId=boardRandomThreadId();
+    // Number from the start of the board run, not the absolute Scene index.
+    for(let i=0;i<Math.max(0,Number(fromIndex)||0);i++){
+      if(workingDocument.scenes[i]?.presentation?.view==='web-board')postNo=Math.max(postNo,Number(workingDocument.scenes[i]?.presentation?.webBoard?.number||0)+1);
+    }
+    for(let i=Math.max(0,Number(fromIndex)||0);i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i];if(!sc||sc.type==='sound')continue;
+      const pr=ensurePresentation(sc);
+      if(pr.view && !['world','web-board'].includes(pr.view))continue;
+      if(pr.view!=='web-board'){pr.view='web-board';changed++;}
+      pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};
+      const b=initWebBoardMeta(sc,i);b.number=postNo++;b.threadId=threadId;b.replyThreadId='';
+    }
+    scheduleDraftSave(40);return changed;
+  }
   function applyChatModeForward(fromIndex){
     if(!workingDocument?.scenes?.length)return 0;
     let changed=0;
@@ -3223,8 +3312,8 @@
       const sc=workingDocument.scenes[i];
       if(!sc || sc.type==='sound')continue;
       const pr=ensurePresentation(sc);
-      // Keep intentionally special non-world/non-chat modes untouched.
-      if(pr.view && !['world','chat'].includes(pr.view))continue;
+      // Return log-style views to the normal reading view, while preserving their metadata.
+      if(pr.view && !['world','chat','web-board'].includes(pr.view))continue;
       if(pr.view!=='world'){pr.view='world';changed++;}
       pr.display=pr.display||'stack';
       pr.entryMotion=pr.entryMotion||'flow';
@@ -10063,7 +10152,7 @@ function openDesktopEffectDetail(){
       effectSelect,
       v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
-      desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;apply();}),
+      desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')]],p.view||'world',v=>{p.view=v;apply();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
       desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();})
     );
@@ -12241,6 +12330,13 @@ function openDesktopTextDetail(){
       },'');
       quick.append(iconBtn,updateBtn,forwardBtn,normalForwardBtn);
       chatPanel.append(quick);
+      const chatLt=ensureLogTime(scene);
+      const chatTimeRow=document.createElement('div');chatTimeRow.className='desktop-chat-quick-grid';
+      chatTimeRow.append(desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],chatLt.mode||'none',v=>{chatLt.mode=v;if(v==='edit')chatLt.editedAt=boardNowString();scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      if(chatLt.mode==='work'){
+        const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('作品時刻','Work time');const inp=document.createElement('input');inp.value=chatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{chatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(80);refresh();});f.append(sp,inp);chatTimeRow.append(f);
+      }
+      chatPanel.append(chatTimeRow);
 
       const colors=document.createElement('div');colors.className='desktop-chat-color-row';
 
@@ -12303,12 +12399,49 @@ function openDesktopTextDetail(){
       }),
       v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderDesktopLivePanel()}),
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()}),
-      desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]],p.view||'world',v=>{p.view=v;refresh();renderDesktopLivePanel();}),
+      desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')]],p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
       desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();})
     );
     effectCard.append(effectGrid);
     effectCard.append(desktopDetail(t('detail.effect'),'effect'));
+
+    let webBoardCard=null;
+    if((p.view||'world')==='web-board'){
+      initWebBoardMeta(scene,index);
+      webBoardCard=desktopCard(u('掲示板設定','Board settings'),'desktop-web-board-card');
+      const grid=document.createElement('div');grid.className='desktop-web-board-grid';
+      const field=(label,key,placeholder='')=>{
+        const wrap=document.createElement('label');wrap.className='desktop-web-board-field';
+        const span=document.createElement('span');span.textContent=label;
+        const input=document.createElement('input');input.type=(key==='number'?'number':'text');input.value=p.webBoard[key]??'';input.placeholder=placeholder;
+        input.addEventListener('keydown',e=>e.stopPropagation());input.addEventListener('keyup',e=>e.stopPropagation());
+        const commitBoardField=()=>{let value=input.value;if(key==='replyTo'){value=String(value||'').trim().replace(/^(?:>>|＞＞)\s*/, '');input.value=value;}p.webBoard[key]=key==='number'?(value?Number(value):''):value;touchLogTime(scene);scheduleDraftSave(80);};
+        input.addEventListener('input',commitBoardField);
+        input.addEventListener('change',()=>{commitBoardField();refreshLivePlayer({preserveSheet:false});});
+        input.addEventListener('blur',()=>{commitBoardField();refreshLivePlayer({preserveSheet:false});});
+        wrap.append(span,input);return wrap;
+      };
+      grid.append(
+        field(u('レス番号','Post no.'),'number','1'),
+        field(u('名前','Name'),'name',u('名無しさん','Anonymous')),
+        field('ID','userId','Ab3x9K'),
+        field(u('メール（sage等）','Email (sage etc.)'),'email','sage'),
+        field(u('アンカー','Reply'),'replyTo','121')
+      );
+      const threadRef=desktopMakeSelect(u('アンカー参照先','Anchor thread'),webBoardThreadOptions(String(p.webBoard.threadId||'')),p.webBoard.replyThreadId||'',v=>{p.webBoard.replyThreadId=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
+      const lt=ensureLogTime(scene);
+      const timeMode=desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      const workTimeWrap=document.createElement('label');workTimeWrap.className='desktop-web-board-field';
+      const workTimeLabel=document.createElement('span');workTimeLabel.textContent=u('作品時刻','Work time');
+      const workTimeInput=document.createElement('input');workTimeInput.type='text';workTimeInput.value=lt.workTime||'';workTimeInput.placeholder='2026/10/01 10:10:07';workTimeInput.disabled=lt.mode!=='work';
+      workTimeInput.addEventListener('keydown',e=>e.stopPropagation());workTimeInput.addEventListener('keyup',e=>e.stopPropagation());
+      const commitWorkTime=()=>{lt.workTime=workTimeInput.value;touchLogTime(scene);scheduleDraftSave(80);};workTimeInput.addEventListener('input',commitWorkTime);workTimeInput.addEventListener('change',()=>{commitWorkTime();refreshLivePlayer({preserveSheet:false});});workTimeInput.addEventListener('blur',()=>{commitWorkTime();refreshLivePlayer({preserveSheet:false});});workTimeWrap.append(workTimeLabel,workTimeInput);
+      const note=document.createElement('small');note.className='desktop-web-board-note';note.textContent=u('時刻はログ共通設定です。読者時刻はPlayerを開いた端末の現在時刻を表示します。','Time is shared log metadata. Reader time uses the current time on the reader device.');
+      const forward=desktopAction(u('このScene以降を掲示板化','Board mode from this Scene onward'),()=>{const count=applyWebBoardModeForward(index);refresh();renderDesktopLivePanel();showUndo(`${count} Sceneを掲示板表示にしました`);},'is-primary');
+      const normal=desktopAction(u('このScene以降を通常に戻す','Normal mode from this Scene onward'),()=>{const count=applyNormalModeForward(index);refresh();renderDesktopLivePanel();showUndo(`${count} Sceneを通常表示に戻しました`);},'');
+      webBoardCard.append(grid,threadRef,timeMode,workTimeWrap,forward,normal,note);
+    }
 
     const bgCard=desktopCard(uiLanguage==='en'?'Background (▣)':'背景（▣）','desktop-live-bg-card');
     const bg=p.background;
@@ -12548,6 +12681,7 @@ function openDesktopTextDetail(){
     if(!inlineExistingDetail('text',panes.text))panes.text.appendChild(textCard);
     if(!inlineExistingDetail('effect',panes.effect))panes.effect.appendChild(effectCard);
     if(chatCard)panes.effect.appendChild(chatCard);
+    if(webBoardCard)panes.effect.appendChild(webBoardCard);
     if(!inlineExistingDetail('background',panes.background))panes.background.appendChild(bgCard);
     panes.image.appendChild(sceneImageCard);
     if(!inlineExistingDetail('audio',panes.audio))panes.audio.appendChild(audioCard);
@@ -13119,7 +13253,7 @@ function openDesktopTextDetail(){
         select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
       };
       const makeEffectAction=(label,cls='')=>{const b=document.createElement('button');b.type='button';b.className=`live-edit-action ${cls}`.trim();b.textContent=label;return b;};
-      const viewValues=[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')]];
+      const viewValues=[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')]];
 
       // Normal effect UI stays intentionally compact. Chat-only controls must
       // never leak into this state.
@@ -13140,11 +13274,41 @@ function openDesktopTextDetail(){
           }),
           v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderLiveEditSheet('effect')}),
           v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderLiveEditSheet('effect')}),
-          makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
+          makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();})
         );
         liveEditSheetBody.append(grid);
+        if((p.view||'world')==='web-board'){
+          initWebBoardMeta(scene,index);
+          const board=document.createElement('div');board.className='live-web-board-fields';
+          const addBoardField=(label,key,placeholder='')=>{
+            const wrap=document.createElement('label');wrap.className='live-edit-field';wrap.append(label);
+            const input=document.createElement('input');input.type=(key==='number'?'number':'text');input.value=p.webBoard[key]??'';input.placeholder=placeholder;
+            input.addEventListener('keydown',e=>e.stopPropagation());input.addEventListener('keyup',e=>e.stopPropagation());
+            const commitBoardField=()=>{let value=input.value;if(key==='replyTo'){value=String(value||'').trim().replace(/^(?:>>|＞＞)\s*/, '');input.value=value;}p.webBoard[key]=key==='number'?(value?Number(value):''):value;touchLogTime(scene);scheduleDraftSave(80);};
+            input.addEventListener('input',commitBoardField);
+            input.addEventListener('change',()=>{commitBoardField();refreshLivePlayer();});
+            input.addEventListener('blur',()=>{commitBoardField();refreshLivePlayer();});
+            wrap.appendChild(input);board.appendChild(wrap);
+          };
+          addBoardField(u('レス番号','Post no.'),'number','1');
+          addBoardField(u('名前','Name'),'name',u('名無しさん','Anonymous'));
+          addBoardField('ID','userId','Ab3x9K');
+          addBoardField(u('メール（sage等）','Email (sage etc.)'),'email','sage');
+          addBoardField(u('アンカー','Reply'),'replyTo','121');
+          board.append(makeSelect(u('アンカー参照先','Anchor thread'),webBoardThreadOptions(String(p.webBoard.threadId||'')),p.webBoard.replyThreadId||'',v=>{p.webBoard.replyThreadId=v;scheduleDraftSave(40);refreshLivePlayer();}));
+          const lt=ensureLogTime(scene);
+          board.append(makeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
+          if(lt.mode==='work'){
+            const tw=document.createElement('label');tw.className='live-edit-field';tw.append(u('作品時刻','Work time'));const ti=document.createElement('input');ti.type='text';ti.value=lt.workTime||'';ti.placeholder='2026/10/01 10:10:07';ti.addEventListener('keydown',e=>e.stopPropagation());ti.addEventListener('keyup',e=>e.stopPropagation());const commitWorkTime=()=>{lt.workTime=ti.value;touchLogTime(scene);scheduleDraftSave(80);};ti.addEventListener('input',commitWorkTime);ti.addEventListener('change',()=>{commitWorkTime();refreshLivePlayer();});ti.addEventListener('blur',()=>{commitWorkTime();refreshLivePlayer();});tw.appendChild(ti);board.appendChild(tw);
+          }
+          const boardForward=makeEffectAction(u('このScene以降を掲示板化','Board mode from this Scene onward'),'is-primary');
+          boardForward.onclick=()=>{const count=applyWebBoardModeForward(index);scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');showUndo(`${count} Sceneを掲示板表示にしました`);};
+          const boardNormal=makeEffectAction(u('このScene以降を通常に戻す','Normal mode from this Scene onward'));
+          boardNormal.onclick=()=>{const count=applyNormalModeForward(index);scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');showUndo(`${count} Sceneを通常表示に戻しました`);};
+          board.append(boardForward,boardNormal);liveEditSheetBody.append(board);
+        }
         const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=t('detail.effect');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('effect');});
         liveEditSheetBody.append(detail);return;
       }
@@ -13233,6 +13397,11 @@ function openDesktopTextDetail(){
         speakerManageRow.append(removeSpeaker);
       }
       liveEditSheetBody.append(speakerManageRow);
+
+      const mobileChatLt=ensureLogTime(scene);
+      const mobileChatTime=document.createElement('div');mobileChatTime.className='live-chat-mode-box';
+      mobileChatTime.append(makeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],mobileChatLt.mode||'none',v=>{mobileChatLt.mode=v;if(v==='edit')mobileChatLt.editedAt=boardNowString();scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
+      if(mobileChatLt.mode==='work'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('作品時刻','Work time'));const inp=document.createElement('input');inp.value=mobileChatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{mobileChatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(80);refreshLivePlayer();});f.appendChild(inp);mobileChatTime.appendChild(f);}liveEditSheetBody.append(mobileChatTime);
 
       const forward=makeEffectAction(u('このScene以降をチャット化','Chat mode from this Scene onward'),'is-primary');
       forward.onclick=()=>{const count=applyChatModeForward(index);if(count){scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');showUndo(`${count} Sceneをチャット表示にしました`);}};

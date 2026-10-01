@@ -403,7 +403,9 @@
             "console",
             "system",
             "warning",
-            "void"
+            "void",
+            "chat",
+            "web-board"
           ]
         },
         "effect": {
@@ -520,6 +522,27 @@
             }
           },
           "additionalProperties": true
+        },
+        "webBoard": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "number": {"type": ["integer", "string"]},
+            "name": {"type": "string"},
+            "date": {"type": "string"},
+            "userId": {"type": "string"},
+            "email": {"type": "string"},
+            "replyTo": {"type": "string"}
+          }
+        },
+        "logTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {"enum": ["none", "work", "edit", "reader"]},
+            "workTime": {"type": "string"},
+            "editedAt": {"type": "string"}
+          }
         },
         "background": {
           "$ref": "#/$defs/background"

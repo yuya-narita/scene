@@ -2126,3 +2126,95 @@ html.sp-scene-image-open body{
   max-height:none!important;
   object-fit:contain!important;
 }
+/* Web Expression v0.1 — anonymous board */
+.sp-scene[data-view="web-board"]{align-items:flex-start;text-align:left;font-family:Arial,"Noto Sans JP",sans-serif}
+.sp-web-board-post{width:min(94%,760px);margin:0 auto;padding:12px 14px;background:#f0f0f0;color:#111;border:1px solid #d5d5d5;border-radius:2px;box-sizing:border-box}
+.sp-web-board-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px;font-size:clamp(11px,2.9vw,14px);line-height:1.45;color:#333}
+.sp-web-board-no{color:#333}
+.sp-web-board-name{font-weight:700;color:#008000}
+.sp-web-board-date,.sp-web-board-id{color:#555}
+.sp-web-board-reply{margin:5px 0 0 1.5em;font-size:.88em;color:#0000cc}
+.sp-web-board-text{margin-top:7px!important;padding-left:1.5em!important;text-align:left!important;white-space:pre-wrap;color:#111!important;font-family:Arial,"Noto Sans JP",sans-serif!important;line-height:1.55!important}
+@media(max-width:600px){.sp-web-board-post{width:96%;padding:10px}.sp-web-board-text{padding-left:.8em!important}}
+
+/* Web Expression v0.2: old anonymous-board / past-log presentation */
+.sp-scene[data-view="web-board"]{align-items:flex-start!important;text-align:left!important;font-family:Arial,"Noto Sans JP",sans-serif!important}
+.sp-web-board-post{width:min(96%,820px)!important;margin:0 auto!important;padding:8px 8px 12px!important;background:transparent!important;color:#111!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+.sp-web-board-head{display:flex!important;flex-wrap:wrap!important;align-items:baseline!important;gap:4px!important;font-size:clamp(10px,2.6vw,13px)!important;line-height:1.4!important;color:#444!important}
+.sp-web-board-no{color:#333!important}.sp-web-board-name{font-weight:700!important;color:#008000!important}.sp-web-board-email{color:#777!important}.sp-web-board-date,.sp-web-board-id{color:#555!important}
+.sp-web-board-reply{margin:3px 0 0 1.2em!important;font-size:clamp(11px,2.8vw,14px)!important;color:#0000cc!important}
+.sp-web-board-text{margin-top:5px!important;padding-left:1.2em!important;text-align:left!important;white-space:pre-wrap!important;color:#111!important;font-family:Arial,"Noto Sans JP",sans-serif!important;font-size:clamp(14px,3.6vw,18px)!important;line-height:1.55!important}
+@media(max-width:600px){.sp-web-board-post{width:98%!important;padding:7px 5px 11px!important}.sp-web-board-text{padding-left:.8em!important}}
+
+
+/* Web Expression v0.3 — shared log time + board history parity */
+.sp-chat-time{margin-top:4px;font-size:11px;line-height:1.25;opacity:.58;text-align:left;white-space:nowrap}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-time{text-align:right}
+.sp-history-chat-time{display:block;margin-top:4px;font-size:10px;line-height:1.25;opacity:.52;text-align:left}
+.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-time{text-align:right}
+.sp-history-item.sp-history-web-board{align-items:flex-start;text-align:left}
+.sp-history-item.sp-history-web-board .sp-history-number{opacity:.42}
+.sp-history-web-board-post{display:block;width:100%;font-family:Arial,"Noto Sans JP",sans-serif;text-align:left}
+.sp-history-web-board-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px;font-size:clamp(10px,2.55vw,12px);line-height:1.4;color:#555}
+.sp-history-web-board-name{font-weight:700;color:#008000}
+.sp-history-web-board-email{color:#777}.sp-history-web-board-date,.sp-history-web-board-id{color:#666}
+.sp-history-web-board-reply{display:block;margin:3px 0 0 .8em;color:#0000cc;font-size:clamp(10px,2.6vw,13px)}
+.sp-history-web-board-text{display:block;margin-top:4px;padding-left:.8em;white-space:pre-wrap;overflow-wrap:anywhere;font-size:clamp(13px,3.45vw,17px);line-height:1.55;color:#222}
+
+/* Web Expression v0.4: board anchor popup */
+/* Web Expression v0.4.3 — board anchors are interactive foreground targets.
+   .sp-scenes intentionally uses pointer-events:none so ordinary Scene text falls
+   through to Stage advance; anchors opt back in without making the whole post clickable. */
+.sp-web-board-reply,.sp-history-web-board-reply{cursor:pointer;text-decoration:none}
+.sp-scenes .sp-web-board-reply{pointer-events:auto!important;position:relative;z-index:12;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.sp-web-board-reply:hover,.sp-history-web-board-reply:hover{text-decoration:underline}
+.sp-board-anchor-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:22px;background:rgba(0,0,0,.18);box-sizing:border-box}
+.sp-board-anchor-overlay.is-hover{pointer-events:none;background:transparent;align-items:flex-start;justify-content:center;padding-top:18%}
+.sp-board-anchor-overlay.is-hover .sp-board-anchor-popup{pointer-events:none;box-shadow:0 8px 28px rgba(0,0,0,.16)}
+.sp-board-anchor-popup{position:relative;width:min(92%,520px);max-height:68%;overflow:auto;background:#f7f7f2;color:#222;border:1px solid rgba(0,0,0,.18);box-shadow:0 12px 36px rgba(0,0,0,.18);padding:18px 20px;border-radius:8px;font-family:Arial,"Noto Sans JP",sans-serif;text-align:left}
+.sp-board-anchor-close{position:absolute;top:5px;right:7px;border:0;background:transparent;color:#777;font-size:22px;line-height:1;cursor:pointer}
+.sp-board-anchor-head{padding-right:24px;font-size:12px;line-height:1.55;color:#555}
+.sp-board-anchor-body{margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.65;color:#222}
+.sp-board-anchor-missing{padding:12px 24px 12px 0;font-size:14px;color:#666}
+
+/* Web Expression v0.4.4 — board theme parity for Easy LIGHT/DARK/CINEMA */
+.sp-core[data-theme="dark"] .sp-web-board-post,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-web-board-post{color:#f2f2f4!important}
+.sp-core[data-theme="dark"] .sp-web-board-head,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-web-board-head{color:rgba(255,255,255,.76)!important}
+.sp-core[data-theme="dark"] .sp-web-board-no,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-web-board-no{color:rgba(255,255,255,.72)!important}
+.sp-core[data-theme="dark"] .sp-web-board-name,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-web-board-name{color:#63d66b!important}
+.sp-core[data-theme="dark"] .sp-web-board-email,
+.sp-core[data-theme="dark"] .sp-web-board-date,
+.sp-core[data-theme="dark"] .sp-web-board-id,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-web-board-email,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-web-board-date,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-web-board-id{color:rgba(255,255,255,.58)!important}
+.sp-core[data-theme="dark"] .sp-web-board-reply,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-web-board-reply{color:#8da2ff!important}
+.sp-core[data-theme="dark"] .sp-web-board-text,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-web-board-text{color:#f2f2f4!important}
+
+.sp-core[data-theme="dark"] .sp-history-web-board-head,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-history-web-board-head{color:rgba(255,255,255,.70)!important}
+.sp-core[data-theme="dark"] .sp-history-web-board-name,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-history-web-board-name{color:#63d66b!important}
+.sp-core[data-theme="dark"] .sp-history-web-board-email,
+.sp-core[data-theme="dark"] .sp-history-web-board-date,
+.sp-core[data-theme="dark"] .sp-history-web-board-id,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-history-web-board-email,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-history-web-board-date,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-history-web-board-id{color:rgba(255,255,255,.54)!important}
+.sp-core[data-theme="dark"] .sp-history-web-board-reply,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-history-web-board-reply{color:#8da2ff!important}
+.sp-core[data-theme="dark"] .sp-history-web-board-text,
+.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-history-web-board-text{color:#f2f2f4!important}
+
+/* Anchor popup lives on document.body, so its palette is stamped by JS. */
+.sp-board-anchor-overlay[data-board-tone="dark"] .sp-board-anchor-popup{background:#15171d;color:#f2f2f4;border-color:rgba(255,255,255,.18);box-shadow:0 12px 36px rgba(0,0,0,.42)}
+.sp-board-anchor-overlay[data-board-tone="dark"] .sp-board-anchor-close{color:rgba(255,255,255,.66)}
+.sp-board-anchor-overlay[data-board-tone="dark"] .sp-board-anchor-head{color:rgba(255,255,255,.62)}
+.sp-board-anchor-overlay[data-board-tone="dark"] .sp-board-anchor-body{color:#f2f2f4}
+.sp-board-anchor-overlay[data-board-tone="dark"] .sp-board-anchor-missing{color:rgba(255,255,255,.66)}
