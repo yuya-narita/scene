@@ -161,6 +161,11 @@
       <section class="panel payment-audit-panel">
         <div class="section-head"><div><small>PAYMENT AUDIT</small><h2>決済監査</h2></div><small class="muted-note">Stripe実績とOrderを再照合・金銭系は自動修復しません</small></div>
         <p class="selection-lead">最近の確定済み注文を自動でStripeと照合します。普段は件数だけ確認し、異常がある注文だけ開いて調査します。監査によって決済や権利が変更されることはありません。</p>
+        <div class="daily-reconciliation">
+          <div class="audit-orders-head"><div><strong>日次決済照合 V1</strong><small>JST・Order全体とStripe実績を1日単位で照合</small></div><div class="daily-recon-controls"><input id="dailyReconDay" type="date"><button id="dailyReconButton" type="button">日次照合</button></div></div>
+          <p id="dailyReconStatus" class="status"></p>
+          <div id="dailyReconResult" class="daily-recon-result"><div class="empty">日付を選んで日次照合を実行できます。</div></div>
+        </div>
         <div class="audit-orders-head"><strong>自動監査</strong><button id="auditOrdersReloadButton" type="button">再監査</button></div>
         <div class="audit-dashboard" aria-live="polite">
           <div class="is-ok"><small>正常</small><strong id="auditOkCount">–</strong></div>
