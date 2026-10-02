@@ -76,10 +76,31 @@ function publicAuthorShelfUrl(author=signedInAuthor){const data=typeof author===
 function readerBookAuthorShelfUrl(book){const slug=String(book?.authorSlug||'').trim().toLowerCase(),authorId=String(book?.authorId||'').trim().toLowerCase();if(/^[a-z0-9][a-z0-9_-]{2,29}$/.test(slug))return publicAuthorShelfUrl({slug});if(/^author_[a-f0-9]{32}$/.test(authorId))return publicAuthorShelfUrl({authorId});return'';}
 function publicAuthorShelfShareUrl(author=signedInAuthor){const data=typeof author==='string'?{authorId:author}:author||{},reference=data.slug||data.authorId;return reference?`${API_BASE}/s/${encodeURIComponent(reference)}`:publicAuthorShelfUrl(data);}
 function readAuthorSession(){try{const row=JSON.parse(localStorage.getItem(AUTHOR_AUTH_STORAGE_KEY)||'null');if(row?.token&&row?.author?.authorId){authorToken=String(row.token);signedInAuthor=row.author;}}catch(_){}}
-function saveAuthorSession(token,author){authorToken=String(token||'');signedInAuthor=author||null;if(authorToken&&signedInAuthor)localStorage.setItem(AUTHOR_AUTH_STORAGE_KEY,JSON.stringify({token:authorToken,author:signedInAuthor}));else localStorage.removeItem(AUTHOR_AUTH_STORAGE_KEY);syncBookshelfAuthorUI();}
+function saveAuthorSession(token,author){authorToken=String(token||'');signedInAuthor=author||null;if(authorToken&&signedInAuthor)localStorage.setItem(AUTHOR_AUTH_STORAGE_KEY,JSON.stringify({token:authorToken,author:signedInAuthor}));else localStorage.removeItem(AUTHOR_AUTH_STORAGE_KEY);syncBookshelfAuthorUI();loadCommerceWallet().catch(()=>{});}
 function syncBookshelfAuthorUI(){const active=!!(authorToken&&signedInAuthor?.authorId),button=$('#bookshelfAuthorButton');if(button){button.textContent=active?(signedInAuthor.displayName||'ログイン中'):'作者ログイン';button.classList.toggle('is-signed-in',active);}$('#bookshelfAuthorSignedIn').hidden=!active;$('#bookshelfAuthorEmailForm').hidden=active;$('#bookshelfAuthorCodeForm').hidden=true;if(active){$('#bookshelfAuthorName').textContent=signedInAuthor.displayName||'';$('#bookshelfAuthorId').textContent=signedInAuthor.slug?`@${signedInAuthor.slug}`:'短い本棚IDは未設定です';if($('#openPublicAuthorShelf'))$('#openPublicAuthorShelf').href=publicAuthorShelfUrl(signedInAuthor);}syncAuthorProfileUI();syncAuthorHeaderUI();syncSeriesShelf();}
 async function restoreBookshelfAuthorSession(){readAuthorSession();syncBookshelfAuthorUI();if(!authorToken)return;try{const response=await fetch(`${API_BASE}/author-auth/me`,{headers:authorHeaders({Accept:'application/json'}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);return;}if(response.ok&&payload?.author)saveAuthorSession(authorToken,payload.author);}catch(_){syncBookshelfAuthorUI();}if(authorToken)await loadAuthorShelfData();}
 async function authorRequest(path,options={}){const response=await fetch(`${API_BASE}${path}`,{...options,headers:authorHeaders(options.headers||{}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);throw new Error(payload?.error||'ログインの有効期限が切れました。');}if(!response.ok||!payload?.ok)throw new Error(payload?.error||'通信できませんでした。');return payload;}
+async function loadCommerceWallet({open=false}={}){
+  const button=$('#commerceWalletButton');
+  if(!authorToken||!signedInAuthor?.authorId){if(button)button.hidden=true;return;}
+  if(button)button.hidden=false;
+  const status=$('#commerceWalletStatus'),history=$('#commerceWalletHistory');
+  if(open&&history)history.innerHTML='<p class="commerce-wallet-empty">残高と履歴を確認しています…</p>';
+  try{
+    const data=await authorRequest('/author/commerce-wallet');
+    const available=Number(data.available)||0,pending=Number(data.pending)||0;
+    if($('#commerceWalletAmount'))$('#commerceWalletAmount').textContent=`¥${available.toLocaleString('ja-JP')}`;
+    if($('#commerceWalletAvailable'))$('#commerceWalletAvailable').textContent=`¥${available.toLocaleString('ja-JP')}`;
+    if($('#commerceWalletPending'))$('#commerceWalletPending').textContent=pending?`処理中 ¥${pending.toLocaleString('ja-JP')}`:'Stripe確認済み';
+    if(status)status.textContent=data.connected?'':'Stripe Connect未接続です。';
+    if(history){
+      const rows=Array.isArray(data.transactions)?data.transactions:[];
+      history.innerHTML=rows.length?rows.map(row=>{const amount=Math.max(0,Number(row.amount)||0),sign=row.direction==='out'?'−':'＋',cls=row.direction==='out'?'is-out':'is-in',date=row.at?new Date(row.at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';return `<div class="commerce-wallet-row"><div><strong>${escapeHtml(row.title||row.label||'取引')}</strong><span>${escapeHtml(row.label||'')} · ${escapeHtml(date)}</span></div><b class="${cls}">${sign}¥${amount.toLocaleString('ja-JP')}</b></div>`;}).join(''):'<p class="commerce-wallet-empty">あ箱での取引履歴はまだありません。</p>';
+    }
+    return data;
+  }catch(error){if(status)status.textContent=error.message||'売上残高を確認できませんでした。';if(open&&history)history.innerHTML='<p class="commerce-wallet-empty">履歴を読み込めませんでした。</p>';}
+}
+function openCommerceWallet(){const dialog=$('#commerceWalletDialog');if(!dialog)return;dialog.showModal();syncShelfScrollLock();loadCommerceWallet({open:true});}
 function authorHeaderPublicUrl(header=signedInAuthor?.bookshelfHeader){if(!header||!signedInAuthor?.authorId)return'';const url=new URL(`${API_BASE}/authors/${encodeURIComponent(signedInAuthor.authorId)}/bookshelf/header`);url.searchParams.set('v',header.updatedAt||'1');return url.toString();}
 function syncAuthorProfileUI(){const name=$('#bookshelfAuthorProfileName'),slug=$('#bookshelfAuthorSlug'),lead=$('#bookshelfAuthorShelfLead'),url=$('#bookshelfAuthorShortUrl');if(name)name.value=signedInAuthor?.displayName||'';if(slug)slug.value=signedInAuthor?.slug||'';if(lead)lead.value=signedInAuthor?.bookshelfLead||'';if(url)url.textContent=signedInAuthor?.slug?publicAuthorShelfShareUrl(signedInAuthor):'未設定の場合は従来の本棚URLを使用します。';}
 function setAuthorProfileStatus(message='',error=false){const node=$('#bookshelfAuthorProfileStatus');if(!node)return;node.textContent=message;node.classList.toggle('is-error',error);}
@@ -168,7 +189,7 @@ async function syncRecoveredMasterSeriesMetadata(){
 async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];await restoreServerPublishedMasters();await syncRecoveredMasterSeriesMetadata();mergeServerPublishedWorksIntoCreatedCache();rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);await queuePublishedWorkOrderSync(createdIds,{immediate:true});}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
 
 function shelfScrollShouldLock(){
-  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open||$('#readLaterDialog')?.open||$('#publicWorkDialog')?.open);
+  return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open||$('#readLaterDialog')?.open||$('#publicWorkDialog')?.open||$('#commerceWalletDialog')?.open);
 }
 function syncShelfScrollLock(){
   const body=document.body;if(!body)return;
@@ -2228,6 +2249,10 @@ $('#bookshelfAuthorDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#seriesBoxDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#readLaterDialog')?.addEventListener('close',syncShelfScrollLock);
 $('#publicWorkDialog')?.addEventListener('close',syncShelfScrollLock);
+$('#commerceWalletDialog')?.addEventListener('close',syncShelfScrollLock);
+$('#commerceWalletButton')?.addEventListener('click',openCommerceWallet);
+$('#closeCommerceWallet')?.addEventListener('click',()=>$('#commerceWalletDialog')?.close());
+$('#reloadCommerceWallet')?.addEventListener('click',()=>loadCommerceWallet({open:true}));
 $('#cancelArchiveDelete')?.addEventListener('click',()=>$('#deleteArchiveDialog')?.close());
 $('#confirmArchiveDelete')?.addEventListener('click',async()=>{const dialog=$('#deleteArchiveDialog');if(!dialog)return;let ids=[];try{ids=JSON.parse(dialog.dataset.ids||'[]');}catch(_){ids=[];}const tab=dialog.dataset.tab||currentShelfTab;if(!Array.isArray(ids)||!ids.length){dialog.close();return;}const button=$('#confirmArchiveDelete');if(button){button.disabled=true;button.textContent='削除中…';}try{for(const id of ids)await permanentlyDeleteArchivedBook(tab,id);dialog.close();await render();if($('#archiveDialog')?.open)openArchiveBox();toast(`${ids.length}冊を削除しました。`);}catch(err){console.error(err);AhakoDialog.alert(err?.message||'削除できませんでした。');}finally{if(button){button.disabled=false;button.textContent='削除する';}dialog.dataset.ids='';}});
 $('#bookshelfMenu')?.addEventListener('keydown',e=>{if(e.key==='Escape'){e.currentTarget.open=false;syncShelfScrollLock();}});
@@ -2241,7 +2266,7 @@ $('#openReadLater')?.addEventListener('click',openReadLater);
 $('#closeReadLater')?.addEventListener('click',()=>$('#readLaterDialog')?.close());
 $('#closePublicWork')?.addEventListener('click',()=>$('#publicWorkDialog')?.close());
 window.addEventListener('storage',event=>{if(event.key===READ_LATER_STORAGE_KEY){syncReadLaterCount();if($('#readLaterDialog')?.open)renderReadLaterList();}});
-window.addEventListener('pageshow',syncReadLaterCount);
+window.addEventListener('pageshow',()=>{syncReadLaterCount();if(authorToken)loadCommerceWallet().catch(()=>{});});
 syncReadLaterCount();
 installSceneDrop();
 installShelfScrollGuard();
