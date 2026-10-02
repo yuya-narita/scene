@@ -45,12 +45,22 @@ function paymentRailLabel(value){const v=String(value||'card');return (v==='bala
 function auditOrderCard(row,{kind='alert',audit=null,error=''}={}){
   const mismatchCount=Array.isArray(audit?.mismatches)?audit.mismatches.length:0;
   const reason=error?error:(audit?.recoveryClass==='ENTITLEMENT_ONLY'?'MY COPY権利のみ要修復':(mismatchCount?`不一致 ${mismatchCount}件`:(audit?.errors?.length?`取得エラー ${audit.errors.length}件`:'')));
-  return `<div class="audit-order-row is-${escapeHtml(kind)}" data-order-id="${escapeHtml(row.orderId||'')}"><div class="audit-order-main"><strong>${yen(row.amount)}</strong><span class="audit-order-status is-${escapeHtml(row.status||'unknown')}">${escapeHtml(row.status||'unknown')}</span><span>${escapeHtml(row.mode||'–')}</span><span>${escapeHtml(paymentRailLabel(row.paymentRail))}</span>${reason?`<span class="audit-reason">${escapeHtml(reason)}</span>`:''}</div><code>${escapeHtml(row.orderId||'')}</code><div class="audit-order-meta"><span>${escapeHtml(formatJstDate(row.paidAt||row.updatedAt||row.createdAt))}</span><span>${escapeHtml(row.workId||'')}</span></div><button class="audit-order-run" type="button" data-audit-order="${escapeHtml(row.orderId||'')}">詳細</button></div>`;
+  return `<div class="audit-order-row is-${escapeHtml(kind)}" data-order-id="${escapeHtml(row.orderId||'')}"><div class="audit-order-main"><strong>${yen(row.amount)}</strong><span class="audit-order-status is-${escapeHtml(row.status||'unknown')}">${escapeHtml(row.status||'unknown')}</span><span>${escapeHtml(row.mode||'–')}</span><span>${escapeHtml(paymentRailLabel(row.paymentRail))}</span>${reason?`<span class="audit-reason">${escapeHtml(reason)}</span>`:''}</div><code>${escapeHtml(row.orderId||'')}</code><div class="audit-order-meta"><span>${escapeHtml(formatJstDate(row.paidAt||row.updatedAt||row.createdAt))}</span><span>${escapeHtml(row.workId||'')}</span></div><button class="audit-order-run" type="button" data-audit-order="${escapeHtml(row.orderId||'')}">再取得して詳細</button>${audit?`<button class="audit-order-run" type="button" data-audit-snapshot="${escapeHtml(row.orderId||'')}">一覧時の結果</button>`:''}</div>`;
 }
+let automaticAuditSnapshots=new Map();
 function bindAuditDetailButtons(){
   els.auditOrdersList?.querySelectorAll('[data-audit-order]').forEach(button=>button.addEventListener('click',()=>{
     if(els.auditOrderId)els.auditOrderId.value=button.dataset.auditOrder||'';
     runPaymentAudit();
+  }));
+  els.auditOrdersList?.querySelectorAll('[data-audit-snapshot]').forEach(button=>button.addEventListener('click',()=>{
+    const orderId=button.dataset.auditSnapshot||'';
+    const audit=automaticAuditSnapshots.get(orderId);
+    if(!audit){toast('一覧時の監査結果が見つかりません');return;}
+    if(els.auditOrderId)els.auditOrderId.value=orderId;
+    renderPaymentAudit(audit);
+    if(els.auditOrderStatus)els.auditOrderStatus.textContent=`一覧取得時の結果：${audit.status==='ok'?'一致':'不一致があります'}（再取得していません）`;
+    els.auditOrderResult?.scrollIntoView({behavior:'smooth',block:'start'});
   }));
 }
 async function fetchPaymentAudit(orderId){
@@ -132,6 +142,10 @@ async function mapWithConcurrency(items,limit,fn){
   return results;
 }
 function renderAutomaticAudit(rows,results,skipped){
+  // V9 diagnostic: preserve the exact audit payload used to build this list.
+  // Opening "一覧時の結果" never calls Stripe again, so intermittent mismatches cannot disappear.
+  automaticAuditSnapshots=new Map();
+  rows.forEach((row,i)=>{const audit=results[i]?.audit;if(audit&&row?.orderId)automaticAuditSnapshots.set(String(row.orderId),audit);});
   const ok=[];const alerts=[];
   rows.forEach((row,i)=>{
     const result=results[i]||{};
