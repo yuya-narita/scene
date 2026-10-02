@@ -104,6 +104,7 @@
   const commerceAmountInput = $('#commerceAmountInput');
   const commercePriceBadge = $('#commercePriceBadge');
   const commercePriceStatus = $('#commercePriceStatus');
+  const commerceRevenueSummary = $('#commerceRevenueSummary');
   const menuRelayToggleButton = $('#menuRelayToggleButton');
   const distributionExportDialog = $('#distributionExportDialog');
   const distributionRelayOn = $('#distributionRelayOn');
@@ -899,6 +900,28 @@
     if(commercePriceStatus)commercePriceStatus.textContent='';
     return settings;
   }
+  function commerceAuthorShareBps(amount){
+    const yen=Math.max(0,Math.floor(Number(amount)||0));
+    if(yen<=100)return 5000;
+    if(yen<=200)return 5500;
+    if(yen<=300)return 6000;
+    if(yen<=400)return 6500;
+    return 7000;
+  }
+  function renderCommerceRevenueSummary(){
+    if(!commerceRevenueSummary)return;
+    const amount=Math.max(100,Math.floor(Number(commerceAmountInput?.value||100)));
+    if(commerceModeFree?.checked){
+      commerceRevenueSummary.innerHTML='<strong>無料MY COPY ¥100</strong><span>作者への分配はありません。100円はあ箱の運営費になります。</span>';
+      return;
+    }
+    if(commerceSupportEnabled?.checked){
+      commerceRevenueSummary.innerHTML='<strong>読者価格</strong><span>読者が決めた価格に応じて、作者への分配率は50〜70%です。</span>';
+      return;
+    }
+    const bps=commerceAuthorShareBps(amount),author=Math.floor(amount*bps/10000);
+    commerceRevenueSummary.innerHTML=`<strong>販売価格 ¥${amount.toLocaleString('ja-JP')} → あなたの売上 ¥${author.toLocaleString('ja-JP')}</strong><span>作者 ${bps/100}% ／ あ箱 ${(10000-bps)/100}%</span>`;
+  }
   function renderCommercePriceUI(){
     const paid=Boolean(commerceModePurchase?.checked||commerceModeLocked?.checked);
     const locked=Boolean(commerceModeLocked?.checked);
@@ -922,6 +945,7 @@
       commercePriceBadge.classList.toggle('is-paid',paid);
       commercePriceBadge.classList.toggle('is-support',readerPrice);
     }
+    renderCommerceRevenueSummary();
     if(ownCopyEnabledInput){
       ownCopyEnabledInput.checked=true;
       ownCopyEnabledInput.disabled=true;

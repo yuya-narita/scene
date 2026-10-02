@@ -524,6 +524,19 @@
               <small id="commerceLockHint" class="commerce-lock-hint">Scene 1 まで無料で読めます。</small>
               <small class="commerce-lock-guide">数字で直接指定するか、Live Editorでプレビューを見ながら指定できます。</small>
             </label>
+            <div id="commerceRevenueSummary" class="commerce-revenue-summary" aria-live="polite"></div>
+            <details class="commerce-revenue-details">
+              <summary>売上の分配について</summary>
+              <div class="commerce-revenue-table" role="table" aria-label="販売価格ごとの作者とあ箱の分配">
+                <div class="commerce-revenue-row commerce-revenue-head" role="row"><span>販売価格</span><span>作者</span><span>あ箱</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥100</span><strong>¥50（50%）</strong><span>¥50</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥200</span><strong>¥110（55%）</strong><span>¥90</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥300</span><strong>¥180（60%）</strong><span>¥120</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥400</span><strong>¥260（65%）</strong><span>¥140</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥500〜</span><strong>70%</strong><span>30%</span></div>
+              </div>
+              <p>決済・運営にかかる費用は、原則として「あ箱」の取り分から負担します。</p>
+            </details>
             <p id="commercePriceStatus" class="commerce-price-status" aria-live="polite"></p>
           </div>
         </details>

@@ -83,24 +83,25 @@ async function authorRequest(path,options={}){const response=await fetch(`${API_
 async function loadCommerceWallet({open=false}={}){
   const button=$('#commerceWalletButton');
   if(!authorToken||!signedInAuthor?.authorId){if(button)button.hidden=true;return;}
-  if(button)button.hidden=false;
+  if(button)button.hidden=true;
   const status=$('#commerceWalletStatus'),history=$('#commerceWalletHistory');
   if(open&&history)history.innerHTML='<p class="commerce-wallet-empty">残高と履歴を確認しています…</p>';
   try{
     const data=await authorRequest('/author/commerce-wallet');
     const available=Number(data.available)||0,pending=Number(data.pending)||0;
+    if(button)button.hidden=!data.connected;
     if($('#commerceWalletAmount'))$('#commerceWalletAmount').textContent=`¥${available.toLocaleString('ja-JP')}`;
     if($('#commerceWalletAvailable'))$('#commerceWalletAvailable').textContent=`¥${available.toLocaleString('ja-JP')}`;
     if($('#commerceWalletPending'))$('#commerceWalletPending').textContent=pending?`処理中 ¥${pending.toLocaleString('ja-JP')}`:'Stripe確認済み';
     if(status)status.textContent=data.connected?'':'Stripe Connect未接続です。';
     if(history){
       const rows=Array.isArray(data.transactions)?data.transactions:[];
-      history.innerHTML=rows.length?rows.map(row=>{const amount=Math.max(0,Number(row.amount)||0),sign=row.direction==='out'?'−':'＋',cls=row.direction==='out'?'is-out':'is-in',date=row.at?new Date(row.at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';return `<div class="commerce-wallet-row"><div><strong>${escapeHtml(row.title||row.label||'取引')}</strong><span>${escapeHtml(row.label||'')} · ${escapeHtml(date)}</span></div><b class="${cls}">${sign}¥${amount.toLocaleString('ja-JP')}</b></div>`;}).join(''):'<p class="commerce-wallet-empty">あ箱での取引履歴はまだありません。</p>';
+      history.innerHTML=rows.length?rows.map(row=>{const amount=Math.max(0,Number(row.amount)||0),sign=row.direction==='out'?'−':'＋',cls=row.direction==='out'?'is-out':'is-in',date=row.at?new Date(row.at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'',label=({'作品の売上':'作品が売れた','売上残高で作品購入':'作品を購入','購入の返金':'購入を返金','売上の返金':'売上を返金'})[String(row.label||'')]||String(row.label||'');return `<div class="commerce-wallet-row"><div><strong>${escapeHtml(row.title||label||'取引')}</strong><span>${escapeHtml(label)} · ${escapeHtml(date)}</span></div><b class="${cls}">${sign}¥${amount.toLocaleString('ja-JP')}</b></div>`;}).join(''):'<p class="commerce-wallet-empty">あ箱での取引履歴はまだありません。</p>';
     }
     return data;
   }catch(error){if(status)status.textContent=error.message||'売上残高を確認できませんでした。';if(open&&history)history.innerHTML='<p class="commerce-wallet-empty">履歴を読み込めませんでした。</p>';}
 }
-function openCommerceWallet(){const dialog=$('#commerceWalletDialog');if(!dialog)return;dialog.showModal();syncShelfScrollLock();loadCommerceWallet({open:true});}
+function openCommerceWallet(){const dialog=$('#commerceWalletDialog');if(!dialog)return;closeBookshelfMenu();dialog.showModal();syncShelfScrollLock();loadCommerceWallet({open:true});}
 function authorHeaderPublicUrl(header=signedInAuthor?.bookshelfHeader){if(!header||!signedInAuthor?.authorId)return'';const url=new URL(`${API_BASE}/authors/${encodeURIComponent(signedInAuthor.authorId)}/bookshelf/header`);url.searchParams.set('v',header.updatedAt||'1');return url.toString();}
 function syncAuthorProfileUI(){const name=$('#bookshelfAuthorProfileName'),slug=$('#bookshelfAuthorSlug'),lead=$('#bookshelfAuthorShelfLead'),url=$('#bookshelfAuthorShortUrl');if(name)name.value=signedInAuthor?.displayName||'';if(slug)slug.value=signedInAuthor?.slug||'';if(lead)lead.value=signedInAuthor?.bookshelfLead||'';if(url)url.textContent=signedInAuthor?.slug?publicAuthorShelfShareUrl(signedInAuthor):'未設定の場合は従来の本棚URLを使用します。';}
 function setAuthorProfileStatus(message='',error=false){const node=$('#bookshelfAuthorProfileStatus');if(!node)return;node.textContent=message;node.classList.toggle('is-error',error);}

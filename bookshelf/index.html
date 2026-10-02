@@ -4,13 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 本棚</title>
-  <link rel="stylesheet" href="bookshelf.css?v=70.5">
+  <link rel="stylesheet" href="bookshelf.css?v=70.6">
   <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><strong><span>あ</span><span class="box">□</span></strong><small>本棚</small></div>
-    <button id="commerceWalletButton" class="commerce-wallet-button" type="button" hidden><small>売上残高</small><strong id="commerceWalletAmount">—</strong></button>
     <button id="bookshelfAuthorButton" class="bookshelf-author-button" type="button">作者ログイン</button>
     <details id="bookshelfMenu" class="bookshelf-menu">
       <summary aria-label="本棚メニュー">•••</summary>
@@ -21,6 +20,7 @@
           <span><strong>つくった本を表示</strong><small>作者用の棚をタブに表示します</small></span>
           <input id="createdTabToggle" type="checkbox" role="switch">
         </label>
+        <button id="commerceWalletButton" class="commerce-wallet-menu-item" type="button" hidden><span><strong>売上残高</strong><small>売上と取引履歴を確認</small></span><b id="commerceWalletAmount">—</b></button>
         <div class="menu-separator"></div>
         <button id="backupButton" type="button">本棚をバックアップ</button>
         <button id="restoreButton" type="button">バックアップから復元</button>
@@ -144,8 +144,8 @@
     <button id="closeCommerceWallet" class="dialog-close" type="button" aria-label="閉じる">×</button>
     <div class="commerce-wallet-body">
       <p class="eyebrow">AHAKO WALLET</p><h2>売上残高</h2>
-      <div class="commerce-wallet-balance"><span>利用可能</span><strong id="commerceWalletAvailable">—</strong><small id="commerceWalletPending"></small></div>
-      <p class="commerce-wallet-note">Stripeで確認した現在の利用可能額です。あ箱での売上・残高購入・返金は下の履歴で確認できます。</p>
+      <div class="commerce-wallet-balance"><strong id="commerceWalletAvailable">—</strong><span>作品の売上から得た、購入に使える残高</span><small id="commerceWalletPending"></small></div>
+      <p class="commerce-wallet-note">あ箱での売上・購入・返金を下の履歴で確認できます。</p>
       <div class="commerce-wallet-history-head"><strong>取引履歴</strong><button id="reloadCommerceWallet" type="button">更新</button></div>
       <div id="commerceWalletHistory" class="commerce-wallet-history"><p>読み込んでいます…</p></div>
       <p id="commerceWalletStatus" class="author-status"></p>
