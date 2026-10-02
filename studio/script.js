@@ -7610,6 +7610,17 @@
     if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}
     renderCommercePriceUI();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(80);
   }));
+  // V4: render the revenue note whenever the sales card is opened.
+  // Do not rely on the browser creating a global variable from the element id.
+  const commerceSettingsDetailsEl=document.getElementById('commerceSettingsDetails');
+  commerceSettingsDetailsEl?.addEventListener('toggle',()=>{
+    if(!commerceSettingsDetailsEl.open)return;
+    requestAnimationFrame(()=>renderCommercePriceUI());
+  });
+  // Also cover restored/open state and the very first paint.
+  requestAnimationFrame(()=>{
+    if(commerceSettingsDetailsEl?.open)renderCommercePriceUI();
+  });
   commerceAmountInput?.addEventListener('input',()=>{
     renderCommercePriceUI();
     if(!workingDocument)ensureWorkingDocumentFromEasy();
