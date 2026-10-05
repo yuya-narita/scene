@@ -338,13 +338,14 @@
   function presentOwnCopyClaim(payload,{button=ownCopyButton,statusNode=status,onSuccess=null}={}){
     const claimToken=String(payload?.bookshelfClaim?.token||'').trim();
     const lineBrowser=isLineInAppBrowser();
+    const forceSafariHandoff=isIOSFamily()&&!isRealIOSSafari();
     const handoffId=newBookshelfHandoffId();
     if(claimToken)rememberBookshelfClaimSource(handoffId,claimToken);
     const claimUrl=bookshelfClaimUrl(claimToken,{external:lineBrowser,handoffId});
     if(statusNode){
-      statusNode.textContent=lineBrowser
+      statusNode.textContent=forceSafariHandoff
         ? '自分の一冊を用意しました。Safariの本棚で受け取れます。'
-        : '自分の一冊を用意しました。本棚を開いてSafariへ受け渡します。';
+        : '自分の一冊を用意しました。本棚を開きます。';
     }
     if(button){
       button.disabled=false;
@@ -354,8 +355,12 @@
         try{
           const target=new URL(claimUrl);
           if(target.protocol!=='https:')return;
-          const safariUrl=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;
-          location.href=safariUrl;
+          if(forceSafariHandoff){
+            const safariUrl=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;
+            location.href=safariUrl;
+          }else{
+            location.href=target.href;
+          }
         }catch(e){console.error(e);}
       };
     }
