@@ -27,6 +27,7 @@
   const API_BASE='https://scene-studio-api.a-hako.workers.dev';
   const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
   const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
+  const RELAY_ORDER_TOKEN_PREFIX='ahako:relay-commerce-order:';
   const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
   let currentOfficialShelfId='';
   function hideShelfReturn(){if(shelfReturnLink)shelfReturnLink.hidden=true;}
@@ -200,7 +201,6 @@
       return rec;
     }finally{db.close();}
   }
-  function clearAutoOpenPending(){try{document.documentElement.classList.remove("local-auto-open-pending");}catch(_){}}
   async function openBookshelfMaster(workId){
     currentBookshelfCopyId='';
     currentSourceMode='bookshelf-master';
@@ -216,45 +216,23 @@
       return true;
     }catch(error){
       console.error(error);currentPackage=null;if(launcher)launcher.hidden=false;if(backButton)backButton.hidden=true;setStatus(String(error?.message||error));return false;
-    }finally{if(openButton)openButton.disabled=false;clearAutoOpenPending();}
+    }finally{if(openButton)openButton.disabled=false;}
   }
   async function readerBookFromBookshelf(copyId){
     if(!validBookshelfCopyId(copyId))throw new Error('本棚の一冊を確認できません。');
     const db=await openBookshelfDb();
     try{
       if(!db.objectStoreNames.contains(READER_BOOKS))throw new Error('読者本棚がまだありません。');
-      // iOS Safari can return an IndexedDB Blob whose backing object becomes
-      // unavailable when read later via Blob.arrayBuffer(). Start FileReader
-      // synchronously inside the IDB request success event, before Safari
-      // releases the transaction's backing reference.
-      return await new Promise((resolve,reject)=>{
-        let settled=false;
-        const fail=error=>{if(settled)return;settled=true;reject(error||new Error('本棚の一冊を読み込めませんでした。'));};
-        const done=value=>{if(settled)return;settled=true;resolve(value);};
-        let tx,req;
-        try{
-          tx=db.transaction(READER_BOOKS,'readonly');
-          req=tx.objectStore(READER_BOOKS).get(copyId);
-        }catch(error){fail(error);return;}
-        tx.onerror=()=>fail(tx.error||new Error('読者本棚を読み込めませんでした。'));
-        tx.onabort=()=>fail(tx.error||new Error('読者本棚の読み込みが中断されました。'));
-        req.onerror=()=>fail(req.error||new Error('本棚の一冊を読み込めませんでした。'));
-        req.onsuccess=()=>{
-          const rec=req.result;
-          if(!rec?.blob){fail(new Error('この一冊は本棚に見つかりませんでした。'));return;}
-          const reader=new FileReader();
-          const fallbackArrayBuffer=primaryError=>{
-            // Keep a fallback for browsers where Blob.arrayBuffer succeeds but
-            // FileReader cannot access an IndexedDB-backed Blob.
-            try{Promise.resolve(rec.blob.arrayBuffer()).then(bytes=>done({...rec,sceneBytes:bytes,blob:null}),()=>fail(primaryError));}
-            catch(_){fail(primaryError);}
-          };
-          reader.onload=()=>done({...rec,sceneBytes:reader.result,blob:null});
-          reader.onabort=()=>fail(new Error('本棚の一冊の読み込みが中断されました。'));
-          reader.onerror=()=>fallbackArrayBuffer(reader.error||new Error('本棚の一冊を読み込めませんでした。'));
-          try{reader.readAsArrayBuffer(rec.blob);}catch(error){fallbackArrayBuffer(error);}
-        };
-      });
+      const rec=await idbRequest(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).get(copyId));
+      if(!rec?.blob)throw new Error('この一冊は本棚に見つかりませんでした。');
+      // iOS Safari can keep an IndexedDB Blob as a backing-store reference.
+      // Once the DB connection is closed, reading that Blob on the next async
+      // step may fail with NotFoundError ("The object can not be found here.").
+      // Materialize the bytes while the IndexedDB connection is still alive.
+      // Desktop browsers also take this path, so bookshelf -> Player uses one
+      // deterministic handoff on every platform.
+      const bytes=await rec.blob.arrayBuffer();
+      return {...rec,sceneBytes:bytes,blob:null};
     }finally{db.close();}
   }
   async function openBookshelfCopy(copyId){
@@ -279,7 +257,6 @@
       return false;
     }finally{
       if(openButton)openButton.disabled=false;
-      clearAutoOpenPending();
     }
   }
 
@@ -358,6 +335,120 @@
     overlay.querySelector('[data-gate-close]')?.addEventListener('click',close);
   }
 
+  function presentOwnCopyClaim(payload,{button=ownCopyButton,statusNode=status,onSuccess=null}={}){
+    const claimToken=String(payload?.bookshelfClaim?.token||'').trim();
+    const lineBrowser=isLineInAppBrowser();
+    const handoffId=newBookshelfHandoffId();
+    if(claimToken)rememberBookshelfClaimSource(handoffId,claimToken);
+    const claimUrl=bookshelfClaimUrl(claimToken,{external:lineBrowser,handoffId});
+    if(statusNode){
+      statusNode.textContent=lineBrowser
+        ? '自分の一冊を用意しました。Safariの本棚で受け取れます。'
+        : '自分の一冊を用意しました。本棚を開いてSafariへ受け渡します。';
+    }
+    if(button){
+      button.disabled=false;
+      button.textContent='本棚を開く';
+      button.onclick=()=>{
+        if(!claimUrl){location.href='../bookshelf/';return;}
+        try{
+          const target=new URL(claimUrl);
+          if(target.protocol!=='https:')return;
+          const safariUrl=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;
+          location.href=safariUrl;
+        }catch(e){console.error(e);}
+      };
+    }
+    if(typeof onSuccess==='function')onSuccess(payload);
+    return true;
+  }
+  function relayOrderTokenKey(orderId){return `${RELAY_ORDER_TOKEN_PREFIX}${orderId}`;}
+  function cleanRelayCommerceReturnUrl(){
+    const u=new URL(location.href);
+    u.searchParams.delete('payment');u.searchParams.delete('order_id');
+    u.searchParams.set('relayPurchase','1');
+    return u.toString();
+  }
+  async function fulfillRelayPurchase(orderId,accessToken,{button=ownCopyButton,statusNode=status}={}){
+    const orderUrl=`${API_BASE}/commerce/order/${encodeURIComponent(orderId)}`;
+    let order=null;
+    for(let i=0;i<20;i++){
+      const response=await fetch(orderUrl,{headers:{'X-Order-Token':accessToken},cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'購入状態を確認できませんでした。'));
+      order=payload.order;
+      if(order?.status==='paid')break;
+      if(order?.status!=='pending_payment')throw new Error('この購入手続きは完了していません。');
+      if(statusNode)statusNode.textContent='Stripeの決済確定を待っています…';
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    if(order?.status!=='paid')throw new Error('決済確認に時間がかかっています。少し待ってから再確認してください。');
+    if(statusNode)statusNode.textContent='決済を確認しました。一冊を本棚に用意しています…';
+    const response=await fetch(`${API_BASE}/commerce/order/${encodeURIComponent(orderId)}/own-copy`,{
+      method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',body:JSON.stringify({})
+    });
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok||!payload?.bookshelfClaim?.token)throw new Error(String(payload?.error||'購入済みの一冊を本棚へ用意できませんでした。'));
+    try{sessionStorage.removeItem(relayOrderTokenKey(orderId));}catch(_){}
+    return presentOwnCopyClaim(payload,{button,statusNode});
+  }
+  async function resumeRelayPurchaseFromReturn(){
+    const u=new URL(location.href);
+    const orderId=String(u.searchParams.get('order_id')||'');
+    if(u.searchParams.get('relayPurchase')!=='1'||u.searchParams.get('payment')!=='success'||!/^order_[a-f0-9]{32}$/i.test(orderId))return false;
+    currentSourceMode='relay-url';setRelayEntryMode(true);
+    if(launcher)launcher.hidden=false;
+    if(ownCopyButton){ownCopyButton.hidden=false;ownCopyButton.disabled=true;ownCopyButton.textContent='購入を確認しています…';}
+    setStatus('Stripeの決済を確認しています…');
+    try{const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('payment');cleanUrl.searchParams.delete('order_id');cleanUrl.searchParams.delete('relayPurchase');history.replaceState(history.state,'',cleanUrl.toString());}catch(_){}
+    let accessToken='';try{accessToken=String(sessionStorage.getItem(relayOrderTokenKey(orderId))||'');}catch(_){}
+    if(!/^[a-f0-9]{48}$/i.test(accessToken)){
+      setStatus('購入情報を確認できません。もう一度「自分の一冊を受け取る」からお試しください。');
+      if(ownCopyButton){ownCopyButton.disabled=false;ownCopyButton.textContent='自分の一冊を受け取る';ownCopyButton.onclick=()=>receiveOwnCopy({button:ownCopyButton,statusNode:status});}
+      return true;
+    }
+    try{
+      await fulfillRelayPurchase(orderId,accessToken,{button:ownCopyButton,statusNode:status});
+      return true;
+    }catch(error){
+      console.error(error);setStatus(String(error?.message||error));
+      if(ownCopyButton){ownCopyButton.disabled=false;ownCopyButton.textContent='購入を再確認';ownCopyButton.onclick=()=>fulfillRelayPurchase(orderId,accessToken,{button:ownCopyButton,statusNode:status}).catch(e=>setStatus(String(e?.message||e)));}
+      return true;
+    }
+  }
+  async function startRelayPaidOwnCopy(gate,{button=ownCopyButton,statusNode=status}={}){
+    let readerAmount=null;
+    const mode=String(gate?.mode||'purchase').toLowerCase();
+    if(mode==='reader_price'||mode==='support'){
+      const value=window.prompt('MY COPYの金額を入力してください（100円〜100,000円、100円単位）','100');
+      if(value===null){if(button)button.disabled=false;if(statusNode)statusNode.textContent='購入をキャンセルしました。';return false;}
+      readerAmount=Number(String(value).replace(/[,，円\s]/g,''));
+      if(!Number.isInteger(readerAmount)||readerAmount<100||readerAmount>100000||readerAmount%100!==0)throw new Error('100円〜100,000円の100円単位で入力してください。');
+    }
+    const credential=ownCopyCredentialFromLocation();
+    if(!credential)throw new Error('RELAYの受け取り情報を確認できませんでした。');
+    if(statusNode)statusNode.textContent='購入内容を確認しています…';
+    const orderResponse=await fetch(`${API_BASE}/relay/own/order`,{
+      method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+      body:JSON.stringify({...credential,...(readerAmount!==null?{readerAmount}:{})})
+    });
+    const orderPayload=await orderResponse.json().catch(()=>null);
+    if(!orderResponse.ok||!orderPayload?.ok||!orderPayload?.order?.orderId||!orderPayload?.accessToken)throw new Error(String(orderPayload?.error||'購入手続きを開始できませんでした。'));
+    const orderId=String(orderPayload.order.orderId),accessToken=String(orderPayload.accessToken);
+    try{sessionStorage.setItem(relayOrderTokenKey(orderId),accessToken);}catch(_){}
+    if(orderPayload.order.status==='paid')return fulfillRelayPurchase(orderId,accessToken,{button,statusNode});
+    if(statusNode)statusNode.textContent='Sandboxの決済画面を用意しています…';
+    const checkoutResponse=await fetch(`${API_BASE}/commerce/order/${encodeURIComponent(orderId)}/checkout`,{
+      method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',
+      body:JSON.stringify({paymentMethod:'card',returnUrl:cleanRelayCommerceReturnUrl()})
+    });
+    const checkout=await checkoutResponse.json().catch(()=>null);
+    if(!checkoutResponse.ok||!checkout?.ok||!checkout?.checkoutUrl)throw new Error(String(checkout?.error||'Sandbox決済を開始できませんでした。'));
+    if(statusNode)statusNode.textContent='Sandboxの決済画面へ移動します…';
+    location.href=checkout.checkoutUrl;
+    return true;
+  }
+
   function sendBookshelfEvent(event,scene){
     const workId=String(scene?.workId||scene?.distribution?.workId||'').trim();
     const copyId=String(scene?.distribution?.copyId||'').trim();
@@ -388,45 +479,12 @@
         if(code==='OWN_COPY_NOT_AVAILABLE')throw new Error('この一冊はまだ誰かに届いていません。');
         if(code==='RELAY_RECEIVER_REQUIRED')throw new Error('受け取り情報を確認できませんでした。');
         if(code==='OWN_COPY_GATE_REQUIRED'){
-          if(statusNode)statusNode.textContent='';
-          if(button)button.disabled=false;
-          showOwnCopyGate(payload?.gate||{});
-          return false;
+          await startRelayPaidOwnCopy(payload?.gate||{},{button,statusNode});
+          return true;
         }
         throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
       }
-      const claimToken=String(payload?.bookshelfClaim?.token||'').trim();
-      const lineBrowser=isLineInAppBrowser();
-      // V63.33: never save an OWN COPY directly from the page that minted it.
-      // A short-lived claim URL must cross browser contexts (or be explicitly
-      // confirmed by a user who is already in Safari). This removes the need
-      // to guess whether the current WebKit view belongs to X/LINE/etc.
-      const handoffId=newBookshelfHandoffId();
-      if(claimToken)rememberBookshelfClaimSource(handoffId,claimToken);
-      const claimUrl=bookshelfClaimUrl(claimToken,{external:lineBrowser,handoffId});
-      if(statusNode){
-        statusNode.textContent=lineBrowser
-          ? '自分の一冊を用意しました。Safariの本棚で受け取れます。'
-          : '自分の一冊を用意しました。本棚を開いてSafariへ受け渡します。';
-      }
-      if(button){
-        button.disabled=false;
-        button.textContent='本棚を開く';
-        button.onclick=()=>{
-          if(!claimUrl){location.href='../bookshelf/';return;}
-          // V63.34.1 — literal copy of the V63.33.2 experiment that worked on X.
-          // Keep the successful path intentionally tiny: explicit user tap ->
-          // build the exact Safari scheme URL -> assign location.href.
-          try{
-            const target=new URL(claimUrl);
-            if(target.protocol!=='https:')return;
-            const safariUrl=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;
-            location.href=safariUrl;
-          }catch(e){console.error(e);}
-        };
-      }
-      if(typeof onSuccess==='function')onSuccess(payload);
-      return true;
+      return presentOwnCopyClaim(payload,{button,statusNode,onSuccess});
     }catch(error){
       console.error(error);
       if(statusNode)statusNode.textContent=String(error?.message||error);
@@ -539,6 +597,7 @@
     return String(fallback||'RELAYを読み込めませんでした。');
   }
   async function openRelayFromUrl(token='',publicId=''){
+    if(await resumeRelayPurchaseFromReturn())return true;
     const hasToken=validRelayToken(token),hasPublicId=validRelayPublicId(publicId);
     if(!hasToken&&!hasPublicId){
       setStatus('このRELAY URLは正しくありません。');
@@ -1080,7 +1139,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.16-ios-idb-filereader-handoff',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.15-ios-idb-blob-materialize',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
