@@ -365,8 +365,12 @@
     const claimToken=String(payload?.bookshelfClaim?.token||'').trim();
     const lineBrowser=isLineInAppBrowser();
     const forceSafariHandoff=isIOSFamily()&&!isRealIOSSafari();
-    const handoffId=newBookshelfHandoffId();
-    if(claimToken)rememberBookshelfClaimSource(handoffId,claimToken);
+    // The bookshelf deliberately returns to the source page when it detects
+    // the same tab's handoff marker. Set that marker only when this iOS
+    // in-app browser must launch a separate Safari context. Ordinary Safari
+    // and desktop should import the claim directly in the current tab.
+    const handoffId=forceSafariHandoff?newBookshelfHandoffId():'';
+    if(claimToken&&handoffId)rememberBookshelfClaimSource(handoffId,claimToken);
     const claimUrl=bookshelfClaimUrl(claimToken,{external:lineBrowser,handoffId});
     if(statusNode){
       statusNode.textContent=forceSafariHandoff
