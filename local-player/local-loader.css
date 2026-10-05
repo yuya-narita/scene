@@ -1,3 +1,9 @@
+html.local-auto-open-pending #localLauncher{display:none!important}
+.local-auto-open{display:none}
+html.local-auto-open-pending .local-auto-open{position:fixed;inset:0;z-index:20001;display:flex;align-items:center;justify-content:center;gap:12px;padding:24px;background:#0b1016;color:rgba(245,245,242,.72);font:500 14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.local-auto-open-spinner{width:18px;height:18px;flex:none;border:2px solid rgba(245,245,242,.22);border-top-color:#f5f5f2;border-radius:50%;animation:local-auto-open-spin .8s linear infinite}
+@keyframes local-auto-open-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.local-auto-open-spinner{animation:none;border-color:#f5f5f2}}
 .local-launcher{
   position:fixed;inset:0;z-index:20000;display:grid;place-items:center;
   min-height:100dvh;padding:max(24px,env(safe-area-inset-top)) 20px max(24px,env(safe-area-inset-bottom));

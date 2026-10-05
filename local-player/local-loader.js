@@ -200,6 +200,7 @@
       return rec;
     }finally{db.close();}
   }
+  function clearAutoOpenPending(){try{document.documentElement.classList.remove("local-auto-open-pending");}catch(_){}}
   async function openBookshelfMaster(workId){
     currentBookshelfCopyId='';
     currentSourceMode='bookshelf-master';
@@ -215,7 +216,7 @@
       return true;
     }catch(error){
       console.error(error);currentPackage=null;if(launcher)launcher.hidden=false;if(backButton)backButton.hidden=true;setStatus(String(error?.message||error));return false;
-    }finally{if(openButton)openButton.disabled=false;}
+    }finally{if(openButton)openButton.disabled=false;clearAutoOpenPending();}
   }
   async function readerBookFromBookshelf(copyId){
     if(!validBookshelfCopyId(copyId))throw new Error('本棚の一冊を確認できません。');
@@ -278,6 +279,7 @@
       return false;
     }finally{
       if(openButton)openButton.disabled=false;
+      clearAutoOpenPending();
     }
   }
 
