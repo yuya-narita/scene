@@ -14161,3 +14161,11 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
     display:none!important;
   }
 }
+
+/* iPhone detail settings footer: remove duplicate bottom reserve.
+   The Live Edit sheet already clears the bottom toolbar and safe area. */
+@media (max-width:899px){
+  body.mobile-live-detail-open .live-edit-sheet.mobile-live-detail-sheet .desktop-text-detail-modal[data-mobile-live-detail="true"]{
+    padding-bottom:0!important;
+  }
+}
