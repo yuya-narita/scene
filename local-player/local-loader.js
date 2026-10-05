@@ -25,11 +25,14 @@
   const BOOKSHELF_DB='ahako-local-bookshelf';
   const READER_BOOKS='readerBooks';
   const API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  const LOCAL_PLAYER_BASE=new URL('./',document.currentScript?.src||location.href);
   const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
   const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
   const RELAY_ORDER_TOKEN_PREFIX='ahako:relay-commerce-order:';
   const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
+  const PUBLIC_READER_ID_KEY='ahako:public-own-copy-reader-id';
   let currentOfficialShelfId='';
+  function bookshelfHomeUrl(){return new URL('../bookshelf/',LOCAL_PLAYER_BASE).href;}
   function hideShelfReturn(){if(shelfReturnLink)shelfReturnLink.hidden=true;}
   function showShelfReturnForSource(){
     if(!shelfReturnLink)return false;
@@ -37,7 +40,7 @@
     if(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master')label='← 自分の本棚へ';
     else if(currentSourceMode==='official-shelf')label='← あ箱の本へ';
     if(!label){hideShelfReturn();return false;}
-    shelfReturnLink.href=new URL('../bookshelf/',location.href).toString();
+    shelfReturnLink.href=bookshelfHomeUrl();
     shelfReturnLink.textContent=label;
     shelfReturnLink.hidden=false;
     shelfReturnLink.classList.remove('is-reading');
@@ -94,7 +97,7 @@
   }
   function bookshelfClaimUrl(token,{external=false,handoffId=''}={}){
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
-    const u=new URL('../bookshelf/',location.href);
+    const u=new URL(bookshelfHomeUrl());
     u.searchParams.set('claim',String(token));
     if(/^handoff_[a-f0-9]{24}$/i.test(String(handoffId||'')))u.searchParams.set('handoff',String(handoffId));
     // LINE can open this handoff URL in the device browser. Other in-app
@@ -183,6 +186,14 @@
   }
   function validBookshelfCopyId(v){return /^copy_[a-f0-9]{32}$/i.test(String(v||''));}
   function idbRequest(req){return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('IndexedDB error'));});}
+  function commerceReaderId(){
+    let id='';try{id=String(localStorage.getItem(PUBLIC_READER_ID_KEY)||'');}catch(_){}
+    if(!/^reader_[a-f0-9]{32}$/i.test(id)){
+      try{id=`reader_${crypto.randomUUID().replaceAll('-','')}`;}catch(_){const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);id=`reader_${[...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}`;}
+      try{localStorage.setItem(PUBLIC_READER_ID_KEY,id);}catch(_){}
+    }
+    return id;
+  }
   function openBookshelfDb(){
     return new Promise((resolve,reject)=>{
       const req=indexedDB.open(BOOKSHELF_DB);
@@ -190,6 +201,21 @@
       req.onerror=()=>reject(req.error||new Error('本棚を開けませんでした。'));
       req.onupgradeneeded=()=>{try{req.transaction.abort();}catch(_){}reject(new Error('読者本棚がまだありません。'));};
     });
+  }
+  async function findOwnedReaderBook(workId){
+    if(!/^[A-Za-z0-9_-]{12,80}$/.test(String(workId||'')))return null;
+    let db;try{db=await openBookshelfDb();}catch(_){return null;}
+    try{
+      if(!db.objectStoreNames.contains(READER_BOOKS))return null;
+      const rows=await idbRequest(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).getAll());
+      let archived=[];try{const parsed=JSON.parse(localStorage.getItem('ahako:bookshelf:archive:owned')||'[]');if(Array.isArray(parsed))archived=parsed;}catch(_){}
+      return (Array.isArray(rows)?rows:[]).find(row=>String(row?.workId||'')===String(workId)&&row?.role==='distribution'&&!archived.includes(String(row?.copyId||'')))||null;
+    }finally{db.close();}
+  }
+  function showAlreadyOwnedInBookshelf(row,{button=ownCopyButton,statusNode=status}={}){
+    if(statusNode)statusNode.textContent='この作品はすでに本棚にあります。購入せず、本棚を開いてください。';
+    if(button){button.disabled=false;button.textContent='本棚を開く';button.onclick=()=>{location.assign(bookshelfHomeUrl());};}
+    return true;
   }
   async function masterBookFromBookshelf(workId){
     if(!validWorkId(workId))throw new Error('本棚のMasterを確認できません。');
@@ -351,7 +377,7 @@
       button.disabled=false;
       button.textContent='本棚を開く';
       button.onclick=()=>{
-        if(!claimUrl){location.href='../bookshelf/';return;}
+        if(!claimUrl){location.href=bookshelfHomeUrl();return;}
         try{
           const target=new URL(claimUrl);
           if(target.protocol!=='https:')return;
@@ -424,20 +450,28 @@
   async function startRelayPaidOwnCopy(gate,{button=ownCopyButton,statusNode=status}={}){
     let readerAmount=null;
     const mode=String(gate?.mode||'purchase').toLowerCase();
-    if(mode==='reader_price'||mode==='support'){
+    const credential=ownCopyCredentialFromLocation();
+    if(!credential)throw new Error('RELAYの受け取り情報を確認できませんでした。');
+    const readerId=commerceReaderId();
+    if(statusNode)statusNode.textContent='購入内容を確認しています…';
+    const requestOrder=async(amount)=>{
+      const response=await fetch(`${API_BASE}/relay/own/order`,{
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+        body:JSON.stringify({...credential,readerId,...(amount!==null?{readerAmount:amount}:{})})
+      });
+      return {response,payload:await response.json().catch(()=>null)};
+    };
+    let {response:orderResponse,payload:orderPayload}=await requestOrder(null);
+    if(!orderResponse.ok&&orderPayload?.code==='BAD_READER_PRICE'&&(mode==='reader_price'||mode==='support')){
       const value=window.prompt('MY COPYの金額を入力してください（100円〜100,000円、100円単位）','100');
       if(value===null){if(button)button.disabled=false;if(statusNode)statusNode.textContent='購入をキャンセルしました。';return false;}
       readerAmount=Number(String(value).replace(/[,，円\s]/g,''));
       if(!Number.isInteger(readerAmount)||readerAmount<100||readerAmount>100000||readerAmount%100!==0)throw new Error('100円〜100,000円の100円単位で入力してください。');
+      ({response:orderResponse,payload:orderPayload}=await requestOrder(readerAmount));
     }
-    const credential=ownCopyCredentialFromLocation();
-    if(!credential)throw new Error('RELAYの受け取り情報を確認できませんでした。');
-    if(statusNode)statusNode.textContent='購入内容を確認しています…';
-    const orderResponse=await fetch(`${API_BASE}/relay/own/order`,{
-      method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
-      body:JSON.stringify({...credential,...(readerAmount!==null?{readerAmount}:{})})
-    });
-    const orderPayload=await orderResponse.json().catch(()=>null);
+    if(orderResponse.ok&&orderPayload?.ok&&orderPayload?.alreadyOwned&&orderPayload?.bookshelfClaim?.token){
+      return presentOwnCopyClaim(orderPayload,{button,statusNode});
+    }
     if(!orderResponse.ok||!orderPayload?.ok||!orderPayload?.order?.orderId||!orderPayload?.accessToken)throw new Error(String(orderPayload?.error||'購入手続きを開始できませんでした。'));
     const orderId=String(orderPayload.order.orderId),accessToken=String(orderPayload.accessToken);
     try{sessionStorage.setItem(relayOrderTokenKey(orderId),accessToken);}catch(_){}
@@ -469,6 +503,8 @@
   async function receiveOwnCopy({button=ownCopyButton,statusNode=status,onSuccess=null}={}){
     const credential=ownCopyCredentialFromLocation();
     if(!credential)return false;
+    const existingBook=await findOwnedReaderBook(String(currentPackage?.raw?.workId||''));
+    if(existingBook)return showAlreadyOwnedInBookshelf(existingBook,{button,statusNode});
     if(button)button.disabled=true;
     if(statusNode)statusNode.textContent='自分の一冊を用意しています…';
     try{
