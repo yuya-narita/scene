@@ -2731,3 +2731,183 @@ html.sp-scene-image-open body{
 .sp-board-anchor-overlay[data-board-tone="dark"] .sp-board-anchor-head{color:rgba(255,255,255,.62)}
 .sp-board-anchor-overlay[data-board-tone="dark"] .sp-board-anchor-body{color:#f2f2f4}
 .sp-board-anchor-overlay[data-board-tone="dark"] .sp-board-anchor-missing{color:rgba(255,255,255,.66)}
+
+
+/* Chat datetime v2 — compact messenger-style time, date boundary and optional read receipt */
+.sp-scene[data-view="chat"] .sp-chat-body{position:relative}
+.sp-chat-meta{display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;align-self:flex-start;margin:0 0 2px 6px;font-family:var(--sp-font-sans);font-size:10px;line-height:1.15;color:var(--sp-sub);opacity:.62;white-space:nowrap}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-meta{align-self:flex-end;margin:0 6px 2px 0}
+.sp-chat-time{margin:0!important;font-size:10px!important;line-height:1.15!important;opacity:1!important;text-align:inherit!important}
+.sp-chat-read{font-size:9px;line-height:1.1}
+.sp-chat-date-separator{width:100%;display:flex;align-items:center;justify-content:center;margin:2px 0 14px;font-family:var(--sp-font-sans);font-size:10px;line-height:1;color:var(--sp-sub);opacity:.72}
+.sp-chat-date-separator::before,.sp-chat-date-separator::after{content:"";width:34px;height:1px;background:currentColor;opacity:.22}
+.sp-chat-date-separator span{padding:0 9px}
+.sp-history-chat-meta{display:flex;flex-direction:column;align-items:flex-end;align-self:flex-start;margin-left:4px;font-size:9px;line-height:1.15;color:var(--sp-sub);opacity:.58;white-space:nowrap}
+.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-meta{align-self:flex-end;margin-left:0;margin-right:4px}
+.sp-history-chat-time{display:block;margin:0!important;font-size:9px!important;line-height:1.15!important;opacity:1!important;text-align:inherit!important}
+.sp-history-chat-read{font-size:8px;line-height:1.05}
+
+.sp-chat-bubble-line{display:flex;align-items:flex-end;max-width:100%}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-bubble-line{flex-direction:row-reverse}
+.sp-history-chat-bubble-line{display:flex;align-items:flex-end;max-width:100%}
+.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-bubble-line{flex-direction:row-reverse}
+
+/* Chat read receipt delay v3 */
+.sp-chat-read.is-pending{visibility:hidden;}
+
+/* Web Review v0.1 --------------------------------------------------------- */
+.sp-web-review-scene{width:100%;max-width:760px;margin-inline:auto;}
+.sp-web-review-row{display:flex;gap:12px;width:100%;box-sizing:border-box;padding:16px 14px;border-bottom:1px solid rgba(127,127,127,.22);text-align:left;}
+.sp-web-review-icon{flex:0 0 38px;width:38px;height:38px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.16);font-size:14px;font-weight:700;line-height:1;}
+.sp-web-review-icon img{width:100%;height:100%;object-fit:cover;display:block;}
+.sp-web-review-body{min-width:0;flex:1;display:flex;flex-direction:column;gap:5px;}
+.sp-web-review-head{display:flex;align-items:center;gap:8px;min-width:0;}
+.sp-web-review-name{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sp-web-review-verified{font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(127,127,127,.15);opacity:.78;white-space:nowrap;}
+.sp-web-review-stars{font-size:16px;line-height:1.2;letter-spacing:1px;color:#e6a400;text-shadow:none;}
+.sp-web-review-text{font-size:15px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;}
+.sp-web-review-meta{font-size:11px;opacity:.55;min-height:1em;}
+.sp-history-web-review .sp-web-review-row{padding:10px 4px;}
+@media(max-width:640px){.sp-web-review-row{gap:10px;padding:13px 10px}.sp-web-review-icon{flex-basis:34px;width:34px;height:34px}.sp-web-review-text{font-size:14px}.sp-web-review-stars{font-size:15px}}
+
+/* Web Expression: comment column v0.1 */
+.sp-web-comment-row{width:min(92%,720px);margin:0 auto;display:flex;align-items:flex-start;gap:10px;box-sizing:border-box;padding:8px 4px;text-align:left}
+.sp-web-comment-row.is-reply{width:min(84%,650px);margin-left:auto;padding-left:18px}
+.sp-web-comment-icon{width:34px;height:34px;flex:0 0 34px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(127,127,127,.12);color:rgba(127,127,127,.72);font-size:12px}
+.sp-web-comment-icon img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-web-comment-body{min-width:0;flex:1}
+.sp-web-comment-name{font-size:12px;line-height:1.35;font-weight:700;color:inherit;opacity:.82;margin-bottom:3px}
+.sp-web-comment-text{font-size:clamp(14px,3.6vw,17px);line-height:1.55;white-space:pre-wrap;word-break:break-word;color:inherit}
+.sp-web-comment-meta{display:flex;align-items:center;gap:12px;margin-top:5px;font-size:11px;line-height:1.3;opacity:.55}
+.sp-web-comment-reply-label{font-weight:600}
+.sp-history-web-comment-row{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left}
+.sp-history-web-comment-row.is-reply{padding-left:24px;box-sizing:border-box}
+.sp-history-web-comment-icon{width:28px;height:28px;flex:0 0 28px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.12);font-size:10px}
+.sp-history-web-comment-icon img{width:100%;height:100%;object-fit:cover}
+.sp-history-web-comment-body{display:flex;flex-direction:column;min-width:0;flex:1}
+.sp-history-web-comment-name{font-size:11px;font-weight:700;opacity:.8}
+.sp-history-web-comment-text{font-size:13px;line-height:1.5;white-space:pre-wrap}
+.sp-history-web-comment-meta{display:flex;gap:10px;margin-top:3px;font-size:10px;opacity:.55}
+@media(max-width:600px){.sp-web-comment-row{width:96%;gap:8px}.sp-web-comment-row.is-reply{width:88%;padding-left:12px}.sp-web-comment-icon{width:32px;height:32px;flex-basis:32px}}
+
+
+
+/* Web Comment preset icons v0.3 */
+.sp-comment-preset{font-family:system-ui,sans-serif;font-weight:700;color:rgba(255,255,255,.92);text-shadow:0 1px 2px rgba(0,0,0,.28)}
+.sp-comment-preset.is-plain{background:linear-gradient(135deg,#7f8792,#adb3bb)}
+.sp-comment-preset.is-moon{background:linear-gradient(135deg,#39445f,#7583a4)}
+.sp-comment-preset.is-star{background:linear-gradient(135deg,#8c7440,#c9a95e)}
+.sp-comment-preset.is-coffee{background:linear-gradient(135deg,#6d5142,#a37a62)}
+.sp-comment-preset.is-cat{background:linear-gradient(135deg,#7b657e,#b596b8)}
+.sp-comment-preset.is-book{background:linear-gradient(135deg,#4e6b67,#7fa09a)}
+.sp-comment-preset.is-leaf{background:linear-gradient(135deg,#526d4d,#83a57b)}
+.sp-comment-preset.is-night{background:linear-gradient(135deg,#252b39,#586276)}
+
+/* Web Expression common avatar v1 */
+
+
+/* Web Expression common avatar v1.1 — visual picker */
+.ahako-common-avatar-field{position:relative}.ahako-common-avatar-trigger{width:100%;min-height:48px;display:flex;align-items:center;gap:10px;padding:5px 10px;border:1px solid #d8dde4;border-radius:10px;background:#fff;color:#202226;text-align:left;cursor:pointer}.ahako-common-avatar-trigger:hover{border-color:#aeb7c2}.ahako-common-avatar-preview{width:38px;height:38px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:#f1f1ee;flex:0 0 38px}.ahako-common-avatar-preview img{width:100%;height:100%;object-fit:cover;display:block}.ahako-common-avatar-caption{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ahako-common-avatar-chevron{font-size:22px;line-height:1;transform:rotate(90deg);opacity:.55}.ahako-common-avatar-popover{position:fixed;z-index:2147483000;box-sizing:border-box;max-height:min(680px,calc(100vh - 24px));overflow:auto;padding:12px;border:1px solid rgba(20,25,32,.16);border-radius:16px;background:rgba(255,255,255,.98);box-shadow:0 18px 60px rgba(15,23,42,.24);backdrop-filter:blur(12px)}.ahako-common-avatar-popover-head{position:sticky;top:-12px;z-index:2;display:flex;align-items:center;justify-content:space-between;margin:-12px -12px 8px;padding:12px 14px 9px;background:rgba(255,255,255,.96);border-bottom:1px solid #eceff2}.ahako-common-avatar-close{width:32px;height:32px;border:0;border-radius:50%;background:#f1f3f5;font-size:22px;line-height:1;cursor:pointer}.ahako-common-avatar-section{margin:10px 0 14px}.ahako-common-avatar-group-title{margin:0 0 7px;font-size:12px;font-weight:700;color:#69717b}.ahako-common-avatar-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.ahako-common-avatar-choice{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;padding:5px 2px;border:2px solid transparent;border-radius:12px;background:transparent;cursor:pointer}.ahako-common-avatar-choice:hover{background:#f4f6f8}.ahako-common-avatar-choice.is-selected{border-color:#202226;background:#f5f5f3}.ahako-common-avatar-choice img{width:48px;height:48px;max-width:100%;aspect-ratio:1;border-radius:50%;object-fit:cover;display:block}.ahako-common-avatar-choice span{font-size:10px;color:#6c737c}.ahako-common-avatar-none{width:100%;padding:9px;border:1px solid #d8dde4;border-radius:10px;background:#fff;cursor:pointer}@media(max-width:560px){.ahako-common-avatar-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.ahako-common-avatar-choice img{width:46px;height:46px}}
+
+
+/* Web SNS v0.1 */
+.sp-web-sns-scene{width:100%;max-width:760px;margin-inline:auto}
+.sp-web-sns-row{display:flex;gap:11px;width:100%;box-sizing:border-box;padding:15px 14px;border-bottom:1px solid rgba(127,127,127,.2);text-align:left}
+.sp-web-sns-avatar{width:40px;height:40px;flex:0 0 40px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.16);font-size:13px;font-weight:700;text-decoration:none;color:inherit}
+.sp-web-sns-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-web-sns-content{min-width:0;flex:1}
+.sp-web-sns-head{display:flex;align-items:baseline;gap:7px;min-width:0;font-size:13px}
+.sp-web-sns-identity{display:inline-flex;align-items:baseline;gap:6px;min-width:0;color:inherit;text-decoration:none}
+.sp-web-sns-identity strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-web-sns-handle,.sp-web-sns-time{font-size:11px;opacity:.55;white-space:nowrap}
+.sp-web-sns-time{margin-left:auto}
+.sp-web-sns-text{margin-top:5px;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.sp-web-sns-metrics{display:flex;gap:18px;margin-top:9px;font-size:11px;opacity:.58}
+.sp-web-sns-avatar[href],.sp-web-sns-identity[href]{cursor:pointer}
+/* SNS profile links are authored foreground controls. .sp-scenes disables pointer
+   input for ordinary Scene taps, so opt only the profile affordances back in. */
+.sp-scenes .sp-web-sns-avatar[href],.sp-scenes .sp-web-sns-identity[href]{pointer-events:auto!important;position:relative;z-index:14;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.sp-web-sns-avatar[href]:hover,.sp-web-sns-identity[href]:hover{text-decoration:underline}
+.sp-history-web-sns .sp-web-sns-row{padding:10px 8px}
+@media(max-width:640px){.sp-web-sns-row{padding:13px 10px;gap:9px}.sp-web-sns-avatar{width:36px;height:36px;flex-basis:36px}.sp-web-sns-head{gap:5px}.sp-web-sns-time{font-size:10px}.sp-web-sns-metrics{gap:14px}}
+
+/* Web Q&A v0.1 */
+.sp-web-qa-scene{width:100%;max-width:760px;margin-inline:auto}.sp-web-qa-wrap{width:100%;box-sizing:border-box;text-align:left}.sp-web-qa-question,.sp-web-qa-answer{padding:16px 14px;border-bottom:1px solid rgba(127,127,127,.22)}.sp-web-qa-question{background:rgba(127,127,127,.055)}.sp-web-qa-status,.sp-web-qa-answer-label{display:inline-block;font-size:10px;font-weight:700;padding:3px 7px;border-radius:999px;background:rgba(127,127,127,.14);margin-bottom:7px}.sp-web-qa-title{font-size:18px;font-weight:800;line-height:1.45;margin-bottom:8px}.sp-web-qa-question-body,.sp-web-qa-answer-text{font-size:14px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}.sp-web-qa-meta{font-size:11px;opacity:.58;margin-top:8px}.sp-web-qa-answer.is-best{box-shadow:inset 3px 0 0 #d6a62f}.sp-web-qa-answer-head{display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:13px}.sp-web-qa-answer-head .sp-web-qa-answer-label{margin:0 0 0 auto}.sp-web-qa-icon{width:34px;height:34px;flex:0 0 34px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.16);font-weight:700}.sp-web-qa-icon img{width:100%;height:100%;object-fit:cover;display:block}.sp-web-qa-question-meta{display:flex;align-items:center;gap:8px;font-size:11px;opacity:.72;margin-top:10px}.sp-web-qa-question-icon{width:28px;height:28px;flex-basis:28px;font-size:11px}.sp-history-web-qa .sp-web-qa-question{padding:10px 8px}.sp-history-web-qa .sp-web-qa-answer{padding:10px 8px}@media(max-width:640px){.sp-web-qa-question,.sp-web-qa-answer{padding:14px 10px}.sp-web-qa-title{font-size:16px}}
+
+/* Web Expression Live Preview edit targets. The Scene canvas normally ignores
+   pointer input so reader taps advance; Studio live-edit mode opts only these
+   canonical Scene.text bodies back in. */
+.live-edit-enabled .sp-scene.is-active .sp-web-comment-text.sp-message-original,
+.live-edit-enabled .sp-scene.is-active .sp-web-review-text,
+.live-edit-enabled .sp-scene.is-active .sp-web-qa-answer-text,
+.live-edit-enabled .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text,
+.live-edit-enabled .sp-scene.is-active .sp-web-sns-text,
+.live-edit-enabled .sp-scene.is-active .sp-web-mail-text,
+.live-edit-enabled .sp-scene.is-active .sp-web-notification-text{
+  pointer-events:auto!important;
+  user-select:text;
+  -webkit-user-select:text;
+  cursor:text;
+  touch-action:manipulation;
+  position:relative;
+  z-index:13;
+}
+
+/* Studio device preview sizing -------------------------------------------------
+   Scene Player already expresses phone typography with cqw + @container
+   studio-preview rules. The Studio preview must therefore be the named query
+   container; otherwise cqw falls back to the desktop viewport and iPhone text
+   becomes oversized. This does not alter Scene positioning or line-height. */
+.preview-device-phone .sp-core,
+.preview-device-tablet .sp-core,
+.preview-device-pc .sp-core{
+  container-type:inline-size;
+  container-name:studio-preview;
+}
+
+
+/* Web Email v0.1 */
+.sp-web-mail-scene{width:100%;max-width:760px;margin-inline:auto}
+.sp-web-mail-card{width:100%;box-sizing:border-box;padding:15px 14px;text-align:left;border-top:1px solid rgba(127,127,127,.16);border-bottom:1px solid rgba(127,127,127,.2);background:rgba(127,127,127,.025)}
+.sp-web-mail-card.is-unread .sp-web-mail-subject,.sp-web-mail-card.is-unread .sp-web-mail-who strong{font-weight:800}
+.sp-web-mail-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:10px;opacity:.68}
+.sp-web-mail-folder{padding:3px 7px;border-radius:999px;background:rgba(127,127,127,.14);font-weight:700}
+.sp-web-mail-star{font-size:15px;line-height:1;margin-left:auto}.sp-web-mail-time{white-space:nowrap}
+.sp-web-mail-subject{font-size:18px;font-weight:700;line-height:1.45;margin-bottom:12px;overflow-wrap:anywhere}
+.sp-web-mail-identity{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.sp-web-mail-avatar{width:38px;height:38px;flex:0 0 38px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.15);font-size:13px;font-weight:700}
+.sp-web-mail-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-web-mail-who{min-width:0;display:flex;flex-direction:column;line-height:1.25}.sp-web-mail-who strong{font-size:13px}.sp-web-mail-who span{font-size:10px;opacity:.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-web-mail-routes{font-size:10px;line-height:1.55;opacity:.58;margin:0 0 12px 48px;overflow-wrap:anywhere}
+.sp-web-mail-text{font-size:14px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;padding-top:12px;border-top:1px solid rgba(127,127,127,.14)}
+.sp-history-web-mail .sp-web-mail-card{padding:10px 8px}.sp-history-web-mail .sp-web-mail-subject{font-size:15px;margin-bottom:8px}.sp-history-web-mail .sp-web-mail-text{font-size:13px}
+@media(max-width:640px){.sp-web-mail-card{padding:14px 10px}.sp-web-mail-subject{font-size:16px}.sp-web-mail-avatar{width:34px;height:34px;flex-basis:34px}.sp-web-mail-routes{margin-left:44px}}
+
+
+/* Web Mail v0.2: mailbox row -> tap to expand. Drafts start open. */
+.sp-web-mail-card{padding:0;overflow:hidden}
+.sp-web-mail-summary{appearance:none;-webkit-appearance:none;width:100%;border:0;margin:0;padding:12px 10px;background:transparent;color:inherit;font:inherit;text-align:left;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;cursor:pointer}
+.sp-web-mail-summary:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+.sp-web-mail-summary-avatar{width:34px;height:34px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.15);font-size:12px;font-weight:700}
+.sp-web-mail-summary-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-web-mail-summary-main{min-width:0;display:flex;flex-direction:column;gap:2px}.sp-web-mail-summary-main strong,.sp-web-mail-summary-main span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sp-web-mail-summary-main strong{font-size:12px}.sp-web-mail-summary-main span{font-size:13px}
+.sp-web-mail-summary-meta{font-size:9px;opacity:.6;white-space:nowrap;align-self:start;padding-top:2px}
+.sp-web-mail-card.is-unread .sp-web-mail-summary-main strong,.sp-web-mail-card.is-unread .sp-web-mail-summary-main span{font-weight:800}
+.sp-web-mail-detail{display:none;padding:4px 14px 15px;border-top:1px solid rgba(127,127,127,.12)}
+.sp-web-mail-card.is-open .sp-web-mail-detail{display:block}
+.sp-web-mail-card.is-open .sp-web-mail-summary{display:none}
+.sp-web-mail-attachment{display:inline-flex;align-items:center;max-width:100%;box-sizing:border-box;margin-top:12px;padding:7px 10px;border:1px solid rgba(127,127,127,.22);border-radius:10px;background:rgba(127,127,127,.06);font-size:11px;line-height:1.3;overflow-wrap:anywhere}
+.sp-history-web-mail .sp-web-mail-summary{padding:9px 8px;grid-template-columns:28px minmax(0,1fr) auto;gap:8px}.sp-history-web-mail .sp-web-mail-summary-avatar{width:28px;height:28px}.sp-history-web-mail .sp-web-mail-detail{padding:4px 8px 10px}
+@media(max-width:640px){.sp-web-mail-summary{padding:11px 8px}.sp-web-mail-detail{padding:4px 10px 14px}}
+
+
+/* Web Notification v0.1 */
+.sp-web-notification-scene{width:100%;max-width:760px;margin-inline:auto}
+.sp-web-notification-card{width:100%;box-sizing:border-box;display:flex;gap:11px;align-items:flex-start;padding:12px 13px;border:1px solid rgba(127,127,127,.18);border-radius:16px;background:rgba(127,127,127,.08);text-align:left;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.sp-web-notification-icon{width:38px;height:38px;flex:0 0 38px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.16);font-size:19px;line-height:1;overflow:hidden}.sp-web-notification-icon img{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit}
+.sp-web-notification-content{min-width:0;flex:1}
+.sp-web-notification-head{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:11px;line-height:1.3}.sp-web-notification-head strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sp-web-notification-time{margin-left:auto;opacity:.55;white-space:nowrap;font-size:10px}
+.sp-web-notification-title{margin-top:3px;font-size:14px;font-weight:750;line-height:1.4;overflow-wrap:anywhere}
+.sp-web-notification-text{margin-top:3px;font-size:13px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;opacity:.9}
+.sp-history-web-notification .sp-web-notification-card{padding:9px 10px;border-radius:13px;gap:9px}.sp-history-web-notification .sp-web-notification-icon{width:30px;height:30px;flex-basis:30px;border-radius:8px;font-size:15px}.sp-history-web-notification .sp-web-notification-title{font-size:13px}.sp-history-web-notification .sp-web-notification-text{font-size:12px}
+@media(max-width:640px){.sp-web-notification-card{padding:11px 10px;border-radius:14px}.sp-web-notification-icon{width:36px;height:36px;flex-basis:36px}.sp-web-notification-title{font-size:13px}.sp-web-notification-text{font-size:12px}}

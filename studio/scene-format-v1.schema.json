@@ -145,16 +145,24 @@
         "relay": {
           "type": "object",
           "properties": {
-            "schemaVersion": { "type": "string" },
-            "enabled": { "type": "boolean" }
+            "schemaVersion": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
           },
           "additionalProperties": true
         },
         "ownCopy": {
           "type": "object",
           "properties": {
-            "schemaVersion": { "type": "string" },
-            "enabled": { "type": "boolean" }
+            "schemaVersion": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
           },
           "additionalProperties": true
         }
@@ -349,8 +357,16 @@
                 "custom"
               ]
             },
-            "x": { "type": "number", "minimum": 0, "maximum": 1 },
-            "y": { "type": "number", "minimum": 0, "maximum": 1 },
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
             "pc": {
               "type": "object",
               "description": "Optional wide-PC-only text/frame position. Phone and tablet use the common parent position.",
@@ -370,8 +386,16 @@
                     "custom"
                   ]
                 },
-                "x": { "type": "number", "minimum": 0, "maximum": 1 },
-                "y": { "type": "number", "minimum": 0, "maximum": 1 }
+                "x": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
               },
               "additionalProperties": false
             }
@@ -405,7 +429,13 @@
             "warning",
             "void",
             "chat",
-            "web-board"
+            "web-board",
+            "web-comment",
+            "web-review",
+            "web-qa",
+            "web-sns",
+            "web-mail",
+            "web-notification"
           ]
         },
         "effect": {
@@ -468,8 +498,16 @@
                     "custom"
                   ]
                 },
-                "x": { "type": "number", "minimum": 0, "maximum": 1 },
-                "y": { "type": "number", "minimum": 0, "maximum": 1 }
+                "x": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
               },
               "additionalProperties": false
             }
@@ -527,23 +565,74 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "number": {"type": ["integer", "string"]},
-            "name": {"type": "string"},
-            "date": {"type": "string"},
-            "userId": {"type": "string"},
-            "email": {"type": "string"},
-            "replyTo": {"type": "string"},
-            "threadId": {"type": "string"},
-            "replyThreadId": {"type": "string"}
+            "number": {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "date": {
+              "type": "string"
+            },
+            "userId": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "replyTo": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "replyThreadId": {
+              "type": "string"
+            }
+          }
+        },
+        "messageState": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": [
+                "normal",
+                "deleted"
+              ]
+            },
+            "delay": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 300
+            }
           }
         },
         "logTime": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "mode": {"enum": ["none", "work", "edit", "reader"]},
-            "workTime": {"type": "string"},
-            "editedAt": {"type": "string"}
+            "mode": {
+              "enum": [
+                "none",
+                "work",
+                "edit",
+                "reader",
+                "relative"
+              ]
+            },
+            "workTime": {
+              "type": "string"
+            },
+            "editedAt": {
+              "type": "string"
+            },
+            "relativeText": {
+              "type": "string"
+            }
           }
         },
         "background": {
@@ -568,6 +657,563 @@
             "flow",
             "still"
           ]
+        },
+        "webComment": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "commentId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "iconText": {
+              "type": "string"
+            },
+            "likes": {
+              "type": [
+                "integer",
+                "number"
+              ],
+              "minimum": 0
+            },
+            "replyTo": {
+              "type": "string"
+            },
+            "_editorFileName": {
+              "type": "string"
+            },
+            "_editorManaged": {
+              "type": "boolean"
+            },
+            "reaction": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "fixed",
+                    "random",
+                    "dynamic"
+                  ]
+                },
+                "value": {
+                  "type": [
+                    "integer",
+                    "number"
+                  ],
+                  "minimum": 0
+                },
+                "min": {
+                  "type": [
+                    "integer",
+                    "number"
+                  ],
+                  "minimum": 0
+                },
+                "max": {
+                  "type": [
+                    "integer",
+                    "number"
+                  ],
+                  "minimum": 0
+                },
+                "start": {
+                  "type": [
+                    "integer",
+                    "number"
+                  ],
+                  "minimum": 0
+                },
+                "end": {
+                  "type": [
+                    "integer",
+                    "number"
+                  ],
+                  "minimum": 0
+                },
+                "delay": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "duration": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "curve": {
+                  "type": "string",
+                  "enum": [
+                    "linear",
+                    "ease",
+                    "burst",
+                    "wave",
+                    "initial",
+                    "fire",
+                    "steps",
+                    "irregular",
+                    "decay"
+                  ]
+                }
+              }
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "extra",
+                "manual"
+              ]
+            },
+            "iconPreset": {
+              "type": "string",
+              "enum": [
+                "",
+                "m01",
+                "m02",
+                "m03",
+                "m04",
+                "m05",
+                "m06",
+                "f01",
+                "f02",
+                "f03",
+                "f04",
+                "f05",
+                "f06",
+                "a01",
+                "a02",
+                "a03",
+                "a04",
+                "a05",
+                "a06",
+                "o01",
+                "o02",
+                "o03",
+                "o04",
+                "o05",
+                "o06",
+                "plain",
+                "moon",
+                "star",
+                "coffee",
+                "cat",
+                "book",
+                "leaf",
+                "night"
+              ]
+            }
+          }
+        },
+        "flowComments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "density": {
+              "type": "string",
+              "enum": [
+                "few",
+                "normal",
+                "many",
+                "danmaku"
+              ]
+            },
+            "comments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "manual",
+                      "extra"
+                    ]
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "lane": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 8,
+                    "maximum": 72
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            },
+            "context": {
+              "type": "string",
+              "enum": [
+                "normal",
+                "excited",
+                "laugh",
+                "surprise",
+                "horror",
+                "emotion",
+                "flame",
+                "tsukkomi",
+                "ending"
+              ]
+            }
+          }
+        },
+        "webReview": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reviewId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "rating": {
+              "type": [
+                "integer",
+                "number"
+              ],
+              "minimum": 1,
+              "maximum": 5
+            },
+            "verified": {
+              "type": "boolean"
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "extra",
+                "manual"
+              ]
+            },
+            "_editorFileName": {
+              "type": "string"
+            },
+            "_editorManaged": {
+              "type": "boolean"
+            },
+            "iconPreset": {
+              "type": "string",
+              "enum": [
+                "",
+                "m01",
+                "m02",
+                "m03",
+                "m04",
+                "m05",
+                "m06",
+                "f01",
+                "f02",
+                "f03",
+                "f04",
+                "f05",
+                "f06",
+                "a01",
+                "a02",
+                "a03",
+                "a04",
+                "a05",
+                "a06",
+                "o01",
+                "o02",
+                "o03",
+                "o04",
+                "o05",
+                "o06",
+                "plain",
+                "moon",
+                "star",
+                "coffee",
+                "cat",
+                "book",
+                "leaf",
+                "night"
+              ]
+            }
+          }
+        },
+        "webSNS": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "postId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "handle": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "profileUrl": {
+              "type": "string"
+            },
+            "likes": {
+              "type": [
+                "integer",
+                "number"
+              ],
+              "minimum": 0
+            },
+            "reposts": {
+              "type": [
+                "integer",
+                "number"
+              ],
+              "minimum": 0
+            },
+            "replies": {
+              "type": [
+                "integer",
+                "number"
+              ],
+              "minimum": 0
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "extra",
+                "manual"
+              ]
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "_editorFileName": {
+              "type": "string"
+            },
+            "_editorManaged": {
+              "type": "boolean"
+            },
+            "iconPreset": {
+              "type": "string",
+              "enum": [
+                "",
+                "m01",
+                "m02",
+                "m03",
+                "m04",
+                "m05",
+                "m06",
+                "f01",
+                "f02",
+                "f03",
+                "f04",
+                "f05",
+                "f06",
+                "a01",
+                "a02",
+                "a03",
+                "a04",
+                "a05",
+                "a06",
+                "o01",
+                "o02",
+                "o03",
+                "o04",
+                "o05",
+                "o06",
+                "plain",
+                "moon",
+                "star",
+                "coffee",
+                "cat",
+                "book",
+                "leaf",
+                "night"
+              ]
+            }
+          }
+        },
+        "webMail": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mailId": {
+              "type": "string"
+            },
+            "folder": {
+              "type": "string",
+              "enum": [
+                "inbox",
+                "sent",
+                "draft",
+                "spam"
+              ]
+            },
+            "senderName": {
+              "type": "string"
+            },
+            "senderAddress": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            },
+            "cc": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "unread": {
+              "type": "boolean"
+            },
+            "starred": {
+              "type": "boolean"
+            },
+            "deleted": {
+              "type": "boolean",
+              "description": "Legacy v0.1 field. Ignored and removed by Studio v0.2."
+            },
+            "_editorFileName": {
+              "type": "string"
+            },
+            "_editorManaged": {
+              "type": "boolean"
+            },
+            "iconPreset": {
+              "type": "string",
+              "enum": [
+                "",
+                "m01",
+                "m02",
+                "m03",
+                "m04",
+                "m05",
+                "m06",
+                "f01",
+                "f02",
+                "f03",
+                "f04",
+                "f05",
+                "f06",
+                "a01",
+                "a02",
+                "a03",
+                "a04",
+                "a05",
+                "a06",
+                "o01",
+                "o02",
+                "o03",
+                "o04",
+                "o05",
+                "o06",
+                "plain",
+                "moon",
+                "star",
+                "coffee",
+                "cat",
+                "book",
+                "leaf",
+                "night"
+              ]
+            },
+            "attachmentName": {
+              "type": "string"
+            }
+          }
+        },
+        "webNotification": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "notificationId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "social",
+                "mail",
+                "system",
+                "message",
+                "other"
+              ]
+            },
+            "source": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "_editorFileName": {
+              "type": "string"
+            },
+            "_editorManaged": {
+              "type": "boolean"
+            },
+            "iconPreset": {
+              "type": "string",
+              "enum": [
+                "",
+                "m01",
+                "m02",
+                "m03",
+                "m04",
+                "m05",
+                "m06",
+                "f01",
+                "f02",
+                "f03",
+                "f04",
+                "f05",
+                "f06",
+                "a01",
+                "a02",
+                "a03",
+                "a04",
+                "a05",
+                "a06",
+                "o01",
+                "o02",
+                "o03",
+                "o04",
+                "o05",
+                "o06"
+              ]
+            }
+          }
         }
       },
       "additionalProperties": true
@@ -621,9 +1267,15 @@
           "type": "object",
           "description": "Optional device-specific cover crop positions. Legacy position remains the phone/common fallback.",
           "properties": {
-            "phone": { "type": "string" },
-            "tablet": { "type": "string" },
-            "pc": { "type": "string" }
+            "phone": {
+              "type": "string"
+            },
+            "tablet": {
+              "type": "string"
+            },
+            "pc": {
+              "type": "string"
+            }
           },
           "additionalProperties": false
         },
@@ -933,6 +1585,45 @@
           "properties": {
             "title": {
               "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "_editorFileName": {
+              "type": "string"
+            },
+            "_editorManaged": {
+              "type": "boolean"
+            },
+            "iconPreset": {
+              "type": "string",
+              "enum": [
+                "",
+                "m01",
+                "m02",
+                "m03",
+                "m04",
+                "m05",
+                "m06",
+                "f01",
+                "f02",
+                "f03",
+                "f04",
+                "f05",
+                "f06",
+                "a01",
+                "a02",
+                "a03",
+                "a04",
+                "a05",
+                "a06",
+                "o01",
+                "o02",
+                "o03",
+                "o04",
+                "o05",
+                "o06"
+              ]
             },
             "subtitle": {
               "type": "string"
