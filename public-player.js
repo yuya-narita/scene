@@ -608,7 +608,7 @@
   function commercePreviewLocked(doc=documentData){return doc?.commerce?.ownCopyGate?.access==='preview_lock';}
   function commerceGateMode(doc=documentData){
     const mode=String(doc?.commerce?.ownCopyGate?.mode||'free').trim().toLowerCase();
-    return ['free','purchase','reader_price','support'].includes(mode)?(mode==='support'?'reader_price':mode):'free';
+    return ['free','copy','purchase','reader_price','support'].includes(mode)?(mode==='support'?'reader_price':mode):'free';
   }
   function formatJPY(amount){return `¥${Math.max(0,Math.floor(Number(amount)||0)).toLocaleString('ja-JP')}`;}
   function cleanCommerceReturnUrl(){
@@ -726,12 +726,12 @@
       if(ownership?.owned){showAlreadyPurchased();return;}
       ownCopyButton.textContent='価格を確認しています…';
       const commerce=await fetchCanonicalCommerce(doc);
-      if(!commerce||commerce.status!=='active'||!['purchase','reader_price','support'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
+      if(!commerce||commerce.status!=='active'||!['copy','purchase','reader_price','support'].includes(String(commerce.mode||''))||!Number.isInteger(Number(commerce.amount))){
         throw new Error('販売価格を確認できませんでした。');
       }
       const amount=Number(commerce.amount);
       ownCopyButton.disabled=false;
-      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:((commerce.mode==='reader_price'||commerce.mode==='support')?'価格を決めてMY COPYを受け取る':`${formatJPY(amount)}で購入して受け取る`);
+      ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='copy'?`${formatJPY(amount)}でMY COPYを発行`:((commerce.mode==='reader_price'||commerce.mode==='support')?'価格を決めてMY COPYを受け取る':`${formatJPY(amount)}で購入して受け取る`));
       ownCopyButton.onclick=()=>purchasePublicOwnCopy(commerce);
       if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':'決済後、この作品を自分の本棚に受け取れます。';
     }catch(error){

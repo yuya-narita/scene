@@ -222,16 +222,38 @@
     const db=await openBookshelfDb();
     try{
       if(!db.objectStoreNames.contains(READER_BOOKS))throw new Error('読者本棚がまだありません。');
-      const rec=await idbRequest(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).get(copyId));
-      if(!rec?.blob)throw new Error('この一冊は本棚に見つかりませんでした。');
-      // iOS Safari can keep an IndexedDB Blob as a backing-store reference.
-      // Once the DB connection is closed, reading that Blob on the next async
-      // step may fail with NotFoundError ("The object can not be found here.").
-      // Materialize the bytes while the IndexedDB connection is still alive.
-      // Desktop browsers also take this path, so bookshelf -> Player uses one
-      // deterministic handoff on every platform.
-      const bytes=await rec.blob.arrayBuffer();
-      return {...rec,sceneBytes:bytes,blob:null};
+      // iOS Safari can return an IndexedDB Blob whose backing object becomes
+      // unavailable when read later via Blob.arrayBuffer(). Start FileReader
+      // synchronously inside the IDB request success event, before Safari
+      // releases the transaction's backing reference.
+      return await new Promise((resolve,reject)=>{
+        let settled=false;
+        const fail=error=>{if(settled)return;settled=true;reject(error||new Error('本棚の一冊を読み込めませんでした。'));};
+        const done=value=>{if(settled)return;settled=true;resolve(value);};
+        let tx,req;
+        try{
+          tx=db.transaction(READER_BOOKS,'readonly');
+          req=tx.objectStore(READER_BOOKS).get(copyId);
+        }catch(error){fail(error);return;}
+        tx.onerror=()=>fail(tx.error||new Error('読者本棚を読み込めませんでした。'));
+        tx.onabort=()=>fail(tx.error||new Error('読者本棚の読み込みが中断されました。'));
+        req.onerror=()=>fail(req.error||new Error('本棚の一冊を読み込めませんでした。'));
+        req.onsuccess=()=>{
+          const rec=req.result;
+          if(!rec?.blob){fail(new Error('この一冊は本棚に見つかりませんでした。'));return;}
+          const reader=new FileReader();
+          const fallbackArrayBuffer=primaryError=>{
+            // Keep a fallback for browsers where Blob.arrayBuffer succeeds but
+            // FileReader cannot access an IndexedDB-backed Blob.
+            try{Promise.resolve(rec.blob.arrayBuffer()).then(bytes=>done({...rec,sceneBytes:bytes,blob:null}),()=>fail(primaryError));}
+            catch(_){fail(primaryError);}
+          };
+          reader.onload=()=>done({...rec,sceneBytes:reader.result,blob:null});
+          reader.onabort=()=>fail(new Error('本棚の一冊の読み込みが中断されました。'));
+          reader.onerror=()=>fallbackArrayBuffer(reader.error||new Error('本棚の一冊を読み込めませんでした。'));
+          try{reader.readAsArrayBuffer(rec.blob);}catch(error){fallbackArrayBuffer(error);}
+        };
+      });
     }finally{db.close();}
   }
   async function openBookshelfCopy(copyId){
@@ -1056,7 +1078,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.15-ios-idb-blob-materialize',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.16-ios-idb-filereader-handoff',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
