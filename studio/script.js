@@ -1041,6 +1041,8 @@
   const DRAFT_LAST_KEY='sceneStudio.lastDraftId';
   let currentDraftId=localStorage.getItem(DRAFT_LAST_KEY)||'';
   let draftSaveTimer=null;
+  let desktopDetailRangeInteracting=false;
+  let desktopDetailRangeFlushActive=null;
   let latestDraftSummary=null;
   let autoRecProgress={nextIndex:0,recordedCount:0};
   let draftStorageLowNoticeShown=false;
@@ -1404,7 +1406,8 @@
   }
   function scheduleDraftSave(delay=700){
     clearTimeout(draftSaveTimer);
-    draftSaveTimer=setTimeout(saveDraftNow,delay);
+    const saveDelay=desktopDetailRangeInteracting?Math.max(1000,Number(delay)||0):delay;
+    draftSaveTimer=setTimeout(saveDraftNow,saveDelay);
   }
   async function restoreDraftRecord(row){
     if(!row)return;
@@ -10209,6 +10212,27 @@ function startInlineTextEdit(field='text',targetEl=null){
     slider.min=min;slider.max=max;slider.step=step;slider.value=value;
 
     const clamp=(n,lo,hi)=>Math.min(hi,Math.max(lo,n));
+    // A range can emit dozens of input events per second. Coalesce preview
+    // cloning/rendering while keeping the numeric readout immediate; flush the
+    // final value on release/change and defer IndexedDB saves until the drag ends.
+    let rangePreviewTimer=0;
+    let pendingRangeValue=0;
+    let hasPendingRangeValue=false;
+    let lastAppliedRangeValue=NaN;
+    const flushRangePreview=()=>{
+      if(rangePreviewTimer){clearTimeout(rangePreviewTimer);rangePreviewTimer=0;}
+      if(!hasPendingRangeValue)return;
+      const next=pendingRangeValue;
+      hasPendingRangeValue=false;
+      if(Object.is(next,lastAppliedRangeValue))return;
+      lastAppliedRangeValue=next;
+      oninput(next);
+    };
+    const queueRangePreview=(next)=>{
+      pendingRangeValue=next;
+      hasPendingRangeValue=true;
+      if(!rangePreviewTimer)rangePreviewTimer=setTimeout(flushRangePreview,80);
+    };
     const sliderToNumber=()=>{
       const raw=Number(slider.value);
       const shown=clean(raw*displayScale);
@@ -10216,7 +10240,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     };
     const applySlider=()=>{
       sliderToNumber();
-      oninput(Number(slider.value));
+      queueRangePreview(Number(slider.value));
     };
     const applyNumber=()=>{
       let shown=Number(numeric.value);
@@ -10224,16 +10248,21 @@ function startInlineTextEdit(field='text',targetEl=null){
       shown=clamp(shown,displayMin,displayMax);
       numeric.value=String(clean(shown));
       slider.value=String(shown/displayScale);
-      oninput(Number(slider.value));
+      queueRangePreview(Number(slider.value));
     };
 
+    slider.addEventListener('pointerdown',()=>{
+      desktopDetailRangeInteracting=true;
+      desktopDetailRangeFlushActive=flushRangePreview;
+    });
     slider.addEventListener('input',applySlider);
+    slider.addEventListener('change',flushRangePreview);
     if(mobileWheel){
-      numeric.addEventListener('change',applyNumber);
+      numeric.addEventListener('change',()=>{applyNumber();flushRangePreview();});
     }else{
       numeric.addEventListener('input',applyNumber);
-      numeric.addEventListener('change',applyNumber);
-      numeric.addEventListener('blur',applyNumber);
+      numeric.addEventListener('change',()=>{applyNumber();flushRangePreview();});
+      numeric.addEventListener('blur',()=>{applyNumber();flushRangePreview();});
     }
 
     valueWrap.append(numeric);
@@ -12686,6 +12715,13 @@ function openDesktopTextDetail(){
   let desktopV2RangeDragging=false;
   let desktopV2RangeRenderPending=false;
   const finishDesktopV2RangeDrag=()=>{
+    if(desktopDetailRangeFlushActive){
+      const flush=desktopDetailRangeFlushActive;
+      desktopDetailRangeFlushActive=null;
+      desktopDetailRangeInteracting=false;
+      flush();
+      scheduleDraftSave(120);
+    }
     if(!desktopV2RangeDragging)return;
     desktopV2RangeDragging=false;
     if(desktopV2RangeRenderPending){
@@ -12704,7 +12740,8 @@ function openDesktopTextDetail(){
   window.addEventListener('pointercancel',finishDesktopV2RangeDrag,true);
 
   function renderDesktopLivePanel(){
-    if(desktopV2RangeDragging){desktopV2RangeRenderPending=true;return;}
+    if(desktopV2RangeDragging||desktopDetailRangeInteracting){desktopV2RangeRenderPending=true;return;}
+    desktopV2RangeRenderPending=false;
     if(!desktopLivePanel)return;
     if(!desktopLiveActive()){
       desktopLivePanel.hidden=true;
