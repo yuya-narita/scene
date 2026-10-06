@@ -4254,13 +4254,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
                   underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';
                   underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
                   frame.insertBefore(underlay,img);img.style.zIndex='2';img.style.willChange='translate';
-                  viewState.pageDrag={underlay,target,sign:totalDx<0?1:-1,width:Math.max(frame.clientWidth,rect.width)};
+                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);
+                  viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
                 }
                 const drag=viewState.pageDrag;
-                if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;}
+                if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
                 const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));
                 img.style.translate=`${dx}px 0`;
-                drag.underlay.style.translate=`${drag.sign*drag.width+dx}px 0`;
+                drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;
                 event.preventDefault();
               }
             }
@@ -4294,19 +4295,19 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const draggedPage=viewState.pageDrag;
             if(draggedPage){
               const dx=x-viewState.touchStartX;
-              const commit=Math.abs(dx)>Math.max(58,Math.min(120,draggedPage.width*.18)) && Math.abs(dx)>Math.abs(vertical)*1.2 && duration<900;
+              const commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32)) && Math.abs(dx)>Math.abs(vertical)*1.2 && duration<900;
               draggedPage.underlay.remove();viewState.pageDrag=null;img.style.willChange='';img.style.zIndex='';
               if(commit){
                 const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
                 const advances=direction==='rtl'?dx>0:dx<0;
                 const target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
                 if(target!==activeIndex){
-                  viewer._scenePageIncomingOffset=draggedPage.sign*draggedPage.width+dx;
+                  viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;
                   showPage(target);img.style.translate='';
                   options?.onPageChange?.(target);
                 }else img.style.translate='';
               }else{
-                img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:190,easing:'cubic-bezier(.2,.75,.25,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
+                img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
               }
               clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
               viewState.multiTouch=false;return;
@@ -4351,7 +4352,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               }
             }
 
-            if(viewState.scale<=1.01) resetView();
+            // VIEW POINT owns the image transform. Resetting the manual zoom state
+            // on iPhone touchend briefly writes FIT between two authored points.
+            if(viewState.scale<=1.01 && !frame.classList.contains('is-view-rec-playing')) resetView();
             viewState.multiTouch=false;
           }else if(event.touches.length===1 && viewState.scale>1.01){
             viewState.dragging=true;
@@ -4498,7 +4501,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         };
         close.addEventListener('click',shut);
         document.addEventListener('keydown',(event)=>{
-          if(event.key==='Escape' && !viewer.hidden)shut(event);
+          if(viewer.hidden)return;
+          if(event.key==='Escape'){shut(event);return;}
+          if((event.key!=='ArrowLeft'&&event.key!=='ArrowRight')||frame._sceneImageMode==='viewPoint'||frame.classList.contains('is-view-rec-playing')||(viewer._scenePages||[]).length<2||event.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+          event.preventDefault();event.stopPropagation();
+          const target=Math.max(0,Math.min(viewer._scenePages.length-1,(viewer._scenePageIndex||0)+(event.key==='ArrowRight'?1:-1)));
+          if(target!==(viewer._scenePageIndex||0)){viewer._sceneShowPage?.(target);viewer._sceneOnPageChange?.(target);}
         });
       }
 
@@ -4520,6 +4528,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
       viewer._scenePages=pages;
       viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';
+      viewer._sceneOnPageChange=options?.onPageChange;
       const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
       let pageLoadToken=0;
       const showPage=(index)=>{
