@@ -7838,27 +7838,24 @@
     document.documentElement.classList.add('cover-position-open');
   }
 
-  // Return the background that is actually visible immediately before a
-  // Scene. Inherited Scene overrides (position, fit, effects) must be merged;
-  // an explicit clear resets the chain until another image is selected.
-  function previousEffectiveBackground(sceneIndex){
+  // Match Player's cumulative background state: an image clear removes only
+  // the image, while brightness, texture and framing settings keep carrying.
+  function effectiveBackgroundAt(sceneIndex){
     let state=null;
-    for(let i=0;i<Number(sceneIndex);i++){
+    for(let i=0;i<=Number(sceneIndex);i++){
       const bg=workingDocument?.scenes?.[i]?.presentation?.background;
       if(!bg)continue;
-      if(bg.src===''){state=null;continue;}
-      if(bg.src)state={...bg};
-      else if(state){
-        Object.keys(bg).forEach(key=>{
-          const value=bg[key];
-          if(value!==undefined)state[key]=(value&&typeof value==='object'&&!Array.isArray(value))
-            ?{...(state[key]&&typeof state[key]==='object'?state[key]:{}),...value}
-            :value;
-        });
-      }
+      state ||= {};
+      Object.keys(bg).forEach(key=>{
+        const value=bg[key];
+        if(value!==undefined)state[key]=(value&&typeof value==='object'&&!Array.isArray(value))
+          ?{...(state[key]&&typeof state[key]==='object'?state[key]:{}),...value}
+          :value;
+      });
     }
     return state;
   }
+  function previousEffectiveBackground(sceneIndex){return effectiveBackgroundAt(Number(sceneIndex)-1);}
 
   // Keep the current image, effects and transition, and copy only the crop
   // framing needed to align two same-composition images precisely.
@@ -7894,6 +7891,38 @@
       target.fit=fit;
       if(positions)target.positions=clone(positions);else delete target.positions;
       if(!current?.src)scene.presentation.background=target;
+      changed++;
+    }
+    return changed;
+  }
+  function copyBackgroundAppearance(target,source){
+    if(!target||!source)return false;
+    const tone=source.tone==='light'?'light':'dark';
+    target.tone=tone;
+    target.dim=Number.isFinite(Number(source.dim))?Number(source.dim):(tone==='light'?.64:.38);
+    target.blur=Math.max(0,Number(source.blur)||0);
+    target.textures=source.textures&&typeof source.textures==='object'?clone(source.textures):{};
+    return true;
+  }
+  function copyPreviousBackgroundAppearance(sceneIndex){
+    const scene=workingDocument?.scenes?.[sceneIndex],source=previousEffectiveBackground(sceneIndex);
+    if(!scene?.presentation||!source)return false;
+    const target=scene.presentation.background&&typeof scene.presentation.background==='object'
+      ?scene.presentation.background:{_editorManaged:true};
+    copyBackgroundAppearance(target,source);
+    if(!scene.presentation.background||typeof scene.presentation.background!=='object')scene.presentation.background=target;
+    return true;
+  }
+  function applyPreviousBackgroundAppearanceForward(sceneIndex){
+    const source=previousEffectiveBackground(sceneIndex);
+    if(!source)return 0;
+    let changed=0;
+    for(let i=Math.max(0,Number(sceneIndex)||0);i<(workingDocument?.scenes?.length||0);i++){
+      const scene=workingDocument.scenes[i];
+      if(!scene?.presentation)continue;
+      let target=scene.presentation.background;
+      if(!target||typeof target!=='object')target=scene.presentation.background={_editorManaged:true};
+      copyBackgroundAppearance(target,source);
       changed++;
     }
     return changed;
@@ -11657,16 +11686,19 @@ function openDesktopBackgroundDetail(){
     );
     const ensureImageState=()=>{
       if(!p.background || typeof p.background!=='object'){
+        const inherited=clone(previousFraming()||{});
+        delete inherited.src;
         p.background={
-          transition:p.background?.transition||'fade',
-          transitionDuration:Number(p.background?.transitionDuration)||700,
-          fit:p.background?.fit||'cover',
-          position:p.background?.position||'center center',
-          tone:p.background?.tone||'dark',
-          dim:Number.isFinite(Number(p.background?.dim))?Number(p.background.dim):.38,
-          blur:Number(p.background?.blur)||0,
-          motion:p.background?.motion||{type:'none'},
-          textures:p.background?.textures||{},
+          ...inherited,
+          transition:inherited.transition||'fade',
+          transitionDuration:Number(inherited.transitionDuration)||700,
+          fit:inherited.fit||'cover',
+          position:inherited.position||'center center',
+          tone:inherited.tone||'dark',
+          dim:Number.isFinite(Number(inherited.dim))?Number(inherited.dim):(inherited.tone==='light'?.64:.38),
+          blur:Number(inherited.blur)||0,
+          motion:inherited.motion||{type:'none'},
+          textures:inherited.textures||{},
           _editorManaged:true
         };
       }
@@ -11828,7 +11860,11 @@ function openDesktopBackgroundDetail(){
     // LIGHT ---------------------------------------------------------------
     const lightSec=section(u('明るさ・質感','Brightness & texture'));
     const lightGrid=two(lightSec);
-    const bg0=explicit()||{};
+    const explicitBg=explicit()||{};
+    const inheritedBg=previousFraming()||{};
+    const bg0={...inheritedBg,...explicitBg,
+      textures:{...(inheritedBg.textures||{}),...(explicitBg.textures||{})},
+      motion:explicitBg.motion||inheritedBg.motion};
     if(bg0.motion && /^pan/.test(bg0.motion.type||''))ensurePanCoverage(bg0.motion);
     lightGrid.append(
       desktopDetailSelect(u('ベール','Veil'),[
@@ -11876,6 +11912,26 @@ function openDesktopBackgroundDetail(){
         }
       })
     );
+    const appearanceActions=document.createElement('div');
+    appearanceActions.className='desktop-background-appearance-actions';
+    const copyPreviousAppearanceAction=desktopAction(u('前Sceneの明るさ・質感をコピー','Copy previous Scene brightness & texture'),()=>{
+      captureUndo('明るさ・質感の変更を元に戻せます');
+      if(!copyPreviousBackgroundAppearance(index))return;
+      apply();
+      closeDesktopBackgroundDetail();
+      openDesktopBackgroundDetail();
+    });
+    copyPreviousAppearanceAction.disabled=!previousFraming();
+    const copyPreviousAppearanceForwardAction=desktopAction(u('前Sceneの明るさ・質感を以降に一括適用','Apply previous Scene brightness & texture to all following Scenes'),()=>{
+      captureUndo('後続Sceneの明るさ・質感変更を元に戻せます');
+      if(!applyPreviousBackgroundAppearanceForward(index))return;
+      apply();
+      closeDesktopBackgroundDetail();
+      openDesktopBackgroundDetail();
+    });
+    copyPreviousAppearanceForwardAction.disabled=!previousFraming();
+    appearanceActions.append(copyPreviousAppearanceAction,copyPreviousAppearanceForwardAction);
+    lightSec.appendChild(appearanceActions);
 
     // TRANSITION ----------------------------------------------------------
     const transSec=section(u('Scene切替','Scene transition'));

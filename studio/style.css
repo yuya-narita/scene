@@ -8952,6 +8952,8 @@ body.cover-visibility-dialog-open{overflow:hidden!important;}
   min-height:42px!important;
   margin-top:8px!important;
 }
+.desktop-background-appearance-actions{display:grid;gap:8px;margin-top:10px}
+.desktop-background-appearance-actions>button{width:100%!important;min-height:42px!important}
 .desktop-background-position-action{
   width:100%!important;
   height:42px!important;
