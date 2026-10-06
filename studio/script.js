@@ -2589,14 +2589,14 @@
   }
 
   function packageManifestFor(doc, coverPath=''){
-    const meta=workMetadataFromEasy();
+    const meta=doc?.metadata||{};
     const manifest={
       package:'scene-package',
       packageVersion:'1.0',
       sceneFormat:'1.0',
       title:doc.title || 'Untitled',
       author:doc.author || '',
-      language:meta.language || doc.language || 'und',
+      language:doc.language || languageInput?.value || 'und',
       entry:'scene.json'
     };
     if(meta.subtitle)manifest.subtitle=meta.subtitle;
@@ -4532,14 +4532,72 @@
   }
 
 
-  async function exportScenePackage(){
+  let pendingScenePackageExport=null;
+  function openScenePackageExportDialog(){
     try{
       if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
-      const result=await buildScenePackage();
-      const name=`${safeFileStem(result.doc.title)}.scene`;
-      downloadBlobFile(name,result.blob);
+      const doc=sceneDocumentForExport();
+      $('#exportWorkTitle').value=doc.title||'';
+      $('#exportWorkAuthor').value=doc.author||'';
+      $('#exportWorkEpisode').value=doc.metadata?.episode||'';
+      $('#exportWorkEpisodeTitle').value=doc.metadata?.episodeTitle||'';
+      $('#scenePackageExportDialog').showModal();
+    }catch(error){
+      console.error(error);
+      appAlert(t('io.invalid'));
+    }
+  }
+
+  async function exportScenePackage(exportMetadata={}){
+    try{
+      if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
+      const source=sceneDocumentForExport();
+      source.title=String(exportMetadata.title??source.title??'').trim()||'Untitled';
+      source.author=String(exportMetadata.author??source.author??'').trim();
+      source.metadata||={};
+      source.metadata.episode=String(exportMetadata.episode??source.metadata.episode??'').trim();
+      source.metadata.episodeTitle=String(exportMetadata.episodeTitle??source.metadata.episodeTitle??'').trim();
+      const name=`${safeFileStem(source.title)}.scene`;
+
+      // Invoke the native picker directly from the confirmation gesture. On
+      // browsers without the File System Access API, the browser download or
+      // iOS share sheet remains the save route.
+      let pickerPromise=null;
+      if(typeof window.showSaveFilePicker==='function'){
+        try{
+          pickerPromise=window.showSaveFilePicker({
+            suggestedName:name,
+            types:[{description:'あ箱 Scene package',accept:{'application/octet-stream':['.scene']}}]
+          });
+        }catch(error){
+          if(error?.name==='AbortError')return;
+          console.warn('Save picker unavailable; using browser download',error);
+        }
+      }
+      let fileHandle=null;
+      if(pickerPromise){
+        try{fileHandle=await pickerPromise;}
+        catch(error){if(error?.name==='AbortError')return;throw error;}
+      }
+      const result=await buildScenePackage(source);
+      if(fileHandle){
+        const writable=await fileHandle.createWritable();
+        await writable.write(result.blob);
+        await writable.close();
+      }else{
+        const file=typeof File==='function'?new File([result.blob],name,{type:'application/octet-stream'}):null;
+        const canShareFile=Boolean(file&&/iPhone|iPad|iPod/i.test(navigator.userAgent)&&navigator.canShare?.({files:[file]}));
+        if(canShareFile&&typeof navigator.share==='function'){
+          pendingScenePackageExport={file,blob:result.blob,name,title:source.title,assetCount:result.assetCount};
+          $('#scenePackageReadyDialog').showModal();
+          setProjectIoStatus(uiLanguage==='ja'?'保存先を選んでください。':'Choose where to save the file.');
+          return;
+        }
+        downloadBlobFile(name,result.blob);
+      }
       setProjectIoStatus(t('io.packageExported',{name,n:result.assetCount}));
     }catch(error){
+      if(error?.name==='AbortError')return;
       console.error(error);
       const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
       if(assetFailure){
@@ -8587,7 +8645,6 @@
   // v0.2.94: menu is a top-right popover; no drag-to-dismiss gesture.
   document.addEventListener('click',closeEasyMenu);
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
-  $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();exportScenePackage();});
   $('#menuExportDistributionButton')?.addEventListener('click',()=>{closeEasyMenu();exportDistributionScenePackage();});
   $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
   $('#menuNewDraftButton')?.addEventListener('click',async()=>{
@@ -8624,7 +8681,47 @@
   // v0.3.04: this legacy button is no longer present in the compact header UI.
   // Guard it so initialization continues and later controls (including Preview return)
   // always receive their event listeners.
-  $('#exportPackageButton')?.addEventListener('click',exportScenePackage);
+  $('#exportPackageButton')?.addEventListener('click',openScenePackageExportDialog);
+  $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();openScenePackageExportDialog();});
+  $('#scenePackageExportCancel')?.addEventListener('click',()=>$('#scenePackageExportDialog')?.close('cancel'));
+  $('#scenePackageExportForm')?.addEventListener('submit',(event)=>{
+    event.preventDefault();
+    const exportMetadata={
+      title:$('#exportWorkTitle')?.value||'',
+      author:$('#exportWorkAuthor')?.value||'',
+      episode:$('#exportWorkEpisode')?.value||'',
+      episodeTitle:$('#exportWorkEpisodeTitle')?.value||''
+    };
+    $('#scenePackageExportDialog')?.close('export');
+    // Keep the native file picker inside the confirmation click's user gesture.
+    exportScenePackage(exportMetadata);
+  });
+  $('#scenePackageReadyShare')?.addEventListener('click',async()=>{
+    const pending=pendingScenePackageExport;
+    if(!pending)return;
+    try{
+      await navigator.share({files:[pending.file],title:pending.title});
+      $('#scenePackageReadyDialog')?.close('saved');
+      pendingScenePackageExport=null;
+      setProjectIoStatus(t('io.packageExported',{name:pending.name,n:pending.assetCount}));
+    }catch(error){
+      if(error?.name==='AbortError')return;
+      console.warn('Share sheet unavailable; use browser download',error);
+      setProjectIoStatus('共有メニューを開けませんでした。ダウンロードを選んでください。',{error:true});
+    }
+  });
+  $('#scenePackageReadyDownload')?.addEventListener('click',()=>{
+    const pending=pendingScenePackageExport;
+    if(!pending)return;
+    downloadBlobFile(pending.name,pending.blob);
+    $('#scenePackageReadyDialog')?.close('download');
+    pendingScenePackageExport=null;
+  });
+  $('#scenePackageReadyCancel')?.addEventListener('click',()=>{
+    $('#scenePackageReadyDialog')?.close('cancel');
+    pendingScenePackageExport=null;
+  });
+  $('#scenePackageReadyDialog')?.addEventListener('cancel',()=>{pendingScenePackageExport=null;});
   $('#importSceneInput').addEventListener('change',async(event)=>{
     const file=event.target.files?.[0];
     if(file) await importSceneDocument(file);

@@ -26,7 +26,7 @@
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="stylesheet" href="./scene-player-core.css?v=20261006-chat-v3">
-  <link rel="stylesheet" href="./style.css?v=70.62">
+  <link rel="stylesheet" href="./style.css?v=70.63">
   <link rel="stylesheet" href="./cage.css?v=14">
   <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
   <style id="studioPreviewDeviceStyles">
@@ -1100,6 +1100,38 @@
     </form>
   </dialog>
 
+  <dialog id="scenePackageExportDialog" class="scene-package-export-dialog" aria-labelledby="scenePackageExportTitle">
+    <form id="scenePackageExportForm" class="scene-package-export-card">
+      <span class="distribution-export-kicker">MASTER .SCENE</span>
+      <h2 id="scenePackageExportTitle">作品を書き出す</h2>
+      <p>作品ファイルに入れる情報を確認できます。ここでの変更は書き出すファイルだけに反映されます。</p>
+      <div class="scene-package-export-fields">
+        <label><span>作品タイトル</span><input id="exportWorkTitle" type="text" maxlength="120" required></label>
+        <label><span>作者名</span><input id="exportWorkAuthor" type="text" maxlength="80"></label>
+        <label><span>話数</span><input id="exportWorkEpisode" type="text" maxlength="80" placeholder="第1話 / EPISODE 01"></label>
+        <label><span>今回のタイトル</span><input id="exportWorkEpisodeTitle" type="text" maxlength="120"></label>
+      </div>
+      <p class="scene-package-export-save-note">保存先は次の画面で選べます。iPhoneでは共有メニューから「ファイルに保存」を選んでください。</p>
+      <div class="distribution-export-actions">
+        <button value="cancel" type="button" id="scenePackageExportCancel">キャンセル</button>
+        <button value="export" type="submit" class="primary">保存先を選んで書き出す</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="scenePackageReadyDialog" class="scene-package-export-dialog" aria-labelledby="scenePackageReadyTitle">
+    <div class="scene-package-export-card">
+      <span class="distribution-export-kicker">READY TO SAVE</span>
+      <h2 id="scenePackageReadyTitle">作品ファイルができました</h2>
+      <p>保存先を選ぶと、共有メニューが開きます。iPhoneでは「ファイルに保存」を選べます。</p>
+      <div class="distribution-export-actions scene-package-ready-actions">
+        <button id="scenePackageReadyCancel" type="button">閉じる</button>
+        <button id="scenePackageReadyDownload" type="button">ダウンロード</button>
+        <button id="scenePackageReadyShare" type="button" class="primary">保存先を選ぶ</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="deleteSceneDialog" class="scene-delete-dialog">
     <form method="dialog" class="scene-delete-dialog-card">
       <div class="scene-delete-dialog-copy">
@@ -1262,7 +1294,7 @@
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
 <script src="./scene-edit-core.js?v=70.27"></script>
-<script src="./script.js?v=158"></script>
+<script src="./script.js?v=159"></script>
 <script src="./cage.js?v=25"></script>
 <script src="./easy-illustration.js?v=11"></script>
 
