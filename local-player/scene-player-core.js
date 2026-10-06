@@ -406,6 +406,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (!Number.isInteger(nextIndex)) return;
         this.closeHistory({ keepVisualState: true });
         this.goToVisited(nextIndex);
+        this.els.stage.focus({ preventScroll: true });
         // The swipe that opened History arms suppressNextClick so its synthetic
         // click cannot advance a Scene. Once the author explicitly selects a
         // History Scene, that protection is stale; clear it so the very next tap
@@ -3044,6 +3045,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._render();
       // V112 — keyboard reading starts immediately after START. Do not require
       // an extra click on the Scene just to move focus from the Cover controls.
+      this.els?.stage?.focus?.({preventScroll:true});
       requestAnimationFrame(()=>this.els?.stage?.focus?.({preventScroll:true}));
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
       return true;
