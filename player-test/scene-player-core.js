@@ -3007,6 +3007,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _sceneGap(prevScene, nextScene) {
+      // Consecutive chat bubbles form one speaker's message group.
+      if (nextScene?.presentation?.flow !== 'horizontal' && this._chatContinues(prevScene, nextScene)) return 8;
       const prevType = prevScene?.type || 'text';
       const nextType = nextScene?.type || 'text';
       if (prevType === 'sound' || nextType === 'sound') return this.options.soundGap;
@@ -3024,8 +3026,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const vertical=text?.dataset?.writingMode==='vertical-rl';
       let inkLeft=0,inkRight=Math.max(1,nodeRect.width),inkTop=0,inkBottom=boxHeight;
       const boardPost=node.querySelector(':scope > .sp-web-board-post');
-      if(boardPost){
-        const r=boardPost.getBoundingClientRect();inkLeft=r.left-nodeRect.left;inkRight=r.right-nodeRect.left;inkTop=r.top-nodeRect.top;inkBottom=r.bottom-nodeRect.top;
+      const chatRow=node.querySelector(':scope > .sp-chat-row');
+      if(boardPost||chatRow){
+        // Include the bubble padding and speaker header in chat stack spacing.
+        const r=(boardPost||chatRow).getBoundingClientRect();inkLeft=r.left-nodeRect.left;inkRight=r.right-nodeRect.left;inkTop=r.top-nodeRect.top;inkBottom=r.bottom-nodeRect.top;
       }else if(frame){
         const frameRect=frame.getBoundingClientRect();
         inkLeft=frameRect.left-nodeRect.left;

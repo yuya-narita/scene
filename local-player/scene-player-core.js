@@ -3168,6 +3168,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _sceneGap(prevScene, nextScene) {
+      // Consecutive chat bubbles form one speaker's message group.
+      if (nextScene?.presentation?.flow !== 'horizontal' && this._chatContinues(prevScene, nextScene)) return 8;
       const prevType = prevScene?.type || 'text';
       const nextType = nextScene?.type || 'text';
       if (prevType === 'sound' || nextType === 'sound') return this.options.soundGap;
