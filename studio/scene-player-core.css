@@ -2939,3 +2939,17 @@ html.sp-scene-image-open body{
 .sp-history-chat[data-chat-continuation="true"] .sp-history-chat-speaker{display:none!important}
 .sp-scene[data-view="chat"][data-chat-continuation="true"] .sp-chat-bubble::after,
 .sp-history-chat[data-chat-continuation="true"] .sp-history-chat-bubble::after{display:none}
+
+
+
+/* V169 — layered page-bundle affordance and fullscreen manga navigation. */
+.sp-scene-image.has-page-stack .sp-scene-image-object{position:relative;isolation:isolate}
+.sp-scene-image.has-page-stack .sp-scene-image-object::before,.sp-scene-image.has-page-stack .sp-scene-image-object::after{content:"";position:absolute;z-index:0;inset:4px -4px -4px 4px;border:1px solid rgba(255,255,255,.28);background:rgba(18,20,27,.94);transform:translate(3px,3px);pointer-events:none}
+.sp-scene-image.has-page-stack .sp-scene-image-object::after{inset:2px -2px -2px 2px;transform:translate(1px,1px)}
+.sp-scene-image.has-page-stack .sp-scene-image-media{position:relative;z-index:1}
+.sp-scene-image.has-page-stack::before{content:"＋" attr(data-page-count) " ページ";position:absolute;z-index:5;right:8px;bottom:8px;padding:4px 8px;border:1px solid rgba(255,255,255,.35);border-radius:999px;background:rgba(0,0,0,.7);color:#fff;font:600 12px/1.2 system-ui,sans-serif;pointer-events:none}
+.sp-scene-image-viewer-pages{position:fixed;z-index:3;left:50%;bottom:max(18px,calc(env(safe-area-inset-bottom) + 16px));transform:translateX(-50%);display:flex;align-items:center;gap:18px;padding:7px 12px;border:1px solid rgba(255,255,255,.24);border-radius:999px;background:rgba(18,18,22,.78);color:#fff;font:600 14px/1 system-ui,sans-serif;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.sp-scene-image-viewer-pages[hidden]{display:none!important}
+.sp-scene-image-viewer-pages button{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:#fff;font:400 30px/1 system-ui,sans-serif;cursor:pointer;touch-action:manipulation}
+.sp-scene-image-viewer-pages button:disabled{opacity:.35}
+.sp-scene-image-viewer-page-count{min-width:54px;text-align:center;white-space:nowrap}

@@ -14190,3 +14190,5 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .scene-package-ready-actions{display:grid;grid-template-columns:1fr 1fr}
 .scene-package-ready-actions #scenePackageReadyShare{grid-column:1/-1}
 @media(max-width:520px){.scene-package-export-card{padding:20px}.scene-package-export-card .distribution-export-actions{margin:18px -20px -20px;padding:12px 20px calc(14px + env(safe-area-inset-bottom))}.scene-package-export-card .distribution-export-actions button{min-height:48px}}
+
+.scene-image-pages-editor{display:grid;gap:6px;margin:10px 0;padding:10px;border:1px solid rgba(140,150,175,.25);border-radius:12px}.scene-image-pages-head{font-weight:700}.scene-image-page-row{display:flex;align-items:center;gap:5px;min-width:0}.scene-image-page-row span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.scene-image-page-row button,.scene-image-pages-add{min-height:34px;border:1px solid rgba(140,150,175,.35);border-radius:8px;padding:4px 8px;background:rgba(255,255,255,.06);color:inherit}.scene-image-pages-add{width:100%;margin-top:4px}

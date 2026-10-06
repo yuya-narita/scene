@@ -4249,6 +4249,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
             viewState.dragging=false;
 
+            // Horizontal swipes turn pages only at fit scale; zoomed manga remains pannable.
+            if(viewState.scale<=1.01 && pages.length>1 && Math.abs(x-viewState.touchStartX)>72 && duration<700){
+              showPage(pageIndex+(x<viewState.touchStartX?1:-1));
+              return;
+            }
             // Downward flick closes only at 1×, so it never fights with image panning.
             if(viewState.scale<=1.01 && !wasMoved && false){
               // reserved
@@ -4353,8 +4358,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         frame._sceneImageReset = resetView;
 
+        const pageControls = document.createElement('div');
+        pageControls.className='sp-scene-image-viewer-pages';
+        pageControls.hidden=true;
+        const prevPage=document.createElement('button');prevPage.type='button';prevPage.className='sp-scene-image-viewer-page-prev';prevPage.setAttribute('aria-label','Previous page');prevPage.textContent='‹';
+        const pageCount=document.createElement('span');pageCount.className='sp-scene-image-viewer-page-count';pageCount.setAttribute('aria-live','polite');
+        const nextPage=document.createElement('button');nextPage.type='button';nextPage.className='sp-scene-image-viewer-page-next';nextPage.setAttribute('aria-label','Next page');nextPage.textContent='›';
+        pageControls.append(prevPage,pageCount,nextPage);
         frame.append(close,img);
-        viewer.append(shade,frame);
+        viewer.append(shade,frame,pageControls);
         document.body.appendChild(viewer);
 
         // V110 — object continuity transition. The fullscreen viewer still owns all
@@ -4426,7 +4438,27 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const rotation=Number.parseFloat(getComputedStyle(media||si).getPropertyValue('--sp-scene-image-rotation'))||0;
         return {left:r.left,top:r.top,width:r.width,height:r.height,rotation};
       })();
-      img.src = src;
+      const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&typeof page.src==='string'&&page.src);
+      let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
+      const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
+      const showPage=(index)=>{
+        if(!pages.length)return;
+        pageIndex=Math.max(0,Math.min(pages.length-1,index));
+        const page=pages[pageIndex];
+        img.alt=page.alt||alt||'';
+        if(img.src!==page.src)img.src=page.src;
+        pageControls.hidden=pages.length<2;
+        pageControls.querySelector('.sp-scene-image-viewer-page-count').textContent=`${pageIndex+1} / ${pages.length}`;
+        pageControls.querySelector('.sp-scene-image-viewer-page-prev').disabled=pageIndex===0;
+        pageControls.querySelector('.sp-scene-image-viewer-page-next').disabled=pageIndex===pages.length-1;
+        frame?._sceneImageReset?.();
+        frame?._fitSceneImageFrame?.();
+      };
+      const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
+      const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
+      if(prevButton)prevButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();showPage(pageIndex-1);};
+      if(nextButton)nextButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();showPage(pageIndex+1);};
+      if(pages.length)showPage(pageIndex);else img.src = src;
         const syncBoundedFrame=()=>{frame?._fitSceneImageFrame?.();frame?._sceneImageReset?.();};
         if(img.complete&&img.naturalWidth>0)requestAnimationFrame(syncBoundedFrame);
         else img.addEventListener('load',()=>requestAnimationFrame(syncBoundedFrame),{once:true});
@@ -4615,10 +4647,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _appendSceneImage(container, scene, presentation, { history=false } = {}) {
       const image = presentation?.image;
-      if (!image?.src || !container) return;
+      const pages=Array.isArray(image?.pages)?image.pages.filter(page=>page&&typeof page.src==='string'&&page.src):[];
+      const firstImage=pages[0]||image;
+      if (!firstImage?.src || !container) return;
 
       const wrap = document.createElement(history ? 'span' : 'div');
       wrap.className = history ? 'sp-history-scene-image' : 'sp-scene-image';
+      if(pages.length>1){wrap.dataset.pageCount=String(pages.length);wrap.classList.add('has-page-stack');}
       wrap.dataset.imageSize = ['small','large'].includes(image.size)
         ? image.size
         : ((presentation?.view==='chat') ? 'small' : 'large');
@@ -4639,7 +4674,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (image.shadow === true) media.classList.add('has-object-shadow');
 
       const img = document.createElement('img');
-      img.alt = image.alt || '';
+      img.alt = firstImage.alt || image.alt || '';
       img.loading = history ? 'lazy' : 'eager';
       img.decoding = 'async';
 
@@ -4689,17 +4724,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       img.addEventListener('load', refreshHistoryGeometryAfterImageLoad, {once:true});
 
-      img.src = image.src;
+      img.src = firstImage.src;
       media.appendChild(img);
 
       const object = document.createElement(history ? 'span' : 'div');
       object.className = history ? 'sp-history-scene-image-object' : 'sp-scene-image-object';
       object.appendChild(media);
       let caption = null;
-      if (image.caption === true && String(image.alt || '').trim()) {
+      if (image.caption === true && String(firstImage.alt || image.alt || '').trim()) {
         caption = document.createElement(history ? 'span' : 'div');
         caption.className = history ? 'sp-history-scene-image-caption' : 'sp-scene-image-caption';
-        caption.textContent = String(image.alt).trim();
+        caption.textContent = String(firstImage.alt || image.alt).trim();
         object.appendChild(caption);
       }
       wrap.appendChild(object);
@@ -4733,7 +4768,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const imageTapAction = image.tapAction || (image.fullscreen === false ? 'none' : 'fullscreen');
       if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
-        const hasViewRec = imageTapAction === 'viewRec' && (image.viewPoints?.points||image.viewRec?.points)?.length > 0;
+        const firstViewPoints=firstImage.viewPoints||image.viewPoints;
+        const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;
         wrap.classList.add(hasViewRec ? 'is-view-rec' : 'is-zoomable');
         wrap.setAttribute('role','button');
         wrap.setAttribute('tabindex','0');
@@ -4743,8 +4779,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const open = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (hasViewRec) this._openSceneImageViewRec(image, wrap);
-          else this._openSceneImage(image.src, image.alt || '', {sourceEl:wrap});
+          if (hasViewRec) this._openSceneImageViewRec({...image,src:firstImage.src,alt:firstImage.alt||image.alt,viewPoints:firstViewPoints}, wrap);
+          else this._openSceneImage(firstImage.src, firstImage.alt || image.alt || '', {sourceEl:wrap,pages:pages.length>1?pages:undefined,pageIndex:0});
         };
         wrap.addEventListener('click',open);
         wrap.addEventListener('keydown',(event)=>{

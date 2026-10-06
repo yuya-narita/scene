@@ -3990,8 +3990,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         frame._sceneImageReset = resetView;
 
-        frame.append(close,img);
-        viewer.append(shade,frame);
+        const pageControls=document.createElement('div');pageControls.className='sp-scene-image-viewer-pages';pageControls.hidden=true;
+        const prevPage=document.createElement('button');prevPage.type='button';prevPage.className='sp-scene-image-viewer-page-prev';prevPage.setAttribute('aria-label','Previous page');prevPage.textContent='‹';
+        const pageCount=document.createElement('span');pageCount.className='sp-scene-image-viewer-page-count';pageCount.setAttribute('aria-live','polite');
+        const nextPage=document.createElement('button');nextPage.type='button';nextPage.className='sp-scene-image-viewer-page-next';nextPage.setAttribute('aria-label','Next page');nextPage.textContent='›';pageControls.append(prevPage,pageCount,nextPage);
+        frame.append(close,img);viewer.append(shade,frame,pageControls);
         document.body.appendChild(viewer);
 
         const shut = (event) => {
@@ -4013,8 +4016,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const img = viewer.querySelector('.sp-scene-image-viewer-img');
       const frame = viewer.querySelector('.sp-scene-image-viewer-frame');
       frame?._sceneImageReset?.();
-      img.src = src;
-      img.alt = alt || '';
+      const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&page.src);let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
+      const controls=viewer.querySelector('.sp-scene-image-viewer-pages');
+      const showPage=index=>{if(!pages.length)return;pageIndex=Math.max(0,Math.min(pages.length-1,index));const page=pages[pageIndex];img.src=page.src;img.alt=page.alt||alt||'';controls.hidden=pages.length<2;controls.querySelector('.sp-scene-image-viewer-page-count').textContent=`${pageIndex+1} / ${pages.length}`;controls.querySelector('.sp-scene-image-viewer-page-prev').disabled=pageIndex===0;controls.querySelector('.sp-scene-image-viewer-page-next').disabled=pageIndex===pages.length-1;};
+      controls.querySelector('.sp-scene-image-viewer-page-prev').onclick=e=>{e.stopPropagation();showPage(pageIndex-1);};controls.querySelector('.sp-scene-image-viewer-page-next').onclick=e=>{e.stopPropagation();showPage(pageIndex+1);};
+      if(pages.length)showPage(pageIndex);else{img.src=src;img.alt=alt||'';}
       viewer.hidden = false;
       document.documentElement.classList.add('sp-scene-image-open');
       viewer.querySelector('.sp-scene-image-viewer-close')?.focus({preventScroll:true});
@@ -4022,10 +4028,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _appendSceneImage(container, scene, presentation, { history=false } = {}) {
       const image = presentation?.image;
-      if (!image?.src || !container) return;
+      const pages=Array.isArray(image?.pages)?image.pages.filter(page=>page?.src):[];const firstImage=pages[0]||image;
+      if (!firstImage?.src || !container) return;
 
       const wrap = document.createElement(history ? 'span' : 'div');
       wrap.className = history ? 'sp-history-scene-image' : 'sp-scene-image';
+      if(pages.length>1){wrap.dataset.pageCount=String(pages.length);wrap.classList.add('has-page-stack');}
       wrap.dataset.imageSize = ['small','large'].includes(image.size)
         ? image.size
         : ((presentation?.view==='chat') ? 'small' : 'large');
@@ -4041,7 +4049,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       media.className = history ? 'sp-history-scene-image-media' : 'sp-scene-image-media';
 
       const img = document.createElement('img');
-      img.alt = image.alt || '';
+      img.alt = firstImage.alt || image.alt || '';
       img.loading = history ? 'lazy' : 'eager';
       img.decoding = 'async';
 
@@ -4088,7 +4096,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       img.addEventListener('load', refreshHistoryGeometryAfterImageLoad, {once:true});
 
-      img.src = image.src;
+      img.src = firstImage.src;
       media.appendChild(img);
       wrap.appendChild(media);
 
