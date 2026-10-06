@@ -4445,41 +4445,14 @@
     return payload;
   }
 
-  async function saveLatestMasterSceneByUser(){
+  function saveLatestMasterSceneByUser(){
     const masterDocument=latestPublishedMasterDocument||workingDocument;
-    if(!masterDocument?.scenes?.length)return false;
-    try{
-      const result=await buildScenePackage(masterDocument);
-      const name=`${safeFileStem(result.doc.title)}.scene`;
-      downloadBlobFile(name,result.blob);
-      setProjectIoStatus(
-        uiLanguage==='ja'
-          ? `最新版 ${name} を保存しました（revision ${result.doc?.studio?.identity?.revision||0}）`
-          : `Saved latest ${name} (revision ${result.doc?.studio?.identity?.revision||0})`
-      );
-      return true;
-    }catch(error){
-      console.warn('Latest master .scene save failed',error);
-      const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
-      setProjectIoStatus(
-        uiLanguage==='ja'
-          ? (assetFailure
-              ? '素材を.scene内へ回収できなかったため、保存を中止しました。壊れたMaster .sceneは作りません。'
-              : '最新版.sceneを保存できませんでした。もう一度お試しください。')
-          : (assetFailure
-              ? 'Saving was stopped because an asset could not be embedded. A broken Master .scene was not created.'
-              : 'Could not save the latest .scene. Please try again.'),
-        {error:true}
-      );
-      if(assetFailure){
-        appAlert(
-          uiLanguage==='ja'
-            ? `Master .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
-            : `The Master .scene must be self-contained.\n\nThis asset could not be retrieved, so export was stopped:\n${error?.assetUrl||''}`
-        );
-      }
+    if(!masterDocument?.scenes?.length){
+      setProjectIoStatus(uiLanguage==='ja'?'保存できる最新版.sceneがありません。':'No latest .scene is available to save.',{error:true});
       return false;
     }
+    openScenePackageExportDialog(masterDocument);
+    return true;
   }
 
   function showLatestMasterSceneSaveAction(){
@@ -4542,10 +4515,12 @@
 
   let pendingScenePackageExport=null;
   let scenePackageFilenameManual=false;
-  function openScenePackageExportDialog(){
+  let scenePackageExportSourceDocument=null;
+  function openScenePackageExportDialog(documentOverride=null){
     try{
-      if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
-      const doc=sceneDocumentForExport();
+      if(!documentOverride&&!advancedScreen.hidden)syncAdvancedFieldsToScene();
+      const doc=documentOverride?clone(documentOverride):sceneDocumentForExport();
+      scenePackageExportSourceDocument=clone(doc);
       $('#exportWorkTitle').value=doc.title||'';
       $('#exportWorkAuthor').value=doc.author||'';
       $('#exportWorkEpisode').value=doc.metadata?.episode||'';
@@ -4559,10 +4534,10 @@
     }
   }
 
-  async function exportScenePackage(exportMetadata={}){
+  async function exportScenePackage(exportMetadata={},documentOverride=null){
     try{
-      if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
-      const source=sceneDocumentForExport();
+      if(!documentOverride&&!advancedScreen.hidden)syncAdvancedFieldsToScene();
+      const source=documentOverride?clone(documentOverride):sceneDocumentForExport();
       source.title=String(exportMetadata.title??source.title??'').trim()||'Untitled';
       source.author=String(exportMetadata.author??source.author??'').trim();
       source.metadata||={};
@@ -4590,6 +4565,7 @@
         try{fileHandle=await pickerPromise;}
         catch(error){if(error?.name==='AbortError')return;throw error;}
       }
+      setProjectIoStatus(uiLanguage==='ja'?`${name} を作成しています…`:`Creating ${name}…`);
       const result=await buildScenePackage(source);
       if(fileHandle){
         const writable=await fileHandle.createWritable();
@@ -8694,7 +8670,10 @@
   // always receive their event listeners.
   $('#exportPackageButton')?.addEventListener('click',openScenePackageExportDialog);
   $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();openScenePackageExportDialog();});
-  $('#scenePackageExportCancel')?.addEventListener('click',()=>$('#scenePackageExportDialog')?.close('cancel'));
+  $('#scenePackageExportCancel')?.addEventListener('click',()=>{
+    $('#scenePackageExportDialog')?.close('cancel');
+    scenePackageExportSourceDocument=null;
+  });
   $('#scenePackageExportForm')?.addEventListener('submit',(event)=>{
     event.preventDefault();
     const exportMetadata={
@@ -8704,9 +8683,11 @@
       episodeTitle:$('#exportWorkEpisodeTitle')?.value||'',
       fileName:$('#exportWorkFileName')?.value||''
     };
+    const sourceDocument=scenePackageExportSourceDocument;
+    scenePackageExportSourceDocument=null;
     $('#scenePackageExportDialog')?.close('export');
     // Keep the native file picker inside the confirmation click's user gesture.
-    exportScenePackage(exportMetadata);
+    exportScenePackage(exportMetadata,sourceDocument);
   });
   $('#exportWorkFileName')?.addEventListener('input',()=>{scenePackageFilenameManual=true;});
   ['exportWorkTitle','exportWorkEpisode'].forEach(id=>$('#'+id)?.addEventListener('input',()=>{
