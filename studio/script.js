@@ -7875,6 +7875,29 @@
     if(!current?.src)scene.presentation.background=target;
     return true;
   }
+  function applyPreviousBackgroundFramingForward(sceneIndex){
+    const previous=previousEffectiveBackground(sceneIndex);
+    if(!previous?.src)return 0;
+    const position=previous.position||'center center';
+    const fit=previous.fit==='contain'?'contain':'cover';
+    const positions=previous.positions&&typeof previous.positions==='object'?clone(previous.positions):null;
+    let changed=0;
+    for(let i=Math.max(0,Number(sceneIndex)||0);i<(workingDocument?.scenes?.length||0);i++){
+      const scene=workingDocument.scenes[i];
+      if(!scene?.presentation)continue;
+      const current=scene.presentation.background;
+      if(current?.src==='')continue;
+      const effective=current?.src?current:previousEffectiveBackground(i);
+      if(!effective?.src)continue;
+      const target=current?.src?current:{...(current||{}),_editorManaged:true};
+      target.position=position;
+      target.fit=fit;
+      if(positions)target.positions=clone(positions);else delete target.positions;
+      if(!current?.src)scene.presentation.background=target;
+      changed++;
+    }
+    return changed;
+  }
   function closeCoverPositionEditor(save=true){
     if(!coverPositionDialog)return;
 
@@ -11791,6 +11814,16 @@ function openDesktopBackgroundDetail(){
     copyPreviousPosition.disabled=(!sourceBg.src&&!inheritedBackground?.src)||sourceBg.src===''||!previousFraming()?.src;
     copyPreviousPosition.classList.add('desktop-background-copy-position');
     sourceSec.appendChild(copyPreviousPosition);
+    const copyPreviousPositionForward=desktopAction(u('前Sceneの表示位置を以降に一括適用','Apply previous Scene position to all following Scenes'),()=>{
+      captureUndo('後続Sceneの背景位置変更を元に戻せます');
+      if(!applyPreviousBackgroundFramingForward(index))return;
+      apply();
+      closeDesktopBackgroundDetail();
+      openDesktopBackgroundDetail();
+    });
+    copyPreviousPositionForward.disabled=!previousFraming()?.src||sourceBg.src==='';
+    copyPreviousPositionForward.classList.add('desktop-background-copy-forward');
+    sourceSec.appendChild(copyPreviousPositionForward);
 
     // LIGHT ---------------------------------------------------------------
     const lightSec=section(u('明るさ・質感','Brightness & texture'));
@@ -13477,11 +13510,19 @@ function openDesktopTextDetail(){
     const bgPositionRow=document.createElement('div');
     bgPositionRow.className='desktop-live-bg-position-row';
     bgPositionRow.append(bgPositionAction,bgCopyPreviousAction);
+    const bgCopyPreviousForwardAction=desktopAction(u('前Sceneの表示位置を以降に一括適用','Apply previous Scene position to all following Scenes'),()=>{
+      captureUndo('後続Sceneの背景位置変更を元に戻せます');
+      if(!applyPreviousBackgroundFramingForward(index))return;
+      refresh();
+      renderDesktopLivePanel();
+    });
+    bgCopyPreviousForwardAction.disabled=!previousEffectiveBackground(index)?.src||bg?.src==='';
+    bgCopyPreviousForwardAction.classList.add('desktop-live-bg-copy-forward');
     const tone=document.createElement('div');tone.className='desktop-live-choice desktop-live-bg-tone-row';
     tone.append(desktopAction(u('暗く','Dark'),()=>{if(p.background?.src){captureUndo('背景の明るさ変更を元に戻せます');p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction(u('明るく','Light'),()=>{if(p.background?.src){captureUndo('背景の明るさ変更を元に戻せます');p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
     const bgDetailAction=desktopDetail(t('detail.background'),'background');
     bgDetailAction.classList.add('desktop-live-bg-detail');
-    bgControls.append(bgBtns,bgPositionRow,tone,bgDetailAction);
+    bgControls.append(bgBtns,bgPositionRow,bgCopyPreviousForwardAction,tone,bgDetailAction);
     bgTop.append(bgPreview,bgControls);
     bgCard.appendChild(bgTop);
 
@@ -14669,6 +14710,14 @@ function openDesktopTextDetail(){
         if(!copyPreviousBackgroundFraming(index))return;
         scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');
       };
+      const copyPreviousPositionForward=makeActionButton(u('前Sceneの表示位置を以降に一括適用','Apply previous Scene position to all following Scenes'));
+      copyPreviousPositionForward.disabled=!previousEffectiveBackground(liveEditScene().index)?.src||bg?.src==='';
+      copyPreviousPositionForward.onclick=()=>{
+        const {index}=liveEditScene();
+        captureUndo('後続Sceneの背景位置変更を元に戻せます');
+        if(!applyPreviousBackgroundFramingForward(index))return;
+        scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');
+      };
       const toneRow=document.createElement('div');toneRow.className='live-edit-choice-row live-edit-tone-row';
       const tone=bg?.tone || ((workingDocument?.theme==='cinema'&&workingDocument?.appearance?.cinemaTone==='light')?'light':'dark');
       const dark=makeActionButton(u('暗く','Dark'),bg?.src&&tone==='dark'?'is-selected':'');
@@ -14684,7 +14733,7 @@ function openDesktopTextDetail(){
       if(!bg?.src){dark.disabled=true;light.disabled=true;}
       const status=document.createElement('div');status.className='live-edit-status';status.textContent=bg?.src?`${u('選択中：','Selected: ')}${bg._editorFileName||u('背景画像','background image')}`:(bg?.src===''?u('このSceneから背景なし','No background from this Scene'):u('前Sceneの背景を継続','Continue previous Scene background'));
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=u('暗さ・動き・切替を細かく調整','Adjust brightness, motion & transitions');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('background');});
-      liveEditSheetBody.append(actions,pick,positionAdjust,copyPreviousPosition,toneRow,status,detail);return;
+      liveEditSheetBody.append(actions,pick,positionAdjust,copyPreviousPosition,copyPreviousPositionForward,toneRow,status,detail);return;
     }
 
     liveEditSheetTitle.textContent=uiLanguage==='en'?'Audio':'音';
