@@ -7749,7 +7749,7 @@
   }
 
   function activePositionEditorImage(){
-    if(positionEditorMode==='background')return sceneBackgroundPositionContext?.scene?.presentation?.background?.src||'';
+    if(positionEditorMode==='background')return sceneBackgroundPositionContext?.sourceSrc||sceneBackgroundPositionContext?.background?.src||'';
     return coverImageUrl;
   }
   function renderCoverPositionStage(){
@@ -7757,7 +7757,7 @@
     const src=activePositionEditorImage();
     coverPositionStage.style.backgroundImage=src?`url("${src}")`:'none';
     coverPositionStage.style.backgroundPosition=positionPairCss({x:coverPositionX,y:coverPositionY});
-    if(positionEditorMode==='background')coverPositionStage.style.backgroundSize=sceneBackgroundPositionContext?.scene?.presentation?.background?.fit||'cover';
+    if(positionEditorMode==='background')coverPositionStage.style.backgroundSize=sceneBackgroundPositionContext?.background?.fit||sceneBackgroundPositionContext?.sourceFit||'cover';
   }
   function storeActiveCoverPosition(){
     if(positionEditorMode==='cover')coverPositions[coverPositionDevice]={x:coverPositionX,y:coverPositionY};
@@ -7803,13 +7803,18 @@
     document.documentElement.classList.add('cover-position-open');
   }
   function openSceneBackgroundPositionEditor(scene,onApply){
-    const bg=scene?.presentation?.background;
-    if(!coverPositionDialog||!bg?.src)return;
+    const current=scene?.presentation?.background;
+    const sceneIndex=workingDocument?.scenes?.indexOf(scene)??-1;
+    const source=current?.src?current:previousEffectiveBackground(sceneIndex);
+    if(!coverPositionDialog||!source?.src||current?.src==='')return;
+    // Inherited backgrounds have no source on this Scene. Keep that inheritance
+    // intact and only save a local framing override if the author changes it.
+    const bg=current?.src?current:{...(current||{}),fit:current?.fit||source.fit||'cover',position:current?.position||source.position||'center center'};
     portalCoverPositionDialog();
     const restoreCover={x:coverPositionX,y:coverPositionY};
     const pos=positionPairFromValue(bg.position||'center center');
     positionEditorMode='background';
-    sceneBackgroundPositionContext={scene,restoreCover,onApply};
+    sceneBackgroundPositionContext={scene,background:bg,sourceSrc:source.src,sourceFit:source.fit||'cover',inherited:!current?.src,restoreCover,onApply};
     coverPositionX=pos.x;coverPositionY=pos.y;
     coverPositionBeforeEdit={x:pos.x,y:pos.y};
     if(coverPositionStage)coverPositionStage.setAttribute('aria-label','背景画像の表示位置を調整');
@@ -7838,11 +7843,13 @@
     const scene=workingDocument?.scenes?.[sceneIndex];
     const current=scene?.presentation?.background;
     const previous=previousEffectiveBackground(sceneIndex);
-    if(!current?.src||!previous?.src)return false;
-    current.position=previous.position||'center center';
-    current.fit=previous.fit==='contain'?'contain':'cover';
-    if(previous.positions&&typeof previous.positions==='object')current.positions=clone(previous.positions);
-    else delete current.positions;
+    if(!scene?.presentation||current?.src===''||!previous?.src)return false;
+    const target=current?.src?current:{...(current||{})};
+    target.position=previous.position||'center center';
+    target.fit=previous.fit==='contain'?'contain':'cover';
+    if(previous.positions&&typeof previous.positions==='object')target.positions=clone(previous.positions);
+    else delete target.positions;
+    if(!current?.src)scene.presentation.background=target;
     return true;
   }
   function closeCoverPositionEditor(save=true){
@@ -7851,8 +7858,8 @@
     if(positionEditorMode==='background' && sceneBackgroundPositionContext){
       const ctx=sceneBackgroundPositionContext;
       if(save){
-        const bg=ctx.scene?.presentation?.background;
-        if(bg?.src)bg.position=positionPairCss({x:coverPositionX,y:coverPositionY});
+        ctx.background.position=positionPairCss({x:coverPositionX,y:coverPositionY});
+        if(ctx.inherited&&ctx.scene?.presentation)ctx.scene.presentation.background=ctx.background;
       }
       coverPositionX=ctx.restoreCover.x;coverPositionY=ctx.restoreCover.y;
       sceneBackgroundPositionContext=null;
@@ -11721,16 +11728,16 @@ function openDesktopBackgroundDetail(){
     });
 
     const sourceBg=explicit()||{};
+    const inheritedBackground=sourceBg.src?sourceBg:previousFraming();
     const sourcePositionAdjust=desktopAction(t('cover.positionAdjust'),()=>{
-      const bg=explicit();
-      if(!bg?.src)return;
+      if(!inheritedBackground?.src)return;
       captureUndo('背景位置の変更を元に戻せます');
       openSceneBackgroundPositionEditor(scene,()=>{
         scheduleDraftSave(40);
         refreshLivePlayer({preserveSheet:true});
       });
     },'is-primary');
-    if(!sourceBg.src)sourcePositionAdjust.disabled=true;
+    if(!inheritedBackground?.src||sourceBg.src==='')sourcePositionAdjust.disabled=true;
 
     assetActions.append(choose,clear);
     assetRow.append(thumb,assetActions);
@@ -11758,7 +11765,7 @@ function openDesktopBackgroundDetail(){
       closeDesktopBackgroundDetail();
       openDesktopBackgroundDetail();
     });
-    copyPreviousPosition.disabled=!sourceBg.src||!previousFraming()?.src;
+    copyPreviousPosition.disabled=(!sourceBg.src&&!inheritedBackground?.src)||sourceBg.src===''||!previousFraming()?.src;
     copyPreviousPosition.classList.add('desktop-background-copy-position');
     sourceSec.appendChild(copyPreviousPosition);
 
@@ -13424,7 +13431,7 @@ function openDesktopTextDetail(){
       },bg?.src===''?'is-selected':'')
     );
     const bgPositionAction=desktopAction(t('cover.positionAdjust'),()=>{
-      if(!p.background?.src)return;
+      if(p.background?.src==='')return;
       captureUndo('背景位置の変更を元に戻せます');
       openSceneBackgroundPositionEditor(scene,()=>{
         scheduleDraftSave(40);
@@ -13432,7 +13439,7 @@ function openDesktopTextDetail(){
         if(desktopLiveActive())renderDesktopLivePanel();
       });
     });
-    bgPositionAction.disabled=!bg?.src;
+    bgPositionAction.disabled=(!bg?.src&&!previousFraming()?.src)||bg?.src==='';
     bgPositionAction.classList.add('desktop-live-bg-position');
     const bgCopyPreviousAction=desktopAction(u('前Sceneの表示位置をコピー','Copy previous Scene position'),()=>{
       captureUndo('背景位置の変更を元に戻せます');
@@ -13440,7 +13447,7 @@ function openDesktopTextDetail(){
       refresh();
       renderDesktopLivePanel();
     });
-    bgCopyPreviousAction.disabled=!bg?.src||!previousEffectiveBackground(index)?.src;
+    bgCopyPreviousAction.disabled=(!bg?.src&&!previousEffectiveBackground(index)?.src)||bg?.src==='';
     bgCopyPreviousAction.classList.add('desktop-live-bg-copy-position');
     const bgPositionRow=document.createElement('div');
     bgPositionRow.className='desktop-live-bg-position-row';
@@ -14619,9 +14626,10 @@ function openDesktopTextDetail(){
         });
       });
       const positionAdjust=makeActionButton(t('cover.positionAdjust'));
-      positionAdjust.disabled=!bg?.src;
+      const inheritedBackground=bg?.src?bg:previousEffectiveBackground(liveEditScene().index);
+      positionAdjust.disabled=(!inheritedBackground?.src)||bg?.src==='';
       positionAdjust.onclick=()=>{
-        if(!p.background?.src)return;
+        if(p.background?.src==='')return;
         captureUndo('背景位置の変更を元に戻せます');
         openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(60);
@@ -14629,7 +14637,7 @@ function openDesktopTextDetail(){
         });
       };
       const copyPreviousPosition=makeActionButton(u('前Sceneの表示位置をコピー','Copy previous Scene position'));
-      copyPreviousPosition.disabled=!bg?.src||!previousEffectiveBackground(liveEditScene().index)?.src;
+      copyPreviousPosition.disabled=(!bg?.src&&!previousEffectiveBackground(liveEditScene().index)?.src)||bg?.src==='';
       copyPreviousPosition.onclick=()=>{
         const {index}=liveEditScene();
         captureUndo('背景位置の変更を元に戻せます');
