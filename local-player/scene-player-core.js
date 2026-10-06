@@ -4235,7 +4235,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
             const activePages=viewer._scenePages||[];
             const activeIndex=viewer._scenePageIndex||0;
-            if(viewState.scale<=1.01 && activePages.length>1 && !frame.classList.contains('is-view-rec-playing') && Math.abs(totalDx)>12 && Math.abs(totalDx)>Math.abs(totalDy)*1.15){
+            if(viewState.scale<=1.01 && activePages.length>1 && Math.abs(totalDx)>12 && Math.abs(totalDx)>Math.abs(totalDy)*1.15){
               const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
               const advances=direction==='rtl'?totalDx>0:totalDx<0;
               const target=activeIndex+(advances?1:-1);
@@ -4281,7 +4281,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(draggedPage){
               const dx=x-viewState.touchStartX,commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32))&&Math.abs(dx)>Math.abs(vertical)*1.2&&duration<900;
               draggedPage.underlay.remove();viewState.pageDrag=null;img.style.willChange='';img.style.zIndex='';
-              if(commit){const advances=viewer._scenePageDirection==='rtl'?dx>0:dx<0,target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));if(target!==activeIndex){viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;showPage(target);img.style.translate='';options?.onPageChange?.(target);}else img.style.translate='';}
+                if(commit){const advances=viewer._scenePageDirection==='rtl'?dx>0:dx<0,target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));if(target!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}}else img.style.translate='';}
               else img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
               clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;viewState.multiTouch=false;return;
             }
@@ -4289,7 +4289,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
               const dx=x-viewState.touchStartX,advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
               const targetPage=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
-              if(targetPage!==activeIndex){showPage(targetPage);options?.onPageChange?.(targetPage);}
+              if(targetPage!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange)viewer._sceneOnPageChange(targetPage);else{viewer._sceneShowPage?.(targetPage);viewer._sceneOnPageChange?.(targetPage);}}
               viewState.multiTouch=false;
               return;
             }
@@ -4482,6 +4482,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const img = viewer.querySelector('.sp-scene-image-viewer-img');
       const frame = viewer.querySelector('.sp-scene-image-viewer-frame');
       if (frame) frame._sceneImageMode = options?.mode === 'viewPoint' ? 'viewPoint' : 'fullscreen';
+      if(options?.mode==='viewPoint')img.style.visibility=options?.viewPointStartHidden?'hidden':'';
       if(options?.mode!=='viewPoint')frame?._viewRecCancel?.();
       frame?._sceneImageReset?.();
       viewer._sceneImageSourceEl = options?.sourceEl || null;
@@ -4600,7 +4601,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         return;
       }
 
-      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange:image.onPageChange,animatePageEntry:image.animatePageEntry===true,direction:image.pageDirection||'ltr'});
+      const fallbackPageChange=(pageIndex)=>{
+        const pages=Array.isArray(image.pages)?image.pages:[],page=pages[pageIndex];if(!page?.src)return;
+        const pagePoints=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
+        if((pagePoints?.points||[]).length)this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,onPageChange:fallbackPageChange,animatePageEntry:false},null);
+        else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
+      };
+      const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
+      const startAtAuthoredPoint=(Number(image.pageIndex)||0)>0;
+      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange,animatePageEntry:image.animatePageEntry===true&&!startAtAuthoredPoint,viewPointStartHidden:startAtAuthoredPoint,direction:image.pageDirection||'ltr'});
       const viewer = document.querySelector('.sp-scene-image-viewer');
       const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
       const img = viewer?.querySelector('.sp-scene-image-viewer-img');
@@ -4694,7 +4703,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const currentPage=Math.max(0,Number(image.pageIndex)||0);
           const nextIndex=currentPage+1;
           const nextPage=pages[nextIndex];
-          const nextPoints=nextPage?.viewPoints||null;
+          const nextPoints=nextPage?.viewPoints||nextPage?.viewRec||null;
           if(nextPage?.src&&(nextPoints?.points||[]).length){
             const nextImage={...image,src:nextPage.src,alt:nextPage.alt??image.alt??'',viewPoints:nextPoints,pageIndex:nextIndex,animatePageEntry:true};
             cancel();
@@ -4729,6 +4738,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // not need an extra fullscreen click before keyboard/tap progression begins.
           // Let the V110 pickup transition finish, then move straight to point 1.
           if(index<0&&points.length){
+            if(startAtAuthoredPoint){index=0;apply(coords(points[0]));initializing=false;img.style.visibility='';return;}
             // Wait for the V110 pickup animation, then establish point 1 as a real
             // settled state. Only after that may Enter/tap advance to point 2.
             setTimeout(()=>{
@@ -4879,7 +4889,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const hasViewPoints = pages.some(page => (page.viewPoints?.points || page.viewRec?.points || []).length) || (image.viewPoints?.points || image.viewRec?.points || []).length > 0;
       const imageTapAction = image.tapAction || (hasViewPoints ? 'viewRec' : pages.length > 1 ? 'fullscreen' : image.fullscreen === false ? 'none' : 'fullscreen');
       if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
-        const firstViewPoints=firstImage.viewPoints||image.viewPoints;
+        const firstViewPoints=firstImage.viewPoints||firstImage.viewRec||image.viewPoints||image.viewRec;
         const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;
         wrap.classList.add(hasViewRec ? 'is-view-rec' : 'is-zoomable');
         wrap.setAttribute('role','button');
@@ -4893,7 +4903,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const openBundlePage=(pageIndex,{fromScene=false}={})=>{
             const page=pages[pageIndex]||firstImage;
             const sourceEl=fromScene?wrap:null;
-            const pointSet=page.viewPoints||(pageIndex===0?image.viewPoints:null);
+            const pointSet=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
             const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage};
             if(imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,sourceEl);
             else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage,direction:image.pageDirection||'ltr'});
