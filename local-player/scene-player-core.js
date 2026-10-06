@@ -4020,10 +4020,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         viewer.setAttribute('role','dialog');
         viewer.setAttribute('aria-modal','true');
 
-        const shade = document.createElement('button');
-        shade.type = 'button';
+        const shade = document.createElement('div');
         shade.className = 'sp-scene-image-viewer-shade';
-        shade.setAttribute('aria-label','Close image');
+        shade.setAttribute('aria-hidden','true');
 
         const frame = document.createElement('div');
         frame.className = 'sp-scene-image-viewer-frame';
@@ -4061,7 +4060,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           touchStartTime: 0,
           lastTapTime: 0,
           lastTapX: 0,
-          lastTapY: 0
+          lastTapY: 0,
+          multiTouch: false
         };
 
         const viewportSize = () => ({
@@ -4181,6 +4181,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // V109 — the close control must always win over zoom/pan gestures.
           if(event.target.closest?.('.sp-scene-image-viewer-close')) return;
           if(event.touches.length===2){
+            viewState.multiTouch=true;
             frame._unlockViewPointCanvas?.();
             event.preventDefault();
             const c=center(event.touches[0],event.touches[1]);
@@ -4193,12 +4194,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             viewState.dragging=false;
             viewState.moved=true;
           }else if(event.touches.length===1){
+            if(!viewState.multiTouch)viewState.multiTouch=false;
             const t=event.touches[0];
             viewState.touchStartX=t.clientX;
             viewState.touchStartY=t.clientY;
             viewState.touchStartTime=performance.now();
             viewState.moved=false;
             if(viewState.scale>1.01){
+              frame._unlockViewPointCanvas?.();
               event.preventDefault();
               viewState.dragging=true;
               viewState.lastX=t.clientX;
@@ -4224,7 +4227,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const t=event.touches[0];
             const totalDx=t.clientX-viewState.touchStartX;
             const totalDy=t.clientY-viewState.touchStartY;
-            if(Math.hypot(totalDx,totalDy)>6)viewState.moved=true;
+            if(Math.hypot(totalDx,totalDy)>10)viewState.moved=true;
 
             if(viewState.scale>1.01){
               event.preventDefault();
@@ -4250,15 +4253,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             viewState.dragging=false;
 
             // Horizontal swipes turn pages only at fit scale; zoomed manga remains pannable.
-            if(viewState.scale<=1.01 && pages.length>1 && Math.abs(x-viewState.touchStartX)>72 && duration<700){
-              showPage(pageIndex+(x<viewState.touchStartX?1:-1));
-              options?.onPageChange?.(pageIndex);
+            if(!viewState.multiTouch && viewState.scale<=1.01 && pages.length>1 && Math.abs(x-viewState.touchStartX)>78 && Math.abs(x-viewState.touchStartX)>Math.abs(vertical)*1.2 && duration<700){
+              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
+              const requested=pageIndex+(x<viewState.touchStartX?1:-1);
+              const targetPage=Math.max(0,Math.min(pages.length-1,requested));
+              if(targetPage!==pageIndex){showPage(targetPage);options?.onPageChange?.(pageIndex);}
+              viewState.multiTouch=false;
               return;
             }
             // Downward flick closes only at 1×, so it never fights with image panning.
             if(viewState.scale<=1.01 && !wasMoved && false){
               // reserved
-            } else if(viewState.scale<=1.01 && vertical>90 && duration<700){
+            } else if(!viewState.multiTouch && viewState.scale<=1.01 && vertical>100 && vertical>Math.abs(x-viewState.touchStartX)*1.3 && duration<650){
               const closeButton=viewer.querySelector('.sp-scene-image-viewer-close');
               closeButton?.click();
               return;
@@ -4268,8 +4274,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(!wasMoved && duration<320){
               const dt=now-viewState.lastTapTime;
               const near=Math.hypot(x-viewState.lastTapX,y-viewState.lastTapY)<42;
-              if(dt<340 && near){
-                event.preventDefault();
+              if(dt<340 && near && (event.target===img||event.target.closest?.('.sp-scene-image-viewer-img'))){
+                event.preventDefault();clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+480;
+                frame._unlockViewPointCanvas?.();
                 if(viewState.scale>1.01) resetView({animate:true});
                 else zoomAt(x,y,2.5,{animate:true});
                 viewState.lastTapTime=0;
@@ -4278,9 +4285,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               viewState.lastTapTime=now;
               viewState.lastTapX=x;
               viewState.lastTapY=y;
+              if(frame.classList.contains('is-view-rec-playing')){
+                clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+420;
+                frame._viewPointTapTimer=setTimeout(()=>{if(!viewer.hidden)frame._viewPointAdvanceTouch?.();},360);
+              }
             }
 
             if(viewState.scale<=1.01) resetView();
+            viewState.multiTouch=false;
           }else if(event.touches.length===1 && viewState.scale>1.01){
             viewState.dragging=true;
             viewState.lastX=event.touches[0].clientX;
@@ -4398,6 +4410,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         viewer._sceneImageClosing = false;
 
         const shut = async (event) => {
+          clearTimeout(frame._viewPointTapTimer);
+          frame._viewPointSuppressClickUntil=0;
+          frame?._viewRecCancel?.();
+          viewer._sceneOutgoingPage?.remove?.();viewer._sceneOutgoingPage=null;
           event?.preventDefault?.();
           event?.stopPropagation?.();
           if (viewer._sceneImageClosing) return;
@@ -4416,11 +4432,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           viewer._sceneImageClosing = false;
           document.documentElement.classList.remove('sp-scene-image-open');
         };
-        shade.addEventListener('click',shut);
         close.addEventListener('click',shut);
-        viewer.addEventListener('click',(event)=>{
-          if(event.target===viewer)shut(event);
-        });
         document.addEventListener('keydown',(event)=>{
           if(event.key==='Escape' && !viewer.hidden)shut(event);
         });
@@ -4429,6 +4441,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const img = viewer.querySelector('.sp-scene-image-viewer-img');
       const frame = viewer.querySelector('.sp-scene-image-viewer-frame');
       if (frame) frame._sceneImageMode = options?.mode === 'viewPoint' ? 'viewPoint' : 'fullscreen';
+      if(options?.mode!=='viewPoint')frame?._viewRecCancel?.();
       frame?._sceneImageReset?.();
       viewer._sceneImageSourceEl = options?.sourceEl || null;
       const openingSource = (()=>{
@@ -4442,18 +4455,49 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&typeof page.src==='string'&&page.src);
       let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
       const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
+      let pageLoadToken=0;
       const showPage=(index)=>{
         if(!pages.length)return;
+        const previousIndex=pageIndex;
         pageIndex=Math.max(0,Math.min(pages.length-1,index));
+        if(pageIndex!==previousIndex){clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=performance.now()+420;}
         const page=pages[pageIndex];
-        img.alt=page.alt||alt||'';
-        if(img.src!==page.src)img.src=page.src;
+        const nextSrc=page.src;
+        const changed=img.getAttribute('src')!==nextSrc;
+        const animateTurn=changed&&!viewer.hidden&&(previousIndex!==pageIndex||options?.animatePageEntry===true);
+        const direction=pageIndex>=previousIndex?1:-1;
+        img.alt=page.alt??alt??'';
         pageControls.hidden=pages.length<2;
         pageControls.querySelector('.sp-scene-image-viewer-page-count').textContent=`${pageIndex+1} / ${pages.length}`;
         pageControls.querySelector('.sp-scene-image-viewer-page-prev').disabled=pageIndex===0;
         pageControls.querySelector('.sp-scene-image-viewer-page-next').disabled=pageIndex===pages.length-1;
         frame?._sceneImageReset?.();
-        frame?._fitSceneImageFrame?.();
+        if(changed){
+          const token=++pageLoadToken;
+          viewer._sceneOutgoingPage?.remove?.();viewer._sceneOutgoingPage=null;
+          let outgoing=null;
+          if(animateTurn&&img.complete&&img.naturalWidth>0){
+            outgoing=img.cloneNode(false);outgoing.classList.add('sp-scene-image-page-outgoing');
+            outgoing.src=img.currentSrc||img.src;outgoing.alt='';outgoing.setAttribute('aria-hidden','true');
+            outgoing.style.position='absolute';outgoing.style.left='50%';outgoing.style.top='50%';outgoing.style.margin='0';
+            outgoing.style.width=`${Math.max(1,img.clientWidth)}px`;outgoing.style.height=`${Math.max(1,img.clientHeight)}px`;
+            outgoing.style.setProperty('max-width','none','important');outgoing.style.setProperty('max-height','none','important');
+            outgoing.style.transform=img.style.transform||'translate3d(0,0,0) scale(1)';outgoing.style.zIndex='1';outgoing.style.pointerEvents='none';
+            frame.appendChild(outgoing);viewer._sceneOutgoingPage=outgoing;
+          }
+          const finishLoad=()=>{
+            if(token!==pageLoadToken)return;
+            frame?._fitSceneImageFrame?.();frame?._sceneImageReset?.();
+            if(animateTurn&&typeof img.animate==='function'){
+              img.animate([{opacity:.58,translate:`${direction*34}px 0`},{opacity:1,translate:'0 0'}],{duration:270,easing:'cubic-bezier(.22,.74,.18,1)'});
+              if(outgoing){const animation=outgoing.animate([{opacity:1,translate:'0 0'},{opacity:0,translate:`${-direction*34}px 0`}],{duration:270,easing:'cubic-bezier(.22,.74,.18,1)'});animation.finished.catch(()=>{}).then(()=>{outgoing.remove();if(viewer._sceneOutgoingPage===outgoing)viewer._sceneOutgoingPage=null;});}
+            }else outgoing?.remove();
+          };
+          img.addEventListener('load',finishLoad,{once:true});
+          img.addEventListener('error',()=>{if(token===pageLoadToken){outgoing?.remove();if(viewer._sceneOutgoingPage===outgoing)viewer._sceneOutgoingPage=null;}},{once:true});
+          img.src=nextSrc;
+        }else frame?._fitSceneImageFrame?.();
+        viewState.lastTapTime=0;
       };
       const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
       const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
@@ -4510,7 +4554,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         return;
       }
 
-      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange:image.onPageChange});
+      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange:image.onPageChange,animatePageEntry:image.animatePageEntry===true});
       const viewer = document.querySelector('.sp-scene-image-viewer');
       const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
       const img = viewer?.querySelector('.sp-scene-image-viewer-img');
@@ -4578,8 +4622,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const from={...current},to=coords(gaze),started=performance.now(),ease=t=>1-Math.pow(1-t,3);
         const tick=now=>{if(cancelled||viewer.hidden)return;const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);apply({x:from.x+(to.x-from.x)*e,y:from.y+(to.y-from.y)*e,scale:from.scale+(to.scale-from.scale)*e});if(q<1)raf=requestAnimationFrame(tick);else{raf=0;moving=false;}};raf=requestAnimationFrame(tick);
       };
-      let onViewPointKey=null;
-      const cancel=()=>{cancelled=true;if(raf)cancelAnimationFrame(raf);raf=0;moving=false;frame._viewRecCancel=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing');frame.removeEventListener('click',advance,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
+      let onViewPointKey=null,onViewPointClick=null;
+      const cancel=()=>{cancelled=true;clearTimeout(frame._viewPointTapTimer);if(raf)cancelAnimationFrame(raf);raf=0;moving=false;frame._viewRecCancel=null;frame._viewPointAdvanceTouch=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing');if(onViewPointClick)frame.removeEventListener('click',onViewPointClick,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
       // Manual pinch / wheel / double-click hands the viewer to the reader completely.
       // Do not resume VIEW POINT on the synthetic click that follows a drag.
       frame._onViewPointManualControl=()=>cancel();
@@ -4600,13 +4644,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // closes the viewer. This is intentional VIEW POINT completion, not native
         // activation of the × button (focus is kept on the viewer frame above).
         else{
+          const pages=Array.isArray(image.pages)?image.pages:[];
+          const currentPage=Math.max(0,Number(image.pageIndex)||0);
+          const nextIndex=currentPage+1;
+          const nextPage=pages[nextIndex];
+          const nextPoints=nextPage?.viewPoints||null;
+          if(nextPage?.src&&(nextPoints?.points||[]).length){
+            const nextImage={...image,src:nextPage.src,alt:nextPage.alt??image.alt??'',viewPoints:nextPoints,pageIndex:nextIndex,animatePageEntry:true};
+            cancel();
+            this._openSceneImageViewRec(nextImage,null);
+            return;
+          }
           const closeButton=viewer.querySelector('.sp-scene-image-viewer-close');
           cancel();
           closeButton?.click();
           return;
         }
       };
-      frame._viewRecCancel=cancel;frame.classList.add('is-view-rec-playing');frame.addEventListener('click',advance,true);
+      frame._viewRecCancel=cancel;frame._viewPointAdvanceTouch=()=>{if(moving){frame._viewPointTapTimer=setTimeout(()=>frame._viewPointAdvanceTouch?.(),60);return;}advance(null);};frame.classList.add('is-view-rec-playing');onViewPointClick=(event)=>{if(performance.now()<frame._viewPointSuppressClickUntil)return;advance(event);};frame.addEventListener('click',onViewPointClick,true);
       // V111 — desktop keyboard parity: Enter advances VIEW POINT exactly like a tap.
       // Once the reader takes manual zoom/pan control, VIEW POINT is cancelled, so Enter
       // intentionally stops advancing as well.
@@ -4677,7 +4732,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (image.shadow === true) media.classList.add('has-object-shadow');
 
       const img = document.createElement('img');
-      img.alt = firstImage.alt || image.alt || '';
+      img.alt = firstImage.alt ?? image.alt ?? '';
       img.loading = history ? 'lazy' : 'eager';
       img.decoding = 'async';
 
@@ -4739,7 +4794,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       object.className = history ? 'sp-history-scene-image-object' : 'sp-scene-image-object';
       object.appendChild(media);
       let caption = null;
-      if (image.caption === true && String(firstImage.alt || image.alt || '').trim()) {
+      if (image.caption === true && String(firstImage.alt ?? image.alt ?? '').trim()) {
         caption = document.createElement(history ? 'span' : 'div');
         caption.className = history ? 'sp-history-scene-image-caption' : 'sp-scene-image-caption';
         caption.textContent = String(firstImage.alt || image.alt).trim();
@@ -4787,14 +4842,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const open = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          const openBundlePage=(pageIndex)=>{
+          const openBundlePage=(pageIndex,{fromScene=false}={})=>{
             const page=pages[pageIndex]||firstImage;
+            const sourceEl=fromScene?wrap:null;
             const pointSet=page.viewPoints||(pageIndex===0?image.viewPoints:null);
-            const pageImage={...image,src:page.src,alt:page.alt||image.alt||'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage};
-            if(imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,pageIndex===0?wrap:null);
-            else this._openSceneImage(page.src,page.alt||image.alt||'',{sourceEl:wrap,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage});
+            const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage};
+            if(imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,sourceEl);
+            else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage});
           };
-          openBundlePage(0);
+          openBundlePage(0,{fromScene:true});
         };
         wrap.addEventListener('click',open);
         wrap.addEventListener('keydown',(event)=>{

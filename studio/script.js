@@ -10235,16 +10235,26 @@ function startInlineTextEdit(field='text',targetEl=null){
     input.addEventListener('change',async()=>{const file=input.files?.[0];if(file){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);onPicked(url,snap.name,file);scheduleDraftSave(60);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}input.remove();},{once:true});
     input.click();
   }
-  async function pickSceneImagePages(onPicked){
+  async function pickSceneImagePages(onPicked,maxCount=100){
     const input=document.createElement('input');input.type='file';input.accept='image/*';input.multiple=true;input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
-    input.addEventListener('change',async()=>{const files=[...(input.files||[])].slice(0,100);const picked=[];for(const file of files){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);picked.push({src:url,alt:'',_editorFileName:snap.name,_editorManaged:true});}if(picked.length)onPicked(picked);input.remove();},{once:true});input.click();
+    input.addEventListener('change',async()=>{const files=[...(input.files||[])].slice(0,Math.max(0,Math.min(100,Number(maxCount)||0)));const picked=[];for(const file of files){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);picked.push({src:url,alt:'',_editorFileName:snap.name,_editorManaged:true});}if(picked.length)onPicked(picked);input.remove();},{once:true});input.click();
   }
   function sceneImagePages(image){const pages=Array.isArray(image?.pages)&&image.pages.length?image.pages:(image?.src?[{src:image.src,alt:image.alt||'',viewPoints:image.viewPoints||image.viewRec||null,_editorFileName:image._editorFileName||''}]:[]);if(pages.length&&image?.viewPoints&&!pages[0]?.viewPoints)return pages.map((page,index)=>index===0?{...page,viewPoints:image.viewPoints}:page);return pages;}
+  function replaceSceneImageFirst(image,url,name){
+    const pages=sceneImagePages(image);
+    const first={src:url,alt:'',_editorFileName:name,_editorManaged:true};
+    const nextPages=pages.length>1?[first,...pages.slice(1)]:[first];
+    return {...image,src:url,alt:'',pages:nextPages,viewPoints:undefined,viewRec:undefined,_editorFileName:name,_editorManaged:true};
+  }
+  function pickSceneImageFile(onPicked){
+    const input=document.createElement('input');input.type='file';input.accept='image/*';input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
+    input.addEventListener('change',async()=>{const file=input.files?.[0];if(file){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);onPicked({src:url,alt:'',_editorFileName:snap.name,_editorManaged:true});scheduleDraftSave(60);}input.remove();},{once:true});input.click();
+  }
   function appendSceneImagePagesEditor(host,image,onChange){
     const pages=sceneImagePages(image);const box=document.createElement('div');box.className='scene-image-pages-editor';
     const head=document.createElement('div');head.className='scene-image-pages-head';head.textContent=u(`ページ束（${pages.length}/100）`,`Page bundle (${pages.length}/100)`);box.appendChild(head);
-    pages.forEach((page,index)=>{const row=document.createElement('div');row.className='scene-image-page-row';const label=document.createElement('span');label.textContent=`${index+1}. ${page._editorFileName||page.alt||u('画像','Image')}`;label.title=label.textContent;row.appendChild(label);const viewButton=document.createElement('button');viewButton.type='button';viewButton.textContent=(page.viewPoints?.points||page.viewRec?.points||[]).length?u('視点編集','Edit view'):u('視点設定','Set view');viewButton.onclick=()=>openViewRecRecorder(page,data=>{const next=pages.slice();next[index]={...page,viewPoints:data};delete next[index].viewRec;onChange(next);});row.appendChild(viewButton);for(const [text,delta] of [[u('↑','↑'),-1],[u('↓','↓'),1]]){const b=document.createElement('button');b.type='button';b.textContent=text;b.disabled=index+delta<0||index+delta>=pages.length;b.onclick=()=>{const next=pages.slice();[next[index],next[index+delta]]=[next[index+delta],next[index]];onChange(next);};row.appendChild(b);}const remove=document.createElement('button');remove.type='button';remove.textContent=u('削除','Remove');remove.onclick=()=>onChange(pages.filter((_,i)=>i!==index));row.appendChild(remove);box.appendChild(row);});
-    const add=document.createElement('button');add.type='button';add.className='scene-image-pages-add';add.textContent=u('ページを追加（複数選択可）','Add pages (multi-select)');add.disabled=pages.length>=100;add.onclick=()=>pickSceneImagePages(added=>onChange([...pages,...added].slice(0,100)));box.appendChild(add);host.appendChild(box);
+    pages.forEach((page,index)=>{const row=document.createElement('div');row.className='scene-image-page-row';const label=document.createElement('span');label.textContent=`${index+1}. ${page._editorFileName||page.alt||u('画像','Image')}`;label.title=label.textContent;row.appendChild(label);const viewButton=document.createElement('button');viewButton.type='button';viewButton.textContent=(page.viewPoints?.points||page.viewRec?.points||[]).length?u('視点編集','Edit view'):u('視点設定','Set view');viewButton.onclick=()=>openViewRecRecorder(page,data=>{const next=pages.slice();next[index]={...page,viewPoints:data};delete next[index].viewRec;onChange(next);});row.appendChild(viewButton);const replace=document.createElement('button');replace.type='button';replace.textContent=u('差替','Replace');replace.onclick=()=>pickSceneImageFile(nextPage=>{const next=pages.slice();next[index]=nextPage;onChange(next);});row.appendChild(replace);for(const [text,delta] of [[u('↑','↑'),-1],[u('↓','↓'),1]]){const b=document.createElement('button');b.type='button';b.textContent=text;b.disabled=index+delta<0||index+delta>=pages.length;b.onclick=()=>{const next=pages.slice();[next[index],next[index+delta]]=[next[index+delta],next[index]];onChange(next);};row.appendChild(b);}const remove=document.createElement('button');remove.type='button';remove.textContent=u('削除','Remove');remove.onclick=()=>onChange(pages.filter((_,i)=>i!==index));row.appendChild(remove);box.appendChild(row);});
+    const add=document.createElement('button');add.type='button';add.className='scene-image-pages-add';add.textContent=u('ページを追加（複数選択可）','Add pages (multi-select)');add.disabled=pages.length>=100;add.onclick=()=>pickSceneImagePages(added=>onChange([...pages,...added].slice(0,100)),100-pages.length);box.appendChild(add);host.appendChild(box);
   }
   function desktopCard(title,cls=''){
     const card=document.createElement('section');card.className=`desktop-live-card ${cls}`.trim();
@@ -13102,7 +13112,7 @@ function openDesktopTextDetail(){
       ()=>desktopPickFile('image/*',(url,name)=>{
         captureUndo('Scene画像の変更を元に戻せます');
         p.image={
-          ...(p.image||{}),
+          ...replaceSceneImageFirst(p.image||{},url,name),
           src:url,
           fit:'contain',
           size:p.image?.size||((p.view==='chat')?'small':'large'),
@@ -13110,7 +13120,7 @@ function openDesktopTextDetail(){
           rotation:Number(p.image?.rotation)||0,
           tapAction:p.image?.tapAction||((p.image?.fullscreen===false)?'none':'fullscreen'),
           fullscreen:p.image?.fullscreen!==false,
-          alt:p.image?.alt||'',
+          alt:'',
           _editorFileName:name,
           _editorManaged:true
         };
@@ -13129,7 +13139,7 @@ function openDesktopTextDetail(){
     sceneImageActions.append(sceneImagePick,sceneImageRemove);
     sceneImageTop.append(sceneImagePreview,sceneImageActions);
     sceneImageCard.append(sceneImageTop);
-    if(sceneImage?.src)appendSceneImagePagesEditor(sceneImageCard,sceneImage,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt||p.image.alt||'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();});
+    if(sceneImage?.src)appendSceneImagePagesEditor(sceneImageCard,sceneImage,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt??'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();});
 
     if(sceneImage?.src){
       const sceneImageOptions=document.createElement('div');sceneImageOptions.className='desktop-scene-image-options';
@@ -14843,13 +14853,13 @@ function openDesktopTextDetail(){
         const pick=makeActionButton(current?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),'is-primary');
         pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{
           captureUndo('Scene画像の変更を元に戻せます');
-          p.image={...(p.image||{}),src:url,fit:'contain',size:p.image?.size||((p.view==='chat')?'small':'large'),align:p.image?.align||((p.view==='chat')?'speaker':'center'),tapAction:p.image?.tapAction||((p.image?.fullscreen===false)?'none':'fullscreen'),fullscreen:p.image?.fullscreen!==false,alt:p.image?.alt||'',_editorFileName:name,_editorManaged:true};
+          p.image={...replaceSceneImageFirst(p.image||{},url,name),src:url,fit:'contain',size:p.image?.size||((p.view==='chat')?'small':'large'),align:p.image?.align||((p.view==='chat')?'speaker':'center'),tapAction:p.image?.tapAction||((p.image?.fullscreen===false)?'none':'fullscreen'),fullscreen:p.image?.fullscreen!==false,alt:'',_editorFileName:name,_editorManaged:true};
           scheduleDraftSave(40);refreshLivePlayer();
           requestAnimationFrame(()=>renderMobileSceneImagePanel());
         },{keepPanel:true});
         const remove=makeActionButton(u('画像を外す','Remove image'));remove.disabled=!current?.src;remove.onclick=()=>{captureUndo('Scene画像の削除を元に戻せます');delete p.image;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();};
         liveEditSheetBody.append(status,pick,remove);
-        if(current?.src)appendSceneImagePagesEditor(liveEditSheetBody,current,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt||p.image.alt||'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
+        if(current?.src)appendSceneImagePagesEditor(liveEditSheetBody,current,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt??'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
         if(current?.src){
           const opts=document.createElement('div');opts.className='live-edit-grid live-scene-image-options';
           opts.append(
