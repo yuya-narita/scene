@@ -4375,7 +4375,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if(!viewer.hidden && !frame.classList.contains('is-view-rec-playing')) applyView();
         });
 
-        frame._sceneImageReset = resetView;
+        frame._sceneImageReset = () => {
+          resetView();
+          viewState.lastTapTime=0;viewState.lastTapX=0;viewState.lastTapY=0;
+        };
 
         const pageControls = document.createElement('div');
         pageControls.className='sp-scene-image-viewer-pages';
@@ -4503,7 +4506,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           img.addEventListener('error',()=>{if(token===pageLoadToken){outgoing?.remove();if(viewer._sceneOutgoingPage===outgoing)viewer._sceneOutgoingPage=null;}},{once:true});
           img.src=nextSrc;
         }else frame?._fitSceneImageFrame?.();
-        viewState.lastTapTime=0;
       };
       const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
       const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
