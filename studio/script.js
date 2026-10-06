@@ -3839,6 +3839,13 @@
     return (crc^0xFFFFFFFF)>>>0;
   }
 
+  function sameAssetBytes(a,b){
+    if(a===b)return true;
+    if(!a||!b||a.length!==b.length)return false;
+    for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;
+    return true;
+  }
+
   async function blobBytes(blob,fallbackUrl=''){
     try{return new Uint8Array(await blob.arrayBuffer());}
     catch(firstError){
@@ -4191,6 +4198,10 @@
     const packaged=clone(doc);
     const entries=[];
     const bySource=new Map();
+    // Different Blob URLs can hold the exact same image/audio bytes (for
+    // example, one chat avatar selected independently on many scenes).
+    // Reuse one package path for byte-identical assets, not only URL matches.
+    const byContent=new Map();
     let assetCounter=0;
 
     const refs=[];
@@ -4219,12 +4230,22 @@
           e.assetUrl=source;
           throw e;
         }
-        assetCounter++;
-        const ext=assetExtension(item.name||ref.fileName,item.blob.type);
-        const base=safeAssetBase(ref.fileName||item.name||`${ref.kind}_${assetCounter}`);
-        assetPath=`assets/${String(assetCounter).padStart(3,'0')}_${ref.kind}_${base}${ext}`;
+        const bytes=await blobBytes(item.blob,source);
+        const contentKey=`${bytes.length}:${crc32(bytes)}`;
+        const candidates=byContent.get(contentKey)||[];
+        const duplicate=candidates.find(candidate=>sameAssetBytes(candidate.bytes,bytes));
+        if(duplicate){
+          assetPath=duplicate.path;
+        }else{
+          assetCounter++;
+          const ext=assetExtension(item.name||ref.fileName,item.blob.type);
+          const base=safeAssetBase(ref.fileName||item.name||`${ref.kind}_${assetCounter}`);
+          assetPath=`assets/${String(assetCounter).padStart(3,'0')}_${ref.kind}_${base}${ext}`;
+          candidates.push({path:assetPath,bytes});
+          byContent.set(contentKey,candidates);
+          entries.push({name:assetPath,bytes});
+        }
         bySource.set(source,assetPath);
-        entries.push({name:assetPath,bytes:await blobBytes(item.blob,source)});
       }
       ref.holder[ref.key]=assetPath;
       ref.holder._editorFileName=
