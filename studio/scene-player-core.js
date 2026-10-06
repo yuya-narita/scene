@@ -504,7 +504,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._on(document, 'keydown', (e) => {
           if (this.destroyed || !this.document || this.ended || !this.els.cover?.hidden || this.historyOpen) return;
           if (!this.host.contains(e.target)) return;
-          if (e.isComposing || e.repeat) return;
+          if (e.isComposing) return;
           if (e.target?.closest?.('button, a, input, textarea, select, [contenteditable="true"], .sp-image-viewer, .sp-scene-image-viewer')) return;
           if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             e.preventDefault();
