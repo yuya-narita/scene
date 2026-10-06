@@ -511,17 +511,26 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       });
 
       if (this.options.keyboard) {
-        this._on(this.els.stage, 'keydown', (e) => {
+        // The cover's Start button becomes hidden after activation. On Safari,
+        // keyboard focus can then fall off the stage, so listen at document
+        // capture level while keeping input scoped to this visible Player.
+        this._on(document, 'keydown', (e) => {
+          if (this.destroyed || !this.document || this.ended || !this.els.cover?.hidden || this.historyOpen) return;
+          if (!this.host.contains(e.target)) return;
+          if (e.isComposing || e.repeat) return;
+          if (e.target?.closest?.('button, a, input, textarea, select, [contenteditable="true"], .sp-image-viewer, .sp-scene-image-viewer')) return;
           if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             e.preventDefault();
+            e.stopPropagation();
             this.unlockAudio(true);
             if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
             this.next();
           } else if (this.options.allowPrevious && (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Backspace')) {
             e.preventDefault();
+            e.stopPropagation();
             this.openHistory();
           }
-        });
+        }, true);
       }
 
       // Desktop/trackpad: scrolling upward opens History. Downward scrolling keeps
