@@ -7839,15 +7839,25 @@
   }
 
   // Return the background that is actually visible immediately before a
-  // Scene. Inherited Scenes are skipped; an explicit clear stops the search.
+  // Scene. Inherited Scene overrides (position, fit, effects) must be merged;
+  // an explicit clear resets the chain until another image is selected.
   function previousEffectiveBackground(sceneIndex){
-    for(let i=Number(sceneIndex)-1;i>=0;i--){
+    let state=null;
+    for(let i=0;i<Number(sceneIndex);i++){
       const bg=workingDocument?.scenes?.[i]?.presentation?.background;
       if(!bg)continue;
-      if(bg.src==='')return null;
-      if(bg.src)return bg;
+      if(bg.src===''){state=null;continue;}
+      if(bg.src)state={...bg};
+      else if(state){
+        Object.keys(bg).forEach(key=>{
+          const value=bg[key];
+          if(value!==undefined)state[key]=(value&&typeof value==='object'&&!Array.isArray(value))
+            ?{...(state[key]&&typeof state[key]==='object'?state[key]:{}),...value}
+            :value;
+        });
+      }
     }
-    return null;
+    return state;
   }
 
   // Keep the current image, effects and transition, and copy only the crop

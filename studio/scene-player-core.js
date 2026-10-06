@@ -3420,6 +3420,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       });
     }
 
+    _disposeSceneNodeObservers(node) {
+      if (!node) return;
+      const scenes = node.matches?.('.sp-scene') ? [node] : [...(node.querySelectorAll?.('.sp-scene') || [])];
+      scenes.forEach((scene) => {
+        (scene._spResizeObservers || []).forEach((observer) => observer.disconnect?.());
+        delete scene._spResizeObservers;
+      });
+    }
+
 
     _renderStackWithBreathing(visible, active) {
       const oldById = new Map(
@@ -3443,7 +3452,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       oldById.forEach((node) => {
         node.classList.add('sp-layout-leaving');
-        this._layoutTimeout(() => node.remove(), 430);
+        this._layoutTimeout(() => {
+          this._disposeSceneNodeObservers(node);
+          node.remove();
+        }, 430);
       });
 
       this._updateSceneAges(nodes, visible);
@@ -3541,6 +3553,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._renderStackWithBreathing(visible, active);
       } else {
         // Restore/load/history jumps should be immediate and deterministic.
+        this._disposeSceneNodeObservers(this.els.scenes);
         this.els.scenes.innerHTML = '';
         const nodes = [];
         const stillNodes = [];
@@ -4625,6 +4638,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (typeof ResizeObserver !== 'undefined' && caption) {
         const captionResizeObserver = new ResizeObserver(updateCaptionClearance);
         captionResizeObserver.observe(media);
+        const ownerScene = wrap.closest('.sp-scene') || container.closest?.('.sp-scene');
+        if (ownerScene) (ownerScene._spResizeObservers ||= []).push(captionResizeObserver);
       }
       requestAnimationFrame(updateCaptionClearance);
 
@@ -4729,7 +4744,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const article=frame.closest('.sp-scene');if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{if(!frame.isConnected||!this.document)return;const active=this.document.scenes?.[this.index],display=active?.presentation?.display||'stack',entries=this._visibleScenes(display),byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node])),present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node),presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);else this._positionSceneNodes(presentNodes,presentEntries,0);});
       };
       requestAnimationFrame(draw);
-      if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();return;}draw();});observer.observe(frame);}
+      if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();return;}draw();});observer.observe(frame);const ownerScene=frame.closest('.sp-scene');if(ownerScene)(ownerScene._spResizeObservers ||= []).push(observer);}
     }
 
 
