@@ -438,13 +438,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (isTapAdvanceSafeZone(e)) return;
         const currentScene = this.document?.scenes?.[this.index];
         const sceneImage = currentScene?.presentation?.image;
-        const action = sceneImage?.tapAction || (sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
-        if (!sceneImage?.src || action === 'none') return;
+        const pages = Array.isArray(sceneImage?.pages)
+          ? sceneImage.pages.filter(page => page && typeof page.src === 'string' && page.src)
+          : [];
+        // Bundles may store the first page only in pages[0], with no legacy src
+        // on the parent image. Resolve the same first page as _appendSceneImage.
+        const firstImage = pages[0] || sceneImage;
+        const action = sceneImage?.tapAction || (pages.length > 1 ? 'fullscreen' : sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
+        if (!firstImage?.src || action === 'none') return;
 
         const activeScene = this.els.stage.querySelector('.sp-scene.is-active');
         const imageTarget = activeScene?.querySelector('.sp-scene-image');
         if (!imageTarget) return;
-        const rect = imageTarget.getBoundingClientRect();
+        // The media is rotated independently of its layout wrapper. Hit-test its
+        // painted bounds so taps near the visible corners still open the image.
+        const rect = (imageTarget.querySelector('.sp-scene-image-media') || imageTarget).getBoundingClientRect();
         const x = Number(e.clientX);
         const y = Number(e.clientY);
         if (!Number.isFinite(x) || !Number.isFinite(y)
@@ -452,12 +460,19 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         e.preventDefault();
         e.stopImmediatePropagation();
-        if (action === 'viewRec') {
-          if ((sceneImage.viewPoints?.points || sceneImage.viewRec?.points)?.length > 0)
-            this._openSceneImageViewRec(sceneImage, imageTarget);
-          else this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
-        } else if (action === 'fullscreen') {
-          this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+        const openBundlePage = (pageIndex, {fromScene=false}={}) => {
+          const page = pages[pageIndex] || firstImage;
+          const sourceEl = fromScene ? imageTarget : null;
+          const pointSet = page.viewPoints || (pageIndex === 0 ? sceneImage.viewPoints : null);
+          const pageImage = {...sceneImage, src:page.src, alt:page.alt ?? sceneImage.alt ?? '', viewPoints:pointSet, pages, pageIndex, onPageChange:openBundlePage};
+          if (action === 'viewRec' && (pointSet?.points || []).length) this._openSceneImageViewRec(pageImage, sourceEl);
+          else this._openSceneImage(page.src, page.alt ?? sceneImage.alt ?? '', {sourceEl, pages:pages.length>1?pages:undefined, pageIndex, onPageChange:openBundlePage});
+        };
+        if (action === 'viewRec' && (firstImage.viewPoints?.points || sceneImage.viewPoints?.points || sceneImage.viewRec?.points)?.length > 0) {
+          const pageImage = {...sceneImage, ...firstImage, pages, pageIndex:0, onPageChange:openBundlePage};
+          this._openSceneImageViewRec(pageImage, imageTarget);
+        } else if (action === 'fullscreen' || action === 'viewRec') {
+          openBundlePage(0,{fromScene:true});
         }
       }, true);
 
@@ -4830,7 +4845,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         refreshHistoryGeometryAfterImageLoad();
       }
 
-      const imageTapAction = image.tapAction || (image.fullscreen === false ? 'none' : 'fullscreen');
+      const imageTapAction = image.tapAction || (pages.length > 1 ? 'fullscreen' : image.fullscreen === false ? 'none' : 'fullscreen');
       if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
         const firstViewPoints=firstImage.viewPoints||image.viewPoints;
         const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;

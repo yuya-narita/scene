@@ -4827,7 +4827,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         refreshHistoryGeometryAfterImageLoad();
       }
 
-      const imageTapAction = image.tapAction || (image.fullscreen === false ? 'none' : 'fullscreen');
+      const imageTapAction = image.tapAction || (pages.length > 1 ? 'fullscreen' : image.fullscreen === false ? 'none' : 'fullscreen');
       if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
         const firstViewPoints=firstImage.viewPoints||image.viewPoints;
         const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;
