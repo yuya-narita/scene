@@ -16466,16 +16466,16 @@ function openDesktopTextDetail(){
     finishInlineTextEdit();
     closeLiveEditSheet();
     setLiveToolbarVisible(desktopLiveActive());
-    // Detail editing is auto-save. Flush the Scene we just left before
-    // retargeting the inspector to the newly visible Scene.
-    saveDraftNow().finally(()=>{
-      requestAnimationFrame(()=>{
-        ensureLiveEditEmptyTarget();
-        renderDesktopLivePanel();
-        if(detailKind){
-          requestAnimationFrame(()=>reopenDesktopDetailForCurrentScene(detailKind));
-        }
-      });
+    // The Player has already moved to the new Scene. Retarget the inspector
+    // immediately; waiting for IndexedDB serialization and draft-list refresh
+    // here made speaker/effect controls trail the preview by several seconds.
+    scheduleDraftSave(450);
+    requestAnimationFrame(()=>{
+      ensureLiveEditEmptyTarget();
+      renderDesktopLivePanel();
+      if(detailKind){
+        requestAnimationFrame(()=>reopenDesktopDetailForCurrentScene(detailKind));
+      }
     });
   });
   playerHost.addEventListener('sceneplayer:historyopen',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
