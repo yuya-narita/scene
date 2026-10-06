@@ -3803,6 +3803,14 @@
       .slice(0,80);
     return stem || 'untitled';
   }
+  function suggestedScenePackageFileName(title,episode=''){
+    const suffix=String(episode||'').trim();
+    return `${safeFileStem(title||'Untitled')}${suffix?`_${safeFileStem(suffix)}`:''}.scene`;
+  }
+  function normalizedScenePackageFileName(value,title,episode=''){
+    const raw=String(value||'').trim().replace(/\.scene$/i,'');
+    return `${safeFileStem(raw||suggestedScenePackageFileName(title,episode).replace(/\.scene$/i,''))}.scene`;
+  }
   function downloadTextFile(name,text,type='application/json'){
     const blob=new Blob([text],{type:`${type};charset=utf-8`});
     const url=URL.createObjectURL(blob);
@@ -4533,6 +4541,7 @@
 
 
   let pendingScenePackageExport=null;
+  let scenePackageFilenameManual=false;
   function openScenePackageExportDialog(){
     try{
       if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
@@ -4541,6 +4550,8 @@
       $('#exportWorkAuthor').value=doc.author||'';
       $('#exportWorkEpisode').value=doc.metadata?.episode||'';
       $('#exportWorkEpisodeTitle').value=doc.metadata?.episodeTitle||'';
+      scenePackageFilenameManual=false;
+      $('#exportWorkFileName').value=suggestedScenePackageFileName(doc.title,doc.metadata?.episode);
       $('#scenePackageExportDialog').showModal();
     }catch(error){
       console.error(error);
@@ -4557,7 +4568,7 @@
       source.metadata||={};
       source.metadata.episode=String(exportMetadata.episode??source.metadata.episode??'').trim();
       source.metadata.episodeTitle=String(exportMetadata.episodeTitle??source.metadata.episodeTitle??'').trim();
-      const name=`${safeFileStem(source.title)}.scene`;
+      const name=normalizedScenePackageFileName(exportMetadata.fileName,source.title,source.metadata.episode);
 
       // Invoke the native picker directly from the confirmation gesture. On
       // browsers without the File System Access API, the browser download or
@@ -8690,12 +8701,18 @@
       title:$('#exportWorkTitle')?.value||'',
       author:$('#exportWorkAuthor')?.value||'',
       episode:$('#exportWorkEpisode')?.value||'',
-      episodeTitle:$('#exportWorkEpisodeTitle')?.value||''
+      episodeTitle:$('#exportWorkEpisodeTitle')?.value||'',
+      fileName:$('#exportWorkFileName')?.value||''
     };
     $('#scenePackageExportDialog')?.close('export');
     // Keep the native file picker inside the confirmation click's user gesture.
     exportScenePackage(exportMetadata);
   });
+  $('#exportWorkFileName')?.addEventListener('input',()=>{scenePackageFilenameManual=true;});
+  ['exportWorkTitle','exportWorkEpisode'].forEach(id=>$('#'+id)?.addEventListener('input',()=>{
+    if(scenePackageFilenameManual)return;
+    $('#exportWorkFileName').value=suggestedScenePackageFileName($('#exportWorkTitle').value,$('#exportWorkEpisode').value);
+  }));
   $('#scenePackageReadyShare')?.addEventListener('click',async()=>{
     const pending=pendingScenePackageExport;
     if(!pending)return;

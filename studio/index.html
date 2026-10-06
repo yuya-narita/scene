@@ -26,7 +26,7 @@
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="stylesheet" href="./scene-player-core.css?v=20261006-chat-v3">
-  <link rel="stylesheet" href="./style.css?v=70.63">
+  <link rel="stylesheet" href="./style.css?v=70.64">
   <link rel="stylesheet" href="./cage.css?v=14">
   <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
   <style id="studioPreviewDeviceStyles">
@@ -1110,8 +1110,9 @@
         <label><span>作者名</span><input id="exportWorkAuthor" type="text" maxlength="80"></label>
         <label><span>話数</span><input id="exportWorkEpisode" type="text" maxlength="80" placeholder="第1話 / EPISODE 01"></label>
         <label><span>今回のタイトル</span><input id="exportWorkEpisodeTitle" type="text" maxlength="120"></label>
+        <label><span>保存ファイル名</span><input id="exportWorkFileName" type="text" maxlength="140" required></label>
       </div>
-      <p class="scene-package-export-save-note">保存先は次の画面で選べます。iPhoneでは共有メニューから「ファイルに保存」を選んでください。</p>
+      <p class="scene-package-export-save-note">ファイル名は「作品タイトル_話数.scene」で自動入力されます。保存先を選ぶ画面でも変更できます。</p>
       <div class="distribution-export-actions">
         <button value="cancel" type="button" id="scenePackageExportCancel">キャンセル</button>
         <button value="export" type="submit" class="primary">保存先を選んで書き出す</button>
@@ -1294,7 +1295,7 @@
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
 <script src="./scene-edit-core.js?v=70.27"></script>
-<script src="./script.js?v=159"></script>
+<script src="./script.js?v=160"></script>
 <script src="./cage.js?v=25"></script>
 <script src="./easy-illustration.js?v=11"></script>
 
