@@ -4034,6 +4034,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const wrap = document.createElement(history ? 'span' : 'div');
       wrap.className = history ? 'sp-history-scene-image' : 'sp-scene-image';
       if(pages.length>1){wrap.dataset.pageCount=String(pages.length);wrap.classList.add('has-page-stack');}
+      wrap.dataset.imageRounded=image.rounded===false?'false':'true';
       wrap.dataset.imageSize = ['small','large'].includes(image.size)
         ? image.size
         : ((presentation?.view==='chat') ? 'small' : 'large');
@@ -4097,6 +4098,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       img.addEventListener('load', refreshHistoryGeometryAfterImageLoad, {once:true});
 
       img.src = firstImage.src;
+      if(pages.length>1){const back=document.createElement('span');back.className='scene-image-stack-sheet is-back';const middle=document.createElement('span');middle.className='scene-image-stack-sheet is-middle';media.append(back,middle);}
       media.appendChild(img);
       wrap.appendChild(media);
 
@@ -4115,7 +4117,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const open = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          this._openSceneImage(image.src, image.alt || '');
+          this._openSceneImage(firstImage.src, firstImage.alt||image.alt||'', {pages:pages.length>1?pages:undefined,pageIndex:0});
         };
         wrap.addEventListener('click',open);
         wrap.addEventListener('keydown',(event)=>{

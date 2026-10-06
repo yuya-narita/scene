@@ -4252,6 +4252,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // Horizontal swipes turn pages only at fit scale; zoomed manga remains pannable.
             if(viewState.scale<=1.01 && pages.length>1 && Math.abs(x-viewState.touchStartX)>72 && duration<700){
               showPage(pageIndex+(x<viewState.touchStartX?1:-1));
+              options?.onPageChange?.(pageIndex);
               return;
             }
             // Downward flick closes only at 1×, so it never fights with image panning.
@@ -4456,8 +4457,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
       const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
-      if(prevButton)prevButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();showPage(pageIndex-1);};
-      if(nextButton)nextButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();showPage(pageIndex+1);};
+      if(pageControls)pageControls.hidden=pages.length<2;
+      if(prevButton)prevButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();showPage(pageIndex-1);options?.onPageChange?.(pageIndex);};
+      if(nextButton)nextButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();showPage(pageIndex+1);options?.onPageChange?.(pageIndex);};
       if(pages.length)showPage(pageIndex);else img.src = src;
         const syncBoundedFrame=()=>{frame?._fitSceneImageFrame?.();frame?._sceneImageReset?.();};
         if(img.complete&&img.naturalWidth>0)requestAnimationFrame(syncBoundedFrame);
@@ -4466,7 +4468,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const ro=new ResizeObserver(()=>{if(!viewer.hidden&&img.naturalWidth>0)frame?._fitSceneImageFrame?.();});
           ro.observe(viewer);viewer._imageBoundedRO?.disconnect?.();viewer._imageBoundedRO=ro;
         }
-      img.alt = alt || '';
+      if(!pages.length)img.alt = alt || '';
       viewer.hidden = false;
       document.documentElement.classList.add('sp-scene-image-open');
       if (openingSource) {
@@ -4508,7 +4510,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         return;
       }
 
-      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl});
+      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange:image.onPageChange});
       const viewer = document.querySelector('.sp-scene-image-viewer');
       const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
       const img = viewer?.querySelector('.sp-scene-image-viewer-img');
@@ -4654,6 +4656,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const wrap = document.createElement(history ? 'span' : 'div');
       wrap.className = history ? 'sp-history-scene-image' : 'sp-scene-image';
       if(pages.length>1){wrap.dataset.pageCount=String(pages.length);wrap.classList.add('has-page-stack');}
+      wrap.dataset.imageRounded=image.rounded===false?'false':'true';
       wrap.dataset.imageSize = ['small','large'].includes(image.size)
         ? image.size
         : ((presentation?.view==='chat') ? 'small' : 'large');
@@ -4725,6 +4728,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       img.addEventListener('load', refreshHistoryGeometryAfterImageLoad, {once:true});
 
       img.src = firstImage.src;
+      if(pages.length>1){
+        const backSheet=document.createElement('span');backSheet.className='scene-image-stack-sheet is-back';backSheet.setAttribute('aria-hidden','true');
+        const middleSheet=document.createElement('span');middleSheet.className='scene-image-stack-sheet is-middle';middleSheet.setAttribute('aria-hidden','true');
+        media.append(backSheet,middleSheet);
+      }
       media.appendChild(img);
 
       const object = document.createElement(history ? 'span' : 'div');
@@ -4779,8 +4787,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const open = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (hasViewRec) this._openSceneImageViewRec({...image,src:firstImage.src,alt:firstImage.alt||image.alt,viewPoints:firstViewPoints}, wrap);
-          else this._openSceneImage(firstImage.src, firstImage.alt || image.alt || '', {sourceEl:wrap,pages:pages.length>1?pages:undefined,pageIndex:0});
+          const openBundlePage=(pageIndex)=>{
+            const page=pages[pageIndex]||firstImage;
+            const pointSet=page.viewPoints||(pageIndex===0?image.viewPoints:null);
+            const pageImage={...image,src:page.src,alt:page.alt||image.alt||'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage};
+            if(imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,pageIndex===0?wrap:null);
+            else this._openSceneImage(page.src,page.alt||image.alt||'',{sourceEl:wrap,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage});
+          };
+          openBundlePage(0);
         };
         wrap.addEventListener('click',open);
         wrap.addEventListener('keydown',(event)=>{
