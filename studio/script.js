@@ -13404,9 +13404,11 @@ function openDesktopTextDetail(){
 
     const bgCard=desktopCard(uiLanguage==='en'?'Background (▣)':'背景（▣）','desktop-live-bg-card');
     const bg=p.background;
+    const inheritedBg=(!bg || (!bg.src && bg.src!=='')) ? previousEffectiveBackground(index) : null;
+    const displayedBg=bg?.src ? bg : inheritedBg;
     const bgTop=document.createElement('div');bgTop.className='desktop-live-bg-top';
     const bgPreview=document.createElement('div');bgPreview.className='desktop-live-bg-preview';
-    if(bg?.src){const img=document.createElement('img');img.src=bg.src;img.alt=u('背景','Background');bgPreview.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent=u('背景','Background');bgPreview.appendChild(ph);}
+    if(displayedBg?.src){const img=document.createElement('img');img.src=displayedBg.src;img.alt=u('背景','Background');bgPreview.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent=u('背景','Background');bgPreview.appendChild(ph);}
     const bgControls=document.createElement('div');bgControls.className='desktop-live-bg-controls';
     const bgBtns=document.createElement('div');bgBtns.className='desktop-live-bg-source-row';
     bgBtns.append(
@@ -13414,7 +13416,7 @@ function openDesktopTextDetail(){
         captureUndo('背景設定の変更を元に戻せます');
         delete p.background;
         refresh();
-      },!bg?'is-selected':''),
+      },(!bg || (!bg.src && bg.src!==''))?'is-selected':''),
       desktopAction(bg?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{
         captureUndo('背景画像の変更を元に戻せます');
         p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:p.background?.position||'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
@@ -13439,7 +13441,7 @@ function openDesktopTextDetail(){
         if(desktopLiveActive())renderDesktopLivePanel();
       });
     });
-    bgPositionAction.disabled=(!bg?.src&&!previousFraming()?.src)||bg?.src==='';
+    bgPositionAction.disabled=(!bg?.src&&!previousEffectiveBackground(index)?.src)||bg?.src==='';
     bgPositionAction.classList.add('desktop-live-bg-position');
     const bgCopyPreviousAction=desktopAction(u('前Sceneの表示位置をコピー','Copy previous Scene position'),()=>{
       captureUndo('背景位置の変更を元に戻せます');
