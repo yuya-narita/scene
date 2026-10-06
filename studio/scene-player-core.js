@@ -2070,6 +2070,50 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return timer;
     }
 
+    _chatIconSource(presentation = {}) {
+      return presentation.chat?.icon || ahakoAvatarSrc(presentation.chat?.iconPreset) || '';
+    }
+
+    _warmChatIcon(src) {
+      if (!src) return null;
+      if (!this._chatIconCache) this._chatIconCache = new Map();
+      let image = this._chatIconCache.get(src);
+      if (!image) {
+        image = document.createElement('img');
+        image.alt = '';
+        image.loading = 'eager';
+        image.fetchPriority = 'high';
+        // Start decoding while the cover is visible, rather than on first speech.
+        image.src = src;
+        this._chatIconCache.set(src, image);
+        if (typeof image.decode === 'function') image.decode().catch(() => {});
+      }
+      return image;
+    }
+
+    _preloadChatIcons() {
+      const sources = new Set();
+      for (const scene of this.document?.scenes || []) {
+        if (scene.presentation?.view !== 'chat') continue;
+        const src = this._chatIconSource(scene.presentation);
+        if (src) sources.add(src);
+      }
+      // Retain only this document's unique avatars; repeated Studio loads must
+      // not accumulate decoded images from previous works or edited speakers.
+      if (this._chatIconCache) {
+        for (const src of this._chatIconCache.keys()) {
+          if (!sources.has(src)) this._chatIconCache.delete(src);
+        }
+      }
+      sources.forEach((src) => this._warmChatIcon(src));
+    }
+
+    _chatIconImage(src) {
+      const image = this._warmChatIcon(src).cloneNode(false);
+      image.decoding = 'sync';
+      return image;
+    }
+
     load(doc, options = {}) {
       if (this.destroyed) throw new Error('ScenePlayerCore has been destroyed.');
       this.stopAuto();
@@ -2094,6 +2138,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.audioPlaybackArmed = false;
       this.playbackTimelineStartedAt = 0;
       this.document = assertSceneDocument(doc);
+      this._preloadChatIcons();
 
       // iOS: build a source-stable native-media bank now. Actual play() calls
       // happen together in the trusted START gesture in _beginFromCover().
@@ -2606,11 +2651,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
           const icon = document.createElement('span');
           icon.className = 'sp-history-chat-icon';
-          const iconSrc = historyPresentation.chat?.icon || ahakoAvatarSrc(historyPresentation.chat?.iconPreset) || '';
+          const iconSrc = this._chatIconSource(historyPresentation);
           if (iconSrc) {
-            const img = document.createElement('img');
-            img.src = iconSrc;
-            img.alt = '';
+            const img = this._chatIconImage(iconSrc);
             icon.appendChild(img);
           } else {
             icon.textContent = historyPresentation.chat?.iconText || '●';
@@ -5258,10 +5301,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         const icon = document.createElement('div');
         icon.className = 'sp-chat-icon';
-        const iconSrc = presentation.chat?.icon || ahakoAvatarSrc(presentation.chat?.iconPreset) || '';
+        const iconSrc = this._chatIconSource(presentation);
         if (iconSrc) {
-          const img = document.createElement('img');
-          img.src = iconSrc; img.alt = '';
+          const img = this._chatIconImage(iconSrc);
           icon.appendChild(img);
         } else {
           icon.textContent = presentation.chat?.iconText || '●';
@@ -5613,6 +5655,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.host.innerHTML = '';
         this.host.classList.remove('sp-core');
       }
+      this._chatIconCache?.clear();
       this.destroyed = true;
     }
   }
