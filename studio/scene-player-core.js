@@ -4828,8 +4828,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const delay=Math.max(0,Number(r.delay)||0)*1000,duration=Math.max(.05,Number(r.duration)||3)*1000;
       const curve=r.curve||'burst';
       const begin=()=>{
+        if(!node.isConnected)return;
         const t0=performance.now();
         const tick=now=>{
+          // A Scene refresh replaces its DOM. Stop the counter immediately when
+          // its node is detached instead of keeping an animation frame alive
+          // against an abandoned Scene for the remainder of its duration.
+          if(!node.isConnected)return;
           let x=Math.min(1,(now-t0)/duration),y=x;
           if(curve==='ease')y=x*x;
           else if(curve==='burst')y=x<.28?.18*(x/.28):.18+.82*(1-Math.pow(1-(x-.28)/.72,3));
@@ -4859,7 +4864,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         };
         requestAnimationFrame(tick);
       };
-      if(delay)setTimeout(begin,delay);else begin();
+      if(delay)this._presentationTimeout(begin,delay);else begin();
     }
 
 
@@ -4908,7 +4913,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         Object.assign(el.style,{position:'absolute',left:'100%',top:`${top}%`,whiteSpace:'nowrap',fontSize:`${size}px`,fontWeight:'700',lineHeight:'1.15',color:String(raw.color||'#FFFFFF'),textShadow:'0 2px 4px rgba(0,0,0,.98),0 0 7px rgba(0,0,0,.9),0 0 14px rgba(0,0,0,.62)',willChange:'transform',opacity:'0'});
         layer.appendChild(el);
         const start=()=>{if(!el.isConnected)return;el.style.opacity='1';const distance=(layer.clientWidth||window.innerWidth||800)+(el.offsetWidth||200)+64;const anim=el.animate([{transform:'translateX(0)'},{transform:`translateX(-${distance}px)`}],{duration:durationSec*1000,easing:'linear',fill:'forwards'});anim.onfinish=()=>{el.style.opacity='0';};};
-        setTimeout(start,startAt);
+        // Scene refreshes already cancel presentation timers. Use that lifecycle
+        // so delayed comments from removed Scenes do not retain their DOM nodes.
+        this._presentationTimeout(start,startAt);
       });
       stage.appendChild(layer);
     }

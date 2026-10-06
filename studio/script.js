@@ -6119,9 +6119,22 @@
   // Detail inspectors are also used as temporary DOM factories by Editor v2.
   // If a setting refresh leaves one behind, it dims the whole authoring surface
   // and intercepts taps. Remove such orphan factory overlays automatically.
-  const desktopV2OverlayObserver=new MutationObserver(()=>{
+  const desktopV2OverlayObserver=new MutationObserver(records=>{
     if(!document.body.classList.contains('desktop-live-edit') || document.body.classList.contains('toolbox-detail-open'))return;
-    queueMicrotask(cleanupDesktopV2BuilderOverlays);
+    // The Player and Live Editor replace many descendants during a normal
+    // preview sync. Only inspect the page when a builder overlay itself was
+    // inserted; scanning the whole document after every Scene mutation causes
+    // avoidable work on every navigation.
+    let hasOrphanOverlay=false;
+    for(const record of records){
+      for(const node of record.addedNodes){
+        if(node.nodeType===1 && node.matches?.('.desktop-text-detail-overlay,.desktop-live-special-shade')){
+          hasOrphanOverlay=true;break;
+        }
+      }
+      if(hasOrphanOverlay)break;
+    }
+    if(hasOrphanOverlay)queueMicrotask(cleanupDesktopV2BuilderOverlays);
   });
   desktopV2OverlayObserver.observe(document.body,{childList:true,subtree:true});
 
@@ -13028,7 +13041,7 @@ function openDesktopTextDetail(){
       chatTimeRow.append(desktopMakeSelect(u('メッセージ状態','Message state'),[['normal',u('通常','Normal')],['deleted',u('送信取消','Unsent')]],p.messageState.mode||'normal',v=>{p.messageState.mode=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
       if(p.messageState.mode==='deleted'){const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('取消まで（秒）','Delay before unsend (sec)');const inp=document.createElement('input');inp.type='number';inp.min='0';inp.max='300';inp.step='0.1';inp.value=Number(p.messageState.delay||0);inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.messageState.delay=Math.max(0,Math.min(300,Number(inp.value)||0));scheduleDraftSave(80);});f.append(sp,inp);chatTimeRow.append(f);}
       if(chatLt.mode==='work'){
-        const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('作品時刻','Work time');const inp=document.createElement('input');inp.value=chatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{chatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(80);refresh();});f.append(sp,inp);chatTimeRow.append(f);
+        const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('作品時刻','Work time');const inp=document.createElement('input');inp.value=chatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{chatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(700);});inp.addEventListener('change',()=>{chatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});renderDesktopLivePanel();});f.append(sp,inp);chatTimeRow.append(f);
       }
       chatPanel.append(chatTimeRow);
 
@@ -14491,7 +14504,7 @@ function openDesktopTextDetail(){
       p.messageState ||= {mode:'normal',delay:0};
       mobileChatTime.append(makeSelect(u('メッセージ状態','Message state'),[['normal',u('通常','Normal')],['deleted',u('送信取消','Unsent')]],p.messageState.mode||'normal',v=>{p.messageState.mode=v;scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
       if(p.messageState.mode==='deleted'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('取消まで（秒）','Delay before unsend (sec)'));const inp=document.createElement('input');inp.type='number';inp.min='0';inp.max='300';inp.step='0.1';inp.value=Number(p.messageState.delay||0);inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.messageState.delay=Math.max(0,Math.min(300,Number(inp.value)||0));scheduleDraftSave(80);});f.appendChild(inp);mobileChatTime.appendChild(f);}
-      if(mobileChatLt.mode==='work'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('作品時刻','Work time'));const inp=document.createElement('input');inp.value=mobileChatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{mobileChatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(80);refreshLivePlayer();});f.appendChild(inp);mobileChatTime.appendChild(f);}liveEditSheetBody.append(mobileChatTime);
+      if(mobileChatLt.mode==='work'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('作品時刻','Work time'));const inp=document.createElement('input');inp.value=mobileChatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{mobileChatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(700);});inp.addEventListener('change',()=>{mobileChatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(40);refreshLivePlayer();});f.appendChild(inp);mobileChatTime.appendChild(f);}liveEditSheetBody.append(mobileChatTime);
 
       const forward=makeEffectAction(u('このScene以降をチャット化','Chat mode from this Scene onward'),'is-primary');
       forward.onclick=()=>{const count=applyChatModeForward(index);if(count){scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');showUndo(`${count} Sceneをチャット表示にしました`);}};
