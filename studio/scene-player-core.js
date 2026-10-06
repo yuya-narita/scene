@@ -2598,6 +2598,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           item.classList.add('sp-history-chat');
           const align = historyPresentation.text?.align === 'right' ? 'right' : 'left';
           item.dataset.chatSide = align;
+          const chatIndex=this.document.scenes.indexOf(scene);
+          item.dataset.chatContinuation=String(this._chatContinues(this.document.scenes[chatIndex-1],scene));
 
           const chatRow = document.createElement('span');
           chatRow.className = 'sp-history-chat-row';
@@ -3409,6 +3411,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       nodes.forEach((node, i) => {
         const distance = sceneEntries.length - 1 - i;
         node.dataset.age = String(distance);
+        // Group only messages present in this stack; a solo/jump starts with an avatar.
+        node.dataset.chatContinuation = String(i>0 && this._chatContinues(sceneEntries[i-1]?.scene, sceneEntries[i]?.scene));
         node.classList.toggle('is-active', distance === 0);
         if (distance > 0) node.classList.add('is-visible');
       });
@@ -5057,6 +5061,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const same=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
       const wd=['日','月','火','水','木','金','土'][dt.getDay()];
       return {raw:String(raw),time:`${hh}:${mm}`,dateKey:key,dateLabel:same(dt,yesterday)?'昨日':`${mo}/${d}(${wd})`};
+    }
+
+    _chatContinues(previous, scene) {
+      const a=previous?.presentation||{}, b=scene?.presentation||{};
+      if(a.view!=='chat'||b.view!=='chat'||!previous?.text||!scene?.text)return false;
+      if((a.text?.align==='right')!==(b.text?.align==='right'))return false;
+      if(this._messageStateInfo(previous,a).mode==='deleted'||this._messageStateInfo(scene,b).mode==='deleted')return false;
+      if(this._chatDateSeparator(scene,b))return false;
+      const ac=a.chat||{},bc=b.chat||{};
+      if(ac.speakerId&&bc.speakerId)return ac.speakerId===bc.speakerId;
+      const an=String(previous.subText||'').trim(),bn=String(scene.subText||'').trim();
+      if(an&&bn)return an===bn;
+      const ai=ac.icon||ac.iconPreset,bi=bc.icon||bc.iconPreset;
+      return !!ai&&ai===bi;
     }
 
     _chatDateSeparator(scene, presentation = scene?.presentation || {}) {
