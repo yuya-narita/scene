@@ -10239,6 +10239,15 @@ function startInlineTextEdit(field='text',targetEl=null){
     const input=document.createElement('input');input.type='file';input.accept='image/*';input.multiple=true;input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
     input.addEventListener('change',async()=>{const files=[...(input.files||[])].slice(0,Math.max(0,Math.min(100,Number(maxCount)||0)));const picked=[];for(const file of files){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);picked.push({src:url,alt:'',_editorFileName:snap.name,_editorManaged:true});}if(picked.length)onPicked(picked);input.remove();},{once:true});input.click();
   }
+  function bindSceneImageRotationInput(input,range,applyRotation){
+    input.type='text';input.inputMode='decimal';input.autocomplete='off';input.spellcheck=false;input.enterKeyHint='done';input.pattern='-?[0-9]*([.,][0-9]*)?';
+    input.pattern='-?[0-9]*';input.setAttribute('aria-label',u('傾き（度）','Rotation in degrees'));
+    const stop=e=>e.stopPropagation();
+    ['pointerdown','touchstart','click','keydown','input'].forEach(type=>input.addEventListener(type,stop,{passive:type==='touchstart'}));
+    const commit=()=>{const raw=input.value.trim();if(!/^-?\d+$/.test(raw))return;const value=Math.max(-20,Math.min(20,Number(raw)||0));if(Number(range?.value)===value)return;applyRotation(value);};
+    input.addEventListener('change',commit);input.addEventListener('blur',commit);
+    range?.addEventListener('pointerdown',stop);range?.addEventListener('touchstart',stop,{passive:true});range?.addEventListener('click',stop);
+  }
   function sceneImagePages(image){const pages=Array.isArray(image?.pages)&&image.pages.length?image.pages:(image?.src?[{src:image.src,alt:image.alt||'',viewPoints:image.viewPoints||image.viewRec||null,_editorFileName:image._editorFileName||''}]:[]);if(pages.length&&image?.viewPoints&&!pages[0]?.viewPoints)return pages.map((page,index)=>index===0?{...page,viewPoints:image.viewPoints}:page);return pages;}
   function replaceSceneImageFirst(image,url,name){
     const pages=sceneImagePages(image);
@@ -10251,10 +10260,58 @@ function startInlineTextEdit(field='text',targetEl=null){
     input.addEventListener('change',async()=>{const file=input.files?.[0];if(file){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);onPicked({src:url,alt:'',_editorFileName:snap.name,_editorManaged:true});scheduleDraftSave(60);}input.remove();},{once:true});input.click();
   }
   function appendSceneImagePagesEditor(host,image,onChange){
-    const pages=sceneImagePages(image);const box=document.createElement('div');box.className='scene-image-pages-editor';
-    const head=document.createElement('div');head.className='scene-image-pages-head';head.textContent=u(`ページ束（${pages.length}/100）`,`Page bundle (${pages.length}/100)`);box.appendChild(head);
-    pages.forEach((page,index)=>{const row=document.createElement('div');row.className='scene-image-page-row';const label=document.createElement('span');label.textContent=`${index+1}. ${page._editorFileName||page.alt||u('画像','Image')}`;label.title=label.textContent;row.appendChild(label);const viewButton=document.createElement('button');viewButton.type='button';viewButton.textContent=(page.viewPoints?.points||page.viewRec?.points||[]).length?u('視点編集','Edit view'):u('視点設定','Set view');viewButton.onclick=()=>openViewRecRecorder(page,data=>{const next=pages.slice();next[index]={...page,viewPoints:data};delete next[index].viewRec;onChange(next);});row.appendChild(viewButton);const replace=document.createElement('button');replace.type='button';replace.textContent=u('差替','Replace');replace.onclick=()=>pickSceneImageFile(nextPage=>{const next=pages.slice();next[index]=nextPage;onChange(next);});row.appendChild(replace);for(const [text,delta] of [[u('↑','↑'),-1],[u('↓','↓'),1]]){const b=document.createElement('button');b.type='button';b.textContent=text;b.disabled=index+delta<0||index+delta>=pages.length;b.onclick=()=>{const next=pages.slice();[next[index],next[index+delta]]=[next[index+delta],next[index]];onChange(next);};row.appendChild(b);}const remove=document.createElement('button');remove.type='button';remove.textContent=u('削除','Remove');remove.onclick=()=>onChange(pages.filter((_,i)=>i!==index));row.appendChild(remove);box.appendChild(row);});
-    const add=document.createElement('button');add.type='button';add.className='scene-image-pages-add';add.textContent=u('ページを追加（複数選択可）','Add pages (multi-select)');add.disabled=pages.length>=100;add.onclick=()=>pickSceneImagePages(added=>onChange([...pages,...added].slice(0,100)),100-pages.length);box.appendChild(add);host.appendChild(box);
+    const initialPages=sceneImagePages(image);
+    const manage=document.createElement('button');manage.type='button';manage.className='scene-image-pages-manage';
+    manage.textContent=u(`ページ束を管理（${initialPages.length}ページ）`,`Manage pages (${initialPages.length})`);
+    manage.setAttribute('aria-haspopup','dialog');
+    manage.onclick=()=>{
+      let pages=sceneImagePages(image).map(page=>({...page}));
+      const overlay=document.createElement('div');overlay.className='scene-image-pages-modal';overlay.setAttribute('role','presentation');
+      const panel=document.createElement('section');panel.className='scene-image-pages-modal-panel';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',u('ページ束を編集','Edit page bundle'));
+      const header=document.createElement('header');header.className='scene-image-pages-modal-head';
+      const heading=document.createElement('div');heading.className='scene-image-pages-modal-title';
+      const close=document.createElement('button');close.type='button';close.className='scene-image-pages-modal-close';close.textContent='×';close.setAttribute('aria-label',u('閉じる','Close'));
+      header.append(heading,close);
+      const list=document.createElement('div');list.className='scene-image-pages-modal-list';
+      const footer=document.createElement('footer');footer.className='scene-image-pages-modal-foot';
+      const add=document.createElement('button');add.type='button';add.className='scene-image-pages-add';
+      add.textContent=u('＋ ページを追加（複数選択可）','＋ Add pages (multi-select)');
+      const done=document.createElement('button');done.type='button';done.className='scene-image-pages-done';done.textContent=u('完了','Done');
+      footer.append(add,done);panel.append(header,list,footer);overlay.appendChild(panel);document.body.appendChild(overlay);
+      const closeModal=()=>{overlay.remove();document.documentElement.classList.remove('scene-image-pages-open');document.removeEventListener('keydown',onKey,true);manage.focus({preventScroll:true});};
+      const onKey=e=>{if(e.key==='Escape'){e.preventDefault();closeModal();}};
+      const commit=()=>{onChange(pages.map(page=>({...page})));manage.textContent=u(`ページ束を管理（${pages.length}ページ）`,`Manage pages (${pages.length})`);};
+      const render=()=>{
+        heading.textContent=u(`ページ束（${pages.length}/100）`,`Page bundle (${pages.length}/100)`);
+        list.replaceChildren();
+        if(!pages.length){const empty=document.createElement('p');empty.className='scene-image-pages-empty';empty.textContent=u('ページがありません。画像を追加してください。','No pages yet. Add images to begin.');list.appendChild(empty);}
+        pages.forEach((page,index)=>{
+          const row=document.createElement('article');row.className='scene-image-pages-modal-row';
+          const preview=document.createElement('div');preview.className='scene-image-page-preview';
+          const thumb=document.createElement('img');thumb.src=page.src;thumb.alt=page.alt||page._editorFileName||`${index+1}`;thumb.loading='lazy';thumb.draggable=false;preview.appendChild(thumb);
+          const number=document.createElement('span');number.className='scene-image-page-number';number.textContent=String(index+1);preview.appendChild(number);
+          const info=document.createElement('div');info.className='scene-image-page-info';
+          const name=document.createElement('strong');name.textContent=page._editorFileName||page.alt||u(`ページ ${index+1}`,`Page ${index+1}`);name.title=name.textContent;
+          const vpCount=(page.viewPoints?.points||page.viewRec?.points||[]).length;
+          const meta=document.createElement('small');meta.textContent=vpCount?u(`VIEW POINT ${vpCount}視点`,`VIEW POINT · ${vpCount}`):u('VIEW POINT 未設定','VIEW POINT · not set');
+          info.append(name,meta);
+          const actions=document.createElement('div');actions.className='scene-image-page-actions';
+          const actionButton=(label,cls,fn)=>{const button=document.createElement('button');button.type='button';button.className=cls||'';button.textContent=label;button.onclick=fn;actions.appendChild(button);return button;};
+          actionButton(vpCount?u('視点編集','Edit view'):u('視点設定','Set view'),'scene-image-page-view',()=>openViewRecRecorder(page,data=>{pages[index]={...pages[index],viewPoints:data};delete pages[index].viewRec;commit();render();}));
+          actionButton(u('差替','Replace'),'scene-image-page-replace',()=>pickSceneImageFile(nextPage=>{pages[index]={...nextPage};commit();render();}));
+          const up=actionButton('↑','scene-image-page-move',()=>{[pages[index-1],pages[index]]=[pages[index],pages[index-1]];commit();render();});up.disabled=index===0;up.setAttribute('aria-label',u('前へ','Move up'));
+          const down=actionButton('↓','scene-image-page-move',()=>{[pages[index+1],pages[index]]=[pages[index],pages[index+1]];commit();render();});down.disabled=index===pages.length-1;down.setAttribute('aria-label',u('後ろへ','Move down'));
+          const remove=actionButton(u('削除','Remove'),'scene-image-page-remove',()=>{if(pages.length<=1)return;pages.splice(index,1);commit();render();});remove.disabled=pages.length<=1;
+          row.append(preview,info,actions);list.appendChild(row);
+        });
+        add.disabled=pages.length>=100;
+      };
+      add.onclick=()=>pickSceneImagePages(added=>{pages=[...pages,...added].slice(0,100);commit();render();},100-pages.length);
+      close.onclick=closeModal;done.onclick=closeModal;overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+      document.documentElement.classList.add('scene-image-pages-open');document.addEventListener('keydown',onKey,true);render();
+      requestAnimationFrame(()=>close.focus({preventScroll:true}));
+    };
+    host.appendChild(manage);
   }
   function desktopCard(title,cls=''){
     const card=document.createElement('section');card.className=`desktop-live-card ${cls}`.trim();
@@ -13139,7 +13196,7 @@ function openDesktopTextDetail(){
     sceneImageActions.append(sceneImagePick,sceneImageRemove);
     sceneImageTop.append(sceneImagePreview,sceneImageActions);
     sceneImageCard.append(sceneImageTop);
-    if(sceneImage?.src)appendSceneImagePagesEditor(sceneImageCard,sceneImage,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt??'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();});
+    if(sceneImage?.src)appendSceneImagePagesEditor(sceneImageCard,sceneImage,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt??'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined,tapAction:pages.some(page=>(page.viewPoints?.points||page.viewRec?.points||[]).length)?'viewRec':p.image.tapAction};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();});
 
     if(sceneImage?.src){
       const sceneImageOptions=document.createElement('div');sceneImageOptions.className='desktop-scene-image-options';
@@ -13162,13 +13219,13 @@ function openDesktopTextDetail(){
       const rotationTitle=document.createElement('span');rotationTitle.textContent=u('傾き','Rotation');
       const rotationRow=document.createElement('div');rotationRow.className='desktop-scene-image-rotation-row';
       const rotationRange=document.createElement('input');rotationRange.type='range';rotationRange.min='-20';rotationRange.max='20';rotationRange.step='1';rotationRange.value=String(Number(sceneImage.rotation)||0);
-      const rotationNumber=document.createElement('input');rotationNumber.type='number';rotationNumber.min='-20';rotationNumber.max='20';rotationNumber.step='1';rotationNumber.value=String(Number(sceneImage.rotation)||0);rotationNumber.setAttribute('aria-label',u('傾き（度）','Rotation in degrees'));
+      const rotationNumber=document.createElement('input');rotationNumber.value=String(Number(sceneImage.rotation)||0);
       const applyRotation=(raw)=>{const value=Math.max(-20,Math.min(20,Number(raw)||0));p.image.rotation=value;rotationRange.value=String(value);rotationNumber.value=String(value);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});const previewImg=sceneImagePreview.querySelector('img');if(previewImg)previewImg.style.transform=`rotate(${value}deg)`;};
       let rotationUndoCaptured=false;
       rotationRange.addEventListener('pointerdown',()=>{rotationUndoCaptured=false;});
       rotationRange.addEventListener('input',()=>{if(!rotationUndoCaptured){captureUndo('Scene画像の傾き変更を元に戻せます');rotationUndoCaptured=true;}applyRotation(rotationRange.value);});
       rotationRange.addEventListener('change',()=>{rotationUndoCaptured=false;});
-      rotationNumber.addEventListener('change',()=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(rotationNumber.value);});
+      bindSceneImageRotationInput(rotationNumber,rotationRange,raw=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(raw);});
       rotationRow.append(rotationRange,rotationNumber,document.createTextNode('°'));
       rotationField.append(rotationTitle,rotationRow);
 
@@ -14859,7 +14916,7 @@ function openDesktopTextDetail(){
         },{keepPanel:true});
         const remove=makeActionButton(u('画像を外す','Remove image'));remove.disabled=!current?.src;remove.onclick=()=>{captureUndo('Scene画像の削除を元に戻せます');delete p.image;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();};
         liveEditSheetBody.append(status,pick,remove);
-        if(current?.src)appendSceneImagePagesEditor(liveEditSheetBody,current,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt??'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
+        if(current?.src)appendSceneImagePagesEditor(liveEditSheetBody,current,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt??'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined,tapAction:pages.some(page=>(page.viewPoints?.points||page.viewRec?.points||[]).length)?'viewRec':p.image.tapAction};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
         if(current?.src){
           const opts=document.createElement('div');opts.className='live-edit-grid live-scene-image-options';
           opts.append(
@@ -14869,9 +14926,9 @@ function openDesktopTextDetail(){
           const rotation=document.createElement('label');rotation.className='live-edit-field live-scene-image-rotation';rotation.append(u('傾き','Rotation'));
           const rotationRow=document.createElement('div');rotationRow.className='live-scene-image-rotation-row';
           const rotationRange=document.createElement('input');rotationRange.type='range';rotationRange.min='-20';rotationRange.max='20';rotationRange.step='1';rotationRange.value=String(Number(current.rotation)||0);
-          const rotationNumber=document.createElement('input');rotationNumber.type='number';rotationNumber.min='-20';rotationNumber.max='20';rotationNumber.step='1';rotationNumber.value=String(Number(current.rotation)||0);
+          const rotationNumber=document.createElement('input');rotationNumber.value=String(Number(current.rotation)||0);
           const applyRotation=(raw)=>{const value=Math.max(-20,Math.min(20,Number(raw)||0));p.image.rotation=value;rotationRange.value=String(value);rotationNumber.value=String(value);scheduleDraftSave(40);refreshLivePlayer();const previewImg=status.querySelector('img');if(previewImg)previewImg.style.transform=`rotate(${value}deg)`;};
-          let rotationUndoCaptured=false;rotationRange.onpointerdown=()=>{rotationUndoCaptured=false;};rotationRange.oninput=()=>{if(!rotationUndoCaptured){captureUndo('Scene画像の傾き変更を元に戻せます');rotationUndoCaptured=true;}applyRotation(rotationRange.value);};rotationRange.onchange=()=>{rotationUndoCaptured=false;};rotationNumber.onchange=()=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(rotationNumber.value);};
+          let rotationUndoCaptured=false;rotationRange.onpointerdown=()=>{rotationUndoCaptured=false;};rotationRange.oninput=()=>{if(!rotationUndoCaptured){captureUndo('Scene画像の傾き変更を元に戻せます');rotationUndoCaptured=true;}applyRotation(rotationRange.value);};rotationRange.onchange=()=>{rotationUndoCaptured=false;};bindSceneImageRotationInput(rotationNumber,rotationRange,raw=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(raw);});
           rotationRow.append(rotationRange,rotationNumber,document.createTextNode('°'));rotation.append(rotationRow);
           opts.append(rotation);
 

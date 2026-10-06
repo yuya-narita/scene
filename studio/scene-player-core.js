@@ -4827,7 +4827,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         refreshHistoryGeometryAfterImageLoad();
       }
 
-      const imageTapAction = image.tapAction || (pages.length > 1 ? 'fullscreen' : image.fullscreen === false ? 'none' : 'fullscreen');
+      const hasViewPoints = pages.some(page => (page.viewPoints?.points || page.viewRec?.points || []).length) || (image.viewPoints?.points || image.viewRec?.points || []).length > 0;
+      const imageTapAction = image.tapAction || (hasViewPoints ? 'viewRec' : pages.length > 1 ? 'fullscreen' : image.fullscreen === false ? 'none' : 'fullscreen');
       if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
         const firstViewPoints=firstImage.viewPoints||image.viewPoints;
         const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;
@@ -4850,6 +4851,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           };
           openBundlePage(0,{fromScene:true});
         };
+        wrap._sceneImageOpen=open;
         wrap.addEventListener('click',open);
         wrap.addEventListener('keydown',(event)=>{
           if(event.key==='Enter' || event.key===' '){ open(event); }
