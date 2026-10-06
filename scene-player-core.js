@@ -4235,6 +4235,36 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const totalDy=t.clientY-viewState.touchStartY;
             if(Math.hypot(totalDx,totalDy)>10)viewState.moved=true;
 
+            // Follow the finger while turning a page. The current sheet slides
+            // away and exposes the adjacent page underneath; release decides
+            // whether the turn completes or springs back.
+            const activePages=viewer._scenePages||[];
+            const activeIndex=viewer._scenePageIndex||0;
+            if(viewState.scale<=1.01 && activePages.length>1 && !frame.classList.contains('is-view-rec-playing') && Math.abs(totalDx)>12 && Math.abs(totalDx)>Math.abs(totalDy)*1.15){
+              const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
+              const advances=direction==='rtl'?totalDx>0:totalDx<0;
+              const target=activeIndex+(advances?1:-1);
+              if(target>=0&&target<activePages.length){
+                if(!viewState.pageDrag){
+                  const underlay=document.createElement('img');
+                  underlay.className='sp-scene-image-page-follow-underlay';
+                  underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
+                  const rect=img.getBoundingClientRect(),frameRect=frame.getBoundingClientRect();
+                  underlay.style.position='absolute';underlay.style.left=`${rect.left-frameRect.left}px`;underlay.style.top=`${rect.top-frameRect.top}px`;
+                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';
+                  underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
+                  frame.insertBefore(underlay,img);img.style.zIndex='2';img.style.willChange='translate';
+                  viewState.pageDrag={underlay,target,sign:totalDx<0?1:-1,width:Math.max(frame.clientWidth,rect.width)};
+                }
+                const drag=viewState.pageDrag;
+                if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;}
+                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));
+                img.style.translate=`${dx}px 0`;
+                drag.underlay.style.translate=`${drag.sign*drag.width+dx}px 0`;
+                event.preventDefault();
+              }
+            }
+
             if(viewState.scale>1.01){
               event.preventDefault();
               viewState.x += t.clientX-viewState.lastX;
@@ -4259,11 +4289,35 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             viewState.dragging=false;
 
             // Horizontal swipes turn pages only at fit scale; zoomed manga remains pannable.
-            if(!viewState.multiTouch && viewState.scale<=1.01 && pages.length>1 && Math.abs(x-viewState.touchStartX)>78 && Math.abs(x-viewState.touchStartX)>Math.abs(vertical)*1.2 && duration<700){
+            const activePages=viewer._scenePages||[];
+            const activeIndex=viewer._scenePageIndex||0;
+            const draggedPage=viewState.pageDrag;
+            if(draggedPage){
+              const dx=x-viewState.touchStartX;
+              const commit=Math.abs(dx)>Math.max(58,Math.min(120,draggedPage.width*.18)) && Math.abs(dx)>Math.abs(vertical)*1.2 && duration<900;
+              draggedPage.underlay.remove();viewState.pageDrag=null;img.style.willChange='';img.style.zIndex='';
+              if(commit){
+                const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
+                const advances=direction==='rtl'?dx>0:dx<0;
+                const target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
+                if(target!==activeIndex){
+                  viewer._scenePageIncomingOffset=draggedPage.sign*draggedPage.width+dx;
+                  showPage(target);img.style.translate='';
+                  options?.onPageChange?.(target);
+                }else img.style.translate='';
+              }else{
+                img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:190,easing:'cubic-bezier(.2,.75,.25,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
+              }
               clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
-              const requested=pageIndex+(x<viewState.touchStartX?1:-1);
-              const targetPage=Math.max(0,Math.min(pages.length-1,requested));
-              if(targetPage!==pageIndex){showPage(targetPage);options?.onPageChange?.(pageIndex);}
+              viewState.multiTouch=false;return;
+            }
+            if(!viewState.multiTouch && viewState.scale<=1.01 && activePages.length>1 && Math.abs(x-viewState.touchStartX)>78 && Math.abs(x-viewState.touchStartX)>Math.abs(vertical)*1.2 && duration<700){
+              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
+              const dx=x-viewState.touchStartX;
+              const advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
+              const requested=activeIndex+(advances?1:-1);
+              const targetPage=Math.max(0,Math.min(activePages.length-1,requested));
+              if(targetPage!==activeIndex){showPage(targetPage);options?.onPageChange?.(targetPage);}
               viewState.multiTouch=false;
               return;
             }
@@ -4362,6 +4416,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // Tap empty black area to close at 1×. At zoom > 1 the same gesture is
         // reserved for panning, avoiding accidental dismissal.
         frame.addEventListener('click',(event)=>{
+          if(frame._sceneImageMode==='viewPoint'||frame.classList.contains('is-view-rec-playing'))return;
           if(event.target===frame && viewState.scale<=1.01){
             event.preventDefault();
             event.stopPropagation();
@@ -4463,18 +4518,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       })();
       const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&typeof page.src==='string'&&page.src);
       let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
+      viewer._scenePages=pages;
+      viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';
       const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
       let pageLoadToken=0;
       const showPage=(index)=>{
         if(!pages.length)return;
         const previousIndex=pageIndex;
         pageIndex=Math.max(0,Math.min(pages.length-1,index));
+        viewer._scenePageIndex=pageIndex;
         if(pageIndex!==previousIndex){clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=performance.now()+420;}
         const page=pages[pageIndex];
         const nextSrc=page.src;
         const changed=img.getAttribute('src')!==nextSrc;
         const animateTurn=changed&&!viewer.hidden&&(previousIndex!==pageIndex||options?.animatePageEntry===true);
-        const direction=pageIndex>=previousIndex?1:-1;
+        const direction=(options?.direction==='rtl'?-1:1)*(pageIndex>=previousIndex?1:-1);
         img.alt=page.alt??alt??'';
         pageControls.hidden=pages.length<2;
         pageControls.querySelector('.sp-scene-image-viewer-page-count').textContent=`${pageIndex+1} / ${pages.length}`;
@@ -4484,6 +4542,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(changed){
           const token=++pageLoadToken;
           viewer._sceneOutgoingPage?.remove?.();viewer._sceneOutgoingPage=null;
+          const outgoingShift=Number.parseFloat(img.style.translate)||0;
           let outgoing=null;
           if(animateTurn&&img.complete&&img.naturalWidth>0){
             outgoing=img.cloneNode(false);outgoing.classList.add('sp-scene-image-page-outgoing');
@@ -4498,8 +4557,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(token!==pageLoadToken)return;
             frame?._fitSceneImageFrame?.();frame?._sceneImageReset?.();
             if(animateTurn&&typeof img.animate==='function'){
-              img.animate([{opacity:.58,translate:`${direction*34}px 0`},{opacity:1,translate:'0 0'}],{duration:270,easing:'cubic-bezier(.22,.74,.18,1)'});
-              if(outgoing){const animation=outgoing.animate([{opacity:1,translate:'0 0'},{opacity:0,translate:`${-direction*34}px 0`}],{duration:270,easing:'cubic-bezier(.22,.74,.18,1)'});animation.finished.catch(()=>{}).then(()=>{outgoing.remove();if(viewer._sceneOutgoingPage===outgoing)viewer._sceneOutgoingPage=null;});}
+              const incomingOffset=Number.isFinite(viewer._scenePageIncomingOffset)?viewer._scenePageIncomingOffset:direction*34;viewer._scenePageIncomingOffset=null;
+              img.animate([{opacity:.58,translate:`${incomingOffset}px 0`},{opacity:1,translate:'0 0'}],{duration:270,easing:'cubic-bezier(.22,.74,.18,1)'});
+              if(outgoing){const animation=outgoing.animate([{opacity:1,translate:`${outgoingShift}px 0`},{opacity:0,translate:`${outgoingShift-direction*34}px 0`}],{duration:270,easing:'cubic-bezier(.22,.74,.18,1)'});animation.finished.catch(()=>{}).then(()=>{outgoing.remove();if(viewer._sceneOutgoingPage===outgoing)viewer._sceneOutgoingPage=null;});}
             }else outgoing?.remove();
           };
           img.addEventListener('load',finishLoad,{once:true});
@@ -4507,6 +4567,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           img.src=nextSrc;
         }else frame?._fitSceneImageFrame?.();
       };
+      viewer._scenePageIndex=pageIndex;
+      viewer._sceneShowPage=showPage;
       const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
       const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
       if(pageControls)pageControls.hidden=pages.length<2;
@@ -4562,7 +4624,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         return;
       }
 
-      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange:image.onPageChange,animatePageEntry:image.animatePageEntry===true});
+      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange:image.onPageChange,animatePageEntry:image.animatePageEntry===true,direction:image.pageDirection||'ltr'});
       const viewer = document.querySelector('.sp-scene-image-viewer');
       const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
       const img = viewer?.querySelector('.sp-scene-image-viewer-img');
@@ -4669,7 +4731,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           return;
         }
       };
-      frame._viewRecCancel=cancel;frame._viewPointAdvanceTouch=()=>{if(moving){frame._viewPointTapTimer=setTimeout(()=>frame._viewPointAdvanceTouch?.(),60);return;}advance(null);};frame.classList.add('is-view-rec-playing');onViewPointClick=(event)=>{if(performance.now()<frame._viewPointSuppressClickUntil)return;advance(event);};frame.addEventListener('click',onViewPointClick,true);
+      frame._viewRecCancel=cancel;frame._viewPointAdvanceTouch=()=>{if(moving){frame._viewPointTapTimer=setTimeout(()=>frame._viewPointAdvanceTouch?.(),60);return;}advance(null);};frame.classList.add('is-view-rec-playing');onViewPointClick=(event)=>{if(performance.now()<frame._viewPointSuppressClickUntil){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();return;}advance(event);};frame.addEventListener('click',onViewPointClick,true);
       // V111 — desktop keyboard parity: Enter advances VIEW POINT exactly like a tap.
       // Once the reader takes manual zoom/pan control, VIEW POINT is cancelled, so Enter
       // intentionally stops advancing as well.
@@ -4802,10 +4864,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       object.className = history ? 'sp-history-scene-image-object' : 'sp-scene-image-object';
       object.appendChild(media);
       let caption = null;
-      if (image.caption === true && String(firstImage.alt ?? image.alt ?? '').trim()) {
+      const captionText=String(firstImage.alt||image.alt||'').trim();
+      if (image.caption === true && captionText) {
         caption = document.createElement(history ? 'span' : 'div');
         caption.className = history ? 'sp-history-scene-image-caption' : 'sp-scene-image-caption';
-        caption.textContent = String(firstImage.alt || image.alt).trim();
+        caption.textContent = captionText;
         object.appendChild(caption);
       }
       wrap.appendChild(object);
@@ -4857,7 +4920,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const pointSet=page.viewPoints||(pageIndex===0?image.viewPoints:null);
             const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage};
             if(imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,sourceEl);
-            else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage});
+            else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage,direction:image.pageDirection||'ltr'});
           };
           openBundlePage(0,{fromScene:true});
         };
