@@ -2179,7 +2179,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.showCover();
       // Let the first Scene/cover background request enter the network queue
       // before warming unique chat avatars during the cover pause.
-      this._backgroundTimeout(() => {
+      if (this._chatIconPreloadTimer) clearTimeout(this._chatIconPreloadTimer);
+      this._chatIconPreloadTimer = setTimeout(() => {
+        this._chatIconPreloadTimer = 0;
         if (!this.destroyed && this.document === doc) this._preloadChatIcons();
       }, 180);
       emit(this.host, 'sceneplayer:load', { document: doc, index: this.index });
@@ -4846,6 +4848,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.host.innerHTML = '';
         this.host.classList.remove('sp-core');
       }
+      if (this._chatIconPreloadTimer) clearTimeout(this._chatIconPreloadTimer);
+      this._chatIconPreloadTimer = 0;
       this._chatIconCache?.clear();
       this._pendingChatIconImages?.clear();
       this.destroyed = true;
