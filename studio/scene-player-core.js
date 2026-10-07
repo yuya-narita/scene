@@ -4635,17 +4635,44 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // opening Enter/click to be interpreted as an advance/close. `initializing`
       // blocks progression until point 1 is visibly in place.
       let index=-1, raf=0, cancelled=false, moving=false, initializing=true;
-      // Animate focus on the existing image layer; no duplicate decoded image
-      // or canvas is allocated, which keeps the optional effect light on iPhone.
-      const focusBlur=Math.max(0,Math.min(7,Number(pointSet?.focusBlur)||0));
-      let focusAnimation=null;
-      const animateFocus=(fromBlur=0)=>{
-        focusAnimation?.cancel?.();focusAnimation=null;
-        if(!focusBlur||typeof img.animate!=='function'||matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
-        try{
-          focusAnimation=img.animate([{filter:`blur(${fromBlur}px)`},{filter:`blur(${focusBlur}px)`,offset:.38},{filter:`blur(${focusBlur}px)`,offset:.62},{filter:'blur(0px)'}],{duration:420,easing:'ease-in-out'});
-          focusAnimation.finished.catch(()=>{}).then(()=>{if(focusAnimation?.playState==='finished')focusAnimation=null;});
-        }catch(_){focusAnimation=null;}
+      // Optional panel spotlight: keep the page at full size and mask only the
+      // area outside the authored viewpoint. Existing sets default to `off`.
+      const focusStyle=['dark','light'].includes(pointSet?.focusStyle)?pointSet.focusStyle:'off';
+      let focusLayer=frame._viewPointFocusLayer;
+      if(!focusLayer){
+        focusLayer=document.createElement('div');focusLayer.className='sp-viewpoint-focus-layer';focusLayer.setAttribute('aria-hidden','true');
+        for(let i=0;i<4;i++){const shade=document.createElement('div');shade.className='sp-viewpoint-focus-shade';focusLayer.appendChild(shade);}
+        frame.appendChild(focusLayer);frame._viewPointFocusLayer=focusLayer;focusLayer.hidden=true;
+      }
+      const focusShades=[...focusLayer.children];
+      let focusTimer=0;
+      const focusRectFor=gaze=>{
+        if(gaze.type==='fit')return{x:0,y:0,width:1,height:1};
+        let width=gaze.width,height=gaze.height,cx=gaze.cx,cy=gaze.cy;
+        if(gaze.type==='rect'){width=gaze.width;height=gaze.height;cx=gaze.x+width/2;cy=gaze.y+height/2;}
+        else if(gaze.type==='legacy'){width=1/Math.max(1,gaze.scale||1);height=width;}
+        width=Math.max(.01,Math.min(1,Number(width)||1));height=Math.max(.01,Math.min(1,Number(height)||1));
+        cx=Number.isFinite(Number(cx))?Number(cx):.5;cy=Number.isFinite(Number(cy))?Number(cy):.5;
+        const x=Math.max(0,Math.min(1-width,cx-width/2)),y=Math.max(0,Math.min(1-height,cy-height/2));
+        return{x,y,width:Math.min(width,1-x),height:Math.min(height,1-y)};
+      };
+      const setSpotlight=gaze=>{
+        if(focusStyle==='off'){focusLayer.hidden=true;frame.classList.remove('is-viewpoint-spotlight');return;}
+        const r=focusRectFor(gaze),right=Math.min(1,r.x+r.width),bottom=Math.min(1,r.y+r.height);
+        focusLayer.dataset.style=focusStyle;focusLayer.hidden=false;frame.classList.add('is-viewpoint-spotlight');
+        const boxes=[
+          {left:0,top:0,width:1,height:r.y},
+          {left:0,top:r.y,width:r.x,height:r.height},
+          {left:right,top:r.y,width:1-right,height:r.height},
+          {left:0,top:bottom,width:1,height:1-bottom}
+        ];
+        boxes.forEach((box,i)=>{const el=focusShades[i];el.style.left=`${box.left*100}%`;el.style.top=`${box.top*100}%`;el.style.width=`${box.width*100}%`;el.style.height=`${box.height*100}%`;el.style.opacity=box.width>.001&&box.height>.001?'1':'0';});
+      };
+      const moveToPoint=gaze=>{
+        if(focusStyle==='off'){focusLayer.hidden=true;frame.classList.remove('is-viewpoint-spotlight');moveTo(gaze);return;}
+        if(focusTimer)clearTimeout(focusTimer);
+        current={x:0,y:0,scale:1};img.style.transform='translate3d(0,0,0) scale(1)';frame.classList.remove('is-zoomed');
+        moving=true;setSpotlight(gaze);focusTimer=setTimeout(()=>{focusTimer=0;moving=false;},320);
       };
 
       const coords=(gaze)=>{
@@ -4698,12 +4725,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const apply=(v)=>{current=v;img.style.transform=`translate3d(${v.x}px, ${v.y}px, 0) scale(${v.scale})`;frame.classList.toggle('is-zoomed',v.scale>1.01);};
       const moveTo=(gaze,duration=420)=>{
         if(raf)cancelAnimationFrame(raf);moving=true;
-        animateFocus(0);
         const from={...current},to=coords(gaze),started=performance.now(),ease=t=>1-Math.pow(1-t,3);
         const tick=now=>{if(cancelled||viewer.hidden)return;const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);apply({x:from.x+(to.x-from.x)*e,y:from.y+(to.y-from.y)*e,scale:from.scale+(to.scale-from.scale)*e});if(q<1)raf=requestAnimationFrame(tick);else{raf=0;moving=false;}};raf=requestAnimationFrame(tick);
       };
       let onViewPointKey=null,onViewPointClick=null;
-      const cancel=()=>{cancelled=true;clearTimeout(frame._viewPointTapTimer);if(raf)cancelAnimationFrame(raf);raf=0;focusAnimation?.cancel?.();focusAnimation=null;moving=false;frame._viewRecCancel=null;frame._viewPointAdvanceTouch=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing');if(onViewPointClick)frame.removeEventListener('click',onViewPointClick,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
+      const cancel=()=>{cancelled=true;clearTimeout(frame._viewPointTapTimer);clearTimeout(focusTimer);focusTimer=0;if(raf)cancelAnimationFrame(raf);raf=0;moving=false;frame._viewRecCancel=null;frame._viewPointAdvanceTouch=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing','is-viewpoint-spotlight');if(focusLayer)focusLayer.hidden=true;if(onViewPointClick)frame.removeEventListener('click',onViewPointClick,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
       // Manual pinch / wheel / double-click hands the viewer to the reader completely.
       // Do not resume VIEW POINT on the synthetic click that follows a drag.
       frame._onViewPointManualControl=()=>cancel();
@@ -4718,7 +4744,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // V109 — do not refit/rewrite the viewport between authored points.
           // Re-fitting here can force a layout/paint between two transforms and show up
           // as a one-frame flash. Opening + actual resize already perform the fit.
-          index++;moveTo(points[index]);
+          index++;moveToPoint(points[index]);
         }
         // V116 — after the final authored point, the NEXT deliberate Enter/tap
         // closes the viewer. This is intentional VIEW POINT completion, not native
@@ -4763,13 +4789,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // not need an extra fullscreen click before keyboard/tap progression begins.
           // Let the V110 pickup transition finish, then move straight to point 1.
           if(index<0&&points.length){
-            if(startAtAuthoredPoint){index=0;apply(coords(points[0]));initializing=false;animateFocus(focusBlur);img.style.visibility='';return;}
+            if(startAtAuthoredPoint){index=0;if(focusStyle==='off')apply(coords(points[0]));else setSpotlight(points[0]);initializing=false;img.style.visibility='';return;}
             // Wait for the V110 pickup animation, then establish point 1 as a real
             // settled state. Only after that may Enter/tap advance to point 2.
             setTimeout(()=>{
               if(cancelled||viewer.hidden)return;
               index=0;
-              moveTo(points[0]);
+              moveToPoint(points[0]);
               const release=()=>{
                 if(cancelled||viewer.hidden)return;
                 if(moving){setTimeout(release,24);return;}

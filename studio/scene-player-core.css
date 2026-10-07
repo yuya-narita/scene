@@ -2960,3 +2960,11 @@ html.sp-scene-image-open body{
 .sp-scene-image.has-page-stack .sp-scene-image-media img{position:relative;z-index:1}
 .sp-scene-image[data-image-rounded="true"] .sp-scene-image-media img,.sp-scene-image[data-image-rounded="true"] .scene-image-stack-sheet{border-radius:12px}
 .sp-scene-image[data-image-rounded="false"] .sp-scene-image-media img,.sp-scene-image[data-image-rounded="false"] .scene-image-stack-sheet{border-radius:0}
+
+/* V188 — spotlight one authored VIEW POINT region while preserving the full page. */
+.sp-viewpoint-focus-layer{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none;contain:paint}
+.sp-viewpoint-focus-layer[hidden]{display:none!important}
+.sp-viewpoint-focus-shade{position:absolute;box-sizing:border-box;pointer-events:none;opacity:0;transition:left .32s cubic-bezier(.22,.74,.18,1),top .32s cubic-bezier(.22,.74,.18,1),width .32s cubic-bezier(.22,.74,.18,1),height .32s cubic-bezier(.22,.74,.18,1),opacity .2s ease;-webkit-backdrop-filter:blur(1.5px);backdrop-filter:blur(1.5px)}
+.sp-viewpoint-focus-layer[data-style="dark"] .sp-viewpoint-focus-shade{background:rgba(0,0,0,.24);-webkit-backdrop-filter:blur(1.5px) brightness(.42) saturate(.72);backdrop-filter:blur(1.5px) brightness(.42) saturate(.72)}
+.sp-viewpoint-focus-layer[data-style="light"] .sp-viewpoint-focus-shade{background:rgba(255,255,255,.48);-webkit-backdrop-filter:blur(1.3px) brightness(1.35) saturate(.5);backdrop-filter:blur(1.3px) brightness(1.35) saturate(.5)}
+@media(prefers-reduced-motion:reduce){.sp-viewpoint-focus-shade{transition:none}}
