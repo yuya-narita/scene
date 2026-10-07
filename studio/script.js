@@ -12855,6 +12855,15 @@ function openDesktopTextDetail(){
       imageOps.append(desktopAction(u('画像を外す','Remove image'),()=>coverImageClear?.click(),false,'is-danger'));
     }
     imageCard.appendChild(imageOps);
+    const startCard=desktopCard(u('「はじめる」後の動作','After tapping START'));
+    const savedStartMode=workingDocument?.cover?.startMode==='comic'?'comic':'scene';
+    startCard.append(desktopMakeSelect(u('開始後','After start'),[['scene',u('Sceneから読む','Start with Scene')],['comic',u('漫画ビューアで1ページ目を開く','Open page 1 in comic viewer')]],savedStartMode,value=>{
+      coverStartMode=value==='comic'?'comic':'scene';
+      syncEasyShellToWorkingDocument();
+      refreshLivePlayerDocumentChrome();
+      syncEasyPublishButton();
+      scheduleDraftSave(70);
+    }));
     // Cover is intentionally a single-sheet editor. Unlike Scene authoring,
     // there are too few groups to justify tabs and switching tabs hides context.
     desktopLivePanel.hidden=false;
@@ -12867,7 +12876,7 @@ function openDesktopTextDetail(){
     const pageKicker=document.createElement('small');pageKicker.textContent='COVER';
     const pageTitle=document.createElement('strong');pageTitle.textContent=u('表紙を編集','Edit cover');
     pageHead.append(pageKicker,pageTitle);
-    shell.append(pageHead,textCard,styleCard,imageCard);
+    shell.append(pageHead,textCard,styleCard,imageCard,startCard);
     desktopLivePanelBody.appendChild(shell);
   }
 

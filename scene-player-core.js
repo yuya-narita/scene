@@ -4649,7 +4649,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
       };
       const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
-      const startAtAuthoredPoint=(Number(image.pageIndex)||0)>0;
+      const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0;
       this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange,animatePageEntry:image.animatePageEntry===true&&!startAtAuthoredPoint,viewPointStartHidden:startAtAuthoredPoint,direction:image.pageDirection||'ltr'});
       const viewer = document.querySelector('.sp-scene-image-viewer');
       const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
@@ -4934,11 +4934,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const imageTapAction = image.tapAction || (hasViewPoints ? 'viewRec' : pages.length > 1 ? 'fullscreen' : image.fullscreen === false ? 'none' : 'fullscreen');
       const firstViewPoints=firstImage.viewPoints||firstImage.viewRec||image.viewPoints||image.viewRec;
       const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;
-      const openBundlePage=(pageIndex,{fromScene=false,forceFullscreen=false}={})=>{
+      const openBundlePage=(pageIndex,{fromScene=false,forceFullscreen=false,startAtAuthoredPoint=false}={})=>{
         const page=pages[pageIndex]||firstImage;
         const sourceEl=fromScene?wrap:null;
         const pointSet=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
-        const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage};
+        const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage,startAtAuthoredPoint};
         if(!forceFullscreen&&imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,sourceEl);
         else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage,direction:image.pageDirection||'ltr'});
       };
@@ -4947,7 +4947,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       wrap._sceneImageOpenForReading=(event)=>{
         event?.preventDefault?.();
         event?.stopPropagation?.();
-        openBundlePage(0,{fromScene:true,forceFullscreen:imageTapAction!=='viewRec'});
+        openBundlePage(0,{fromScene:true,forceFullscreen:imageTapAction!=='viewRec',startAtAuthoredPoint:true});
       };
       if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
         wrap.classList.add(hasViewRec ? 'is-view-rec' : 'is-zoomable');
