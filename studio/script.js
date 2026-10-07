@@ -133,6 +133,7 @@
   const coverQuickEpisode=$('#coverQuickEpisode');
   const coverQuickEpisodeTitle=$('#coverQuickEpisodeTitle');
   const coverQuickDescription=$('#coverQuickDescription');
+  const coverQuickStartMode=$('#coverQuickStartMode');
   const coverQuickFont=$('#coverQuickFont');
   const coverQuickLogo=$('#coverQuickLogo');
   const coverQuickLogoClear=$('#coverQuickLogoClear');
@@ -222,6 +223,7 @@
   let coverLogoUrl = '';
   let coverLogoFileName = '';
   let coverFontFamily = 'serif';
+  let coverStartMode = 'scene';
   let endingFontFamily = 'serif';
   // Rich Paste v0.1 — keep semantic clipboard structure beside the existing plain-text source.
   // The existing Splitter still receives plain text; semantic ranges are mapped back after splitting.
@@ -654,7 +656,7 @@
     document.querySelectorAll('.toolbox-detail-card .toolbox-card-open').forEach(el=>el.textContent=t('toolbox.open'));
     const quickCoverLabels=[
       ['#coverQuickWorkTitle','field.title'],['#coverQuickSubtitle','work.subtitle'],['#coverQuickAuthor','field.author'],
-      ['#coverQuickEpisode','work.episode'],['#coverQuickEpisodeTitle','Episode title'],['#coverQuickDescription','work.description'],['#coverQuickFont','cover.font']
+      ['#coverQuickEpisode','work.episode'],['#coverQuickEpisodeTitle','Episode title'],['#coverQuickDescription','work.description'],['#coverQuickStartMode','cover.startMode'],['#coverQuickFont','cover.font']
     ];
     quickCoverLabels.forEach(([sel,key])=>{const input=$(sel);const cap=input?.closest('label')?.querySelector(':scope > span');if(cap){cap.textContent=key==='Episode title'?u('今回のタイトル','Episode title'):t(key);}});
     const quickEndLabels=[
@@ -663,6 +665,7 @@
     quickEndLabels.forEach(([sel,key])=>{const input=$(sel);const cap=input?.closest('label')?.querySelector(':scope > span');if(cap)cap.textContent=t(key);});
     if(coverQuickEpisodeTitle)coverQuickEpisodeTitle.placeholder=u('例：窯の前で','e.g. Before the Kiln');
     if(coverQuickWorkTitle)coverQuickWorkTitle.placeholder=u('作品タイトル','Untitled');
+    const coverStartModeSelect=$('#coverQuickStartMode'); if(coverStartModeSelect){const cap=coverStartModeSelect.closest('label')?.querySelector(':scope > span');if(cap)cap.textContent=u('「はじめる」後の動作','After tapping START');const labels={scene:u('Sceneから読む','Start with Scene'),comic:u('漫画ビューアで1ページ目を開く','Open page 1 in comic viewer')};[...coverStartModeSelect.options].forEach(o=>{if(labels[o.value])o.textContent=labels[o.value];});}
     const coverFont=$('#coverQuickFont'); if(coverFont){const map={serif:'font.serif',sans:'font.sans',mono:'font.mono'};[...coverFont.options].forEach(o=>{if(map[o.value])o.textContent=t(map[o.value]);});}
     const endingFont=$('#endingQuickFont'); if(endingFont){const map={serif:'font.serif',sans:'font.sans',mono:'font.mono'};[...endingFont.options].forEach(o=>{if(map[o.value])o.textContent=t(map[o.value]);});}
 
@@ -1372,7 +1375,7 @@
       recProgress:clone(autoRecProgress),
       theme:selectedTheme,
       cinemaBackground:cinemaBackgroundUrl||'',
-      cover:{url:coverImageUrl||'',name:coverImageFileName||'',position:coverPositionCss('phone'),positions:coverPositionsForDocument(),logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||''},
+      cover:{url:coverImageUrl||'',name:coverImageFileName||'',position:coverPositionCss('phone'),positions:coverPositionsForDocument(),logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||'',startMode:coverStartMode},
       assets:serializeDraftAssets()
     };
   }
@@ -1420,6 +1423,7 @@
       const url=URL.createObjectURL(item.blob);map.set(item.url,url);registerAsset(url,item.blob,item.name||'asset');
     }
     workingDocument=row.document?replaceAssetRefs(clone(row.document),map):null;
+    coverStartMode=workingDocument?.cover?.startMode==='comic'?'comic':'scene';
     if(workingDocument)ensureMasterIdentity(workingDocument);
     currentDraftId=row.id;localStorage.setItem(DRAFT_LAST_KEY,row.id);
     selectedSceneIndex=Math.max(0,Number(row.selectedSceneIndex)||0);
@@ -1756,7 +1760,7 @@
       appAlert(uiLanguage==='ja'?'現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。':'The current work could not be saved automatically, so Studio did not start a new work.');
       return false;
     }
-    workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceModeLocked)commerceModeLocked.checked=false;if(commerceSupportEnabled)commerceSupportEnabled.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    workingDocument=null;coverStartMode='scene';relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceModeLocked)commerceModeLocked.checked=false;if(commerceSupportEnabled)commerceSupportEnabled.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     latestPublishedId='';
     latestPublishedUrl='';
@@ -2734,6 +2738,7 @@
       commerce:{ ownCopyGate:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'reader_price':'copy')), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
       studio:{ commerceDraft:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'reader_price':'copy')), currency:'JPY', ...((commerceModePurchase?.checked||commerceModeLocked?.checked)?{amount:Math.floor(Number(commerceAmountInput?.value||100))}:{amount:100}), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
       cover:{
+        startMode:coverStartMode==='comic'?'comic':'scene',
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
         fontFamily:coverFontFamily,
@@ -3178,7 +3183,7 @@
     applyCommerceDraftToDocument(workingDocument);
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
     const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
-    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
+    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,startMode:coverStartMode==='comic'?'comic':'scene',...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -4800,6 +4805,7 @@
     el.textContent=message||''; el.classList.toggle('is-error',Boolean(error));
   }
   function restoreEasyStateFromDocument(doc){
+    coverStartMode=doc?.cover?.startMode==='comic'?'comic':'scene';
     relayEnabled=relayPolicyEnabled(doc);
     refreshRelayPolicyUI();
     if(ownCopyEnabledInput)ownCopyEnabledInput.checked=doc?.sharing?.ownCopy?.enabled===true;
@@ -7257,6 +7263,7 @@
   function applyHistorySnapshot(snap){
     if(!snap)return;
     workingDocument=snap.workingDocument ? clone(snap.workingDocument) : null;
+    coverStartMode=workingDocument?.cover?.startMode==='comic'?'comic':'scene';
     selectedSceneIndex=snap.selectedSceneIndex;
     easySourceDirty=snap.easySourceDirty;
     if(titleInput)titleInput.value=snap.easy.title;
@@ -7634,6 +7641,7 @@
     if(episodeTitleInput)episodeTitleInput.value=coverQuickEpisodeTitle?.value||'';
     if(descriptionInput)descriptionInput.value=coverQuickDescription?.value||'';
     if(coverQuickFont)coverFontFamily=coverQuickFont.value||'serif';
+    if(coverQuickStartMode)coverStartMode=coverQuickStartMode.value==='comic'?'comic':'scene';
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
 
@@ -8082,6 +8090,7 @@
     coverQuickEpisodeTitle.value=episodeTitleInput?.value||'';
     if(coverQuickDescription)coverQuickDescription.value=descriptionInput?.value||'';
     if(coverQuickFont)coverQuickFont.value=coverFontFamily;
+    if(coverQuickStartMode)coverQuickStartMode.value=(workingDocument?.cover?.startMode==='comic'||coverStartMode==='comic')?'comic':'scene';
     ensureCoverVisibilityPanel();
     syncCoverVisibilityControls();
     coverQuickImageClear.hidden=!coverImageUrl;
@@ -8113,6 +8122,7 @@
   coverPreviewSubtitle?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('subtitle');});
   [coverQuickWorkTitle,coverQuickAuthor,coverQuickSubtitle,coverQuickEpisode,coverQuickEpisodeTitle,coverQuickDescription].forEach(el=>el?.addEventListener('input',syncCoverQuickToMain));
   coverQuickFont?.addEventListener('change',syncCoverQuickToMain);
+  coverQuickStartMode?.addEventListener('change',syncCoverQuickToMain);
   coverQuickLogo?.addEventListener('click',()=>coverLogoInput?.click());
   coverQuickLogoClear?.addEventListener('click',()=>coverLogoClear?.click());
   coverQuickImage?.addEventListener('click',()=>coverImageInput?.click());
@@ -8868,6 +8878,7 @@
   function loadSceneFormatFromObject(value,{openPlayer=true,startAt=0}={}){
     const doc=validateSceneFormatV1(clone(value));
     workingDocument=doc;
+    coverStartMode=doc.cover?.startMode==='comic'?'comic':'scene';
     latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
     easySourceDirty=false;
     selectedSceneIndex=0;

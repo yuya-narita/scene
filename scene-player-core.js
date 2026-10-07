@@ -386,7 +386,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.showCover({restart:true});
       });
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
-      if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover();});
+      if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover(e);});
       if(this.els.endingCover)this._on(this.els.endingCover,'click',()=>this.showCover({restart:true}));
       this._on(this.els.auto, 'click', (e) => {
         e.stopPropagation();
@@ -3025,7 +3025,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return true;
     }
 
-    _beginFromCover() {
+    _beginFromCover(startEvent) {
       if(!this.document || !this.els?.cover)return false;
       // Cover -> Scene 1 must always re-arm navigation as well as audio.
       // Without this reset a synthetic click suppressed at the end of the first
@@ -3048,6 +3048,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
       this._render();
+      // A work may start directly in its comic viewer. Open the first Scene's
+      // image from the same trusted cover gesture so iOS Safari keeps the action
+      // attached to the user's tap. Works without a usable image fall back to Scene.
+      if(this.document?.cover?.startMode==='comic'){
+        const firstImage=this.els?.stage?.querySelector('.sp-scene.is-active .sp-scene-image');
+        firstImage?._sceneImageOpenForReading?.(startEvent);
+      }
       // V112 — keyboard reading starts immediately after START. Move focus now
       // and once more after the frame so mouse and keyboard starts both leave
       // the Player ready for Enter without an extra Scene click.
@@ -4925,9 +4932,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const hasViewPoints = pages.some(page => (page.viewPoints?.points || page.viewRec?.points || []).length) || (image.viewPoints?.points || image.viewRec?.points || []).length > 0;
       const imageTapAction = image.tapAction || (hasViewPoints ? 'viewRec' : pages.length > 1 ? 'fullscreen' : image.fullscreen === false ? 'none' : 'fullscreen');
+      const firstViewPoints=firstImage.viewPoints||firstImage.viewRec||image.viewPoints||image.viewRec;
+      const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;
+      const openBundlePage=(pageIndex,{fromScene=false,forceFullscreen=false}={})=>{
+        const page=pages[pageIndex]||firstImage;
+        const sourceEl=fromScene?wrap:null;
+        const pointSet=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
+        const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage};
+        if(!forceFullscreen&&imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,sourceEl);
+        else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage,direction:image.pageDirection||'ltr'});
+      };
+      // The cover's comic-start mode opens the image even when ordinary Scene
+      // tapping was disabled. Preserve authored VIEW POINT behavior when selected.
+      wrap._sceneImageOpenForReading=(event)=>{
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        openBundlePage(0,{fromScene:true,forceFullscreen:imageTapAction!=='viewRec'});
+      };
       if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
-        const firstViewPoints=firstImage.viewPoints||firstImage.viewRec||image.viewPoints||image.viewRec;
-        const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;
         wrap.classList.add(hasViewRec ? 'is-view-rec' : 'is-zoomable');
         wrap.setAttribute('role','button');
         wrap.setAttribute('tabindex','0');
@@ -4937,14 +4959,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const open = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          const openBundlePage=(pageIndex,{fromScene=false}={})=>{
-            const page=pages[pageIndex]||firstImage;
-            const sourceEl=fromScene?wrap:null;
-            const pointSet=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
-            const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage};
-            if(imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,sourceEl);
-            else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage,direction:image.pageDirection||'ltr'});
-          };
           openBundlePage(0,{fromScene:true});
         };
         wrap._sceneImageOpen=open;

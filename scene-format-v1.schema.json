@@ -1536,6 +1536,11 @@
     "cover": {
       "type": "object",
       "properties": {
+        "startMode": {
+          "enum": ["scene", "comic"],
+          "default": "scene",
+          "description": "How START behaves: begin Scene playback or open the first Scene image viewer."
+        },
         "src": {
           "type": "string"
         },
