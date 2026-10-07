@@ -10138,35 +10138,40 @@ function startInlineTextEdit(field='text',targetEl=null){
   // Phase 6 / V99 — VIEW POINT authoring.
   // The author chooses stable viewpoints; the reader chooses WHEN to move to the next one.
   // No raw hand motion or timing is stored.
-  function openViewRecRecorder(image,onSave){
+  function openViewRecRecorder(image,onSave,bundleOptions={}){
     if(!image?.src)return;
+    const bundlePages=Array.isArray(bundleOptions.pages)?bundleOptions.pages.map(page=>({...page})):null;
+    let currentPageIndex=Math.max(0,Math.min(Math.max(0,(bundlePages?.length||1)-1),Number(bundleOptions.index)||0));
+    let currentImage=bundlePages?.[currentPageIndex]||image;
     const overlay=document.createElement('div');overlay.className='view-rec-recorder';
     const panel=document.createElement('div');panel.className='view-rec-recorder-panel';
     const head=document.createElement('div');head.className='view-rec-recorder-head';
     const title=document.createElement('div');title.className='view-rec-recorder-title';title.textContent='VIEW POINT';
+    const pageCounter=document.createElement('div');pageCounter.className='view-rec-page-counter';pageCounter.hidden=!bundlePages;pageCounter.textContent=bundlePages?`${currentPageIndex+1} / ${bundlePages.length}`:'';
     const close=document.createElement('button');close.type='button';close.className='view-rec-recorder-close';close.textContent='×';close.setAttribute('aria-label',u('閉じる','Close'));
-    head.append(title,close);
+    head.append(title,pageCounter,close);
     const stage=document.createElement('div');stage.className='view-rec-recorder-stage';
-    const img=document.createElement('img');img.className='view-rec-recorder-image';img.src=image.src;img.alt=image.alt||'';img.draggable=false;stage.appendChild(img);
-    const selectionBox=document.createElement('div');selectionBox.className='view-rec-selection-box';selectionBox.hidden=true;selectionBox.setAttribute('aria-hidden','true');stage.appendChild(selectionBox);
-    const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('通常の視点はズームして「＋視点を追加」。横長コマは「コマ範囲を選択」→コマをドラッグで囲む→追加。','For a normal view, zoom and add. For a wide panel, select panel area, drag around it, then add.');
+    const img=document.createElement('img');img.className='view-rec-recorder-image';img.src=currentImage.src;img.alt=currentImage.alt||'';img.draggable=false;stage.appendChild(img);
+    const pagePrev=document.createElement('button');pagePrev.type='button';pagePrev.className='view-rec-page-arrow is-prev';pagePrev.textContent='‹';pagePrev.setAttribute('aria-label',u('前のページ','Previous page'));pagePrev.hidden=!bundlePages;
+    const pageNext=document.createElement('button');pageNext.type='button';pageNext.className='view-rec-page-arrow is-next';pageNext.textContent='›';pageNext.setAttribute('aria-label',u('次のページ','Next page'));pageNext.hidden=!bundlePages;stage.append(pagePrev,pageNext);
+    const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('画像を拡大・移動して、見せたい位置で「＋視点を追加」。左右の矢印でページを切り替えます。','Zoom or move the image to the desired view, then add a viewpoint. Use the arrows to switch pages.');
     const status=document.createElement('div');status.className='view-rec-recorder-status';
     const controls=document.createElement('div');controls.className='view-rec-recorder-controls';
     const add=document.createElement('button');add.type='button';add.className='view-rec-button is-rec';add.textContent=u('＋ 視点を追加','＋ Add viewpoint');
     const reset=document.createElement('button');reset.type='button';reset.className='view-rec-button';reset.textContent=u('全景に戻す','Reset view');
     const clearPoints=document.createElement('button');clearPoints.type='button';clearPoints.className='view-rec-button';clearPoints.textContent=u('視点を全削除','Clear viewpoints');
-    const selectArea=document.createElement('button');selectArea.type='button';selectArea.className='view-rec-button';selectArea.textContent=u('▱ コマ範囲を選択','▱ Select panel area');selectArea.setAttribute('aria-pressed','false');
     const save=document.createElement('button');save.type='button';save.className='view-rec-button is-primary';save.textContent=u('保存','Save');
     const axis=document.createElement('button');axis.type='button';axis.className='view-rec-button';axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');axis.setAttribute('aria-pressed','false');
     const axisY=document.createElement('button');axisY.type='button';axisY.className='view-rec-button';axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');axisY.setAttribute('aria-pressed','false');
     const cancel=document.createElement('button');cancel.type='button';cancel.className='view-rec-button';cancel.textContent=u('キャンセル','Cancel');
-    controls.append(add,reset,axis,axisY,selectArea,clearPoints,save,cancel);panel.append(head,stage,hint,status,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
+    controls.append(add,reset,axis,axisY,clearPoints,save,cancel);panel.append(head,stage,hint,status,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
 
     // V113 — reopening VIEW POINT is an edit, not an implicit destructive rebuild.
     // Preserve the saved point sequence unless the author explicitly clears it.
-    const savedPointSet=image?.viewPoints||image?.viewRec||null;
-    const savedPoints=Array.isArray(savedPointSet?.points)?savedPointSet.points.map(point=>JSON.parse(JSON.stringify(point))):[];
-    const state={scale:1,x:0,y:0,points:savedPoints,zoomAnimRaf:0,drag:false,lastX:0,lastY:0,pinchDistance:0,pinchScale:1,axisLockX:false,axisLockY:false,dragAnchorY:0,dragAnchorX:0,selectMode:false,selectDrag:false,selectStart:null,selectedRect:null};
+    const savedPointSet=currentImage?.viewPoints||currentImage?.viewRec||null;
+    const normalizePoint=point=>{const copy=JSON.parse(JSON.stringify(point));delete copy.fit;return copy;};
+    const savedPoints=Array.isArray(savedPointSet?.points)?savedPointSet.points.map(normalizePoint):[];
+    const state={scale:1,x:0,y:0,points:savedPoints,zoomAnimRaf:0,drag:false,lastX:0,lastY:0,pinchDistance:0,pinchScale:1,axisLockX:false,axisLockY:false,dragAnchorY:0,dragAnchorX:0};
     // V102 — the authoring viewport itself follows the source-image aspect ratio.
     // VIEW POINT is therefore authored in image space, not in the current device/window shape.
     const sizeStageToSource=()=>{
@@ -10182,12 +10187,6 @@ function startInlineTextEdit(field='text',targetEl=null){
     const bounds=()=>{const vp=viewport(),w=Math.max(1,img.clientWidth)*state.scale,h=Math.max(1,img.clientHeight)*state.scale;return{maxX:Math.max(0,(w-vp.w)/2),maxY:Math.max(0,(h-vp.h)/2)}};
     const clampPan=()=>{const b=bounds();state.x=Math.max(-b.maxX,Math.min(b.maxX,state.x));state.y=Math.max(-b.maxY,Math.min(b.maxY,state.y));};
     const apply=()=>{clampPan();img.style.transform=`translate3d(${state.x}px,${state.y}px,0) scale(${state.scale})`;};
-    const clamp01=value=>Math.max(0,Math.min(1,value));
-    const sourcePoint=(clientX,clientY)=>{const r=stage.getBoundingClientRect(),vp=viewport(),iw=Math.max(1,img.clientWidth*state.scale),ih=Math.max(1,img.clientHeight*state.scale);return{x:clamp01(.5+(clientX-r.left-vp.w/2-state.x)/iw),y:clamp01(.5+(clientY-r.top-vp.h/2-state.y)/ih)};};
-    const paintSelection=(x1,y1,x2,y2)=>{const r=stage.getBoundingClientRect();selectionBox.hidden=false;selectionBox.style.left=`${Math.min(x1,x2)-r.left}px`;selectionBox.style.top=`${Math.min(y1,y2)-r.top}px`;selectionBox.style.width=`${Math.abs(x2-x1)}px`;selectionBox.style.height=`${Math.abs(y2-y1)}px`;};
-    const beginSelection=(clientX,clientY)=>{state.selectDrag=true;state.selectStart={x:clientX,y:clientY};state.selectedRect=null;paintSelection(clientX,clientY,clientX,clientY);};
-    const updateSelection=(clientX,clientY)=>{if(!state.selectDrag||!state.selectStart)return;paintSelection(state.selectStart.x,state.selectStart.y,clientX,clientY);};
-    const finishSelection=(clientX,clientY)=>{if(!state.selectDrag||!state.selectStart)return;updateSelection(clientX,clientY);const a=sourcePoint(state.selectStart.x,state.selectStart.y),b=sourcePoint(clientX,clientY),left=Math.min(a.x,b.x),top=Math.min(a.y,b.y),width=Math.abs(a.x-b.x),height=Math.abs(a.y-b.y);state.selectDrag=false;state.selectStart=null;if(width<.025||height<.025){state.selectedRect=null;selectionBox.hidden=true;status.textContent=u('範囲が小さすぎます。コマを囲み直してください','Selection is too small. Drag around the panel again.');return;}state.selectedRect={x:+left.toFixed(5),y:+top.toFixed(5),width:+width.toFixed(5),height:+height.toFixed(5)};status.textContent=u('コマ範囲を選択しました。「＋ 視点を追加」でこの範囲を登録します','Panel area selected. Tap Add viewpoint to save this area.');};
     const gazePoint=()=>{
       // V102 — save the visible rectangle on the ORIGINAL image.
       // Because the authoring stage has the same aspect ratio as the source, this
@@ -10201,35 +10200,42 @@ function startInlineTextEdit(field='text',targetEl=null){
       const x=Math.max(0,Math.min(1-width,cx-width/2)),y=Math.max(0,Math.min(1-height,cy-height/2));
       return{type:'focus',rect:{x:+x.toFixed(5),y:+y.toFixed(5),width:+width.toFixed(5),height:+height.toFixed(5)}};
     };
-    const updateStatus=()=>{status.textContent=state.selectedRect?u(`範囲を選択済み · 視点 ${state.points.length}個`,`Area selected · ${state.points.length} viewpoints`):state.points.length?u(`視点 ${state.points.length}個 · 読者タップで順番に移動`,`Viewpoints: ${state.points.length} · reader taps to advance`):u('まだ視点はありません','No viewpoints yet');save.disabled=state.points.length<1;};
-    const zoomAt=(clientX,clientY,next)=>{const r=stage.getBoundingClientRect(),vp=viewport(),old=state.scale,scale=clampScale(next);if(Math.abs(scale-old)<.0001)return;state.selectedRect=null;selectionBox.hidden=true;updateStatus();const dx=clientX-r.left-vp.w/2,dy=clientY-r.top-vp.h/2,ratio=scale/old;state.x=dx-(dx-state.x)*ratio;state.y=dy-(dy-state.y)*ratio;state.scale=scale;apply();};
-    const resetView=()=>{state.scale=1;state.x=0;state.y=0;state.selectedRect=null;selectionBox.hidden=true;apply();updateStatus();};
+    const updateStatus=()=>{status.textContent=state.points.length?u(`視点 ${state.points.length}個 · 読者タップで順番に移動`,`Viewpoints: ${state.points.length} · reader taps to advance`):u('まだ視点はありません','No viewpoints yet');save.disabled=!bundlePages&&state.points.length<1;};
+    const zoomAt=(clientX,clientY,next)=>{const r=stage.getBoundingClientRect(),vp=viewport(),old=state.scale,scale=clampScale(next);if(Math.abs(scale-old)<.0001)return;updateStatus();const dx=clientX-r.left-vp.w/2,dy=clientY-r.top-vp.h/2,ratio=scale/old;state.x=dx-(dx-state.x)*ratio;state.y=dy-(dy-state.y)*ratio;state.scale=scale;apply();};
+    const resetView=()=>{state.scale=1;state.x=0;state.y=0;apply();updateStatus();};
     const dist=(a,b)=>Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY),center=(a,b)=>({x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2});
     const cancelZoomAnimation=()=>{if(state.zoomAnimRaf)cancelAnimationFrame(state.zoomAnimRaf);state.zoomAnimRaf=0;};
     const animateViewTo=(target,duration=340)=>{cancelZoomAnimation();const from={x:state.x,y:state.y,scale:state.scale},started=performance.now(),ease=t=>1-Math.pow(1-t,3);const step=now=>{const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);state.x=from.x+(target.x-from.x)*e;state.y=from.y+(target.y-from.y)*e;state.scale=from.scale+(target.scale-from.scale)*e;apply();if(q<1)state.zoomAnimRaf=requestAnimationFrame(step);else state.zoomAnimRaf=0;};state.zoomAnimRaf=requestAnimationFrame(step);};
     const doubleTapZoomTarget=(clientX,clientY,nextScale)=>{const r=stage.getBoundingClientRect(),vp=viewport(),old=state.scale,scale=clampScale(nextScale),dx=clientX-r.left-vp.w/2,dy=clientY-r.top-vp.h/2,ratio=scale/old;return{x:dx-(dx-state.x)*ratio,y:dy-(dy-state.y)*ratio,scale};};
-    const toggleDoubleTapZoom=(x,y)=>{state.selectedRect=null;selectionBox.hidden=true;updateStatus();return state.scale>1.05?animateViewTo({x:0,y:0,scale:1}):animateViewTo(doubleTapZoomTarget(x,y,2));};
+    const toggleDoubleTapZoom=(x,y)=>{updateStatus();return state.scale>1.05?animateViewTo({x:0,y:0,scale:1}):animateViewTo(doubleTapZoomTarget(x,y,2));};
     let lastTapTime=0,lastTapX=0,lastTapY=0;
     const registerTap=(x,y)=>{const now=performance.now(),near=Math.hypot(x-lastTapX,y-lastTapY)<42;if(now-lastTapTime<330&&near){lastTapTime=0;toggleDoubleTapZoom(x,y);return true;}lastTapTime=now;lastTapX=x;lastTapY=y;return false;};
     stage.addEventListener('dblclick',e=>{e.preventDefault();toggleDoubleTapZoom(e.clientX,e.clientY);});
     stage.addEventListener('wheel',e=>{e.preventDefault();cancelZoomAnimation();zoomAt(e.clientX,e.clientY,state.scale*Math.exp(-e.deltaY*.0015));},{passive:false});
-    stage.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')return;cancelZoomAnimation();if(state.selectMode){beginSelection(e.clientX,e.clientY);stage.setPointerCapture?.(e.pointerId);e.preventDefault();return;}state.drag=true;state.selectedRect=null;selectionBox.hidden=true;state.lastX=e.clientX;state.lastY=e.clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;stage.setPointerCapture?.(e.pointerId);});
-    stage.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;if(state.selectDrag){updateSelection(e.clientX,e.clientY);return;}if(!state.drag)return;if(!state.axisLockY)state.x+=e.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=e.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=e.clientX;state.lastY=e.clientY;apply();});
-    const endDrag=e=>{if(state.selectDrag&&e)finishSelection(e.clientX,e.clientY);state.drag=false;};stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',endDrag);
-    stage.addEventListener('touchstart',e=>{cancelZoomAnimation();if(e.touches.length===2){e.preventDefault();state.pinchDistance=dist(e.touches[0],e.touches[1]);state.pinchScale=state.scale;state.drag=false;state.selectDrag=false;state.selectStart=null;state.selectedRect=null;selectionBox.hidden=true;}else if(e.touches.length===1){e.preventDefault();const t=e.touches[0];if(state.selectMode)beginSelection(t.clientX,t.clientY);else{state.drag=true;state.selectedRect=null;selectionBox.hidden=true;state.lastX=t.clientX;state.lastY=t.clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;}}},{passive:false});
-    stage.addEventListener('touchmove',e=>{e.preventDefault();if(e.touches.length===2&&state.pinchDistance){const c=center(e.touches[0],e.touches[1]);zoomAt(c.x,c.y,state.pinchScale*(dist(e.touches[0],e.touches[1])/state.pinchDistance));}else if(e.touches.length===1&&state.selectDrag){const t=e.touches[0];updateSelection(t.clientX,t.clientY);}else if(e.touches.length===1&&state.drag){const t=e.touches[0];if(!state.axisLockY)state.x+=t.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=t.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=t.clientX;state.lastY=t.clientY;apply();}},{passive:false});
-    stage.addEventListener('touchend',e=>{if(!e.touches.length){const changed=e.changedTouches&&e.changedTouches[0],wasPinch=!!state.pinchDistance,wasSelection=state.selectDrag;state.drag=false;state.pinchDistance=0;if(wasSelection&&changed)finishSelection(changed.clientX,changed.clientY);else if(!wasPinch&&changed)registerTap(changed.clientX,changed.clientY);}},{passive:false});
-    selectArea.onclick=()=>{state.selectMode=!state.selectMode;state.selectedRect=null;selectionBox.hidden=true;selectArea.classList.toggle('is-active',state.selectMode);selectArea.setAttribute('aria-pressed',String(state.selectMode));selectArea.textContent=state.selectMode?u('選択中：コマをドラッグで囲む','Selecting: drag around the panel'):u('▱ コマ範囲を選択','▱ Select panel area');hint.textContent=state.selectMode?u('コマの左上から右下へドラッグ。iPhoneは1本指で囲み、2本指で拡大できます。囲めたら「＋ 視点を追加」。','Drag from one corner of the panel to the other. On iPhone, drag with one finger and pinch with two. Then tap Add viewpoint.'):u('通常の視点はズームして「＋視点を追加」。横長コマは「コマ範囲を選択」→コマをドラッグで囲む→追加。','For a normal view, zoom and add. For a wide panel, select panel area, drag around it, then add.');updateStatus();};
-    add.onclick=()=>{cancelZoomAnimation();if(state.selectMode&&!state.selectedRect){status.textContent=u('先にコマをドラッグで囲んでください','Drag around a panel first');return;}const point=state.selectedRect?{type:'focus',rect:state.selectedRect,fit:'contain'}:gazePoint();state.points.push(point);state.selectedRect=null;state.selectMode=false;selectionBox.hidden=true;selectArea.classList.remove('is-active');selectArea.setAttribute('aria-pressed','false');selectArea.textContent=u('▱ コマ範囲を選択','▱ Select panel area');hint.textContent=u('通常の視点はズームして「＋視点を追加」。横長コマは「コマ範囲を選択」→コマをドラッグで囲む→追加。','For a normal view, zoom and add. For a wide panel, select panel area, drag around it, then add.');updateStatus();};
-    clearPoints.onclick=()=>{cancelZoomAnimation();state.points=[];state.selectedRect=null;selectionBox.hidden=true;updateStatus();};
+    stage.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')return;cancelZoomAnimation();state.drag=true;state.lastX=e.clientX;state.lastY=e.clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;stage.setPointerCapture?.(e.pointerId);});
+    stage.addEventListener('pointermove',e=>{if(e.pointerType==='touch'||!state.drag)return;if(!state.axisLockY)state.x+=e.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=e.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=e.clientX;state.lastY=e.clientY;apply();});
+    const endDrag=()=>{state.drag=false;};stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',endDrag);
+    stage.addEventListener('touchstart',e=>{cancelZoomAnimation();if(e.touches.length===2){e.preventDefault();state.pinchDistance=dist(e.touches[0],e.touches[1]);state.pinchScale=state.scale;state.drag=false;}else if(e.touches.length===1){e.preventDefault();const t=e.touches[0];state.drag=true;state.lastX=t.clientX;state.lastY=t.clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;}},{passive:false});
+    stage.addEventListener('touchmove',e=>{e.preventDefault();if(e.touches.length===2&&state.pinchDistance){const c=center(e.touches[0],e.touches[1]);zoomAt(c.x,c.y,state.pinchScale*(dist(e.touches[0],e.touches[1])/state.pinchDistance));}else if(e.touches.length===1&&state.drag){const t=e.touches[0];if(!state.axisLockY)state.x+=t.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=t.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=t.clientX;state.lastY=t.clientY;apply();}},{passive:false});
+    stage.addEventListener('touchend',e=>{if(!e.touches.length){const changed=e.changedTouches&&e.changedTouches[0],wasPinch=!!state.pinchDistance;state.drag=false;state.pinchDistance=0;if(!wasPinch&&changed&&!e.target.closest?.('.view-rec-page-arrow'))registerTap(changed.clientX,changed.clientY);}},{passive:false});
+    add.onclick=()=>{cancelZoomAnimation();state.points.push(gazePoint());updateStatus();};
+    clearPoints.onclick=()=>{cancelZoomAnimation();state.points=[];updateStatus();};
     reset.onclick=()=>{cancelZoomAnimation();resetView();};
     axis.onclick=()=>{state.axisLockX=!state.axisLockX;if(state.axisLockX)state.axisLockY=false;axis.classList.toggle('is-active',state.axisLockX);axisY.classList.remove('is-active');axis.setAttribute('aria-pressed',String(state.axisLockX));axisY.setAttribute('aria-pressed','false');axis.textContent=state.axisLockX?u('↔ 横移動固定 ON','↔ Horizontal lock ON'):u('↔ 横移動固定','↔ Lock horizontal');axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');};
     axisY.onclick=()=>{state.axisLockY=!state.axisLockY;if(state.axisLockY)state.axisLockX=false;axisY.classList.toggle('is-active',state.axisLockY);axis.classList.remove('is-active');axisY.setAttribute('aria-pressed',String(state.axisLockY));axis.setAttribute('aria-pressed','false');axisY.textContent=state.axisLockY?u('↕ 縦移動固定 ON','↕ Vertical lock ON'):u('↕ 縦移動固定','↕ Lock vertical');axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');};
-    save.onclick=()=>{if(!state.points.length)return;onSave?.({version:3,coordinateSpace:'source',sizing:'source-rect',bounded:true,mode:'tap',points:state.points});cleanup();};
+    const currentPointSet=()=>({version:3,coordinateSpace:'source',sizing:'source-rect',bounded:true,mode:'tap',points:state.points.map(normalizePoint)});
+    const storeCurrentPage=()=>{if(!bundlePages)return;const page=bundlePages[currentPageIndex];if(!page)return;const set=currentPointSet();if(set.points.length){page.viewPoints=set;delete page.viewRec;}else{delete page.viewPoints;delete page.viewRec;}};
+    const updatePageNavigation=()=>{if(!bundlePages)return;pageCounter.textContent=`${currentPageIndex+1} / ${bundlePages.length}`;pagePrev.disabled=currentPageIndex<=0;pageNext.disabled=currentPageIndex>=bundlePages.length-1;};
+    const loadCurrentPage=()=>{currentImage=bundlePages[currentPageIndex];if(!currentImage?.src)return;state.scale=1;state.x=0;state.y=0;state.drag=false;state.pinchDistance=0;state.points=(currentImage.viewPoints?.points||currentImage.viewRec?.points||[]).map(normalizePoint);img.alt=currentImage.alt||'';status.textContent='';img.src=currentImage.src;updatePageNavigation();updateStatus();if(img.complete&&img.naturalWidth){sizeStageToSource();fitImageToStage();apply();}};
+    const movePage=delta=>{if(!bundlePages)return;const next=Math.max(0,Math.min(bundlePages.length-1,currentPageIndex+delta));if(next===currentPageIndex)return;storeCurrentPage();currentPageIndex=next;loadCurrentPage();};
+    pagePrev.onclick=e=>{e.stopPropagation();movePage(-1);};pageNext.onclick=e=>{e.stopPropagation();movePage(1);};
+    [pagePrev,pageNext].forEach(button=>{['pointerdown','pointerup','touchstart','touchend'].forEach(type=>button.addEventListener(type,e=>e.stopPropagation(),{passive:true}));});
+    save.onclick=()=>{if(!bundlePages&&!state.points.length)return;storeCurrentPage();const result=currentPointSet();if(bundlePages)result.pages=bundlePages.map(page=>({...page}));onSave?.(result);cleanup();};
     const resizeObserver=('ResizeObserver' in window)?new ResizeObserver(()=>{if(!img.naturalWidth)return;sizeStageToSource();if(state.scale<=1.0001&&Math.abs(state.x)<.01&&Math.abs(state.y)<.01){fitImageToStage();apply();}}):null;resizeObserver?.observe(stage);
     const cleanup=()=>{cancelZoomAnimation();resizeObserver?.disconnect();overlay.remove();document.documentElement.classList.remove('view-rec-open');};
     close.onclick=cleanup;cancel.onclick=cleanup;overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});document.documentElement.classList.add('view-rec-open');
-    img.addEventListener('load',()=>{sizeStageToSource();fitImageToStage();apply();const old=image.viewPoints||image.viewRec;if(old?.points?.length)updateStatus();else if(old?.frames?.length)status.textContent=u('旧VIEW RECがあります。視点方式で録り直してください','Legacy VIEW REC found. Re-record as viewpoints.');else updateStatus();},{once:true});
+    img.addEventListener('load',()=>{sizeStageToSource();fitImageToStage();apply();if(!state.points.length&&currentImage?.viewRec?.frames?.length)status.textContent=u('旧VIEW RECがあります。視点方式で録り直してください','Legacy VIEW REC found. Re-record as viewpoints.');else updateStatus();});
+    if(img.complete&&img.naturalWidth){sizeStageToSource();fitImageToStage();apply();updateStatus();}
   }
 
   function makeViewRecAuthoringField(image,onSaved){
@@ -10355,7 +10361,7 @@ function startInlineTextEdit(field='text',targetEl=null){
           const actions=document.createElement('div');actions.className='scene-image-page-actions';
           const actionButton=(label,cls,fn)=>{const button=document.createElement('button');button.type='button';button.className=cls||'';button.textContent=label;button.onclick=fn;actions.appendChild(button);return button;};
           const drag=actionButton('⠿','scene-image-page-drag',()=>{});drag.setAttribute('aria-label',u('ドラッグして順番を変更','Drag to reorder'));drag.title=u('長押ししてドラッグ','Press and drag');drag.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();dragRow=row;dragPointerId=e.pointerId;row.classList.add('is-dragging');document.addEventListener('pointermove',onDragMove,{passive:false});document.addEventListener('pointerup',onDragEnd);document.addEventListener('pointercancel',onDragEnd);});
-          actionButton(vpCount?u('視点編集','Edit view'):u('視点設定','Set view'),'scene-image-page-view',()=>openViewRecRecorder(page,data=>{pages[index]={...pages[index],viewPoints:data};delete pages[index].viewRec;commit();render();}));
+          actionButton(vpCount?u('視点編集','Edit view'):u('視点設定','Set view'),'scene-image-page-view',()=>openViewRecRecorder(page,data=>{if(Array.isArray(data.pages)){pages=data.pages;}else{pages[index]={...pages[index],viewPoints:data};delete pages[index].viewRec;}commit();render();},{pages,index}));
           actionButton(u('差替','Replace'),'scene-image-page-replace',()=>pickSceneImageFile(nextPage=>{pages[index]={...nextPage};commit();render();}));
           const up=actionButton('↑','scene-image-page-move',()=>{[pages[index-1],pages[index]]=[pages[index],pages[index-1]];commit();render();});up.disabled=index===0;up.setAttribute('aria-label',u('前へ','Move up'));
           const down=actionButton('↓','scene-image-page-move',()=>{[pages[index+1],pages[index]]=[pages[index],pages[index+1]];commit();render();});down.disabled=index===pages.length-1;down.setAttribute('aria-label',u('後ろへ','Move down'));
