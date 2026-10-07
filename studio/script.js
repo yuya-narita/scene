@@ -10147,13 +10147,18 @@ function startInlineTextEdit(field='text',targetEl=null){
     const panel=document.createElement('div');panel.className='view-rec-recorder-panel';
     const head=document.createElement('div');head.className='view-rec-recorder-head';
     const title=document.createElement('div');title.className='view-rec-recorder-title';title.textContent='VIEW POINT';
-    const pageCounter=document.createElement('div');pageCounter.className='view-rec-page-counter';pageCounter.hidden=!bundlePages;pageCounter.textContent=bundlePages?`${currentPageIndex+1} / ${bundlePages.length}`:'';
+    const pageNav=document.createElement('div');pageNav.className='view-rec-page-nav';pageNav.hidden=!bundlePages;
+    const pageCounter=document.createElement('div');pageCounter.className='view-rec-page-counter';pageCounter.textContent=bundlePages?`${currentPageIndex+1} / ${bundlePages.length}`:'';
     const close=document.createElement('button');close.type='button';close.className='view-rec-recorder-close';close.textContent='×';close.setAttribute('aria-label',u('閉じる','Close'));
-    head.append(title,pageCounter,close);
+    const pagePrevTop=document.createElement('button');pagePrevTop.type='button';pagePrevTop.className='view-rec-page-arrow is-head is-prev';pagePrevTop.textContent='‹';pagePrevTop.setAttribute('aria-label',u('前のページ','Previous page'));
+    const pageNextTop=document.createElement('button');pageNextTop.type='button';pageNextTop.className='view-rec-page-arrow is-head is-next';pageNextTop.textContent='›';pageNextTop.setAttribute('aria-label',u('次のページ','Next page'));
+    pageNav.append(pagePrevTop,pageCounter,pageNextTop);head.append(title,pageNav,close);
+    const media=document.createElement('div');media.className='view-rec-recorder-media';
     const stage=document.createElement('div');stage.className='view-rec-recorder-stage';
     const img=document.createElement('img');img.className='view-rec-recorder-image';img.src=currentImage.src;img.alt=currentImage.alt||'';img.draggable=false;stage.appendChild(img);
-    const pagePrev=document.createElement('button');pagePrev.type='button';pagePrev.className='view-rec-page-arrow is-prev';pagePrev.textContent='‹';pagePrev.setAttribute('aria-label',u('前のページ','Previous page'));pagePrev.hidden=!bundlePages;
-    const pageNext=document.createElement('button');pageNext.type='button';pageNext.className='view-rec-page-arrow is-next';pageNext.textContent='›';pageNext.setAttribute('aria-label',u('次のページ','Next page'));pageNext.hidden=!bundlePages;stage.append(pagePrev,pageNext);
+    const pagePrevSide=document.createElement('button');pagePrevSide.type='button';pagePrevSide.className='view-rec-page-arrow is-margin is-prev';pagePrevSide.textContent='‹';pagePrevSide.setAttribute('aria-label',u('前のページ','Previous page'));
+    const pageNextSide=document.createElement('button');pageNextSide.type='button';pageNextSide.className='view-rec-page-arrow is-margin is-next';pageNextSide.textContent='›';pageNextSide.setAttribute('aria-label',u('次のページ','Next page'));
+    media.append(pagePrevSide,stage,pageNextSide);
     const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('画像を拡大・移動して、見せたい位置で「＋視点を追加」。左右の矢印でページを切り替えます。','Zoom or move the image to the desired view, then add a viewpoint. Use the arrows to switch pages.');
     const status=document.createElement('div');status.className='view-rec-recorder-status';
     const controls=document.createElement('div');controls.className='view-rec-recorder-controls';
@@ -10164,7 +10169,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     const axis=document.createElement('button');axis.type='button';axis.className='view-rec-button';axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');axis.setAttribute('aria-pressed','false');
     const axisY=document.createElement('button');axisY.type='button';axisY.className='view-rec-button';axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');axisY.setAttribute('aria-pressed','false');
     const cancel=document.createElement('button');cancel.type='button';cancel.className='view-rec-button';cancel.textContent=u('キャンセル','Cancel');
-    controls.append(add,reset,axis,axisY,clearPoints,save,cancel);panel.append(head,stage,hint,status,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
+    controls.append(add,reset,axis,axisY,clearPoints,save,cancel);panel.append(head,media,hint,status,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
 
     // V113 — reopening VIEW POINT is an edit, not an implicit destructive rebuild.
     // Preserve the saved point sequence unless the author explicitly clears it.
@@ -10175,8 +10180,8 @@ function startInlineTextEdit(field='text',targetEl=null){
     // V102 — the authoring viewport itself follows the source-image aspect ratio.
     // VIEW POINT is therefore authored in image space, not in the current device/window shape.
     const sizeStageToSource=()=>{
-      const panelBox=panel.getBoundingClientRect(),headH=head.getBoundingClientRect().height||0,hintH=hint.getBoundingClientRect().height||0,statusH=status.getBoundingClientRect().height||0,controlsH=controls.getBoundingClientRect().height||0;
-      const maxW=Math.max(1,panelBox.width),maxH=Math.max(1,panelBox.height-headH-hintH-statusH-controlsH);
+      const mediaBox=media.getBoundingClientRect(),mobile=window.matchMedia('(max-width:600px)').matches;
+      const maxW=Math.max(1,mediaBox.width-(mobile?0:96)),maxH=Math.max(1,mediaBox.height);
       const nw=Math.max(1,img.naturalWidth||1),nh=Math.max(1,img.naturalHeight||1),ratio=nw/nh;
       let w=maxW,h=w/ratio;if(h>maxH){h=maxH;w=h*ratio;}
       stage.style.width=`${Math.max(1,w)}px`;stage.style.height=`${Math.max(1,h)}px`;stage.style.justifySelf='center';
@@ -10225,13 +10230,14 @@ function startInlineTextEdit(field='text',targetEl=null){
     axisY.onclick=()=>{state.axisLockY=!state.axisLockY;if(state.axisLockY)state.axisLockX=false;axisY.classList.toggle('is-active',state.axisLockY);axis.classList.remove('is-active');axisY.setAttribute('aria-pressed',String(state.axisLockY));axis.setAttribute('aria-pressed','false');axisY.textContent=state.axisLockY?u('↕ 縦移動固定 ON','↕ Vertical lock ON'):u('↕ 縦移動固定','↕ Lock vertical');axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');};
     const currentPointSet=()=>({version:3,coordinateSpace:'source',sizing:'source-rect',bounded:true,mode:'tap',points:state.points.map(normalizePoint)});
     const storeCurrentPage=()=>{if(!bundlePages)return;const page=bundlePages[currentPageIndex];if(!page)return;const set=currentPointSet();if(set.points.length){page.viewPoints=set;delete page.viewRec;}else{delete page.viewPoints;delete page.viewRec;}};
-    const updatePageNavigation=()=>{if(!bundlePages)return;pageCounter.textContent=`${currentPageIndex+1} / ${bundlePages.length}`;pagePrev.disabled=currentPageIndex<=0;pageNext.disabled=currentPageIndex>=bundlePages.length-1;};
+    const updatePageNavigation=()=>{if(!bundlePages)return;pageCounter.textContent=`${currentPageIndex+1} / ${bundlePages.length}`;[pagePrevTop,pagePrevSide].forEach(button=>button.disabled=currentPageIndex<=0);[pageNextTop,pageNextSide].forEach(button=>button.disabled=currentPageIndex>=bundlePages.length-1);};
     const loadCurrentPage=()=>{currentImage=bundlePages[currentPageIndex];if(!currentImage?.src)return;state.scale=1;state.x=0;state.y=0;state.drag=false;state.pinchDistance=0;state.points=(currentImage.viewPoints?.points||currentImage.viewRec?.points||[]).map(normalizePoint);img.alt=currentImage.alt||'';status.textContent='';img.src=currentImage.src;updatePageNavigation();updateStatus();if(img.complete&&img.naturalWidth){sizeStageToSource();fitImageToStage();apply();}};
     const movePage=delta=>{if(!bundlePages)return;const next=Math.max(0,Math.min(bundlePages.length-1,currentPageIndex+delta));if(next===currentPageIndex)return;storeCurrentPage();currentPageIndex=next;loadCurrentPage();};
-    pagePrev.onclick=e=>{e.stopPropagation();movePage(-1);};pageNext.onclick=e=>{e.stopPropagation();movePage(1);};
-    [pagePrev,pageNext].forEach(button=>{['pointerdown','pointerup','touchstart','touchend'].forEach(type=>button.addEventListener(type,e=>e.stopPropagation(),{passive:true}));});
+    [pagePrevTop,pagePrevSide].forEach(button=>{button.hidden=!bundlePages;button.onclick=e=>{e.stopPropagation();movePage(-1);};});
+    [pageNextTop,pageNextSide].forEach(button=>{button.hidden=!bundlePages;button.onclick=e=>{e.stopPropagation();movePage(1);};});
+    [pagePrevTop,pagePrevSide,pageNextTop,pageNextSide].forEach(button=>{['pointerdown','pointerup','touchstart','touchend'].forEach(type=>button.addEventListener(type,e=>e.stopPropagation(),{passive:true}));});
     save.onclick=()=>{if(!bundlePages&&!state.points.length)return;storeCurrentPage();const result=currentPointSet();if(bundlePages)result.pages=bundlePages.map(page=>({...page}));onSave?.(result);cleanup();};
-    const resizeObserver=('ResizeObserver' in window)?new ResizeObserver(()=>{if(!img.naturalWidth)return;sizeStageToSource();if(state.scale<=1.0001&&Math.abs(state.x)<.01&&Math.abs(state.y)<.01){fitImageToStage();apply();}}):null;resizeObserver?.observe(stage);
+    const resizeObserver=('ResizeObserver' in window)?new ResizeObserver(()=>{if(!img.naturalWidth)return;sizeStageToSource();if(state.scale<=1.0001&&Math.abs(state.x)<.01&&Math.abs(state.y)<.01){fitImageToStage();apply();}}):null;resizeObserver?.observe(media);
     const cleanup=()=>{cancelZoomAnimation();resizeObserver?.disconnect();overlay.remove();document.documentElement.classList.remove('view-rec-open');};
     close.onclick=cleanup;cancel.onclick=cleanup;overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});document.documentElement.classList.add('view-rec-open');
     img.addEventListener('load',()=>{sizeStageToSource();fitImageToStage();apply();if(!state.points.length&&currentImage?.viewRec?.frames?.length)status.textContent=u('旧VIEW RECがあります。視点方式で録り直してください','Legacy VIEW REC found. Re-record as viewpoints.');else updateStatus();});
