@@ -13264,10 +13264,10 @@ function openDesktopTextDetail(){
       }),
       'is-primary'
     );
-    const sceneImageRemove=desktopAction(u('画像を外す','Remove image'),()=>{
+    const sceneImageRemove=desktopAction(u('画像を外す','Remove image'),async()=>{
       const pageCount=Array.isArray(p.image?.pages)?p.image.pages.length:1;
       const message=pageCount>1?u(`Scene画像とページ束の全${pageCount}ページをSceneから外します。続けますか？`,`Remove the Scene image and all ${pageCount} pages from this Scene?`):u('このScene画像を外します。続けますか？','Remove this Scene image?');
-      if(!window.confirm(message))return;
+      if(!await appConfirm(message,{title:u('Scene画像を外しますか？','Remove Scene image?'),kicker:'SCENE IMAGE',danger:true,confirmLabel:u('画像を外す','Remove image')}))return;
       captureUndo('Scene画像の削除を元に戻せます');
       // Keep the asset registered: Undo may restore this Scene image immediately.
       // Orphan cleanup can reclaim unused assets later.
@@ -15006,7 +15006,7 @@ function openDesktopTextDetail(){
           scheduleDraftSave(40);refreshLivePlayer();
           requestAnimationFrame(()=>renderMobileSceneImagePanel());
         },{keepPanel:true});
-        const remove=makeActionButton(u('画像を外す','Remove image'));remove.disabled=!current?.src;remove.onclick=()=>{const pageCount=Array.isArray(p.image?.pages)?p.image.pages.length:1;const message=pageCount>1?u(`Scene画像とページ束の全${pageCount}ページをSceneから外します。続けますか？`,`Remove the Scene image and all ${pageCount} pages from this Scene?`):u('このScene画像を外します。続けますか？','Remove this Scene image?');if(!window.confirm(message))return;captureUndo('Scene画像の削除を元に戻せます');delete p.image;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();};
+        const remove=makeActionButton(u('画像を外す','Remove image'));remove.disabled=!current?.src;remove.onclick=async()=>{const pageCount=Array.isArray(p.image?.pages)?p.image.pages.length:1;const message=pageCount>1?u(`Scene画像とページ束の全${pageCount}ページをSceneから外します。続けますか？`,`Remove the Scene image and all ${pageCount} pages from this Scene?`):u('このScene画像を外します。続けますか？','Remove this Scene image?');if(!await appConfirm(message,{title:u('Scene画像を外しますか？','Remove Scene image?'),kicker:'SCENE IMAGE',danger:true,confirmLabel:u('画像を外す','Remove image')}))return;captureUndo('Scene画像の削除を元に戻せます');delete p.image;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();};
         liveEditSheetBody.append(status,pick,remove);
         if(current?.src){
           appendSceneImagePagesEditor(liveEditSheetBody,current,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt||p.image.alt||'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined,tapAction:pages.some(page=>(page.viewPoints?.points||page.viewRec?.points||[]).length)?'viewRec':p.image.tapAction};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
