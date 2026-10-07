@@ -4639,7 +4639,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
         // V99 compatibility: old device-relative point.
         return{type:'legacy',cx:Number.isFinite(Number(p?.cx))?Number(p.cx):.5,cy:Number.isFinite(Number(p?.cy))?Number(p.cy):.5,scale:Math.max(1,Math.min(5,Number(p?.scale)||1))};
-      });
+      }).map((point,i)=>({...point,transitionMs:Number.isFinite(Number(rawPoints[i]?.transitionMs))?Math.max(100,Math.min(10000,Number(rawPoints[i].transitionMs))):420}));
       // V114 — keep the opening/first-point handoff separate from normal advancement.
       // V112 assigned index=0 before point 1 had actually settled. That allowed the
       // opening Enter/click to be interpreted as an advance/close. `initializing`
@@ -4694,7 +4694,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       let current={x:0,y:0,scale:1};
       const apply=(v)=>{current=v;img.style.transform=`translate3d(${v.x}px, ${v.y}px, 0) scale(${v.scale})`;frame.classList.toggle('is-zoomed',v.scale>1.01);};
-      const moveTo=(gaze,duration=420)=>{
+      const moveTo=(gaze,duration=gaze.transitionMs??420)=>{
         if(raf)cancelAnimationFrame(raf);moving=true;
         const from={...current},to=coords(gaze),started=performance.now(),ease=t=>1-Math.pow(1-t,3);
         const tick=now=>{if(cancelled||viewer.hidden)return;const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);apply({x:from.x+(to.x-from.x)*e,y:from.y+(to.y-from.y)*e,scale:from.scale+(to.scale-from.scale)*e});if(q<1)raf=requestAnimationFrame(tick);else{raf=0;moving=false;}};raf=requestAnimationFrame(tick);
