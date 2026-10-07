@@ -4511,6 +4511,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       viewer._scenePages=pages;viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';viewer._scenePageIndex=pageIndex;
       viewer._sceneOnPageChange=options?.onPageChange;
       const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
+      const oldRestart=pageControls?.querySelector('.sp-image-reading-restart');if(oldRestart)oldRestart.hidden=!options?.readingResumeKey;
       let pageLoadToken=0;
       const showPage=(index)=>{
         if(!pages.length)return;
@@ -4521,7 +4522,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const page=pages[pageIndex];
         const nextSrc=page.src;
         const changed=img.getAttribute('src')!==nextSrc;
-        const animateTurn=changed&&!viewer.hidden&&(previousIndex!==pageIndex||options?.animatePageEntry===true);
+        const animateTurn=options?.mode!=='viewPoint'&&changed&&!viewer.hidden&&(previousIndex!==pageIndex||options?.animatePageEntry===true);
         const direction=(options?.direction==='rtl'?-1:1)*(pageIndex>=previousIndex?1:-1);
         img.alt=page.alt??alt??'';
         pageControls.hidden=pages.length<2;
@@ -4561,8 +4562,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
       const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
       if(pageControls)pageControls.hidden=pages.length<2;
-      if(prevButton)prevButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();showPage(pageIndex-1);options?.onPageChange?.(pageIndex);};
-      if(nextButton)nextButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();showPage(pageIndex+1);options?.onPageChange?.(pageIndex);};
+      if(prevButton)prevButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();if(frame._sceneImageMode==='viewPoint'&&options?.onPageChange)options.onPageChange(Math.max(0,pageIndex-1));else{showPage(pageIndex-1);options?.onPageChange?.(pageIndex);}};
+      if(nextButton)nextButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();if(frame._sceneImageMode==='viewPoint'&&options?.onPageChange)options.onPageChange(Math.min(pages.length-1,pageIndex+1));else{showPage(pageIndex+1);options?.onPageChange?.(pageIndex);}};
       if(pages.length)showPage(pageIndex);else img.src = src;
         const syncBoundedFrame=()=>{frame?._fitSceneImageFrame?.();frame?._sceneImageReset?.();};
         if(img.complete&&img.naturalWidth>0)requestAnimationFrame(syncBoundedFrame);
@@ -4606,6 +4607,22 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     // Phase 6 / V99 — tap-driven VIEW POINT playback.
     // The author chooses WHERE to look; the reader chooses WHEN to advance.
     _openSceneImageViewRec(image, sourceEl=null) {
+      // Hold the current authored camera while the next sheet loads.
+      const oldViewer=document.querySelector('.sp-scene-image-viewer');
+      const oldFrame=oldViewer?.querySelector('.sp-scene-image-viewer-frame');
+      const oldImg=oldViewer?.querySelector('.sp-scene-image-viewer-img');
+      const previousPage=Number(oldViewer?._scenePageIndex)||0;
+      let pageGhost=null;
+      oldViewer?._viewPointPageGhost?.remove?.();
+      if(oldViewer&&!oldViewer.hidden&&oldImg?.naturalWidth&&oldImg.getAttribute('src')!==image?.src){
+        const box=oldFrame.getBoundingClientRect();
+        pageGhost=document.createElement('div');pageGhost.className='sp-viewpoint-page-handoff';
+        Object.assign(pageGhost.style,{position:'fixed',left:`${box.left}px`,top:`${box.top}px`,width:`${box.width}px`,height:`${box.height}px`,overflow:'hidden',pointerEvents:'none',zIndex:'100002',background:getComputedStyle(oldViewer).backgroundColor});
+        const old=oldImg.cloneNode(false);
+        Object.assign(old.style,{position:'absolute',left:'50%',top:'50%',width:`${oldImg.clientWidth}px`,height:`${oldImg.clientHeight}px`,margin:'0',maxWidth:'none',maxHeight:'none',visibility:'visible',transform:`translate(-50%,-50%) ${getComputedStyle(oldImg).transform}`,translate:'0 0'});
+        pageGhost.append(old);document.body.append(pageGhost);oldViewer._viewPointPageGhost=pageGhost;
+      }
+      const handoffGhost=pageGhost;
       const pointSet=image?.viewPoints||image?.viewRec||null;
       const rawPoints = Array.isArray(pointSet?.points) ? pointSet.points : [];
       if (!image?.src || rawPoints.length < 1) {
@@ -4616,12 +4633,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const fallbackPageChange=(pageIndex)=>{
         const pages=Array.isArray(image.pages)?image.pages:[],page=pages[pageIndex];if(!page?.src)return;
         const pagePoints=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
-        if((pagePoints?.points||[]).length)this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,onPageChange:fallbackPageChange,animatePageEntry:false},null);
+        if((pagePoints?.points||[]).length)this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
         else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
       };
       const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
-      const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0;
-      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,closeTargetEl:image.closeTargetEl||sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange,animatePageEntry:image.animatePageEntry===true&&!startAtAuthoredPoint,viewPointStartHidden:startAtAuthoredPoint,direction:image.pageDirection||'ltr'});
+      const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0||Number(image.resumePoint)>0||!!pageGhost;
+      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,closeTargetEl:image.closeTargetEl||sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange,animatePageEntry:false,viewPointStartHidden:startAtAuthoredPoint,readingResumeKey:image.readingResumeKey,direction:image.pageDirection||'ltr'});
       const viewer = document.querySelector('.sp-scene-image-viewer');
       const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
       const img = viewer?.querySelector('.sp-scene-image-viewer-img');
@@ -4692,15 +4709,28 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const maxX=Math.max(0,(bw*scale-frame.clientWidth)/2),maxY=Math.max(0,(bh*scale-frame.clientHeight)/2);
         return{x:Math.max(-maxX,Math.min(maxX,rawX)),y:Math.max(-maxY,Math.min(maxY,rawY)),scale};
       };
+      const rememberPoint=()=>{if(image.readingResumeKey&&index>=0){try{localStorage.setItem(image.readingResumeKey,JSON.stringify({page:Number(image.pageIndex)||0,point:index}));}catch(_){}}};
+      const finishPageHandoff=()=>{
+        if(!pageGhost)return;
+        const ghost=pageGhost;pageGhost=null;
+        const sign=(image.pageDirection==='rtl'?-1:1)*((Number(image.pageIndex)||0)>=previousPage?1:-1);
+        const width=Math.max(1,frame.clientWidth),duration=360;
+        initializing=true;
+        if(typeof img.animate==='function'){
+          const incoming=img.animate([{translate:`${sign*width}px 0`},{translate:'0 0'}],{duration,easing:'ease-in-out'});
+          ghost.animate([{translate:'0 0'},{translate:`${-sign*width}px 0`}],{duration,easing:'ease-in-out'});
+          incoming.finished.catch(()=>{}).then(()=>{ghost.remove();if(viewer._viewPointPageGhost===ghost)viewer._viewPointPageGhost=null;if(!cancelled)initializing=false;});
+        }else{ghost.remove();initializing=false;}
+      };
       let current={x:0,y:0,scale:1};
       const apply=(v)=>{current=v;img.style.transform=`translate3d(${v.x}px, ${v.y}px, 0) scale(${v.scale})`;frame.classList.toggle('is-zoomed',v.scale>1.01);};
       const moveTo=(gaze,duration=gaze.transitionMs??420)=>{
         if(raf)cancelAnimationFrame(raf);moving=true;
         const from={...current},to=coords(gaze),started=performance.now(),ease=t=>gaze.transitionCurve==='linear'?t:gaze.transitionCurve==='ease-in'?t*t*t:gaze.transitionCurve==='ease-in-out'?(t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2):1-Math.pow(1-t,3);
-        const tick=now=>{if(cancelled||viewer.hidden)return;const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);apply({x:from.x+(to.x-from.x)*e,y:from.y+(to.y-from.y)*e,scale:from.scale+(to.scale-from.scale)*e});if(q<1)raf=requestAnimationFrame(tick);else{raf=0;moving=false;}};raf=requestAnimationFrame(tick);
+        const tick=now=>{if(cancelled||viewer.hidden)return;const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);apply({x:from.x+(to.x-from.x)*e,y:from.y+(to.y-from.y)*e,scale:from.scale+(to.scale-from.scale)*e});if(q<1)raf=requestAnimationFrame(tick);else{raf=0;moving=false;rememberPoint();}};raf=requestAnimationFrame(tick);
       };
       let onViewPointKey=null,onViewPointClick=null;
-      const cancel=()=>{cancelled=true;clearTimeout(frame._viewPointTapTimer);if(raf)cancelAnimationFrame(raf);raf=0;moving=false;frame._viewRecCancel=null;frame._viewPointAdvanceTouch=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing');if(onViewPointClick)frame.removeEventListener('click',onViewPointClick,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
+      const cancel=()=>{cancelled=true;handoffGhost?.remove();pageGhost?.remove();pageGhost=null;clearTimeout(frame._viewPointTapTimer);if(raf)cancelAnimationFrame(raf);raf=0;moving=false;frame._viewRecCancel=null;frame._viewPointAdvanceTouch=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing');if(onViewPointClick)frame.removeEventListener('click',onViewPointClick,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
       // Manual pinch / wheel / double-click hands the viewer to the reader completely.
       // Do not resume VIEW POINT on the synthetic click that follows a drag.
       frame._onViewPointManualControl=()=>cancel();
@@ -4727,11 +4757,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const nextPage=pages[nextIndex];
           const nextPoints=nextPage?.viewPoints||nextPage?.viewRec||null;
           if(nextPage?.src&&(nextPoints?.points||[]).length){
-            const nextImage={...image,src:nextPage.src,alt:nextPage.alt??image.alt??'',viewPoints:nextPoints,pageIndex:nextIndex,animatePageEntry:true};
+            const nextImage={...image,src:nextPage.src,alt:nextPage.alt??image.alt??'',viewPoints:nextPoints,pageIndex:nextIndex,resumePoint:0,animatePageEntry:true};
             cancel();
             this._openSceneImageViewRec(nextImage,null);
             return;
           }
+          if(image.readingResumeKey&&currentPage>=pages.length-1){try{localStorage.removeItem(image.readingResumeKey);}catch(_){}}
           const closeButton=viewer.querySelector('.sp-scene-image-viewer-close');
           cancel();
           closeButton?.click();
@@ -4914,20 +4945,33 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const imageTapAction = image.tapAction || (hasViewPoints ? 'viewRec' : pages.length > 1 ? 'fullscreen' : image.fullscreen === false ? 'none' : 'fullscreen');
       const firstViewPoints=firstImage.viewPoints||firstImage.viewRec||image.viewPoints||image.viewRec;
       const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;
-      const openBundlePage=(pageIndex,{fromScene=false,forceFullscreen=false,startAtAuthoredPoint=false}={})=>{
+      let readingResumeKey=null;
+      // Reading progress is separate from the .scene and disabled in Studio.
+      if(!/\/studio(?:\/|$)/.test(location.pathname)&&this.options?.readingResume!==false){
+        const identity=JSON.stringify([this.document?.id||this.document?.metadata?.workId||'',this.document?.title||'',this.document?.author||this.document?.metadata?.author||'',scene?.id||this.index||0,pages.length||1,(pages.length?pages:[image]).map(p=>[p._editorFileName||p.alt||'',p.viewPoints?.points||p.viewRec?.points||[]])]);
+        let hash=2166136261;for(let i=0;i<identity.length;i++){hash^=identity.charCodeAt(i);hash=Math.imul(hash,16777619);}readingResumeKey=`ahako:image-reading:v1:${(hash>>>0).toString(16)}`;
+      }
+      const readProgress=()=>{if(!readingResumeKey)return null;try{const value=JSON.parse(localStorage.getItem(readingResumeKey));return value&&Number.isInteger(value.page)&&value.page>=0&&value.page<Math.max(1,pages.length)&&Number.isInteger(value.point)&&value.point>=0?value:null;}catch(_){return null;}};
+      const openBundlePage=(pageIndex,{fromScene=false,forceFullscreen=false,startAtAuthoredPoint=false,resumePoint=0}={})=>{
         const page=pages[pageIndex]||firstImage;
         const sourceEl=fromScene?wrap:null;
         const pointSet=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
-        const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage,startAtAuthoredPoint,closeTargetEl:sourceEl};
+        const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,resumePoint,readingResumeKey,onPageChange:openBundlePage,startAtAuthoredPoint,closeTargetEl:sourceEl};
         if(!forceFullscreen&&imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,startAtAuthoredPoint?null:sourceEl);
         else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage,direction:image.pageDirection||'ltr'});
+        if(readingResumeKey){
+          const viewer=document.querySelector('.sp-scene-image-viewer'),controls=viewer?.querySelector('.sp-scene-image-viewer-pages');
+          if(controls){controls.hidden=false;if(!pages.length){controls.querySelector('.sp-scene-image-viewer-page-count').textContent='1 / 1';controls.querySelector('.sp-scene-image-viewer-page-prev').disabled=true;controls.querySelector('.sp-scene-image-viewer-page-next').disabled=true;}let restart=controls.querySelector('.sp-image-reading-restart');if(!restart){restart=document.createElement('button');restart.type='button';restart.className='sp-image-reading-restart';Object.assign(restart.style,{width:'auto',font:'600 12px/1 system-ui,sans-serif',whiteSpace:'nowrap',padding:'0 8px',borderRadius:'8px'});restart.textContent=this.options?.uiLanguage==='en'?'Start over':'最初から';controls.append(restart);}restart.hidden=false;restart.onclick=e=>{e.preventDefault();e.stopPropagation();try{localStorage.removeItem(readingResumeKey);}catch(_){}openBundlePage(0,{startAtAuthoredPoint:true});};}
+          try{localStorage.setItem(readingResumeKey,JSON.stringify({page:pageIndex,point:resumePoint}));}catch(_){}
+        }
       };
+      const openReading=opts=>{const progress=readProgress();openBundlePage(progress?.page||0,{...opts,resumePoint:progress?.point||0,startAtAuthoredPoint:opts.startAtAuthoredPoint||!!progress});};
       // The cover's comic-start mode opens the image even when ordinary Scene
       // tapping was disabled. Preserve authored VIEW POINT behavior when selected.
       wrap._sceneImageOpenForReading=(event)=>{
         event?.preventDefault?.();
         event?.stopPropagation?.();
-        openBundlePage(0,{fromScene:true,forceFullscreen:imageTapAction!=='viewRec',startAtAuthoredPoint:true});
+        openReading({fromScene:true,forceFullscreen:imageTapAction!=='viewRec',startAtAuthoredPoint:true});
       };
       if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
         wrap.classList.add(hasViewRec ? 'is-view-rec' : 'is-zoomable');
@@ -4939,7 +4983,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const open = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          openBundlePage(0,{fromScene:true});
+          openReading({fromScene:true});
         };
         wrap._sceneImageOpen=open;
         wrap.addEventListener('click',open);
