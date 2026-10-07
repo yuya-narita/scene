@@ -10148,7 +10148,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     head.append(title,close);
     const stage=document.createElement('div');stage.className='view-rec-recorder-stage';
     const img=document.createElement('img');img.className='view-rec-recorder-image';img.src=image.src;img.alt=image.alt||'';img.draggable=false;stage.appendChild(img);
-    const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('見せたい位置へ移動・ズームして「＋ 視点を追加」','Move / zoom to the view you want, then add a viewpoint');
+    const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('①コマをズームして画面内に合わせる ②全体を見せたい時は下の項目をオン ③「＋ 視点を追加」','① Zoom and frame a panel ② Turn on the option below to fit it fully ③ Add viewpoint');
     const status=document.createElement('div');status.className='view-rec-recorder-status';
     const controls=document.createElement('div');controls.className='view-rec-recorder-controls';
     const add=document.createElement('button');add.type='button';add.className='view-rec-button is-rec';add.textContent=u('＋ 視点を追加','＋ Add viewpoint');
@@ -10156,7 +10156,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     const clearPoints=document.createElement('button');clearPoints.type='button';clearPoints.className='view-rec-button';clearPoints.textContent=u('視点を全削除','Clear viewpoints');
     const fitField=document.createElement('label');fitField.className='view-rec-fit-option';
     const fitInput=document.createElement('input');fitInput.type='checkbox';fitInput.checked=false;
-    const fitText=document.createElement('span');fitText.textContent=u('選択範囲全体を表示（横長コマ向け）','Fit the selected area (for wide panels)');fitField.append(fitInput,fitText);
+    const fitText=document.createElement('span');fitText.textContent=u('次に追加する視点で選択範囲全体を表示（横長コマ向け）','Fit the next viewpoint selection (for wide panels)');fitField.append(fitInput,fitText);
     const save=document.createElement('button');save.type='button';save.className='view-rec-button is-primary';save.textContent=u('保存','Save');
     const axis=document.createElement('button');axis.type='button';axis.className='view-rec-button';axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');axis.setAttribute('aria-pressed','false');
     const axisY=document.createElement('button');axisY.type='button';axisY.className='view-rec-button';axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');axisY.setAttribute('aria-pressed','false');

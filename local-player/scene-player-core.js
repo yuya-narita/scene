@@ -4461,13 +4461,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           event?.stopPropagation?.();
           if (viewer._sceneImageClosing) return;
           viewer._sceneImageClosing = true;
-          const source = sceneObjectRect(viewer._sceneImageSourceEl);
+          const source = sceneObjectRect(viewer._sceneImageCloseTargetEl || viewer._sceneImageSourceEl);
           const current = img.getBoundingClientRect();
           const from = current.width ? {left:current.left,top:current.top,width:current.width,height:current.height,rotation:0} : null;
-          if (source && from) {
+          if (from) {
             viewer.classList.add('is-object-transitioning','is-object-closing');
             img.style.visibility='hidden';
-            await animateObjectBoundary(from, source, {closing:true});
+            // Comic-start VIEW POINT intentionally opens without a pickup animation,
+            // but still returns to its Scene object. If no object exists, ease the
+            // image away so closing never feels like a hard cut.
+            const destination=source||{left:from.left+from.width*.04,top:from.top+from.height*.04,width:from.width*.92,height:from.height*.92,rotation:0};
+            await animateObjectBoundary(from,destination,{closing:true});
           }
           viewer.hidden = true;
           viewer.classList.remove('is-object-transitioning','is-object-closing');
@@ -4493,6 +4497,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(options?.mode!=='viewPoint')frame?._viewRecCancel?.();
       frame?._sceneImageReset?.();
       viewer._sceneImageSourceEl = options?.sourceEl || null;
+      viewer._sceneImageCloseTargetEl = options?.closeTargetEl || options?.sourceEl || null;
       const openingSource = (()=>{
         const el=viewer._sceneImageSourceEl;
         const media=el?.querySelector?.('.sp-scene-image-media')||el?.closest?.('.sp-scene-image-media')||el;
@@ -4616,7 +4621,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
       const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0;
-      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange,animatePageEntry:image.animatePageEntry===true&&!startAtAuthoredPoint,viewPointStartHidden:startAtAuthoredPoint,direction:image.pageDirection||'ltr'});
+      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,closeTargetEl:image.closeTargetEl||sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange,animatePageEntry:image.animatePageEntry===true&&!startAtAuthoredPoint,viewPointStartHidden:startAtAuthoredPoint,direction:image.pageDirection||'ltr'});
       const viewer = document.querySelector('.sp-scene-image-viewer');
       const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
       const img = viewer?.querySelector('.sp-scene-image-viewer-img');
@@ -4913,7 +4918,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const page=pages[pageIndex]||firstImage;
         const sourceEl=fromScene?wrap:null;
         const pointSet=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
-        const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage,startAtAuthoredPoint};
+        const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,onPageChange:openBundlePage,startAtAuthoredPoint,closeTargetEl:sourceEl};
         if(!forceFullscreen&&imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,startAtAuthoredPoint?null:sourceEl);
         else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage,direction:image.pageDirection||'ltr'});
       };
