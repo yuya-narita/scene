@@ -10278,13 +10278,27 @@ function startInlineTextEdit(field='text',targetEl=null){
     if(img.complete&&img.naturalWidth){sizeStageToSource();fitImageToStage();apply();updateStatus();}
   }
 
+  function saveSceneImageViewPoints(image,data){
+    image.viewPoints=data;
+    delete image.viewRec;
+    // The bundle Player reads the first page; the ordinary editor reads image.
+    // Keep both representations synchronized after any first-page edit.
+    if(Array.isArray(image.pages)&&image.pages[0]){
+      image.pages[0]={...image.pages[0],viewPoints:data};
+      delete image.pages[0].viewRec;
+    }
+  }
+
   function makeViewRecAuthoringField(image,onSaved){
+    const firstPage=Array.isArray(image?.pages)?image.pages[0]:null;
+    const pointSet=firstPage?.viewPoints||firstPage?.viewRec||image?.viewPoints||image?.viewRec;
+    const editingImage=firstPage?{...image,...firstPage,viewPoints:pointSet,viewRec:undefined}:image;
     const box=document.createElement('div');box.className='view-rec-authoring-field';
     const meta=document.createElement('div');meta.className='view-rec-authoring-meta';
-    const points=(image?.viewPoints?.points||image?.viewRec?.points||[]).length,legacy=image?.viewRec?.frames?.length||0;
+    const points=(pointSet?.points||[]).length,legacy=pointSet?.frames?.length||0;
     meta.textContent=points?u(`VIEW POINT：${points}視点 · タップ駆動`,`VIEW POINT: ${points} viewpoints · tap driven`):(legacy?u('VIEW REC：旧方式（録り直し推奨）','VIEW REC: legacy (re-record recommended)'):u('VIEW POINT：未設定','VIEW POINT: not set'));
     const button=document.createElement('button');button.type='button';button.className='view-rec-authoring-button';button.textContent=points?u('VIEW POINTを再編集','Edit VIEW POINT'):u('VIEW POINTを設定','Set VIEW POINT');
-    button.onclick=()=>openViewRecRecorder(image,onSaved);box.append(meta,button);return box;
+    button.onclick=()=>openViewRecRecorder(editingImage,onSaved);box.append(meta,button);return box;
   }
 
   function desktopMakeSelect(label,values,current,onchange){
@@ -13368,7 +13382,7 @@ function openDesktopTextDetail(){
         }
       );
 
-      const viewRecField=currentTapAction==='viewRec' ? makeViewRecAuthoringField(sceneImage,data=>{captureUndo('VIEW RECの記録を元に戻せます');p.image.viewPoints=data;delete p.image.viewRec;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}) : null;
+      const viewRecField=currentTapAction==='viewRec' ? makeViewRecAuthoringField(sceneImage,data=>{captureUndo('VIEW RECの記録を元に戻せます');saveSceneImageViewPoints(p.image,data);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}) : null;
 
       const roundedField=document.createElement('label');roundedField.className='desktop-scene-image-check';const roundedInput=document.createElement('input');roundedInput.type='checkbox';roundedInput.checked=sceneImage.rounded!==false;roundedInput.addEventListener('change',()=>{captureUndo('Scene画像の角丸設定を元に戻せます');p.image.rounded=roundedInput.checked;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});roundedField.append(roundedInput,document.createElement('span'));roundedField.lastChild.textContent=u('角を丸める','Round image corners');
       const shadowField=document.createElement('label');shadowField.className='desktop-scene-image-check';
@@ -15068,7 +15082,7 @@ function openDesktopTextDetail(){
           const alt=document.createElement('label');alt.className='live-edit-field live-scene-image-alt';alt.append(u('画像の説明（任意）','Image description (optional)'));const inp=document.createElement('input');inp.type='text';inp.value=current.alt||'';inp.placeholder=u('例：面積2cm²の正方形','e.g. A square with area 2 cm²');inp.onchange=()=>{captureUndo('Scene画像の説明変更を元に戻せます');p.image.alt=inp.value.trim();scheduleDraftSave(40);refreshLivePlayer();};alt.append(inp);
           const caption=document.createElement('label');caption.className='live-scene-image-check';const captionCb=document.createElement('input');captionCb.type='checkbox';captionCb.checked=current.caption===true;captionCb.onchange=()=>{captureUndo('Scene画像のキャプション設定変更を元に戻せます');p.image.caption=captionCb.checked;scheduleDraftSave(40);refreshLivePlayer();};caption.append(captionCb,document.createTextNode(u('説明を画像下に表示','Show description as caption')));
           const pageCount=document.createElement('label');pageCount.className='live-scene-image-check';const pageCountCb=document.createElement('input');pageCountCb.type='checkbox';pageCountCb.checked=current.showPageCount!==false;pageCountCb.onchange=()=>{captureUndo('ページ数バッジの表示設定を元に戻せます');p.image.showPageCount=pageCountCb.checked;scheduleDraftSave(40);refreshLivePlayer();};pageCount.append(pageCountCb,document.createTextNode(u('＋ページ数を表示','Show page count badge')));
-          liveEditSheetBody.append(opts,rounded,shadow,tapAction,pageCount);if(sceneImagePages(current).length>1)liveEditSheetBody.append(pageDirection);if((current.tapAction||((current.fullscreen===false)?'none':'fullscreen'))==='viewRec')liveEditSheetBody.append(makeViewRecAuthoringField(current,data=>{captureUndo('VIEW RECの記録を元に戻せます');p.image.viewPoints=data;delete p.image.viewRec;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();}));liveEditSheetBody.append(alt,caption);
+          liveEditSheetBody.append(opts,rounded,shadow,tapAction,pageCount);if(sceneImagePages(current).length>1)liveEditSheetBody.append(pageDirection);if((current.tapAction||((current.fullscreen===false)?'none':'fullscreen'))==='viewRec')liveEditSheetBody.append(makeViewRecAuthoringField(current,data=>{captureUndo('VIEW RECの記録を元に戻せます');saveSceneImageViewPoints(p.image,data);scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();}));liveEditSheetBody.append(alt,caption);
         }
       };
       installVisualHeaderTabs('background');
