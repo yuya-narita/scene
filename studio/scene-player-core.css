@@ -2964,7 +2964,14 @@ html.sp-scene-image-open body{
 /* V188 — spotlight one authored VIEW POINT region while preserving the full page. */
 .sp-viewpoint-focus-layer{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none;contain:paint}
 .sp-viewpoint-focus-layer[hidden]{display:none!important}
-.sp-viewpoint-focus-shade{position:absolute;box-sizing:border-box;pointer-events:none;opacity:0;transition:left .32s cubic-bezier(.22,.74,.18,1),top .32s cubic-bezier(.22,.74,.18,1),width .32s cubic-bezier(.22,.74,.18,1),height .32s cubic-bezier(.22,.74,.18,1),opacity .2s ease;-webkit-backdrop-filter:blur(1.5px);backdrop-filter:blur(1.5px)}
-.sp-viewpoint-focus-layer[data-style="dark"] .sp-viewpoint-focus-shade{background:rgba(0,0,0,.24);-webkit-backdrop-filter:blur(1.5px) brightness(.42) saturate(.72);backdrop-filter:blur(1.5px) brightness(.42) saturate(.72)}
-.sp-viewpoint-focus-layer[data-style="light"] .sp-viewpoint-focus-shade{background:rgba(255,255,255,.48);-webkit-backdrop-filter:blur(1.3px) brightness(1.35) saturate(.5);backdrop-filter:blur(1.3px) brightness(1.35) saturate(.5)}
+.sp-viewpoint-focus-shade{position:absolute;box-sizing:border-box;pointer-events:none;opacity:0;transition:left .32s cubic-bezier(.22,.74,.18,1),top .32s cubic-bezier(.22,.74,.18,1),width .32s cubic-bezier(.22,.74,.18,1),height .32s cubic-bezier(.22,.74,.18,1),opacity .2s ease;-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px)}
+.sp-viewpoint-focus-shade[data-edge="top"]{-webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 calc(100% - clamp(18px,4vw,52px)),transparent 100%);mask-image:linear-gradient(to bottom,#000 0%,#000 calc(100% - clamp(18px,4vw,52px)),transparent 100%)}
+.sp-viewpoint-focus-shade[data-edge="bottom"]{-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 clamp(18px,4vw,52px),#000 100%);mask-image:linear-gradient(to bottom,transparent 0%,#000 clamp(18px,4vw,52px),#000 100%)}
+.sp-viewpoint-focus-shade[data-edge="left"]{-webkit-mask-image:linear-gradient(to right,#000 0%,#000 calc(100% - clamp(18px,4vw,52px)),transparent 100%);mask-image:linear-gradient(to right,#000 0%,#000 calc(100% - clamp(18px,4vw,52px)),transparent 100%)}
+.sp-viewpoint-focus-shade[data-edge="right"]{-webkit-mask-image:linear-gradient(to right,transparent 0%,#000 clamp(18px,4vw,52px),#000 100%);mask-image:linear-gradient(to right,transparent 0%,#000 clamp(18px,4vw,52px),#000 100%)}
+.sp-viewpoint-focus-layer[data-style="dark"] .sp-viewpoint-focus-shade{background:rgba(0,0,0,.28);-webkit-backdrop-filter:blur(7px) brightness(.42) saturate(.72);backdrop-filter:blur(7px) brightness(.42) saturate(.72)}
+.sp-viewpoint-focus-layer[data-style="light"] .sp-viewpoint-focus-shade{background:rgba(255,255,255,.48);-webkit-backdrop-filter:blur(7px) brightness(1.35) saturate(.5);backdrop-filter:blur(7px) brightness(1.35) saturate(.5)}
+.sp-viewpoint-ambient{display:none;position:fixed;z-index:1;inset:-3%;width:106%;height:106%;object-fit:cover;filter:blur(24px) brightness(.48) saturate(.78);transform:scale(1.04);opacity:.88;pointer-events:none}
+.sp-scene-image-viewer.has-viewpoint-ambient .sp-viewpoint-ambient{display:block}
+.sp-scene-image-viewer.has-viewpoint-ambient .sp-scene-image-viewer-frame{z-index:2;background:transparent!important}
 @media(prefers-reduced-motion:reduce){.sp-viewpoint-focus-shade{transition:none}}

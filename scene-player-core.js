@@ -4040,6 +4040,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const frame = document.createElement('div');
         frame.className = 'sp-scene-image-viewer-frame';
 
+        const ambient = document.createElement('img');
+        ambient.className = 'sp-viewpoint-ambient';
+        ambient.alt = '';
+        ambient.setAttribute('aria-hidden','true');
+        ambient.hidden = true;
+
         const close = document.createElement('button');
         close.type = 'button';
         close.className = 'sp-scene-image-viewer-close';
@@ -4452,7 +4458,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const nextPage=document.createElement('button');nextPage.type='button';nextPage.className='sp-scene-image-viewer-page-next';nextPage.setAttribute('aria-label','Next page');nextPage.textContent='›';
         pageControls.append(prevPage,pageCount,nextPage);
         frame.append(img);
-        viewer.append(shade,frame,close,pageControls);
+        viewer.append(shade,ambient,frame,close,pageControls);
         document.body.appendChild(viewer);
 
         // V110 — object continuity transition. The fullscreen viewer still owns all
@@ -4522,7 +4528,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const img = viewer.querySelector('.sp-scene-image-viewer-img');
       const frame = viewer.querySelector('.sp-scene-image-viewer-frame');
+      const ambient=viewer.querySelector('.sp-viewpoint-ambient');
       if (frame) frame._sceneImageMode = options?.mode === 'viewPoint' ? 'viewPoint' : 'fullscreen';
+      if(ambient){const enabled=options?.mode==='viewPoint'&&options?.viewPointAmbient===true;ambient.hidden=!enabled;viewer.classList.toggle('has-viewpoint-ambient',enabled);if(enabled)ambient.src=src;}
       if(options?.mode==='viewPoint')img.style.visibility=options?.viewPointStartHidden?'hidden':'';
       if(options?.mode!=='viewPoint')frame?._viewRecCancel?.();
       frame?._sceneImageReset?.();
@@ -4586,6 +4594,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           img.addEventListener('load',finishLoad,{once:true});
           img.addEventListener('error',()=>{if(token===pageLoadToken){outgoing?.remove();if(viewer._sceneOutgoingPage===outgoing)viewer._sceneOutgoingPage=null;}},{once:true});
           img.src=nextSrc;
+          if(ambient&&!ambient.hidden)ambient.src=nextSrc;
         }else frame?._fitSceneImageFrame?.();
       };
       viewer._scenePageIndex=pageIndex;
@@ -4655,7 +4664,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
       const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0;
-      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,closeTargetEl:image.closeTargetEl||sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange,animatePageEntry:image.animatePageEntry===true&&!startAtAuthoredPoint,viewPointStartHidden:startAtAuthoredPoint,direction:image.pageDirection||'ltr'});
+      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint',viewPointAmbient:pointSet?.ambient===true, sourceEl,closeTargetEl:image.closeTargetEl||sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange,animatePageEntry:image.animatePageEntry===true&&!startAtAuthoredPoint,viewPointStartHidden:startAtAuthoredPoint,direction:image.pageDirection||'ltr'});
       const viewer = document.querySelector('.sp-scene-image-viewer');
       const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
       const img = viewer?.querySelector('.sp-scene-image-viewer-img');
@@ -4665,9 +4674,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const sourceSpace=pointSet?.coordinateSpace==='source';
       const points = rawPoints.map(p=>{
         if(sourceSpace){
-          if(p?.type==='fit')return{type:'fit'};
+          if(p?.type==='fit'){const fr=p.focusRect;return{type:'fit',focusRect:fr?{x:Math.max(0,Math.min(.99,Number(fr.x)||0)),y:Math.max(0,Math.min(.99,Number(fr.y)||0)),width:Math.max(.01,Math.min(1,Number(fr.width)||1)),height:Math.max(.01,Math.min(1,Number(fr.height)||1))}:null};}
           if(p?.rect){
-            const r=p.rect;return{type:'rect',x:Math.max(0,Math.min(.99,Number(r.x)||0)),y:Math.max(0,Math.min(.99,Number(r.y)||0)),width:Math.max(.01,Math.min(1,Number(r.width)||1)),height:Math.max(.01,Math.min(1,Number(r.height)||1)),fit:p.fit==='contain'?'contain':undefined};
+            const r=p.rect,fr=p.focusRect;return{type:'rect',x:Math.max(0,Math.min(.99,Number(r.x)||0)),y:Math.max(0,Math.min(.99,Number(r.y)||0)),width:Math.max(.01,Math.min(1,Number(r.width)||1)),height:Math.max(.01,Math.min(1,Number(r.height)||1)),focusRect:fr?{x:Math.max(0,Math.min(.99,Number(fr.x)||0)),y:Math.max(0,Math.min(.99,Number(fr.y)||0)),width:Math.max(.01,Math.min(1,Number(fr.width)||1)),height:Math.max(.01,Math.min(1,Number(fr.height)||1))}:null,fit:p.fit==='contain'?'contain':undefined};
           }
           return{type:'focus',cx:Number.isFinite(Number(p?.cx))?Number(p.cx):.5,cy:Number.isFinite(Number(p?.cy))?Number(p.cy):.5,width:Math.max(.01,Math.min(1,Number(p?.width)||1)),height:Math.max(.01,Math.min(1,Number(p?.height)||1)),occupancy:Number.isFinite(Number(p?.occupancy))?Math.max(1,Math.min(8,Number(p.occupancy))):null};
         }
@@ -4702,15 +4711,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       const setSpotlight=gaze=>{
         if(focusStyle==='off'){focusLayer.hidden=true;frame.classList.remove('is-viewpoint-spotlight');return;}
-        const r=focusRectFor(gaze),right=Math.min(1,r.x+r.width),bottom=Math.min(1,r.y+r.height);
+        const r=gaze.focusRect||focusRectFor(gaze),right=Math.min(1,r.x+r.width),bottom=Math.min(1,r.y+r.height),feather=.028;
         focusLayer.dataset.style=focusStyle;focusLayer.hidden=false;frame.classList.add('is-viewpoint-spotlight');
         const boxes=[
-          {left:0,top:0,width:1,height:r.y},
-          {left:0,top:r.y,width:r.x,height:r.height},
-          {left:right,top:r.y,width:1-right,height:r.height},
-          {left:0,top:bottom,width:1,height:1-bottom}
+          {left:0,top:0,width:1,height:Math.min(1,r.y+feather),edge:'top'},
+          {left:0,top:r.y,width:Math.min(1,r.x+feather),height:r.height,edge:'left'},
+          {left:Math.max(0,right-feather),top:r.y,width:1-Math.max(0,right-feather),height:r.height,edge:'right'},
+          {left:0,top:Math.max(0,bottom-feather),width:1,height:1-Math.max(0,bottom-feather),edge:'bottom'}
         ];
-        boxes.forEach((box,i)=>{const el=focusShades[i];el.style.left=`${box.left*100}%`;el.style.top=`${box.top*100}%`;el.style.width=`${box.width*100}%`;el.style.height=`${box.height*100}%`;el.style.opacity=box.width>.001&&box.height>.001?'1':'0';});
+        boxes.forEach((box,i)=>{const el=focusShades[i];el.dataset.edge=box.edge;el.style.left=`${box.left*100}%`;el.style.top=`${box.top*100}%`;el.style.width=`${box.width*100}%`;el.style.height=`${box.height*100}%`;el.style.opacity=box.width>.001&&box.height>.001?'1':'0';});
       };
       const moveToPoint=gaze=>{
         if(focusStyle==='off'){focusLayer.hidden=true;frame.classList.remove('is-viewpoint-spotlight');moveTo(gaze);return;}
