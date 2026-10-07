@@ -2410,6 +2410,7 @@ html.sp-scene-image-open body{
 
 /* V169 — layered page-bundle affordance and fullscreen manga navigation. */
 .sp-scene-image.has-page-stack::before{content:"＋" attr(data-page-count) " ページ";position:absolute;z-index:5;left:8px;top:8px;right:auto;bottom:auto;padding:4px 8px;border:1px solid rgba(255,255,255,.35);border-radius:999px;background:rgba(0,0,0,.7);color:#fff;font:600 12px/1.2 system-ui,sans-serif;pointer-events:none}
+.sp-scene-image.has-page-stack[data-show-page-count="false"]::before{display:none}
 .sp-scene-image-viewer-pages{position:fixed;z-index:3;left:50%;bottom:max(18px,calc(env(safe-area-inset-bottom) + 16px));transform:translateX(-50%);display:flex;align-items:center;gap:18px;padding:7px 12px;border:1px solid rgba(255,255,255,.24);border-radius:999px;background:rgba(18,18,22,.78);color:#fff;font:600 14px/1 system-ui,sans-serif;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 .sp-scene-image-viewer-pages[hidden]{display:none!important}
 .sp-scene-image-viewer-pages button{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:#fff;font:400 30px/1 system-ui,sans-serif;cursor:pointer;touch-action:manipulation}

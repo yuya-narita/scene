@@ -4628,7 +4628,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(sourceSpace){
           if(p?.type==='fit')return{type:'fit'};
           if(p?.rect){
-            const r=p.rect;return{type:'rect',x:Math.max(0,Math.min(.99,Number(r.x)||0)),y:Math.max(0,Math.min(.99,Number(r.y)||0)),width:Math.max(.01,Math.min(1,Number(r.width)||1)),height:Math.max(.01,Math.min(1,Number(r.height)||1))};
+            const r=p.rect;return{type:'rect',x:Math.max(0,Math.min(.99,Number(r.x)||0)),y:Math.max(0,Math.min(.99,Number(r.y)||0)),width:Math.max(.01,Math.min(1,Number(r.width)||1)),height:Math.max(.01,Math.min(1,Number(r.height)||1)),fit:p.fit==='contain'?'contain':undefined};
           }
           return{type:'focus',cx:Number.isFinite(Number(p?.cx))?Number(p.cx):.5,cy:Number.isFinite(Number(p?.cy))?Number(p.cy):.5,width:Math.max(.01,Math.min(1,Number(p?.width)||1)),height:Math.max(.01,Math.min(1,Number(p?.height)||1)),occupancy:Number.isFinite(Number(p?.occupancy))?Math.max(1,Math.min(8,Number(p.occupancy))):null};
         }
@@ -4654,11 +4654,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // Resolve the recorded source rectangle against that viewport exactly as V104 did.
           // The V105 source-only scale (1/rw, 1/rh) over-amplified horizontal travel on
           // portrait manga, especially on wide desktop screens.
-          const rectScale=Math.max(1,Math.max(frame.clientWidth/(bw*rw),frame.clientHeight/(bh*rh)));
-          scale=Math.min(12,rectScale);
+          let panW=bw,panH=bh;
+          let rectScale;
+          if(gaze.fit==='contain'){
+            // Use the image's actual object-fit:contain footprint. This lets a wide
+            // panel fill the viewport as much as possible while staying entirely visible.
+            const fit=Math.min(frame.clientWidth/Math.max(1,img.naturalWidth||bw),frame.clientHeight/Math.max(1,img.naturalHeight||bh));
+            panW=Math.max(1,(img.naturalWidth||bw)*fit);panH=Math.max(1,(img.naturalHeight||bh)*fit);
+            rectScale=Math.min(frame.clientWidth/(panW*rw),frame.clientHeight/(panH*rh));
+          }else{
+            rectScale=Math.max(1,Math.max(frame.clientWidth/(bw*rw),frame.clientHeight/(bh*rh)));
+          }
+          scale=Math.max(.05,Math.min(12,rectScale));
           const cx=Math.max(0,Math.min(1,gaze.x+rw/2)),cy=Math.max(0,Math.min(1,gaze.y+rh/2));
-          const rawX=(.5-cx)*bw*scale,rawY=(.5-cy)*bh*scale;
-          const maxX=Math.max(0,(bw*scale-frame.clientWidth)/2),maxY=Math.max(0,(bh*scale-frame.clientHeight)/2);
+          const rawX=(.5-cx)*panW*scale,rawY=(.5-cy)*panH*scale;
+          const maxX=Math.max(0,(panW*scale-frame.clientWidth)/2),maxY=Math.max(0,(panH*scale-frame.clientHeight)/2);
           return{x:Math.max(-maxX,Math.min(maxX,rawX)),y:Math.max(-maxY,Math.min(maxY,rawY)),scale};
         }
         if(gaze.type==='focus'){
@@ -4769,11 +4779,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const image = presentation?.image;
       const pages=Array.isArray(image?.pages)?image.pages.filter(page=>page&&typeof page.src==='string'&&page.src):[];
       const firstImage=pages[0]||image;
+      const displayImage=image?.cover?.src?image.cover:firstImage;
       if (!firstImage?.src || !container) return;
 
       const wrap = document.createElement(history ? 'span' : 'div');
       wrap.className = history ? 'sp-history-scene-image' : 'sp-scene-image';
-      if(pages.length>1){wrap.dataset.pageCount=String(pages.length);wrap.classList.add('has-page-stack');}
+      wrap.dataset.showPageCount=image.showPageCount===false?'false':'true';
+      if(pages.length>1||image?.cover?.src){wrap.dataset.pageCount=String(Math.max(1,pages.length));wrap.classList.add('has-page-stack');}
       wrap.dataset.imageRounded=image.rounded===false?'false':'true';
       wrap.dataset.imageSize = ['small','large'].includes(image.size)
         ? image.size
@@ -4795,7 +4807,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (image.shadow === true) media.classList.add('has-object-shadow');
 
       const img = document.createElement('img');
-      img.alt = firstImage.alt ?? image.alt ?? '';
+      img.alt = displayImage.alt ?? firstImage.alt ?? image.alt ?? '';
       img.loading = history ? 'lazy' : 'eager';
       img.decoding = 'async';
 
@@ -4845,8 +4857,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       img.addEventListener('load', refreshHistoryGeometryAfterImageLoad, {once:true});
 
-      img.src = firstImage.src;
-      if(pages.length>1){
+      img.src = displayImage.src;
+      if(pages.length>1 || image?.cover?.src){
         const backSheet=document.createElement('span');backSheet.className='scene-image-stack-sheet is-back';backSheet.setAttribute('aria-hidden','true');
         const middleSheet=document.createElement('span');middleSheet.className='scene-image-stack-sheet is-middle';middleSheet.setAttribute('aria-hidden','true');
         media.append(backSheet,middleSheet);
