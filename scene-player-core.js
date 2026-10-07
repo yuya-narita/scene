@@ -4444,8 +4444,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const pageCount=document.createElement('span');pageCount.className='sp-scene-image-viewer-page-count';pageCount.setAttribute('aria-live','polite');
         const nextPage=document.createElement('button');nextPage.type='button';nextPage.className='sp-scene-image-viewer-page-next';nextPage.setAttribute('aria-label','Next page');nextPage.textContent='›';
         pageControls.append(prevPage,pageCount,nextPage);
-        frame.append(close,img);
-        viewer.append(shade,frame,pageControls);
+        frame.append(img);
+        viewer.append(shade,frame,close,pageControls);
         document.body.appendChild(viewer);
 
         // V110 — object continuity transition. The fullscreen viewer still owns all
@@ -4559,7 +4559,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             outgoing.style.position='absolute';outgoing.style.left='50%';outgoing.style.top='50%';outgoing.style.margin='0';
             outgoing.style.width=`${Math.max(1,img.clientWidth)}px`;outgoing.style.height=`${Math.max(1,img.clientHeight)}px`;
             outgoing.style.setProperty('max-width','none','important');outgoing.style.setProperty('max-height','none','important');
-            outgoing.style.transform=img.style.transform||'translate3d(0,0,0) scale(1)';outgoing.style.zIndex='1';outgoing.style.pointerEvents='none';
+            outgoing.style.transform=`translate(-50%,-50%) ${img.style.transform||'translate3d(0,0,0) scale(1)'}`;outgoing.style.zIndex='1';outgoing.style.pointerEvents='none';
             frame.appendChild(outgoing);viewer._sceneOutgoingPage=outgoing;
           }
           const finishLoad=()=>{
