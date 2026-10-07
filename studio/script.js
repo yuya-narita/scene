@@ -10159,21 +10159,28 @@ function startInlineTextEdit(field='text',targetEl=null){
     const pagePrevSide=document.createElement('button');pagePrevSide.type='button';pagePrevSide.className='view-rec-page-arrow is-margin is-prev';pagePrevSide.textContent='‹';pagePrevSide.setAttribute('aria-label',u('前のページ','Previous page'));
     const pageNextSide=document.createElement('button');pageNextSide.type='button';pageNextSide.className='view-rec-page-arrow is-margin is-next';pageNextSide.textContent='›';pageNextSide.setAttribute('aria-label',u('次のページ','Next page'));
     media.append(pagePrevSide,stage,pageNextSide);
-    const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('画像を拡大・移動して、見せたい位置で「＋視点を追加」。左右の矢印でページを切り替えます。','Zoom or move the image to the desired view, then add a viewpoint. Use the arrows to switch pages.');
+    const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('画像を拡大・移動して「＋視点を追加」。ピント演出は視点切替時のぼけ具合です。','Zoom or move the image, then add a viewpoint. Focus shift controls blur during viewpoint changes.');
     const status=document.createElement('div');status.className='view-rec-recorder-status';
     const controls=document.createElement('div');controls.className='view-rec-recorder-controls';
     const add=document.createElement('button');add.type='button';add.className='view-rec-button is-rec';add.textContent=u('＋ 視点を追加','＋ Add viewpoint');
     const reset=document.createElement('button');reset.type='button';reset.className='view-rec-button';reset.textContent=u('全景に戻す','Reset view');
     const clearPoints=document.createElement('button');clearPoints.type='button';clearPoints.className='view-rec-button';clearPoints.textContent=u('視点を全削除','Clear viewpoints');
     const save=document.createElement('button');save.type='button';save.className='view-rec-button is-primary';save.textContent=u('保存','Save');
+    const focusControl=document.createElement('label');focusControl.className='view-rec-focus-control';
+    const focusLabel=document.createElement('span');focusLabel.textContent=u('ピント演出','Focus shift');
+    const focusSelect=document.createElement('select');focusSelect.className='view-rec-focus-select';focusSelect.setAttribute('aria-label',u('ピント演出の強さ','Focus shift strength'));
+    [[0,u('OFF','Off')],[2,u('弱','Subtle')],[4,u('中','Medium')],[7,u('強','Strong')]].forEach(([value,label])=>{const option=document.createElement('option');option.value=String(value);option.textContent=label;focusSelect.appendChild(option);});
+    focusControl.append(focusLabel,focusSelect);
     const axis=document.createElement('button');axis.type='button';axis.className='view-rec-button';axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');axis.setAttribute('aria-pressed','false');
     const axisY=document.createElement('button');axisY.type='button';axisY.className='view-rec-button';axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');axisY.setAttribute('aria-pressed','false');
     const cancel=document.createElement('button');cancel.type='button';cancel.className='view-rec-button';cancel.textContent=u('キャンセル','Cancel');
-    controls.append(add,reset,axis,axisY,clearPoints,save,cancel);panel.append(head,media,hint,status,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
+    controls.append(add,reset,axis,axisY,focusControl,clearPoints,save,cancel);panel.append(head,media,hint,status,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
 
     // V113 — reopening VIEW POINT is an edit, not an implicit destructive rebuild.
     // Preserve the saved point sequence unless the author explicitly clears it.
     const savedPointSet=currentImage?.viewPoints||currentImage?.viewRec||null;
+    const focusLevelFor=set=>Number.isFinite(Number(set?.focusBlur))?Math.max(0,Math.min(7,Number(set.focusBlur))):((set?.points||[]).length?0:4);
+    focusSelect.value=String(focusLevelFor(savedPointSet));
     const normalizePoint=point=>{const copy=JSON.parse(JSON.stringify(point));delete copy.fit;return copy;};
     const savedPoints=Array.isArray(savedPointSet?.points)?savedPointSet.points.map(normalizePoint):[];
     const state={scale:1,x:0,y:0,points:savedPoints,zoomAnimRaf:0,drag:false,lastX:0,lastY:0,pinchDistance:0,pinchScale:1,axisLockX:false,axisLockY:false,dragAnchorY:0,dragAnchorX:0};
@@ -10228,10 +10235,10 @@ function startInlineTextEdit(field='text',targetEl=null){
     reset.onclick=()=>{cancelZoomAnimation();resetView();};
     axis.onclick=()=>{state.axisLockX=!state.axisLockX;if(state.axisLockX)state.axisLockY=false;axis.classList.toggle('is-active',state.axisLockX);axisY.classList.remove('is-active');axis.setAttribute('aria-pressed',String(state.axisLockX));axisY.setAttribute('aria-pressed','false');axis.textContent=state.axisLockX?u('↔ 横移動固定 ON','↔ Horizontal lock ON'):u('↔ 横移動固定','↔ Lock horizontal');axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');};
     axisY.onclick=()=>{state.axisLockY=!state.axisLockY;if(state.axisLockY)state.axisLockX=false;axisY.classList.toggle('is-active',state.axisLockY);axis.classList.remove('is-active');axisY.setAttribute('aria-pressed',String(state.axisLockY));axis.setAttribute('aria-pressed','false');axisY.textContent=state.axisLockY?u('↕ 縦移動固定 ON','↕ Vertical lock ON'):u('↕ 縦移動固定','↕ Lock vertical');axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');};
-    const currentPointSet=()=>({version:3,coordinateSpace:'source',sizing:'source-rect',bounded:true,mode:'tap',points:state.points.map(normalizePoint)});
+    const currentPointSet=()=>({version:3,coordinateSpace:'source',sizing:'source-rect',bounded:true,mode:'tap',focusBlur:Number(focusSelect.value)||0,points:state.points.map(normalizePoint)});
     const storeCurrentPage=()=>{if(!bundlePages)return;const page=bundlePages[currentPageIndex];if(!page)return;const set=currentPointSet();if(set.points.length){page.viewPoints=set;delete page.viewRec;}else{delete page.viewPoints;delete page.viewRec;}};
     const updatePageNavigation=()=>{if(!bundlePages)return;pageCounter.textContent=`${currentPageIndex+1} / ${bundlePages.length}`;[pagePrevTop,pagePrevSide].forEach(button=>button.disabled=currentPageIndex<=0);[pageNextTop,pageNextSide].forEach(button=>button.disabled=currentPageIndex>=bundlePages.length-1);};
-    const loadCurrentPage=()=>{currentImage=bundlePages[currentPageIndex];if(!currentImage?.src)return;state.scale=1;state.x=0;state.y=0;state.drag=false;state.pinchDistance=0;state.points=(currentImage.viewPoints?.points||currentImage.viewRec?.points||[]).map(normalizePoint);img.alt=currentImage.alt||'';status.textContent='';img.src=currentImage.src;updatePageNavigation();updateStatus();if(img.complete&&img.naturalWidth){sizeStageToSource();fitImageToStage();apply();}};
+    const loadCurrentPage=()=>{currentImage=bundlePages[currentPageIndex];if(!currentImage?.src)return;state.scale=1;state.x=0;state.y=0;state.drag=false;state.pinchDistance=0;const pagePointSet=currentImage.viewPoints||currentImage.viewRec||null;state.points=(pagePointSet?.points||[]).map(normalizePoint);focusSelect.value=String(focusLevelFor(pagePointSet));img.alt=currentImage.alt||'';status.textContent='';img.src=currentImage.src;updatePageNavigation();updateStatus();if(img.complete&&img.naturalWidth){sizeStageToSource();fitImageToStage();apply();}};
     const movePage=delta=>{if(!bundlePages)return;const next=Math.max(0,Math.min(bundlePages.length-1,currentPageIndex+delta));if(next===currentPageIndex)return;storeCurrentPage();currentPageIndex=next;loadCurrentPage();};
     [pagePrevTop,pagePrevSide].forEach(button=>{button.hidden=!bundlePages;button.onclick=e=>{e.stopPropagation();movePage(-1);};});
     [pageNextTop,pageNextSide].forEach(button=>{button.hidden=!bundlePages;button.onclick=e=>{e.stopPropagation();movePage(1);};});

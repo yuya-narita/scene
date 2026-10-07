@@ -14225,3 +14225,8 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .scene-image-pages-modal-row.is-dragging{z-index:4;opacity:.68;box-shadow:0 8px 22px rgba(15,25,38,.2);transform:scale(.99)}
 .live-scene-image-rotation-row select.scene-image-rotation-wheel,.desktop-scene-image-rotation-row select.scene-image-rotation-wheel{box-sizing:border-box!important;flex:0 0 82px!important;width:82px!important;min-width:82px!important;height:48px!important;min-height:48px!important;padding:0 5px!important;border:1px solid #cbd2dc!important;border-radius:10px!important;background:#fff!important;color:#17191d!important;text-align:center!important;font-size:16px!important;touch-action:manipulation;pointer-events:auto}
 @media(max-width:600px){.live-scene-image-rotation-row select.scene-image-rotation-wheel,.desktop-scene-image-rotation-row select.scene-image-rotation-wheel{flex:0 0 88px!important;width:88px!important;min-width:88px!important;height:50px!important;min-height:50px!important;font-size:17px!important}}
+
+/* V187 — optional VIEW POINT focus rack. Native select remains easy to use on iPhone. */
+.view-rec-focus-control{display:flex;flex:1 1 42%;min-width:150px;min-height:40px;align-items:center;justify-content:space-between;gap:8px;padding:0 11px;border:1px solid #ccd2d8;border-radius:10px;background:#fff;color:#202428;font:750 12px system-ui;box-sizing:border-box}
+.view-rec-focus-select{min-width:76px;min-height:36px;padding:0 8px;border:1px solid #d8dde2;border-radius:8px;background:#f7f8fa;color:#202428;font:750 13px system-ui;touch-action:manipulation}
+@media(max-width:600px){.view-rec-focus-control{flex:1 1 42%;min-height:44px}.view-rec-focus-select{min-height:38px;font-size:14px}}

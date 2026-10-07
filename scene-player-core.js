@@ -4679,6 +4679,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // opening Enter/click to be interpreted as an advance/close. `initializing`
       // blocks progression until point 1 is visibly in place.
       let index=-1, raf=0, cancelled=false, moving=false, initializing=true;
+      // Animate focus on the existing image layer; no duplicate decoded image
+      // or canvas is allocated, which keeps the optional effect light on iPhone.
+      const focusBlur=Math.max(0,Math.min(7,Number(pointSet?.focusBlur)||0));
+      let focusAnimation=null;
+      const animateFocus=(fromBlur=0)=>{
+        focusAnimation?.cancel?.();focusAnimation=null;
+        if(!focusBlur||typeof img.animate!=='function'||matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
+        try{
+          focusAnimation=img.animate([{filter:`blur(${fromBlur}px)`},{filter:`blur(${focusBlur}px)`,offset:.38},{filter:`blur(${focusBlur}px)`,offset:.62},{filter:'blur(0px)'}],{duration:420,easing:'ease-in-out'});
+          focusAnimation.finished.catch(()=>{}).then(()=>{if(focusAnimation?.playState==='finished')focusAnimation=null;});
+        }catch(_){focusAnimation=null;}
+      };
 
       const coords=(gaze)=>{
         const bw=Math.max(1,img.clientWidth),bh=Math.max(1,img.clientHeight);
@@ -4730,11 +4742,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const apply=(v)=>{current=v;img.style.transform=`translate3d(${v.x}px, ${v.y}px, 0) scale(${v.scale})`;frame.classList.toggle('is-zoomed',v.scale>1.01);};
       const moveTo=(gaze,duration=420)=>{
         if(raf)cancelAnimationFrame(raf);moving=true;
+        animateFocus(0);
         const from={...current},to=coords(gaze),started=performance.now(),ease=t=>1-Math.pow(1-t,3);
         const tick=now=>{if(cancelled||viewer.hidden)return;const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);apply({x:from.x+(to.x-from.x)*e,y:from.y+(to.y-from.y)*e,scale:from.scale+(to.scale-from.scale)*e});if(q<1)raf=requestAnimationFrame(tick);else{raf=0;moving=false;}};raf=requestAnimationFrame(tick);
       };
       let onViewPointKey=null,onViewPointClick=null;
-      const cancel=()=>{cancelled=true;clearTimeout(frame._viewPointTapTimer);if(raf)cancelAnimationFrame(raf);raf=0;moving=false;frame._viewRecCancel=null;frame._viewPointAdvanceTouch=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing');if(onViewPointClick)frame.removeEventListener('click',onViewPointClick,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
+      const cancel=()=>{cancelled=true;clearTimeout(frame._viewPointTapTimer);if(raf)cancelAnimationFrame(raf);raf=0;focusAnimation?.cancel?.();focusAnimation=null;moving=false;frame._viewRecCancel=null;frame._viewPointAdvanceTouch=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing');if(onViewPointClick)frame.removeEventListener('click',onViewPointClick,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
       // Manual pinch / wheel / double-click hands the viewer to the reader completely.
       // Do not resume VIEW POINT on the synthetic click that follows a drag.
       frame._onViewPointManualControl=()=>cancel();
@@ -4795,7 +4808,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // Let the V110 pickup transition finish, then move straight to point 1.
           if(index<0&&points.length){
             if(startAtAuthoredPoint){
-              index=0;apply(coords(points[0]));initializing=false;img.style.visibility='';
+              index=0;apply(coords(points[0]));initializing=false;animateFocus(focusBlur);img.style.visibility='';
               return;
             }
             // Wait for the V110 pickup animation, then establish point 1 as a real
