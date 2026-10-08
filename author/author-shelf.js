@@ -73,7 +73,14 @@ function applyBookshelfHeader(header){
 }
 
 async function fetchJson(path){
-  const response=await fetch(`${API_BASE}${path}`,{headers:{Accept:'application/json'},cache:'no-store'});
+  let response;
+  for(let attempt=0;;attempt++){
+    try{response=await fetch(`${API_BASE}${path}`,{headers:{Accept:'application/json'},cache:'default'});break;}
+    catch(error){
+      if(attempt>=1||!(error instanceof TypeError))throw error;
+      await new Promise(resolve=>setTimeout(resolve,450));
+    }
+  }
   const payload=await response.json().catch(()=>null);
   if(!response.ok||!payload?.ok)throw new Error(payload?.error||`HTTP ${response.status}`);
   return payload;
@@ -84,11 +91,10 @@ async function loadShelf(){
   $('#loadingState').hidden=false;$('#errorState').hidden=true;$('#shelfContent').hidden=true;
   if(!authorReference){showError('作者本棚のURLが正しくありません。');return;}
   try{
-    const [bookshelf,worksPayload]=await Promise.all([
-      fetchJson(`/authors/${authorReference}/bookshelf`),
-      fetchJson(`/authors/${authorReference}/works`)
-    ]);
-    shelfData=bookshelf;allWorks=Array.isArray(worksPayload.works)?worksPayload.works:[];
+    const bookshelf=await fetchJson(`/authors/${authorReference}/bookshelf`);
+    shelfData=bookshelf;
+    const gathered=[...(Array.isArray(bookshelf.unboxedWorks)?bookshelf.unboxedWorks:[]),...(Array.isArray(bookshelf.series)?bookshelf.series.flatMap(series=>Array.isArray(series.episodes)?series.episodes:[]):[])];
+    allWorks=[...new Map(gathered.filter(work=>work?.publicationId).map(work=>[work.publicationId,work])).values()];
     workById=new Map(allWorks.map(work=>[work.publicationId,work]));
     applyFutureTheme(bookshelf.author?.theme);
     renderShelf();
