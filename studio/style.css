@@ -14284,3 +14284,8 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
  background:rgba(255,255,255,.88)!important;color:#111!important;
  box-shadow:0 3px 14px rgba(0,0,0,.16)!important;font-size:14px!important;
 }
+
+/* V198 — entry choice reflected in the cover thumbnail. */
+#coverPreview[data-start-trigger="center"] .cover-preview-start{top:50%!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:84%!important;min-height:52px!important;border-radius:14px!important;}
+#coverPreview[data-start-trigger="tap"] .cover-preview-start{font-size:0!important;background:rgba(0,0,0,.55)!important;color:#fff!important;width:auto!important;padding:10px 16px!important;}
+#coverPreview[data-start-trigger="tap"] .cover-preview-start::after{content:"タップしてはじめる";font-size:12px;}

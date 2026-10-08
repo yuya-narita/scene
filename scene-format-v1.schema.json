@@ -1537,7 +1537,10 @@
       "type": "object",
       "properties": {
         "startMode": {
-          "enum": ["scene", "comic"],
+          "enum": [
+            "scene",
+            "comic"
+          ],
           "default": "scene",
           "description": "How START behaves: begin Scene playback or open the first Scene image viewer."
         },
@@ -1666,6 +1669,15 @@
             }
           },
           "additionalProperties": true
+        },
+        "startTrigger": {
+          "enum": [
+            "center",
+            "bottom",
+            "tap"
+          ],
+          "default": "bottom",
+          "description": "Cover entry control: centered button, small bottom button, or tap cover."
         }
       },
       "additionalProperties": true

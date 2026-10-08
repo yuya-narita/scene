@@ -496,6 +496,7 @@
   }
 
   function applyDocumentMeta(doc) {
+    intro.dataset.startTrigger=['center','bottom','tap'].includes(doc?.cover?.startTrigger)?doc.cover.startTrigger:'bottom';
     const cleanTitle=String(doc.title||'').trim()==='Untitled'?'':String(doc.title||'');
     document.title = cleanTitle || 'Scene';
 
@@ -1550,6 +1551,7 @@
 
 
   function showIntro() {
+    intro.dataset.startTrigger=['center','bottom','tap'].includes(documentData?.cover?.startTrigger)?documentData.cover.startTrigger:'bottom';
     setShelfReturnReading(false);
     ending.classList.remove('is-visible');
     ending.hidden = true;
@@ -1570,6 +1572,10 @@
     applyDocumentMeta(documentData);
   }
 
+  intro.addEventListener('click', event=>{
+    if(intro.hidden||documentData?.cover?.startTrigger!=='tap'||event.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
+    startButton.click();
+  });
   startButton.addEventListener('click', () => {
     localStorage.removeItem(storageKey());
     ensurePlayer(0);

@@ -2973,3 +2973,15 @@ html.sp-scene-image-open body{
  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
  touch-action:manipulation;
 }
+
+/* V198 — author-selected entry control. */
+.sp-cover[data-start-trigger="center"] .sp-cover-start{
+ top:50%!important;bottom:auto!important;transform:translate(-50%,-50%)!important;
+ width:min(420px,84%)!important;min-height:58px!important;border-radius:14px!important;
+}
+.sp-cover[data-start-trigger="tap"] .sp-cover-start{
+ width:auto!important;min-width:140px!important;background:rgba(0,0,0,.55)!important;
+ color:#fff!important;font-size:0!important;border:0!important;
+}
+.sp-cover[data-start-trigger="tap"] .sp-cover-start::after{content:"タップしてはじめる";font-size:14px;}
+.sp-cover[data-start-trigger="tap"]{cursor:pointer;}

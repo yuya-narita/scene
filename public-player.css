@@ -1263,3 +1263,14 @@ body{
  font-family:"Yu Mincho","Hiragino Mincho ProN",serif!important;
  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);touch-action:manipulation;
 }
+
+/* V198 — selectable cover entry; secondary resume remains independently tappable. */
+.public-intro[data-start-trigger="center"] .public-intro-actions{
+ top:50%!important;bottom:auto!important;transform:translate(-50%,-50%)!important;
+ width:min(420px,84%)!important;flex-direction:column!important;
+}
+.public-intro[data-start-trigger="center"] .public-primary,
+.public-intro[data-start-trigger="center"] .public-secondary{width:100%!important;max-width:none!important;min-height:58px!important;border-radius:14px!important;}
+.public-intro[data-start-trigger="tap"]{cursor:pointer;}
+.public-intro[data-start-trigger="tap"] .public-primary{font-size:0!important;background:rgba(0,0,0,.55)!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border:0!important;}
+.public-intro[data-start-trigger="tap"] .public-primary::after{content:"タップしてはじめる";font-size:14px;}

@@ -387,6 +387,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       });
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
       if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover(e);});
+      this._on(this.els.cover,'click',(e)=>{
+        if(this.els.cover.hidden||this.document?.cover?.startTrigger!=='tap'||this.host.classList.contains('live-edit-enabled'))return;
+        if(e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
+        e.stopPropagation();this._beginFromCover(e);
+      });
+
       if(this.els.endingCover)this._on(this.els.endingCover,'click',()=>this.showCover({restart:true}));
       this._on(this.els.auto, 'click', (e) => {
         e.stopPropagation();
@@ -2287,6 +2293,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         mono: 'var(--sp-font-mono)'
       };
       const coverFamily = families[doc.cover?.fontFamily] || families.serif;
+      this.els.cover.dataset.startTrigger=['center','bottom','tap'].includes(doc.cover?.startTrigger)?doc.cover.startTrigger:'bottom';
       const endingFamily = families[doc.ending?.fontFamily] || families.serif;
       this.host.style.setProperty('--sp-cover-font', coverFamily);
 
@@ -3020,6 +3027,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(this.els.coverEpisodeTitle){const epTitle=coverValue('episodeTitle',this.document.metadata?.episodeTitle||this.document.episodeTitle||'');this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!coverVisible('episodeTitle',epTitle);}
       if(this.els.coverTitle){const title=coverValue('title',this.document.title||'');this.els.coverTitle.textContent=title;this.els.coverTitle.hidden=Boolean(logoSrc)||!coverVisible('title',title);}
       if(this.els.coverSubtitle){const sub=coverValue('subtitle',this.document.metadata?.subtitle||this.document.subtitle||'');this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!coverVisible('subtitle',sub);}
+      this.els.cover.dataset.startTrigger=['center','bottom','tap'].includes(this.document.cover?.startTrigger)?this.document.cover.startTrigger:'bottom';
       this.els.cover.hidden=false;
       this.host.classList.add('sp-cover-open');
       return true;
