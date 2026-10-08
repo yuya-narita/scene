@@ -14240,3 +14240,37 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 @media(max-width:600px){.view-rec-recorder-stage{grid-column:1}.view-rec-editbar{gap:6px;padding:6px 8px}.view-rec-editbar .view-rec-button{flex:0 1 auto;min-height:40px}.view-rec-recorder-controls{gap:5px;padding:7px 8px max(8px,env(safe-area-inset-bottom))}.view-rec-recorder-controls .view-rec-button{flex:0 1 auto;min-height:38px;padding:0 9px;font-size:11px}.view-rec-duration-label{font-size:11px}.view-rec-recorder-hint{padding-top:4px}.view-rec-recorder-status{min-height:22px;padding-top:4px}}
 
 .view-rec-point-actions summary{cursor:pointer;color:#555;font:650 12px system-ui;padding:9px 7px}.view-rec-point-actions[open]{flex-basis:100%}.view-rec-point-actions>div{display:flex;justify-content:center;flex-wrap:wrap;gap:7px;padding-top:4px}
+
+/* V196 — viewpoint editor: main actions, folded tools, dedicated save footer. */
+.view-rec-editbar{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;overflow-y:auto;max-height:42dvh;overscroll-behavior:contain}
+.view-rec-point-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px;align-items:center}
+.view-rec-point-nav .view-rec-point-select{width:100%;min-width:0}
+.view-rec-point-nav .view-rec-button{min-height:44px;padding:0;font-size:30px;line-height:1}
+.view-rec-primary-actions,.view-rec-review-actions{display:flex;gap:8px}
+.view-rec-primary-actions .view-rec-button,.view-rec-review-actions .view-rec-button{flex:1;min-height:42px}
+.view-rec-tool-groups{display:flex;gap:8px;flex-wrap:wrap}
+.view-rec-tools{flex:1 1 28%;min-width:0;border-top:1px solid #dfe2e5}
+.view-rec-tools summary{cursor:pointer;padding:10px 4px;font:650 12px system-ui;color:#555}
+.view-rec-tools[open]{flex-basis:100%}
+.view-rec-tools>div{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:8px;padding:4px 0 8px}
+.view-rec-duration-label{flex:1 1 220px;justify-content:space-between}
+.view-rec-duration-label select{max-width:100%;min-width:0}
+.view-rec-tools .is-danger{color:#bb2525;border-color:#e2b7b7}
+.view-rec-recorder-controls{display:grid;grid-template-columns:minmax(90px,1fr) minmax(140px,2fr);gap:10px;border-top:1px solid #dfe2e5;background:#f7f7f5}
+.view-rec-recorder-controls .view-rec-button{min-height:50px;font-size:15px}
+.view-rec-recorder-controls .view-rec-save{background:#087fff;border-color:#087fff;color:#fff;font-weight:800}
+@media(max-width:600px){
+ .view-rec-recorder-hint{display:none}
+ .view-rec-recorder-status{font-size:11px;min-height:24px;padding:5px 8px 0}
+ .view-rec-editbar{max-height:38dvh;padding:7px 10px;gap:7px}
+ .view-rec-point-nav{grid-template-columns:44px minmax(0,1fr) 44px;gap:6px}
+ .view-rec-point-nav .view-rec-button{min-height:44px;font-size:30px}
+ .view-rec-point-nav .view-rec-point-select{min-height:44px;font-size:14px}
+ .view-rec-primary-actions .view-rec-button,.view-rec-review-actions .view-rec-button{flex:1;min-height:42px;font-size:12px;padding:0 6px}
+ .view-rec-tools summary{font-size:11px;min-height:40px;box-sizing:border-box;padding:11px 2px}
+ .view-rec-tools>div .view-rec-button{min-height:44px}
+ .view-rec-duration-label{flex-basis:100%;font-size:12px}
+ .view-rec-duration-label select{min-height:44px;font-size:13px;max-width:72%}
+ .view-rec-recorder-controls{padding:8px 10px max(10px,env(safe-area-inset-bottom));grid-template-columns:1fr 2fr}
+ .view-rec-recorder-controls .view-rec-button{min-height:52px;font-size:15px;padding:0 12px}
+}

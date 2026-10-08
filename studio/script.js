@@ -10166,12 +10166,14 @@ function startInlineTextEdit(field='text',targetEl=null){
     const add=document.createElement('button');add.type='button';add.className='view-rec-button is-rec';add.textContent=u('＋ 視点を追加','＋ Add viewpoint');
     const reset=document.createElement('button');reset.type='button';reset.className='view-rec-button';reset.textContent=u('全景に戻す','Reset view');
     const clearPoints=document.createElement('button');clearPoints.type='button';clearPoints.className='view-rec-button';clearPoints.textContent=u('視点を全削除','Clear viewpoints');
-    const save=document.createElement('button');save.type='button';save.className='view-rec-button is-primary';save.textContent=u('保存','Save');
+    const save=document.createElement('button');save.type='button';save.className='view-rec-button is-primary view-rec-save';save.textContent=u('保存','Save');
     const axis=document.createElement('button');axis.type='button';axis.className='view-rec-button';axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');axis.setAttribute('aria-pressed','false');
     const axisY=document.createElement('button');axisY.type='button';axisY.className='view-rec-button';axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');axisY.setAttribute('aria-pressed','false');
-    const cancel=document.createElement('button');cancel.type='button';cancel.className='view-rec-button';cancel.textContent=u('キャンセル','Cancel');
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='view-rec-button view-rec-cancel';cancel.textContent=u('キャンセル','Cancel');
     const editbar=document.createElement('div');editbar.className='view-rec-editbar';
     const pointSelect=document.createElement('select');pointSelect.className='view-rec-point-select';pointSelect.setAttribute('aria-label',u('編集する視点','Viewpoint to edit'));
+    const pointPrev=document.createElement('button');pointPrev.type='button';pointPrev.className='view-rec-button view-rec-point-prev';pointPrev.textContent='‹';pointPrev.setAttribute('aria-label',u('前の視点','Previous viewpoint'));
+    const pointNext=document.createElement('button');pointNext.type='button';pointNext.className='view-rec-button view-rec-point-next';pointNext.textContent='›';pointNext.setAttribute('aria-label',u('次の視点','Next viewpoint'));
     const updatePoint=document.createElement('button');updatePoint.type='button';updatePoint.className='view-rec-button is-primary';updatePoint.textContent=u('この視点を更新','Update this viewpoint');
     const durationLabel=document.createElement('label');durationLabel.className='view-rec-duration-label';durationLabel.append(document.createTextNode(u('この視点への移動','Move to this viewpoint')));
     const durationSelect=document.createElement('select');durationSelect.setAttribute('aria-label',u('この視点への移動時間','Transition time to this viewpoint'));durationLabel.append(durationSelect);
@@ -10182,9 +10184,17 @@ function startInlineTextEdit(field='text',targetEl=null){
     const deletePoint=document.createElement('button');deletePoint.type='button';deletePoint.className='view-rec-button';deletePoint.textContent=u('この視点を削除','Delete this viewpoint');
     const orderPrev=document.createElement('button');orderPrev.type='button';orderPrev.className='view-rec-button';orderPrev.textContent=u('順番 ←','Order ←');
     const orderNext=document.createElement('button');orderNext.type='button';orderNext.className='view-rec-button';orderNext.textContent=u('順番 →','Order →');
-    const pointActions=document.createElement('details');pointActions.className='view-rec-point-actions';const pointActionsLabel=document.createElement('summary');pointActionsLabel.textContent=u('順番・削除','Order / delete');const pointActionsBody=document.createElement('div');pointActionsBody.append(orderPrev,orderNext,deletePoint);pointActions.append(pointActionsLabel,pointActionsBody);
-    editbar.append(pointSelect,updatePoint,durationLabel,curveLabel,mapButton,playButton,pointActions);
-    controls.append(add,reset,axis,axisY,clearPoints,save,cancel);panel.append(head,media,hint,status,editbar,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
+    const pointActions=document.createElement('details');pointActions.className='view-rec-point-actions';const pointActionsLabel=document.createElement('summary');pointActionsLabel.textContent=u('順番・削除','Order / delete');const pointActionsBody=document.createElement('div');pointActionsBody.append(orderPrev,orderNext,deletePoint,clearPoints);pointActions.append(pointActionsLabel,pointActionsBody);
+    const pointNav=document.createElement('div');pointNav.className='view-rec-point-nav';pointNav.append(pointPrev,pointSelect,pointNext);
+    const primaryActions=document.createElement('div');primaryActions.className='view-rec-primary-actions';primaryActions.append(add,updatePoint);
+    const reviewActions=document.createElement('div');reviewActions.className='view-rec-review-actions';reviewActions.append(mapButton,playButton);
+    const makeTools=(label,className,items)=>{const details=document.createElement('details');details.className=`view-rec-tools ${className}`;const summary=document.createElement('summary');summary.textContent=label;const body=document.createElement('div');body.append(...items);details.append(summary,body);return details;};
+    const motionTools=makeTools(u('移動時間・速度','Timing / speed'),'view-rec-motion-tools',[durationLabel,curveLabel]);
+    const adjustTools=makeTools(u('表示・移動固定','View / axis lock'),'view-rec-adjust-tools',[reset,axis,axisY]);
+    pointActions.classList.add('view-rec-tools');clearPoints.classList.add('is-danger');
+    const toolGroups=document.createElement('div');toolGroups.className='view-rec-tool-groups';toolGroups.append(motionTools,adjustTools,pointActions);
+    editbar.append(pointNav,primaryActions,reviewActions,toolGroups);
+    controls.append(cancel,save);panel.append(head,media,hint,status,editbar,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
 
     // V113 — reopening VIEW POINT is an edit, not an implicit destructive rebuild.
     // Preserve the saved point sequence unless the author explicitly clears it.
@@ -10225,7 +10235,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     const curveProgress=(t,curve)=>curve==='linear'?t:curve==='ease-in'?t*t*t:curve==='ease-in-out'?(t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2):1-Math.pow(1-t,3);
     const pointCenter=p=>p?.type==='fit'?{x:.5,y:.5}:p?.rect?{x:p.rect.x+p.rect.width/2,y:p.rect.y+p.rect.height/2}:{x:Number.isFinite(p?.cx)?p.cx:.5,y:Number.isFinite(p?.cy)?p.cy:.5};
     const renderRoute=()=>{route.toggleAttribute('hidden',!state.map);route.replaceChildren();if(!state.map)return;const vp=viewport();route.setAttribute('viewBox',`0 0 ${vp.w} ${vp.h}`);const centers=state.points.map(pointCenter);const make=(tag,attrs)=>{const el=document.createElementNS('http://www.w3.org/2000/svg',tag);Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,String(v)));return el;};const line=make('polyline',{points:centers.map(c=>`${c.x*vp.w},${c.y*vp.h}`).join(' '),fill:'none',stroke:'#79c5ff','stroke-width':2.5});route.append(line);centers.forEach((c,i)=>{const g=make('g',{'data-point':i,role:'button',tabindex:0,'aria-label':u(`視点 ${i+1} を表示`,`Show viewpoint ${i+1}`)});g.append(make('circle',{cx:c.x*vp.w,cy:c.y*vp.h,r:16,fill:i===state.selected?'#087fff':'#142b40',stroke:'#fff','stroke-width':2}));const label=make('text',{x:c.x*vp.w,y:c.y*vp.h,'text-anchor':'middle','dominant-baseline':'central',fill:'#fff','font-size':14,'font-family':'system-ui','font-weight':800});label.textContent=String(i+1);g.append(label);g.addEventListener('click',e=>{e.stopPropagation();selectPoint(i);});g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectPoint(i);}});['pointerdown','touchstart','touchend','dblclick'].forEach(type=>g.addEventListener(type,e=>e.stopPropagation()));route.append(g);});};
-    const updateStatus=()=>{const count=state.points.length,selected=state.points[state.selected];status.textContent=state.preview?u(`プレビュー · 視点 ${state.selected+1} / ${count}`,`Preview · viewpoint ${state.selected+1} / ${count}`):selected?u(`視点 ${state.selected+1} / ${count} · 調整後に「この視点を更新」`,`Viewpoint ${state.selected+1} / ${count} · update after adjusting`):count?u(`視点 ${count}個 · 編集する視点を選んでください`,`${count} viewpoints · select one to edit`):u('まだ視点はありません','No viewpoints yet');save.disabled=!bundlePages&&count<1;pointSelect.replaceChildren();const placeholder=document.createElement('option');placeholder.value='-1';placeholder.textContent=u('視点を選択','Select viewpoint');pointSelect.append(placeholder);state.points.forEach((p,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=u(`視点 ${i+1}`,`Viewpoint ${i+1}`);pointSelect.append(o);});pointSelect.value=String(state.selected);pointSelect.disabled=!count;[updatePoint,deletePoint,durationSelect,curveSelect].forEach(el=>el.disabled=!selected||state.preview);updatePoint.disabled=!selected||state.preview||state.map;add.disabled=state.map||state.preview;[mapButton,playButton].forEach(el=>el.disabled=!count);orderPrev.disabled=state.selected<=0||state.preview;orderNext.disabled=state.selected<0||state.selected>=count-1||state.preview;durationSelect.replaceChildren();const ms=transitionTime(selected);[...new Set([100,150,250,420,600,800,1000,1200,1500,2000,3000,4000,5000,7500,10000,15000,20000,30000,ms])].sort((a,b)=>a-b).forEach(v=>{const o=document.createElement('option');o.value=String(v);o.textContent=`${v/1000}${u('秒','s')}`;durationSelect.append(o);});durationSelect.value=String(ms);curveSelect.value=transitionCurve(selected);playButton.textContent=state.preview?u('■ 停止','■ Stop'):u('▶ 再生プレビュー','▶ Preview');mapButton.setAttribute('aria-pressed',String(state.map));renderRoute();};
+    const updateStatus=()=>{const count=state.points.length,selected=state.points[state.selected];status.textContent=state.preview?u(`プレビュー · 視点 ${state.selected+1} / ${count}`,`Preview · viewpoint ${state.selected+1} / ${count}`):selected?u(`視点 ${state.selected+1} / ${count} · 調整後に「この視点を更新」`,`Viewpoint ${state.selected+1} / ${count} · update after adjusting`):count?u(`視点 ${count}個 · 編集する視点を選んでください`,`${count} viewpoints · select one to edit`):u('まだ視点はありません','No viewpoints yet');save.disabled=!bundlePages&&count<1&&savedPoints.length<1;pointSelect.replaceChildren();const placeholder=document.createElement('option');placeholder.value='-1';placeholder.textContent=u('視点を選択','Select viewpoint');pointSelect.append(placeholder);state.points.forEach((p,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=u(`視点 ${i+1}`,`Viewpoint ${i+1}`);pointSelect.append(o);});pointSelect.value=String(state.selected);pointSelect.disabled=!count;[updatePoint,deletePoint,durationSelect,curveSelect].forEach(el=>el.disabled=!selected||state.preview);updatePoint.disabled=!selected||state.preview||state.map;add.disabled=state.map||state.preview;[mapButton,playButton].forEach(el=>el.disabled=!count);pointPrev.disabled=state.selected<=0||state.preview;pointNext.disabled=!count||state.selected>=count-1||state.preview;clearPoints.disabled=!count||state.preview;orderPrev.disabled=state.selected<=0||state.preview;orderNext.disabled=state.selected<0||state.selected>=count-1||state.preview;durationSelect.replaceChildren();const ms=transitionTime(selected);[...new Set([100,150,250,420,600,800,1000,1200,1500,2000,3000,4000,5000,7500,10000,15000,20000,30000,ms])].sort((a,b)=>a-b).forEach(v=>{const o=document.createElement('option');o.value=String(v);o.textContent=`${v/1000}${u('秒','s')}`;durationSelect.append(o);});durationSelect.value=String(ms);curveSelect.value=transitionCurve(selected);playButton.textContent=state.preview?u('■ 停止','■ Stop'):u('▶ 再生プレビュー','▶ Preview');mapButton.setAttribute('aria-pressed',String(state.map));renderRoute();};
     const zoomAt=(clientX,clientY,next)=>{stopPreview();hideMap();const r=stage.getBoundingClientRect(),vp=viewport(),old=state.scale,scale=clampScale(next);if(Math.abs(scale-old)<.0001)return;updateStatus();const dx=clientX-r.left-vp.w/2,dy=clientY-r.top-vp.h/2,ratio=scale/old;state.x=dx-(dx-state.x)*ratio;state.y=dy-(dy-state.y)*ratio;state.scale=scale;apply();};
     const resetView=()=>{state.scale=1;state.x=0;state.y=0;apply();updateStatus();};
     const dist=(a,b)=>Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY),center=(a,b)=>({x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2});
@@ -10237,6 +10247,8 @@ function startInlineTextEdit(field='text',targetEl=null){
     const showPoint=(index,animate=false)=>{const p=state.points[index];if(!p)return;state.selected=index;hideMap();const target=targetFor(p);if(animate)animateViewTo(target,transitionTime(p),transitionCurve(p));else{cancelZoomAnimation();Object.assign(state,target);apply();}updateStatus();};
     const selectPoint=index=>{stopPreview();showPoint(index);};
     const startPreview=()=>{stopPreview();if(!state.points.length)return;state.preview=true;showPoint(0);const advance=()=>{if(!state.preview)return;if(state.selected>=state.points.length-1){state.preview=false;updateStatus();return;}const next=state.selected+1;showPoint(next,true);state.previewTimer=setTimeout(advance,transitionTime(state.points[next])+700);};state.previewTimer=setTimeout(advance,700);};
+    pointPrev.onclick=()=>{if(state.selected>0)selectPoint(state.selected-1);};
+    pointNext.onclick=()=>{if(state.selected<state.points.length-1)selectPoint(state.selected+1);};
     pointSelect.onchange=()=>{const index=Number(pointSelect.value);if(index>=0)selectPoint(index);};
     updatePoint.onclick=()=>{if(state.selected<0)return;stopPreview();hideMap();const old=state.points[state.selected],metadata={...old};['type','rect','cx','cy','width','height','scale','occupancy','fit'].forEach(key=>delete metadata[key]);state.points[state.selected]={...metadata,...gazePoint()};updateStatus();};
     durationSelect.onchange=()=>{if(state.selected<0)return;state.points[state.selected].transitionMs=Number(durationSelect.value);updateStatus();};
@@ -10258,7 +10270,15 @@ function startInlineTextEdit(field='text',targetEl=null){
     stage.addEventListener('touchmove',e=>{e.preventDefault();if(e.touches.length===2&&state.pinchDistance){const c=center(e.touches[0],e.touches[1]);zoomAt(c.x,c.y,state.pinchScale*(dist(e.touches[0],e.touches[1])/state.pinchDistance));}else if(e.touches.length===1&&state.drag){const t=e.touches[0];if(!state.axisLockY)state.x+=t.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=t.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=t.clientX;state.lastY=t.clientY;apply();}},{passive:false});
     stage.addEventListener('touchend',e=>{if(!state.map&&!e.touches.length){const changed=e.changedTouches&&e.changedTouches[0],wasPinch=!!state.pinchDistance;state.drag=false;state.pinchDistance=0;if(!wasPinch&&changed&&!e.target.closest?.('.view-rec-page-arrow'))registerTap(changed.clientX,changed.clientY);}},{passive:false});
     add.onclick=()=>{stopPreview();hideMap();state.points.push(gazePoint());state.selected=state.points.length-1;updateStatus();};
-    clearPoints.onclick=()=>{stopPreview();hideMap();state.points=[];state.selected=-1;updateStatus();};
+    clearPoints.onclick=async()=>{
+      if(!state.points.length)return;
+      stopPreview();updateStatus();
+      const requestedPage=currentPageIndex,requestedPoints=state.points;
+      const message=bundlePages?u(`このページ（${currentPageIndex+1} / ${bundlePages.length}）の視点${state.points.length}個をすべて削除します。画像と他のページの視点は残ります。`,`Delete all ${state.points.length} viewpoints on page ${currentPageIndex+1} of ${bundlePages.length}? The image and other pages will remain.`):u(`この画像の視点${state.points.length}個をすべて削除します。画像は残ります。`,`Delete all ${state.points.length} viewpoints? The image will remain.`);
+      const ok=await appConfirm(message,{title:u('視点をすべて削除しますか？','Delete all viewpoints?'),kicker:'VIEW POINT',danger:true,confirmLabel:u('視点をすべて削除','Delete all viewpoints'),cancelLabel:u('戻る','Go back')});
+      if(!ok||!overlay.isConnected||currentPageIndex!==requestedPage||state.points!==requestedPoints)return;
+      hideMap();state.points=[];state.selected=-1;updateStatus();
+    };
     reset.onclick=()=>{stopPreview();hideMap();resetView();};
     axis.onclick=()=>{state.axisLockX=!state.axisLockX;if(state.axisLockX)state.axisLockY=false;axis.classList.toggle('is-active',state.axisLockX);axisY.classList.remove('is-active');axis.setAttribute('aria-pressed',String(state.axisLockX));axisY.setAttribute('aria-pressed','false');axis.textContent=state.axisLockX?u('↔ 横移動固定 ON','↔ Horizontal lock ON'):u('↔ 横移動固定','↔ Lock horizontal');axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');};
     axisY.onclick=()=>{state.axisLockY=!state.axisLockY;if(state.axisLockY)state.axisLockX=false;axisY.classList.toggle('is-active',state.axisLockY);axis.classList.remove('is-active');axisY.setAttribute('aria-pressed',String(state.axisLockY));axis.setAttribute('aria-pressed','false');axisY.textContent=state.axisLockY?u('↕ 縦移動固定 ON','↕ Vertical lock ON'):u('↕ 縦移動固定','↕ Lock vertical');axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');};
@@ -10270,7 +10290,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     [pagePrevTop,pagePrevSide].forEach(button=>{button.hidden=!bundlePages;button.onclick=e=>{e.stopPropagation();movePage(-1);};});
     [pageNextTop,pageNextSide].forEach(button=>{button.hidden=!bundlePages;button.onclick=e=>{e.stopPropagation();movePage(1);};});
     [pagePrevTop,pagePrevSide,pageNextTop,pageNextSide].forEach(button=>{['pointerdown','pointerup','touchstart','touchend'].forEach(type=>button.addEventListener(type,e=>e.stopPropagation(),{passive:true}));});
-    save.onclick=()=>{if(!bundlePages&&!state.points.length)return;storeCurrentPage();const result=currentPointSet();if(bundlePages)result.pages=bundlePages.map(page=>({...page}));onSave?.(result);cleanup();};
+    save.onclick=()=>{if(!bundlePages&&!state.points.length&&!savedPoints.length)return;storeCurrentPage();const result=currentPointSet();if(bundlePages)result.pages=bundlePages.map(page=>({...page}));onSave?.(result);cleanup();};
     const resizeObserver=('ResizeObserver' in window)?new ResizeObserver(()=>{if(!img.naturalWidth)return;const view=state.preview&&state.selected>=0?state.points[state.selected]:gazePoint();cancelZoomAnimation();sizeStageToSource();fitImageToStage();Object.assign(state,targetFor(view));apply();updateStatus();}):null;resizeObserver?.observe(media);
     const cleanup=()=>{stopPreview();cancelZoomAnimation();resizeObserver?.disconnect();overlay.remove();document.documentElement.classList.remove('view-rec-open');};
     close.onclick=cleanup;cancel.onclick=cleanup;overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});document.documentElement.classList.add('view-rec-open');
@@ -10279,6 +10299,13 @@ function startInlineTextEdit(field='text',targetEl=null){
   }
 
   function saveSceneImageViewPoints(image,data){
+    if(Array.isArray(data?.pages)){
+      image.pages=data.pages;
+      const firstSet=data.pages[0]?.viewPoints||data.pages[0]?.viewRec;
+      if(firstSet)image.viewPoints=firstSet;else delete image.viewPoints;
+      delete image.viewRec;
+      return;
+    }
     image.viewPoints=data;
     delete image.viewRec;
     // The bundle Player reads the first page; the ordinary editor reads image.
@@ -10298,7 +10325,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     const points=(pointSet?.points||[]).length,legacy=pointSet?.frames?.length||0;
     meta.textContent=points?u(`VIEW POINT：${points}視点 · タップ駆動`,`VIEW POINT: ${points} viewpoints · tap driven`):(legacy?u('VIEW REC：旧方式（録り直し推奨）','VIEW REC: legacy (re-record recommended)'):u('VIEW POINT：未設定','VIEW POINT: not set'));
     const button=document.createElement('button');button.type='button';button.className='view-rec-authoring-button';button.textContent=points?u('VIEW POINTを再編集','Edit VIEW POINT'):u('VIEW POINTを設定','Set VIEW POINT');
-    button.onclick=()=>openViewRecRecorder(editingImage,onSaved);box.append(meta,button);return box;
+    button.onclick=()=>openViewRecRecorder(editingImage,onSaved,firstPage?{pages:image.pages,index:0}:{});box.append(meta,button);return box;
   }
 
   function desktopMakeSelect(label,values,current,onchange){
