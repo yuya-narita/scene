@@ -1053,7 +1053,7 @@ async function loadOfficialShelf({force=false}={}){
   if(officialShelfLoaded&&!force)return officialShelfItems;
   if(officialShelfLoadPromise&&!force)return officialShelfLoadPromise;
   const job=(async()=>{
-    const [response,discoveryResponse]=await Promise.all([fetch(`${API_BASE}/official-shelf`,{cache:'no-store'}),fetch(`${API_BASE}/discover`,{cache:'no-store'})]);
+    const [response,discoveryResponse]=await Promise.all([fetch(`${API_BASE}/official-shelf`,{cache:'default'}),fetch(`${API_BASE}/discover`,{cache:'default'})]);
     const [payload,discoveryPayload]=await Promise.all([response.json().catch(()=>null),discoveryResponse.json().catch(()=>null)]);
     if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'あ箱の本を読み込めませんでした。'));
     if(!discoveryResponse.ok||!discoveryPayload?.ok)throw new Error(String(discoveryPayload?.error||'公開中の本を読み込めませんでした。'));
