@@ -4081,6 +4081,63 @@
     return null;
   }
 
+  // Built-in avatars are runtime presets, never package assets. Older drafts
+  // and speaker presets can retain their former data-URI representation in
+  // `icon`; normalize those exact known images back to the compact preset ID
+  // before collecting package assets. Also recognize matching Blobs restored
+  // from already-exported packages so re-saving a legacy file cleans it up.
+  const COMMON_AVATAR_ID_BY_DATA_URL=new Map(
+    Object.entries(AHAKO_COMMON_AVATARS).map(([id,src])=>[src,id])
+  );
+  let commonAvatarByteIndex=null;
+  function getCommonAvatarByteIndex(){
+    if(commonAvatarByteIndex)return commonAvatarByteIndex;
+    commonAvatarByteIndex=new Map();
+    for(const [id,src] of Object.entries(AHAKO_COMMON_AVATARS)){
+      const payload=src.slice(src.indexOf(',')+1);
+      const binary=atob(payload);
+      const bytes=Uint8Array.from(binary,ch=>ch.charCodeAt(0));
+      const key=`${bytes.length}:${crc32(bytes)}`;
+      const candidates=commonAvatarByteIndex.get(key)||[];
+      candidates.push({id,bytes});
+      commonAvatarByteIndex.set(key,candidates);
+    }
+    return commonAvatarByteIndex;
+  }
+  async function normalizeCommonAvatarAssetRefs(doc){
+    const seen=new WeakSet(),blobRefs=[];
+    const visit=value=>{
+      if(!value||typeof value!=='object'||seen.has(value))return;
+      seen.add(value);
+      if(!Array.isArray(value)&&typeof value.icon==='string'){
+        const preset=COMMON_AVATAR_ID_BY_DATA_URL.get(value.icon);
+        if(preset){value.iconPreset=preset;delete value.icon;}
+        else if(/^blob:/i.test(value.icon))blobRefs.push({holder:value,src:value.icon});
+      }
+      if(Array.isArray(value))value.forEach(visit);
+      else Object.values(value).forEach(visit);
+    };
+    visit(doc);
+    if(!blobRefs.length)return doc;
+    const bySource=new Map();
+    for(const ref of blobRefs){
+      if(bySource.has(ref.src)){
+        const preset=bySource.get(ref.src);
+        if(preset){ref.holder.iconPreset=preset;delete ref.holder.icon;}
+        continue;
+      }
+      const registered=assetRegistry.get(ref.src);
+      if(!registered?.blob){bySource.set(ref.src,'');continue;}
+      const bytes=await blobBytes(registered.blob,ref.src);
+      const candidates=getCommonAvatarByteIndex().get(`${bytes.length}:${crc32(bytes)}`)||[];
+      const match=candidates.find(candidate=>sameAssetBytes(candidate.bytes,bytes));
+      const preset=match?.id||'';
+      bySource.set(ref.src,preset);
+      if(preset){ref.holder.iconPreset=preset;delete ref.holder.icon;}
+    }
+    return doc;
+  }
+
   function walkAssetRefs(doc,callback){
     const cover=doc?.cover;
     if(cover?.src)callback({kind:'cover',sceneIndex:-1,holder:cover,key:'src',src:cover.src,fileName:cover._editorFileName||coverImageFileName||''});
@@ -4214,6 +4271,7 @@
   async function buildScenePackage(documentOverride=null){
     const doc=documentOverride ? clone(documentOverride) : sceneDocumentForExport();
     ensureMasterIdentity(doc);
+    await normalizeCommonAvatarAssetRefs(doc);
     const packaged=clone(doc);
     const entries=[];
     const bySource=new Map();
