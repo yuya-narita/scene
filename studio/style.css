@@ -14287,5 +14287,5 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 
 /* V198 — entry choice reflected in the cover thumbnail. */
 #coverPreview[data-start-trigger="center"] .cover-preview-start{top:50%!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:84%!important;min-height:52px!important;border-radius:14px!important;}
-#coverPreview[data-start-trigger="tap"] .cover-preview-start{font-size:0!important;background:rgba(0,0,0,.55)!important;color:#fff!important;width:auto!important;padding:10px 16px!important;}
-#coverPreview[data-start-trigger="tap"] .cover-preview-start::after{content:"タップしてはじめる";font-size:12px;}
+#coverPreview[data-start-trigger="tap"] .cover-preview-start{width:max-content!important;min-width:144px!important;max-width:calc(100% - 16px)!important;white-space:nowrap!important;font-size:0!important;background:rgba(0,0,0,.55)!important;color:#fff!important;width:auto!important;padding:10px 16px!important;}
+#coverPreview[data-start-trigger="tap"] .cover-preview-start::after{content:"タップしてはじめる";display:block;white-space:nowrap;font-size:12px;line-height:1.3;}

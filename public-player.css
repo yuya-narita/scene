@@ -1272,5 +1272,5 @@ body{
 .public-intro[data-start-trigger="center"] .public-primary,
 .public-intro[data-start-trigger="center"] .public-secondary{width:100%!important;max-width:none!important;min-height:58px!important;border-radius:14px!important;}
 .public-intro[data-start-trigger="tap"]{cursor:pointer;}
-.public-intro[data-start-trigger="tap"] .public-primary{font-size:0!important;background:rgba(0,0,0,.55)!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border:0!important;}
-.public-intro[data-start-trigger="tap"] .public-primary::after{content:"タップしてはじめる";font-size:14px;}
+.public-intro[data-start-trigger="tap"] .public-primary{width:max-content!important;min-width:168px!important;max-width:calc(100vw - 32px)!important;white-space:nowrap!important;flex-shrink:0!important;padding-left:20px!important;padding-right:20px!important;font-size:0!important;background:rgba(0,0,0,.55)!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border:0!important;}
+.public-intro[data-start-trigger="tap"] .public-primary::after{content:"タップしてはじめる";display:block;white-space:nowrap;font-size:14px;line-height:1.3;}
