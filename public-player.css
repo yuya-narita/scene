@@ -1245,3 +1245,21 @@ body{
 .sp-web-notification-text{margin-top:3px;font-size:13px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;opacity:.9}
 .sp-history-web-notification .sp-web-notification-card{padding:9px 10px;border-radius:13px;gap:9px}.sp-history-web-notification .sp-web-notification-icon{width:30px;height:30px;flex-basis:30px;border-radius:8px;font-size:15px}.sp-history-web-notification .sp-web-notification-title{font-size:13px}.sp-history-web-notification .sp-web-notification-text{font-size:12px}
 @media(max-width:640px){.sp-web-notification-card{padding:11px 10px;border-radius:14px}.sp-web-notification-icon{width:36px;height:36px;flex-basis:36px}.sp-web-notification-title{font-size:13px}.sp-web-notification-text{font-size:12px}}
+
+/* V197 — leave the cover artwork visible; keep both entry actions reachable. */
+.public-intro .public-intro-actions{
+ position:absolute!important;left:50%!important;right:auto!important;top:auto!important;
+ bottom:calc(16px + env(safe-area-inset-bottom,0px))!important;
+ transform:translateX(-50%)!important;margin:0!important;
+ width:max-content!important;max-width:calc(100% - 32px)!important;
+ display:flex!important;justify-content:center!important;gap:10px!important;
+}
+.public-intro .public-primary,.public-intro .public-secondary{
+ width:180px!important;max-width:42vw!important;min-height:48px!important;
+ padding:10px 20px!important;border:1px solid rgba(255,255,255,.65)!important;
+ border-radius:999px!important;background:rgba(255,255,255,.88)!important;
+ color:#111!important;-webkit-text-fill-color:#111!important;
+ box-shadow:0 3px 14px rgba(0,0,0,.16)!important;font-size:16px!important;
+ font-family:"Yu Mincho","Hiragino Mincho ProN",serif!important;
+ backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);touch-action:manipulation;
+}

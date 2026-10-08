@@ -14274,3 +14274,13 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
  .view-rec-recorder-controls{padding:8px 10px max(10px,env(safe-area-inset-bottom));grid-template-columns:1fr 2fr}
  .view-rec-recorder-controls .view-rec-button{min-height:52px;font-size:15px;padding:0 12px}
 }
+
+/* V197 — cover editing thumbnail mirrors the Player's bottom entry action. */
+#coverPreview .cover-preview-start{
+ position:absolute!important;left:50%!important;right:auto!important;top:auto!important;
+ bottom:16px!important;transform:translateX(-50%)!important;margin:0!important;
+ width:min(180px,60%)!important;min-height:44px!important;
+ border:1px solid rgba(255,255,255,.65)!important;border-radius:999px!important;
+ background:rgba(255,255,255,.88)!important;color:#111!important;
+ box-shadow:0 3px 14px rgba(0,0,0,.16)!important;font-size:14px!important;
+}
