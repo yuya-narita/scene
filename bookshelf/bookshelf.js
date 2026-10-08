@@ -14,6 +14,15 @@ const STUDIO_DRAFT_META_STORE='draftMeta';
 const STUDIO_DRAFT_RECOVERY_STORE='draftRecovery';
 const STUDIO_DRAFT_VERSION_STORE='draftVersions';
 const API_BASE='https://scene-studio-api.a-hako.workers.dev';
+async function shelfGet(url,options={}){
+  for(let attempt=0;;attempt++){
+    try{return await fetch(url,{...options,method:'GET'});}
+    catch(error){
+      if(attempt>=1||!(error instanceof TypeError))throw error;
+      await new Promise(resolve=>setTimeout(resolve,450));
+    }
+  }
+}
 const AUTHOR_AUTH_STORAGE_KEY='ahako-author-session-v1';
 const td=new TextDecoder('utf-8');
 const te=new TextEncoder();
@@ -1053,7 +1062,7 @@ async function loadOfficialShelf({force=false}={}){
   if(officialShelfLoaded&&!force)return officialShelfItems;
   if(officialShelfLoadPromise&&!force)return officialShelfLoadPromise;
   const job=(async()=>{
-    const [response,discoveryResponse]=await Promise.all([fetch(`${API_BASE}/official-shelf`,{cache:'default'}),fetch(`${API_BASE}/discover`,{cache:'default'})]);
+    const [response,discoveryResponse]=await Promise.all([shelfGet(`${API_BASE}/official-shelf`,{cache:'default'}),shelfGet(`${API_BASE}/discover`,{cache:'default'})]);
     const [payload,discoveryPayload]=await Promise.all([response.json().catch(()=>null),discoveryResponse.json().catch(()=>null)]);
     if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'あ箱の本を読み込めませんでした。'));
     if(!discoveryResponse.ok||!discoveryPayload?.ok)throw new Error(String(discoveryPayload?.error||'公開中の本を読み込めませんでした。'));
