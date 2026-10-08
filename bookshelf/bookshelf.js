@@ -1197,8 +1197,12 @@ function buildLocalShelfView(tab){
   const arranged=orderedShelfBooks((shelfDataCache[tab]||[]).filter(book=>archived.has(shelfIdOf(book))||!grouped.has(shelfIdOf(book))),tab);
   if(tab==='created'){
     const publishedIds=new Set(authorWorks.map(work=>work.workId));
-    const published=arranged.visible.filter(book=>publishedIds.has(book.workId));
-    const drafts=arranged.visible.filter(book=>!publishedIds.has(book.workId));
+    // The local Studio draft metadata records the last confirmed publication ID.
+    // Use it while /author/works is still loading (and when a work was published
+    // from another author account), so published books do not flash as drafts.
+    const hasPublicationRecord=book=>Boolean(String(book?.publication?.id||book?.publicationId||book?.publicId||'').trim());
+    const published=arranged.visible.filter(book=>publishedIds.has(book.workId)||hasPublicationRecord(book));
+    const drafts=arranged.visible.filter(book=>!publishedIds.has(book.workId)&&!hasPublicationRecord(book));
     grid.classList.add('created-status-grid');
     grid.innerHTML=`<header class="created-shelf-group-heading"><div><small>PUBLISHED</small><h2>公開中</h2></div><span>${published.length}冊</span></header>${published.map(w=>bookCardHtml(w)).join('')}<header class="created-shelf-group-heading created-draft-heading"><div><small>DRAFT</small><h2>下書き</h2></div><span>${drafts.length}冊</span></header>${drafts.map(w=>bookCardHtml(w)).join('')}`;
   }else grid.innerHTML=arranged.visible.map(w=>bookCardHtml(w)).join('');
