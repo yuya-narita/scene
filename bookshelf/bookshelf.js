@@ -1,5 +1,8 @@
 (()=>{
 'use strict';
+// This shelf already restores its own per-tab position. Avoid a second,
+// browser-managed restoration competing with it after a reload.
+try{history.scrollRestoration='manual';}catch(_){}
 const DB_NAME='ahako-local-bookshelf';
 const DB_VERSION=3;
 const WORKS='works';
@@ -27,6 +30,7 @@ const AUTHOR_AUTH_STORAGE_KEY='ahako-author-session-v1';
 const td=new TextDecoder('utf-8');
 const te=new TextEncoder();
 const $=s=>document.querySelector(s);
+$('#shelfLoadingState')?.style.setProperty('--ahako-wait-top',`${Math.max(0,$('#shelfChrome')?.getBoundingClientRect().bottom||0)}px`);
 let currentWorkId='';
 const SHELF_TAB_KEY='ahako:bookshelf:last-tab';
 const CREATED_TAB_VISIBLE_KEY='ahako:bookshelf:created-tab-visible';
@@ -1287,13 +1291,17 @@ async function presentShelfFromCache({refreshOfficial=false}={}){
     $('#emptyDistributionButton').hidden=created;
   }
   if(official&&refreshOfficial)await renderOfficialShelf({force:true});
-  // Data is ready: do not wait for the entrance animation to finish.
-  $('#shelfLoadingState').hidden=true;
-  $('#shelfBodyViewport').classList.remove('is-shelf-pending');
   applyMobileColumns(mobileShelfColumns);
   applyDesktopColumns(desktopShelfColumns);
   installShelfPinch();
   if(!official)bindBookInteractions();
+  const viewport=$('#shelfBodyViewport');
+  if(viewport.classList.contains('is-shelf-pending')){
+    // Real shelf layout exists behind the entrance; restore before revealing.
+    await restoreShelfScroll(currentShelfTab,{conceal:false});
+    $('#shelfLoadingState').hidden=true;
+    viewport.classList.remove('is-shelf-pending');
+  }
 }
 
 function seriesStackCoverHtml(book,index){let image='<span class="series-stack-empty">□</span>';if(book?.coverBlob){const url=URL.createObjectURL(book.coverBlob);coverUrls.push(url);image=`<img src="${url}" alt="">`;}else if(book?.coverUrl)image=`<img src="${escapeHtml(book.coverUrl)}" alt="">`;return`<span class="series-stack-cover series-stack-cover-${index}">${image}</span>`;}
@@ -2335,7 +2343,6 @@ syncBookshelfAuthorUI();
       catch(e){console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
       await render();
       await restoreBookshelfAuthorSession();
-      await restoreShelfScroll(currentShelfTab);
       if(claimed)toast('自分の一冊を本棚に受け取りました。');
     },{once:true});
     return;
@@ -2345,7 +2352,6 @@ syncBookshelfAuthorUI();
   catch(e){console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
   await render();
   await restoreBookshelfAuthorSession();
-  await restoreShelfScroll(currentShelfTab);
   if(claimed)toast('自分の一冊を本棚に受け取りました。');
 })().catch(e=>{console.error(e);
   $('#shelfLoadingState').hidden=false;

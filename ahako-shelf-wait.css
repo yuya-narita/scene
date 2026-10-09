@@ -17,8 +17,16 @@
 .ahako-shelf-wait[data-effect="fade"] .ahako-shelf-wait-text { animation:ahakoWaitFade 1.05s ease-out both }
 .ahako-shelf-wait[data-effect="blur"] .ahako-shelf-wait-text { animation:ahakoWaitBlur 1.05s ease-out both }
 .ahako-shelf-wait[data-effect="typewriter"] .ahako-shelf-wait-text span { animation:ahakoWaitCharacter 1ms step-end both }
-/* Initial HTML conceals the empty-state UI even before bookshelf.js loads. */
-.shelf-body-viewport.is-shelf-pending > :not(#shelfLoadingState) { display:none!important }
+/* Build and measure the real shelf behind the entrance. Hiding it with
+   display:none made saved scroll positions clamp to zero. The entrance stays
+   out of layout so removing it cannot move the books or change scroll extent. */
+.shelf-body-viewport { position:relative }
+.shelf-body-viewport.is-shelf-pending { min-height:clamp(220px,48vh,440px) }
+.shelf-body-viewport.is-shelf-pending > :not(#shelfLoadingState) { visibility:hidden!important }
+#shelfLoadingState {
+  position:fixed;top:var(--ahako-wait-top,180px);bottom:0;left:0;right:0;
+  z-index:2;pointer-events:none;background:#f6f3ec;
+}
 @media (prefers-reduced-motion:reduce) {
   .ahako-shelf-wait .ahako-shelf-wait-text,
   .ahako-shelf-wait .ahako-shelf-wait-text span { animation:none!important;filter:none!important;opacity:1!important }
