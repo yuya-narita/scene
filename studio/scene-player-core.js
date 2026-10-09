@@ -2045,9 +2045,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!state) return false;
       clearInterval(state.timer);
       if (complete && state.node?.isConnected) {
-        state.node.textContent = state.text;
+        if(state.complete)state.complete();else state.node.textContent = state.text;
         state.node.classList.remove('is-typing');
       }
+      state.cleanup?.();
       this.typingState = null;
       return true;
     }
@@ -5834,7 +5835,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // or because another Scene is revealed above/below it.
       this._playEntranceEffectOnce(article);
 
-      if (textNode && typing?.enabled && !scene.richText?.ranges?.length && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
+      if (textNode && typing?.enabled && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
         this._startTyping(scene, textNode, typing);
       }
 
@@ -5877,28 +5878,46 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _startTyping(scene, node, typing) {
       this._stopTyping(true);
-      const chars = Array.from(scene.text || '');
+      // Animate the rendered text nodes so rich-text spans and chat formatting
+      // survive typing, skipping and Live Editor refreshes.
+      const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
+      const parts=[];
+      let text;
+      while((text=walker.nextNode()))parts.push({node:text,chars:Array.from(text.data)});
+      const length=parts.reduce((sum,part)=>sum+part.chars.length,0);
+      if(!length)return;
       const speed = Math.max(10, asNumber(typing.speed, 55));
-      const cursor = typing.cursor === false ? '' : '▍';
-      let position = 0;
-
+      const cursor=document.createElement('span');
+      cursor.className='sp-typing-cursor';
+      cursor.setAttribute('aria-hidden','true');
+      cursor.textContent=typing.cursor===false?'':'▍';
+      let position=0;
+      const reveal=count=>{
+        let remaining=count,last=null;
+        for(const part of parts){
+          const shown=Math.min(part.chars.length,Math.max(0,remaining));
+          part.node.data=part.chars.slice(0,shown).join('');
+          if(shown>0)last=part.node;
+          remaining-=part.chars.length;
+        }
+        if(count>=length)cursor.remove();
+        else if(last)last.after(cursor);
+        else if(parts[0])parts[0].node.after(cursor);
+      };
       node.classList.add('is-typing');
-      node.textContent = cursor;
+      reveal(0);
       emit(this.host, 'sceneplayer:typingstart', { index: this.index, scene });
-
-      const timer = setInterval(() => {
-        position += 1;
-        node.textContent = chars.slice(0, position).join('') + (position < chars.length ? cursor : '');
-        if (position >= chars.length) {
+      const timer=setInterval(()=>{
+        reveal(++position);
+        if(position>=length){
           clearInterval(timer);
-          if (this.typingState?.timer === timer) this.typingState = null;
+          if(this.typingState?.timer===timer)this.typingState=null;
           node.classList.remove('is-typing');
-          emit(this.host, 'sceneplayer:typingend', { index: this.index, scene, skipped: false });
+          emit(this.host,'sceneplayer:typingend',{index:this.index,scene,skipped:false});
           this._scheduleAuto();
         }
-      }, speed);
-
-      this.typingState = { timer, node, text: scene.text, sceneId: scene.id };
+      },speed);
+      this.typingState={timer,node,text:scene.text,sceneId:scene.id,complete:()=>reveal(length),cleanup:()=>cursor.remove()};
     }
 
     destroy(options = {}) {
