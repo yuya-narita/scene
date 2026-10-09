@@ -250,14 +250,20 @@
     try{
       if(!db.objectStoreNames.contains(READER_BOOKS))throw new Error('読者本棚がまだありません。');
       const rec=await idbRequest(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).get(copyId));
-      if(!rec?.blob)throw new Error('この一冊は本棚に見つかりませんでした。');
-      // iOS Safari can keep an IndexedDB Blob as a backing-store reference.
-      // Once the DB connection is closed, reading that Blob on the next async
-      // step may fail with NotFoundError ("The object can not be found here.").
-      // Materialize the bytes while the IndexedDB connection is still alive.
-      // Desktop browsers also take this path, so bookshelf -> Player uses one
-      // deterministic handoff on every platform.
-      const bytes=await rec.blob.arrayBuffer();
+      if(!rec)throw new Error('この一冊は本棚に見つかりませんでした。');
+      // New copies keep sceneBytes (a structured-clone-safe ArrayBuffer) in
+      // IndexedDB. Older shelf rows still have a Blob, so read those while the
+      // database connection is open and migrate them for the next launch.
+      let bytes=rec.sceneBytes instanceof ArrayBuffer?rec.sceneBytes:
+        (ArrayBuffer.isView(rec.sceneBytes)?rec.sceneBytes.buffer.slice(rec.sceneBytes.byteOffset,rec.sceneBytes.byteOffset+rec.sceneBytes.byteLength):null);
+      if(!bytes&&rec.blob instanceof Blob){
+        try{bytes=await rec.blob.arrayBuffer();}
+        catch(readError){const error=new Error(String(readError?.message||'本棚のデータを読み出せませんでした。'));error.name=readError?.name||'Error';error.readerBook={workId:rec.workId,editionId:rec.editionId};throw error;}
+      }
+      if(!bytes)throw new Error('この一冊のデータが本棚に見つかりませんでした。');
+      if(!rec.sceneBytes&&rec.blob instanceof Blob){
+        try{await idbRequest(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).put({...rec,sceneBytes:bytes,blob:null}));}catch(error){console.warn('Reader book byte migration skipped',error);}
+      }
       return {...rec,sceneBytes:bytes,blob:null};
     }finally{db.close();}
   }
@@ -275,6 +281,18 @@
       await openScene(file,{sourceMode:'bookshelf',sourceKey:`bookshelf:${copyId}`,syncPublicAppearance:true});
       return true;
     }catch(error){
+      // A previously stored iOS Blob can become unreadable even though its
+      // copy metadata remains. If this copy came from the active official
+      // shelf, let the reader continue from the published edition while the
+      // local byte-array format prevents the problem for new imports.
+      if(error?.name==='NotFoundError'&&error?.readerBook){
+        try{
+          const response=await fetch(`${API_BASE}/official-shelf`,{cache:'no-store'});
+          const payload=await response.json().catch(()=>null);
+          const item=(Array.isArray(payload?.items)?payload.items:[]).find(row=>String(row?.workId||'')===String(error.readerBook.workId||'')&&String(row?.editionId||'')===String(error.readerBook.editionId||''));
+          if(item?.shelfId&&await openOfficialShelfRead(item.shelfId))return true;
+        }catch(recoveryError){console.warn('Official shelf fallback skipped',recoveryError);}
+      }
       console.error(error);
       currentPackage=null;
       if(launcher)launcher.hidden=false;
@@ -1184,7 +1202,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.15-ios-idb-blob-materialize',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.16-reader-copy-arraybuffer',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
