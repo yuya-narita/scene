@@ -414,14 +414,14 @@ async function inspectDistribution(file){
   const editionId=String(doc?.edition?.editionId||manifest?.editionId||'').trim();
   if(!/^copy_[a-f0-9]{32}$/i.test(copyId))throw new Error('Distribution の copyId を確認できません。');
   if(!/^[A-Za-z0-9_-]{12,80}$/.test(workId))throw new Error('Distribution の workId を確認できません。');
-  let coverBlob=null;const coverPath=String(doc?.cover?.src||manifest?.cover?.image||'').replace(/^\.\//,'');
-  if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:mime(coverPath)});
+  let coverBytes=null;const coverPath=String(doc?.cover?.src||manifest?.cover?.image||'').replace(/^\.\//,'');
+  if(coverPath&&entries.has(coverPath))coverBytes=entries.get(coverPath).slice().buffer;
   const coverUrl=/^https?:\/\//i.test(String(doc?.cover?.src||''))?String(doc.cover.src):'';
   const rawAuthorId=String(doc?.publication?.authorId||manifest?.authorId||'').trim().toLowerCase();
   const rawAuthorSlug=String(doc?.publication?.authorSlug||manifest?.authorSlug||'').trim().toLowerCase();
   const authorId=/^author_[a-f0-9]{32}$/.test(rawAuthorId)?rawAuthorId:'';
   const authorSlug=/^[a-z0-9][a-z0-9_-]{2,29}$/.test(rawAuthorSlug)?rawAuthorSlug:'';
-  return{role:'distribution',copyId,workId,editionId,title:String(doc.title||manifest.title||'Untitled'),subtitle:String(doc?.metadata?.subtitle||doc?.subtitle||manifest?.subtitle||''),description:String(doc?.metadata?.description||doc?.description||manifest?.description||''),seriesId:String(doc?.metadata?.seriesId||manifest?.series?.id||''),seriesTitle:String(doc?.metadata?.seriesTitle||manifest?.series?.title||''),episode:String(doc?.metadata?.episode||manifest?.series?.episode||''),episodeNumber:Number(doc?.metadata?.episodeNumber||manifest?.series?.episodeNumber||0)||0,episodeTitle:String(doc?.metadata?.episodeTitle||manifest?.episodeTitle||''),author:String(doc.author||manifest.author||''),authorId,authorSlug,sceneCount:Array.isArray(doc.scenes)?doc.scenes.length:0,relayEnabled:doc?.sharing?.relay?.enabled!==false,issuedAt:String(doc?.distribution?.issuedAt||doc?.edition?.issuedAt||''),coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}},coverBlob,coverUrl,sceneBytes:await file.arrayBuffer(),blob:null};
+  return{role:'distribution',copyId,workId,editionId,title:String(doc.title||manifest.title||'Untitled'),subtitle:String(doc?.metadata?.subtitle||doc?.subtitle||manifest?.subtitle||''),description:String(doc?.metadata?.description||doc?.description||manifest?.description||''),seriesId:String(doc?.metadata?.seriesId||manifest?.series?.id||''),seriesTitle:String(doc?.metadata?.seriesTitle||manifest?.series?.title||''),episode:String(doc?.metadata?.episode||manifest?.series?.episode||''),episodeNumber:Number(doc?.metadata?.episodeNumber||manifest?.series?.episodeNumber||0)||0,episodeTitle:String(doc?.metadata?.episodeTitle||manifest?.episodeTitle||''),author:String(doc.author||manifest.author||''),authorId,authorSlug,sceneCount:Array.isArray(doc.scenes)?doc.scenes.length:0,relayEnabled:doc?.sharing?.relay?.enabled!==false,issuedAt:String(doc?.distribution?.issuedAt||doc?.edition?.issuedAt||''),coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}},coverBlob:null,coverBytes,coverMime:mime(coverPath),coverUrl,shelfMetaVersion:6,sceneBytes:await file.arrayBuffer(),blob:null};
 }
 function readerBookSceneBytes(book){
   const value=book?.sceneBytes;
@@ -437,15 +437,30 @@ function readerBookSceneBlob(book){
 async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);await assertMyCopyImportable(info.copyId);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!old){const order=readIdList(SHELF_ORDER_KEYS.owned).filter(id=>id!==info.copyId);writeIdList(SHELF_ORDER_KEYS.owned,[info.copyId,...order]);}if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
 
 
+// Build display Blobs in this document, rather than reuse IndexedDB's Blob
+// backing references (which can be unavailable on Safari immediately after import).
+function storedCoverBlob(book){
+  const value=book?.coverBytes;
+  if(value instanceof ArrayBuffer||ArrayBuffer.isView(value))return new Blob([value],{type:book.coverMime||'application/octet-stream'});
+  return book?.coverBlob instanceof Blob?book.coverBlob:null;
+}
 async function hydrateStoredBookMetadata(w){
   const storedBlob=w?.copyId?readerBookSceneBlob(w):w?.blob;
-  if(!storedBlob||w.shelfMetaVersion===5)return w;
+  if(!storedBlob||w.shelfMetaVersion===6||(!w.copyId&&w.shelfMetaVersion===5))return w;
   try{
     const entries=await readZipEntries(storedBlob);
     const sceneBytes=entries.get('scene.json');if(!sceneBytes)return w;
     const doc=parseJson(sceneBytes);
     const manifest=entries.get('manifest.json')?parseJson(entries.get('manifest.json')):{};
+    const coverPath=String(doc?.cover?.src||manifest?.cover?.image||'').replace(/^\.\//,'');
+    let coverBytes=w.coverBytes||null,coverMime=w.coverMime||'';
+    if(w.copyId&&!coverBytes){
+      const embedded=entries.get(coverPath);
+      if(embedded){coverBytes=embedded.slice().buffer;coverMime=mime(coverPath);}
+      else if(w.coverBlob){coverBytes=await w.coverBlob.arrayBuffer();coverMime=w.coverBlob.type;}
+    }
     const next={...w,
+      ...(w.copyId?{coverBytes,coverMime,coverBlob:coverBytes?null:w.coverBlob}:{}),
       subtitle:String(doc?.metadata?.subtitle||doc?.subtitle||manifest?.subtitle||w.subtitle||''),
       description:String(doc?.metadata?.description||doc?.description||manifest?.description||w.description||''),
       seriesId:String(doc?.metadata?.seriesId||manifest?.series?.id||w.seriesId||''),
@@ -456,7 +471,7 @@ async function hydrateStoredBookMetadata(w){
       authorId:/^author_[a-f0-9]{32}$/i.test(String(doc?.publication?.authorId||manifest?.authorId||w.authorId||''))?String(doc?.publication?.authorId||manifest?.authorId||w.authorId).toLowerCase():'',
       authorSlug:/^[a-z0-9][a-z0-9_-]{2,29}$/.test(String(doc?.publication?.authorSlug||manifest?.authorSlug||w.authorSlug||''))?String(doc?.publication?.authorSlug||manifest?.authorSlug||w.authorSlug).toLowerCase():'',
       coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}},
-      shelfMetaVersion:5
+      shelfMetaVersion:w.copyId?6:5
     };
     if(w.role==='distribution'||w.copyId)await putReaderBook(next);else await putWork(next);
     return next;
@@ -835,7 +850,7 @@ function authoredCoverOverlayHtml(w){
 function bookCardHtml(w,{archived=false}={}){
   const isPublishedCreated=w.role!=='distribution'&&authorWorks.some(work=>work.workId===w.workId);
   const badge=w.role==='distribution'?'MY COPY':isPublishedCreated?'MASTER':w.role==='studio-draft'?'DRAFT':'MASTER',id=shelfIdOf(w);
-  const image=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<img src="${u}" alt="" draggable="false">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false">`:`<div class="cover-fallback">□</div>`);
+  const image=storedCoverBlob(w)?(()=>{const u=URL.createObjectURL(storedCoverBlob(w));coverUrls.push(u);return`<img src="${u}" alt="" draggable="false">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false">`:`<div class="cover-fallback">□</div>`);
   if(archived)return`<label class="archive-item" data-role="${w.role}" data-id="${escapeHtml(id)}"><input class="archive-check" type="checkbox" aria-label="${escapeHtml(w.title)}を選択"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div></label>`;
   const episode=String(w.episode||'').trim();
   const episodeTitle=String(w.episodeTitle||'').trim();
@@ -844,7 +859,7 @@ function bookCardHtml(w,{archived=false}={}){
 
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmtDate(v){if(!v)return'—';const d=new Date(v);if(Number.isNaN(d.getTime()))return'—';return new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);}
-function coverHtml(w,cls=''){if(w.coverBlob){const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="${cls}"><img src="${u}" alt=""></div>`;}return`<div class="${cls}"><div class="cover-fallback">□</div></div>`;}
+function coverHtml(w,cls=''){if(storedCoverBlob(w)){const u=URL.createObjectURL(storedCoverBlob(w));coverUrls.push(u);return`<div class="${cls}"><img src="${u}" alt=""></div>`;}return`<div class="${cls}"><div class="cover-fallback">□</div></div>`;}
 function shelfViewportTop(){
   const chrome=$('#shelfChrome');
   return Math.max(0,Math.round(chrome?.getBoundingClientRect?.().bottom||0));
@@ -1309,6 +1324,8 @@ async function presentShelfFromCache({refreshOfficial=false}={}){
   if(!official)bindBookInteractions();
   const viewport=$('#shelfBodyViewport');
   if(viewport.classList.contains('is-shelf-pending')){
+    // Keep the entrance visible while the first row decodes.
+    await waitForEntranceCovers();
     // Real shelf layout exists behind the entrance; restore before revealing.
     await restoreShelfScroll(currentShelfTab,{conceal:false});
     $('#shelfLoadingState').hidden=true;
@@ -1316,7 +1333,7 @@ async function presentShelfFromCache({refreshOfficial=false}={}){
   }
 }
 
-function seriesStackCoverHtml(book,index){let image='<span class="series-stack-empty">□</span>';if(book?.coverBlob){const url=URL.createObjectURL(book.coverBlob);coverUrls.push(url);image=`<img src="${url}" alt="">`;}else if(book?.coverUrl)image=`<img src="${escapeHtml(book.coverUrl)}" alt="">`;return`<span class="series-stack-cover series-stack-cover-${index}">${image}</span>`;}
+function seriesStackCoverHtml(book,index){let image='<span class="series-stack-empty">□</span>';if(storedCoverBlob(book)){const url=URL.createObjectURL(storedCoverBlob(book));coverUrls.push(url);image=`<img src="${url}" alt="">`;}else if(book?.coverUrl)image=`<img src="${escapeHtml(book.coverUrl)}" alt="">`;return`<span class="series-stack-cover series-stack-cover-${index}">${image}</span>`;}
 function seriesOrderKey(shelf){return shelf==='owned'?OWNED_SERIES_BOX_ORDER_KEY:SERIES_BOX_ORDER_KEY;}
 function orderedSeriesBoxes(boxes,shelf=currentShelfTab){const key=seriesOrderKey(shelf),ids=boxes.map(box=>box.seriesId),saved=readIdList(key).filter(id=>ids.includes(id)),missing=ids.filter(id=>!saved.includes(id)),order=[...saved,...missing];writeIdList(key,order);const rank=new Map(order.map((id,index)=>[id,index]));return [...boxes].sort((a,b)=>(rank.get(a.seriesId)??9999)-(rank.get(b.seriesId)??9999));}
 function seriesBoxesContentHtml(seriesShelf){
@@ -1365,10 +1382,16 @@ async function addBookToSeries(shelf,seriesId,bookId,target){
   const series=authorSeries.find(item=>item.seriesId===seriesId);if(!series||!authorWorks.some(item=>item.workId===bookId))return;const workIds=(series.episodes||[]).map(item=>item.workId).filter(id=>id!==bookId);workIds.push(bookId);try{await animateBookIntoBox(bookId,target);await authorRequest(`/author/series/${seriesId}/books`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds})});draggingBookId='';await loadAuthorShelfData();toast(`「${series.title}」へ入れました。`);}catch(error){toast(error.message||'シリーズBOXへ入れられませんでした。');}
 }
 
+function revokeUnusedCoverUrls(urls){
+  const live=new Set([...document.querySelectorAll('img[src^="blob:"]')].map(img=>img.src));
+  for(const url of urls){
+    if(live.has(url)){if(!coverUrls.includes(url))coverUrls.push(url);}
+    else URL.revokeObjectURL(url);
+  }
+}
 async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
   const staleCoverUrls=coverUrls;coverUrls=[];
   ownedSeriesBoxes=readOwnedSeriesBoxes();
-  if(!deferCoverRevoke)staleCoverUrls.forEach(URL.revokeObjectURL);
   const storedMasters=await Promise.all((await getAllWorks()).map(async w=>({...await hydrateStoredBookMetadata({...w,role:'master'}),role:'master'})));
   const mastersByWorkId=new Map(storedMasters.map(work=>[work.workId,work]));
   const masters=[...storedMasters];
@@ -1400,6 +1423,7 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
   desktopShelfColumns=loadDesktopColumns();
   rebuildLocalShelfViews();
   await presentShelfFromCache({refreshOfficial:currentShelfTab==='official'&&refreshOfficial});
+  if(!deferCoverRevoke)revokeUnusedCoverUrls(staleCoverUrls);
   // Prepare the official shelf once in the background. Navigation reuses it
   // and never forces a network refresh merely because the user changed tabs.
   if(currentShelfTab!=='official'&&!officialShelfLoaded)renderOfficialShelf({force:false}).catch(()=>{});
@@ -1641,6 +1665,20 @@ function adoptOfficialSwipeSnapshot(view){
   return true;
 }
 
+async function waitForEntranceCovers(){
+  const grid=currentShelfBodyElement();
+  if(!grid)return;
+  const images=[...grid.querySelectorAll('img')].filter(img=>{
+    const r=img.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight;
+  });
+  let timer;
+  try{
+    await Promise.race([
+      Promise.all(images.map(img=>img.complete&&img.naturalWidth>0?Promise.resolve():img.decode?.().catch(()=>{}))),
+      new Promise(resolve=>{timer=setTimeout(resolve,1500);})
+    ]);
+  }finally{clearTimeout(timer);}
+}
 async function waitForLiveShelfVisualReady(){
   // The swipe snapshot stays on top until the newly rendered live shelf has
   // finished decoding its cover images. Two rAFs are not enough on iOS Safari
@@ -1926,7 +1964,7 @@ async function openDetail(role,id){
     $('#removeWork').onclick=async()=>{if(!await AhakoDialog.confirm(`「${w.title}」を段ボール箱にしまいますか？\n\n制作途中データは削除されず、あとから本棚へ戻せます。`))return;archiveBookId('created',id);$('#detailDialog').close();await render();toast('段ボール箱にしまいました。');};
     return;
   }
-  const isReader=role==='distribution';let w=isReader?await getReaderBook(id):await getWork(id);if(!w)return;if(cached?.draftId)w={...w,...cached,blob:w.blob,coverBlob:w.coverBlob};w=await hydrateStoredBookMetadata({...w,role:isReader?'distribution':'master'});currentWorkId=id;const cover=w.coverBlob?(()=>{const u=URL.createObjectURL(w.coverBlob);coverUrls.push(u);return`<div class="detail-cover"><img src="${u}" alt=""></div>`})():(w.coverUrl?`<div class="detail-cover"><img src="${escapeHtml(w.coverUrl)}" alt=""></div>`:`<div class="detail-cover"><div class="cover-fallback">□</div></div>`);if(isReader){const relayAction=w.relayEnabled===false?'':`<button id="relayDistribution" class="journey" type="button">次の一人へ</button>`;$('#detailContent').innerHTML=`<div class="detail-hero">${cover}${detailIdentityHtml(w,true)}</div>${detailWorkInfoHtml(w)}<div class="actions reader-primary-actions"><button id="readDistribution" class="edit" type="button">読む</button>${relayAction}</div><section id="copyJourneyPanel" class="copy-journey-panel is-compact"><div class="copy-journey-loading">この一冊の旅を確認しています…</div></section><div class="detail-management"><button id="removeWork" class="danger compact-danger" type="button">段ボール箱にしまう</button></div><p class="detail-note">${w.relayEnabled===false?'この一冊は「もっている本」に保存されています。作者の設定によりRELAYは無効です。':'この一冊は「もっている本」に保存されています。読むことも、そのまま次の一人へ送ることもできます。'}</p>`;$('#detailDialog').showModal();syncShelfScrollLock();loadCopyJourney(w);const openReaderCopy=(relayNow=false)=>{try{sessionStorage.setItem('ahako:bookshelf:open-copy',w.copyId);}catch(_){}const q=new URLSearchParams({bookshelfCopy:w.copyId});if(relayNow)q.set('relayNow','1');location.href=`../local-player/?${q.toString()}`;};$('#readDistribution').onclick=()=>openReaderCopy(false);if($('#relayDistribution'))$('#relayDistribution').onclick=()=>openReaderCopy(true);$('#removeWork').onclick=async()=>{if(!await AhakoDialog.confirm(`「${w.title}」を段ボール箱にしまいますか？\n\n本そのものは削除されず、あとから本棚へ戻せます。`))return;archiveBookId('owned',id);$('#detailDialog').close();await render();toast('段ボール箱にしまいました。');};return;}$('#detailContent').innerHTML=`<div class="detail-hero">${cover}${detailIdentityHtml(w,false)}</div>${detailWorkInfoHtml(w)}<div class="actions master-primary-actions"><button id="readMaster" class="edit" type="button">読む</button><button id="editWork" class="edit" type="button">Studioで編集</button></div><section id="masterSignalPanel" class="master-signal-panel is-compact"><button id="toggleMasterSignal" class="master-signal-summary" type="button" aria-expanded="false"><span><small>WORK SIGNAL</small><strong>作品の力</strong><em>読者の行動から見る</em></span><b aria-hidden="true">›</b></button><div id="masterSignalDetails" class="master-signal-details" hidden><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><button id="viewJourney" class="journey master-journey-button" type="button">旅を見る</button></div></section><div class="master-file-actions"><button id="exportMaster" type="button">Masterを書き出す</button><button id="replaceMaster" type="button">Masterを更新</button></div><div class="detail-management master-management"><button id="removeWork" class="danger compact-danger" type="button">段ボール箱にしまう</button></div><p class="detail-note">段ボール箱にしまっても、このブラウザ内のMaster本体は削除されません。あとから本棚へ戻せます。</p>`;$('#detailDialog').showModal();syncShelfScrollLock();loadStrengths(w);const signalToggle=$('#toggleMasterSignal'),signalDetails=$('#masterSignalDetails'),signalPanel=$('#masterSignalPanel');if(signalToggle&&signalDetails)signalToggle.onclick=()=>{const open=signalToggle.getAttribute('aria-expanded')==='true';signalToggle.setAttribute('aria-expanded',String(!open));signalDetails.hidden=open;signalPanel?.classList.toggle('is-open',!open);};$('#readMaster').onclick=()=>{try{sessionStorage.setItem('ahako:bookshelf:open-master',w.workId);}catch(_){}location.href=`../local-player/?bookshelfMaster=${encodeURIComponent(w.workId)}`;};$('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);$('#exportMaster').onclick=()=>exportMasterBlob(w).catch(error=>{console.error(error);toast('Masterを書き出せませんでした。');});$('#replaceMaster').onclick=()=>{$('#fileInput').dataset.replace=id;$('#fileInput').click();};const publishButton=$('#togglePublishState'),publishedRow=publishedAuthorWorkForLocal(w,id);if(publishButton&&publishedRow){const stopped=String(publishedRow.state||'public')==='stopped';publishButton.hidden=false;publishButton.textContent=stopped?'公開を再開':'公開を停止';publishButton.onclick=async()=>{const nextPublic=String(publishedRow.state||'public')==='stopped';const message=nextPublic?`「${w.title}」の公開を再開しますか？`:`「${w.title}」の公開を停止しますか？\n\nすでに取得済みのMY COPYは削除されません。`;if(!await AhakoDialog.confirm(message))return;publishButton.disabled=true;try{await setPublishedWorkState(w,id,nextPublic);publishButton.textContent=nextPublic?'公開を停止':'公開を再開';toast(nextPublic?'公開を再開しました。':'公開を停止しました。');await render();}catch(error){AhakoDialog.alert(error.message||'公開状態を変更できませんでした。');}finally{publishButton.disabled=false;}};}$('#removeWork').onclick=async()=>{if(!await AhakoDialog.confirm(`「${w.title}」を段ボール箱にしまいますか？\n\nMaster本体は削除されず、あとから本棚へ戻せます。`))return;archiveBookId('created',id);$('#detailDialog').close();await render();toast('段ボール箱にしまいました。');};}
+  const isReader=role==='distribution';let w=isReader?await getReaderBook(id):await getWork(id);if(!w)return;if(cached?.draftId)w={...w,...cached,blob:w.blob,coverBlob:w.coverBlob};w=await hydrateStoredBookMetadata({...w,role:isReader?'distribution':'master'});currentWorkId=id;const cover=storedCoverBlob(w)?(()=>{const u=URL.createObjectURL(storedCoverBlob(w));coverUrls.push(u);return`<div class="detail-cover"><img src="${u}" alt=""></div>`})():(w.coverUrl?`<div class="detail-cover"><img src="${escapeHtml(w.coverUrl)}" alt=""></div>`:`<div class="detail-cover"><div class="cover-fallback">□</div></div>`);if(isReader){const relayAction=w.relayEnabled===false?'':`<button id="relayDistribution" class="journey" type="button">次の一人へ</button>`;$('#detailContent').innerHTML=`<div class="detail-hero">${cover}${detailIdentityHtml(w,true)}</div>${detailWorkInfoHtml(w)}<div class="actions reader-primary-actions"><button id="readDistribution" class="edit" type="button">読む</button>${relayAction}</div><section id="copyJourneyPanel" class="copy-journey-panel is-compact"><div class="copy-journey-loading">この一冊の旅を確認しています…</div></section><div class="detail-management"><button id="removeWork" class="danger compact-danger" type="button">段ボール箱にしまう</button></div><p class="detail-note">${w.relayEnabled===false?'この一冊は「もっている本」に保存されています。作者の設定によりRELAYは無効です。':'この一冊は「もっている本」に保存されています。読むことも、そのまま次の一人へ送ることもできます。'}</p>`;$('#detailDialog').showModal();syncShelfScrollLock();loadCopyJourney(w);const openReaderCopy=(relayNow=false)=>{try{sessionStorage.setItem('ahako:bookshelf:open-copy',w.copyId);}catch(_){}const q=new URLSearchParams({bookshelfCopy:w.copyId});if(relayNow)q.set('relayNow','1');location.href=`../local-player/?${q.toString()}`;};$('#readDistribution').onclick=()=>openReaderCopy(false);if($('#relayDistribution'))$('#relayDistribution').onclick=()=>openReaderCopy(true);$('#removeWork').onclick=async()=>{if(!await AhakoDialog.confirm(`「${w.title}」を段ボール箱にしまいますか？\n\n本そのものは削除されず、あとから本棚へ戻せます。`))return;archiveBookId('owned',id);$('#detailDialog').close();await render();toast('段ボール箱にしまいました。');};return;}$('#detailContent').innerHTML=`<div class="detail-hero">${cover}${detailIdentityHtml(w,false)}</div>${detailWorkInfoHtml(w)}<div class="actions master-primary-actions"><button id="readMaster" class="edit" type="button">読む</button><button id="editWork" class="edit" type="button">Studioで編集</button></div><section id="masterSignalPanel" class="master-signal-panel is-compact"><button id="toggleMasterSignal" class="master-signal-summary" type="button" aria-expanded="false"><span><small>WORK SIGNAL</small><strong>作品の力</strong><em>読者の行動から見る</em></span><b aria-hidden="true">›</b></button><div id="masterSignalDetails" class="master-signal-details" hidden><section id="strengthPanel" class="strength-panel"><div class="strength-loading">作品の力を観測しています…</div></section><section id="journeyPanel" class="journey-panel" hidden></section><button id="viewJourney" class="journey master-journey-button" type="button">旅を見る</button></div></section><div class="master-file-actions"><button id="exportMaster" type="button">Masterを書き出す</button><button id="replaceMaster" type="button">Masterを更新</button></div><div class="detail-management master-management"><button id="removeWork" class="danger compact-danger" type="button">段ボール箱にしまう</button></div><p class="detail-note">段ボール箱にしまっても、このブラウザ内のMaster本体は削除されません。あとから本棚へ戻せます。</p>`;$('#detailDialog').showModal();syncShelfScrollLock();loadStrengths(w);const signalToggle=$('#toggleMasterSignal'),signalDetails=$('#masterSignalDetails'),signalPanel=$('#masterSignalPanel');if(signalToggle&&signalDetails)signalToggle.onclick=()=>{const open=signalToggle.getAttribute('aria-expanded')==='true';signalToggle.setAttribute('aria-expanded',String(!open));signalDetails.hidden=open;signalPanel?.classList.toggle('is-open',!open);};$('#readMaster').onclick=()=>{try{sessionStorage.setItem('ahako:bookshelf:open-master',w.workId);}catch(_){}location.href=`../local-player/?bookshelfMaster=${encodeURIComponent(w.workId)}`;};$('#editWork').onclick=()=>editInStudio(w);$('#viewJourney').onclick=()=>loadJourney(w);$('#exportMaster').onclick=()=>exportMasterBlob(w).catch(error=>{console.error(error);toast('Masterを書き出せませんでした。');});$('#replaceMaster').onclick=()=>{$('#fileInput').dataset.replace=id;$('#fileInput').click();};const publishButton=$('#togglePublishState'),publishedRow=publishedAuthorWorkForLocal(w,id);if(publishButton&&publishedRow){const stopped=String(publishedRow.state||'public')==='stopped';publishButton.hidden=false;publishButton.textContent=stopped?'公開を再開':'公開を停止';publishButton.onclick=async()=>{const nextPublic=String(publishedRow.state||'public')==='stopped';const message=nextPublic?`「${w.title}」の公開を再開しますか？`:`「${w.title}」の公開を停止しますか？\n\nすでに取得済みのMY COPYは削除されません。`;if(!await AhakoDialog.confirm(message))return;publishButton.disabled=true;try{await setPublishedWorkState(w,id,nextPublic);publishButton.textContent=nextPublic?'公開を停止':'公開を再開';toast(nextPublic?'公開を再開しました。':'公開を停止しました。');await render();}catch(error){AhakoDialog.alert(error.message||'公開状態を変更できませんでした。');}finally{publishButton.disabled=false;}};}$('#removeWork').onclick=async()=>{if(!await AhakoDialog.confirm(`「${w.title}」を段ボール箱にしまいますか？\n\nMaster本体は削除されず、あとから本棚へ戻せます。`))return;archiveBookId('created',id);$('#detailDialog').close();await render();toast('段ボール箱にしまいました。');};}
 async function fetchCopyJourney(workId,copyId,{force=false}={}){const key=`${workId}|${copyId}`;if(!force&&copyJourneyCache.has(key))return copyJourneyCache.get(key);const res=await fetch(`${API_BASE}/copy-journey/${encodeURIComponent(workId)}/${encodeURIComponent(copyId)}`,{headers:{Accept:'application/json'},cache:'no-store'});const data=await res.json().catch(()=>null);if(!res.ok||!data?.ok)throw new Error(data?.error||`HTTP ${res.status}`);copyJourneyCache.set(key,data);return data;}
 function copyJourneyStateCopy(summary){const people=Math.max(1,Number(summary?.peopleReached||1));if(summary?.state==='travelling')return`この一冊は、いま${people}人目。次の一人へ向かっています。`;if(Number(summary?.relayArrivals||0)>0)return`この一冊は、いま${people}人目まで届きました。`;return'この一冊は、いま1人目。まだ旅には出ていません。';}
 function renderCopyJourney(panel,data,w){const s=data?.summary||{},j=data?.journey||null;const relayArrivals=Math.max(0,Number(s.relayArrivals||0)),generations=Math.max(0,Number(s.generations||0)),pending=Math.max(0,Number(s.pending||0)),completions=Math.max(0,Number(s.completions||0)),observedReaders=Math.max(0,Number(s.observedReaders||0));const hasJourney=generations>0||relayArrivals>0;const tree=hasJourney&&j?`<div class="copy-journey-preview">${workJourneyTreeSvg([j],{rootType:'copy',rootLabel:'この一冊'})}</div><button id="openCopyTreeView" class="copy-tree-button" type="button">この一冊の旅を見る</button>`:'';panel.innerHTML=`<button id="toggleCopyJourney" class="copy-journey-summary" type="button" aria-expanded="false"><span><small>MY COPY JOURNEY</small><strong>この一冊の旅</strong><em>${escapeHtml(copyJourneyStateCopy(s))}</em></span><b aria-hidden="true">›</b></button><div id="copyJourneyDetails" class="copy-journey-details" hidden><div class="copy-journey-stats"><div><small>届いた回数</small><strong>${relayArrivals}</strong></div><div><small>送り出し</small><strong>${generations}</strong></div><div><small>読了</small><strong>${completions}</strong></div></div>${pending?`<p class="copy-journey-now">○ ${pending}つのRELAYが、まだ次の到着を待っています。</p>`:''}${observedReaders?`<p class="copy-journey-note">この一冊は匿名で ${observedReaders} 人以上の読書端末から観測されています。</p>`:'<p class="copy-journey-note">読者名・送り先・位置情報は表示しません。</p>'}${tree}</div>`;const toggle=$('#toggleCopyJourney'),details=$('#copyJourneyDetails');if(toggle&&details)toggle.onclick=()=>{const open=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!open));details.hidden=open;panel.classList.toggle('is-open',!open);};const b=$('#openCopyTreeView');if(b)b.onclick=()=>openCopyTree(data,w);}
