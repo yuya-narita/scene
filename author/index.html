@@ -7,6 +7,7 @@
   <title>作者の本棚｜あ箱</title>
   <meta name="description" content="あ箱で公開されている作者の本棚です。">
   <link rel="stylesheet" href="author-shelf.css?v=69.1">
+  <link rel="stylesheet" href="../ahako-shelf-wait.css?v=1">
 </head>
 <body>
   <header class="visitor-header">
@@ -16,9 +17,8 @@
   </header>
 
   <main>
-    <section id="loadingState" class="state-panel" aria-live="polite">
-      <span class="state-mark">□</span>
-      <strong>本棚を開いています…</strong>
+    <section id="loadingState" class="ahako-shelf-wait" data-ahako-shelf-wait>
+      <p>この向こうに、誰かの一冊。</p>
     </section>
 
     <section id="errorState" class="state-panel" hidden>
@@ -85,6 +85,7 @@
   </dialog>
 
   <div id="toast" class="toast" hidden aria-live="polite"></div>
+    <script src="../ahako-shelf-wait.js?v=1"></script>
     <script src="author-shelf.js?v=70.1"></script>
 </body>
 </html>

@@ -1111,6 +1111,11 @@ function renderOfficialShelf({force=true}={}){
   if(officialShelfRenderPromise&&!force)return officialShelfRenderPromise;
   const job=(async()=>{
     const host=$('#officialBooks');if(!host)return;
+    if(!officialShelfLoaded){
+      const wait=document.createElement('div');
+      window.AhakoShelfWait?.mount(wait);
+      host.replaceChildren(wait);
+    }
     try{
       const items=await loadOfficialShelf({force});
       const owned=await getAllReaderBooks();
@@ -1282,6 +1287,9 @@ async function presentShelfFromCache({refreshOfficial=false}={}){
     $('#emptyDistributionButton').hidden=created;
   }
   if(official&&refreshOfficial)await renderOfficialShelf({force:true});
+  // Data is ready: do not wait for the entrance animation to finish.
+  $('#shelfLoadingState').hidden=true;
+  $('#shelfBodyViewport').classList.remove('is-shelf-pending');
   applyMobileColumns(mobileShelfColumns);
   applyDesktopColumns(desktopShelfColumns);
   installShelfPinch();
@@ -1382,12 +1390,19 @@ async function switchShelf(tab,{refreshOfficial=false,concealRestore=false}={}){
   if(!visibleShelfTabs().includes(tab)||tab===currentShelfTab)return [];
   const from=currentShelfTab;
   if(from)saveShelfScroll(from);
-  // A first official visit may race the background preload. Finish it while
-  // the current shelf (or swipe stage) remains visible, then switch once.
+  // Show the one-line entrance during a first official visit, instead of
+  // leaving the previous tab visible while the network request finishes.
+  const enteringPendingOfficial=tab==='official'&&!officialShelfLoaded;
+  if(enteringPendingOfficial){
+    applyShelfTab(tab);
+    await presentShelfFromCache({refreshOfficial:false});
+  }
   if(tab==='official'){
     if(officialShelfRenderPromise)await officialShelfRenderPromise;
     else if(!officialShelfLoaded)await renderOfficialShelf({force:false});
   }
+  // The reader may have returned to a local tab while the request ran.
+  if(enteringPendingOfficial&&currentShelfTab!==tab)return [];
   applyShelfTab(tab);
   await presentShelfFromCache({refreshOfficial});
   await restoreShelfScroll(currentShelfTab,{conceal:concealRestore});
@@ -2332,5 +2347,9 @@ syncBookshelfAuthorUI();
   await restoreBookshelfAuthorSession();
   await restoreShelfScroll(currentShelfTab);
   if(claimed)toast('自分の一冊を本棚に受け取りました。');
-})().catch(e=>{console.error(e);AhakoDialog.alert('本棚を開けませんでした。');});
+})().catch(e=>{console.error(e);
+  $('#shelfLoadingState').hidden=false;
+  $('#shelfLoadingState').textContent='本棚を開けませんでした。再読み込みしてお試しください。';
+  $('#shelfBodyViewport').classList.add('is-shelf-pending');
+  AhakoDialog.alert('本棚を開けませんでした。');});
 })();

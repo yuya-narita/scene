@@ -1,0 +1,25 @@
+/* Studio's fade / blur entrance keyframes, scoped to the shelf entrance.
+   Kept small so the loading Scene does not need to download Player Core. */
+@keyframes ahakoWaitFade { from { opacity:0 } to { opacity:1 } }
+@keyframes ahakoWaitBlur { from { filter:blur(10px);opacity:.12 } to { filter:blur(0);opacity:1 } }
+@keyframes ahakoWaitCharacter { from { opacity:0 } to { opacity:1 } }
+.ahako-shelf-wait {
+  display:flex;align-items:center;justify-content:center;
+  min-height:clamp(220px,48vh,440px);padding:32px 24px;box-sizing:border-box;
+  color:inherit;text-align:center;
+}
+.ahako-shelf-wait[hidden] { display:none!important }
+.ahako-shelf-wait .ahako-shelf-wait-text {
+  margin:0;max-width:26em;font-family:"Yu Mincho","Hiragino Mincho ProN",serif;
+  font-size:clamp(19px,4.8vw,28px);font-weight:400;line-height:1.9;
+  letter-spacing:.05em;overflow-wrap:anywhere;
+}
+.ahako-shelf-wait[data-effect="fade"] .ahako-shelf-wait-text { animation:ahakoWaitFade 1.05s ease-out both }
+.ahako-shelf-wait[data-effect="blur"] .ahako-shelf-wait-text { animation:ahakoWaitBlur 1.05s ease-out both }
+.ahako-shelf-wait[data-effect="typewriter"] .ahako-shelf-wait-text span { animation:ahakoWaitCharacter 1ms step-end both }
+/* Initial HTML conceals the empty-state UI even before bookshelf.js loads. */
+.shelf-body-viewport.is-shelf-pending > :not(#shelfLoadingState) { display:none!important }
+@media (prefers-reduced-motion:reduce) {
+  .ahako-shelf-wait .ahako-shelf-wait-text,
+  .ahako-shelf-wait .ahako-shelf-wait-text span { animation:none!important;filter:none!important;opacity:1!important }
+}
