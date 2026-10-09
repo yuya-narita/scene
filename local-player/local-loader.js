@@ -113,6 +113,7 @@
 
   function revokeAssets(){for(const url of assetUrls){try{URL.revokeObjectURL(url)}catch(_){}}assetUrls=[];}
   function setStatus(text){if(status)status.textContent=text||'';}
+  function finishAutoOpen(){document.documentElement.classList.remove('local-auto-open-pending');}
   function setRelayEntryMode(active){
     if(ownCopyButton)ownCopyButton.hidden=true;
     if(!dropZone)return;
@@ -293,6 +294,7 @@
           if(item?.shelfId&&await openOfficialShelfRead(item.shelfId))return true;
         }catch(recoveryError){console.warn('Official shelf fallback skipped',recoveryError);}
       }
+      finishAutoOpen();
       console.error(error);
       currentPackage=null;
       if(launcher)launcher.hidden=false;
@@ -620,9 +622,9 @@
       if(journey)journey.hidden=true;
       if(endingOwnWrap)endingOwnWrap.hidden=true;
       await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`official-shelf:${shelfId}`,suppressObservation:true});
-      launcher.hidden=true;const hasShelfReturn=showShelfReturnForSource();if(backButton)backButton.hidden=hasShelfReturn;setStatus('');
+      launcher.hidden=true;const hasShelfReturn=showShelfReturnForSource();if(backButton)backButton.hidden=hasShelfReturn;setStatus('');finishAutoOpen();
       return true;
-    }catch(error){console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
+    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
     finally{if(openButton)openButton.disabled=false;}
   }
 
@@ -1146,8 +1148,8 @@
       try{const map=buildAssetMap(files);doc=rewriteAssets(raw,map);await window.ScenePublicPlayer.loadDocument(doc,{sourceKey:sourceKey||`local:${file.name}:${file.size}:${file.lastModified||0}`});}
       catch(error){for(const u of assetUrls){try{URL.revokeObjectURL(u)}catch(_){}}assetUrls=previousUrls;throw error;}
       for(const u of previousUrls){try{URL.revokeObjectURL(u)}catch(_){}}
-      launcher.hidden=true;const hasShelfReturn=showShelfReturnForSource();if(backButton)backButton.hidden=hasShelfReturn;setStatus('');
-    }catch(error){console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));}
+      launcher.hidden=true;const hasShelfReturn=showShelfReturnForSource();if(backButton)backButton.hidden=hasShelfReturn;setStatus('');finishAutoOpen();
+    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));}
     finally{openButton.disabled=false;fileInput.value='';}
   }
   function returnToLauncher(){

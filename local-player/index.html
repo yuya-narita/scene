@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b1016">
   <title>あ箱 Local Player</title>
+  <script>try{if(/^copy_[a-f0-9]{32}$/i.test(new URLSearchParams(location.search).get('bookshelfCopy')||''))document.documentElement.classList.add('local-auto-open-pending')}catch(_){}</script>
   <link rel="stylesheet" href="./scene-player-core.css?v=20261008-cover-choice-v200">
   <link rel="stylesheet" href="./public-player.css?v=20261008-cover-choice-v200">
-  <link rel="stylesheet" href="./local-loader.css?v=63.35.4-review">
+  <link rel="stylesheet" href="./local-loader.css?v=63.35.5-auto-open">
   <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
   <script>window.__AHAKO_LOCAL_PLAYER__ = true;</script>
 </head>
@@ -26,6 +27,9 @@
       <a class="local-privacy-link" href="https://yuya-narita.github.io/scene/privacy/" target="_blank" rel="noopener noreferrer">プライバシー</a>
     </div>
   </section>
+  <div id="localAutoOpen" class="local-auto-open" role="status" aria-live="polite" aria-label="本を開いています">
+    <span class="local-auto-open-spinner" aria-hidden="true"></span><span>本を開いています…</span>
+  </div>
 
   <button id="localBackButton" class="local-back-button" type="button" hidden aria-label="ファイル選択に戻る">‹ <span>選択</span></button>
 
@@ -138,6 +142,6 @@
   <script src="./scene-player-core.js?v=20261008-cover-choice-v198"></script>
   <script src="./public-player.js?v=20261008-cover-choice-v198"></script>
   <script src="../ahako-dialog.js?v=70.3"></script>
-  <script src="./local-loader.js?v=bookshelf-copy-arraybuffer-v1"></script>
+  <script src="./local-loader.js?v=bookshelf-copy-arraybuffer-auto-open-v2"></script>
 </body>
 </html>
