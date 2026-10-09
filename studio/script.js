@@ -1094,6 +1094,9 @@
   function mergeDraftPublication(existingPublication,incomingPublication){
     const previous=existingPublication||{};
     const next=incomingPublication||{};
+    // A verified absent publication is authoritative, unlike a delayed blank autosave.
+    if(next.verified===true && next.workId && !next.id)return {...next,url:'',fingerprint:'',publishedAt:0,stoppedAt:0};
+    if(previous.workId && next.workId && previous.workId!==next.workId)return {...next};
 
     // Publication identity is durable metadata. A delayed autosave that was
     // created before publish must never be able to erase a workId/public URL
@@ -1150,7 +1153,8 @@
       get.onerror=()=>reject(get.error);
       get.onsuccess=()=>{
         const existing=get.result||null;
-        const safeRow=existing
+        const sameWork=!existing?.document?.studio?.identity?.workId || !row?.document?.studio?.identity?.workId || existing.document.studio.identity.workId===row.document.studio.identity.workId;
+        const safeRow=existing && sameWork
           ? {...row,publication:mergeDraftPublication(existing.publication,row.publication)}
           : row;
         const put=store.put(safeRow);
@@ -1270,6 +1274,11 @@
       console.warn('Master publication lookup failed',error);
       return null;
     }
+    // A lookup may finish after the author opens a different work.
+    if(doc!==workingDocument || ident.workId!==workingDocument?.studio?.identity?.workId)return status;
+    latestPublicationWorkId=ident.workId;
+    latestPublicationVerified=true;
+    legacyPublicationChecks.delete(ident.workId);
     if(!status?.exists){
       latestPublishedId='';
       latestPublishedUrl='';
@@ -1369,8 +1378,10 @@
       easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',seriesId:activeSeriesId(),episode:episodeInput?.value||'',episodeNumber:episodeNumberInput?.value||'',episodeTitle:episodeTitleInput?.value||'',description:descriptionInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
       document:workingDocument?clone(workingDocument):null,
       publication:{
-        id:latestPublishedId||'',
-        url:latestPublishedUrl||'',
+        workId:workingDocument?.studio?.identity?.workId||'',
+        verified:latestPublicationVerified && latestPublicationWorkId===workingDocument?.studio?.identity?.workId,
+        id:latestPublicationWorkId===workingDocument?.studio?.identity?.workId?latestPublishedId||'':'',
+        url:latestPublicationWorkId===workingDocument?.studio?.identity?.workId?latestPublishedUrl||'':'',
         fingerprint:latestPublishedFingerprint||'',
         publishedAt:latestPublishedAt||0,
         stoppedAt:latestPublicationStoppedAt||0
@@ -1434,6 +1445,8 @@
     easySourceDirty=Boolean(row.easySourceDirty);
     protectedResplitPending=false;
     autoRecProgress=row.recProgress||{nextIndex:0,recordedCount:0};
+    latestPublicationWorkId=String(row.publication?.workId||'');
+    latestPublicationVerified=row.publication?.verified===true;
     latestPublishedId=row.publication?.id||'';
     latestPublishedUrl=row.publication?.url||'';
     latestPublishedFingerprint=row.publication?.fingerprint||'';
@@ -1524,8 +1537,27 @@
     return 0;
   }
 
+  function draftPublicationBelongsToWork(row){
+    const workId=String(row?.document?.studio?.identity?.workId||row?.workId||'');
+    return !workId || row?.publication?.workId===workId;
+  }
+  async function verifyLegacyDraftPublications(rows){
+    return Promise.all(rows.map(async row=>{
+      const workId=String(row?.document?.studio?.identity?.workId||row?.workId||'');
+      if(!workId || !row.publication?.id || draftPublicationBelongsToWork(row))return row;
+      if(!legacyPublicationChecks.has(workId)){
+        legacyPublicationChecks.set(workId,fetchWithTimeout(masterPublicationEndpoint(workId),{headers:{Accept:'application/json'}},10000)
+          .then(async res=>{const status=await res.json();if(!res.ok||!status?.ok)throw new Error('Publication lookup failed');return status;})
+          .catch(()=>{legacyPublicationChecks.delete(workId);return null;}));
+      }
+      const status=await legacyPublicationChecks.get(workId);
+      if(!status)return {...row,publication:{}};
+      return {...row,publication:status.exists?{...row.publication,workId,verified:true,id:status.id,url:status.url||'',stoppedAt:['stopped','suspended'].includes(status.state)?Date.now():0}:{workId,verified:true,id:'',url:''}};
+    }));
+  }
   function draftPublicationUrl(row){
     const pub=row?.publication||{};
+    if(!draftPublicationBelongsToWork(row))return '';
     if(pub.url)return String(pub.url);
     if(pub.id && !Number(pub.stoppedAt)){
       return `${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(pub.id)}`;
@@ -1598,7 +1630,7 @@
     try{
       await setHostedPublicationState(row.publication.id,'unpublish');
       const fresh=await getDraftRecord(row.id); if(!fresh)return;
-      fresh.publication={...(fresh.publication||{}),id:row.publication.id,url:'',stoppedAt:Date.now()};
+      fresh.publication={...(fresh.publication||{}),workId:draftMasterWorkId(fresh)||row.workId||'',verified:true,id:row.publication.id,url:'',stoppedAt:Date.now()};
       fresh.updatedAt=Date.now(); await putDraftRecord(fresh);
       if(currentDraftId===row.id){
         latestPublishedId=row.publication.id; latestPublishedUrl='';
@@ -1613,7 +1645,7 @@
     try{
       await setHostedPublicationState(workId,'republish');
       const fresh=await getDraftRecord(row.id); if(!fresh)return;
-      fresh.publication={...(fresh.publication||{}),id:workId,url:`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}`,stoppedAt:0};
+      fresh.publication={...(fresh.publication||{}),workId:draftMasterWorkId(fresh)||row.workId||'',verified:true,id:workId,url:`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}`,stoppedAt:0};
       fresh.updatedAt=Date.now(); await putDraftRecord(fresh);
       if(currentDraftId===row.id){
         latestPublishedId=workId; latestPublishedUrl=fresh.publication.url;
@@ -1631,7 +1663,7 @@
   }
 
   async function refreshDraftUI(showResume=true){
-    const rows=await listDraftRecords();
+    const rows=await verifyLegacyDraftPublications(await listDraftRecords());
     latestDraftSummary=rows[0]||null;
 
     const label=$('#draftCountLabel');
@@ -1674,7 +1706,7 @@
       const rec=Math.min(total,Number(row.recProgress?.completedCount||row.recCompletedCount||0));
       const publicationUrl=draftPublicationUrl(row);
       const isPublished=Boolean(publicationUrl);
-      const isStopped=!isPublished && Boolean(row.publication?.id);
+      const isStopped=!isPublished && draftPublicationBelongsToWork(row) && Boolean(row.publication?.id);
       const status=isPublished?draftPublishStatus(row):(isStopped?'stopped':'draft');
       const el=document.createElement('article');
       el.className=`draft-row unified-work-row ${isPublished?'is-published':''} ${isStopped?'is-stopped':''} ${status==='dirty'?'is-dirty':''}`;
@@ -5756,6 +5788,9 @@
   };
 
   let latestPublishedId='';
+  let latestPublicationWorkId='';
+  let latestPublicationVerified=false;
+  const legacyPublicationChecks=new Map();
   let latestPublishedMasterDocument=null;
   let staleRestoreRemoteRevision=0;
   let latestPublishedUrl='';
@@ -5987,6 +6022,9 @@
       );
       if(!result?.url)throw new Error('Publish URL missing');
 
+      latestPublicationWorkId=workingDocument?.studio?.identity?.workId||'';
+      latestPublicationVerified=true;
+      legacyPublicationChecks.delete(latestPublicationWorkId);
       latestPublishedId=result.id||latestPublishedId;
       latestPublishedUrl=result.url;
 
@@ -17001,6 +17039,8 @@ function openDesktopTextDetail(){
         location.href='../bookshelf/';
         return;
       }
+      await hydrateMasterPublicationState(workingDocument,{warnStale:false});
+      if(!await saveDraftNow({force:true}))throw new Error('draft-save-failed');
       const result=await buildScenePackage();
       const workId=String(result?.doc?.studio?.identity?.workId||'').trim();
       if(!workId)throw new Error('bookshelf-workid-missing');
