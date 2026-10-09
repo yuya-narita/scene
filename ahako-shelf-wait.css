@@ -27,6 +27,57 @@
   position:fixed;top:var(--ahako-wait-top,180px);bottom:0;left:0;right:0;
   z-index:2;pointer-events:none;background:#f6f3ec;
 }
+
+/* Existing Studio entrances, with only their names scoped to this surface. */
+@keyframes ahakoWaitPop{
+  0%{opacity:0;transform:scale(.78)}
+  58%{opacity:1;transform:scale(1.055)}
+  82%{opacity:1;transform:scale(.992)}
+  100%{opacity:1;transform:scale(1)}
+}
+@keyframes ahakoWaitPulse{
+  0%{opacity:.2;filter:blur(2px);transform:scale(.82)}
+  45%{opacity:1;filter:blur(0);transform:scale(1.08)}
+  100%{opacity:1;filter:blur(0);transform:scale(1)}
+}
+@keyframes ahakoWaitWhisper{
+  from{opacity:0;filter:blur(5px)}
+  to{opacity:.7;filter:blur(0)}
+}
+@keyframes ahakoWaitTilt{
+  0%{opacity:0;transform:rotate(-5deg)}
+  72%{opacity:1;transform:rotate(-2.35deg)}
+  100%{opacity:1;transform:rotate(-2deg)}
+}
+@keyframes ahakoWaitGlitch{
+  0%{opacity:0;transform:translateX(-34vw) scale(2.8) skewX(-28deg);filter:blur(7px)}
+  12%{opacity:1;transform:translateX(34vw) scale(2.15) skewX(28deg);filter:blur(2px)}
+  25%{transform:translateX(-24vw) scale(1.75) skewX(-20deg);filter:none}
+  38%{transform:translateX(24vw) scale(1.48) skewX(20deg)}
+  52%{transform:translateX(-14vw) scale(1.28) skewX(-12deg)}
+  66%{transform:translateX(14vw) scale(1.18) skewX(12deg)}
+  80%{transform:translateX(-6vw) scale(1.08) skewX(-5deg)}
+  90%{transform:translateX(6vw) scale(1.04) skewX(5deg)}
+  100%{opacity:1;transform:none;filter:none}
+}
+.ahako-shelf-wait[data-effect="pop"] .ahako-shelf-wait-text { animation:ahakoWaitPop .68s cubic-bezier(.18,.82,.2,1) both }
+.ahako-shelf-wait[data-effect="pulse"] .ahako-shelf-wait-text { animation:ahakoWaitPulse .95s ease-out both }
+.ahako-shelf-wait[data-effect="whisper"] .ahako-shelf-wait-text { font-size:clamp(16px,3.8vw,22px);animation:ahakoWaitWhisper .78s ease-out both }
+.ahako-shelf-wait[data-effect="tilt"] .ahako-shelf-wait-text { animation:ahakoWaitTilt .68s cubic-bezier(.18,.82,.2,1) both }
+.ahako-shelf-wait[data-effect="glitchHit"] .ahako-shelf-wait-text { animation:ahakoWaitGlitch .46s steps(8,end) both }
+.ahako-shelf-wait[data-view="chat"],.ahako-shelf-wait[data-view="board"] { overflow:hidden }
+.ahako-wait-chat { display:flex;align-items:flex-end;gap:10px;max-width:100%;text-align:left }
+.ahako-wait-chat[data-side="right"] { flex-direction:row-reverse }
+.ahako-wait-chat-icon { display:flex;align-items:center;justify-content:center;flex:0 0 42px;width:42px;height:42px;border:1px solid #d8d2c8;border-radius:50%;background:#fff;font-size:22px }
+.ahako-wait-chat>div { min-width:0 }
+.ahako-wait-chat-name { display:block;margin:0 12px 6px;color:#79746a;font:600 13px sans-serif }
+.ahako-wait-chat[data-side="right"] .ahako-wait-chat-name { text-align:right }
+.ahako-wait-chat .ahako-shelf-wait-text { padding:12px 16px;border:1px solid #d8d2c8;border-radius:20px 20px 20px 5px;background:#fff;font-family:sans-serif;font-size:clamp(17px,4.5vw,24px);line-height:1.6;letter-spacing:normal;color:#555574;text-align:left }
+.ahako-wait-chat[data-side="right"] .ahako-shelf-wait-text { border-radius:20px 20px 5px 20px;background:#f9e9f0;color:#a84975 }
+.ahako-wait-board { width:min(96%,820px);text-align:left;font-family:sans-serif }
+.ahako-wait-board>small { color:#008000;font-size:13px;font-weight:700 }
+.ahako-wait-board .ahako-shelf-wait-text { margin-top:7px;padding-left:1.2em;font-family:sans-serif;font-size:clamp(17px,4.5vw,24px);line-height:1.6;letter-spacing:normal;text-align:left }
+
 @media (prefers-reduced-motion:reduce) {
   .ahako-shelf-wait .ahako-shelf-wait-text,
   .ahako-shelf-wait .ahako-shelf-wait-text span { animation:none!important;filter:none!important;opacity:1!important }
