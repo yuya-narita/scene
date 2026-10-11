@@ -11121,7 +11121,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       const frame=article?.querySelector('.sp-handdrawn-frame');
       const target=frame||article?.querySelector(':scope > .sp-text');
       if(!stage||!scenes||!article||!target){appAlert(u('配置できるテキストがありません','There is no text to position.'));return;}
-      const pcMode=studioPreviewDevice==='pc'&&window.matchMedia('(min-width:1100px)').matches&&document.body.classList.contains('desktop-live-edit');
+      const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
       const beforeText=p.text.position?clone(p.text.position):null;
       const beforeFrame=p.frame?.position?clone(p.frame.position):null;
       // V45: drag positioning mutates continuously outside the generic
@@ -11182,7 +11182,8 @@ function startInlineTextEdit(field='text',targetEl=null){
         // pane. Convert rendered pointer pixels back to that logical space
         // before clamping, saving and assigning the Scene transform.
         const scale=Math.max(.05,Number(player?._layoutScale?.())||1);
-        const width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=10;
+        const width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop;
+        const margin=(stage.clientWidth||sr.width/scale)<=600?10:16;
         const stageWidth=Math.max(1,stage.clientWidth||sr.width/scale),stageHeight=Math.max(1,stage.clientHeight||sr.height/scale);
         const contentLeft=(cr.left-sr.left)/scale;
         let centerX=(clientX-sr.left)/scale,centerY=(clientY-sr.top)/scale;
@@ -11212,7 +11213,7 @@ function startInlineTextEdit(field='text',targetEl=null){
   }
   function makeFramePositionDragButton(scene){
     const button=document.createElement('button');button.type='button';button.className='frame-position-adjust-button';
-    const pcMode=studioPreviewDevice==='pc'&&window.matchMedia('(min-width:1100px)').matches&&document.body.classList.contains('desktop-live-edit');
+    const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
     const hasPc=Boolean(scene?.presentation?.text?.position?.pc);
     button.textContent=pcMode?(hasPc?u('PC専用位置を再調整','Readjust PC-only position'):u('PC専用位置をドラッグ調整','Adjust PC-only position')):u('プレビュー上でドラッグ調整','Drag on preview to position');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
     button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openFramePositionDragEditor(scene);});return button;

@@ -375,7 +375,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
         const atLastScene = !!this.document && !this.ended
           && this.index >= Math.max(0, (this.document.scenes?.length || 1) - 1);
-        if (atLastScene && !isControl && !isEditableText) this._playEndingAudio();
+        if (this._iosStableMediaBank && atLastScene && !isControl && !isEditableText
+          && !this.host.classList.contains('live-edit-enabled')) this._playEndingAudio();
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -2882,6 +2883,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._clearAutoTimer();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
+      this._endingAudioStarted = false;
       this.ended = false;
       if (this.els?.ending) this.els.ending.hidden = true;
       this.index = nextIndex;
@@ -2927,6 +2929,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._clearAutoTimer();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
+      this._endingAudioStarted = false;
       this.ended = false;
       this.els.ending.hidden = true;
       this.index = nextIndex;
@@ -3282,9 +3285,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return this.options.baseGap;
     }
 
+    // All layout/drag coordinates are logical CSS pixels, including scaled Studio previews.
+    _layoutScale() {
+      const stage=this.els?.stage;
+      return stage?.clientWidth ? Math.max(.01,stage.getBoundingClientRect().width/stage.clientWidth) : 1;
+    }
+
+    _logicalRect(rect) {
+      const scale=this._layoutScale();
+      return Object.fromEntries(['left','right','top','bottom','width','height'].map(key=>[key,rect[key]/scale]));
+    }
+
     _measureSceneGeometry(node, stageRect) {
       node.classList.add('sp-layout-measuring');
-      const nodeRect=node.getBoundingClientRect();
+      const nodeRect=this._logicalRect(node.getBoundingClientRect());
       const boxHeight=Math.max(1,nodeRect.height);
       const text=node.querySelector('.sp-text');
       const frame=node.querySelector('.sp-handdrawn-frame');
@@ -3293,7 +3307,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const contentRects=[];
       const addElementRect=(element)=>{
         if(!element)return;
-        const rect=element.getBoundingClientRect();
+        const rect=this._logicalRect(element.getBoundingClientRect());
         if(rect.width>0&&rect.height>0)contentRects.push(rect);
       };
       const addTextRects=(element)=>{
@@ -3301,7 +3315,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         try{
           const range=document.createRange();
           range.selectNodeContents(element);
-          const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
+          const rects=[...range.getClientRects()].map(rect=>this._logicalRect(rect)).filter(rect=>rect.width>0&&rect.height>0);
           range.detach?.();
           if(rects.length)contentRects.push(...rects);else addElementRect(element);
         }catch(_){addElementRect(element);}
@@ -3331,7 +3345,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         inkBottom=Math.max(...contentRects.map(rect=>rect.bottom))-nodeRect.top;
       }
       const inkHeight=Math.max(1,inkBottom-inkTop);
-      const height=vertical?Math.min(boxHeight,Math.max(48,Math.min(stageRect.height*.52,inkHeight+8))):boxHeight;
+      const height=vertical?Math.min(boxHeight,Math.max(48,Math.min((stageRect.height/this._layoutScale())*.52,inkHeight+8))):boxHeight;
       node.classList.remove('sp-layout-measuring');
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
@@ -3390,9 +3404,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
-      const stageHeight = stageRect.height;
+      const stageHeight = Math.max(1,this.els.stage.clientHeight||stageRect.height/this._layoutScale());
       const stageWidth = Math.max(1,this.els.stage.clientWidth||stageRect.width);
-      const focusRatio = global.innerWidth <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
+      const focusRatio = stageWidth <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
       const focusY = stageHeight * focusRatio;
 
       const metrics = nodes.map((node, i) => ({
@@ -3421,7 +3435,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const flow=next.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
         const eitherVertical=current.scene?.presentation?.text?.writingMode==='vertical-rl'||next.scene?.presentation?.text?.writingMode==='vertical-rl';
         if(flow==='horizontal'){
-          const gap=Math.max(this._sceneGap(current.scene,next.scene),stageRect.width*.09)+extraGap;
+          const gap=Math.max(this._sceneGap(current.scene,next.scene),stageWidth*.09)+extraGap;
           const verticalReading=next.scene?.presentation?.text?.writingMode==='vertical-rl';
           positions[i]={
             x:verticalReading
@@ -3433,7 +3447,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const verticalGap=eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0;
           const gap=this._sceneGap(current.scene,next.scene)+verticalGap+extraGap;
           const ownPosition=this._framePosition(current.scene);
-          const ownX=ownPosition.preset==='auto'?0:this._customPositionTransform(current,ownPosition,stageWidth,stageHeight,global.innerWidth<=600?10:16).x;
+          const ownX=ownPosition.preset==='auto'?0:this._customPositionTransform(current,ownPosition,stageWidth,stageHeight,stageWidth<=600?10:16).x;
           positions[i]={x:ownX,y:nextPosition.y+next.inkTop-gap-current.inkBottom};
         }
       }
@@ -3445,14 +3459,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
         if(previousFrame){
           const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
-          const gap=global.innerWidth<=600?14:24;
+          const gap=stageWidth<=600?14:24;
           const currentWidth=newest.inkRight-newest.inkLeft;
           const previousWidth=previous.inkRight-previous.inkLeft;
           const currentHeight=newest.inkBottom-newest.inkTop;
           const previousHeight=previous.inkBottom-previous.inkTop;
-          const availableWidth=Math.max(1,newest.node.getBoundingClientRect().width);
+          const availableWidth=Math.max(1,newest.node.clientWidth||newest.node.getBoundingClientRect().width/this._layoutScale());
           const availableHeight=stageHeight*.86;
-          const margin=global.innerWidth<=600?10:16;
+          const margin=stageWidth<=600?10:16;
           previous.node.style.visibility='';
           previous.node.style.zIndex='20';
           newest.node.style.zIndex='30';
@@ -3483,7 +3497,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;
         const position=this._framePosition(item.scene);
         if(position.preset==='auto')return;
-        const margin=global.innerWidth<=600?10:16;
+        const margin=stageWidth<=600?10:16;
         positions[i]=this._customPositionTransform(item,position,stageWidth,stageHeight,margin);
       });
 
@@ -3491,7 +3505,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
         previous.node.style.zIndex='20';newest.node.style.zIndex='30';
         if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){
-          const availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),margin=global.innerWidth<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
+          const availableWidth=Math.max(1,newest.node.clientWidth||newest.node.getBoundingClientRect().width/this._layoutScale()),margin=stageWidth<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
           if(flow==='horizontal'){
             const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;
             positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};
@@ -3518,9 +3532,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return nodes.map((node, i) => {
         const geometry=this._measureSceneGeometry(node,stageRect);
         const position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
-        let x=0,y=focusY-Math.max(1,node.getBoundingClientRect().height)/2;
+        let x=0,y=focusY-geometry.height/2;
         if(position.preset!=='auto'){
-          ({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,global.innerWidth<=600?10:16));
+          ({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,stageWidth<=600?10:16));
         }
         node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
         node.style.zIndex = String(20 + i);
@@ -5089,16 +5103,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             range.selectNodeContents(text);
             const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);
             range.detach?.();
-            return measured;
+            return measured.map(rect=>this._logicalRect(rect));
           }catch(_){return [];}};
           let rects=measureRects();
-          const initialTextRect=text.getBoundingClientRect();
+          const initialTextRect=this._logicalRect(text.getBoundingClientRect());
           let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left;
           let inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;
           const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);
           text.style.width=`${fittedWidth}px`;
           rects=measureRects();
-          const fittedTextRect=text.getBoundingClientRect();
+          const fittedTextRect=this._logicalRect(text.getBoundingClientRect());
           inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;
           inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;
           const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top;
@@ -5106,7 +5120,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1;
           const charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length;
           const shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58)));
-          const mobile=global.innerWidth<=600;
+          const mobile=(this.host.clientWidth||global.innerWidth)<=600;
           const padX=(mobile?27:34)+shapeLevel*(mobile?8:12);
           const padY=(mobile?30:38)+shapeLevel*(mobile?13:18);
           const inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
@@ -5123,7 +5137,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           fitted=true;
         }
         frame.classList.remove('sp-frame-measuring');
-        const rect=frame.getBoundingClientRect();
+        const rect=this._logicalRect(frame.getBoundingClientRect());
         const width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
         if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
         lastWidth=width;lastHeight=height;
@@ -5841,7 +5855,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const size = style.size;
       const tokenSizes = isSubText
         ? { small: '11px', normal: '14px', large: '17px', xl: '20px' }
-        : { small: 'clamp(17px,3.8vw,24px)', normal: 'clamp(21px,4.8vw,34px)', large: 'clamp(26px,5.8vw,42px)', xl: 'clamp(32px,7vw,54px)' };
+        : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)' };
       if (typeof size === 'number' && Number.isFinite(size) && size > 0) node.style.fontSize = `${size}px`;
       else if (typeof size === 'string' && size !== 'auto' && tokenSizes[size]) node.style.fontSize = tokenSizes[size];
 
@@ -5858,7 +5872,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.dataset.writingMode='vertical-rl';
         node.style.writingMode='vertical-rl';
         node.style.textOrientation='mixed';
-        node.style.height=`min(52dvh, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
+        node.style.height=`min(${Math.max(1,this.host.clientHeight||global.innerHeight)*.52}px, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
         node.style.textAlign='start';
         const blockAlign=style.align==='left'||style.align==='right'?style.align:'center';
         node.dataset.verticalBlockAlign=blockAlign;

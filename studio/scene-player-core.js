@@ -377,7 +377,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext, .sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-notification-text');
         const atLastScene = !!this.document && !this.ended
           && this.index >= Math.max(0, (this.document.scenes?.length || 1) - 1);
-        if (atLastScene && !isControl && !isEditableText) this._playEndingAudio();
+        if (this._iosStableMediaBank && atLastScene && !isControl && !isEditableText
+          && !this.host.classList.contains('live-edit-enabled')) this._playEndingAudio();
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -2865,6 +2866,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._clearAutoTimer();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
+      this._endingAudioStarted = false;
       this.ended = false;
       if (this.els?.ending) this.els.ending.hidden = true;
       this.index = nextIndex;
@@ -2910,6 +2912,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._clearAutoTimer();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
+      this._endingAudioStarted = false;
       this.ended = false;
       this.els.ending.hidden = true;
       this.index = nextIndex;
@@ -3274,11 +3277,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return this.options.baseGap;
     }
 
+    // All layout/drag coordinates are logical CSS pixels, including scaled Studio previews.
+    _layoutScale() {
+      const stage=this.els?.stage;
+      return stage?.clientWidth ? Math.max(.01,stage.getBoundingClientRect().width/stage.clientWidth) : 1;
+    }
+
+    _logicalRect(rect) {
+      const scale=this._layoutScale();
+      return Object.fromEntries(['left','right','top','bottom','width','height'].map(key=>[key,rect[key]/scale]));
+    }
+
     _measureSceneGeometry(node, stageRect) {
       node.classList.add('sp-layout-measuring');
-      const scale=this._layoutScale();
-      const nodeRect=node.getBoundingClientRect();
-      const boxHeight=Math.max(1,nodeRect.height/scale);
+      const nodeRect=this._logicalRect(node.getBoundingClientRect());
+      const boxHeight=Math.max(1,nodeRect.height);
       const text=node.querySelector('.sp-text');
       const frame=node.querySelector('.sp-handdrawn-frame');
       const vertical=text?.dataset?.writingMode==='vertical-rl';
@@ -3286,7 +3299,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const contentRects=[];
       const addElementRect=(element)=>{
         if(!element)return;
-        const rect=element.getBoundingClientRect();
+        const rect=this._logicalRect(element.getBoundingClientRect());
         if(rect.width>0&&rect.height>0)contentRects.push(rect);
       };
       const addTextRects=(element)=>{
@@ -3294,11 +3307,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         try{
           const range=document.createRange();
           range.selectNodeContents(element);
-          const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
+          const rects=[...range.getClientRects()].map(rect=>this._logicalRect(rect)).filter(rect=>rect.width>0&&rect.height>0);
           range.detach?.();
           if(rects.length)contentRects.push(...rects);else addElementRect(element);
         }catch(_){addElementRect(element);}
       };
+
+      // Measure the complete painted Scene. Previously only the main text or
+      // frame participated in stack placement, so subtext and foreground
+      // images could occupy the landing space reserved for the next Scene.
       const boardPost=node.querySelector(':scope > .sp-web-board-post');
       const chatRow=node.querySelector(':scope > .sp-chat-row');
       if(boardPost){
@@ -3314,14 +3331,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
       addElementRect(node.querySelector(':scope > .sp-scene-image > .sp-scene-image-media')||node.querySelector(':scope > .sp-scene-image'));
       if(contentRects.length){
-        inkLeft=(Math.min(...contentRects.map(rect=>rect.left))-nodeRect.left)/scale;
-        inkRight=(Math.max(...contentRects.map(rect=>rect.right))-nodeRect.left)/scale;
-        inkTop=(Math.min(...contentRects.map(rect=>rect.top))-nodeRect.top)/scale;
-        inkBottom=(Math.max(...contentRects.map(rect=>rect.bottom))-nodeRect.top)/scale;
+        inkLeft=Math.min(...contentRects.map(rect=>rect.left))-nodeRect.left;
+        inkRight=Math.max(...contentRects.map(rect=>rect.right))-nodeRect.left;
+        inkTop=Math.min(...contentRects.map(rect=>rect.top))-nodeRect.top;
+        inkBottom=Math.max(...contentRects.map(rect=>rect.bottom))-nodeRect.top;
       }
       const inkHeight=Math.max(1,inkBottom-inkTop);
-      const stageHeight=Math.max(1,this.els.stage?.clientHeight||stageRect.height/scale);
-      const height=vertical?Math.min(boxHeight,Math.max(48,Math.min(stageHeight*.52,inkHeight+8))):boxHeight;
+      const height=vertical?Math.min(boxHeight,Math.max(48,Math.min((stageRect.height/this._layoutScale())*.52,inkHeight+8))):boxHeight;
       node.classList.remove('sp-layout-measuring');
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
@@ -3332,15 +3348,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // otherwise a phone preview can accidentally pick PC-specific positions.
       const preview=this.host?.closest?.('.preview-device-phone, .preview-device-tablet, .preview-device-pc');
       if(preview?.classList?.contains('preview-device-phone')) return 390;
-      if(preview?.classList?.contains('preview-device-tablet')) return 820;
+      if(preview?.classList?.contains('preview-device-tablet')) return 768;
       if(preview?.classList?.contains('preview-device-pc')) return 1440;
       return Math.max(1, Number(this.host?.clientWidth) || Number(global.innerWidth) || 1);
-    }
-
-    _layoutScale() {
-      const width=Math.max(1,Number(this.host?.clientWidth)||1);
-      const rendered=Number(this.host?.getBoundingClientRect?.().width)||width;
-      return Math.max(.05,rendered/width);
     }
 
     _framePosition(scene) {
@@ -5773,7 +5783,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.dataset.writingMode='vertical-rl';
         node.style.writingMode='vertical-rl';
         node.style.textOrientation='mixed';
-        node.style.height=`min(52cqh, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
+        node.style.height=`min(${Math.max(1,this.host.clientHeight||global.innerHeight)*.52}px, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
         node.style.textAlign='start';
         const blockAlign=style.align==='left'||style.align==='right'?style.align:'center';
         node.dataset.verticalBlockAlign=blockAlign;
