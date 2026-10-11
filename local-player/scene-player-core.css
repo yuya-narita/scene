@@ -2453,9 +2453,9 @@ html.sp-scene-image-open body{
 .sp-cover[data-start-trigger="tap"]{cursor:pointer;}
 
 /* Ruby stays attached to its base in horizontal and vertical writing. */
-.sp-rich-ruby{ruby-position:over;ruby-align:center;white-space:nowrap}
+.sp-rich-ruby{ruby-position:over;ruby-align:center;white-space:normal;overflow-wrap:normal;word-break:normal}
 .sp-rich-ruby rt{font-size:.5em;line-height:1;letter-spacing:0;font-weight:400;text-align:center;user-select:none;-webkit-user-select:none}
-.sp-rich-ruby .sp-ruby-base{white-space:inherit}
+.sp-rich-ruby .sp-ruby-base,.sp-rich-ruby rt{white-space:nowrap;overflow-wrap:normal;word-break:normal}
 
 /* Reader typography uses the logical Player width, never the Studio window. */
 .sp-core{container-type:inline-size;container-name:scene-viewport studio-preview!important}
@@ -2478,4 +2478,14 @@ html.sp-scene-image-open body{
  .sp-scene[data-fit="medium"] .sp-text{font-size:clamp(16px,4.35cqw,21px)}
  .sp-scene[data-fit="compact"] .sp-text{font-size:clamp(14px,3.85cqw,19px)}
  .sp-scene[data-fit="tight"] .sp-text{font-size:clamp(12.5px,3.35cqw,17px)}
+}
+
+/* Ruby prose: use normal Japanese line breaking across annotation boundaries.
+   Keep author newlines and nowrap choices; only disable discretionary balancing
+   and emergency character breaks that fragment native ruby on WebKit. */
+.sp-text.sp-has-ruby,.sp-subtext.sp-has-ruby{
+  text-wrap:wrap;overflow-wrap:normal;word-break:normal;
+}
+.sp-scene:lang(ja) .sp-text.sp-has-ruby,.sp-scene:lang(ja) .sp-subtext.sp-has-ruby{
+  line-break:strict;overflow-wrap:normal;
 }

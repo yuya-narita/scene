@@ -5181,6 +5181,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const source = String(displayText ?? scene?.text ?? '');
       const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
       const tables = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table') : [];
+      node.classList.remove('sp-has-ruby');
       if (!ranges.length && !tables.length) { node.textContent = source; return false; }
       node.textContent = '';
       const tableById = new Map(tables.map(t => [String(t.id||''), t]));
@@ -5189,6 +5190,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         .sort((a,b)=>a.start-b.start);
       const normal = ranges.filter(r => r?.kind !== 'table').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
       const rubies=normal.filter(r=>r.kind==='ruby'&&String(r.reading||'').trim()&&!source.slice(r.start,r.end).includes('\n')).sort((a,b)=>a.start-b.start);
+      node.classList.toggle('sp-has-ruby',rubies.length>0);
       const appendTextRange=(from,to)=>{
         const rubyNodes=new Map();
         if(to<=from)return;
@@ -5215,6 +5217,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
           });
+          // Keep undecorated text in text nodes. Fragmented inline spans plus
+          // ruby and pretty wrapping can produce short lines on WebKit.
+          const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
           const annotation=rubies.find(r=>r.start<=a&&r.end>=b&&r.start>=from&&r.end<=to);
           if(annotation){
             let group=rubyNodes.get(annotation);
@@ -5224,8 +5229,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               const rt=document.createElement('rt');rt.textContent=String(annotation.reading);rt.setAttribute('contenteditable','false');
               ruby.append(base,rt);node.appendChild(ruby);group={base};rubyNodes.set(annotation,group);
             }
-            group.base.appendChild(span);
-          }else node.appendChild(span);
+            group.base.appendChild(content);
+          }else node.appendChild(content);
         }
       };
       let cursor=0;
