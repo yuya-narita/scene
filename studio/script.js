@@ -3874,7 +3874,7 @@
     const a=document.createElement('a');
     a.href=url; a.download=name; a.style.display='none';
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    setTimeout(()=>URL.revokeObjectURL(url),120000);
   }
 
   const ZIP_TEXT_ENCODER=new TextEncoder();
@@ -3912,7 +3912,7 @@
   // Minimal standards-compliant ZIP writer using STORE (method 0).
   // STORE is deliberate: browser-side implementation stays dependency-free,
   // while images/audio are already compressed formats in most projects.
-  async function makeStoreZip(entries){
+  async function makeStoreZip(entries,onProgress=null){
     const locals=[];
     const centrals=[];
     let offset=0;
@@ -3958,6 +3958,8 @@
       centrals.push(central);
 
       offset+=local.length;
+      onProgress?.(locals.length,entries.length);
+      if(onProgress)await new Promise(resolve=>setTimeout(resolve,0));
     }
 
     const centralOffset=offset;
@@ -4300,7 +4302,7 @@
     selectedSceneIndex=Math.max(0,Math.min(selected,Math.max(0,total-1)));
   }
 
-  async function buildScenePackage(documentOverride=null){
+  async function buildScenePackage(documentOverride=null,onProgress=null){
     const doc=documentOverride ? clone(documentOverride) : sceneDocumentForExport();
     ensureMasterIdentity(doc);
     await normalizeCommonAvatarAssetRefs(doc);
@@ -4316,7 +4318,10 @@
     const refs=[];
     walkAssetRefs(packaged,ref=>refs.push(ref));
 
+    let processedRefs=0;
     for(const ref of refs){
+      onProgress?.(5+Math.round(55*processedRefs++/Math.max(1,refs.length)),`素材をまとめています ${processedRefs}/${refs.length}`);
+      if(onProgress)await new Promise(resolve=>setTimeout(resolve,0));
       const source=String(ref.src||'').trim();
       if(!source)continue;
 
@@ -4390,7 +4395,8 @@
       {name:'studio-state.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(studioState,null,2))}
     );
 
-    const blob=await makeStoreZip(entries);
+    onProgress?.(60,'.sceneを生成しています…');
+    const blob=await makeStoreZip(entries,onProgress?(done,total)=>onProgress(60+Math.round(15*done/Math.max(1,total)),`.sceneを生成しています ${done}/${total}`):null);
     return {doc:packaged,manifest,studioState,blob,assetCount:packageAssetCount};
   }
 
@@ -4611,6 +4617,56 @@
   }
 
 
+  let sceneExportBusy=false;
+  let sceneExportProgressDialog=null;
+  window.addEventListener('beforeunload',event=>{
+    if(!sceneExportBusy)return;
+    event.preventDefault();event.returnValue='';
+  });
+  function showSceneExportProgress(name){
+    if(!sceneExportProgressDialog){
+      const dialog=document.createElement('dialog');
+      dialog.className='scene-export-progress-dialog';
+      dialog.style.cssText='width:min(440px,calc(100vw - 32px));box-sizing:border-box;border:1px solid #ddd9cf;border-radius:24px;padding:28px;background:#fbfaf5;color:#26221e;box-shadow:0 20px 70px #0003';
+      dialog.innerHTML='<small style="letter-spacing:.15em">MASTER .SCENE</small><h2 style="margin:12px 0">作品を保存しています</h2><p data-name style="overflow-wrap:anywhere"></p><progress max="100" value="0" style="width:100%;height:16px;accent-color:#26221e" aria-label="書き出しの進捗"></progress><p data-phase role="status" aria-live="polite"></p><p data-note style="font-size:13px;line-height:1.7">保存完了と表示されるまで、このタブを閉じないでください。</p><button type="button" data-close style="width:100%;min-height:48px;border:0;border-radius:14px;background:#26221e;color:white;font:inherit" hidden>閉じる</button>';
+      dialog.querySelector('[data-close]').onclick=()=>{if(!sceneExportBusy)dialog.close();};
+      dialog.addEventListener('cancel',event=>{if(sceneExportBusy)event.preventDefault();});
+      document.body.appendChild(dialog);sceneExportProgressDialog=dialog;
+    }
+    const dialog=sceneExportProgressDialog;
+    dialog.querySelector('h2').textContent='作品を保存しています';
+    dialog.querySelector('[data-name]').textContent=name;
+    dialog.querySelector('[data-note]').textContent='保存完了と表示されるまで、このタブを閉じないでください。';
+    dialog.querySelector('[data-close]').hidden=true;
+    updateSceneExportProgress(0,'保存先を選んでいます…');
+    if(!dialog.open)dialog.showModal();
+  }
+  function updateSceneExportProgress(value,label){
+    const dialog=sceneExportProgressDialog;if(!dialog)return;
+    dialog.querySelector('progress').value=Math.max(0,Math.min(100,value));
+    dialog.querySelector('[data-phase]').textContent=label;
+  }
+  function finishSceneExportProgress(title,note,{complete=false}={}){
+    const dialog=sceneExportProgressDialog;if(!dialog)return;
+    dialog.querySelector('h2').textContent=title;
+    dialog.querySelector('[data-note]').textContent=note;
+    if(complete)updateSceneExportProgress(100,'保存完了');
+    dialog.querySelector('[data-close]').hidden=false;
+  }
+  async function writeSceneExportFile(handle,blob,onProgress){
+    const writable=await handle.createWritable();
+    try{
+      const chunkSize=1024*1024;
+      for(let offset=0;offset<blob.size;offset+=chunkSize){
+        await writable.write(blob.slice(offset,Math.min(blob.size,offset+chunkSize)));
+        onProgress(Math.min(blob.size,offset+chunkSize),blob.size);
+      }
+      // close() commits the temporary file to the selected destination.
+      onProgress(blob.size,blob.size,true);
+      await writable.close();
+    }catch(error){try{await writable.abort();}catch(_){}throw error;}
+  }
+
   let pendingScenePackageExport=null;
   let scenePackageFilenameManual=false;
   let scenePackageExportSourceDocument=null;
@@ -4633,6 +4689,9 @@
   }
 
   async function exportScenePackage(exportMetadata={},documentOverride=null){
+    if(sceneExportBusy)return;
+    sceneExportBusy=true;
+    let started=false;
     try{
       if(!documentOverride&&!advancedScreen.hidden)syncAdvancedFieldsToScene();
       const source=documentOverride?clone(documentOverride):sceneDocumentForExport();
@@ -4658,31 +4717,41 @@
           console.warn('Save picker unavailable; using browser download',error);
         }
       }
+      showSceneExportProgress(name);started=true;
       let fileHandle=null;
       if(pickerPromise){
         try{fileHandle=await pickerPromise;}
         catch(error){if(error?.name==='AbortError')return;throw error;}
       }
       setProjectIoStatus(uiLanguage==='ja'?`${name} を作成しています…`:`Creating ${name}…`);
-      const result=await buildScenePackage(source);
+      updateSceneExportProgress(2,'作品データを準備しています…');
+      await new Promise(resolve=>setTimeout(resolve,0));
+      const result=await buildScenePackage(source,updateSceneExportProgress);
       if(fileHandle){
-        const writable=await fileHandle.createWritable();
-        await writable.write(result.blob);
-        await writable.close();
+        updateSceneExportProgress(75,'保存先へ書き込んでいます…');
+        await writeSceneExportFile(fileHandle,result.blob,(done,total,committing=false)=>{
+          const mb=bytes=>(bytes/1024/1024).toFixed(1);
+          updateSceneExportProgress(committing?99:75+Math.floor(24*done/Math.max(1,total)),committing?'保存を確定しています…':`保存先へ書き込んでいます ${mb(done)} / ${mb(total)} MB`);
+        });
+        finishSceneExportProgress('保存完了','このタブを閉じても大丈夫です。選んだ保存先への書き込みが完了しました。',{complete:true});
       }else{
         const file=typeof File==='function'?new File([result.blob],name,{type:'application/octet-stream'}):null;
         const canShareFile=Boolean(file&&/iPhone|iPad|iPod/i.test(navigator.userAgent)&&navigator.canShare?.({files:[file]}));
         if(canShareFile&&typeof navigator.share==='function'){
           pendingScenePackageExport={file,blob:result.blob,name,title:source.title,assetCount:result.assetCount};
+          sceneExportProgressDialog?.close();
           $('#scenePackageReadyDialog').showModal();
           setProjectIoStatus(uiLanguage==='ja'?'保存先を選んでください。':'Choose where to save the file.');
           return;
         }
         downloadBlobFile(name,result.blob);
+        updateSceneExportProgress(100,'ブラウザーにファイルを渡しました');
+        finishSceneExportProgress('ダウンロードを開始しました','ダウンロード履歴やファイルアプリで保存完了を確認してからタブを閉じてください。この方式では保存完了をあ箱から確認できません。');
       }
       setProjectIoStatus(t('io.packageExported',{name,n:result.assetCount}));
     }catch(error){
-      if(error?.name==='AbortError')return;
+      if(error?.name==='AbortError'){sceneExportProgressDialog?.close();return;}
+      if(started)finishSceneExportProgress('保存できませんでした','ファイルの保存は完了していません。もう一度書き出してください。');
       console.error(error);
       const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
       if(assetFailure){
@@ -4702,6 +4771,9 @@
         setProjectIoStatus(`${t('io.packageFailed')} ${detail.split('\n')[0]}`,{error:true});
         appAlert(`${t('io.packageFailed')}\n\n${detail}`);
       }
+    }finally{
+      sceneExportBusy=false;
+      if(started&&sceneExportProgressDialog?.open&&sceneExportProgressDialog.querySelector('[data-close]').hidden)sceneExportProgressDialog.close();
     }
   }
 
