@@ -9339,8 +9339,8 @@
     const scene=liveInlineEditSceneRef;
     if(!scene)return '';
     let value;
-    if(liveInlineEditField==='text' && el.querySelector('.sp-rich-table-card')){
-      const copy=el.cloneNode(true);
+    if(liveInlineEditField==='text' && el.querySelector('.sp-rich-table-card, ruby')){
+      const copy=stripRubyReadings(el.cloneNode(true));
       const tableRanges=(Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[])
         .filter(r=>r?.kind==='table').sort((a,b)=>(a.start||0)-(b.start||0));
       const cards=[...copy.querySelectorAll('.sp-rich-table-card')];
@@ -9361,8 +9361,9 @@
         else delete player.currentScene.subText;
       }
     }else{
+      remapRubyAfterTextEdit(scene,String(scene.text||''),value);
       scene.text=value;
-      if(player?.currentScene)player.currentScene.text=value;
+      if(player?.currentScene){player.currentScene.text=value;if(scene.richText)player.currentScene.richText=clone(scene.richText);}
       // Rich Text Player v0.19: list Live Edit must never keep stale listItem offsets.
       // Bullets/newlines are literal canonical text; semantics are rebuilt only from
       // lines that actually begin with a list marker. No word matching is used.
@@ -9399,6 +9400,7 @@
     const bar=document.createElement('div');bar.className='rich-selection-toolbar';bar.hidden=true;bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','選択した文字の書式');
     const button=(label,action,title,extra='')=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.richAction=action;b.title=title||label;b.setAttribute('aria-label',title||label);if(extra)b.classList.add(extra);bar.appendChild(b);return b;};
     button('B 太字','bold','太字','rich-bold-button');
+    button('ルビ','ruby','ふりがなを追加・編集');
     const dropdown=(label,action,items,title)=>{
       const wrap=document.createElement('div');wrap.className='rich-dropdown';wrap.dataset.richDropdown=action;
       const trigger=document.createElement('button');trigger.type='button';trigger.className='rich-dropdown-trigger';trigger.textContent=label+' ▼';trigger.title=title||label;trigger.setAttribute('aria-label',title||label);trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');
@@ -9431,10 +9433,40 @@
       const item=e.target.closest?.('.rich-dropdown-item');
       if(item){e.preventDefault();e.stopPropagation();const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);return;}
       const t=e.target.closest?.('button[data-rich-action]');
-      if(t){e.preventDefault();e.stopPropagation();closeMenus();applyRichSelectionAction(t.dataset.richAction);}
+      if(t){e.preventDefault();e.stopPropagation();closeMenus();if(t.dataset.richAction==='ruby'){editRichRuby();return;}applyRichSelectionAction(t.dataset.richAction);}
     });
     color.addEventListener('input',()=>{});color.addEventListener('change',()=>applyRichSelectionAction('color',color.value));
     return bar;
+  }
+  async function editRichRuby(){
+    const snap=richSelectionSnapshot;if(!snap?.scene)return;
+    const ranges=snap.scene.richText?.ranges||[];
+    const existing=ranges.find(r=>r.kind==='ruby'&&r.start<snap.end&&r.end>snap.start);
+    const target=existing?{...snap,start:existing.start,end:existing.end,selectedText:String(snap.scene.text||'').slice(existing.start,existing.end)}:{...snap};
+    // Keep an immutable selection while iPhone opens the reading input keyboard.
+    hideRichSelectionToolbar();
+    const value=await appPrompt(`「${target.selectedText}」のふりがな\n空欄で保存するとルビを解除します。`,existing?.reading||'',{title:'ルビ',inputLabel:'ふりがな',confirmLabel:'適用'});
+    if(value===null||value===undefined)return;
+    if(!workingDocument?.scenes?.includes(target.scene))return;
+    const reading=String(value).replace(/[\r\n]/g,'').trim().slice(0,200);
+    richSelectionSnapshot=target;
+    applyRichSelectionAction('ruby',reading);
+  }
+  function inlineBaseText(el){return stripRubyReadings(el.cloneNode(true)).textContent||'';}
+  function stripRubyReadings(root){root.querySelectorAll?.('rt,rp,.sp-typing-cursor').forEach(el=>el.remove());return root;}
+  function remapRubyAfterTextEdit(scene,before,after){
+    if(before===after||!scene.richText?.ranges)return;
+    let start=0;while(start<before.length&&start<after.length&&before[start]===after[start])start++;
+    let oldEnd=before.length,newEnd=after.length;
+    while(oldEnd>start&&newEnd>start&&before[oldEnd-1]===after[newEnd-1]){oldEnd--;newEnd--;}
+    const delta=newEnd-oldEnd;
+    scene.richText.ranges=scene.richText.ranges.flatMap(r=>{
+      if(r.kind!=='ruby')return [r];
+      if(r.end<=start)return [r];
+      if(r.start>=oldEnd)return [{...r,start:r.start+delta,end:r.end+delta}];
+      // Changing the base word invalidates its old reading; never attach it to another word.
+      return [];
+    });
   }
   function hideRichSelectionToolbar(){if(richSelectionToolbar)richSelectionToolbar.hidden=true;richSelectionSnapshot=null;}
   function previewRichSelection(){
@@ -9464,6 +9496,7 @@
       const walker=document.createTreeWalker(startEl,NodeFilter.SHOW_TEXT);
       let n;
       while((n=walker.nextNode())){
+        if(n.parentElement?.closest('rt,rp,.sp-typing-cursor'))continue;
         if(n===container){total+=Math.max(0,Math.min(Number(offset)||0,String(n.nodeValue||'').length));found=true;break;}
         if(container?.nodeType===Node.ELEMENT_NODE&&container.contains?.(n)){
           // Boundary is an element: count only text children preceding its child offset.
@@ -9474,7 +9507,7 @@
       }
       if(found)return total;
       // Element-boundary fallback: clone only DOM content, then strip table UI text.
-      try{const pre=document.createRange();pre.selectNodeContents(startEl);pre.setEnd(container,offset);const frag=pre.cloneContents();frag.querySelectorAll?.('.sp-rich-table-card').forEach(x=>x.remove());return String(frag.textContent||'').length;}catch(_){return 0;}
+      try{const pre=document.createRange();pre.selectNodeContents(startEl);pre.setEnd(container,offset);const frag=pre.cloneContents();frag.querySelectorAll?.('.sp-rich-table-card,rt,rp,.sp-typing-cursor').forEach(x=>x.remove());return String(frag.textContent||'').length;}catch(_){return 0;}
     };
     const start=pointOffset(r.startContainer,r.startOffset),end=pointOffset(r.endContainer,r.endOffset);if(end<=start)return null;
     let rect=r.getBoundingClientRect();
@@ -9545,7 +9578,12 @@
     const canonical=String(scene.text||''),picked=String(snap.selectedText||'');
     if(picked){const hits=[];let at=canonical.indexOf(picked);while(at>=0){hits.push(at);at=canonical.indexOf(picked,at+1);}if(hits.length){const best=hits.reduce((a,b)=>Math.abs(b-start)<Math.abs(a-start)?b:a,hits[0]);start=best;end=best+picked.length;}}
     if(end<=start)return;
-    if(action==='clear')ranges=removeRichKindsInSelection(ranges,start,end,['span','heading','quote','listItem']);
+    if(action==='clear')ranges=removeRichKindsInSelection(ranges,start,end,['span','heading','quote','listItem','ruby']);
+    else if(action==='ruby'){
+      if(/\n/.test(canonical.slice(start,end))){appAlert('ルビは改行を含まない文字列を選択してください。');return;}
+      ranges=ranges.filter(r=>!(r?.kind==='ruby'&&overlaps(r)));
+      if(value)ranges.push({start,end,kind:'ruby',reading:String(value)});
+    }
     else if(action==='bold'){const cur=spanCover(st=>st.bold===true);if(cur)ranges=ranges.filter(r=>r!==cur);else ranges.push({start,end,kind:'span',style:{bold:true}});}
     else if(action==='font'&&value){const cur=spanCover(st=>String(st.fontFamily||'')===String(value));ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&r?.style?.fontFamily));if(!cur)ranges.push({start,end,kind:'span',style:{fontFamily:String(value)}});}
     else if(action==='size'&&value){const num=Number(value)||1,cur=spanCover(st=>Number(st.fontScale)===num);ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&Number(r?.style?.fontScale)>0));if(!cur)ranges.push({start,end,kind:'span',style:{fontScale:num}});}
@@ -9669,14 +9707,15 @@
     const before=range.cloneRange();
     before.selectNodeContents(el);
     before.setEnd(range.startContainer,range.startOffset);
-    return before.toString().length;
+    return stripRubyReadings(before.cloneContents()).textContent.length;
   }
   function setInlineCaretOffset(offset){
     const el=liveInlineEditEl;if(!el)return false;
-    const target=Math.max(0,Math.min(Number(offset)||0,el.innerText.replace(/\n$/,'').length));
+    const target=Math.max(0,Math.min(Number(offset)||0,inlineBaseText(el).replace(/\n$/,'').length));
     const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
     let left=target,node=null;
     while((node=walker.nextNode())){
+      if(node.parentElement?.closest('rt,rp,.sp-typing-cursor'))continue;
       const len=node.nodeValue?.length||0;
       if(left<=len){
         const range=document.createRange(),sel=getSelection();
@@ -9698,7 +9737,7 @@
   }
   function jumpInlineCaretToPunctuation(direction){
     const el=liveInlineEditEl;if(!el)return;
-    const text=el.innerText.replace(/\n$/,'');
+    const text=inlineBaseText(el).replace(/\n$/,'');
     const pos=inlineCaretOffset();if(pos<0)return;
     // Scene editing usually splits at sentence / clause boundaries. Land AFTER punctuation/newline.
     const boundary=/[。、！？!?\n]/;
@@ -12336,14 +12375,14 @@ function openDesktopBackgroundDetail(){
       desktopDetailRange(u('背景ぼかし','Background blur'),{
         min:0,max:24,step:.5,value:Number(bg0.blur)||0,unit:' px',
         format:v=>v.toFixed(1),
-        oninput:v=>{const bg=ensureImageState();if(v<=0)delete bg.blur;else bg.blur=v;apply();}
+        oninput:v=>{const bg=ensureImageState();bg.blur=Math.max(0,v);apply();}
       }),
       desktopDetailRange(u('ビネット','Vignette'),{
         min:0,max:1,step:.05,value:Number(bg0.textures?.vignette)||0,unit:' %',
         format:v=>Math.round(v*100),
         oninput:v=>{
           const bg=ensureImageState();bg.textures={...(bg.textures||{})};
-          if(v<=0)delete bg.textures.vignette;else bg.textures.vignette=v;apply();
+          bg.textures.vignette=Math.max(0,v);apply();
         }
       }),
       desktopDetailRange(u('粒子','Grain'),{
@@ -12351,7 +12390,7 @@ function openDesktopBackgroundDetail(){
         format:v=>Math.round(v*100),
         oninput:v=>{
           const bg=ensureImageState();bg.textures={...(bg.textures||{})};
-          if(v<=0)delete bg.textures.grain;else bg.textures.grain=v;apply();
+          bg.textures.grain=Math.max(0,v);apply();
         }
       }),
       desktopDetailRange(u('モノクロ','Monochrome'),{
@@ -12359,7 +12398,7 @@ function openDesktopBackgroundDetail(){
         format:v=>Math.round(v*100),
         oninput:v=>{
           const bg=ensureImageState();bg.textures={...(bg.textures||{})};
-          if(v<=0)delete bg.textures.monochrome;else bg.textures.monochrome=v;apply();
+          bg.textures.monochrome=Math.max(0,v);apply();
         }
       })
     );

@@ -230,6 +230,45 @@
             "ltr",
             "rtl"
           ]
+        },
+        "richText": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 1
+            },
+            "ranges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "reading": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Ruby reading for kind ruby. Offsets refer only to scene.text, never reading text."
+                  }
+                },
+                "required": [
+                  "start",
+                  "end",
+                  "kind"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "additionalProperties": true
         }
       },
       "allOf": [
@@ -1537,7 +1576,10 @@
       "type": "object",
       "properties": {
         "startMode": {
-          "enum": ["scene", "comic"],
+          "enum": [
+            "scene",
+            "comic"
+          ],
           "default": "scene",
           "description": "How START behaves: begin Scene playback or open the first Scene image viewer."
         },
