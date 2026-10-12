@@ -9,7 +9,7 @@
   // product UI. The backdrop and Escape key intentionally do not dismiss
   // these dialogs, so switching away to check mail/files cannot lose state.
   let appDialogQueue=Promise.resolve();
-  function openAppDialog({kind='alert',message='',title='',kicker='',confirmLabel='',cancelLabel='',initialValue='',inputLabel='',danger=false}={}){
+  function openAppDialog({kind='alert',message='',title='',kicker='',confirmLabel='',cancelLabel='',initialValue='',inputLabel='',danger=false,checkboxLabel='',onCheckbox=null}={}){
     const dialog=$('#appDialog');
     if(!dialog || typeof dialog.showModal!=='function')return Promise.resolve(kind==='alert'?true:kind==='prompt'?null:false);
     const english=document.documentElement.lang?.toLowerCase().startsWith('en');
@@ -27,6 +27,12 @@
     inputWrap.hidden=kind!=='prompt';
     $('#appDialogInputLabel').textContent=inputLabel||(english?'Name':'入力');
     input.value=String(initialValue||'');
+    dialog.querySelector('.app-dialog-option')?.remove();
+    let option=null;
+    if(kind==='prompt'&&checkboxLabel){
+      const label=document.createElement('label');label.className='app-dialog-option';label.style.cssText='display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px';
+      option=document.createElement('input');option.type='checkbox';option.style.width='auto';const text=document.createElement('span');text.textContent=checkboxLabel;label.append(option,text);inputWrap.append(label);
+    }
     const cancel=$('#appDialogCancel'),confirmButton=$('#appDialogConfirm');
     cancel.textContent=cancelLabel||(english?'Cancel':'キャンセル');
     confirmButton.textContent=confirmLabel||copy.confirm;
@@ -42,7 +48,7 @@
         if(dialog.open)dialog.close();
         resolve(value);
       };
-      const onConfirm=()=>finish(kind==='prompt'?input.value:true);
+      const onConfirm=()=>{onCheckbox?.(!!option?.checked);finish(kind==='prompt'?input.value:true);};
       const onCancel=()=>finish(kind==='prompt'?null:false);
       const onNativeCancel=event=>event.preventDefault();
       const onBackdrop=event=>{if(event.target===dialog)event.preventDefault();};
@@ -7008,7 +7014,7 @@
       scene.pause=Math.round(seconds*1000);
       rebuildAbsoluteCues();
     }
-    scene.text=$('#sceneTextInput').value;
+    remapRubyAfterTextEdit(scene,String(scene.text||''),$('#sceneTextInput').value);scene.text=$('#sceneTextInput').value;
     const sub=$('#sceneSubTextInput').value; if(sub)scene.subText=sub; else delete scene.subText;
     scene.type=$('#sceneTypeSelect').value;
     const p=ensurePresentation(scene); p.display=$('#sceneDisplaySelect').value; p.flow=$('#sceneFlowSelect')?.value==='horizontal'?'horizontal':'vertical'; p.view=$('#sceneViewSelect')?.value || 'world'; p.entryMotion=$('#sceneEntryMotionSelect')?.value || 'flow';
@@ -7526,9 +7532,10 @@
     if(sceneHasTable(mergePrev)||sceneHasTable(mergeCur)){showToast?.('表Sceneは文章Sceneと結合できません');return;}
     captureUndo('Scene結合を元に戻せます');
     const prev=workingDocument.scenes[selectedSceneIndex-1], cur=workingDocument.scenes[selectedSceneIndex];
+    const mergedExcluded=mergeAutoRubyExclusions(prev,cur);
     const mergedRanges=window.AhakoSceneEditCore?.mergeRanges?.(prev,cur)||[];
     prev.text=`${prev.text||''}${cur.text||''}`;
-    if(mergedRanges.length)prev.richText={version:1,ranges:mergedRanges}; else delete prev.richText;
+    assignSceneRichText(prev,mergedRanges,mergedExcluded);
     if(cur.subText&&!prev.subText)prev.subText=cur.subText;
     workingDocument.scenes.splice(selectedSceneIndex,1);
     selectedSceneIndex-=1;
@@ -7546,13 +7553,14 @@
     const left=text.slice(0,pos).trimEnd(), right=text.slice(pos).trimStart();
     if(!left||!right)return;
     captureUndo('Scene分割を元に戻せます');
+    const splitExcluded=splitAutoRubyExclusions(scene,pos,left,right,text);
     const splitRich=window.AhakoSceneEditCore?.splitRanges?.(scene,pos,left,right,text)||{left:[],right:[]};
     scene.text=left;
-    if(splitRich.left.length)scene.richText={version:1,ranges:splitRich.left}; else delete scene.richText;
+    assignSceneRichText(scene,splitRich.left,splitExcluded.left);
     const cloneScene=clone(scene);
     cloneScene.id=nextUniqueId();
     cloneScene.text=right;
-    if(splitRich.right.length)cloneScene.richText={version:1,ranges:splitRich.right}; else delete cloneScene.richText;
+    assignSceneRichText(cloneScene,splitRich.right,splitExcluded.right);
     delete cloneScene.subText;
     delete cloneScene.audio;
     if(cloneScene.presentation)delete cloneScene.presentation.background;
@@ -9510,6 +9518,46 @@
     color.addEventListener('input',()=>{});color.addEventListener('change',()=>applyRichSelectionAction('color',color.value));
     return bar;
   }
+  function autoRubyConfig(doc=workingDocument){return doc?.studio?.autoRuby||{version:1,settings:{mode:'difficult',grade:3,repeat:'work'},dictionary:{}};}
+  function openAutoRuby(scene,quick=false){
+    if(!scene||!workingDocument?.scenes?.includes(scene))return;
+    if(liveInlineEditEl){syncInlineTextToScene();finishInlineTextEdit();}
+    const doc=workingDocument,index=doc.scenes.indexOf(scene);
+    const changed=()=>{scheduleDraftSave(0);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();};
+    const setConfig=config=>{doc.studio||={};doc.studio.autoRuby=clone(config);};
+    if(!window.SceneAutoRubyUI){appAlert('自動ルビの画面を読み込めません。更新ファイルを配置して再読み込みしてください。');return;}
+    window.SceneAutoRubyUI.open({document:doc,index,getDocument:()=>workingDocument,confirm:message=>appConfirm(message,{title:'自動ルビ'}),
+      onConfig:config=>{if(workingDocument!==doc)return;captureUndo('作者辞書・ルビ設定の変更を元に戻せます');setConfig(config);scheduleDraftSave(0);},
+      onApply:(plans,config)=>{if(workingDocument!==doc)return;captureUndo('自動ルビを元に戻せます');setConfig(config);for(const plan of plans){const target=doc.scenes[plan.index];target.richText||={version:1,ranges:[]};target.richText.ranges=clone(plan.ranges);}changed();showUndo('自動ルビを適用しました');},
+      onRemove:indices=>{if(workingDocument!==doc)return;captureUndo('自動ルビの解除を元に戻せます');for(const i of indices){const target=doc.scenes[i];if(target.richText)target.richText.ranges=(target.richText.ranges||[]).filter(r=>r.kind!=='ruby'||r.source!=='auto');}changed();showUndo('自動ルビを解除しました');},
+      onResetExclusions:indices=>{if(workingDocument!==doc)return;captureUndo('ルビの除外解除を元に戻せます');for(const i of indices)if(doc.scenes[i].richText)delete doc.scenes[i].richText.autoRubyExcluded;changed();showUndo('除外した箇所を再対象にしました');}
+    },quick);
+  }
+  function makeAutoRubyBodyControl(scene){
+    const row=document.createElement('div');row.className='auto-ruby-body-control';
+    const quick=document.createElement('button');quick.type='button';quick.className='is-primary';quick.textContent='自動ルビ';quick.title='前回の設定で、このSceneに付ける';quick.disabled=!String(scene.text||'').trim();quick.onclick=()=>openAutoRuby(scene,true);
+    const settings=document.createElement('button');settings.type='button';settings.textContent='設定・一括適用';settings.onclick=()=>openAutoRuby(scene,false);
+    const note=document.createElement('small');const config=autoRubyConfig();note.textContent=({all:'総ルビ',grade:`学年別：小${config.settings?.grade||3}まで既習`,difficult:'難しい語だけ'})[config.settings?.mode||'difficult'];
+    row.append(quick,settings,note);return row;
+  }
+  function assignSceneRichText(scene,ranges,excluded=[]){
+    if(ranges.length||excluded.length)scene.richText={version:1,ranges,...(excluded.length?{autoRubyExcluded:excluded}:{})};else delete scene.richText;
+  }
+  function splitAutoRubyExclusions(scene,pos,left,right,text){
+    const rightStart=pos+String(text).slice(pos).length-String(right).length;
+    const exclusions=scene.richText?.autoRubyExcluded||[];
+    return {left:exclusions.filter(r=>r.end<=left.length).map(r=>({...r})),right:exclusions.filter(r=>r.start>=rightStart).map(r=>({...r,start:r.start-rightStart,end:r.end-rightStart}))};
+  }
+  function mergeAutoRubyExclusions(prev,cur){
+    const offset=String(prev.text||'').length;
+    return [...(prev.richText?.autoRubyExcluded||[]).map(r=>({...r})),...(cur.richText?.autoRubyExcluded||[]).map(r=>({...r,start:r.start+offset,end:r.end+offset}))];
+  }
+  function excludeAutomaticRuby(scene,start,end){
+    scene.richText||={version:1,ranges:[]};scene.richText.autoRubyExcluded||=[];
+    const text=String(scene.text||'').slice(start,end);
+    scene.richText.autoRubyExcluded=scene.richText.autoRubyExcluded.filter(r=>!(r.start<end&&start<r.end));
+    scene.richText.autoRubyExcluded.push({start,end,text});
+  }
   async function editRichRuby(){
     const snap=richSelectionSnapshot;if(!snap?.scene)return;
     const ranges=snap.scene.richText?.ranges||[];
@@ -9517,12 +9565,14 @@
     const target=existing?{...snap,start:existing.start,end:existing.end,selectedText:String(snap.scene.text||'').slice(existing.start,existing.end)}:{...snap};
     // Keep an immutable selection while iPhone opens the reading input keyboard.
     hideRichSelectionToolbar();
-    const value=await appPrompt(`「${target.selectedText}」のふりがな\n空欄で保存するとルビを解除します。`,existing?.reading||'',{title:'ルビ',inputLabel:'ふりがな',confirmLabel:'適用'});
+    let rememberReading=false;
+    const value=await appPrompt(`「${target.selectedText}」のふりがな\n空欄で保存するとルビを解除します。`,existing?.reading||'',{title:'ルビ',inputLabel:'ふりがな',confirmLabel:'適用',checkboxLabel:'この作品の作者辞書にも登録する',onCheckbox:value=>rememberReading=value});
     if(value===null||value===undefined)return;
     if(!workingDocument?.scenes?.includes(target.scene))return;
     const reading=String(value).replace(/[\r\n]/g,'').trim().slice(0,200);
     richSelectionSnapshot=target;
     applyRichSelectionAction('ruby',reading);
+    if(rememberReading&&reading){workingDocument.studio||={};const config=clone(autoRubyConfig());config.dictionary||={};Object.defineProperty(config.dictionary,target.selectedText,{value:reading,enumerable:true,writable:true,configurable:true});workingDocument.studio.autoRuby=config;scheduleDraftSave(0);}
   }
   function inlineBaseText(el){return stripRubyReadings(el.cloneNode(true)).textContent||'';}
   function stripRubyReadings(root){root.querySelectorAll?.('rt,rp,.sp-typing-cursor').forEach(el=>el.remove());return root;}
@@ -9532,6 +9582,7 @@
     let oldEnd=before.length,newEnd=after.length;
     while(oldEnd>start&&newEnd>start&&before[oldEnd-1]===after[newEnd-1]){oldEnd--;newEnd--;}
     const delta=newEnd-oldEnd;
+    scene.richText.autoRubyExcluded=(scene.richText.autoRubyExcluded||[]).flatMap(r=>r.end<=start?[r]:r.start>=oldEnd?[{...r,start:r.start+delta,end:r.end+delta}]:[]);
     scene.richText.ranges=scene.richText.ranges.flatMap(r=>{
       if(r.kind!=='ruby')return [r];
       if(r.end<=start)return [r];
@@ -9650,9 +9701,11 @@
     const canonical=String(scene.text||''),picked=String(snap.selectedText||'');
     if(picked){const hits=[];let at=canonical.indexOf(picked);while(at>=0){hits.push(at);at=canonical.indexOf(picked,at+1);}if(hits.length){const best=hits.reduce((a,b)=>Math.abs(b-start)<Math.abs(a-start)?b:a,hits[0]);start=best;end=best+picked.length;}}
     if(end<=start)return;
-    if(action==='clear')ranges=removeRichKindsInSelection(ranges,start,end,['span','heading','quote','listItem','ruby']);
+    if(action==='clear'){for(const r of ranges.filter(r=>r.kind==='ruby'&&r.source==='auto'&&overlaps(r)))excludeAutomaticRuby(scene,r.start,r.end);ranges=removeRichKindsInSelection(ranges,start,end,['span','heading','quote','listItem','ruby']);}
     else if(action==='ruby'){
       if(/\n/.test(canonical.slice(start,end))){appAlert('ルビは改行を含まない文字列を選択してください。');return;}
+      if(!value)excludeAutomaticRuby(scene,start,end);
+      else if(scene.richText?.autoRubyExcluded)scene.richText.autoRubyExcluded=scene.richText.autoRubyExcluded.filter(r=>!overlaps(r));
       ranges=ranges.filter(r=>!(r?.kind==='ruby'&&overlaps(r)));
       if(value)ranges.push({start,end,kind:'ruby',reading:String(value)});
     }
@@ -9722,7 +9775,7 @@
       }
     }
     scene.richText.ranges=ranges.sort((a,b)=>(a.start||0)-(b.start||0)||(a.end||0)-(b.end||0));
-    if(!scene.richText.ranges.length)delete scene.richText;
+    if(!scene.richText.ranges.length&&!scene.richText.autoRubyExcluded?.length)delete scene.richText;
     scheduleDraftSave(0);hideRichSelectionToolbar();
     try{getSelection()?.removeAllRanges();}catch(_){ }
     if(liveInlineEditEl)finishInlineTextEdit();
@@ -9942,15 +9995,16 @@
     const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
     if(!left||!right){showUndo('分割する位置にカーソルを置いてください');return;}
     captureUndo('Scene分割を元に戻せます');
+    const splitExcluded=splitAutoRubyExclusions(scene,pos,left,right,text);
     const splitRich=window.AhakoSceneEditCore?.splitRanges?.(scene,pos,left,right,text)||{left:[],right:[]};
     scene.text=left;
-    if(splitRich.left.length)scene.richText={version:1,ranges:splitRich.left}; else delete scene.richText;
+    assignSceneRichText(scene,splitRich.left,splitExcluded.left);
     // The currently visible Scene becomes Player history when we move to the
     // new Scene. Shorten that DOM now so history cannot keep the old full text.
     liveInlineEditEl.innerText=left;
     if(player?.currentScene)player.currentScene.text=left;
     const next=clone(scene);next.id=nextUniqueId();next.text=right;
-    if(splitRich.right.length)next.richText={version:1,ranges:splitRich.right}; else delete next.richText;
+    assignSceneRichText(next,splitRich.right,splitExcluded.right);
     delete next.subText;delete next.audio;
     if(next.presentation)delete next.presentation.background;
     workingDocument.scenes.splice(index+1,0,next);
@@ -13338,6 +13392,7 @@ function openDesktopTextDetail(){
     const refresh=()=>{scheduleDraftSave(70);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();};
 
     const bodyCard=desktopCard(u('本文','Text'),'desktop-live-body-card');
+    bodyCard.prepend(makeAutoRubyBodyControl(scene));
     // Scene type is part of the manuscript's meaning, so keep it beside the
     // body instead of hiding it in the typography inspector. The former quick
     // Text card is not mounted in the current tab layout, which made these
@@ -13407,11 +13462,11 @@ function openDesktopTextDetail(){
       if(removedIds.size){
         scene.richText.ranges=ranges.filter(r=>!(r?.kind==='table'&&removedIds.has(String(r.tableId||''))));
         scene.content=contents.filter(c=>!(c?.type==='table'&&removedIds.has(String(c.id||''))));
-        if(!scene.richText.ranges.length)delete scene.richText;
+        if(!scene.richText.ranges.length&&!scene.richText.autoRubyExcluded?.length)delete scene.richText;
         if(!scene.content.length)delete scene.content;
       }
     };
-    ta.addEventListener('input',()=>{reconcileSceneTablesFromText();scene.text=ta.value;scheduleDraftSave(100);mirrorDesktopTextOnly('text',ta.value);});
+    ta.addEventListener('input',()=>{remapRubyAfterTextEdit(scene,String(scene.text||''),ta.value);reconcileSceneTablesFromText();scene.text=ta.value;scheduleDraftSave(100);mirrorDesktopTextOnly('text',ta.value);});
     ta.addEventListener('blur',finishDesktopTextMirror);
     ta.addEventListener('keydown',e=>{
       if(e.isComposing||e.key!=='Enter')return;
@@ -14792,6 +14847,7 @@ function openDesktopTextDetail(){
     const head=liveEditSheet.querySelector('.live-edit-sheet-head');
     if(head)head.hidden=false;
     liveEditSheetTitle.textContent=uiLanguage==='en'?'Text':'文字';
+    liveEditSheetBody.append(makeAutoRubyBodyControl(scene));
     liveEditSheetBody.innerHTML='';
 
     const st=ctx.style;
@@ -15474,13 +15530,14 @@ function openDesktopTextDetail(){
     const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
     if(!left||!right){showUndo('分割する位置にカーソルを置いてください');return;}
     captureUndo('Scene分割を元に戻せます');
+    const splitExcluded=splitAutoRubyExclusions(scene,pos,left,right,text);
     const splitRich=window.AhakoSceneEditCore?.splitRanges?.(scene,pos,left,right,text)||{left:[],right:[]};
     scene.text=left;
-    if(splitRich.left.length)scene.richText={version:1,ranges:splitRich.left}; else delete scene.richText;
+    assignSceneRichText(scene,splitRich.left,splitExcluded.left);
     const cloneScene=clone(scene);
     cloneScene.id=nextUniqueId();
     cloneScene.text=right;
-    if(splitRich.right.length)cloneScene.richText={version:1,ranges:splitRich.right}; else delete cloneScene.richText;
+    assignSceneRichText(cloneScene,splitRich.right,splitExcluded.right);
     delete cloneScene.subText;
     delete cloneScene.audio;
     if(cloneScene.presentation)delete cloneScene.presentation.background;
@@ -15500,12 +15557,13 @@ function openDesktopTextDetail(){
     if(sceneHasTable(prev)||sceneHasTable(scene)){showToast?.('表Sceneは文章Sceneと結合できません');return;}
     captureUndo('Scene結合を元に戻せます');
     const before=(prev.text||'').length;
+    const mergedExcluded=mergeAutoRubyExclusions(prev,scene);
     const mergedRanges=window.AhakoSceneEditCore?.mergeRanges?.(prev,scene)||[];
     // Merge without inserting any separator. This makes "split -> merge previous"
     // a true reverse operation: only line breaks that already belong to either
     // Scene's text are preserved.
     prev.text=`${prev.text||''}${scene.text||''}`;
-    if(mergedRanges.length)prev.richText={version:1,ranges:mergedRanges}; else delete prev.richText;
+    assignSceneRichText(prev,mergedRanges,mergedExcluded);
     if(scene.subText&&!prev.subText)prev.subText=scene.subText;
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(index-1);
@@ -15591,9 +15649,10 @@ function openDesktopTextDetail(){
     const prev=workingDocument.scenes[index-1];
     if(sceneHasTable(prev)||sceneHasTable(scene)){showToast?.('表Sceneは文章Sceneと結合できません');return;}
     captureUndo('Scene結合を元に戻せます');
+    const mergedExcluded=mergeAutoRubyExclusions(prev,scene);
     const mergedRanges=window.AhakoSceneEditCore?.mergeRanges?.(prev,scene)||[];
     prev.text=`${prev.text||''}${scene.text||''}`;
-    if(mergedRanges.length)prev.richText={version:1,ranges:mergedRanges}; else delete prev.richText;
+    assignSceneRichText(prev,mergedRanges,mergedExcluded);
     if(scene.subText&&!prev.subText)prev.subText=scene.subText;
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(index-1);
