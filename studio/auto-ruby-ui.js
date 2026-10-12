@@ -19,6 +19,7 @@
   const repeat=field('同じ語へのルビ',[['always','毎回'],['scene','各Sceneの初出だけ'],['work','作品の初出だけ']],settings.repeat);
   const scope=field('対象',[['current',`このScene（${index+1}）`],['forward','このScene以降'],['all','全Scene']],'current');
   controls.append(mode.row,grade.row,repeat.row,scope.row);
+  const scopeNote=element('p');scopeNote.className='auto-ruby-note';
   const status=element('p','設定して「確認プレビュー」を押してください。');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
   const preview=element('div');preview.className='auto-ruby-preview';preview.hidden=true;
   const previewSelect=element('select');previewSelect.setAttribute('aria-label','確認するScene');
@@ -59,11 +60,13 @@
   });
   foot.append(check,apply,button('閉じる',()=>dialog.close()));
   const advanced=element('details');advanced.append(element('summary','解除・除外の設定'),remove,exclusions);
-  dialog.append(header,intro,controls,status,preview,dict,advanced,foot);document.body.append(dialog);
+  dialog.append(header,intro,controls,scopeNote,status,preview,dict,advanced,foot);document.body.append(dialog);
+  function updateScopeNote(){scopeNote.textContent=repeat.select.value==='work'?'作品内の初出確認のため、対象より前のSceneも解析します。対象より後は解析しません。':'指定した対象だけを解析します。辞書の準備時間はScene数とは別です。';}
   function indices(){return doc.scenes.map((_,i)=>i).filter(i=>scope.select.value==='all'||(scope.select.value==='forward'?i>=index:i===index));}
   function readSettings(){return {mode:mode.select.value,grade:Number(grade.select.value),repeat:repeat.select.value};}
-  function fingerprint(){return JSON.stringify([doc.scenes.map(s=>({text:s.text,richText:s.richText})),doc.studio?.autoRuby?.dictionary||{}]);}
-  function invalidate(){seq++;worker?.terminate();worker=null;busy=false;result=null;apply.disabled=true;check.disabled=false;preview.hidden=true;grade.row.hidden=mode.select.value!=='grade';}
+  function neededIndices(){const selected=indices();return repeat.select.value==='work'&&selected.length?Array.from({length:Math.max(...selected)+1},(_,i)=>i):selected;}
+  function fingerprint(){return JSON.stringify([neededIndices().map(i=>({index:i,text:doc.scenes[i]?.text,richText:doc.scenes[i]?.richText})),doc.studio?.autoRuby?.dictionary||{}]);}
+  function invalidate(){seq++;worker?.terminate();worker=null;busy=false;result=null;apply.disabled=true;check.disabled=false;preview.hidden=true;grade.row.hidden=mode.select.value!=='grade';updateScopeNote();}
   for(const control of [mode,grade,repeat,scope])control.select.onchange=invalidate;
   function commit(){
    if(!result||busy)return;
@@ -75,8 +78,8 @@
   function analyze(autoApply){
    if(busy)return;invalidate();busy=true;check.disabled=true;
    if(ctx.getDocument()!==doc){busy=false;check.disabled=false;status.textContent='作品が切り替わりました。開き直してください。';return;}
-   const id=++seq;snapshot={scenes:copy(doc.scenes.map(scene=>({text:scene.text,richText:scene.richText}))),fingerprint:fingerprint()};settings=readSettings();
-   try{worker=new Worker(new URL('./auto-ruby-worker.js?v=1',document.baseURI));}
+   const id=++seq;snapshot={scenes:Object.fromEntries(neededIndices().map(i=>[i,copy({text:doc.scenes[i].text,richText:doc.scenes[i].richText})])),fingerprint:fingerprint()};settings=readSettings();
+   try{worker=new Worker(new URL('./auto-ruby-worker.js?v=2',document.baseURI));}
    catch(e){busy=false;check.disabled=false;status.textContent='解析を開始できませんでした：'+e.message;return;}
    worker.onerror=e=>{if(id!==seq)return;busy=false;check.disabled=false;status.textContent='解析用ファイルを読み込めませんでした。更新ZIPをすべて配置してから再試行してください。';worker?.terminate();worker=null;};
    worker.onmessage=({data})=>{
@@ -95,7 +98,7 @@
   }
   function cleanup(){seq++;worker?.terminate();worker=null;dialog.remove();if(active?.dialog===dialog)active=null;}
   dialog.addEventListener('close',cleanup,{once:true});dialog.addEventListener('keydown',e=>e.stopPropagation());
-  active={dialog,close:()=>dialog.close()};renderDictionary();grade.row.hidden=settings.mode!=='grade';dialog.showModal();
+  active={dialog,close:()=>dialog.close()};renderDictionary();grade.row.hidden=settings.mode!=='grade';updateScopeNote();dialog.showModal();
   if(quick)analyze(true);
  }
  window.SceneAutoRubyUI={open,close};

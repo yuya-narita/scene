@@ -36,7 +36,10 @@
  function plan(scenes,settings,dictionary,tokenizer,grades,difficult,onProgress){
   const gradeMap=new Map(Object.entries(grades).flatMap(([g,chars])=>chars.map(c=>[c,Number(g)])));
   const target=new Set(settings.indices);const seen=new Set();const plans=[];let unknown=0;
-  for(let i=0;i<scenes.length;i++){
+  const targets=[...target].filter(i=>Number.isInteger(i)&&i>=0&&scenes[i]).sort((a,b)=>a-b);
+  const needed=settings.repeat==='work'&&targets.length?Array.from({length:targets.at(-1)+1},(_,i)=>i).filter(i=>scenes[i]):targets;
+  let processed=0;
+  for(const i of needed){
    const scene=scenes[i],text=String(scene.text||'');const old=scene.richText?.ranges||[];
    const kept=old.filter(r=>r.kind!=='ruby'||r.source!=='auto');
    const blockers=kept.filter(r=>r.kind==='ruby'||r.kind==='table');
@@ -52,7 +55,7 @@
     added.push({start:r.start,end:r.end,kind:'ruby',reading:r.reading,source:'auto',word:r.word});
    }
    if(target.has(i))plans.push({index:i,ranges:[...kept,...added].sort((a,b)=>a.start-b.start||a.end-b.end),added:added.length,removed:old.filter(r=>r.kind==='ruby'&&r.source==='auto').length});
-   onProgress?.(i+1,scenes.length);
+   onProgress?.(++processed,needed.length);
   }
   return {plans,unknown,total:plans.reduce((n,p)=>n+p.added,0)};
  }

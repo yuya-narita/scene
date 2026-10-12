@@ -1,5 +1,5 @@
 /* Lazy dedicated worker. Terminate on dialog close to release the tokenizer. */
-importScripts('./vendor/kuromoji/kuromoji.js','./auto-ruby-engine.js');
+importScripts('./vendor/kuromoji/kuromoji.js','./auto-ruby-engine.js?v=2');
 let ready;
 function load(){
  if(!ready)ready=Promise.all([

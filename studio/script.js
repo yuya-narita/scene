@@ -9535,8 +9535,8 @@
   }
   function makeAutoRubyBodyControl(scene){
     const row=document.createElement('div');row.className='auto-ruby-body-control';
-    const quick=document.createElement('button');quick.type='button';quick.className='is-primary';quick.textContent='自動ルビ';quick.title='前回の設定で、このSceneに付ける';quick.disabled=!String(scene.text||'').trim();quick.onclick=()=>openAutoRuby(scene,true);
-    const settings=document.createElement('button');settings.type='button';settings.textContent='設定・一括適用';settings.onclick=()=>openAutoRuby(scene,false);
+    const quick=document.createElement('button');quick.type='button';quick.className='is-primary';quick.textContent='このSceneに付ける';quick.title='前回のルビ設定で、このSceneへすぐ適用';quick.disabled=!String(scene.text||'').trim();quick.onclick=()=>openAutoRuby(scene,true);
+    const settings=document.createElement('button');settings.type='button';settings.textContent='ルビ設定・一括適用';settings.onclick=()=>openAutoRuby(scene,false);
     const note=document.createElement('small');const config=autoRubyConfig();note.textContent=({all:'総ルビ',grade:`学年別：小${config.settings?.grade||3}まで既習`,difficult:'難しい語だけ'})[config.settings?.mode||'difficult'];
     row.append(quick,settings,note);return row;
   }
