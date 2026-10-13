@@ -11,7 +11,9 @@ async function loadCommerceRuntime(){
   commerceRuntime=await api('/commerce/status');
   let badge=document.getElementById('commerceEnvironmentBadge');
   if(!badge){badge=document.createElement('p');badge.id='commerceEnvironmentBadge';els.auditOrdersList?.parentNode.prepend(badge);}
-  badge.textContent=`決済環境：${commerceRuntime.environment==='live'?'本番 LIVE':'Sandbox TEST'} / 新規購入：${commerceRuntime.paymentsEnabled?'有効':'停止'} / 売上残高購入：${commerceRuntime.balancePurchaseEnabled?'有効':'停止'}`;
+  let riskText='';
+  try{const risk=await api('/admin/commerce/risk');const held=(risk.disputes||[]).filter(x=>x.blocked).length;riskText=held?` / 異議申立て内部保留：${held}件`:'';}catch(_){riskText=' / Risk情報：未確認';}
+  badge.textContent=`決済環境：${commerceRuntime.environment==='live'?'本番 LIVE':'Sandbox TEST'} / 新規購入：${commerceRuntime.paymentsEnabled?'有効':'停止'} / 売上残高購入：${commerceRuntime.balancePurchaseEnabled?'有効':'停止'}${riskText}`;
   badge.style.cssText='padding:12px;border-radius:8px;background:#fff3cd;color:#333;font-weight:bold';
 }
 function liveRefundPayload(orderId){
@@ -833,5 +835,35 @@ function installWebhookInbox(){
   panel.addEventListener('toggle',()=>{if(panel.open)load();});
 }
 installWebhookInbox();
+
+function installDisputeRiskPanel(){
+  if(!els.auditOrdersList)return;
+  const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
+  panel.innerHTML='<summary>異議申立て・出金確認</summary><p>内部保留とStripeの銀行出金設定を分けて確認します。この画面では資金回収・返金・銀行出金を実行しません。</p><button type="button" data-risk-refresh>異議申立てを更新</button><div data-risk-list></div><p>作者のConnected Account ID</p><input data-risk-account placeholder="acct_…" autocomplete="off" style="max-width:100%;width:320px"><button type="button" data-payout-check>出金設定を確認</button><div data-payout-result></div>';
+  els.auditOrdersList.parentNode.append(panel);
+  const list=panel.querySelector('[data-risk-list]');
+  async function load(){
+    list.textContent='確認中…';
+    try{
+      const data=await api('/admin/commerce/risk');const items=data.disputes||[];
+      items.sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
+      list.innerHTML=`<p>内部保留 ${items.filter(x=>x.blocked).length}件 / 記録 ${items.length}件</p>`+items.map(x=>`<div class="audit-order-card" style="display:block"><strong>${escapeHtml(x.status)} · ${yen(x.amount)}</strong><p>理由 ${escapeHtml(x.reason)} / 注文 ${escapeHtml(x.orderId||'未照合')}</p><p>証拠提出期限 ${escapeHtml(x.evidenceDueAt?formatJstDate(x.evidenceDueAt):'未設定')}</p><p>${x.blocked?'購入権・作者の内部取引を保留':'この異議申立てによる内部保留は解除'} / Stripeの銀行出金停止：未実施</p><p>購入時の作者配分 ${x.sellerShareAtSale===null?'未確認':yen(x.sellerShareAtSale)} / 後続の残高購入候補 ${(x.possibleDownstreamPurchases||[]).length}件（資金の出所は未確定）</p>${(x.possibleDownstreamPurchases||[]).length?`<details><summary>後続取引候補</summary>${x.possibleDownstreamPurchases.map(t=>`<p>${escapeHtml(t.orderId)} · ${yen(t.amount)}<br>${escapeHtml(t.buyerAccountId)} → ${escapeHtml(t.sellerAccountId||'あ箱')}</p>`).join('')}</details>`:''}${x.accountId?`<button type="button" data-risk-select="${escapeHtml(x.accountId)}">この作者の出金設定を確認</button>`:''}</div>`).join('');
+      list.querySelectorAll('[data-risk-select]').forEach(button=>button.onclick=()=>{panel.querySelector('[data-risk-account]').value=button.dataset.riskSelect;checkPayout();});
+    }catch(error){list.textContent=error.message;}
+  }
+  async function checkPayout(){
+    const accountId=panel.querySelector('[data-risk-account]').value.trim(),result=panel.querySelector('[data-payout-result]');
+    if(!/^acct_[A-Za-z0-9_]+$/.test(accountId)){result.textContent='Connected Account IDを確認してください。';return;}
+    result.textContent='Stripeへ確認中…';
+    try{
+      const data=await api('/admin/commerce/account/'+encodeURIComponent(accountId)+'/payout-check');const p=data.payout;
+      const shown=v=>v===null?'未確認':`¥${Number(v).toLocaleString('ja-JP')}`;
+      result.innerHTML=`<p>環境：${escapeHtml(p.environment)} / 内部保留：${p.internalHeld?'あり':'なし'}</p><p>Stripeの出金スケジュール：${escapeHtml(p.payoutInterval)} / 銀行出金能力：${p.payoutsEnabled===null?'未確認':p.payoutsEnabled?'有効':'無効'}</p><p>Stripe利用可能残高 ${shown(p.availableJPY)} / 入金待ち ${shown(p.pendingJPY)}</p><p><strong>あ箱の出金可能額：未算定。銀行出金実行：未実装。</strong></p><p>Stripe側の出金停止は実行していません。manual表示だけでInstant Payouts等の利用可否まで保証しません。</p>${p.errors.length?`<p>取得エラー：${escapeHtml(p.errors.map(x=>x.source+': '+x.code).join(', '))}</p>`:''}`;
+    }catch(error){result.textContent=error.message;}
+  }
+  panel.querySelector('[data-risk-refresh]').onclick=load;panel.querySelector('[data-payout-check]').onclick=checkPayout;
+  panel.addEventListener('toggle',()=>{if(panel.open)load();});
+}
+installDisputeRiskPanel();
 
 })();
