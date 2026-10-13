@@ -782,4 +782,38 @@ if(els.officialShelfItems)els.officialShelfItems.addEventListener('click',async 
 els.connect.addEventListener('click',connect);els.token.addEventListener('keydown',e=>{if(e.key==='Enter')connect();});els.refresh.addEventListener('click',loadDashboard);els.filter.addEventListener('change',loadReports);if(els.contactFilter)els.contactFilter.addEventListener('change',loadContacts);els.inspect.addEventListener('click',inspect);
 setAdminTab(sessionStorage.getItem('ahako-admin-tab')||'status',{remember:false});
 if(token)connect();
+function installWebhookInbox(){
+  const anchor=els.auditOrdersList;if(!anchor)return;
+  const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
+  panel.innerHTML='<summary>Webhook受信・再処理</summary><p>受信記録から購入確定・返金状態を再照合します。新しい課金・送金・返金は実行しません。</p><button type="button" data-webhook-refresh>受信記録を更新</button><div data-webhook-list></div>';
+  anchor.parentNode.append(panel);
+  const container=panel.querySelector('[data-webhook-list]');
+  let generation=0;
+  async function load(){
+    const own=++generation;container.textContent='受信記録を確認しています…';
+    try{
+      const events=[];let cursor=null;
+      do{
+        const data=await api('/admin/commerce/webhooks'+(cursor?'?cursor='+encodeURIComponent(cursor):''));
+        events.push(...(data.events||[]));cursor=data.cursor;
+      }while(cursor);
+      if(own!==generation)return;
+      const labels={pending:'未処理',processing:'処理中',waiting:'待機',failed:'失敗',needs_review:'要確認',applied:'処理済み',ignored:'対象外・処理不要'};
+      events.sort((a,b)=>String(b.receivedAt).localeCompare(String(a.receivedAt)));
+      const active=events.filter(e=>!['applied','ignored'].includes(e.status));
+      const done=events.filter(e=>['applied','ignored'].includes(e.status));
+      function card(e){return `<div class="audit-order-card" style="display:block"><strong>${escapeHtml(labels[e.status]||e.status)} · ${escapeHtml(e.type)}</strong><p><code style="overflow-wrap:anywhere">${escapeHtml(e.eventId)}</code></p><p>${escapeHtml(formatJstDate(e.receivedAt))} · 試行 ${Number(e.attempts||0)}回</p>${e.reason?`<p>${escapeHtml(e.reason)}</p>`:''}${e.orderId?`<p><code>${escapeHtml(e.orderId)}</code></p>`:''}${['pending','waiting','failed','needs_review'].includes(e.status)?`<button type="button" data-webhook-retry="${escapeHtml(e.eventId)}">再処理する</button>`:''}</div>`;}
+      container.innerHTML=events.length?`<p>未完了・要確認 ${active.length}件 / 処理済み・対象外 ${done.length}件</p>${active.map(card).join('')}<details><summary>処理済み・対象外 ${done.length}件</summary>${done.map(card).join('')}</details>`:'保存された受信記録はまだありません。更新後に届く通知から記録します。';
+      container.querySelectorAll('[data-webhook-retry]').forEach(button=>button.onclick=async()=>{
+        button.disabled=true;button.textContent='再処理中…';
+        try{const result=await api('/admin/commerce/webhook/'+encodeURIComponent(button.dataset.webhookRetry)+'/retry',{method:'POST',body:'{}'});toast(labels[result.status]||result.status);await load();}
+        catch(error){button.disabled=false;button.textContent='再処理する';toast('再処理失敗: '+error.message);}
+      });
+    }catch(error){if(own===generation)container.textContent='受信記録を取得できませんでした: '+error.message;}
+  }
+  panel.querySelector('[data-webhook-refresh]').onclick=load;
+  panel.addEventListener('toggle',()=>{if(panel.open)load();});
+}
+installWebhookInbox();
+
 })();
