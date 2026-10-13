@@ -471,6 +471,28 @@
       return true;
     }
   }
+
+  function confirmSalesConditions(order,title='MY COPY'){
+    const amount=Number(order?.amount),currency=String(order?.currency||'JPY').toUpperCase();
+    if(!Number.isInteger(amount)||amount<=0||currency!=='JPY')return Promise.reject(new Error('購入金額を確認できません。'));
+    return new Promise(resolve=>{
+      const previousFocus=document.activeElement,overlay=document.createElement('div');
+      overlay.style.cssText='position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:16px;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom));';
+      const card=document.createElement('section');card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');card.setAttribute('aria-label','購入内容と販売条件');card.tabIndex=-1;
+      card.style.cssText='width:min(100%,440px);max-height:85vh;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:#fff;color:#171717;border-radius:16px;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:16px;line-height:1.7;text-align:left;';
+      card.innerHTML='<h2 style="font-size:20px;margin:0 0 12px">購入内容を確認</h2><p data-title style="overflow-wrap:anywhere"></p><p data-price style="font-weight:bold"></p><p>MY COPY 1冊の単発購入です。有料ロック作品では、購入により続きを読めるようになります。決済成功の確認後に受け取れます。</p><p>正常に提供できている作品の購入者都合の返金は原則受け付けません。二重課金・提供不具合・法令上の対応は別に受け付けます。</p><p>本棚は端末・ブラウザに保存されます。端末変更や保存データ削除後の再受取は保証できません。</p><p><a href="https://yuya-narita.github.io/scene/sales/" target="_blank" rel="noopener noreferrer" style="color:#174b97">販売条件・販売者情報</a> ／ <a href="https://yuya-narita.github.io/scene/terms/" target="_blank" rel="noopener noreferrer" style="color:#174b97">利用規約</a> ／ <a href="https://yuya-narita.github.io/scene/privacy/" target="_blank" rel="noopener noreferrer" style="color:#174b97">プライバシー</a></p><label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0"><input type="checkbox" data-consent style="width:22px;height:22px;flex-shrink:0;margin-top:3px"><span>購入内容・販売条件・利用規約を確認し、同意します。</span></label><button type="button" data-proceed disabled style="width:100%;min-height:48px;background:#171717;color:#fff;border:0;border-radius:10px;font-size:16px;opacity:.45">購入手続きへ進む</button><button type="button" data-cancel style="width:100%;min-height:44px;margin-top:8px;background:#fff;color:#171717;border:1px solid #bbb;border-radius:10px;font-size:16px">戻る・キャンセル</button>';
+      card.querySelector('[data-title]').textContent=String(title||'MY COPY');card.querySelector('[data-price]').textContent='お支払総額 ¥'+amount.toLocaleString('ja-JP');
+      const check=card.querySelector('[data-consent]'),proceed=card.querySelector('[data-proceed]');
+      check.onchange=()=>{proceed.disabled=!check.checked;proceed.style.opacity=check.checked?'1':'.45';};
+      const finish=value=>{document.removeEventListener('keydown',onKey);overlay.remove();previousFocus?.focus?.();resolve(value);};
+      const onKey=event=>{if(event.key==='Escape'){event.preventDefault();finish(null);}else if(event.key==='Tab'){const items=[...card.querySelectorAll('a,input,button')].filter(x=>!x.disabled);const first=items[0],last=items[items.length-1];if(event.shiftKey&&(document.activeElement===first||document.activeElement===card)){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}};
+      card.querySelector('[data-cancel]').onclick=()=>finish(null);
+      proceed.onclick=()=>{if(check.checked)finish({accepted:true,version:'ahako-sales-20261013-v1',amount,currency});};
+      overlay.onclick=event=>{if(event.target===overlay)finish(null);};
+      overlay.appendChild(card);document.body.appendChild(overlay);document.addEventListener('keydown',onKey);card.focus();
+    });
+  }
+
   async function startRelayPaidOwnCopy(gate,{button=ownCopyButton,statusNode=status}={}){
     let readerAmount=null;
     const mode=String(gate?.mode||'purchase').toLowerCase();
@@ -500,10 +522,12 @@
     const orderId=String(orderPayload.order.orderId),accessToken=String(orderPayload.accessToken);
     try{sessionStorage.setItem(relayOrderTokenKey(orderId),accessToken);}catch(_){}
     if(orderPayload.order.status==='paid')return fulfillRelayPurchase(orderId,accessToken,{button,statusNode});
+    const salesConsent=await confirmSalesConditions(orderPayload.order,String(gate?.title||'MY COPY'));
+    if(!salesConsent){if(button)button.disabled=false;if(statusNode)statusNode.textContent='購入をキャンセルしました。';return false;}
     if(statusNode)statusNode.textContent='決済画面を用意しています…';
     const checkoutResponse=await fetch(`${API_BASE}/commerce/order/${encodeURIComponent(orderId)}/checkout`,{
       method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',
-      body:JSON.stringify({paymentMethod:'card',returnUrl:cleanRelayCommerceReturnUrl()})
+      body:JSON.stringify({salesConsent,paymentMethod:'card',returnUrl:cleanRelayCommerceReturnUrl()})
     });
     const checkout=await checkoutResponse.json().catch(()=>null);
     if(!checkoutResponse.ok||!checkout?.ok||!checkout?.checkoutUrl)throw new Error(String(checkout?.error||'決済を開始できませんでした。'));
