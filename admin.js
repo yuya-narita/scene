@@ -839,7 +839,7 @@ installWebhookInbox();
 function installDisputeRiskPanel(){
   if(!els.auditOrdersList)return;
   const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
-  panel.innerHTML='<summary>異議申立て・出金確認</summary><p>内部保留とStripeの銀行出金設定を分けて確認します。この画面では資金回収・返金・銀行出金を実行しません。</p><button type="button" data-risk-refresh>異議申立てを更新</button><div data-risk-list></div><p>作者のConnected Account ID</p><input data-risk-account placeholder="acct_…" autocomplete="off" style="max-width:100%;width:320px"><button type="button" data-payout-check>出金設定を確認</button><div data-payout-result></div>';
+  panel.innerHTML='<summary>異議申立て・出金確認</summary><p>内部保留とStripeの銀行出金設定を分けて確認します。資金回収・返金・銀行出金は実行しません。Sandboxでは自動出金スケジュールをmanualへ変更できます。</p><button type="button" data-risk-refresh>異議申立てを更新</button><div data-risk-list></div><p>作者のConnected Account ID</p><input data-risk-account placeholder="acct_…" autocomplete="off" style="max-width:100%;width:320px"><button type="button" data-payout-check>出金設定を確認</button><div data-payout-result></div>';
   els.auditOrdersList.parentNode.append(panel);
   const list=panel.querySelector('[data-risk-list]');
   async function load(){
@@ -858,7 +858,16 @@ function installDisputeRiskPanel(){
     try{
       const data=await api('/admin/commerce/account/'+encodeURIComponent(accountId)+'/payout-check');const p=data.payout;
       const shown=v=>v===null?'未確認':`¥${Number(v).toLocaleString('ja-JP')}`;
-      result.innerHTML=`<p>環境：${escapeHtml(p.environment)} / 内部保留：${p.internalHeld?'あり':'なし'}</p><p>Stripeの出金スケジュール：${escapeHtml(p.payoutInterval)} / 銀行出金能力：${p.payoutsEnabled===null?'未確認':p.payoutsEnabled?'有効':'無効'}</p><p>Stripe利用可能残高 ${shown(p.availableJPY)} / 入金待ち ${shown(p.pendingJPY)}</p><p><strong>あ箱の出金可能額：未算定。銀行出金実行：未実装。</strong></p><p>Stripe側の出金停止は実行していません。manual表示だけでInstant Payouts等の利用可否まで保証しません。</p>${p.errors.length?`<p>取得エラー：${escapeHtml(p.errors.map(x=>x.source+': '+x.code).join(', '))}</p>`:''}`;
+      result.innerHTML=`<p>環境：${escapeHtml(p.environment)} / 内部保留：${p.internalHeld?'あり':'なし'}</p><p>Stripeの出金スケジュール：${escapeHtml(p.payoutInterval)} / 銀行出金能力：${p.payoutsEnabled===null?'未確認':p.payoutsEnabled?'有効':'無効'}</p><p>Stripe利用可能残高 ${shown(p.availableJPY)} / 入金待ち ${shown(p.pendingJPY)}</p><p><strong>あ箱の出金可能額：未算定。銀行出金実行：未実装。</strong></p><p>${p.payoutInterval==='manual'?'自動出金は停止設定です。':'自動出金は停止設定になっていません。'} 手動出金・Instant Payouts・既に作成済みの出金を止めた保証ではありません。</p>${p.errors.length?`<p>取得エラー：${escapeHtml(p.errors.map(x=>x.source+': '+x.code).join(', '))}</p>`:''}`;
+      if(p.environment==='test'&&p.payoutInterval!=='manual'&&!p.errors.length){
+        const button=document.createElement('button');button.type='button';button.textContent='Sandboxの自動出金を停止';result.appendChild(button);
+        button.onclick=async()=>{
+          if(!confirm(accountId+' の自動出金をmanualへ変更します。手動・Instant出金は別途制御が必要です。自動再開はしません。'))return;
+          button.disabled=true;
+          try{await api('/admin/commerce/account/'+encodeURIComponent(accountId)+'/manual-payouts',{method:'POST',body:JSON.stringify({accountId,confirmation:'STOP_AUTOMATIC_PAYOUTS'})});await checkPayout();}
+          catch(error){result.textContent='設定変更・確認に失敗しました：'+error.message+'。出金設定を再取得してください。';}
+        };
+      }
     }catch(error){result.textContent=error.message;}
   }
   panel.querySelector('[data-risk-refresh]').onclick=load;panel.querySelector('[data-payout-check]').onclick=checkPayout;
