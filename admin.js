@@ -839,7 +839,7 @@ installWebhookInbox();
 function installDisputeRiskPanel(){
   if(!els.auditOrdersList)return;
   const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
-  panel.innerHTML='<summary>異議申立て・出金確認</summary><p>内部保留とStripeの銀行出金設定を分けて確認します。資金回収・返金・銀行出金は実行しません。Sandboxでは自動出金スケジュールをmanualへ変更できます。</p><button type="button" data-risk-refresh>異議申立てを更新</button><div data-risk-list></div><p>作者のConnected Account ID</p><input data-risk-account placeholder="acct_…" autocomplete="off" style="max-width:100%;width:320px"><button type="button" data-payout-check>出金設定を確認</button><div data-payout-result></div>';
+  panel.innerHTML='<summary>異議申立て・出金確認</summary><p>内部保留とStripeの銀行出金設定を分けて確認します。資金回収・返金・銀行出金は実行しません。Sandboxでは自動出金スケジュールをmanualへ変更できます。</p><button type="button" data-risk-refresh>異議申立てを更新</button><div data-risk-list></div><p>作者のConnected Account ID</p><input data-risk-account placeholder="acct_…" autocomplete="off" style="max-width:100%;width:320px"><button type="button" data-payout-check>出金設定を確認</button><div data-payout-result></div><hr><p><strong>登録済み作者の出金設定一覧</strong></p><p>現在の決済環境の登録を5件ずつ確認します。設定変更・出金は実行しません。</p><button type="button" data-payout-list-refresh>作者一覧を確認</button><div data-payout-list></div><button type="button" data-payout-list-more hidden>次の5件を確認</button>';
   els.auditOrdersList.parentNode.append(panel);
   const list=panel.querySelector('[data-risk-list]');
   async function load(){
@@ -883,6 +883,31 @@ function installDisputeRiskPanel(){
       }
     }catch(error){result.textContent=error.message;}
   }
+  let payoutRows=[],payoutCursor=null,payoutLoading=false,payoutEnvironment='';
+  const payoutList=panel.querySelector('[data-payout-list]'),more=panel.querySelector('[data-payout-list-more]'),refresh=panel.querySelector('[data-payout-list-refresh]');
+  function renderPayoutList(){
+    const shown=v=>v===null||v===undefined?'未確認':yen(v);
+    const verified=payoutRows.filter(x=>x.payout?.payoutInterval==='manual'&&!x.errors.length&&!x.payout.errors.length).length;
+    payoutList.innerHTML=`<p>環境：${escapeHtml(payoutEnvironment)} / 取得 ${payoutRows.length}件 / manual確認済み ${verified}件（取得済み分）</p>`+payoutRows.map(x=>{
+      const p=x.payout,errors=[...(x.errors||[]),...(p?.errors||[])];
+      const state=!p||errors.length?'未確認・取得エラー':p.payoutInterval==='manual'?'自動出金は停止設定':p.payoutInterval==='unknown'?'スケジュール未確認':'自動出金は停止設定ではありません';
+      return `<div class="audit-order-card" style="display:block;overflow-wrap:anywhere"><strong>${escapeHtml(x.displayName)}</strong><p>${escapeHtml(x.authorId)}<br>${escapeHtml(x.accountId||'Account ID未確認')}</p><p>${escapeHtml(state)} / ${escapeHtml(p?.payoutInterval||'unknown')}</p><p>Stripe利用可能 ${shown(p?.availableJPY)} / 入金待ち ${shown(p?.pendingJPY)}</p><p>内部保留：${p?(p.internalHeld?'あり':'なし'):'未確認'} / 銀行出金能力：${!p||p.payoutsEnabled===null?'未確認':p.payoutsEnabled?'有効':'無効'}</p>${errors.length?`<p>取得エラー：${escapeHtml(errors.map(e=>e.source+': '+e.code).join(', '))}</p>`:''}${x.accountId?`<button type="button" data-payout-list-select="${escapeHtml(x.accountId)}">個別に確認</button>`:''}</div>`;
+    }).join('')+'<p>manualは自動出金の停止設定です。手動・Instant出金や、作成済み出金の停止確認は含みません。</p>';
+    payoutList.querySelectorAll('[data-payout-list-select]').forEach(button=>button.onclick=()=>{panel.querySelector('[data-risk-account]').value=button.dataset.payoutListSelect;checkPayout();});
+  }
+  async function loadPayoutList(reset){
+    if(payoutLoading)return;payoutLoading=true;refresh.disabled=true;more.disabled=true;
+    if(reset){payoutRows=[];payoutCursor=null;payoutList.textContent='Stripeへ確認中…';more.hidden=true;}
+    try{
+      const data=await api('/admin/commerce/payout-accounts'+(!reset&&payoutCursor?'?cursor='+encodeURIComponent(payoutCursor):''));
+      if(!reset&&payoutEnvironment&&payoutEnvironment!==data.environment)throw new Error('決済環境が変わりました。作者一覧を再取得してください。');
+      payoutEnvironment=data.environment;payoutRows.push(...(data.accounts||[]));payoutCursor=data.nextCursor;
+      renderPayoutList();more.hidden=!data.hasMore;
+      if(!payoutRows.length)payoutList.textContent='この決済環境にはConnected Accountの登録がありません。';
+    }catch(error){const message=document.createElement('p');message.textContent='一覧の取得に失敗しました：'+error.message;payoutList.appendChild(message);}
+    finally{payoutLoading=false;refresh.disabled=false;more.disabled=false;}
+  }
+  refresh.onclick=()=>loadPayoutList(true);more.onclick=()=>loadPayoutList(false);
   panel.querySelector('[data-risk-refresh]').onclick=load;panel.querySelector('[data-payout-check]').onclick=checkPayout;
   panel.addEventListener('toggle',()=>{if(panel.open)load();});
 }
