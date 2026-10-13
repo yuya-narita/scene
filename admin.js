@@ -858,7 +858,20 @@ function installDisputeRiskPanel(){
     try{
       const data=await api('/admin/commerce/account/'+encodeURIComponent(accountId)+'/payout-check');const p=data.payout;
       const shown=v=>v===null?'未確認':`¥${Number(v).toLocaleString('ja-JP')}`;
-      result.innerHTML=`<p>環境：${escapeHtml(p.environment)} / 内部保留：${p.internalHeld?'あり':'なし'}</p><p>Stripeの出金スケジュール：${escapeHtml(p.payoutInterval)} / 銀行出金能力：${p.payoutsEnabled===null?'未確認':p.payoutsEnabled?'有効':'無効'}</p><p>Stripe利用可能残高 ${shown(p.availableJPY)} / 入金待ち ${shown(p.pendingJPY)}</p><p><strong>あ箱の出金可能額：未算定。銀行出金実行：未実装。</strong></p><p>${p.payoutInterval==='manual'?'自動出金は停止設定です。':'自動出金は停止設定になっていません。'} 手動出金・Instant Payouts・既に作成済みの出金を止めた保証ではありません。</p>${p.errors.length?`<p>取得エラー：${escapeHtml(p.errors.map(x=>x.source+': '+x.code).join(', '))}</p>`:''}`;
+      result.innerHTML=`<p>Dashboard種別：${escapeHtml(p.dashboardType||'unknown')}</p><p>環境：${escapeHtml(p.environment)} / 内部保留：${p.internalHeld?'あり':'なし'}</p><p>Stripeの出金スケジュール：${escapeHtml(p.payoutInterval)} / 銀行出金能力：${p.payoutsEnabled===null?'未確認':p.payoutsEnabled?'有効':'無効'}</p><p>Stripe利用可能残高 ${shown(p.availableJPY)} / 入金待ち ${shown(p.pendingJPY)}</p><p><strong>あ箱の出金可能額：未算定。銀行出金実行：未実装。</strong></p><p>${p.payoutInterval==='manual'?'自動出金は停止設定です。':'自動出金は停止設定になっていません。'} 手動出金・Instant Payouts・既に作成済みの出金を止めた保証ではありません。</p>${p.errors.length?`<p>取得エラー：${escapeHtml(p.errors.map(x=>x.source+': '+x.code).join(', '))}</p>`:''}`;
+      if(p.environment==='test'&&p.dashboardType==='express'){
+        const button=document.createElement('button');button.type='button';button.textContent='SandboxのExpress画面を確認';result.appendChild(button);
+        button.onclick=async()=>{
+          button.disabled=true;
+          try{
+            const data=await api('/admin/commerce/account/'+encodeURIComponent(accountId)+'/express-login',{method:'POST'});
+            const url=new URL(data.url);if(url.protocol!=='https:'||url.hostname!=='connect.stripe.com')throw new Error('ログイン先を確認できません。');
+            const link=document.createElement('a');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';link.textContent='作者向けExpress Dashboardを開く';
+            result.appendChild(document.createElement('br'));result.appendChild(link);
+          }catch(error){const message=document.createElement('p');message.textContent=error.message;result.appendChild(message);}
+          finally{button.disabled=false;}
+        };
+      }
       if(p.environment==='test'&&p.payoutInterval!=='manual'&&!p.errors.length){
         const button=document.createElement('button');button.type='button';button.textContent='Sandboxの自動出金を停止';result.appendChild(button);
         button.onclick=async()=>{
