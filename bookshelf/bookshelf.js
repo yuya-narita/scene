@@ -2354,6 +2354,51 @@ $('#closeReadLater')?.addEventListener('click',()=>$('#readLaterDialog')?.close(
 $('#closePublicWork')?.addEventListener('click',()=>$('#publicWorkDialog')?.close());
 window.addEventListener('storage',event=>{if(event.key===READ_LATER_STORAGE_KEY){syncReadLaterCount();if($('#readLaterDialog')?.open)renderReadLaterList();}});
 window.addEventListener('pageshow',()=>{syncReadLaterCount();if(authorToken)loadCommerceWallet().catch(()=>{});});
+
+// Recover settled purchases even if the public work is no longer listed.
+async function purchaseRecoveryRequest(path,payload){
+  const response=await fetch(API_BASE+path,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify(payload)});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.ok)throw new Error(data.error||'購入の確認に失敗しました');
+  return data;
+}
+function installPurchaseRecovery(){
+  const menu=document.querySelector('#bookshelfMenu .bookshelf-menu-panel');if(!menu)return;
+  const button=document.createElement('button');button.type='button';button.textContent='購入済みの本を受け取る';
+  const dialog=document.createElement('dialog');dialog.style.cssText='width:min(520px,calc(100vw - 32px));max-height:80vh;padding:20px;border:1px solid #ddd;border-radius:16px;background:#fff;color:#222;';
+  dialog.innerHTML='<h2 style="font-size:18px">購入済みの本を受け取る</h2><p>このブラウザで購入した本を確認します。再決済はありません。</p><div data-purchase-list></div><button type="button" data-purchase-close style="margin-top:16px">閉じる</button>';
+  document.body.append(dialog);dialog.querySelector('[data-purchase-close]').onclick=()=>dialog.close();
+  dialog.addEventListener('close',syncShelfScrollLock);
+  button.onclick=async()=>{
+    closeBookshelfMenu();dialog.showModal();syncShelfScrollLock();
+    const list=dialog.querySelector('[data-purchase-list]');list.textContent='購入履歴を確認しています…';
+    const readerId=String(localStorage.getItem('ahako:public-own-copy-reader-id')||'').toLowerCase();
+    if(!/^reader_[a-f0-9]{32}$/.test(readerId)){list.textContent='このブラウザには購入時の読者情報がありません。購入したブラウザで開いてください。';return;}
+    try{
+      const data=await purchaseRecoveryRequest('/commerce/purchases',{readerId});
+      const owned=new Set((shelfDataCache.owned||[]).map(book=>String(book.copyId||'')));
+      const purchases=(data.purchases||[]).filter(p=>!p.copyId||!owned.has(p.copyId));
+      if(!purchases.length){list.textContent='本棚に未保存の購入済み作品はありません。';return;}
+      list.innerHTML=purchases.map(p=>`<div style="padding:12px 0;border-bottom:1px solid #ddd"><strong>${escapeHtml(p.title)}</strong><p style="font-size:12px">¥${Number(p.amount||0).toLocaleString('ja-JP')} · ${escapeHtml(p.paidAt.slice(0,10))}</p><button type="button" data-recover-order="${escapeHtml(p.orderId)}" style="min-height:44px">本棚に受け取る</button><p data-purchase-message style="font-size:12px"></p></div>`).join('');
+      list.querySelectorAll('[data-recover-order]').forEach(receive=>receive.onclick=async()=>{
+        receive.disabled=true;receive.textContent='受取中…';const message=receive.parentElement.querySelector('[data-purchase-message]');
+        try{
+          const result=await purchaseRecoveryRequest('/commerce/purchases/claim',{readerId,orderId:receive.dataset.recoverOrder});
+          const claimToken=String(result.bookshelfClaim?.token||'');
+          if(!validBookshelfClaimToken(claimToken))throw new Error('受取リンクを確認できませんでした');
+          const claim=await purchaseRecoveryRequest('/bookshelf-claim',{token:claimToken});
+          if(!claim.scene)throw new Error('作品データを確認できませんでした');
+          await addDistribution(await distributionFileFromClaimScene(claim.scene),{silent:true});
+          await purchaseRecoveryRequest('/bookshelf-claim/consume',{token:claimToken}).catch(()=>{});
+          applyShelfTab('owned');await render();receive.textContent='受取済み';message.textContent='購入した版を本棚に保存しました。';toast('購入済みの一冊を受け取りました。');
+        }catch(error){receive.disabled=false;receive.textContent='もう一度受け取る';message.textContent=error.message||'受け取れませんでした';}
+      });
+    }catch(error){list.textContent=error.message||'購入履歴を確認できませんでした';}
+  };
+  menu.insertBefore(button,menu.querySelector('.menu-separator'));
+}
+installPurchaseRecovery();
+
 syncReadLaterCount();
 installSceneDrop();
 installShelfScrollGuard();
