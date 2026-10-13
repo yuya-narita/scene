@@ -500,14 +500,14 @@
     const orderId=String(orderPayload.order.orderId),accessToken=String(orderPayload.accessToken);
     try{sessionStorage.setItem(relayOrderTokenKey(orderId),accessToken);}catch(_){}
     if(orderPayload.order.status==='paid')return fulfillRelayPurchase(orderId,accessToken,{button,statusNode});
-    if(statusNode)statusNode.textContent='Sandboxの決済画面を用意しています…';
+    if(statusNode)statusNode.textContent='決済画面を用意しています…';
     const checkoutResponse=await fetch(`${API_BASE}/commerce/order/${encodeURIComponent(orderId)}/checkout`,{
       method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',
       body:JSON.stringify({paymentMethod:'card',returnUrl:cleanRelayCommerceReturnUrl()})
     });
     const checkout=await checkoutResponse.json().catch(()=>null);
-    if(!checkoutResponse.ok||!checkout?.ok||!checkout?.checkoutUrl)throw new Error(String(checkout?.error||'Sandbox決済を開始できませんでした。'));
-    if(statusNode)statusNode.textContent='Sandboxの決済画面へ移動します…';
+    if(!checkoutResponse.ok||!checkout?.ok||!checkout?.checkoutUrl)throw new Error(String(checkout?.error||'決済を開始できませんでした。'));
+    if(statusNode)statusNode.textContent='決済画面へ移動します…';
     location.href=checkout.checkoutUrl;
     return true;
   }

@@ -5,6 +5,20 @@ const $=s=>document.querySelector(s);
 let token=sessionStorage.getItem('ahako-admin-token')||'';
 let lastStats=null;
 let verifiedStats=null;
+let commerceRuntime=null;
+let currentRefundAudit=null;
+async function loadCommerceRuntime(){
+  commerceRuntime=await api('/commerce/status');
+  let badge=document.getElementById('commerceEnvironmentBadge');
+  if(!badge){badge=document.createElement('p');badge.id='commerceEnvironmentBadge';els.auditOrdersList?.parentNode.prepend(badge);}
+  badge.textContent=`決済環境：${commerceRuntime.environment==='live'?'本番 LIVE':'Sandbox TEST'} / 新規購入：${commerceRuntime.paymentsEnabled?'有効':'停止'} / 売上残高購入：${commerceRuntime.balancePurchaseEnabled?'有効':'停止'}`;
+  badge.style.cssText='padding:12px;border-radius:8px;background:#fff3cd;color:#333;font-weight:bold';
+}
+function liveRefundPayload(orderId){
+  if(commerceRuntime?.environment!=='live')return {};
+  if(currentRefundAudit?.orderId!==orderId)throw new Error('返金対象の詳細を再取得してください');
+  return {confirmEnvironment:'live',confirmOrderId:orderId,confirmAmount:Number(currentRefundAudit.amount)};
+}
 const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),authorCount:$('#authorCount'),authorList:$('#authorList'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems'),auditOrderId:$('#auditOrderIdInput'),auditOrderButton:$('#auditOrderButton'),auditOrderStatus:$('#auditOrderStatus'),auditOrderResult:$('#auditOrderResult'),auditOrdersList:$('#auditOrdersList'),auditOrdersStatus:$('#auditOrdersStatus'),auditOrdersReload:$('#auditOrdersReloadButton'),auditOkCount:$('#auditOkCount'),auditAlertCount:$('#auditAlertCount'),auditPendingCount:$('#auditPendingCount'),auditTabBadge:$('#auditTabBadge'),dailyReconDay:$('#dailyReconDay'),dailyReconButton:$('#dailyReconButton'),dailyReconStatus:$('#dailyReconStatus'),dailyReconResult:$('#dailyReconResult')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
@@ -28,6 +42,7 @@ function auditValue(value){
   return String(value);
 }
 function renderPaymentAudit(audit){
+  currentRefundAudit=audit;
   if(!els.auditOrderResult)return;
   const ok=audit?.status==='ok';
   const checks=Array.isArray(audit?.checks)?audit.checks:[];
@@ -40,7 +55,7 @@ function renderPaymentAudit(audit){
   const rail=String(audit?.paymentRail||'');
   const canCardRefund=ok&&isPaid&&rail==='card';
   const canBalanceRefund=ok&&isPaid&&rail==='connected_balance';
-  const sandboxTestHtml=ok&&isPaid?`<div class="audit-test-tools"><strong>Sandbox破壊テスト / 管理者非常口</strong><span>MY COPY欠損はお金を動かしません。返金はStripe上で実際に資金を巻き戻し、成功Webhook後にMY COPYを失効させます。</span><button type="button" data-test-missing-entitlement="${escapeHtml(audit.orderId||'')}">MY COPY欠損を発生</button>${canCardRefund?`<button type="button" data-test-full-refund="${escapeHtml(audit.orderId||'')}">カード全額返金テスト</button>`:''}${canBalanceRefund?`<button type="button" data-test-balance-refund="${escapeHtml(audit.orderId||'')}">残高全額返金（非常口）</button>`:''}</div>`:'';
+  const sandboxTestHtml=ok&&isPaid&&commerceRuntime?.environment==='test'?`<div class="audit-test-tools"><strong>Sandbox破壊テスト / 管理者非常口</strong><span>試験操作です。返金成功後はMY COPYを失効させます。</span><button type="button" data-test-missing-entitlement="${escapeHtml(audit.orderId||'')}">MY COPY欠損を発生</button>${canCardRefund?`<button type="button" data-test-full-refund="${escapeHtml(audit.orderId||'')}">カード全額返金テスト</button>`:''}${canBalanceRefund?`<button type="button" data-test-balance-refund="${escapeHtml(audit.orderId||'')}">残高全額返金（非常口）</button>`:''}</div>`:ok&&isPaid&&commerceRuntime?.environment==='live'?`<div class="audit-test-tools"><strong>本番決済</strong><span>${commerceRuntime.adminRefundEnabled?'全額返金は実資金を動かします。金額・注文を確認して実行してください。':'本番返金はまだ有効化されていません。'}</span>${commerceRuntime.adminRefundEnabled&&canCardRefund?`<button type="button" data-test-full-refund="${escapeHtml(audit.orderId||'')}">本番カード全額返金 ${yen(audit.amount)}</button>`:''}</div>`:'';
   if(!ok&&audit?.safeRecoveryAction==='REISSUE_ENTITLEMENT'){
     recoveryHtml=`<div class="audit-recovery is-safe"><strong>MY COPY権利だけが不足しています</strong><span>Stripeの金銭照合は正常です。再実行時にも再監査してから権利だけを発行します。</span><button type="button" data-recover-entitlement="${escapeHtml(audit.orderId||'')}">MY COPYを再発行</button></div>`;
   }else if(!ok){
@@ -75,6 +90,7 @@ function bindAuditDetailButtons(){
   }));
 }
 async function fetchPaymentAudit(orderId){
+  if(!commerceRuntime)await loadCommerceRuntime();
   const r=await fetch(API+`/admin/commerce/order/${encodeURIComponent(orderId)}/audit`,{method:'GET',headers:headers(),cache:'no-store'});
   const data=await r.json().catch(()=>({}));
   if(data?.audit)return {audit:data.audit,httpStatus:r.status};
@@ -97,11 +113,11 @@ async function injectMissingEntitlement(orderId,button){
 }
 async function testFullCardRefund(orderId,button){
   if(!/^order_[a-f0-9]{32}$/.test(String(orderId||'')))return;
-  if(!confirm('Stripe Sandboxでこのカード注文を全額返金します。作者への送金取消とあ箱のapplication fee返金も実行されます。返金成功後はMY COPYも失効します。\n\nこの操作は元に戻せません。続けますか？'))return;
-  const original=button?.textContent||'カード全額返金テスト';
+  if(!confirm((commerceRuntime?.environment==='live'?`【本番・実資金】注文 ${orderId} / 全額 ${yen(currentRefundAudit?.amount)} を返金します。\n作者への送金取消とあ箱手数料の返金、MY COPY失効を伴います。\n続けますか？`:'Stripe Sandboxでこのカード注文を全額返金します。作者への送金取消とあ箱のapplication fee返金も実行されます。返金成功後はMY COPYも失効します。\n\nこの操作は元に戻せません。続けますか？')))return;
+  const original=button?.textContent||'カード全額返金';
   if(button){button.disabled=true;button.textContent='返金処理中…';}
   try{
-    const data=await api(`/admin/commerce/order/${encodeURIComponent(orderId)}/refund`,{method:'POST',body:'{}'});
+    const data=await api(`/admin/commerce/order/${encodeURIComponent(orderId)}/refund`,{method:'POST',body:JSON.stringify(liveRefundPayload(orderId))});
     toast(data.reused?'すでに返金済みです':'Stripeへ全額返金を送信しました');
     if(els.auditOrderId)els.auditOrderId.value=orderId;
     if(els.auditOrderStatus)els.auditOrderStatus.textContent='返金Webhookの反映を確認しています…';
@@ -109,8 +125,8 @@ async function testFullCardRefund(orderId,button){
     await runPaymentAudit();
     await loadAuditOrders();
   }catch(e){
-    toast(`返金テスト失敗: ${e.message}`);
-    if(els.auditOrderStatus)els.auditOrderStatus.textContent=`返金テスト失敗：${e.message}`;
+    toast(`返金失敗: ${e.message}`);
+    if(els.auditOrderStatus)els.auditOrderStatus.textContent=`返金失敗：${e.message}`;
   }finally{if(button){button.disabled=false;button.textContent=original;}}
 }
 async function testFullBalanceRefund(orderId,button){
@@ -119,7 +135,7 @@ async function testFullBalanceRefund(orderId,button){
   const original=button?.textContent||'残高全額返金（非常口）';
   if(button){button.disabled=true;button.textContent='返金処理中…';}
   try{
-    const data=await api(`/admin/commerce/order/${encodeURIComponent(orderId)}/refund`,{method:'POST',body:'{}'});
+    const data=await api(`/admin/commerce/order/${encodeURIComponent(orderId)}/refund`,{method:'POST',body:JSON.stringify(liveRefundPayload(orderId))});
     toast(data.reused?'すでに返金済みです':'残高返金をStripeへ送信しました');
     if(els.auditOrderId)els.auditOrderId.value=orderId;
     if(els.auditOrderStatus)els.auditOrderStatus.textContent='返金Webhookの反映を確認しています…';
@@ -191,6 +207,7 @@ function renderDailyReconciliation(r){
   els.dailyReconResult.querySelectorAll('[data-recover-debit-order]').forEach(b=>b.addEventListener('click',async()=>{
     const orderId=String(b.dataset.recoverDebitOrder||''),chargeId=String(b.dataset.recoverDebitCharge||''),amount=Number(b.dataset.recoverDebitAmount||0);
     if(!orderId||!chargeId)return;
+    if(commerceRuntime?.environment==='live'){alert('本番の未説明Debit復旧は専用確認導線の準備後に実行します。');return;}
     if(!confirm(`未説明の残高Debit ${yen(amount)} を購入者へ返金します。\n\nOrder: ${orderId}\nStripe: ${chargeId}\n\nStripe実績を再確認し、安全条件を満たす場合だけ実行します。`))return;
     const original=b.textContent;b.disabled=true;b.textContent='確認・返金中…';
     try{
@@ -235,6 +252,7 @@ async function loadAuditOrders(){
   els.auditOrdersStatus.textContent='最近の注文を取得しています…';
   els.auditOrdersList.innerHTML='<div class="empty">監査を開始しています…</div>';
   try{
+    await loadCommerceRuntime();
     const data=await api('/admin/commerce/orders?limit=30');
     const all=Array.isArray(data.orders)?data.orders:[];
     const shouldAudit=row=>['paid','refunded'].includes(String(row.status||'').toLowerCase())||String(row.paymentRail||'')==='connected_balance'||Boolean(row.balanceDebitCapturedAt)||String(row.recoveryState||'')==='RECOVERY_REQUIRED';

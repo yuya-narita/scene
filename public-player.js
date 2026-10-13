@@ -903,7 +903,7 @@
       if(authorToken){
         if(ownCopyStatus)ownCopyStatus.textContent='売上残高を確認しています…';
         const balance=await fetchAuthorPurchaseBalance(authorToken);
-        if(balance?.connected){
+        if(balance?.connected&&balance.balancePurchaseEnabled!==false){
           displayedBalance=Math.max(0,Number(balance.available)||0);
           const choice=await showBalancePurchaseModal({amount:Number(orderPayload.order.amount),available:displayedBalance});
           if(choice==='cancel'){
@@ -931,6 +931,7 @@
       // present and author-balance payment is selected, fire the exact same
       // checkout request twice concurrently. Production behavior is unchanged.
       const doublePurchaseRegression=selectedPaymentMethod==='author_balance'
+        &&orderPayload.paymentEnvironment==='test'
         &&new URLSearchParams(location.search).get('ahakoDoublePurchaseRegression')==='1';
       if(doublePurchaseRegression){
         const [a,b]=await Promise.all([fetch(checkoutUrl,checkoutInit),fetch(checkoutUrl,checkoutInit)]);
