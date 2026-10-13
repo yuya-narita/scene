@@ -250,6 +250,14 @@ async function loadAuditOrders(){
     if(els.auditOkCount)els.auditOkCount.textContent='–';if(els.auditAlertCount)els.auditAlertCount.textContent='–';if(els.auditPendingCount)els.auditPendingCount.textContent='–';if(els.auditTabBadge)els.auditTabBadge.hidden=true;
   }finally{if(els.auditOrdersReload)els.auditOrdersReload.disabled=false;}
 }
+function renderCheckoutStatus(checkout){
+  const good=checkout.state==='expired_unpaid'||checkout.state==='open_unpaid';
+  const details=[['Session',checkout.sessionId],['Stripe Session状態',checkout.sessionStatus],['Stripe支払状態',checkout.paymentStatus],['PaymentIntent',checkout.paymentIntentId],['環境',checkout.environment],['照会エラー',checkout.errorCode],['不一致',(checkout.issues||[]).join(', ')]];
+  const rows=details.filter(x=>x[1]).map(x=>`<p>${escapeHtml(x[0])}：<code style="overflow-wrap:anywhere">${escapeHtml(String(x[1]))}</code></p>`).join('');
+  const panel=document.createElement('div');panel.className=`audit-verdict ${good?'is-ok':'is-alert'}`;
+  panel.innerHTML=`<small>CHECKOUT 照会 · 読取専用</small><strong>${escapeHtml(checkout.message||'状態不明')}</strong>${rows}<p>注文・購入権・資金は変更していません。</p><small>${escapeHtml(formatJstDate(checkout.checkedAt))}</small>`;
+  els.auditOrderResult.prepend(panel);
+}
 async function runPaymentAudit(){
   const orderId=String(els.auditOrderId?.value||'').trim().toLowerCase();
   if(!/^order_[a-f0-9]{32}$/.test(orderId)){els.auditOrderStatus.textContent='Order IDを確認してください。';return;}
@@ -257,6 +265,12 @@ async function runPaymentAudit(){
   try{
     const {audit}=await fetchPaymentAudit(orderId);
     renderPaymentAudit(audit);
+    if(audit.orderStatus==='pending_payment'&&audit.paymentRail!=='connected_balance'){
+      let checkout;
+      try{checkout=(await apiWithTimeout(`/admin/commerce/order/${encodeURIComponent(orderId)}/checkout-status`,{},12000)).checkout;}
+      catch(error){checkout={state:'lookup_failed',message:'Checkout照会失敗。未払いとは断定できません',errorCode:error.message,checkedAt:new Date().toISOString()};}
+      renderCheckoutStatus(checkout);
+    }
     els.auditOrderStatus.textContent=audit.status==='ok'?'監査完了：一致':'監査完了：不一致があります';
     // FINAL: the detail audit is live Stripe evidence. Rebuild the automatic-audit
     // list immediately so stale cards/counters cannot continue showing an old result.
