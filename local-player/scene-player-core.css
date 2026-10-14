@@ -2574,12 +2574,20 @@ html.sp-scene-image-open body{
 .sp-core.sp-immersive.sp-immersive-controls>.sp-header{padding-right:calc(60px + env(safe-area-inset-right));padding-left:max(16px,env(safe-area-inset-left));background:var(--sp-panel);}
 .sp-core.sp-immersive.sp-immersive-controls>.sp-footer{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));background:var(--sp-panel);}
 
-/* V13: auto-sized text carries an explicit marker; Studio writes inline sizes. */
-@media (orientation:landscape) and (max-height:600px) and (any-pointer:coarse){
-  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene .sp-text[data-sp-size-mode="auto"]:not(.sp-credits-body){
-    font-size:clamp(16px,2.8cqw,25px)!important;line-height:1.65;
-  }
-  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene .sp-subtext[data-sp-size-mode="auto"]:not(.sp-credits-subtext){
-    font-size:clamp(11px,1.9cqw,14px)!important;
-  }
+/* V14: a compact landscape prose scale, including stored numeric sizes.
+   Native text autosizing must not enlarge the explicit reading layout. */
+.sp-core.sp-immersive{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+.sp-core.sp-immersive .sp-scene[data-fit="soft"]{--sp-landscape-font-limit:19px;}
+.sp-core.sp-immersive .sp-scene[data-fit="medium"]{--sp-landscape-font-limit:18px;}
+.sp-core.sp-immersive .sp-scene[data-fit="compact"]{--sp-landscape-font-limit:16px;}
+.sp-core.sp-immersive .sp-scene[data-fit="tight"]{--sp-landscape-font-limit:14px;}
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-text,
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-handdrawn-frame>.sp-text{
+  font-size:min(var(--sp-landscape-font,19px),var(--sp-landscape-font-limit,1000px))!important;
+}
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-text{
+  max-width:min(100%,570px);margin-inline:auto;
+}
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-subtext{
+  font-size:var(--sp-landscape-font,11px)!important;
 }
