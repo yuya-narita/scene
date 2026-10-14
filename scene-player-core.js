@@ -191,6 +191,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       this._buildShell();
       this._bindControls();
+      this._bindLandscapeImmersion();
     }
 
     _buildShell() {
@@ -220,6 +221,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           </div>
           <button class="sp-cover-start" type="button">はじめる</button>
         </section>
+        <button class="sp-immersive-toggle" type="button" aria-label="操作を表示" aria-expanded="false">⋯</button>
         <header class="sp-header">
           <button class="sp-button sp-prev" type="button" aria-label="Previous scene">‹</button>
           <div class="sp-meta">
@@ -349,6 +351,28 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._bound.push([el, event, fn, options]);
     }
 
+
+    _bindLandscapeImmersion() {
+      if(typeof global.matchMedia!=='function')return;
+      const mq=global.matchMedia('(orientation: landscape) and (max-height: 600px) and (any-pointer: coarse)');
+      const button=this.host.querySelector('.sp-immersive-toggle');
+      const updateLabel=()=>{const shown=this.host.classList.contains('sp-immersive-controls'),en=this.uiLanguage==='en';button.setAttribute('aria-expanded',String(shown));button.setAttribute('aria-label',shown?(en?'Hide controls':'操作を隠す'):(en?'Show controls':'操作を表示'));button.textContent=shown?'×':'⋯';};
+      const reflow=()=>{
+        if(this.destroyed||!this.document||!this.els.stage?.clientHeight)return;
+        const nodes=Array.from(this.els.scenes.children),entries=nodes.map(node=>({scene:this.document.scenes.find(sc=>sc.id===node.dataset.sceneId)}));
+        if(!nodes.length||entries.some(e=>!e.scene))return;
+        if(this.host.dataset.display==='overlay')this._positionOverlayNodes(nodes,entries);else this._positionSceneNodes(nodes,entries,0);
+        // Existing viewers/rolls keep their timeline; no Scene/audio replay on rotation.
+        this.els.scenes.querySelectorAll('.sp-credits-viewport').forEach(v=>v.dispatchEvent(new Event('sceneplayer:reflow')));
+      };
+      const scheduleReflow=()=>{if(this._immersiveRaf)cancelAnimationFrame(this._immersiveRaf);this._immersiveRaf=requestAnimationFrame(()=>{this._immersiveRaf=0;reflow();});};
+      const orientationChanged=()=>{this.host.classList.toggle('sp-immersive',mq.matches);this.host.classList.remove('sp-immersive-controls');updateLabel();scheduleReflow();};
+      this._on(mq,'change',orientationChanged);
+      this._on(global,'resize',scheduleReflow,{passive:true});
+      if(global.visualViewport)this._on(global.visualViewport,'resize',scheduleReflow,{passive:true});
+      this._on(button,'click',e=>{e.preventDefault();e.stopPropagation();this.host.classList.toggle('sp-immersive-controls');updateLabel();});
+      orientationChanged();
+    }
 
     _bindControls() {
       // iOS/WebKit: the reading gesture unlocks Web Audio and arms playback.
@@ -5666,6 +5690,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         };
         requestAnimationFrame(configureRoll);
         viewport.addEventListener('click',()=>requestAnimationFrame(configureRoll));
+        viewport.addEventListener('sceneplayer:reflow',configureRoll);
         list.querySelectorAll('img').forEach(img=>img.addEventListener('load',configureRoll,{once:true}));
         document.fonts?.ready.then(()=>{if(ready)configureRoll();});
       }
@@ -6177,6 +6202,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     destroy(options = {}) {
       if (this.destroyed) return;
       const preserveHost = options?.preserveHost === true;
+      if(this._immersiveRaf)cancelAnimationFrame(this._immersiveRaf);this._immersiveRaf=0;
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
@@ -6207,7 +6233,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // shared host, otherwise its delayed destroy wipes out the second read.
       if (!preserveHost) {
         this.host.innerHTML = '';
-        this.host.classList.remove('sp-core');
+        this.host.classList.remove('sp-core','sp-immersive','sp-immersive-controls');
       }
       if (this._chatIconPreloadTimer) clearTimeout(this._chatIconPreloadTimer);
       this._chatIconPreloadTimer = 0;

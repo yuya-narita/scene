@@ -1171,3 +1171,6 @@ body{
 .public-intro[data-start-trigger="tap"]{cursor:pointer;}
 .public-intro[data-start-trigger="tap"] .public-primary{width:max-content!important;min-width:168px!important;max-width:calc(100vw - 32px)!important;white-space:nowrap!important;flex-shrink:0!important;padding-left:20px!important;padding-right:20px!important;font-size:0!important;background:rgba(0,0,0,.55)!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border:0!important;}
 .public-intro[data-start-trigger="tap"] .public-primary::after{content:"タップしてはじめる";display:block;white-space:nowrap;font-size:14px;line-height:1.3;}
+
+body:has(.public-player.sp-immersive:not(.sp-immersive-controls):not(.sp-cover-open):not([hidden])) .public-shelf-return,
+body:has(.public-player.sp-immersive:not(.sp-immersive-controls):not(.sp-cover-open):not([hidden])) .public-report-trigger{visibility:hidden!important;pointer-events:none!important;}
