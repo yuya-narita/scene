@@ -1474,6 +1474,23 @@
                 1,
                 2
               ]
+            },
+            "startDelay": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 60
+            },
+            "endMode": {
+              "type": "string",
+              "enum": [
+                "exit",
+                "hold"
+              ]
+            },
+            "stopPosition": {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 90
             }
           }
         }

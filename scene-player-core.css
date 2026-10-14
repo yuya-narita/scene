@@ -2543,3 +2543,14 @@ html.sp-scene-image-open body{
 .sp-credits-section,.sp-credits-spacer{grid-column:1 / -1;min-width:0;}
 .sp-credits-section{text-align:center;font-weight:700;letter-spacing:.12em;overflow-wrap:anywhere;}
 .sp-credits-spacer{pointer-events:none;}
+
+/* Optional delayed entrance and a measured final position; pause keeps the same timeline. */
+.sp-credits.is-roll .sp-credits-list{position:relative;animation-delay:var(--credits-delay,0s);}
+.sp-credits.is-roll[data-end-mode="hold"] .sp-credits-list{animation-name:sp-credits-roll-hold;}
+@keyframes sp-credits-roll-hold{
+  0%{transform:translateY(0);animation-timing-function:linear;}
+  85%{transform:translateY(calc(var(--credits-stop,0px) * .94));animation-timing-function:ease-out;}
+  100%{transform:translateY(var(--credits-stop,0px));}
+}
+
+@media(prefers-reduced-motion:reduce){.sp-credits.is-roll[data-end-mode="hold"] .sp-credits-list{animation:none;transform:none;padding-top:0;}}
