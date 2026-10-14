@@ -3646,6 +3646,28 @@
       return {platform,handle:id?`@${id}`:''};
     }catch(_){return {platform:'',handle:''};}
   }
+
+  function buildCreditsEditor(scene){
+    const pr=ensurePresentation(scene);pr.credits ||= {mode:'card',title:'CREDITS',duration:30,fontSize:22,gap:28,align:'center',color:'#ffffff',opacity:.72,entries:[]};
+    const m=pr.credits;if(!Array.isArray(m.entries))m.entries=[];
+    const card=desktopCard(u('提供・協力・クレジット','Credits'),'desktop-credits-card');
+    card.addEventListener('keydown',e=>e.stopPropagation());card.addEventListener('keyup',e=>e.stopPropagation());
+    const save=()=>{scheduleDraftSave(80);refreshLivePlayer({preserveSheet:true});};
+    const field=(label,obj,key,type='text',min,max,step)=>{const w=document.createElement('label');w.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=label;const inp=document.createElement(key==='note'?'textarea':'input');if(inp.tagName==='INPUT')inp.type=type;inp.value=obj[key]??'';if(min!==undefined)inp.min=min;if(max!==undefined)inp.max=max;if(step)inp.step=step;inp.addEventListener('input',()=>{obj[key]=type==='number'?Number(inp.value):inp.value;scheduleDraftSave(80);});inp.addEventListener('change',save);w.append(sp,inp);return w;};
+    card.append(desktopMakeSelect(u('表示方式','Display'),[['card',u('カード','Card')],['roll',u('エンドロール','End roll')]],m.mode||'card',v=>{m.mode=v;save();}));
+    const grid=document.createElement('div');grid.className='desktop-web-board-grid';
+    grid.append(field(u('タイトル','Title'),m,'title'),field(u('流れる時間（秒）','Roll duration (seconds)'),m,'duration','number',5,600,.5),field(u('文字サイズ','Font size'),m,'fontSize','number',12,48,1),field(u('項目の間隔','Entry spacing'),m,'gap','number',8,80,1),field(u('文字色','Text color'),m,'color','color'),field(u('カード背景の濃さ（0〜1）','Card opacity (0–1)'),m,'opacity','number',0,1,.05));
+    card.append(grid,desktopMakeSelect(u('文字揃え','Alignment'),[['center',u('中央','Center')],['left',u('左','Left')]],m.align||'center',v=>{m.align=v;save();}));
+    const note=document.createElement('p');note.textContent=u('本文は最後の一言として表示。名前とロゴにリンクを設定できます。エンドロールは一時停止・一覧表示ができます。','Scene text appears after the credits. Names and logos can link to websites. End rolls support pause and a static list.');card.appendChild(note);
+    const list=document.createElement('div');card.appendChild(list);
+    const render=()=>{list.replaceChildren();m.entries.forEach((entry,i)=>{const box=document.createElement('div');box.className='desktop-credits-entry';const title=document.createElement('strong');title.textContent=String(i+1);const fields=document.createElement('div');fields.className='desktop-web-board-grid';fields.append(field(u('区分・見出し','Heading'),entry,'heading'),field(u('名前・表示名','Name'),entry,'name'),field(u('補足・指定クレジット表記','Note / required credit'),entry,'note'),field(u('リンク（https://…）','Link (https://…)'),entry,'url','url'));const actions=document.createElement('div');actions.className='desktop-web-board-actions';
+      const move=(delta)=>{const to=i+delta;if(to<0||to>=m.entries.length)return;[m.entries[i],m.entries[to]]=[m.entries[to],m.entries[i]];save();render();};
+      const up=desktopAction('↑',()=>move(-1),'');up.disabled=i===0;const down=desktopAction('↓',()=>move(1),'');down.disabled=i===m.entries.length-1;
+      actions.append(up,down,desktopAction(u('ロゴを選択','Choose logo'),()=>desktopPickFile('image/*',(url,name)=>{entry.logoUrl=url;entry._editorFileName=name;save();render();}),''),desktopAction(u('ロゴを外す','Remove logo'),()=>{delete entry.logoUrl;delete entry._editorFileName;save();render();},''),desktopAction(u('項目を削除','Delete entry'),async()=>{if(await openAppDialog({kind:'confirm',danger:true,title:u('項目を削除','Delete entry'),message:u('このクレジット項目を削除しますか？','Delete this credit entry?'),confirmLabel:u('削除','Delete')})){m.entries.splice(i,1);save();render();}},''));
+      box.append(title,fields);if(entry.logoUrl){const img=document.createElement('img');img.src=entry.logoUrl;img.alt=entry.name||'';img.style.cssText='max-width:100%;max-height:90px;object-fit:contain';box.appendChild(img);}box.appendChild(actions);list.appendChild(box);
+    });};render();card.append(desktopAction(u('＋ クレジット項目を追加','+ Add credit'),()=>{m.entries.push({heading:'',name:'',note:'',url:''});save();render();},'is-primary'));return card;
+  }
+
   function initWebSNSMeta(scene,index){ const pr=ensurePresentation(scene);pr.webSNS ||= {};const m=pr.webSNS;if(!m.postId)m.postId=snsId();if(!m.name)m.name='ユーザー';if(!m.handle)m.handle='@user';if(m.platform===undefined)m.platform='';if(m.icon===undefined)m.icon='';if(m.iconPreset===undefined)m.iconPreset='';if(m.profileUrl===undefined)m.profileUrl='';if(m.likes===undefined)m.likes=0;if(m.reposts===undefined)m.reposts=0;if(m.replies===undefined)m.replies=0;if(m.role===undefined)m.role='extra';if(m.deleted===undefined)m.deleted=false;return m; }
   function applyWebSNSTimeModeForward(fromIndex,mode){let changed=0;for(let i=Math.max(0,Number(fromIndex)||0);i<(workingDocument?.scenes?.length||0);i++){const sc=workingDocument.scenes[i],pr=sc?.presentation||{};if(pr.view!=='web-sns')break;const lt=ensureLogTime(sc);if(lt.mode!==mode){lt.mode=mode;changed++;}if(mode==='edit')lt.editedAt=boardNowString();}scheduleDraftSave(40);return changed;}
   function applyWebSNSModeForward(fromIndex){if(!workingDocument?.scenes?.length)return 0;let changed=0;const start=Math.max(0,Number(fromIndex)||0),inherited=ensureLogTime(workingDocument.scenes[start]).mode||'none';for(let i=start;i<workingDocument.scenes.length;i++){const sc=workingDocument.scenes[i];if(!sc||sc.type==='sound')continue;const pr=ensurePresentation(sc);if(pr.view&&!['world','web-sns'].includes(pr.view))continue;if(pr.view!=='web-sns')changed++;pr.view='web-sns';pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};initWebSNSMeta(sc,i);const lt=ensureLogTime(sc);lt.mode=inherited;if(inherited==='edit')lt.editedAt=boardNowString();}scheduleDraftSave(40);return changed;}
@@ -4230,6 +4252,8 @@
         holder:webReview,key:'icon',src:webReview.icon,
         fileName:webReview._editorFileName||''
       });
+
+      (scene?.presentation?.credits?.entries||[]).forEach((entry,entryIndex)=>{if(entry?.logoUrl)callback({kind:'creditLogo',sceneIndex,entryIndex,holder:entry,key:'logoUrl',src:entry.logoUrl,fileName:entry._editorFileName||''});});
 
       const webSNS=scene?.presentation?.webSNS;
       if(webSNS?.icon)callback({
@@ -11475,6 +11499,7 @@ function openDesktopEffectDetail(){
       display:p.display,
       view:p.view,
       entryMotion:p.entryMotion,
+      credits:clone(p.credits||null),
       typing:clone(p.typing||null),
       effectTiming:clone(p.effectTiming||null),
       disappear:clone(p.disappear||null)
@@ -11486,6 +11511,7 @@ function openDesktopEffectDetail(){
       if(before.display===undefined)delete p.display;else p.display=before.display;
       if(before.view===undefined)delete p.view;else p.view=before.view;
       if(before.entryMotion===undefined)delete p.entryMotion;else p.entryMotion=before.entryMotion;
+      if(before.credits===null)delete p.credits;else p.credits=clone(before.credits);
       if(before.typing===null)delete p.typing;else p.typing=clone(before.typing);
       if(before.effectTiming===null)delete p.effectTiming;else p.effectTiming=clone(before.effectTiming);
       if(before.disappear===null)delete p.disappear;else p.disappear=clone(before.disappear);
@@ -11535,10 +11561,12 @@ function openDesktopEffectDetail(){
       effectSelect,
       v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
-      desktopDetailSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')]],p.view||'world',v=>{p.view=v;if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);apply();}),
+      desktopDetailSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')],['credits',u('提供・協力・クレジット','Credits')]],p.view||'world',v=>{p.view=v;if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);apply();committed=true;if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
       desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();})
     );
+
+    if(p.view==='credits')body.appendChild(buildCreditsEditor(scene));
 
     const timing=section(u('タイミング','Timing'));timing.classList.add('desktop-effect-timing-section');
     const timingGrid=two(timing);
@@ -13982,6 +14010,7 @@ function openDesktopTextDetail(){
       webQACard.append(grid,timeMode);if(lt.mode==='work')webQACard.append(workWrap);webQACard.append(actions);
     }
 
+    let creditsCard=p.view==='credits'?buildCreditsEditor(scene):null;
     let webSNSCard=null;
     if((p.view||'world')==='web-sns'){
       const m=initWebSNSMeta(scene,index);webSNSCard=desktopCard(u('SNS投稿設定','SNS post settings'),'desktop-web-sns-card');
@@ -14120,7 +14149,7 @@ function openDesktopTextDetail(){
       }),
       v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderDesktopLivePanel()}),
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()}),
-      desktopMakeSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')]],p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);if(v==='web-comment')initWebCommentMeta(scene,index);if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);refresh();renderDesktopLivePanel();}),
+      desktopMakeSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')],['credits',u('提供・協力・クレジット','Credits')]],p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);if(v==='web-comment')initWebCommentMeta(scene,index);if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
       desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();})
     );
@@ -14458,7 +14487,7 @@ function openDesktopTextDetail(){
     if(!effectInlined)panes.effect.appendChild(effectCard);
     const effectBody=effectInlined?panes.effect.querySelector('.desktop-v2-inline-detail'):null;
     const timingAnchor=effectBody?.querySelector('.desktop-effect-timing-section')||null;
-    const activeFormatCard=chatCard||webBoardCard||webCommentCard||webReviewCard||webQACard||webSNSCard||webMailCard||webNotificationCard||null;
+    const activeFormatCard=(!effectInlined?creditsCard:null)||chatCard||webBoardCard||webCommentCard||webReviewCard||webQACard||webSNSCard||webMailCard||webNotificationCard||null;
     if(activeFormatCard && effectBody && timingAnchor)effectBody.insertBefore(activeFormatCard,timingAnchor);
     else if(activeFormatCard)panes.effect.appendChild(activeFormatCard);
     if(flowCommentCard)panes.effect.appendChild(flowCommentCard);

@@ -2489,3 +2489,25 @@ html.sp-scene-image-open body{
 .sp-scene:lang(ja) .sp-text.sp-has-ruby,.sp-scene:lang(ja) .sp-subtext.sp-has-ruby{
   line-break:strict;overflow-wrap:normal;
 }
+
+/* Credits: shared card / end roll; motion is local to the active Scene. */
+.sp-scene[data-view="credits"] {width:100%;max-width:100%;}
+.sp-credits {color:inherit;text-align:var(--credits-align,center);font-size:var(--credits-size,22px);line-height:1.55;width:min(92%,680px);margin:0 auto;pointer-events:auto;writing-mode:horizontal-tb;}
+.sp-credits-viewport {border:1px solid currentColor;border-radius:24px;background:rgb(12 15 20 / var(--credits-opacity,.72));color:inherit;padding:24px;max-height:55vh;max-height:55cqh;overflow:auto;overscroll-behavior:contain;}
+.sp-credits-list {display:flex;flex-direction:column;gap:var(--credits-gap,28px);}
+.sp-credits-title {font-size:.7em;font-weight:700;letter-spacing:.2em;white-space:pre-wrap;}
+.sp-credits-heading {font-size:.62em;letter-spacing:.14em;opacity:.72;white-space:pre-wrap;}
+.sp-credits-name {display:block;font-size:1em;font-weight:700;white-space:pre-wrap;overflow-wrap:anywhere;color:inherit;}
+.sp-credits-name[href] {text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
+.sp-credits-link-mark {font-size:.65em;opacity:.7;}
+.sp-credits-note {font-size:.75em;white-space:pre-wrap;overflow-wrap:anywhere;}
+.sp-credits-logo {display:block;max-width:180px;max-height:90px;object-fit:contain;margin:0 auto 12px;}
+.sp-credits.is-roll:not(.is-static) .sp-credits-viewport {height:50vh;height:50cqh;overflow:hidden;padding:0;border:0;border-radius:0;background:none;}
+.sp-credits.is-roll:not(.is-static) .sp-credits-list {padding-top:50vh;padding-top:50cqh;animation:sp-credits-roll var(--credits-duration,30s) linear forwards;}
+.sp-credits.is-paused .sp-credits-list {animation-play-state:paused!important;}
+.sp-credits-controls {display:flex;justify-content:center;gap:12px;margin-top:14px;}
+.sp-credits-controls button {font:inherit;font-size:14px;color:inherit;background:rgb(24 24 24 / .6);border:1px solid currentColor;border-radius:20px;padding:10px 16px;min-height:44px;cursor:pointer;}
+@keyframes sp-credits-roll {from{transform:translateY(0)}to{transform:translateY(-100%)}}
+.sp-history-body .sp-credits {width:100%;font-size:18px;}
+.sp-history-body .sp-credits-viewport {max-height:none;}
+@media(prefers-reduced-motion:reduce){.sp-credits.is-roll:not(.is-static) .sp-credits-viewport{overflow:auto}.sp-credits.is-roll:not(.is-static) .sp-credits-list{animation:none;padding-top:0}}

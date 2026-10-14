@@ -558,7 +558,8 @@
             "web-qa",
             "web-sns",
             "web-mail",
-            "web-notification"
+            "web-notification",
+            "credits"
           ]
         },
         "effect": {
@@ -1335,6 +1336,72 @@
                 "o05",
                 "o06"
               ]
+            }
+          }
+        },
+        "credits": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "card",
+                "roll"
+              ]
+            },
+            "title": {
+              "type": "string"
+            },
+            "duration": {
+              "type": "number",
+              "minimum": 5,
+              "maximum": 600
+            },
+            "fontSize": {
+              "type": "number",
+              "minimum": 12,
+              "maximum": 48
+            },
+            "gap": {
+              "type": "number",
+              "minimum": 8,
+              "maximum": 80
+            },
+            "align": {
+              "enum": [
+                "center",
+                "left"
+              ]
+            },
+            "color": {
+              "type": "string"
+            },
+            "opacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "heading": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "logoUrl": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           }
         }

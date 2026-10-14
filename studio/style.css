@@ -14289,3 +14289,5 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 #coverPreview[data-start-trigger="center"] .cover-preview-start{top:50%!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:84%!important;min-height:52px!important;border-radius:14px!important;}
 #coverPreview[data-start-trigger="tap"] .cover-preview-start{width:max-content!important;min-width:144px!important;max-width:calc(100% - 16px)!important;white-space:nowrap!important;font-size:0!important;background:rgba(0,0,0,.55)!important;color:#fff!important;width:auto!important;padding:10px 16px!important;}
 #coverPreview[data-start-trigger="tap"] .cover-preview-start::after{content:"タップしてはじめる";display:block;white-space:nowrap;font-size:12px;line-height:1.3;}
+
+.desktop-credits-card input,.desktop-credits-card textarea{width:100%;min-width:0;box-sizing:border-box;font-size:16px}.desktop-credits-entry{padding:14px 0;border-top:1px solid #a0a0a055}.desktop-credits-card textarea{min-height:70px}.desktop-credits-card .desktop-web-board-actions{flex-wrap:wrap}

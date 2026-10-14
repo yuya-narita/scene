@@ -2594,6 +2594,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         body.className = 'sp-history-body';
 
         const historyPresentation = scene.presentation || {};
+        if(historyPresentation.view==='credits'){body.appendChild(this._creditsNode(scene,historyPresentation,false));item.append(num,body);fragment.appendChild(item);continue;}
         if (historyPresentation.view === 'web-qa') {
           item.classList.add('sp-history-web-qa');const q=historyPresentation.webQA||{},a=q.answer||{},qaIndex=(this.document?.scenes||[]).indexOf(scene);let kind=q.kind||'legacy-answer';
           let qScene=scene,qPresentation=historyPresentation,qData=q;
@@ -5469,6 +5470,46 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return '';
     }
 
+
+    _creditsNode(scene, presentation, active=false) {
+      const m=presentation.credits||{},roll=m.mode==='roll'&&active;
+      const wrap=document.createElement('section');wrap.className='sp-credits'+(roll?' is-roll':'');
+      wrap.style.setProperty('--credits-size',`${Math.max(12,Math.min(48,Number(m.fontSize)||22))}px`);
+      wrap.style.setProperty('--credits-gap',`${Math.max(8,Math.min(80,Number(m.gap)||28))}px`);
+      wrap.style.setProperty('--credits-duration',`${Math.max(5,Math.min(600,Number(m.duration)||30))}s`);
+      wrap.style.setProperty('--credits-align',m.align==='left'?'left':'center');
+      wrap.style.setProperty('--credits-opacity',String(Math.max(0,Math.min(1,Number.isFinite(Number(m.opacity))?Number(m.opacity):.72))));
+      if(/^#[0-9a-f]{3,8}$/i.test(m.color||''))wrap.style.color=m.color;
+      const viewport=document.createElement('div');viewport.className='sp-credits-viewport';
+      const list=document.createElement('div');list.className='sp-credits-list';
+      const title=document.createElement('div');title.className='sp-credits-title';title.textContent=m.title||'CREDITS';list.appendChild(title);
+      const entries=Array.isArray(m.entries)?m.entries:[];
+      entries.forEach(entry=>{
+        if(!entry||typeof entry!=='object')return;
+        const row=document.createElement('div');row.className='sp-credits-entry';
+        const heading=document.createElement('div');heading.className='sp-credits-heading';heading.textContent=String(entry.heading||'');
+        let url='';try{const u=new URL(String(entry.url||''));if(/^https?:$/.test(u.protocol))url=u.href;}catch(_){}
+        const name=document.createElement(url?'a':'div');name.className='sp-credits-name';name.textContent=String(entry.name||'');
+        if(url){name.href=url;name.target='_blank';name.rel='noopener noreferrer';name.title='外部リンクを開く';name.addEventListener('pointerdown',e=>{e.stopPropagation();wrap.classList.add('is-paused');});name.addEventListener('click',e=>e.stopPropagation());const mark=document.createElement('span');mark.className='sp-credits-link-mark';mark.textContent=' ↗';name.appendChild(mark);}
+        if(entry.logoUrl){const img=document.createElement('img');img.className='sp-credits-logo';img.src=String(entry.logoUrl);img.alt=String(entry.name||'');name.prepend(img);}
+        const note=document.createElement('div');note.className='sp-credits-note';note.textContent=String(entry.note||'');
+        row.append(heading,name,note);list.appendChild(row);
+      });
+      if(scene.text){const tx=document.createElement('div');tx.className='sp-credits-note';tx.textContent=String(scene.text);list.appendChild(tx);}
+      viewport.appendChild(list);wrap.appendChild(viewport);
+      if(roll){
+        const controls=document.createElement('div');controls.className='sp-credits-controls';
+        const pause=document.createElement('button');pause.type='button';pause.textContent='一時停止';pause.addEventListener('click',e=>{e.stopPropagation();const stopped=wrap.classList.toggle('is-paused');pause.textContent=stopped?'再生':'一時停止';});
+        const all=document.createElement('button');all.type='button';all.textContent='一覧を見る';all.addEventListener('click',e=>{e.stopPropagation();const staticMode=wrap.classList.toggle('is-static');all.textContent=staticMode?'エンドロールに戻る':'一覧を見る';});
+        controls.append(pause,all);controls.addEventListener('pointerdown',e=>e.stopPropagation());wrap.appendChild(controls);
+        viewport.addEventListener('pointerdown',e=>{if(!e.target.closest('a')){e.stopPropagation();wrap.classList.add('is-paused');pause.textContent='再生';}});
+        viewport.addEventListener('click',e=>e.stopPropagation());
+        ['pointermove','pointerup','touchstart','touchmove','touchend'].forEach(type=>viewport.addEventListener(type,e=>e.stopPropagation()));
+        list.addEventListener('animationend',()=>{wrap.classList.add('is-static');all.textContent='エンドロールに戻る';});
+      }
+      return wrap;
+    }
+
     _sceneNode(scene, active, age) {
       const article = document.createElement('article');
       article.className = `sp-scene sp-type-${scene.type}`;
@@ -5497,6 +5538,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const entryMotion = presentation.entryMotion === 'still' ? 'still' : 'flow';
       article.dataset.entryMotion = entryMotion;
       article.dataset.fit = this._resolveAutoFit(scene, presentation.text || {});
+
+      if(presentation.view==='credits'){article.appendChild(this._creditsNode(scene,presentation,active));return article;}
 
       if (presentation.view === 'web-qa') {
         article.classList.add('sp-web-qa-scene');const q=presentation.webQA||{},a=q.answer||{},qaIndex=(this.document?.scenes||[]).indexOf(scene);let kind=q.kind||'legacy-answer';
