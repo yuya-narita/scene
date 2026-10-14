@@ -6019,6 +6019,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       node.style.fontFamily = families[family] || families.serif;
 
       const size = style.size;
+      // Flag auto/normal sizes so landscape immersion can tune only defaults;
+      // explicit author-selected sizes remain untouched.
+      node.dataset.spSizeMode = size == null || size === '' || size === 'auto' || size === 'normal' ? 'auto' : 'fixed';
       const tokenSizes = isSubText
         ? { small: '11px', normal: '14px', large: '17px', xl: '20px' }
         : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)' };

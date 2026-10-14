@@ -2574,19 +2574,12 @@ html.sp-scene-image-open body{
 .sp-core.sp-immersive.sp-immersive-controls>.sp-header{padding-right:calc(60px + env(safe-area-inset-right));padding-left:max(16px,env(safe-area-inset-left));background:var(--sp-panel);}
 .sp-core.sp-immersive.sp-immersive-controls>.sp-footer{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));background:var(--sp-panel);}
 
-/* Landscape PWA: keep automatic prose close to its portrait reading scale.
-   Explicit author sizes and the separately sized credits roll retain their settings. */
+/* V13: auto-sized text carries an explicit marker; Studio writes inline sizes. */
 @media (orientation:landscape) and (max-height:600px) and (any-pointer:coarse){
-  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-fit]),
-  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene[data-fit="auto"]{
-    --sp-immersive-auto-text:clamp(16px,2.8cqw,25px);
+  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene .sp-text[data-sp-size-mode="auto"]:not(.sp-credits-body){
+    font-size:clamp(16px,2.8cqw,25px)!important;line-height:1.65;
   }
-  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-fit]) .sp-text:not([style*="font-size"]),
-  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene[data-fit="auto"] .sp-text:not([style*="font-size"]){
-    font-size:var(--sp-immersive-auto-text)!important;line-height:1.65;
-  }
-  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-fit]) .sp-subtext:not([style*="font-size"]),
-  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene[data-fit="auto"] .sp-subtext:not([style*="font-size"]){
+  .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene .sp-subtext[data-sp-size-mode="auto"]:not(.sp-credits-subtext){
     font-size:clamp(11px,1.9cqw,14px)!important;
   }
 }
