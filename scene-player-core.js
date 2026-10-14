@@ -5602,6 +5602,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const m=presentation.credits||{},roll=m.mode==='roll'&&active;
       const wrap=document.createElement('section');wrap.className='sp-credits'+(roll?' is-roll':'');
       wrap.dataset.creditsMode=m.mode||'card';
+      wrap.dataset.surface=m.surface==='none'?'none':'card';wrap.dataset.columns=Number(m.columns)===2?'2':'1';
       wrap.style.setProperty('--credits-size',`${Math.max(12,Math.min(48,Number(m.fontSize)||22))}px`);
       wrap.style.setProperty('--credits-gap',`${Math.max(8,Math.min(80,Number(m.gap)||28))}px`);
       wrap.style.setProperty('--credits-duration',`${Math.max(5,Math.min(600,Number(m.duration)||30))}s`);

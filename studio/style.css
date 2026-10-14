@@ -14311,3 +14311,13 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .desktop-credits-card .desktop-credits-enable{font-size:13px;min-height:32px;gap:8px;}
 
 .desktop-credits-card .desktop-credits-help{font-size:12px!important;line-height:1.65!important;font-weight:400;letter-spacing:normal;margin:4px 0 8px;color:#727780;}
+
+.desktop-credits-list-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.desktop-credits-list-head input{flex:1;min-width:160px;}
+.desktop-credits-entry-fold{border-top:1px solid #a0a0a033;}
+.desktop-credits-entry-fold>summary{display:flex;align-items:center;gap:6px;min-height:44px;cursor:pointer;font-size:13px;}
+.desktop-credits-entry-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.desktop-credits-entry-fold>summary::before{content:"▸";font-size:11px;}
+.desktop-credits-entry-fold[open]>summary::before{content:"▾";}
+.desktop-credits-entry-fold>summary button{min-width:32px;min-height:32px;padding:4px 8px;flex:none;}
+.desktop-credits-entry-body{display:grid;gap:8px;padding:8px 0 14px;}

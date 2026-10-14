@@ -1448,6 +1448,19 @@
             "richTextFields": {
               "type": "object",
               "additionalProperties": true
+            },
+            "surface": {
+              "enum": [
+                "card",
+                "none"
+              ]
+            },
+            "columns": {
+              "type": "integer",
+              "enum": [
+                1,
+                2
+              ]
             }
           }
         }

@@ -2532,3 +2532,9 @@ html.sp-scene-image-open body{
 .sp-credits-viewport{position:relative;}
 .live-edit-enabled .sp-credits [data-credit-field]{-webkit-user-select:text!important;user-select:text!important;}
 .live-edit-enabled .sp-credits-name-text{display:inline-block;min-width:1em;min-height:1.3em;}
+
+/* Borderless cards / static lists and responsive paired entries. */
+.sp-credits[data-surface="none"] .sp-credits-viewport{border:0!important;background:transparent!important;border-radius:0!important;box-shadow:none!important;}
+.sp-credits[data-columns="2"] .sp-credits-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));column-gap:24px;row-gap:var(--credits-gap,28px);align-items:start;}
+.sp-credits[data-columns="2"] .sp-credits-list>.sp-credits-title,.sp-credits[data-columns="2"] .sp-credits-list>.sp-credits-body,.sp-credits[data-columns="2"] .sp-credits-list>.sp-credits-subtext{grid-column:1/-1;}
+.sp-credits-entry{min-width:0;overflow-wrap:anywhere;}
