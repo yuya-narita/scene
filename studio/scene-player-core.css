@@ -3088,3 +3088,5 @@ html.sp-scene-image-open body{
 }
 
 @media(prefers-reduced-motion:reduce){.sp-credits.is-roll[data-end-mode="hold"] .sp-credits-list{animation:none;transform:none;padding-top:0;}}
+
+.sp-credits.is-preparing .sp-credits-list{animation-play-state:paused!important;}

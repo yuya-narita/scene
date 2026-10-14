@@ -5506,7 +5506,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
         if(entry.kind==='heading'){
           const section=document.createElement('div');section.className='sp-credits-section';
-          const key=entry.heading?'heading':'name';setField(section,key,index);applyCreditStyle(section,entry.styles?.[key]);list.appendChild(section);return;
+          let url='';try{const u=new URL(String(entry.url||''));if(/^https?:$/.test(u.protocol))url=u.href;}catch(_){}
+          const label=document.createElement(url?'a':'div');label.className='sp-credits-name';if(url){label.href=url;label.target='_blank';label.rel='noopener noreferrer';}
+          if(entry.logoUrl){const img=document.createElement('img');img.className='sp-credits-logo';img.src=String(entry.logoUrl);img.alt=String(entry.heading||entry.name||'');label.appendChild(img);}
+          const text=document.createElement('span'),key=entry.heading?'heading':'name';setField(text,key,index);applyCreditStyle(text,entry.styles?.[key]);label.appendChild(text);section.appendChild(label);
+          if(entry.note){const note=document.createElement('div');note.className='sp-credits-note';setField(note,'note',index);applyCreditStyle(note,entry.styles?.note);section.appendChild(note);}list.appendChild(section);return;
         }
         const row=document.createElement('div');row.className='sp-credits-entry';
         const heading=document.createElement('div');heading.className='sp-credits-heading';heading.textContent=String(entry.heading||'');setField(heading,'heading',index);applyCreditStyle(heading,entry.styles?.heading);
@@ -5523,19 +5527,29 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(scene.text||live){const tx=document.createElement('div');tx.className='sp-text sp-credits-body';this._renderRichText(tx,scene);this._applyTextStyle(tx,presentation.text||{},false);tx.style.color='inherit';if(!presentation.text?.size||presentation.text.size==='auto'||presentation.text.size==='normal')tx.style.fontSize='inherit';tx.style.writingMode='horizontal-tb';applyCreditStyle(tx,m.bodyStyle);list.appendChild(tx);}
       if(scene.subText){const sub=document.createElement('div');sub.className='sp-subtext sp-credits-subtext';sub.textContent=String(scene.subText);applyCreditStyle(sub,m.subTextStyle);list.appendChild(sub);}
       viewport.appendChild(list);wrap.appendChild(viewport);
-      if(roll&&m.endMode==='hold'){
-        // Layout coordinates stay independent of the running transform and Studio scale.
-        const measureStop=()=>{
-          if(!wrap.isConnected||wrap.classList.contains('is-static')||wrap.classList.contains('is-editing')||wrap.classList.contains('is-body-editing'))return;
+      if(roll){
+        wrap.classList.add('is-preparing');
+        let attempts=0,ready=false;
+        const configureRoll=()=>{
+          if(!wrap.isConnected||viewport.clientHeight<=0){if(++attempts<180)requestAnimationFrame(configureRoll);return;}
+          if(wrap.classList.contains('is-static')||wrap.classList.contains('is-editing')||wrap.classList.contains('is-body-editing')){if(!ready&&++attempts<180)requestAnimationFrame(configureRoll);return;}
+          const first=Array.from(list.children).find(n=>!n.classList.contains('sp-credits-spacer')&&(n.textContent.trim()||n.querySelector('img')));
           const last=Array.from(list.children).reverse().find(n=>!n.classList.contains('sp-credits-spacer')&&(n.textContent.trim()||n.querySelector('img')));
-          if(!last)return;
+          const start=first?viewport.clientHeight-first.offsetTop:0;
           const value=Number(m.stopPosition),position=Number.isFinite(value)?Math.max(10,Math.min(90,value)):50;
-          const end=Math.min(0,viewport.clientHeight*position/100-last.offsetTop-last.offsetHeight/2);
-          list.style.setProperty('--credits-stop',`${end}px`);
+          const end=m.endMode==='hold'&&last?Math.min(start,viewport.clientHeight*position/100-last.offsetTop-last.offsetHeight/2):-list.offsetHeight;
+          // Resolve lengths before playback; no changing custom property inside keyframes.
+          const animation=list.getAnimations?.().find(a=>['sp-credits-roll','sp-credits-roll-hold'].includes(a.animationName));
+          if(animation?.effect?.setKeyframes){
+            const frames=m.endMode==='hold'?[{transform:`translateY(${start}px)`,offset:0,easing:'linear'},{transform:`translateY(${start+(end-start)*.94}px)`,offset:.85,easing:'ease-out'},{transform:`translateY(${end}px)`,offset:1}]:[{transform:`translateY(${start}px)`},{transform:`translateY(${end}px)`}];
+            animation.effect.setKeyframes(frames);
+          }
+          if(!ready){ready=true;wrap.classList.remove('is-preparing');}
         };
-        requestAnimationFrame(measureStop);
-        list.querySelectorAll('img').forEach(img=>img.addEventListener('load',measureStop,{once:true}));
-        document.fonts?.ready.then(measureStop);
+        requestAnimationFrame(configureRoll);
+        viewport.addEventListener('click',()=>requestAnimationFrame(configureRoll));
+        list.querySelectorAll('img').forEach(img=>img.addEventListener('load',configureRoll,{once:true}));
+        document.fonts?.ready.then(()=>{if(ready)configureRoll();});
       }
       const editing=()=>this.host?.classList?.contains('live-edit-enabled');
       let down=null,dragged=false,completed=false;

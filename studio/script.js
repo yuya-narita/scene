@@ -3728,13 +3728,13 @@ return flowCommentCard;}
         const fields=document.createElement('div');fields.className='desktop-web-board-grid';fields.append(field(u('区分・見出し','Heading'),entry,'heading'),field(u('名前・表示名','Name'),entry,'name'),field(u('補足・指定クレジット表記','Note / required credit'),entry,'note'),field(u('リンク（https://…）','Link (https://…)'),entry,'url','url'));
         const kind=desktopMakeSelect(u('項目の種類','Entry type'),[['item',u('通常項目','Credit')],['heading',u('中央見出し（全幅）','Centered heading / full width')],['spacer',u('余白','Space')]],entry.kind||'item',v=>{entry.kind=v;if(v==='spacer'&&entry.height===undefined)entry.height=40;openEntry=entry;save();render();});
         body.appendChild(kind);
-        if(entry.kind==='heading'){fields.replaceChildren(field(u('中央見出し','Centered heading'),entry,entry.heading?'heading':'name'));}
+        if(entry.kind==='heading'){fields.replaceChildren(field(u('中央見出し','Centered heading'),entry,entry.heading?'heading':'name'),field(u('補足','Note'),entry,'note'),field(u('リンク（https://…）','Link (https://…)'),entry,'url','url'));}
         if(entry.kind==='spacer'){fields.replaceChildren(field(u('追加する余白の高さ（px）','Extra space height (px)'),entry,'height','number',0,240,4));}
         body.addEventListener('input',updateLabel);
         const actions=document.createElement('div');actions.className='desktop-web-board-actions';
         actions.append(desktopAction(u('ロゴを選択','Choose logo'),()=>desktopPickFile('image/*',(url,name)=>{entry.logoUrl=url;entry._editorFileName=name;save();render();}),''),desktopAction(u('ロゴを外す','Remove logo'),()=>{delete entry.logoUrl;delete entry._editorFileName;save();render();},''),desktopAction(u('項目を削除','Delete entry'),async()=>{if(await openAppDialog({kind:'confirm',danger:true,title:u('項目を削除','Delete entry'),message:u('このクレジット項目を削除しますか？','Delete this credit entry?'),confirmLabel:u('削除','Delete')})){m.entries.splice(i,1);if(openEntry===entry)openEntry=null;save();render();}},''));
-        if(entry.kind==='heading'||entry.kind==='spacer'){actions.removeChild(actions.children[0]);actions.removeChild(actions.children[0]);}
-        body.append(fields);if(entry.logoUrl&&entry.kind!=='heading'&&entry.kind!=='spacer'){const img=document.createElement('img');img.src=entry.logoUrl;img.alt=entry.name||'';img.style.cssText='max-width:100%;max-height:90px;object-fit:contain';body.appendChild(img);}body.appendChild(actions);box.append(summary,body);list.appendChild(box);
+        if(entry.kind==='spacer'){actions.removeChild(actions.children[0]);actions.removeChild(actions.children[0]);}
+        body.append(fields);if(entry.logoUrl&&entry.kind!=='spacer'){const img=document.createElement('img');img.src=entry.logoUrl;img.alt=entry.name||'';img.style.cssText='max-width:100%;max-height:90px;object-fit:contain';body.appendChild(img);}body.appendChild(actions);box.append(summary,body);list.appendChild(box);
       });
     };
     search.addEventListener('input',render);render();card.append(desktopAction(u('＋ クレジット項目を追加','+ Add credit'),()=>{const entry={heading:'',name:'',note:'',url:''};m.entries.push(entry);openEntry=entry;search.value='';save();render();},'is-primary'));
