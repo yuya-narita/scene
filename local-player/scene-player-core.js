@@ -5573,25 +5573,26 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(m.colorMode==='custom'&&/^#[0-9a-f]{3,8}$/i.test(m.color||''))wrap.style.color=m.color;
       const viewport=document.createElement('div');viewport.className='sp-credits-viewport';
       const list=document.createElement('div');list.className='sp-credits-list';
+      const applyCreditStyle=(node,style)=>{if(style&&typeof style==='object'&&Object.keys(style).length){const family=node.style.fontFamily;this._applyTextStyle(node,style,false);if(!style.fontFamily)node.style.fontFamily=family||'';}};
       const setField=(node,key,index)=>{node.dataset.creditField=key;if(index!==undefined)node.dataset.creditIndex=String(index);};
-      const title=document.createElement('div');title.className='sp-credits-title';title.textContent=m.title||'';setField(title,'title');list.appendChild(title);
+      const title=document.createElement('div');title.className='sp-credits-title';title.textContent=m.title||'';setField(title,'title');applyCreditStyle(title,m.titleStyle);list.appendChild(title);
       const entries=Array.isArray(m.entries)?m.entries:[];
       entries.forEach((entry,index)=>{
         if(!entry||typeof entry!=='object')return;
         const row=document.createElement('div');row.className='sp-credits-entry';
-        const heading=document.createElement('div');heading.className='sp-credits-heading';heading.textContent=String(entry.heading||'');setField(heading,'heading',index);
+        const heading=document.createElement('div');heading.className='sp-credits-heading';heading.textContent=String(entry.heading||'');setField(heading,'heading',index);applyCreditStyle(heading,entry.styles?.heading);
         let url='';try{const u=new URL(String(entry.url||''));if(/^https?:$/.test(u.protocol))url=u.href;}catch(_){}
         const name=document.createElement(url?'a':'div');name.className='sp-credits-name';
         if(url){name.href=url;name.target='_blank';name.rel='noopener noreferrer';name.title='外部リンクを開く';}
         if(entry.logoUrl){const img=document.createElement('img');img.className='sp-credits-logo';img.src=String(entry.logoUrl);img.alt=String(entry.name||'');name.appendChild(img);}
-        const nameText=document.createElement('span');nameText.className='sp-credits-name-text';nameText.textContent=String(entry.name||'');setField(nameText,'name',index);name.appendChild(nameText);
+        const nameText=document.createElement('span');nameText.className='sp-credits-name-text';nameText.textContent=String(entry.name||'');setField(nameText,'name',index);applyCreditStyle(nameText,entry.styles?.name);name.appendChild(nameText);
         if(url){const mark=document.createElement('span');mark.className='sp-credits-link-mark';mark.textContent=' ↗';name.appendChild(mark);}
-        const note=document.createElement('div');note.className='sp-credits-note';note.textContent=String(entry.note||'');setField(note,'note',index);
+        const note=document.createElement('div');note.className='sp-credits-note';note.textContent=String(entry.note||'');setField(note,'note',index);applyCreditStyle(note,entry.styles?.note);
         row.append(heading,name,note);list.appendChild(row);
       });
       const live=active&&this.host?.classList?.contains('live-edit-enabled');
-      if(scene.text||live){const tx=document.createElement('div');tx.className='sp-text sp-credits-body';this._renderRichText(tx,scene);this._applyTextStyle(tx,presentation.text||{},false);tx.style.color='inherit';tx.style.fontSize='inherit';tx.style.writingMode='horizontal-tb';list.appendChild(tx);}
-      if(scene.subText){const sub=document.createElement('div');sub.className='sp-subtext sp-credits-subtext';sub.textContent=String(scene.subText);list.appendChild(sub);}
+      if(scene.text||live){const tx=document.createElement('div');tx.className='sp-text sp-credits-body';this._renderRichText(tx,scene);this._applyTextStyle(tx,presentation.text||{},false);tx.style.color='inherit';if(!presentation.text?.size||presentation.text.size==='auto'||presentation.text.size==='normal')tx.style.fontSize='inherit';tx.style.writingMode='horizontal-tb';applyCreditStyle(tx,m.bodyStyle);list.appendChild(tx);}
+      if(scene.subText){const sub=document.createElement('div');sub.className='sp-subtext sp-credits-subtext';sub.textContent=String(scene.subText);applyCreditStyle(sub,m.subTextStyle);list.appendChild(sub);}
       viewport.appendChild(list);wrap.appendChild(viewport);
       const editing=()=>this.host?.classList?.contains('live-edit-enabled');
       let down=null,dragged=false,completed=false;
@@ -5610,7 +5611,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           else{viewport.scrollTop=0;wrap.classList.remove('is-static','is-paused');if(completed){const animation=list.getAnimations?.()[0];if(animation){animation.currentTime=0;animation.play();}completed=false;}}
         }else if(e.target.closest('a'))e.stopPropagation();
       });
-      if(roll)list.addEventListener('animationend',()=>{completed=true;wrap.classList.add('is-static','is-paused');});
+      if(roll)list.addEventListener('animationend',e=>{if(e.target!==list||e.animationName!=='sp-credits-roll')return;completed=true;wrap.classList.add('is-complete');});
       return wrap;
     }
 

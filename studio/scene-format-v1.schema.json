@@ -1399,6 +1399,23 @@
                   },
                   "logoUrl": {
                     "type": "string"
+                  },
+                  "styles": {
+                    "type": "object",
+                    "properties": {
+                      "heading": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "name": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "note": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
                   }
                 }
               }
@@ -1411,6 +1428,18 @@
                 "auto",
                 "custom"
               ]
+            },
+            "titleStyle": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "bodyStyle": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "subTextStyle": {
+              "type": "object",
+              "additionalProperties": true
             }
           }
         }

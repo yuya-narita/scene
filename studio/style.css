@@ -14300,3 +14300,9 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .desktop-credits-fold input,.desktop-credits-fold textarea{font-size:16px;}
 .desktop-flow-comment-card.is-collapsed .desktop-collapsible-content{display:none!important;}
 .desktop-flow-comment-card .desktop-collapsible-head{width:100%;min-height:44px;text-align:left;cursor:pointer;background:none;border:0;color:inherit;font:inherit;}
+
+.desktop-credits-card.is-collapsed .desktop-collapsible-content{display:none!important;}
+.desktop-credits-card .desktop-collapsible-head{width:100%;min-height:44px;text-align:left;cursor:pointer;background:none;border:0;color:inherit;font:inherit;}
+.desktop-credits-card .desktop-collapsible-content{display:grid;gap:10px;}
+.desktop-credits-card .desktop-collapsible-content>:not(summary){margin-top:0;}
+.desktop-credits-typography input{width:100%;min-width:0;font-size:16px;box-sizing:border-box;}

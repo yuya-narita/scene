@@ -2518,5 +2518,9 @@ html.sp-scene-image-open body{
 .live-edit-enabled .sp-credits [data-credit-field][contenteditable="true"] {outline:1px dashed var(--sp-accent);outline-offset:4px;}
 @media(prefers-reduced-motion:reduce){.sp-credits.is-roll .sp-credits-viewport{overflow:auto}.sp-credits.is-roll .sp-credits-list{animation:none;padding-top:0}}
 
-.live-inline-text-edit .sp-credits.is-roll .sp-credits-list{animation-play-state:paused!important;transform:none!important;padding-top:0;}
-.live-inline-text-edit .sp-credits.is-roll .sp-credits-viewport{padding:24px;overflow:auto;border:1px solid var(--sp-line);border-radius:24px;background:rgb(var(--credits-panel-rgb) / var(--credits-opacity,.72));}
+.sp-credits.is-body-editing.is-roll .sp-credits-list{animation-play-state:paused!important;transform:none!important;padding-top:0;}
+.sp-credits.is-body-editing.is-roll .sp-credits-viewport{padding:24px;overflow:auto;border:1px solid var(--sp-line);border-radius:24px;background:rgb(var(--credits-panel-rgb) / var(--credits-opacity,.72));}
+
+.sp-credits.is-roll.is-complete:not(.is-static):not(.is-editing):not(.is-body-editing){visibility:hidden;pointer-events:none;}
+.sp-credits.is-body-editing .sp-credits-list{animation-play-state:paused!important;}
+.sp-credits-name-text{white-space:pre-wrap;}
