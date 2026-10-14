@@ -1402,6 +1402,15 @@
                   }
                 }
               }
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "colorMode": {
+              "enum": [
+                "auto",
+                "custom"
+              ]
             }
           }
         }

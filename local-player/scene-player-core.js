@@ -2611,7 +2611,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         body.className = 'sp-history-body';
 
         const historyPresentation = scene.presentation || {};
-        if(historyPresentation.view==='credits'){body.appendChild(this._creditsNode(scene,historyPresentation,false));item.append(num,body);fragment.appendChild(item);continue;}
+        if(this._hasCredits(historyPresentation)){body.appendChild(this._creditsNode(scene,historyPresentation,false));item.append(num,body);fragment.appendChild(item);continue;}
         if (historyPresentation.view === 'web-qa') {
           item.classList.add('sp-history-web-qa');const q=historyPresentation.webQA||{},a=q.answer||{},qaIndex=(this.document?.scenes||[]).indexOf(scene);let kind=q.kind||'legacy-answer';
           let qScene=scene,qPresentation=historyPresentation,qData=q;
@@ -3667,7 +3667,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const scenes = this.document.scenes;
       const active = scenes[this.index];
-      const display = active?.presentation?.display || 'stack';
+      const display = this._hasCredits(active?.presentation) ? 'solo' : active?.presentation?.display || 'stack';
       const visible = this._visibleScenes(display);
       const isForwardStack = this._audioRenderMode === 'advance' && (display === 'stack' || display === 'overlay');
 
@@ -4884,7 +4884,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const run = () => {
           const activeScene = this.document?.scenes?.[this.index];
           if (!activeScene || activeScene.id !== scene.id) return;
-          const display = activeScene.presentation?.display || 'stack';
+          const display = this._hasCredits(activeScene.presentation) ? 'solo' : activeScene.presentation?.display || 'stack';
           const visible = this._visibleScenes(display);
           const nodeMap = new Map(
             [...this.els.scenes.querySelectorAll('.sp-scene')]
@@ -5558,42 +5558,59 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
+
+    _hasCredits(p={}) { return p?.credits?.enabled===true || (p?.view==='credits' && p?.credits?.enabled!==false); }
+
     _creditsNode(scene, presentation, active=false) {
       const m=presentation.credits||{},roll=m.mode==='roll'&&active;
       const wrap=document.createElement('section');wrap.className='sp-credits'+(roll?' is-roll':'');
+      wrap.dataset.creditsMode=m.mode||'card';
       wrap.style.setProperty('--credits-size',`${Math.max(12,Math.min(48,Number(m.fontSize)||22))}px`);
       wrap.style.setProperty('--credits-gap',`${Math.max(8,Math.min(80,Number(m.gap)||28))}px`);
       wrap.style.setProperty('--credits-duration',`${Math.max(5,Math.min(600,Number(m.duration)||30))}s`);
       wrap.style.setProperty('--credits-align',m.align==='left'?'left':'center');
       wrap.style.setProperty('--credits-opacity',String(Math.max(0,Math.min(1,Number.isFinite(Number(m.opacity))?Number(m.opacity):.72))));
-      if(/^#[0-9a-f]{3,8}$/i.test(m.color||''))wrap.style.color=m.color;
+      if(m.colorMode==='custom'&&/^#[0-9a-f]{3,8}$/i.test(m.color||''))wrap.style.color=m.color;
       const viewport=document.createElement('div');viewport.className='sp-credits-viewport';
       const list=document.createElement('div');list.className='sp-credits-list';
-      const title=document.createElement('div');title.className='sp-credits-title';title.textContent=m.title||'CREDITS';list.appendChild(title);
+      const setField=(node,key,index)=>{node.dataset.creditField=key;if(index!==undefined)node.dataset.creditIndex=String(index);};
+      const title=document.createElement('div');title.className='sp-credits-title';title.textContent=m.title||'';setField(title,'title');list.appendChild(title);
       const entries=Array.isArray(m.entries)?m.entries:[];
-      entries.forEach(entry=>{
+      entries.forEach((entry,index)=>{
         if(!entry||typeof entry!=='object')return;
         const row=document.createElement('div');row.className='sp-credits-entry';
-        const heading=document.createElement('div');heading.className='sp-credits-heading';heading.textContent=String(entry.heading||'');
+        const heading=document.createElement('div');heading.className='sp-credits-heading';heading.textContent=String(entry.heading||'');setField(heading,'heading',index);
         let url='';try{const u=new URL(String(entry.url||''));if(/^https?:$/.test(u.protocol))url=u.href;}catch(_){}
-        const name=document.createElement(url?'a':'div');name.className='sp-credits-name';name.textContent=String(entry.name||'');
-        if(url){name.href=url;name.target='_blank';name.rel='noopener noreferrer';name.title='外部リンクを開く';name.addEventListener('pointerdown',e=>{e.stopPropagation();wrap.classList.add('is-paused');});name.addEventListener('click',e=>e.stopPropagation());const mark=document.createElement('span');mark.className='sp-credits-link-mark';mark.textContent=' ↗';name.appendChild(mark);}
-        if(entry.logoUrl){const img=document.createElement('img');img.className='sp-credits-logo';img.src=String(entry.logoUrl);img.alt=String(entry.name||'');name.prepend(img);}
-        const note=document.createElement('div');note.className='sp-credits-note';note.textContent=String(entry.note||'');
+        const name=document.createElement(url?'a':'div');name.className='sp-credits-name';
+        if(url){name.href=url;name.target='_blank';name.rel='noopener noreferrer';name.title='外部リンクを開く';}
+        if(entry.logoUrl){const img=document.createElement('img');img.className='sp-credits-logo';img.src=String(entry.logoUrl);img.alt=String(entry.name||'');name.appendChild(img);}
+        const nameText=document.createElement('span');nameText.className='sp-credits-name-text';nameText.textContent=String(entry.name||'');setField(nameText,'name',index);name.appendChild(nameText);
+        if(url){const mark=document.createElement('span');mark.className='sp-credits-link-mark';mark.textContent=' ↗';name.appendChild(mark);}
+        const note=document.createElement('div');note.className='sp-credits-note';note.textContent=String(entry.note||'');setField(note,'note',index);
         row.append(heading,name,note);list.appendChild(row);
       });
-      if(scene.text){const tx=document.createElement('div');tx.className='sp-credits-note';tx.textContent=String(scene.text);list.appendChild(tx);}
+      const live=active&&this.host?.classList?.contains('live-edit-enabled');
+      if(scene.text||live){const tx=document.createElement('div');tx.className='sp-text sp-credits-body';this._renderRichText(tx,scene);this._applyTextStyle(tx,presentation.text||{},false);tx.style.color='inherit';tx.style.fontSize='inherit';tx.style.writingMode='horizontal-tb';list.appendChild(tx);}
+      if(scene.subText){const sub=document.createElement('div');sub.className='sp-subtext sp-credits-subtext';sub.textContent=String(scene.subText);list.appendChild(sub);}
       viewport.appendChild(list);wrap.appendChild(viewport);
-      if(roll){
-        const controls=document.createElement('div');controls.className='sp-credits-controls';
-        const pause=document.createElement('button');pause.type='button';pause.textContent='一時停止';pause.addEventListener('click',e=>{e.stopPropagation();const stopped=wrap.classList.toggle('is-paused');pause.textContent=stopped?'再生':'一時停止';});
-        const all=document.createElement('button');all.type='button';all.textContent='一覧を見る';all.addEventListener('click',e=>{e.stopPropagation();const staticMode=wrap.classList.toggle('is-static');all.textContent=staticMode?'エンドロールに戻る':'一覧を見る';});
-        controls.append(pause,all);controls.addEventListener('pointerdown',e=>e.stopPropagation());wrap.appendChild(controls);
-        viewport.addEventListener('pointerdown',e=>{if(!e.target.closest('a')){e.stopPropagation();wrap.classList.add('is-paused');pause.textContent='再生';}});
-        viewport.addEventListener('click',e=>e.stopPropagation());
-        ['pointermove','pointerup','touchstart','touchmove','touchend'].forEach(type=>viewport.addEventListener(type,e=>e.stopPropagation()));
-        list.addEventListener('animationend',()=>{wrap.classList.add('is-static');all.textContent='エンドロールに戻る';});
-      }
+      const editing=()=>this.host?.classList?.contains('live-edit-enabled');
+      let down=null,dragged=false,completed=false;
+      viewport.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY};dragged=false;e.stopPropagation();});
+      viewport.addEventListener('pointermove',e=>{if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>12)dragged=true;e.stopPropagation();});
+      ['pointerup','touchstart','touchmove','touchend'].forEach(type=>viewport.addEventListener(type,e=>e.stopPropagation()));
+      viewport.addEventListener('click',e=>{
+        if(editing()){e.preventDefault();e.stopPropagation();return;}
+        if(dragged){e.preventDefault();e.stopPropagation();return;}
+        if(roll){
+          const isStatic=wrap.classList.contains('is-static');
+          // The first tap reveals a stable list; only stable links navigate.
+          if(isStatic&&e.target.closest('a')){e.stopPropagation();return;}
+          e.preventDefault();e.stopPropagation();
+          if(!isStatic){wrap.classList.add('is-static','is-paused');}
+          else{viewport.scrollTop=0;wrap.classList.remove('is-static','is-paused');if(completed){const animation=list.getAnimations?.()[0];if(animation){animation.currentTime=0;animation.play();}completed=false;}}
+        }else if(e.target.closest('a'))e.stopPropagation();
+      });
+      if(roll)list.addEventListener('animationend',()=>{completed=true;wrap.classList.add('is-static','is-paused');});
       return wrap;
     }
 
@@ -5626,7 +5643,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       article.dataset.entryMotion = entryMotion;
       article.dataset.fit = this._resolveAutoFit(scene, presentation.text || {});
 
-      if(presentation.view==='credits'){article.appendChild(this._creditsNode(scene,presentation,active));return article;}
+      if(this._hasCredits(presentation)){article.dataset.credits='on';article.appendChild(this._creditsNode(scene,presentation,active));return article;}
 
       if (presentation.view === 'web-qa') {
         article.classList.add('sp-web-qa-scene');const q=presentation.webQA||{},a=q.answer||{},qaIndex=(this.document?.scenes||[]).indexOf(scene);let kind=q.kind||'legacy-answer';
