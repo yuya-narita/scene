@@ -5640,10 +5640,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       viewport.addEventListener('click',e=>{
         if(editing()){if(roll){const isStatic=wrap.classList.toggle('is-static');wrap.classList.toggle('is-paused',isStatic);}e.preventDefault();e.stopPropagation();return;}
         if(dragged){e.preventDefault();e.stopPropagation();return;}
+        // Links open in one tap, including a held final entry; other taps reveal the list.
+        if(e.target.closest('a')){e.stopPropagation();return;}
         if(roll){
           const isStatic=wrap.classList.contains('is-static');
-          // The first tap reveals a stable list; only stable links navigate.
-          if(isStatic&&e.target.closest('a')){e.stopPropagation();return;}
           e.preventDefault();e.stopPropagation();
           if(!isStatic){wrap.classList.add('is-static','is-paused');}
           else{viewport.scrollTop=0;wrap.classList.remove('is-static','is-paused');if(completed){const animation=list.getAnimations?.()[0];if(animation){animation.currentTime=0;animation.play();}completed=false;}}
