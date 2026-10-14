@@ -14309,3 +14309,5 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 
 .desktop-credits-card .desktop-collapsible-content .desktop-credits-enable input[type="checkbox"]{appearance:auto;width:16px!important;height:16px!important;min-width:16px!important;min-height:16px!important;max-width:16px!important;flex:0 0 16px!important;padding:0!important;margin:0!important;box-shadow:none;}
 .desktop-credits-card .desktop-credits-enable{font-size:13px;min-height:32px;gap:8px;}
+
+.desktop-credits-card .desktop-credits-help{font-size:12px!important;line-height:1.65!important;font-weight:400;letter-spacing:normal;margin:4px 0 8px;color:#727780;}

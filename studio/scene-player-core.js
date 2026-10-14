@@ -3293,9 +3293,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       node.classList.add('sp-layout-measuring');
       const nodeRect=this._logicalRect(node.getBoundingClientRect());
       const boxHeight=Math.max(1,nodeRect.height);
+      const creditsViewport=node.querySelector(':scope > .sp-credits > .sp-credits-viewport');
       const text=node.querySelector('.sp-text');
       const frame=node.querySelector('.sp-handdrawn-frame');
-      const vertical=text?.dataset?.writingMode==='vertical-rl';
+      const vertical=!creditsViewport&&text?.dataset?.writingMode==='vertical-rl';
       let inkLeft=0,inkRight=Math.max(1,nodeRect.width),inkTop=0,inkBottom=boxHeight;
       const contentRects=[];
       const addElementRect=(element)=>{
@@ -3319,7 +3320,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // images could occupy the landing space reserved for the next Scene.
       const boardPost=node.querySelector(':scope > .sp-web-board-post');
       const chatRow=node.querySelector(':scope > .sp-chat-row');
-      if(boardPost){
+      if(creditsViewport){
+        // Roll text (including the author-only empty body) can be outside its
+        // clipped window. Anchor the stable viewport, never the moving text.
+        addElementRect(creditsViewport);
+      }else if(boardPost){
         // Board text is nested inside the post. Measure the complete post so
         // long responses reserve their real height before the next Scene lands.
         addElementRect(boardPost);
@@ -5478,6 +5483,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const m=presentation.credits||{},roll=m.mode==='roll'&&active;
       const wrap=document.createElement('section');wrap.className='sp-credits'+(roll?' is-roll':'');
       wrap.dataset.creditsMode=m.mode||'card';
+      const stageHeight=Number(this.els?.stage?.clientHeight);if(stageHeight>0){wrap.style.setProperty('--credits-viewport-height',`${stageHeight*.5}px`);wrap.style.setProperty('--credits-max-height',`${stageHeight*.55}px`);}
       wrap.style.setProperty('--credits-size',`${Math.max(12,Math.min(48,Number(m.fontSize)||22))}px`);
       wrap.style.setProperty('--credits-gap',`${Math.max(8,Math.min(80,Number(m.gap)||28))}px`);
       wrap.style.setProperty('--credits-duration',`${Math.max(5,Math.min(600,Number(m.duration)||30))}s`);
