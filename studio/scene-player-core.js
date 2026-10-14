@@ -5487,9 +5487,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const viewport=document.createElement('div');viewport.className='sp-credits-viewport';
       const list=document.createElement('div');list.className='sp-credits-list';
       const applyCreditStyle=(node,style)=>{if(style&&typeof style==='object'&&Object.keys(style).length){const family=node.style.fontFamily;this._applyTextStyle(node,style,false);if(!style.fontFamily)node.style.fontFamily=family||'';}};
-      const setField=(node,key,index)=>{node.dataset.creditField=key;if(index!==undefined)node.dataset.creditIndex=String(index);};
-      const title=document.createElement('div');title.className='sp-credits-title';title.textContent=m.title||'';setField(title,'title');applyCreditStyle(title,m.titleStyle);list.appendChild(title);
+      const setField=(node,key,index)=>{node.dataset.creditField=key;if(index!==undefined)node.dataset.creditIndex=String(index);const holder=index===undefined?m:entries[index];this._renderRichText(node,{text:String(holder?.[key]||''),richText:holder?.richTextFields?.[key]});};
       const entries=Array.isArray(m.entries)?m.entries:[];
+      const title=document.createElement('div');title.className='sp-credits-title';title.textContent=m.title||'';setField(title,'title');applyCreditStyle(title,m.titleStyle);list.appendChild(title);
       entries.forEach((entry,index)=>{
         if(!entry||typeof entry!=='object')return;
         const row=document.createElement('div');row.className='sp-credits-entry';
@@ -5513,7 +5513,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       viewport.addEventListener('pointermove',e=>{if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>12)dragged=true;e.stopPropagation();});
       ['pointerup','touchstart','touchmove','touchend'].forEach(type=>viewport.addEventListener(type,e=>e.stopPropagation()));
       viewport.addEventListener('click',e=>{
-        if(editing()){e.preventDefault();e.stopPropagation();return;}
+        if(editing()){if(roll){const isStatic=wrap.classList.toggle('is-static');wrap.classList.toggle('is-paused',isStatic);}e.preventDefault();e.stopPropagation();return;}
         if(dragged){e.preventDefault();e.stopPropagation();return;}
         if(roll){
           const isStatic=wrap.classList.contains('is-static');

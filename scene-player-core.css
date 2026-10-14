@@ -2524,3 +2524,11 @@ html.sp-scene-image-open body{
 .sp-credits.is-roll.is-complete:not(.is-static):not(.is-editing):not(.is-body-editing){visibility:hidden;pointer-events:none;}
 .sp-credits.is-body-editing .sp-credits-list{animation-play-state:paused!important;}
 .sp-credits-name-text{white-space:pre-wrap;}
+
+/* Authors can reopen a finished roll and select its text without changing playback. */
+.live-edit-enabled .sp-credits.is-roll.is-complete{visibility:visible;pointer-events:auto;}
+.live-edit-enabled .sp-credits.is-roll.is-complete:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list{visibility:hidden;}
+.live-edit-enabled .sp-credits.is-roll.is-complete:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-viewport::after{content:"タップしてクレジットを編集";display:block;position:absolute;inset:0;align-content:center;text-align:center;color:var(--sp-sub);font:14px var(--sp-font-sans);}
+.sp-credits-viewport{position:relative;}
+.live-edit-enabled .sp-credits [data-credit-field]{-webkit-user-select:text!important;user-select:text!important;}
+.live-edit-enabled .sp-credits-name-text{display:inline-block;min-width:1em;min-height:1.3em;}

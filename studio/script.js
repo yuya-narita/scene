@@ -3717,26 +3717,6 @@ return flowCommentCard;}
   }
 
 
-  function buildCreditsTypography(scene){
-    const m=ensurePresentation(scene).credits;if(!m?.enabled)return null;
-    const card=desktopCard(u('クレジットの文字','Credit typography'),'desktop-credits-typography');
-    card.addEventListener('keydown',e=>e.stopPropagation());card.addEventListener('keyup',e=>e.stopPropagation());
-    const targets=[['title',u('タイトル','Title')],['body',u('本文','Body')],['subText',u('本文の補足','Scene subtext')]];
-    (m.entries||[]).forEach((entry,i)=>{const label=entry.name||`${i+1}`;for(const key of ['heading','name','note'])targets.push([`${i}:${key}`,`${i+1} ${label} — ${u(({heading:'見出し',name:'名前',note:'補足'})[key],key)}`]);});
-    let chosen=creditsTypographyTargetScene===scene?creditsTypographyTarget:'title';if(!targets.some(x=>x[0]===chosen))chosen='title';
-    const select=desktopMakeSelect(u('調整する文字','Text target'),targets,chosen,value=>{chosen=value;creditsTypographyTargetScene=scene;creditsTypographyTarget=value;draw();});
-    const controls=document.createElement('div');controls.className='desktop-web-board-grid';card.append(select,controls);
-    const getStyle=()=>{if(chosen==='title')return m.titleStyle ||= {};if(chosen==='body')return m.bodyStyle ||= {};if(chosen==='subText')return m.subTextStyle ||= {};const [i,key]=chosen.split(':');const entry=m.entries[Number(i)];entry.styles ||= {};return entry.styles[key] ||= {};};
-    const apply=()=>{scheduleDraftSave(80);refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});};
-    const draw=()=>{controls.replaceChildren();const style=getStyle();let factor=chosen==='title'?.7:chosen==='subText'?.7:chosen.endsWith(':heading')?.62:chosen.endsWith(':note')?.75:1;
-      const numeric=(label,key,min,max,step,def)=>{const wrap=document.createElement('label');wrap.className='desktop-web-board-field';const title=document.createElement('span');title.textContent=label;const inp=document.createElement('input');inp.type='number';inp.min=min;inp.max=max;inp.step=step;inp.value=style[key]??def;inp.addEventListener('input',()=>{if(inp.value==='')delete style[key];else{const n=Number(inp.value);if(Number.isFinite(n))style[key]=Math.max(min,Math.min(max,n));}scheduleDraftSave(80);});inp.addEventListener('change',apply);wrap.append(title,inp);return wrap;};
-      controls.append(numeric(u('文字サイズ','Font size'),'size',8,100,1,Math.round((Number(m.fontSize)||22)*factor)),numeric(u('行間','Line height'),'lineHeight',.8,3,.05,1.55));
-      controls.append(desktopMakeSelect(u('書体','Typeface'),[['',u('既定','Default')],['serif',u('明朝','Serif')],['sans',u('ゴシック','Sans')],['mono',u('等幅','Mono')]],style.fontFamily||'',v=>{if(v)style.fontFamily=v;else delete style.fontFamily;apply();}),desktopMakeSelect(u('太さ','Weight'),[['',u('既定','Default')],['300',u('細い','Light')],['400',u('標準','Normal')],['700',u('太い','Bold')],['900',u('極太','Heavy')]],String(style.fontWeight||''),v=>{if(v)style.fontWeight=Number(v);else delete style.fontWeight;apply();}));
-      const color=document.createElement('label');color.className='desktop-web-board-field';const title=document.createElement('span');title.textContent=u('指定色','Custom color');const input=document.createElement('input');input.type='color';input.value=style.color||'#ffffff';input.addEventListener('input',()=>{style.color=input.value;scheduleDraftSave(80);});input.addEventListener('change',apply);color.append(title,input);controls.append(color,desktopAction(u('この文字を既定に戻す','Reset this text'),()=>{for(const key of Object.keys(style))delete style[key];apply();draw();},''));
-    };draw();return card;
-  }
-  var creditsTypographyTargetScene=null,creditsTypographyTarget='title';
-
   function initWebSNSMeta(scene,index){ const pr=ensurePresentation(scene);pr.webSNS ||= {};const m=pr.webSNS;if(!m.postId)m.postId=snsId();if(!m.name)m.name='ユーザー';if(!m.handle)m.handle='@user';if(m.platform===undefined)m.platform='';if(m.icon===undefined)m.icon='';if(m.iconPreset===undefined)m.iconPreset='';if(m.profileUrl===undefined)m.profileUrl='';if(m.likes===undefined)m.likes=0;if(m.reposts===undefined)m.reposts=0;if(m.replies===undefined)m.replies=0;if(m.role===undefined)m.role='extra';if(m.deleted===undefined)m.deleted=false;return m; }
   function applyWebSNSTimeModeForward(fromIndex,mode){let changed=0;for(let i=Math.max(0,Number(fromIndex)||0);i<(workingDocument?.scenes?.length||0);i++){const sc=workingDocument.scenes[i],pr=sc?.presentation||{};if(pr.view!=='web-sns')break;const lt=ensureLogTime(sc);if(lt.mode!==mode){lt.mode=mode;changed++;}if(mode==='edit')lt.editedAt=boardNowString();}scheduleDraftSave(40);return changed;}
   function applyWebSNSModeForward(fromIndex){if(!workingDocument?.scenes?.length)return 0;let changed=0;const start=Math.max(0,Number(fromIndex)||0),inherited=ensureLogTime(workingDocument.scenes[start]).mode||'none';for(let i=start;i<workingDocument.scenes.length;i++){const sc=workingDocument.scenes[i];if(!sc||sc.type==='sound')continue;const pr=ensurePresentation(sc);if(pr.view&&!['world','web-sns'].includes(pr.view))continue;if(pr.view!=='web-sns')changed++;pr.view='web-sns';pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};initWebSNSMeta(sc,i);const lt=ensureLogTime(sc);lt.mode=inherited;if(inherited==='edit')lt.editedAt=boardNowString();}scheduleDraftSave(40);return changed;}
@@ -9663,7 +9643,7 @@ return flowCommentCard;}
     let rememberReading=false;
     const value=await appPrompt(`「${target.selectedText}」のふりがな\n空欄で保存するとルビを解除します。`,existing?.reading||'',{title:'ルビ',inputLabel:'ふりがな',confirmLabel:'適用',checkboxLabel:'この作品の作者辞書にも登録する',onCheckbox:value=>rememberReading=value});
     if(value===null||value===undefined)return;
-    if(!workingDocument?.scenes?.includes(target.scene))return;
+    if(!workingDocument?.scenes?.includes(target.scene.creditOwner||target.scene))return;
     const reading=String(value).replace(/[\r\n]/g,'').trim().slice(0,200);
     richSelectionSnapshot=target;
     applyRichSelectionAction('ruby',reading);
@@ -9687,13 +9667,32 @@ return flowCommentCard;}
     });
   }
   function hideRichSelectionToolbar(){if(richSelectionToolbar)richSelectionToolbar.hidden=true;richSelectionSnapshot=null;}
+
+  // Route the existing rich-text toolbar to one credit field without touching Scene.text.
+  function creditRichTarget(owner,node){
+    const key=node?.dataset?.creditField,index=node?.dataset?.creditIndex;
+    if(!owner||!['title','heading','name','note'].includes(key))return null;
+    const credits=owner.presentation?.credits;
+    const holder=index===undefined?credits:credits?.entries?.[Number(index)];if(!holder)return null;
+    const target={id:`${owner.id}::credit:${index??'title'}:${key}`,creditOwner:owner,creditHolder:holder,creditKey:key};
+    Object.defineProperties(target,{
+      text:{get:()=>String(holder[key]||''),set:value=>{holder[key]=String(value||'');},enumerable:true},
+      richText:{get:()=>holder.richTextFields?.[key],set:value=>{holder.richTextFields ||= {};if(value)holder.richTextFields[key]=value;else delete holder.richTextFields[key];},configurable:true,enumerable:true}
+    });return target;
+  }
+  function removeEmptyCreditRichText(target){
+    const holder=target?.creditHolder,key=target?.creditKey;if(!holder)return;
+    const value=holder.richTextFields?.[key];if(value&&!value.ranges?.length&&!value.autoRubyExcluded?.length)delete holder.richTextFields[key];
+    if(holder.richTextFields&&!Object.keys(holder.richTextFields).length)delete holder.richTextFields;
+  }
+
   function previewRichSelection(){
     const sel=window.getSelection?.();
     if(!sel||!sel.rangeCount||sel.isCollapsed||!String(sel.toString()||'').length)return null;
     const r=sel.getRangeAt(0);
     const ownerText=node=>{
       const el=node?.nodeType===Node.ELEMENT_NODE?node:node?.parentElement;
-      return el?.closest?.('.sp-text')||null;
+      return el?.closest?.('[data-credit-field]')||el?.closest?.('.sp-text')||null;
     };
     const startEl=ownerText(r.startContainer),endEl=ownerText(r.endContainer);
     if(!startEl||startEl!==endEl||!playerHost.contains(startEl))return null;
@@ -9705,7 +9704,7 @@ return flowCommentCard;}
     const sceneId=article.dataset.sceneId||'';
     let index=(workingDocument?.scenes||[]).findIndex(sc=>String(sc?.id||'')===String(sceneId));
     if(index<0)index=Math.max(0,Math.min(player?.index??selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
-    const scene=workingDocument?.scenes?.[index]||null;if(!scene)return null;
+    const ownerScene=workingDocument?.scenes?.[index]||null;if(!ownerScene)return null;const scene=creditRichTarget(ownerScene,startEl)||ownerScene;
     // V124: derive source offsets from actual text nodes, never from Range.toString().
     // Range.toString() can inject visual newlines for display:block Rich Text (quotes etc.),
     // which made the next toolbar action point at the wrong characters.
@@ -9780,6 +9779,7 @@ return flowCommentCard;}
   function removeRichKindsInSelection(ranges,start,end,kinds){return ranges.filter(r=>!(kinds.includes(r?.kind)&&Number(r.end)>start&&Number(r.start)<end));}
   function applyRichSelectionAction(action,value=''){
     const snap=richSelectionSnapshot,scene=snap?.scene;if(!scene)return;
+    if(scene.creditOwner)finishCreditsInlineEdit();
     // V124: commit the editable DOM first, then detach it BEFORE structural mutation.
     // This makes scene.text the single source of truth; stale contenteditable DOM can no
     // longer write pre-conversion text back over bullets/numbers or rebuilt ranges.
@@ -9870,11 +9870,12 @@ return flowCommentCard;}
       }
     }
     scene.richText.ranges=ranges.sort((a,b)=>(a.start||0)-(b.start||0)||(a.end||0)-(b.end||0));
-    if(!scene.richText.ranges.length&&!scene.richText.autoRubyExcluded?.length)delete scene.richText;
+    if(!scene.richText.ranges.length&&!scene.richText.autoRubyExcluded?.length){if(scene.creditOwner){scene.richText=null;removeEmptyCreditRichText(scene);}else delete scene.richText;}
     scheduleDraftSave(0);hideRichSelectionToolbar();
     try{getSelection()?.removeAllRanges();}catch(_){ }
     if(liveInlineEditEl)finishInlineTextEdit();
     liveEditRenderAt(Number.isInteger(snap.index)?snap.index:workingDocument.scenes.indexOf(scene),{preserveSheet:false});
+    if(scene.creditOwner||scene.presentation?.credits?.enabled){playerHost.querySelector('.sp-scene.is-active .sp-credits.is-roll')?.classList.add('is-static','is-paused');}
     showUndo(action==='clear'?'書式を解除しました':'文字の書式を変更しました');
   }
   // V73: the Player itself handles pointer/tap release. Waiting until RAF meant the
@@ -12900,7 +12901,6 @@ function openDesktopTextDetail(){
     const section=(name)=>{const s=document.createElement('section');s.className='desktop-text-detail-section';const hh=document.createElement('h3');hh.textContent=name;s.appendChild(hh);body.appendChild(s);return s;};
     const two=(parent)=>{const g=document.createElement('div');g.className='desktop-text-detail-two';parent.appendChild(g);return g;};
 
-    const creditsTypography=buildCreditsTypography(scene);if(creditsTypography)body.appendChild(creditsTypography);
     const typography=section(u('基本','Basic'));
     const v60ColorScopeCtl=v60MakeTextColorScope(scene,{onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}});
     const basic=two(typography);
@@ -17094,7 +17094,7 @@ function openDesktopTextDetail(){
     finishCreditsInlineEdit();finishInlineTextEdit();
     captureUndo(u('クレジット編集を元に戻せます','Undo credit edit'));
     const wrap=node.closest('.sp-credits'),abort=new AbortController();
-    const save=()=>{holder[key]=String(node.innerText??node.textContent??'').replace(/\r\n/g,'\n');scheduleDraftSave(180);};
+    const target=creditRichTarget(scene,node);const save=()=>{const before=String(holder[key]||'');const copy=stripRubyReadings(node.cloneNode(true));const value=String(copy.innerText??copy.textContent??'').replace(/\r\n/g,'\n');remapRubyAfterTextEdit(target,before,value);holder[key]=value;scheduleDraftSave(180);};
     creditsInlineSession={node,wrap,abort,save};wrap?.classList.add('is-editing');
     node.setAttribute('contenteditable','true');node.setAttribute('role','textbox');node.setAttribute('aria-label',u('クレジットを編集','Edit credit'));
     node.addEventListener('input',save,{signal:abort.signal});node.addEventListener('blur',()=>{finishCreditsInlineEdit();requestAnimationFrame(renderDesktopLivePanel);},{once:true,signal:abort.signal});
@@ -17112,7 +17112,7 @@ function openDesktopTextDetail(){
   playerHost.addEventListener('click',e=>{
     if(!liveEditEnabled||autoRecActive||player?.historyOpen||player?.ended)return;
     const node=e.target.closest?.('.sp-scene.is-active .sp-credits [data-credit-field]');if(!node)return;
-    e.preventDefault();e.stopImmediatePropagation();startCreditsInlineEdit(node);
+    e.preventDefault();e.stopImmediatePropagation();if(captureAndShowRichSelection())return;startCreditsInlineEdit(node);
   },true);
 
   // Once direct writing has started, the release/click belonging to that same
@@ -17148,6 +17148,7 @@ function openDesktopTextDetail(){
       return;
     }
 
+    if(e.target.closest?.('.sp-credits')&&captureAndShowRichSelection()){e.preventDefault();e.stopImmediatePropagation();return;}
     const activeSubText=e.target.closest?.('.sp-scene.is-active .sp-subtext');
     const activeText=e.target.closest?.('.sp-scene.is-active .sp-text');
     // Web Expression bodies render Scene.text into their own DOM instead of .sp-text.
