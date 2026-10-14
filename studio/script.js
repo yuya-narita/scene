@@ -3716,20 +3716,28 @@ return flowCommentCard;}
       count.textContent=query?u(`項目 ${matches.length} / ${m.entries.length}`,`Entries ${matches.length} / ${m.entries.length}`):u(`項目 ${m.entries.length}`,`Entries ${m.entries.length}`);
       matches.forEach(({entry,i})=>{
         const box=document.createElement('details');box.className='desktop-credits-entry-fold';box.open=openEntry===entry;
-        const summary=document.createElement('summary');const title=document.createElement('span');title.className='desktop-credits-entry-label';const updateLabel=()=>{title.textContent=`${i+1}｜${[entry.heading,entry.name].filter(Boolean).join(' · ')||u('未入力','Untitled')}`;};updateLabel();
+        const summary=document.createElement('summary');const title=document.createElement('span');title.className='desktop-credits-entry-label';const updateLabel=()=>{title.textContent=`${i+1}｜${entry.kind==='spacer'?u(`余白 ${entry.height??40}px`,`Space ${entry.height??40}px`):(entry.kind==='heading'?u('見出し：','Heading: '):'')+([entry.heading,entry.name].filter(Boolean).join(' · ')||u('未入力','Untitled'))}`;};updateLabel();
         const move=(delta)=>{const to=i+delta;if(to<0||to>=m.entries.length)return;[m.entries[i],m.entries[to]]=[m.entries[to],m.entries[i]];save();render();};
         const up=desktopAction('↑',()=>move(-1),'');up.disabled=i===0;up.title=u('前へ','Move up');const down=desktopAction('↓',()=>move(1),'');down.disabled=i===m.entries.length-1;down.title=u('後ろへ','Move down');
         [up,down].forEach(button=>{button.addEventListener('pointerdown',e=>e.stopPropagation());button.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();});});summary.append(title,up,down);
         box.addEventListener('toggle',()=>{if(box.open){openEntry=entry;list.querySelectorAll('details').forEach(other=>{if(other!==box)other.open=false;});}else if(openEntry===entry)openEntry=null;});
         const body=document.createElement('div');body.className='desktop-credits-entry-body';
         const fields=document.createElement('div');fields.className='desktop-web-board-grid';fields.append(field(u('区分・見出し','Heading'),entry,'heading'),field(u('名前・表示名','Name'),entry,'name'),field(u('補足・指定クレジット表記','Note / required credit'),entry,'note'),field(u('リンク（https://…）','Link (https://…)'),entry,'url','url'));
+        const kind=desktopMakeSelect(u('項目の種類','Entry type'),[['item',u('通常項目','Credit')],['heading',u('中央見出し（全幅）','Centered heading / full width')],['spacer',u('余白','Space')]],entry.kind||'item',v=>{entry.kind=v;if(v==='spacer'&&entry.height===undefined)entry.height=40;openEntry=entry;save();render();});
+        body.appendChild(kind);
+        if(entry.kind==='heading'){fields.replaceChildren(field(u('中央見出し','Centered heading'),entry,entry.heading?'heading':'name'));}
+        if(entry.kind==='spacer'){fields.replaceChildren(field(u('追加する余白の高さ（px）','Extra space height (px)'),entry,'height','number',0,240,4));}
         body.addEventListener('input',updateLabel);
         const actions=document.createElement('div');actions.className='desktop-web-board-actions';
         actions.append(desktopAction(u('ロゴを選択','Choose logo'),()=>desktopPickFile('image/*',(url,name)=>{entry.logoUrl=url;entry._editorFileName=name;save();render();}),''),desktopAction(u('ロゴを外す','Remove logo'),()=>{delete entry.logoUrl;delete entry._editorFileName;save();render();},''),desktopAction(u('項目を削除','Delete entry'),async()=>{if(await openAppDialog({kind:'confirm',danger:true,title:u('項目を削除','Delete entry'),message:u('このクレジット項目を削除しますか？','Delete this credit entry?'),confirmLabel:u('削除','Delete')})){m.entries.splice(i,1);if(openEntry===entry)openEntry=null;save();render();}},''));
-        body.append(fields);if(entry.logoUrl){const img=document.createElement('img');img.src=entry.logoUrl;img.alt=entry.name||'';img.style.cssText='max-width:100%;max-height:90px;object-fit:contain';body.appendChild(img);}body.appendChild(actions);box.append(summary,body);list.appendChild(box);
+        if(entry.kind==='heading'||entry.kind==='spacer'){actions.removeChild(actions.children[0]);actions.removeChild(actions.children[0]);}
+        body.append(fields);if(entry.logoUrl&&entry.kind!=='heading'&&entry.kind!=='spacer'){const img=document.createElement('img');img.src=entry.logoUrl;img.alt=entry.name||'';img.style.cssText='max-width:100%;max-height:90px;object-fit:contain';body.appendChild(img);}body.appendChild(actions);box.append(summary,body);list.appendChild(box);
       });
     };
     search.addEventListener('input',render);render();card.append(desktopAction(u('＋ クレジット項目を追加','+ Add credit'),()=>{const entry={heading:'',name:'',note:'',url:''};m.entries.push(entry);openEntry=entry;search.value='';save();render();},'is-primary'));
+    const addKinds=document.createElement('div');addKinds.className='desktop-web-board-actions';
+    const addEntry=(entry)=>{m.entries.push(entry);openEntry=entry;search.value='';save();render();};
+    addKinds.append(desktopAction(u('＋ 中央見出し','+ Centered heading'),()=>addEntry({kind:'heading',name:'CAST'}),''),desktopAction(u('＋ 余白','+ Space'),()=>addEntry({kind:'spacer',height:40}),''));card.appendChild(addKinds);
     const heading=card.querySelector('h3');const content=document.createElement('div');content.className='desktop-collapsible-content';content.append(...[...card.childNodes].filter(n=>n!==heading));const toggle=document.createElement('button');toggle.type='button';toggle.className='desktop-collapsible-head';const updateCreditHead=()=>{toggle.textContent=`${u('提供・協力・クレジット','Credits')} ${m.enabled?'ON':'OFF'} ${card.classList.contains('is-collapsed')?'▸':'▾'}`;};if(!m.enabled)card.classList.add('is-collapsed');toggle.addEventListener('click',()=>{card.classList.toggle('is-collapsed');updateCreditHead();});heading.replaceChildren(toggle);card.appendChild(content);updateCreditHead();return card;
   }
 

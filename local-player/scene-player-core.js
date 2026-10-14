@@ -5580,6 +5580,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const title=document.createElement('div');title.className='sp-credits-title';title.textContent=m.title||'';setField(title,'title');applyCreditStyle(title,m.titleStyle);list.appendChild(title);
       entries.forEach((entry,index)=>{
         if(!entry||typeof entry!=='object')return;
+        if(entry.kind==='spacer'){
+          const space=document.createElement('div');space.className='sp-credits-spacer';space.setAttribute('aria-hidden','true');
+          const height=Number(entry.height);space.style.height=`${Number.isFinite(height)?Math.max(0,Math.min(240,height)):40}px`;list.appendChild(space);return;
+        }
+        if(entry.kind==='heading'){
+          const section=document.createElement('div');section.className='sp-credits-section';
+          const key=entry.heading?'heading':'name';setField(section,key,index);applyCreditStyle(section,entry.styles?.[key]);list.appendChild(section);return;
+        }
         const row=document.createElement('div');row.className='sp-credits-entry';
         const heading=document.createElement('div');heading.className='sp-credits-heading';heading.textContent=String(entry.heading||'');setField(heading,'heading',index);applyCreditStyle(heading,entry.styles?.heading);
         let url='';try{const u=new URL(String(entry.url||''));if(/^https?:$/.test(u.protocol))url=u.href;}catch(_){}

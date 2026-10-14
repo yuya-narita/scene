@@ -1420,6 +1420,19 @@
                   "richTextFields": {
                     "type": "object",
                     "additionalProperties": true
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "item",
+                      "heading",
+                      "spacer"
+                    ]
+                  },
+                  "height": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 240
                   }
                 }
               }

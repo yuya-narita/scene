@@ -3072,3 +3072,8 @@ html.sp-scene-image-open body{
 .sp-credits[data-columns="2"] .sp-credits-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));column-gap:24px;row-gap:var(--credits-gap,28px);align-items:start;}
 .sp-credits[data-columns="2"] .sp-credits-list>.sp-credits-title,.sp-credits[data-columns="2"] .sp-credits-list>.sp-credits-body,.sp-credits[data-columns="2"] .sp-credits-list>.sp-credits-subtext{grid-column:1/-1;}
 .sp-credits-entry{min-width:0;overflow-wrap:anywhere;}
+
+/* Section headings and deliberate space span both credit columns. */
+.sp-credits-section,.sp-credits-spacer{grid-column:1 / -1;min-width:0;}
+.sp-credits-section{text-align:center;font-weight:700;letter-spacing:.12em;overflow-wrap:anywhere;}
+.sp-credits-spacer{pointer-events:none;}
