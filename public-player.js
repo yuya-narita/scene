@@ -115,7 +115,7 @@
       return Boolean(authorReference(destination))&&authorReference(destination)===authorReference(previous);
     }catch(_){return false;}
   }
-  shelfReturnLink?.addEventListener('click',event=>{if(!canRestoreShelfFromHistory(shelfReturnLink.href))return;event.preventDefault();history.back();});
+  shelfReturnLink?.addEventListener('click',event=>{if(window.parent!==window){event.preventDefault();try{window.parent.postMessage({type:'ahako:close-reader'},location.origin);}catch(_){}return;}if(!canRestoreShelfFromHistory(shelfReturnLink.href))return;event.preventDefault();history.back();});
 
   function setShelfReturnReading(reading){
     shelfReturnLink?.classList.toggle('is-reading',Boolean(reading));
