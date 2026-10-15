@@ -534,7 +534,11 @@
   const I18N = window.SceneStudioI18n;
   const t = (key, vars={}) => I18N?.t(key, vars) ?? key;
   const u = (ja,en) => uiLanguage==='en' ? en : ja;
-  let uiLanguage = I18N?.getLocale?.() || 'ja';
+  // English UI is temporarily hidden; ignore a previously saved EN preference.
+  // Keep the dictionaries and language switching implementation for later use.
+  let uiLanguage = 'ja';
+  try{ I18N?.setLocale?.('ja'); }catch(_){ /* storage can be unavailable */ }
+  document.documentElement.lang = 'ja';
 
   const UI_BINDINGS = [
     ['.intro h2','intro.title'],['.intro p','intro.body'],
