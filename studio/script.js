@@ -4612,7 +4612,7 @@ return flowCommentCard;}
     return runtime;
   }
 
-  async function registerRelayEditionSource(sourceDocument,editionId){
+  async function registerRelayEditionSource(sourceDocument,editionId,copyId=''){
     const ident=ensureMasterIdentity(sourceDocument);
     if(!ident?.workId||!ident?.ownerKey)throw new Error('Master identity missing');
 
@@ -4640,19 +4640,23 @@ return flowCommentCard;}
         'X-Scene-Work-Id':ident.workId,
         'X-Scene-Owner-Key':ident.ownerKey
       }),
-      body:JSON.stringify({editionId,scene:runtime})
+      body:JSON.stringify({editionId,scene:runtime,...(copyId?{copyId}:{})})
     },30000);
     let payload=null;
     try{payload=await response.json();}catch(_){}
     // A timed-out first request may have succeeded server-side. A retry with
     // the same freshly generated editionId is safe to treat as registered.
-    if(response.status===409&&payload?.code==='EDITION_EXISTS'){
+    if(!copyId&&response.status===409&&payload?.code==='EDITION_EXISTS'){
       return {ok:true,editionId,alreadyExists:true};
     }
     if(!response.ok||!payload?.ok){
       const error=new Error(payload?.error||`RELAY source registration failed (${response.status})`);
       error.code=payload?.code||'RELAY_SOURCE_FAILED';
       throw error;
+    }
+    if(copyId&&(payload.copyRegistered!==true||payload.copyId!==copyId)){
+      const error=new Error('配布版の一冊を発行登録できませんでした。WorkerのV21更新を確認してから、配布版を書き出し直してください。');
+      error.code='DISTRIBUTION_COPY_NOT_REGISTERED';throw error;
     }
     return payload;
   }
@@ -4787,7 +4791,7 @@ return flowCommentCard;}
         const result=await buildDistributionScenePackage(sourceDocument,{editionId,onProgress:progress});
         if(chosenRelayPolicy){
           progress(70,'RELAY用の版を登録しています…');
-          await registerRelayEditionSource(sourceDocument,editionId);
+          await registerRelayEditionSource(sourceDocument,editionId,result.doc.distribution.copyId);
         }
         progress(75,'配布版の準備ができました');return result;
       }});
