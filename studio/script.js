@@ -9516,6 +9516,28 @@ return flowCommentCard;}
     const inset=vv?Math.max(0,window.innerHeight-(vv.height+vv.offsetTop)):0;
     document.documentElement.style.setProperty('--live-keyboard-inset',`${Math.round(inset)}px`);
   }
+  // Read author line breaks from editable DOM, independent of layout/attachment.
+  // Detached ruby-stripped clones have no rendered innerText line boundaries.
+  function editablePlainText(root){
+    const blocks=new Set(['DIV','P','LI','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','PRE']);
+    const read=node=>{
+      if(node.nodeType===3)return String(node.nodeValue||'').replace(/\u00a0/g,' ');
+      if(['RT','RP'].includes(node.nodeName)||node.classList?.contains('sp-typing-cursor'))return '';
+      if(node.nodeName==='BR')return '\n';
+      const children=Array.from(node.childNodes||[]);
+      if(children.length===1&&children[0].nodeName==='BR'&&blocks.has(node.nodeName))return '';
+      let text='';
+      children.forEach(child=>{
+        if(blocks.has(child.nodeName)){
+          if(text&&!text.endsWith('\n'))text+='\n';
+          text+=read(child)+'\n';
+        }else text+=read(child);
+      });
+      if(children.length&&blocks.has(children[children.length-1].nodeName))text=text.slice(0,-1);
+      return text;
+    };
+    return read(root).replace(/\r\n?/g,'\n');
+  }
   function syncInlineTextToScene(){
     const el=liveInlineEditEl;
     if(!el)return '';
@@ -9532,9 +9554,9 @@ return flowCommentCard;}
         const label=r?String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)):'';
         card.replaceWith(document.createTextNode(label||`［表 ${i+1}］`));
       });
-      value=copy.innerText.replace(/\n$/,'');
+      value=editablePlainText(copy);
     }else{
-      value=el.innerText.replace(/\n$/,'');
+      value=editablePlainText(el);
     }
     if(liveInlineEditField==='subText'){
       if(value.length)scene.subText=value;
@@ -9677,7 +9699,7 @@ return flowCommentCard;}
     applyRichSelectionAction('ruby',reading);
     if(rememberReading&&reading){workingDocument.studio||={};const config=clone(autoRubyConfig());config.dictionary||={};Object.defineProperty(config.dictionary,target.selectedText,{value:reading,enumerable:true,writable:true,configurable:true});workingDocument.studio.autoRuby=config;scheduleDraftSave(0);}
   }
-  function inlineBaseText(el){return stripRubyReadings(el.cloneNode(true)).textContent||'';}
+  function inlineBaseText(el){return editablePlainText(stripRubyReadings(el.cloneNode(true)));}
   function stripRubyReadings(root){root.querySelectorAll?.('rt,rp,.sp-typing-cursor').forEach(el=>el.remove());return root;}
   function remapRubyAfterTextEdit(scene,before,after){
     if(before===after||!scene.richText?.ranges)return;
@@ -9956,7 +9978,7 @@ return flowCommentCard;}
     const before=range.cloneRange();
     before.selectNodeContents(el);
     before.setEnd(range.startContainer,range.startOffset);
-    return stripRubyReadings(before.cloneContents()).textContent.length;
+    return editablePlainText(stripRubyReadings(before.cloneContents())).length;
   }
   function setInlineCaretOffset(offset){
     const el=liveInlineEditEl;if(!el)return false;
@@ -17122,7 +17144,7 @@ function openDesktopTextDetail(){
     finishCreditsInlineEdit();finishInlineTextEdit();
     captureUndo(u('クレジット編集を元に戻せます','Undo credit edit'));
     const wrap=node.closest('.sp-credits'),abort=new AbortController();
-    const target=creditRichTarget(scene,node);const save=()=>{const before=String(holder[key]||'');const copy=stripRubyReadings(node.cloneNode(true));const value=String(copy.innerText??copy.textContent??'').replace(/\r\n/g,'\n');remapRubyAfterTextEdit(target,before,value);holder[key]=value;scheduleDraftSave(180);};
+    const target=creditRichTarget(scene,node);const save=()=>{const before=String(holder[key]||'');const copy=stripRubyReadings(node.cloneNode(true));const value=editablePlainText(copy);remapRubyAfterTextEdit(target,before,value);holder[key]=value;scheduleDraftSave(180);};
     creditsInlineSession={node,wrap,abort,save};wrap?.classList.add('is-editing');
     node.setAttribute('contenteditable','true');node.setAttribute('role','textbox');node.setAttribute('aria-label',u('クレジットを編集','Edit credit'));
     node.addEventListener('input',save,{signal:abort.signal});node.addEventListener('blur',()=>{finishCreditsInlineEdit();requestAnimationFrame(renderDesktopLivePanel);},{once:true,signal:abort.signal});
