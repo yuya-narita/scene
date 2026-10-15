@@ -229,10 +229,15 @@ function prepareShelfPlayerExit(dialog=null){
   syncShelfScrollLock();
   saveShelfScroll(currentShelfTab,readShelfScrollY());
 }
+function setBookshelfReaderTheme(reading){
+  document.documentElement.classList.toggle('bookshelf-reading',reading);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content',reading?'#0b1016':'#f6f3ec');
+}
 function openBookshelfReader(href,dialog=null){
   const target=String(href||'').trim();if(!target)return;
   const overlay=$('#bookshelfReaderOverlay'),frame=$('#bookshelfReaderFrame');if(!overlay||!frame){location.href=target;return;}
   prepareShelfPlayerExit(dialog);
+  setBookshelfReaderTheme(true);
   document.body.classList.add('bookshelf-reading');
   overlay.hidden=false;
   frame.src=target;
@@ -242,6 +247,7 @@ function closeBookshelfReader(){
   if(frame)frame.src='about:blank';
   if(overlay)overlay.hidden=true;
   document.body.classList.remove('bookshelf-reading');
+  setBookshelfReaderTheme(false);
   syncShelfScrollLock();
 }
 function leaveShelfForPlayer(href,dialog=null){openBookshelfReader(href,dialog);}
