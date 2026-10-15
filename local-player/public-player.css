@@ -1227,3 +1227,12 @@ body:has(.public-player.sp-immersive:not(.sp-immersive-controls):not(.sp-cover-o
   body .public-ending .public-preview-lock-marker small{margin-bottom:8px!important;}
   body .public-ending .public-preview-lock-marker strong{white-space:normal!important;font-size:17px!important;}
 }
+
+/* V17: Resonance narrows the ending container; purchase controls follow its
+   content width, including padding, instead of retaining a viewport width. */
+.public-ending .public-ending-inner>.public-own-copy-wrap:not([hidden]){
+  width:100%!important;max-width:100%!important;min-width:0;box-sizing:border-box;
+}
+.public-ending .public-ending-inner>.public-own-copy-wrap>.public-own-copy{
+  max-width:100%!important;min-width:0;box-sizing:border-box;
+}
