@@ -245,7 +245,6 @@ function closeBookshelfReader(){
   syncShelfScrollLock();
 }
 function leaveShelfForPlayer(href,dialog=null){openBookshelfReader(href,dialog);}
-$('#bookshelfReaderClose')?.addEventListener('click',closeBookshelfReader);
 window.addEventListener('message',event=>{if(event.origin===location.origin&&event.source===$('#bookshelfReaderFrame')?.contentWindow&&event.data?.type==='ahako:close-reader')closeBookshelfReader();});
 document.addEventListener('click',event=>{
   const target=event.target;
