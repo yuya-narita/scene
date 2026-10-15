@@ -361,6 +361,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(this.destroyed||!this.document||!this.els.stage?.clientHeight)return;
         const nodes=Array.from(this.els.scenes.children),entries=nodes.map(node=>({scene:this.document.scenes.find(sc=>sc.id===node.dataset.sceneId)}));
         if(!nodes.length||entries.some(e=>!e.scene))return;
+        nodes.forEach(node=>node.querySelectorAll('.sp-text[data-writing-mode="vertical-rl"],.sp-subtext[data-writing-mode="vertical-rl"]').forEach(text=>this._syncVerticalTextHeight(text)));
         if(this.host.dataset.display==='overlay')this._positionOverlayNodes(nodes,entries);else this._positionSceneNodes(nodes,entries,0);
         // Existing viewers/rolls keep their timeline; no Scene/audio replay on rotation.
         this.els.scenes.querySelectorAll('.sp-credits-viewport').forEach(v=>v.dispatchEvent(new Event('sceneplayer:reflow')));
@@ -5999,6 +6000,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return 'fadeRise';
     }
 
+    _syncVerticalTextHeight(node) {
+      const chars = Math.max(4, Math.min(22, Number(node.dataset.verticalMaxChars) || 4));
+      const screenHeight = Math.max(1, this.host.clientHeight || global.innerHeight) * .52;
+      node.style.setProperty('--sp-vertical-screen-height', `${screenHeight}px`);
+      node.style.setProperty('--sp-vertical-content-height', `${chars * 1.15}em`);
+      node.style.height = `min(${screenHeight}px, ${chars * 1.15}em)`;
+    }
+
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
       if (style.color) node.style.color = String(style.color);
@@ -6047,7 +6056,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.dataset.writingMode='vertical-rl';
         node.style.writingMode='vertical-rl';
         node.style.textOrientation='mixed';
-        node.style.height=`min(${Math.max(1,this.host.clientHeight||global.innerHeight)*.52}px, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
+        node.dataset.verticalMaxChars=String(longest+1);
+        this._syncVerticalTextHeight(node);
         node.style.textAlign='start';
         const blockAlign=style.align==='left'||style.align==='right'?style.align:'center';
         node.dataset.verticalBlockAlign=blockAlign;
@@ -6059,6 +6069,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.style.textOrientation='';
         node.style.height='';
         delete node.dataset.verticalBlockAlign;
+        delete node.dataset.verticalMaxChars;
         node.style.marginLeft='';
         node.style.marginRight='';
       }

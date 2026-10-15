@@ -2591,3 +2591,9 @@ html.sp-scene-image-open body{
 .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-subtext{
   font-size:var(--sp-landscape-font,11px)!important;
 }
+
+/* Landscape vertical prose gains two glyph advances (including .08em spacing). */
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-text[data-writing-mode="vertical-rl"],
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-handdrawn-frame>.sp-text[data-writing-mode="vertical-rl"]{
+  height:min(calc(var(--sp-vertical-screen-height) + 2.16em),calc(var(--sp-vertical-content-height) + 2.16em),calc(100dvh - 48px))!important;
+}
