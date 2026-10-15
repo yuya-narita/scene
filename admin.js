@@ -170,6 +170,23 @@ async function mapWithConcurrency(items,limit,fn){
   await Promise.all(Array.from({length:Math.min(limit,Math.max(1,items.length))},()=>worker()));
   return results;
 }
+// This is an Order-state grouping, not proof of non-payment on Stripe.
+// Keep payment/recovery evidence in the existing audit or unaudited groups.
+function isIncompletePurchaseOrder(row){
+  return String(row.status||'').toLowerCase()==='pending_payment'
+    &&['','card'].includes(String(row.paymentRail||''))
+    &&!row.providerPaymentIntentId&&!row.balanceDebitCapturedAt&&!row.paidAt
+    &&!row.recoveryState&&!row.recoveryReason&&!row.transferSettlementState;
+}
+function ensureIncompletePurchaseCounter(){
+  if(document.getElementById('auditIncompleteCount'))return;
+  const dashboard=els.auditPendingCount?.closest('.audit-dashboard');
+  if(!dashboard)return;
+  const card=document.createElement('div');
+  card.style.gridColumn='1 / -1';
+  card.innerHTML='<small>購入手続き未完了</small><strong id="auditIncompleteCount">–</strong>';
+  dashboard.appendChild(card);
+}
 function renderAutomaticAudit(rows,results,skipped){
   // V9 diagnostic: preserve the exact audit payload used to build this list.
   // Opening "一覧時の結果" never calls Stripe again, so intermittent mismatches cannot disappear.
@@ -182,18 +199,24 @@ function renderAutomaticAudit(rows,results,skipped){
     if(result.audit?.status==='ok')ok.push({row,audit:result.audit});
     else alerts.push({row,audit:result.audit,error:''});
   });
+  const incomplete=skipped.filter(isIncompletePurchaseOrder);
+  const unaudited=skipped.filter(row=>!isIncompletePurchaseOrder(row));
+  ensureIncompletePurchaseCounter();
+  const incompleteCount=document.getElementById('auditIncompleteCount');
+  if(incompleteCount)incompleteCount.textContent=String(incomplete.length);
   if(els.auditOkCount)els.auditOkCount.textContent=String(ok.length);
   if(els.auditAlertCount)els.auditAlertCount.textContent=String(alerts.length);
-  if(els.auditPendingCount)els.auditPendingCount.textContent=String(skipped.length);
+  if(els.auditPendingCount)els.auditPendingCount.textContent=String(unaudited.length);
   if(els.auditTabBadge){els.auditTabBadge.textContent=String(alerts.length);els.auditTabBadge.hidden=alerts.length===0;}
   const alertHtml=alerts.length
     ?`<div class="audit-alert-section"><div class="audit-list-title"><strong>要確認</strong><span>${alerts.length}件</span></div>${alerts.map(x=>auditOrderCard(x.row,{kind:'alert',audit:x.audit,error:x.error})).join('')}</div>`
     :`<div class="audit-all-clear"><strong>✓ 要確認なし</strong><span>確定済み注文はすべて一致しています。</span></div>`;
   const okHtml=ok.length?`<details class="audit-normal"><summary>正常 ${ok.length}件を表示</summary><div class="audit-normal-list">${ok.map(x=>auditOrderCard(x.row,{kind:'ok',audit:x.audit})).join('')}</div></details>`:'';
-  const skippedHtml=skipped.length?`<details class="audit-normal"><summary>未監査 ${skipped.length}件を表示</summary><div class="audit-normal-list">${skipped.map(row=>auditOrderCard(row,{kind:'pending'})).join('')}</div></details>`:'';
-  els.auditOrdersList.innerHTML=alertHtml+okHtml+skippedHtml;
+  const skippedHtml=unaudited.length?`<details class="audit-normal"><summary>未監査 ${unaudited.length}件を表示</summary><div class="audit-normal-list">${unaudited.map(row=>auditOrderCard(row,{kind:'pending'})).join('')}</div></details>`:'';
+  const incompleteHtml=incomplete.length?`<details class="audit-normal"><summary>購入手続き未完了 ${incomplete.length}件を表示</summary><p>あ箱で購入確定前の注文です。確認画面で中断した注文などを含みます。Stripeでの未払いを保証する表示ではありません。支払状況は「再取得して詳細」で確認してください。</p><div class="audit-normal-list">${incomplete.map(row=>auditOrderCard(row,{kind:'pending'})).join('')}</div></details>`:'';
+  els.auditOrdersList.innerHTML=alertHtml+okHtml+skippedHtml+incompleteHtml;
   bindAuditDetailButtons();
-  return {ok:ok.length,alerts:alerts.length,skipped:skipped.length};
+  return {ok:ok.length,alerts:alerts.length,skipped:unaudited.length,incomplete:incomplete.length};
 }
 function localJstDay(){
   const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
@@ -249,6 +272,9 @@ async function runDailyReconciliation(){
 
 async function loadAuditOrders(){
   if(!els.auditOrdersList)return;
+  ensureIncompletePurchaseCounter();
+  const incompleteCount=document.getElementById('auditIncompleteCount');
+  if(incompleteCount)incompleteCount.textContent='…';
   if(els.auditOrdersReload)els.auditOrdersReload.disabled=true;
   if(els.auditOkCount)els.auditOkCount.textContent='…';if(els.auditAlertCount)els.auditAlertCount.textContent='…';if(els.auditPendingCount)els.auditPendingCount.textContent='…';
   els.auditOrdersStatus.textContent='最近の注文を取得しています…';
@@ -263,8 +289,9 @@ async function loadAuditOrders(){
     els.auditOrdersStatus.textContent=`決済痕跡あり ${auditable.length}件を自動監査中…`;
     const results=await mapWithConcurrency(auditable,4,async row=>await fetchPaymentAudit(row.orderId));
     const summary=renderAutomaticAudit(auditable,results,skipped);
-    els.auditOrdersStatus.textContent=`監査完了：正常 ${summary.ok}件 / 要確認 ${summary.alerts}件 / 未監査 ${summary.skipped}件`;
+    els.auditOrdersStatus.textContent=`監査完了：正常 ${summary.ok}件 / 要確認 ${summary.alerts}件 / 未監査 ${summary.skipped}件 / 購入手続き未完了 ${summary.incomplete}件`;
   }catch(e){
+    if(incompleteCount)incompleteCount.textContent='–';
     els.auditOrdersStatus.textContent=`自動監査できませんでした: ${e.message}`;
     els.auditOrdersList.innerHTML='<div class="empty">読み込みに失敗しました。</div>';
     if(els.auditOkCount)els.auditOkCount.textContent='–';if(els.auditAlertCount)els.auditAlertCount.textContent='–';if(els.auditPendingCount)els.auditPendingCount.textContent='–';if(els.auditTabBadge)els.auditTabBadge.hidden=true;
