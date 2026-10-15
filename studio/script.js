@@ -4526,11 +4526,11 @@ return flowCommentCard;}
     return value;
   }
 
-  async function buildDistributionScenePackage(documentOverride=null,{editionId=""}={}){
+  async function buildDistributionScenePackage(documentOverride=null,{editionId="",onProgress=null}={}){
     // Reuse the proven Master packager for asset collection/self-containment,
     // then sanitize only the package metadata/runtime document. This avoids a
     // second asset pipeline and keeps Master export behaviour untouched.
-    const masterResult=await buildScenePackage(documentOverride);
+    const masterResult=await buildScenePackage(documentOverride,onProgress?(value,label)=>onProgress(Math.round(value*.8),label):null);
     const entries=await readZipEntries(masterResult.blob);
 
     const sceneBytes=entries.get('scene.json');
@@ -4587,6 +4587,7 @@ return flowCommentCard;}
       {name:'manifest.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(manifest,null,2))}
     );
 
+    onProgress?.(65,'配布版を生成しています…');
     const blob=await makeStoreZip(output);
     return {doc,manifest,blob,assetCount:masterResult.assetCount};
   }
@@ -4725,56 +4726,6 @@ return flowCommentCard;}
 
 
   let sceneExportBusy=false;
-  let sceneExportProgressDialog=null;
-  window.addEventListener('beforeunload',event=>{
-    if(!sceneExportBusy)return;
-    event.preventDefault();event.returnValue='';
-  });
-  function showSceneExportProgress(name){
-    if(!sceneExportProgressDialog){
-      const dialog=document.createElement('dialog');
-      dialog.className='scene-export-progress-dialog';
-      dialog.style.cssText='width:min(440px,calc(100vw - 32px));box-sizing:border-box;border:1px solid #ddd9cf;border-radius:24px;padding:28px;background:#fbfaf5;color:#26221e;box-shadow:0 20px 70px #0003';
-      dialog.innerHTML='<small style="letter-spacing:.15em">MASTER .SCENE</small><h2 style="margin:12px 0">作品を保存しています</h2><p data-name style="overflow-wrap:anywhere"></p><progress max="100" value="0" style="width:100%;height:16px;accent-color:#26221e" aria-label="書き出しの進捗"></progress><p data-phase role="status" aria-live="polite"></p><p data-note style="font-size:13px;line-height:1.7">保存完了と表示されるまで、このタブを閉じないでください。</p><button type="button" data-close style="width:100%;min-height:48px;border:0;border-radius:14px;background:#26221e;color:white;font:inherit" hidden>閉じる</button>';
-      dialog.querySelector('[data-close]').onclick=()=>{if(!sceneExportBusy)dialog.close();};
-      dialog.addEventListener('cancel',event=>{if(sceneExportBusy)event.preventDefault();});
-      document.body.appendChild(dialog);sceneExportProgressDialog=dialog;
-    }
-    const dialog=sceneExportProgressDialog;
-    dialog.querySelector('h2').textContent='作品を保存しています';
-    dialog.querySelector('[data-name]').textContent=name;
-    dialog.querySelector('[data-note]').textContent='保存完了と表示されるまで、このタブを閉じないでください。';
-    dialog.querySelector('[data-close]').hidden=true;
-    updateSceneExportProgress(0,'保存先を選んでいます…');
-    if(!dialog.open)dialog.showModal();
-  }
-  function updateSceneExportProgress(value,label){
-    const dialog=sceneExportProgressDialog;if(!dialog)return;
-    dialog.querySelector('progress').value=Math.max(0,Math.min(100,value));
-    dialog.querySelector('[data-phase]').textContent=label;
-  }
-  function finishSceneExportProgress(title,note,{complete=false}={}){
-    const dialog=sceneExportProgressDialog;if(!dialog)return;
-    dialog.querySelector('h2').textContent=title;
-    dialog.querySelector('[data-note]').textContent=note;
-    if(complete)updateSceneExportProgress(100,'保存完了');
-    dialog.querySelector('[data-close]').hidden=false;
-  }
-  async function writeSceneExportFile(handle,blob,onProgress){
-    const writable=await handle.createWritable();
-    try{
-      const chunkSize=1024*1024;
-      for(let offset=0;offset<blob.size;offset+=chunkSize){
-        await writable.write(blob.slice(offset,Math.min(blob.size,offset+chunkSize)));
-        onProgress(Math.min(blob.size,offset+chunkSize),blob.size);
-      }
-      // close() commits the temporary file to the selected destination.
-      onProgress(blob.size,blob.size,true);
-      await writable.close();
-    }catch(error){try{await writable.abort();}catch(_){}throw error;}
-  }
-
-  let pendingScenePackageExport=null;
   let scenePackageFilenameManual=false;
   let scenePackageExportSourceDocument=null;
   function openScenePackageExportDialog(documentOverride=null){
@@ -4796,9 +4747,8 @@ return flowCommentCard;}
   }
 
   async function exportScenePackage(exportMetadata={},documentOverride=null){
-    if(sceneExportBusy)return;
+    if(sceneExportBusy||window.AhakoFileSave.busy)return;
     sceneExportBusy=true;
-    let started=false;
     try{
       if(!documentOverride&&!advancedScreen.hidden)syncAdvancedFieldsToScene();
       const source=documentOverride?clone(documentOverride):sceneDocumentForExport();
@@ -4808,83 +4758,17 @@ return flowCommentCard;}
       source.metadata.episode=String(exportMetadata.episode??source.metadata.episode??'').trim();
       source.metadata.episodeTitle=String(exportMetadata.episodeTitle??source.metadata.episodeTitle??'').trim();
       const name=normalizedScenePackageFileName(exportMetadata.fileName,source.title,source.metadata.episode);
-
-      // Invoke the native picker directly from the confirmation gesture. On
-      // browsers without the File System Access API, the browser download or
-      // iOS share sheet remains the save route.
-      let pickerPromise=null;
-      if(typeof window.showSaveFilePicker==='function'){
-        try{
-          pickerPromise=window.showSaveFilePicker({
-            suggestedName:name,
-            types:[{description:'あ箱 Scene package',accept:{'application/octet-stream':['.scene']}}]
-          });
-        }catch(error){
-          if(error?.name==='AbortError')return;
-          console.warn('Save picker unavailable; using browser download',error);
-        }
-      }
-      showSceneExportProgress(name);started=true;
-      let fileHandle=null;
-      if(pickerPromise){
-        try{fileHandle=await pickerPromise;}
-        catch(error){if(error?.name==='AbortError')return;throw error;}
-      }
-      setProjectIoStatus(uiLanguage==='ja'?`${name} を作成しています…`:`Creating ${name}…`);
-      updateSceneExportProgress(2,'作品データを準備しています…');
-      await new Promise(resolve=>setTimeout(resolve,0));
-      const result=await buildScenePackage(source,updateSceneExportProgress);
-      if(fileHandle){
-        updateSceneExportProgress(75,'保存先へ書き込んでいます…');
-        await writeSceneExportFile(fileHandle,result.blob,(done,total,committing=false)=>{
-          const mb=bytes=>(bytes/1024/1024).toFixed(1);
-          updateSceneExportProgress(committing?99:75+Math.floor(24*done/Math.max(1,total)),committing?'保存を確定しています…':`保存先へ書き込んでいます ${mb(done)} / ${mb(total)} MB`);
-        });
-        finishSceneExportProgress('保存完了','このタブを閉じても大丈夫です。選んだ保存先への書き込みが完了しました。',{complete:true});
-      }else{
-        const file=typeof File==='function'?new File([result.blob],name,{type:'application/octet-stream'}):null;
-        const canShareFile=Boolean(file&&/iPhone|iPad|iPod/i.test(navigator.userAgent)&&navigator.canShare?.({files:[file]}));
-        if(canShareFile&&typeof navigator.share==='function'){
-          pendingScenePackageExport={file,blob:result.blob,name,title:source.title,assetCount:result.assetCount};
-          sceneExportProgressDialog?.close();
-          $('#scenePackageReadyDialog').showModal();
-          setProjectIoStatus(uiLanguage==='ja'?'保存先を選んでください。':'Choose where to save the file.');
-          return;
-        }
-        downloadBlobFile(name,result.blob);
-        updateSceneExportProgress(100,'ブラウザーにファイルを渡しました');
-        finishSceneExportProgress('ダウンロードを開始しました','ダウンロード履歴やファイルアプリで保存完了を確認してからタブを閉じてください。この方式では保存完了をあ箱から確認できません。');
-      }
-      setProjectIoStatus(t('io.packageExported',{name,n:result.assetCount}));
-    }catch(error){
-      if(error?.name==='AbortError'){sceneExportProgressDialog?.close();return;}
-      if(started)finishSceneExportProgress('保存できませんでした','ファイルの保存は完了していません。もう一度書き出してください。');
-      console.error(error);
-      const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
-      if(assetFailure){
-        setProjectIoStatus(
-          uiLanguage==='ja'
-            ? '素材を.scene内へ回収できなかったため、書き出しを中止しました。'
-            : 'Export stopped because an asset could not be embedded.',
-          {error:true}
-        );
-        appAlert(
-          uiLanguage==='ja'
-            ? `Master .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
-            : `The Master .scene must be self-contained.\n\nThis asset could not be retrieved:\n${error?.assetUrl||''}`
-        );
-      }else{
-        const detail=(error && (error.stack||error.message)) ? String(error.stack||error.message) : String(error);
-        setProjectIoStatus(`${t('io.packageFailed')} ${detail.split('\n')[0]}`,{error:true});
-        appAlert(`${t('io.packageFailed')}\n\n${detail}`);
-      }
-    }finally{
-      sceneExportBusy=false;
-      if(started&&sceneExportProgressDialog?.open&&sceneExportProgressDialog.querySelector('[data-close]').hidden)sceneExportProgressDialog.close();
-    }
+      const saved=await window.AhakoFileSave.save({name,kind:'MASTER .SCENE',build:progress=>buildScenePackage(source,progress)});
+      if(saved?.status==='saved')setProjectIoStatus(t('io.packageExported',{name,n:saved.result.assetCount}));
+      else if(saved?.status==='ready')setProjectIoStatus('保存先を選んでください。');
+      else if(saved?.status==='download')setProjectIoStatus('ダウンロード履歴で保存完了を確認してください。');
+    }catch(error){console.error(error);setProjectIoStatus(String(error?.message||error),{error:true});}
+    finally{sceneExportBusy=false;}
   }
 
   async function exportDistributionScenePackage(){
+    if(sceneExportBusy||window.AhakoFileSave.busy)return;
+    sceneExportBusy=true;
     try{
       if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
       const chosenRelayPolicy=await confirmDistributionRelayPolicy();
@@ -4897,20 +4781,17 @@ return flowCommentCard;}
       // written into the portable file and, when RELAY is ON, registered once
       // as the server-side URL RELAY source before the file is downloaded.
       const editionId=chosenRelayPolicy ? makeEditionId() : '';
-      const sourceDocument=clone(workingDocument);
-      const result=await buildDistributionScenePackage(sourceDocument,{editionId});
-      if(chosenRelayPolicy){
-        setProjectIoStatus(uiLanguage==='ja'?'RELAY用の版を登録しています…':'Registering RELAY Edition…');
-        await registerRelayEditionSource(sourceDocument,editionId);
-      }
-
-      const name=`${safeFileStem(result.doc.title)}_distribution.scene`;
-      downloadBlobFile(name,result.blob);
-      setProjectIoStatus(
-        uiLanguage==='ja'
-          ? `配布版 ${name} を書き出しました（copyId: ${result.doc?.distribution?.copyId||'-'}${editionId?` / editionId: ${editionId}`:''} / Studioでは編集できません / ${result.assetCount} assets）`
-          : `Exported distribution ${name} (copyId: ${result.doc?.distribution?.copyId||'-'}${editionId?` / editionId: ${editionId}`:''} / not editable in Studio / ${result.assetCount} assets)`
-      );
+      const sourceDocument=sceneDocumentForExport();
+      const name=`${safeFileStem(sourceDocument.title)}_distribution.scene`;
+      const saved=await window.AhakoFileSave.save({name,kind:'DISTRIBUTION .SCENE',build:async progress=>{
+        const result=await buildDistributionScenePackage(sourceDocument,{editionId,onProgress:progress});
+        if(chosenRelayPolicy){
+          progress(70,'RELAY用の版を登録しています…');
+          await registerRelayEditionSource(sourceDocument,editionId);
+        }
+        progress(75,'配布版の準備ができました');return result;
+      }});
+      if(saved?.result)setProjectIoStatus(`配布版 ${name} を準備しました（copyId: ${saved.result.doc?.distribution?.copyId||'-'}）`);
     }catch(error){
       console.error(error);
       const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
@@ -4936,7 +4817,7 @@ return flowCommentCard;}
           appAlert(detail.split('\n')[0]);
         }
       }
-    }
+    }finally{sceneExportBusy=false;}
   }
 
   async function importScenePackage(file){
@@ -8989,32 +8870,6 @@ return flowCommentCard;}
     if(scenePackageFilenameManual)return;
     $('#exportWorkFileName').value=suggestedScenePackageFileName($('#exportWorkTitle').value,$('#exportWorkEpisode').value);
   }));
-  $('#scenePackageReadyShare')?.addEventListener('click',async()=>{
-    const pending=pendingScenePackageExport;
-    if(!pending)return;
-    try{
-      await navigator.share({files:[pending.file],title:pending.title});
-      $('#scenePackageReadyDialog')?.close('saved');
-      pendingScenePackageExport=null;
-      setProjectIoStatus(t('io.packageExported',{name:pending.name,n:pending.assetCount}));
-    }catch(error){
-      if(error?.name==='AbortError')return;
-      console.warn('Share sheet unavailable; use browser download',error);
-      setProjectIoStatus('共有メニューを開けませんでした。ダウンロードを選んでください。',{error:true});
-    }
-  });
-  $('#scenePackageReadyDownload')?.addEventListener('click',()=>{
-    const pending=pendingScenePackageExport;
-    if(!pending)return;
-    downloadBlobFile(pending.name,pending.blob);
-    $('#scenePackageReadyDialog')?.close('download');
-    pendingScenePackageExport=null;
-  });
-  $('#scenePackageReadyCancel')?.addEventListener('click',()=>{
-    $('#scenePackageReadyDialog')?.close('cancel');
-    pendingScenePackageExport=null;
-  });
-  $('#scenePackageReadyDialog')?.addEventListener('cancel',()=>{pendingScenePackageExport=null;});
   $('#importSceneInput').addEventListener('change',async(event)=>{
     const file=event.target.files?.[0];
     if(file) await importSceneDocument(file);

@@ -552,7 +552,9 @@ async function packRemoteAssetsIntoScene(scene){
   collect(doc);
   const replacements=new Map(),assets=[];
   let index=0;
+  let completedAssets=0;
   for(const url of assetUrls){
+    onProgress?.(5+Math.floor(60*completedAssets/assetUrls.size),`素材を回収しています ${completedAssets+1}/${assetUrls.size}`);
     const res=await fetch(url,{cache:'no-store'});
     if(!res.ok)throw new Error(`MY_COPY_ASSET_FETCH_${res.status}`);
     const bytes=new Uint8Array(await res.arrayBuffer());
@@ -1862,7 +1864,7 @@ function installShelfSwipe(){
   window.addEventListener('touchcancel',()=>{const g=gesture;gesture=null;const live=currentShelfBodyElement();if(live)live.style.transform='';removeShelfSwipeStage(g?.view);},{passive:true});
 }
 
-async function makeSelfContainedRecoveredMasterBlob(w){
+async function makeSelfContainedRecoveredMasterBlob(w,onProgress=null){
   if(!w?.blob)return null;
   const entries=await readZipEntries(new File([w.blob],w.fileName||'master.scene',{type:'application/octet-stream'}));
   const sceneBytes=entries.get('scene.json');
@@ -1888,7 +1890,7 @@ async function makeSelfContainedRecoveredMasterBlob(w){
     const bytes=new Uint8Array(await res.arrayBuffer());
     const u=new URL(url),base=(u.pathname.split('/').pop()||`asset_${++n}`).replace(/[^A-Za-z0-9._-]/g,'_');
     const name=`assets/${base}`;
-    replacements.set(url,`./${name}`);packed.push({name,bytes});
+    replacements.set(url,`./${name}`);packed.push({name,bytes});completedAssets++;
   }
   function rewrite(value){
     if(typeof value==='string'){
@@ -1905,14 +1907,12 @@ async function makeSelfContainedRecoveredMasterBlob(w){
   return makeStoreZip(out);
 }
 async function exportMasterBlob(w){
-  if(w?.serverRecovered){
-    toast('画像・音声をMasterへ格納しています…');
-    const blob=await makeSelfContainedRecoveredMasterBlob(w);
-    downloadBlob(blob,w.fileName||`${w.title||'master'}.scene`);
-    toast('自己完結Masterを書き出しました。');
-    return;
-  }
-  downloadBlob(w.blob,w.fileName||`${w.title||'master'}.scene`);
+  if(!w?.blob)throw new Error('Masterファイルがありません。');
+  return window.AhakoFileSave.save({name:w.fileName||`${w.title||'master'}.scene`,kind:'MASTER .SCENE',build:async progress=>{
+    progress(5,w.serverRecovered?'画像・音声をMasterへ格納しています…':'本棚のMasterを準備しています…');
+    const blob=w.serverRecovered?await makeSelfContainedRecoveredMasterBlob(w,progress):w.blob;
+    progress(75,'Masterの準備ができました');return blob;
+  }});
 }
 
 function detailWorkInfoHtml(w){
