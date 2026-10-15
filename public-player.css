@@ -1277,3 +1277,56 @@ body{
 
 body:has(.public-player.sp-immersive:not(.sp-immersive-controls):not(.sp-cover-open):not([hidden])) .public-shelf-return,
 body:has(.public-player.sp-immersive:not(.sp-immersive-controls):not(.sp-cover-open):not([hidden])) .public-report-trigger{visibility:hidden!important;pointer-events:none!important;}
+
+/* V16: landscape endings use normal grid flow, with an internal scroll surface.
+   Title and Resonance have separate cells; commerce/journey stay reachable. */
+@media (orientation:landscape) and (max-height:600px) and (any-pointer:coarse){
+  body .public-ending{
+    overflow-x:hidden!important;overflow-y:auto!important;touch-action:pan-y;
+    overscroll-behavior:contain!important;-webkit-text-size-adjust:100%;text-size-adjust:100%;
+  }
+  body .public-ending .public-ending-inner,
+  body .public-ending.has-resonance .public-ending-inner{
+    display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));
+    align-content:center!important;align-items:center!important;justify-content:normal!important;
+    gap:12px 24px!important;width:min(840px,100%)!important;
+    height:auto!important;min-height:100%!important;max-height:none!important;overflow:visible!important;
+    padding:max(16px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))!important;
+  }
+  body .public-ending .public-ending-inner>.public-ending-label{
+    grid-column:1;grid-row:1;display:block!important;min-height:0!important;height:auto!important;
+    padding:0!important;margin:0!important;transform:none!important;
+    font-size:24px!important;line-height:1.5!important;overflow-wrap:anywhere!important;
+  }
+  body .public-ending .public-ending-inner>.public-ending-label[hidden]{display:none!important;}
+  body .public-ending .public-ending-inner:not(:has(.public-resonance-result:not([hidden])))>.public-ending-label{
+    grid-column:1/-1;
+  }
+  body .public-ending .public-ending-inner>.public-resonance-result{
+    grid-column:2;grid-row:1;width:100%!important;max-width:none!important;
+    padding:0!important;margin:0!important;transform:none!important;gap:4px!important;
+  }
+  body .public-ending .public-ending-inner:has(.public-ending-label[hidden])>.public-resonance-result{grid-column:1/-1;}
+  body .public-ending .public-ending-inner .public-resonance-result small{font-size:9px!important;line-height:1.3!important;margin:0!important;}
+  body .public-ending .public-ending-inner .public-resonance-result strong{font-size:32px!important;line-height:1.1!important;margin:0!important;}
+  body .public-ending .public-ending-inner .public-resonance-depth{font-size:11px!important;margin:0!important;}
+  body .public-ending .public-ending-inner .public-resonance-result p{font-size:10px!important;margin:0!important;line-height:1.4!important;}
+  body .public-ending .public-ending-inner>:not(.public-ending-label):not(.public-resonance-result){grid-column:1/-1;min-width:0;}
+  body .public-ending .public-ending-inner .public-ending-actions.public-ending-three{
+    width:100%!important;margin:0!important;transform:none!important;gap:8px!important;
+  }
+  body .public-ending .public-ending-actions.public-ending-three>.public-ending-box{
+    min-height:60px!important;height:auto!important;padding:8px!important;gap:5px!important;
+  }
+  body .public-ending .public-ending-actions.public-ending-three>.public-ending-box small{font-size:9px!important;}
+  body .public-ending .public-ending-actions.public-ending-three>.public-ending-box strong{font-size:17px!important;line-height:1.25!important;}
+  body .public-ending .public-ending-inner>.public-own-copy-wrap:not([hidden]){
+    width:100%!important;margin:0!important;transform:none!important;gap:4px!important;
+  }
+  body .public-ending .public-own-copy{min-height:44px!important;padding:10px 18px!important;font-size:14px!important;}
+  body .public-ending .public-own-copy-status{min-height:0!important;font-size:10px!important;}
+  body .public-ending .public-ending-inner>.public-journey{width:100%!important;margin:0!important;padding:10px 14px!important;}
+  body .public-ending .public-preview-lock-marker{margin:0!important;padding:0!important;}
+  body .public-ending .public-preview-lock-marker small{margin-bottom:8px!important;}
+  body .public-ending .public-preview-lock-marker strong{white-space:normal!important;font-size:17px!important;}
+}
