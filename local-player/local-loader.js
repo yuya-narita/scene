@@ -60,7 +60,7 @@
       return destination.origin===previous.origin&&clean(destination.pathname)===clean(previous.pathname)&&/\/bookshelf$/.test(clean(destination.pathname));
     }catch(_){return false;}
   }
-  shelfReturnLink?.addEventListener('click',event=>{if(window.parent!==window){event.preventDefault();try{window.parent.postMessage({type:'ahako:close-reader'},location.origin);}catch(_){}return;}if(!canRestoreShelfFromHistory(shelfReturnLink.href))return;event.preventDefault();history.back();});
+  shelfReturnLink?.addEventListener('click',event=>{if(!canRestoreShelfFromHistory(shelfReturnLink.href))return;event.preventDefault();history.back();});
   function newBookshelfHandoffId(){
     const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);
     return 'handoff_'+Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
@@ -1177,7 +1177,6 @@
     finally{openButton.disabled=false;fileInput.value='';}
   }
   function returnToLauncher(){
-    if(window.parent!==window){try{window.parent.postMessage({type:'ahako:close-reader'},location.origin);}catch(_){}return;}
     if(currentSourceMode==='review'){
       try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
       try{window.close();}catch(_){}
