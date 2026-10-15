@@ -1,0 +1,9 @@
+{
+  "id": "./bookshelf/",
+  "name": "あ箱 本棚",
+  "short_name": "あ箱",
+  "lang": "ja",
+  "start_url": "./bookshelf/",
+  "scope": "./",
+  "display": "standalone"
+}
