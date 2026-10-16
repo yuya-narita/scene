@@ -409,6 +409,34 @@
   touch-action:none;
 }
 .sp-history[hidden]{display:none}
+
+/* PAST v28: vertical prose travels horizontally, with older Scenes to the right. */
+.sp-history-list{position:relative}
+.sp-history.is-horizontal .sp-history-scroll{
+  overflow-x:auto;overflow-y:hidden;touch-action:pan-x;direction:ltr;
+}
+.sp-history.is-horizontal .sp-history-list{
+  width:max-content;max-width:none;height:100%;box-sizing:border-box;
+  margin:0;padding:18px 40cqw;flex-direction:row;align-items:center;
+  gap:clamp(24px,6cqw,72px);
+}
+.sp-history.is-horizontal .sp-history-item{
+  flex:0 0 auto;width:min(74cqw,720px);height:100%;min-height:0;
+  box-sizing:border-box;padding:14px 0;
+  grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);
+  align-items:stretch;gap:10px;
+  transform:perspective(700px) rotateY(calc(var(--sp-history-depth) * -7deg))
+    scale(calc(.91 + (1 - var(--sp-history-depth)) * .09));
+}
+.sp-history.is-horizontal .sp-history-number{text-align:center;padding:0}
+.sp-history.is-horizontal .sp-history-body{
+  min-height:0;max-height:100%;overflow:auto;align-items:center;
+}
+.sp-history.is-horizontal .sp-history-text[data-writing-mode="vertical-rl"],
+.sp-history.is-horizontal .sp-history-subtext[data-writing-mode="vertical-rl"]{
+  flex-shrink:0;max-height:100%;max-width:100%;
+}
+
 .sp-no-header .sp-history{top:env(safe-area-inset-top)}
 .sp-no-footer .sp-history{bottom:env(safe-area-inset-bottom)}
 

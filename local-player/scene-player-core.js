@@ -446,6 +446,50 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.suppressNextClick = false;
       });
       this._on(this.els.historyScroll, 'scroll', () => this._scheduleHistoryDepth(), { passive: true });
+      this._on(window, 'resize', () => {
+        if (!this.historyOpen) return;
+        this.historyMetrics = null;
+        requestAnimationFrame(() => {
+          if (this._historyAutoCenter) this._centerHistoryOnCurrent();
+          this._scheduleHistoryDepth();
+        });
+      });
+      for (const event of ['touchstart', 'pointerdown', 'wheel']) {
+        this._on(this.els.historyScroll, event, () => { this._historyAutoCenter = false; }, { passive: true });
+      }
+      this._on(this.els.historyScroll, 'wheel', (e) => {
+        if (!this._historyHorizontal || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+        e.preventDefault();
+        const unit = e.deltaMode === 1 ? 20 : e.deltaMode === 2 ? this.els.historyScroll.clientWidth : 1;
+        this.els.historyScroll.scrollLeft += e.deltaY * unit;
+      }, { passive: false });
+      let historyDrag = null;
+      this._on(this.els.historyScroll, 'pointerdown', (e) => {
+        this._historyDragged = false;
+        if (!this._historyHorizontal || e.pointerType !== 'mouse' || e.button !== 0
+            || e.target.closest('a, input, textarea, select')) return;
+        historyDrag = { x: e.clientX, scroll: this.els.historyScroll.scrollLeft };
+      });
+      this._on(this.els.historyScroll, 'pointermove', (e) => {
+        if (!historyDrag || !(e.buttons & 1)) { historyDrag = null; return; }
+        const scroll = this.els.historyScroll;
+        const scale = scroll.getBoundingClientRect().width / scroll.offsetWidth || 1;
+        const distance = (e.clientX - historyDrag.x) / scale;
+        if (Math.abs(distance) < 6 && !this._historyDragged) return;
+        this._historyDragged = true;
+        scroll.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+        scroll.scrollLeft = historyDrag.scroll - distance;
+      });
+      for (const event of ['pointerup', 'pointercancel']) {
+        this._on(this.els.historyScroll, event, () => { historyDrag = null; });
+      }
+      this._on(this.els.historyScroll, 'click', (e) => {
+        if (!this._historyDragged) return;
+        this._historyDragged = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
 
       // V135 — TAP itself is the highest-priority Scene-advance control.
       // Its visible design stays unchanged; CSS expands only its invisible hit area.
@@ -574,9 +618,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // the future discrete, so it never reveals an unread Scene.
       this._on(this.els.stage, 'wheel', (e) => {
         if (!this.options.allowPrevious || this.historyOpen) return;
-        if (e.deltaY < -8) {
+        const vertical = this.currentScene?.presentation?.text?.writingMode === 'vertical-rl'
+          && !this._hasCredits(this.currentScene?.presentation);
+        if (e.deltaY < -8 || (vertical && e.deltaX > 8)) {
           e.preventDefault();
-          this.openHistory({ wheelDelta: e.deltaY });
+          this.openHistory({ wheelDelta: vertical && e.deltaX > 8 ? e.deltaX : e.deltaY });
         }
       }, { passive: false });
 
@@ -609,7 +655,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
             else if (dy < 0) { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
           } else {
-            if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
+            const vertical = this.currentScene?.presentation?.text?.writingMode === 'vertical-rl'
+              && !this._hasCredits(this.currentScene?.presentation);
+            if ((vertical ? dx < 0 : dx > 0) && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
             else { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
           }
         }, { passive: true });
@@ -2499,28 +2547,29 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._clearPresentationTimers();
       this.historyOpen = true;
       this.host.classList.add('sp-history-open');
+      this._historyHorizontal = this.currentScene?.presentation?.text?.writingMode === 'vertical-rl'
+        && !this._hasCredits(this.currentScene?.presentation);
+      this.els.history.classList.toggle('is-horizontal', this._historyHorizontal);
+      this._historyAutoCenter = true;
+      const help = this.els.history.querySelector('.sp-history-help');
+      if (help) help.textContent = this._historyHorizontal ? '左右にスワイプして過去Sceneへ' : '過去Sceneをスクロール';
       this.els.history.hidden = false;
       this._renderHistory();
 
       requestAnimationFrame(() => {
-        const current = this.els.historyList.querySelector(`.sp-history-item[data-index="${this.index}"]`);
-        if (current) {
-          const box = current.getBoundingClientRect();
-          const viewport = this.els.historyScroll.getBoundingClientRect();
-          const target = this.els.historyScroll.scrollTop
-            + (box.top - viewport.top)
-            - ((viewport.height - box.height) / 2);
-          this.els.historyScroll.scrollTop = Math.max(0, target);
+        if (!this.historyOpen || this.destroyed) return;
+        this._centerHistoryOnCurrent();
+        const scroll = this.els.historyScroll;
+        {
 
           // A pull gesture should feel like grabbing the drum and moving into the past.
           // Give it a small initial offset while preserving native momentum afterwards.
           const drag = Math.abs(asNumber(options.dragDistance, 0));
           const wheel = Math.abs(asNumber(options.wheelDelta, 0));
           if (drag > 0 || wheel > 0) {
-            this.els.historyScroll.scrollTop = Math.max(
-              0,
-              this.els.historyScroll.scrollTop - clamp((drag || wheel) * 0.7, 18, 110)
-            );
+            const axis = this._historyHorizontal ? 'scrollLeft' : 'scrollTop';
+            const direction = this._historyHorizontal ? 1 : -1;
+            scroll[axis] = Math.max(0, scroll[axis] + direction * clamp((drag || wheel) * 0.7, 18, 110));
           }
         }
         this._updateHistoryDepth();
@@ -2538,6 +2587,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.historyOpen = false;
       this.host.classList.remove('sp-history-open');
       this.els.history.hidden = true;
+      // Hidden history can retain decoded images and a long document's DOM.
+      this.els.historyList.replaceChildren();
+      this.historyMetrics = null;
+      this.historyDepthItems.clear();
+      if (this.historyScrollRaf) cancelAnimationFrame(this.historyScrollRaf);
+      this.historyScrollRaf = 0;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
       emit(this.host, 'sceneplayer:historyclose', {
         index: this.index,
@@ -2611,6 +2666,28 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       overlay.appendChild(card);
       overlay.addEventListener('click',e=>{e.stopPropagation();if(e.target===overlay)overlay.remove();});
       document.body.appendChild(overlay);
+    }
+
+    _historyItemCenter(item) {
+      const horizontal = this._historyHorizontal;
+      let center = (horizontal ? item.offsetWidth : item.offsetHeight) / 2;
+      // All values are layout pixels, even inside Studio's scaled preview.
+      for (let node = item; node && node !== this.els.historyScroll; node = node.offsetParent) {
+        center += horizontal ? node.offsetLeft : node.offsetTop;
+      }
+      return center;
+    }
+
+    _centerHistoryOnCurrent() {
+      if (!this.historyOpen || this.destroyed) return;
+      const item = this.els.historyList.querySelector(`.sp-history-item[data-index="${this.index}"]`);
+      if (!item) return;
+      const scroll = this.els.historyScroll;
+      const horizontal = this._historyHorizontal;
+      scroll[horizontal ? 'scrollTop' : 'scrollLeft'] = 0;
+      scroll[horizontal ? 'scrollLeft' : 'scrollTop'] = Math.max(0,
+        this._historyItemCenter(item) - (horizontal ? scroll.clientWidth : scroll.clientHeight) / 2);
+      this.historyMetrics = null;
     }
 
     _renderHistory() {
@@ -2829,6 +2906,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         item.append(num, body);
         fragment.appendChild(item);
       }
+      // Keep native LTR scrolling (no negative RTL scrollLeft), with older
+      // Scenes physically to the right for Japanese vertical reading.
+      if (this._historyHorizontal) fragment.replaceChildren(...Array.from(fragment.childNodes).reverse());
       this.els.historyList.appendChild(fragment);
       // Measure the drum once after rebuilding it. Scroll-time depth updates can
       // then use cached centers instead of forcing layout for every Scene.
@@ -2855,12 +2935,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!this.historyMetrics || this.historyMetrics.length !== items.length) {
         this.historyMetrics = items.map((item) => ({
           item,
-          center: item.offsetTop + item.offsetHeight / 2
-        }));
+          center: this._historyItemCenter(item)
+        })).sort((a, b) => a.center - b.center);
       }
 
       const metrics = this.historyMetrics;
-      const center = scroll.scrollTop + scroll.clientHeight / 2;
+      const extent = this._historyHorizontal ? scroll.clientWidth : scroll.clientHeight;
+      const center = (this._historyHorizontal ? scroll.scrollLeft : scroll.scrollTop) + extent / 2;
 
       // Binary-search the nearest cached Scene center.
       let lo = 0, hi = metrics.length - 1;
@@ -2885,7 +2966,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const radius = 6;
       const start = Math.max(0, nearestIndex - radius);
       const end = Math.min(metrics.length - 1, nearestIndex + radius);
-      const depthRange = Math.max(1, scroll.clientHeight * 0.58);
+      const depthRange = Math.max(1, extent * 0.58);
       for (let i = start; i <= end; i += 1) {
         const entry = metrics[i];
         const distance = Math.abs(entry.center - center);
@@ -4937,7 +5018,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (!history) return;
         this.historyMetrics = null;
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => this._scheduleHistoryDepth());
+          requestAnimationFrame(() => {
+            if (this._historyAutoCenter) this._centerHistoryOnCurrent();
+            this._scheduleHistoryDepth();
+          });
         });
       };
       img.addEventListener('load', refreshHistoryGeometryAfterImageLoad, {once:true});
