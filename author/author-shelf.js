@@ -140,9 +140,13 @@ function openSeries(seriesId){
   $('#seriesDialogMeta').textContent=`全${series.episodes.length}冊。上から順番に並んでいます。`;
   $('#seriesDialogBooks').innerHTML=series.episodes.map((episode,index)=>{
     const work=workById.get(episode.publicationId)||episode;
-    return `<button class="series-dialog-row" type="button" data-publication-id="${escapeHtml(episode.publicationId)}">${coverHtml(work,'series-dialog-thumb')}<span class="series-dialog-copy"><small>${index+1}冊目${episode.episodeLabel?`・${escapeHtml(episode.episodeLabel)}`:''}</small><strong>${escapeHtml(work.title||episode.title||'Untitled')}</strong><em>${escapeHtml(episode.episodeTitle||work.episodeTitle||work.byline||'')}</em></span>${ownCopyBadgeHtml(work)}<span class="series-dialog-arrow">›</span></button>`;
+    const episodeTitle=String(episode.episodeTitle||work.episodeTitle||'').trim();
+    const seriesTitle=String(work.title||episode.title||'Untitled').trim();
+    const mainTitle=episodeTitle||seriesTitle;
+    const secondary=episodeTitle&&episodeTitle!==seriesTitle?seriesTitle:(work.byline||'');
+    return `<button class="series-dialog-row" type="button" data-publication-id="${escapeHtml(episode.publicationId)}">${coverHtml(work,'series-dialog-thumb')}<span class="series-dialog-copy"><small>${index+1}冊目${episode.episodeLabel?`・${escapeHtml(episode.episodeLabel)}`:''}</small><strong>${escapeHtml(mainTitle)}</strong><em>${escapeHtml(secondary)}</em></span>${ownCopyBadgeHtml(work)}<span class="series-dialog-arrow">›</span></button>`;
   }).join('');
-  document.querySelectorAll('#seriesDialogBooks .series-dialog-row').forEach(button=>button.onclick=()=>{closeDialog('seriesDialog');setTimeout(()=>openWork(button.dataset.publicationId),80);});
+  document.querySelectorAll('#seriesDialogBooks .series-dialog-row').forEach(button=>button.onclick=()=>openWork(button.dataset.publicationId));
   openDialog('seriesDialog');
 }
 
@@ -150,8 +154,9 @@ function openWork(publicationId){
   const work=workById.get(publicationId);if(!work)return;
   const series=shelfData?.series?.find(box=>box.episodes.some(episode=>episode.publicationId===publicationId));
   const episode=series?.episodes.find(item=>item.publicationId===publicationId);
-  const context=[series?.title,episode?.episodeLabel||work.episodeLabel,episode?.episodeTitle||work.episodeTitle].filter(Boolean).join(' ／ ');
-  $('#workDialogContent').innerHTML=`<div class="work-dialog-layout">${coverHtml(work,'work-dialog-cover')}<div class="work-dialog-body"><div class="work-dialog-info"><p class="eyebrow">${escapeHtml(context||'PUBLIC BOOK')}</p><h2>${escapeHtml(work.title||'Untitled')}</h2><p class="work-byline">${escapeHtml(work.byline||shelfData.author?.displayName||'')}</p></div>${work.description?`<p class="work-description">${escapeHtml(work.description)}</p>`:''}<div class="work-dialog-actions"><button class="read-later-toggle" type="button" data-read-later-toggle aria-pressed="false">あとで読む</button><a class="read-link" href="${escapeHtml(publicPlayerUrl(work))}">この本を読む</a></div></div></div>`;
+  const context=[series?.title,episode?.episodeLabel||work.episodeLabel].filter(Boolean).join(' ／ ');
+  const displayTitle=episode?.episodeTitle||work.episodeTitle||work.title||'Untitled';
+  $('#workDialogContent').innerHTML=`<div class="work-dialog-layout">${coverHtml(work,'work-dialog-cover')}<div class="work-dialog-body"><div class="work-dialog-info"><p class="eyebrow">${escapeHtml(context||'PUBLIC BOOK')}</p><h2>${escapeHtml(displayTitle)}</h2><p class="work-byline">${escapeHtml(work.byline||shelfData.author?.displayName||'')}</p></div>${work.description?`<p class="work-description">${escapeHtml(work.description)}</p>`:''}<div class="work-dialog-actions"><button class="read-later-toggle" type="button" data-read-later-toggle aria-pressed="false">あとで読む</button><a class="read-link" href="${escapeHtml(publicPlayerUrl(work))}">この本を読む</a></div></div></div>`;
   syncReadLaterButton(work);
   $('[data-read-later-toggle]').onclick=()=>toggleReadLater(work);
   $('.read-link').onclick=event=>{event.preventDefault();leaveAuthorShelfForPlayer(event.currentTarget.href);};
@@ -169,7 +174,7 @@ async function shareShelf(){
 }
 
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>closeDialog(button.dataset.close));
-document.querySelectorAll('dialog').forEach(dialog=>{dialog.addEventListener('cancel',()=>setTimeout(()=>document.body.classList.remove('dialog-open'),0));dialog.addEventListener('click',event=>{if(event.target===dialog)closeDialog(dialog.id);});});
+document.querySelectorAll('dialog').forEach(dialog=>{dialog.addEventListener('cancel',()=>setTimeout(()=>{if(!document.querySelector('dialog[open]'))document.body.classList.remove('dialog-open');},0));dialog.addEventListener('click',event=>{if(event.target===dialog)closeDialog(dialog.id);});});
 $('#retryButton').onclick=loadShelf;
 $('#shareShelfButton').onclick=shareShelf;
 $('.my-shelf-link').onclick=event=>{if(!canRestoreBookshelfFromHistory(event.currentTarget.href))return;event.preventDefault();history.back();};

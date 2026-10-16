@@ -882,6 +882,11 @@ function writeShelfScrollY(y){
   document.body.scrollTop=target;
   try{window.scrollTo({left:0,top:target,behavior:'instant'});}catch(_){window.scrollTo(0,target);}
 }
+$('#shelfStatusTapTop')?.addEventListener('click',()=>{
+  const scroller=$('#shelfBodyViewport');
+  if(usesInternalShelfScroller())scroller?.scrollTo({top:0,left:0,behavior:'smooth'});
+  else window.scrollTo({top:0,left:0,behavior:'smooth'});
+});
 function shelfMeaningfulMaxScroll(el=currentShelfBodyElement()){
   if(!el||el.hidden)return 0;
   if(usesInternalShelfScroller()){

@@ -34,3 +34,8 @@
   .author-hero-side{position:static;width:100%;justify-self:stretch}
   .author-hero-side .share-button{position:absolute;right:20px;bottom:20px;z-index:3;width:auto;margin:0}
 }
+
+
+/* Make each episode title the visual anchor inside a series. */
+.series-dialog-copy strong{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:16px;line-height:1.35;text-overflow:ellipsis;white-space:normal}
+.series-dialog-copy em{font-size:10px;line-height:1.4}
