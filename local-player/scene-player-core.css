@@ -405,11 +405,11 @@
 }
 .sp-history.is-horizontal .sp-history-list{
   width:max-content;max-width:none;height:100%;box-sizing:border-box;
-  margin:0;padding:18px 37cqw;flex-direction:row;align-items:center;
-  gap:clamp(12px,2.2cqw,26px);
+  margin:0;padding:18px 27.5cqw;flex-direction:row;align-items:center;
+  gap:clamp(8px,1.3cqw,16px);
 }
 .sp-history.is-horizontal .sp-history-item{
-  flex:0 0 auto;width:min(74cqw,720px);height:100%;min-height:0;
+  flex:0 0 auto;width:min(55cqw,560px);height:100%;min-height:0;
   box-sizing:border-box;padding:14px 0;
   grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);
   align-items:stretch;gap:10px;
@@ -430,13 +430,13 @@
    compresses vertical Japanese into a crowded cluster. */
 @media (orientation:landscape) and (max-height:600px){
   .sp-history.is-horizontal .sp-history-list{
-    padding:10px clamp(110px,35vh,210px);
-    gap:clamp(10px,2vh,18px);
+    padding:8px clamp(88px,25vh,150px);
+    gap:clamp(6px,1.4vh,12px);
   }
   .sp-history.is-horizontal .sp-history-item{
-    width:min(56vh,420px);
-    padding:8px 0;
-    gap:6px;
+    width:min(50vh,340px);
+    padding:5px 0;
+    gap:4px;
   }
   .sp-history.is-horizontal .sp-history-body{overflow:auto;}
 }
@@ -2641,3 +2641,15 @@ html.sp-scene-image-open body{
 .sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-handdrawn-frame>.sp-text[data-writing-mode="vertical-rl"]{
   height:min(calc(var(--sp-vertical-screen-height) + 2.16em),calc(var(--sp-vertical-content-height) + 2.16em),calc(100dvh - 48px))!important;
 }
+/* Compact PAST for phones held sideways: reserve more height for the scenes,
+   keep vertical Japanese readable, and avoid a tall instruction bar. */
+@media (orientation:landscape) and (max-height:600px){
+  .sp-history.is-horizontal .sp-history-top{height:38px;padding:0 12px}
+  .sp-history.is-horizontal .sp-history-scroll{top:38px}
+  .sp-history.is-horizontal .sp-history-kicker{font-size:8px;letter-spacing:.14em}
+  .sp-history.is-horizontal .sp-history-help{font-size:8px;letter-spacing:0}
+  .sp-history.is-horizontal .sp-history-close{width:30px;height:30px;font-size:19px}
+  .sp-history.is-horizontal .sp-history-text{font-size:clamp(14px,2.25vh,17px)!important;line-height:1.4;letter-spacing:0}
+  .sp-history.is-horizontal .sp-history-subtext{font-size:clamp(10px,1.65vh,12px)!important;line-height:1.35}
+}
+
