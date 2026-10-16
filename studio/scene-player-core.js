@@ -1111,6 +1111,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           } catch (e) { reject(e); }
         }))
         .then((buffer) => {
+          if(this.destroyed)return null;
           this._bufferAudioCache.set(key, buffer);
           emit(this.host, 'sceneplayer:audiobufferready', { src: key, duration: buffer?.duration || 0 });
           return buffer;
@@ -6140,11 +6141,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     destroy(options = {}) {
       if (this.destroyed) return;
+      this.destroyed = true;
       const preserveHost = options?.preserveHost === true;
       this.stopAuto();
       this._resetPresentationRuntime();
+      this._resetChatReadRuntime();
       this._resetBackgroundRuntime();
+      this._clearLayoutTimers();
+      this._disposeSceneNodeObservers(this.els?.scenes);
+      this.host.querySelectorAll('.sp-scene-image-viewer').forEach(viewer=>viewer._imageBoundedRO?.disconnect?.());
+      if(this.historyScrollRaf)cancelAnimationFrame(this.historyScrollRaf);
+      this.historyScrollRaf=0;
+      this.historyMetrics=null;
+      this.historyDepthItems.clear();
       this._stopAllAudio(true);
+      Object.values(this.audioEls||{}).forEach(audio=>this._disposeAudioElement(audio));
       if (this.endingAudio) {
         try { this.endingAudio.pause(); } catch (_) {}
         try { this.endingAudio.removeAttribute('src'); this.endingAudio.load(); } catch (_) {}
@@ -6155,7 +6166,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (this._bufferOneShots) this._bufferOneShots.clear();
       this._disposeIOSMediaBank();
       if (this.audioContext && typeof this.audioContext.close === 'function') {
-        try { this.audioContext.close(); } catch (_) {}
+        try { this.audioContext.close()?.catch?.(()=>{}); } catch (_) {}
       }
       (this.oneshotPool || []).forEach((audio) => this._disposeAudioElement(audio));
       this.oneshotPool = [];
@@ -6177,7 +6188,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._chatIconPreloadTimer = 0;
       this._chatIconCache?.clear();
       this._pendingChatIconImages?.clear();
-      this.destroyed = true;
+      this._backgroundStateCache=[];
+      this._backgroundStateCacheDocument=null;
+      this.document=null;
     }
   }
 

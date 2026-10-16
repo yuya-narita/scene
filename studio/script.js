@@ -1409,7 +1409,7 @@
       const row=await buildDraftRecord();
       if(!row)return true;
       await putDraftRecord(row);
-      latestDraftSummary=row;
+      latestDraftSummary=draftMetaFromRow(row);
       const ind=$('#draftSaveIndicator');
       if(ind){ind.textContent=t('draft.saved');ind.hidden=false;clearTimeout(ind._hideTimer);ind._hideTimer=setTimeout(()=>ind.hidden=true,1800);}
       await refreshDraftUI(false);
@@ -1439,8 +1439,7 @@
   async function restoreDraftRecord(row){
     if(!row)return;
     const rowHadMasterIdentity=Boolean(row?.document?.studio?.identity?.workId && row?.document?.studio?.identity?.ownerKey);
-    assetRegistry.forEach((_,url)=>{if(/^blob:/i.test(url)){try{URL.revokeObjectURL(url);}catch(_){}}});
-    assetRegistry.clear();
+    if(!await prepareWorkReplacement())return;
     const map=new Map();
     for(const item of (row.assets||[])){
       if(!item?.blob)continue;
@@ -1673,7 +1672,13 @@
   }
 
   async function refreshDraftUI(showResume=true){
-    const rows=await verifyLegacyDraftPublications(await listDraftRecords());
+    // Buttons need summaries, not every work's full document and Blob array.
+    // Fetch the full row only when it is opened/published.
+    const rows=(await verifyLegacyDraftPublications(await listDraftRecords())).map(row=>({
+      ...draftMetaFromRow(row),
+      recCompletedCount:Number(row.recProgress?.completedCount||row.recCompletedCount||0),
+      publishStatus:draftPublishStatus(row)
+    }));
     latestDraftSummary=rows[0]||null;
 
     const label=$('#draftCountLabel');
@@ -1717,7 +1722,7 @@
       const publicationUrl=draftPublicationUrl(row);
       const isPublished=Boolean(publicationUrl);
       const isStopped=!isPublished && draftPublicationBelongsToWork(row) && Boolean(row.publication?.id);
-      const status=isPublished?draftPublishStatus(row):(isStopped?'stopped':'draft');
+      const status=isPublished?row.publishStatus:(isStopped?'stopped':'draft');
       const el=document.createElement('article');
       el.className=`draft-row unified-work-row ${isPublished?'is-published':''} ${isStopped?'is-stopped':''} ${status==='dirty'?'is-dirty':''}`;
 
@@ -1799,13 +1804,7 @@
 
   async function startNewDraft(){
     requestPersistentDraftStorage();
-    // Never abandon the currently edited work silently.
-    const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
-    const saved=await saveDraftNow();
-    if(hadWork && !saved){
-      appAlert(uiLanguage==='ja'?'現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。':'The current work could not be saved automatically, so Studio did not start a new work.');
-      return false;
-    }
+    if(!await prepareWorkReplacement())return false;
     workingDocument=null;coverStartMode='scene';coverStartTrigger='bottom';relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceModeLocked)commerceModeLocked.checked=false;if(commerceSupportEnabled)commerceSupportEnabled.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     latestPublishedId='';
@@ -1834,6 +1833,55 @@
   function registerAsset(url, blob, name='asset'){
     if(!url || !blob)return;
     assetRegistry.set(url,{blob,name:String(name||'asset')});
+  }
+
+  // A file-open is a work boundary. Persist edits first, then detach the old
+  // Player, inspectors, Undo snapshots and object URLs so Chrome can collect them.
+  async function prepareWorkReplacement({keepAssetUrls=new Set()}={}){
+    const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
+    const wasLive=liveEditEnabled;
+    finishCreditsInlineEdit();
+    finishLiveEndingInlineEdit({refresh:false});
+    try{if(autoRecActive)finishAutoRec(false);}catch(error){console.warn('AUTO REC cleanup failed',error);}
+    disableLiveEdit();
+    if(hadWork && !await saveDraftNow()){
+      if(wasLive)enableLiveEdit();
+      appAlert(uiLanguage==='ja'?'現在の作品を自動保存できなかったため、作品を切り替えませんでした。Master .sceneを書き出して保存してください。':'The current work could not be saved. Export a Master .scene before switching works.');
+      return false;
+    }
+    clearTimeout(draftSaveTimer);draftSaveTimer=null;
+    clearTimeout(liveInlineIntroTimer);clearTimeout(liveInlineDockTimer);
+    clearTimeout(undoBarTimer);undoBarTimer=null;
+    liveEditSoundAbort?.abort();liveEditSoundAbort=null;liveEditSoundBound=false;
+    player?.destroy();player=null;
+    desktopBodyResizeObserver?.disconnect();desktopBodyResizeObserver=null;
+    desktopDetailRangeFlushActive=null;desktopDetailRangeInteracting=false;
+    hideRichSelectionToolbar();
+    liveEditSheetBody?.replaceChildren();desktopLivePanelBody?.replaceChildren();
+    undoHistory=[];redoHistory=[];undoSnapshot=null;syncHistoryUi();
+    latestDraftSummary=null;pendingUnpublishDraft=null;sceneBackgroundPositionContext=null;
+    assetRegistry.forEach((_,url)=>{
+      if(keepAssetUrls.has(url))return;
+      if(/^blob:/i.test(url)){try{URL.revokeObjectURL(url);}catch(_){}}
+      assetRegistry.delete(url);
+    });
+    workingDocument=null;
+    coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';cinemaBackgroundUrl='';
+    const backgroundPreview=$('#cinemaBackgroundPreview');
+    if(backgroundPreview){backgroundPreview.style.backgroundImage='';backgroundPreview.hidden=true;}
+    document.querySelectorAll('input[type="file"]').forEach(input=>{input.value='';});
+    return true;
+  }
+
+  function materializePackageAsset(entries,assetsByPath,path,name){
+    if(assetsByPath.has(path))return assetsByPath.get(path);
+    const bytes=entries.get(path);
+    if(!bytes)return null;
+    const blob=new Blob([bytes],{type:guessMime(name)});
+    const url=URL.createObjectURL(blob);
+    registerAsset(url,blob,name);
+    assetsByPath.set(path,url);
+    return url;
   }
 
   async function snapshotPickedFile(file){
@@ -1894,6 +1942,10 @@
   function unregisterAsset(url){
     if(!url)return;
     const item=assetRegistry.get(url);
+    // A packaged asset can be shared by multiple Scenes (or Undo snapshots).
+    // Replacing one reference must not invalidate all the other references.
+    const usesAsset=doc=>{if(!doc)return false;let used=false;walkAssetRefs(doc,ref=>{if(ref.src===url)used=true;});return used;};
+    if(usesAsset(workingDocument) || [...undoHistory,...redoHistory].some(s=>usesAsset(s.workingDocument)))return item;
     assetRegistry.delete(url);
     if(/^blob:/i.test(url)){
       try{ URL.revokeObjectURL(url); }catch(_){}
@@ -4875,21 +4927,20 @@ return flowCommentCard;}
         doc.metadata.episode=manifest.series?.episode||doc.metadata.episode||'';
         doc.metadata.episodeNumber=Number(manifest.series?.episodeNumber||doc.metadata.episodeNumber||0)||0;
         doc.metadata.description=manifest.description||doc.metadata.description||'';
-        if(languageInput)languageInput.value=['ja','en','mul'].includes(manifest.language)?manifest.language:'auto';
       }
+      if(!await prepareWorkReplacement())return;
+      if(manifest && languageInput)languageInput.value=['ja','en','mul'].includes(manifest.language)?manifest.language:'auto';
       let restored=0;
+      const assetsByPath=new Map();
 
       const refs=[];
       walkAssetRefs(doc,ref=>refs.push(ref));
       for(const ref of refs){
         const path=String(ref.src||'').replace(/^\.\//,'');
         if(!/^assets\//i.test(path))continue;
-        const bytes=entries.get(path);
-        if(!bytes)continue;
         const name=ref.fileName || path.split('/').pop() || 'asset';
-        const blob=new Blob([bytes],{type:guessMime(name)});
-        const url=URL.createObjectURL(blob);
-        registerAsset(url,blob,name);
+        const url=materializePackageAsset(entries,assetsByPath,path,name);
+        if(!url)continue;
         ref.holder[ref.key]=url;
         ref.holder._editorFileName=name;
         restored++;
@@ -4911,17 +4962,16 @@ return flowCommentCard;}
         coverImageFileName=doc.cover._editorFileName||'cover';
         updateCoverPreview();
       } else if(manifest?.cover?.image && entries.get(manifest.cover.image)){
-        const bytes=entries.get(manifest.cover.image);
-        const blob=new Blob([bytes],{type:guessMime(manifest.cover.image)});
-        coverImageUrl=URL.createObjectURL(blob);
         coverImageFileName=manifest.cover.image.split('/').pop()||'cover';
-        assetRegistry.set(coverImageUrl,{blob,name:coverImageFileName});
+        coverImageUrl=materializePackageAsset(entries,assetsByPath,manifest.cover.image,coverImageFileName);
         setCoverPositionFromValue(manifest?.cover?.position||'center center',manifest?.cover?.positions);
         doc.cover={src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()};
         updateCoverPreview();
       } else {
         coverImageUrl=''; coverImageFileName=''; setCoverPositionFromValue('center center'); updateCoverPreview();
       }
+      // Drop the decompressed ZIP bytes before network verification/autosave.
+      entries.clear();assetsByPath.clear();refs.length=0;
       await hydrateMasterPublicationState(workingDocument,{warnStale:true});
       await saveDraftNow();
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
@@ -5039,6 +5089,11 @@ return flowCommentCard;}
       const raw=await file.text();
       const parsed=JSON.parse(raw.replace(/^\uFEFF/,''));
       const doc=validateSceneFormatV1(parsed);
+      // Legacy JSON exports may reference assets still owned by this session.
+      // Transfer those assets rather than revoking URLs the new document needs.
+      const keepAssetUrls=new Set();
+      walkAssetRefs(doc,ref=>{if(assetRegistry.has(ref.src))keepAssetUrls.add(ref.src);});
+      if(!await prepareWorkReplacement({keepAssetUrls}))return;
       workingDocument=doc;
       ensureMasterIdentity(workingDocument);
       latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
@@ -6223,6 +6278,8 @@ return flowCommentCard;}
 
   let liveEditChromeObserver=null;
   let liveEditSoundBound=false;
+  let liveEditSoundAbort=null;
+  let studioPlayerEventsBound=false;
 
   function bindLiveEditSoundControl(){
     if(!player || liveEditSoundBound)return;
@@ -6230,6 +6287,8 @@ return flowCommentCard;}
     if(!right)return;
 
     liveEditSoundBound=true;
+    liveEditSoundAbort=new AbortController();
+    const signal=liveEditSoundAbort.signal;
     right.hidden=false;
     right.disabled=false;
     right.textContent='♪';
@@ -6246,13 +6305,13 @@ return flowCommentCard;}
       const muted=player.toggleMuted();
       right.classList.toggle('is-muted',muted);
       right.setAttribute('aria-pressed',muted?'false':'true');
-    },true);
+    },{capture:true,signal});
 
     playerHost.addEventListener('sceneplayer:mutechange',(e)=>{
       const muted=Boolean(e.detail?.muted);
       right.classList.toggle('is-muted',muted);
       right.setAttribute('aria-pressed',muted?'false':'true');
-    });
+    },{signal});
   }
 
   function syncLiveEditPreviewChrome(){
@@ -6287,6 +6346,8 @@ return flowCommentCard;}
   function ensurePlayer(){
     if(player)return player;
     player=new ScenePlayerCore(playerHost,{allowPrevious:true,keyboard:true,swipe:true,endOnNextAction:true,maxStackVisible:4,autoDelay:2600,uiLanguage});
+    if(!studioPlayerEventsBound){
+    studioPlayerEventsBound=true;
     playerHost.addEventListener('sceneplayer:advanceintent',(event)=>{
       if(autoRecActive)recordAutoRecBoundary(event.detail||{});
     });
@@ -6309,6 +6370,7 @@ return flowCommentCard;}
       // 公開状態は保持したまま公開ボタンだけ非表示へ戻す。
       syncPublishPreviewButton(false);
     });
+    }
     syncStudioPreviewDevice();
     return player;
   }
@@ -7706,7 +7768,7 @@ return flowCommentCard;}
     try{
       const snap=await snapshotPickedFile(file);
       const logoBlob=await trimTransparentPng(snap.blob);
-      if(coverLogoUrl && /^blob:/i.test(coverLogoUrl))URL.revokeObjectURL(coverLogoUrl);
+      if(coverLogoUrl)unregisterAsset(coverLogoUrl);
       coverLogoUrl=URL.createObjectURL(logoBlob);
       coverLogoFileName=snap.name||'logo.png';
       assetRegistry.set(coverLogoUrl,{blob:logoBlob,name:coverLogoFileName});
@@ -7714,7 +7776,7 @@ return flowCommentCard;}
     }catch(error){console.error(error);appAlert(u('作品ロゴを読み込めませんでした。','Could not load the work logo.'));coverLogoInput.value='';}
   });
   coverLogoClear?.addEventListener('click',()=>{
-    if(coverLogoUrl && /^blob:/i.test(coverLogoUrl))URL.revokeObjectURL(coverLogoUrl);
+    if(coverLogoUrl)unregisterAsset(coverLogoUrl);
     coverLogoUrl='';coverLogoFileName='';if(coverLogoInput)coverLogoInput.value='';
     if(coverQuickLogoClear)coverQuickLogoClear.hidden=true;
     refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
@@ -7723,7 +7785,7 @@ return flowCommentCard;}
     if(!file)return;
     try{
       const snap=await snapshotPickedFile(file);
-      if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
+      if(coverImageUrl)unregisterAsset(coverImageUrl);
       coverImageUrl=URL.createObjectURL(snap.blob);
       coverImageFileName=snap.name||'cover';
       assetRegistry.set(coverImageUrl,{blob:snap.blob,name:coverImageFileName});
@@ -7743,7 +7805,7 @@ return flowCommentCard;}
   }
   coverImageInput?.addEventListener('change',()=>applyCoverImageFile(coverImageInput.files?.[0]));
   coverImageClear?.addEventListener('click',()=>{if(coverQuickImageClear)coverQuickImageClear.hidden=true;
-    if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
+    if(coverImageUrl)unregisterAsset(coverImageUrl);
     coverImageUrl=''; coverImageFileName='';
     if(coverImageInput)coverImageInput.value='';
     refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();syncEasyPublishButton();scheduleDraftSave(80);
