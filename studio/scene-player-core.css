@@ -417,8 +417,8 @@
 }
 .sp-history.is-horizontal .sp-history-list{
   width:max-content;max-width:none;height:100%;box-sizing:border-box;
-  margin:0;padding:18px 40cqw;flex-direction:row;align-items:center;
-  gap:clamp(24px,6cqw,72px);
+  margin:0;padding:18px 37cqw;flex-direction:row;align-items:center;
+  gap:clamp(12px,2.2cqw,26px);
 }
 .sp-history.is-horizontal .sp-history-item{
   flex:0 0 auto;width:min(74cqw,720px);height:100%;min-height:0;
@@ -435,6 +435,22 @@
 .sp-history.is-horizontal .sp-history-text[data-writing-mode="vertical-rl"],
 .sp-history.is-horizontal .sp-history-subtext[data-writing-mode="vertical-rl"]{
   flex-shrink:0;max-height:100%;max-width:100%;
+}
+
+/* In a phone held sideways, size each past Scene from the available height.
+   Width-based sizing makes the cards span the whole landscape screen and
+   compresses vertical Japanese into a crowded cluster. */
+@media (orientation:landscape) and (max-height:600px){
+  .sp-history.is-horizontal .sp-history-list{
+    padding:10px clamp(110px,35vh,210px);
+    gap:clamp(10px,2vh,18px);
+  }
+  .sp-history.is-horizontal .sp-history-item{
+    width:min(56vh,420px);
+    padding:8px 0;
+    gap:6px;
+  }
+  .sp-history.is-horizontal .sp-history-body{overflow:auto;}
 }
 
 .sp-no-header .sp-history{top:env(safe-area-inset-top)}
