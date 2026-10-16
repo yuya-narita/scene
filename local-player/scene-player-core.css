@@ -2644,11 +2644,11 @@ html.sp-scene-image-open body{
 /* Compact PAST for phones held sideways: reserve more height for the scenes,
    keep vertical Japanese readable, and avoid a tall instruction bar. */
 @media (orientation:landscape) and (max-height:600px){
-  .sp-history.is-horizontal .sp-history-top{height:38px;padding:0 12px}
-  .sp-history.is-horizontal .sp-history-scroll{top:38px}
-  .sp-history.is-horizontal .sp-history-kicker{font-size:8px;letter-spacing:.14em}
-  .sp-history.is-horizontal .sp-history-help{font-size:8px;letter-spacing:0}
-  .sp-history.is-horizontal .sp-history-close{width:30px;height:30px;font-size:19px}
+  .sp-history.is-horizontal .sp-history-top{height:24px;padding:0 8px}
+  .sp-history.is-horizontal .sp-history-scroll{top:24px}
+  .sp-history.is-horizontal .sp-history-kicker{font-size:7px;letter-spacing:.12em}
+  .sp-history.is-horizontal .sp-history-help{font-size:7px;letter-spacing:0}
+  .sp-history.is-horizontal .sp-history-close{width:22px;height:22px;font-size:16px}
   .sp-history.is-horizontal .sp-history-text{font-size:clamp(14px,2.25vh,17px)!important;line-height:1.4;letter-spacing:0}
   .sp-history.is-horizontal .sp-history-subtext{font-size:clamp(10px,1.65vh,12px)!important;line-height:1.35}
 }
