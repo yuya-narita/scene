@@ -882,11 +882,21 @@ function writeShelfScrollY(y){
   document.body.scrollTop=target;
   try{window.scrollTo({left:0,top:target,behavior:'instant'});}catch(_){window.scrollTo(0,target);}
 }
-$('#shelfStatusTapTop')?.addEventListener('click',()=>{
+function scrollShelfToTop(){
+  if(shelfScrollShouldLock()||document.querySelector('dialog[open]'))return;
+  const behavior=matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth';
   const scroller=$('#shelfBodyViewport');
-  if(usesInternalShelfScroller())scroller?.scrollTo({top:0,left:0,behavior:'smooth'});
-  else window.scrollTo({top:0,left:0,behavior:'smooth'});
+  if(usesInternalShelfScroller())scroller?.scrollTo({top:0,left:0,behavior});
+  else window.scrollTo({top:0,left:0,behavior});
+}
+$('#shelfStatusTapTop')?.addEventListener('click',scrollShelfToTop);
+$('#shelfScrollTopButton')?.addEventListener('click',scrollShelfToTop);
+// Safari owns status-bar taps; keep an actual in-page control available even
+// when safe-area-inset-top is zero or native UI consumes the status-bar tap.
+$('.topbar')?.addEventListener('click',event=>{
+  if(event.target===event.currentTarget)scrollShelfToTop();
 });
+
 function shelfMeaningfulMaxScroll(el=currentShelfBodyElement()){
   if(!el||el.hidden)return 0;
   if(usesInternalShelfScroller()){
