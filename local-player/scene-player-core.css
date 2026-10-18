@@ -2715,3 +2715,7 @@ html.sp-scene-image-open body{
 .sp-credits.is-roll.is-revealed:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list>.sp-credits-final-target{visibility:visible;animation:sp-credits-final-reveal 1.2s ease-out both;}
 @keyframes sp-credits-final-reveal{from{opacity:0;filter:blur(14px)}to{filter:blur(0)}}
 @media(prefers-reduced-motion:reduce){.sp-credits.is-revealed .sp-credits-final-target{animation:none!important;filter:none;}}
+
+/* V44: reserve the last item for its reveal instead of showing it twice. */
+.sp-credits.is-roll[data-end-mode="reveal"]:not(.is-revealed):not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list>.sp-credits-final-target{visibility:hidden;pointer-events:none;}
+@media(prefers-reduced-motion:reduce){.sp-credits.is-roll[data-end-mode="reveal"] .sp-credits-list>.sp-credits-final-target{visibility:visible!important;pointer-events:auto;}}

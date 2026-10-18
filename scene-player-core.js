@@ -5779,7 +5779,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           wrap.style.setProperty('--credits-final-y',`${finalY}px`);
           list.querySelectorAll('.sp-credits-final-target').forEach(node=>node.classList.remove('sp-credits-final-target'));
           if(last)last.classList.add('sp-credits-final-target');
-          const end=m.endMode==='hold'&&last?finalY:-list.offsetHeight;
+          // The final item is reserved for the reveal; only earlier content rolls.
+          const preceding=last?Array.from(list.children).slice(0,Array.from(list.children).indexOf(last)).reverse().find(n=>!n.classList.contains('sp-credits-spacer')&&(n.textContent.trim()||n.querySelector('img'))):null;
+          const exitY=m.endMode==='reveal'?(preceding?-(preceding.offsetTop+preceding.offsetHeight):-(last?.offsetTop||0)):-list.offsetHeight;
+          const end=m.endMode==='hold'&&last?finalY:exitY;
           // Resolve lengths before playback; no changing custom property inside keyframes.
           const animation=list.getAnimations?.().find(a=>['sp-credits-roll','sp-credits-roll-hold'].includes(a.animationName));
           if(animation?.effect?.setKeyframes){
