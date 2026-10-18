@@ -1067,7 +1067,7 @@
 
   function draftMetaFromRow(row){
     const doc=row?.document||{},easy=row?.easy||{};
-    return {id:String(row?.id||''),draftId:String(row?.id||''),workId:String(doc?.studio?.identity?.workId||row?.publication?.id||''),title:String(row?.title||doc?.title||'Untitled'),author:String(easy.author||doc?.author||''),subtitle:String(easy.subtitle||doc?.metadata?.subtitle||''),description:String(easy.description||doc?.metadata?.description||''),seriesId:String(easy.seriesId||doc?.metadata?.seriesId||''),seriesTitle:String(easy.series||doc?.metadata?.seriesTitle||''),episode:String(easy.episode||doc?.metadata?.episode||''),episodeNumber:Number(easy.episodeNumber||doc?.metadata?.episodeNumber||0)||0,episodeTitle:String(easy.episodeTitle||doc?.metadata?.episodeTitle||''),sceneCount:Number(row?.sceneCount||doc?.scenes?.length||0),updatedAt:Number(row?.updatedAt)||Date.now(),publication:{...(row?.publication||{})},coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}}};
+    return {id:String(row?.id||''),draftId:String(row?.id||''),workId:String(doc?.studio?.identity?.workId||row?.workId||row?.publication?.id||''),title:String(row?.title||doc?.title||'Untitled'),author:String(easy.author||doc?.author||row?.author||''),subtitle:String(easy.subtitle||doc?.metadata?.subtitle||row?.subtitle||''),description:String(easy.description||doc?.metadata?.description||row?.description||''),seriesId:String(easy.seriesId||doc?.metadata?.seriesId||row?.seriesId||''),seriesTitle:String(easy.series||doc?.metadata?.seriesTitle||row?.seriesTitle||''),episode:String(easy.episode||doc?.metadata?.episode||row?.episode||''),episodeNumber:Number(easy.episodeNumber||doc?.metadata?.episodeNumber||row?.episodeNumber||0)||0,episodeTitle:String(easy.episodeTitle||doc?.metadata?.episodeTitle||row?.episodeTitle||''),sceneCount:Number(row?.sceneCount||doc?.scenes?.length||0),updatedAt:Number(row?.updatedAt)||Date.now(),publication:{...(row?.publication||{})},coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}}};
   }
 
   function openDraftDB(){
@@ -1671,6 +1671,16 @@
     if(!response.ok || !payload?.ok)throw new Error(payload?.error||`Delete failed (${response.status})`);
   }
 
+  function draftListIdentity(row){
+    const title=String(row?.title||'Untitled').trim()||'Untitled';
+    const episodeTitle=String(row?.episodeTitle||'').trim();
+    const number=Number(row?.episodeNumber)||0;
+    const episode=String(row?.episode||'').trim()||(number>0?(uiLanguage==='ja'?`第${number}話`:`Episode ${number}`):'');
+    const main=episodeTitle||title;
+    const parts=[episode,episodeTitle&&episodeTitle!==title?title:'',String(row?.seriesTitle||'').trim(),!episodeTitle?String(row?.subtitle||'').trim():''];
+    return {title:main,detail:[...new Set(parts.filter(value=>value&&value!==main))].join(' ／ ')};
+  }
+
   async function refreshDraftUI(showResume=true){
     // Buttons need summaries, not every work's full document and Blob array.
     // Fetch the full row only when it is opened/published.
@@ -1732,6 +1742,7 @@
             <strong></strong>
             <span class="unified-work-badges"></span>
           </div>
+          <div class="unified-work-identity" hidden></div>
           <small class="unified-work-meta"></small>
           <small class="published-url" ${isPublished?'':'hidden'}></small>
         </div>
@@ -1745,7 +1756,10 @@
           <button data-delete>${t('draft.delete')}</button>
         </div>`;
 
-      el.querySelector('strong').textContent=row.title||'Untitled';
+      const identity=draftListIdentity(row);
+      el.querySelector('strong').textContent=identity.title;
+      const identityLine=el.querySelector('.unified-work-identity');
+      identityLine.textContent=identity.detail;identityLine.hidden=!identity.detail;
 
       const badges=el.querySelector('.unified-work-badges');
       if(isPublished || isStopped){

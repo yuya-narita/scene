@@ -14335,3 +14335,8 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .desktop-credits-card .desktop-credits-list-head input{min-width:0;flex:1 1 160px;}
 .desktop-credits-card .desktop-credits-entry-fold>summary{min-width:0;max-width:100%;box-sizing:border-box;}
 .desktop-credits-card .desktop-credits-help{white-space:normal;overflow-wrap:anywhere;}
+
+/* V46: distinguish episodes in the local draft manager. */
+.draft-manager-dialog .unified-work-title-line{flex-wrap:wrap;align-items:flex-start;}
+.draft-manager-dialog .unified-work-title-line strong{white-space:normal;overflow-wrap:anywhere;line-height:1.45;}
+.draft-manager-dialog .unified-work-identity{min-width:0;font-size:11px;line-height:1.5;color:#68717e;white-space:normal;overflow-wrap:anywhere;}
