@@ -1487,7 +1487,8 @@
               "type": "string",
               "enum": [
                 "exit",
-                "hold"
+                "hold",
+                "reveal"
               ]
             },
             "stopPosition": {

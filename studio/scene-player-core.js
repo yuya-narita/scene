@@ -5579,7 +5579,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const m=presentation.credits||{},roll=m.mode==='roll'&&active;
       const wrap=document.createElement('section');wrap.className='sp-credits'+(roll?' is-roll':'');
       wrap.dataset.creditsMode=m.mode||'card';
-      wrap.dataset.endMode=m.endMode==='hold'?'hold':'exit';wrap.style.setProperty('--credits-delay',`${Math.max(0,Math.min(60,Number(m.startDelay)||0))}s`);
+      wrap.dataset.endMode=['hold','reveal'].includes(m.endMode)?m.endMode:'exit';wrap.style.setProperty('--credits-delay',`${Math.max(0,Math.min(60,Number(m.startDelay)||0))}s`);
       wrap.dataset.surface=m.surface==='none'?'none':'card';wrap.dataset.columns=Number(m.columns)===2?'2':'1';
       const stageHeight=Number(this.els?.stage?.clientHeight);if(stageHeight>0){wrap.style.setProperty('--credits-viewport-height',`${stageHeight*.5}px`);wrap.style.setProperty('--credits-max-height',`${stageHeight*.55}px`);}
       wrap.style.setProperty('--credits-size',`${Math.max(12,Math.min(48,Number(m.fontSize)||22))}px`);
@@ -5633,7 +5633,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const last=Array.from(list.children).reverse().find(n=>!n.classList.contains('sp-credits-spacer')&&(n.textContent.trim()||n.querySelector('img')));
           const start=first?viewport.clientHeight-first.offsetTop:0;
           const value=Number(m.stopPosition),position=Number.isFinite(value)?Math.max(10,Math.min(90,value)):50;
-          const end=m.endMode==='hold'&&last?Math.min(start,viewport.clientHeight*position/100-last.offsetTop-last.offsetHeight/2):-list.offsetHeight;
+          const finalY=last?Math.min(start,viewport.clientHeight*position/100-last.offsetTop-last.offsetHeight/2):0;
+          wrap.style.setProperty('--credits-final-y',`${finalY}px`);
+          list.querySelectorAll('.sp-credits-final-target').forEach(node=>node.classList.remove('sp-credits-final-target'));
+          if(last)last.classList.add('sp-credits-final-target');
+          const end=m.endMode==='hold'&&last?finalY:-list.offsetHeight;
           // Resolve lengths before playback; no changing custom property inside keyframes.
           const animation=list.getAnimations?.().find(a=>['sp-credits-roll','sp-credits-roll-hold'].includes(a.animationName));
           if(animation?.effect?.setKeyframes){
@@ -5661,10 +5665,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const isStatic=wrap.classList.contains('is-static');
           e.preventDefault();e.stopPropagation();
           if(!isStatic){wrap.classList.add('is-static','is-paused');}
-          else{viewport.scrollTop=0;wrap.classList.remove('is-static','is-paused');if(completed){const animation=list.getAnimations?.()[0];if(animation){animation.currentTime=0;animation.play();}completed=false;}}
+          else{viewport.scrollTop=0;wrap.classList.remove('is-static','is-paused');if(completed){const animation=list.getAnimations?.()[0];if(animation){animation.currentTime=0;animation.play();}completed=false;wrap.classList.remove('is-complete','is-held','is-revealed');}}
         }else if(e.target.closest('a'))e.stopPropagation();
       });
-      if(roll)list.addEventListener('animationend',e=>{if(e.target!==list||!['sp-credits-roll','sp-credits-roll-hold'].includes(e.animationName))return;completed=true;if(m.endMode!=='hold')wrap.classList.add('is-complete');else wrap.classList.add('is-held');});
+      if(roll)list.addEventListener('animationend',e=>{if(e.target!==list||!['sp-credits-roll','sp-credits-roll-hold'].includes(e.animationName))return;completed=true;if(m.endMode==='reveal')wrap.classList.add('is-revealed');else if(m.endMode==='hold')wrap.classList.add('is-held');else wrap.classList.add('is-complete');});
       return wrap;
     }
 

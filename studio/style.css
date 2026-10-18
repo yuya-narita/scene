@@ -14321,3 +14321,17 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .desktop-credits-entry-fold[open]>summary::before{content:"▾";}
 .desktop-credits-entry-fold>summary button{min-width:32px;min-height:32px;padding:4px 8px;flex:none;}
 .desktop-credits-entry-body{display:grid;gap:8px;padding:8px 0 14px;}
+
+/* V43: allow credits controls to shrink to the actual inspector width. */
+.desktop-credits-card,.desktop-credits-card .desktop-collapsible-content,
+.desktop-credits-card .desktop-collapsible-content>*,
+.desktop-credits-card .desktop-web-board-grid>*,
+.desktop-credits-card .desktop-live-field,.desktop-credits-card .desktop-web-board-field,
+.desktop-credits-card .desktop-credits-entry-list,.desktop-credits-card .desktop-credits-entry-fold,
+.desktop-credits-card .desktop-credits-entry-body{min-width:0;max-width:100%;box-sizing:border-box;}
+.desktop-credits-card .desktop-web-board-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));}
+.desktop-credits-card select,.desktop-credits-card input:not([type="checkbox"]),.desktop-credits-card textarea{width:100%;min-width:0;max-width:100%;box-sizing:border-box;}
+.desktop-credits-card .desktop-live-field>span,.desktop-credits-card .desktop-web-board-field>span{min-width:0;overflow-wrap:anywhere;}
+.desktop-credits-card .desktop-credits-list-head input{min-width:0;flex:1 1 160px;}
+.desktop-credits-card .desktop-credits-entry-fold>summary{min-width:0;max-width:100%;box-sizing:border-box;}
+.desktop-credits-card .desktop-credits-help{white-space:normal;overflow-wrap:anywhere;}
