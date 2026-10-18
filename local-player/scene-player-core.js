@@ -3381,6 +3381,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return timer;
     }
 
+    _horizontalFlowIsVertical(scene) {
+      const scenes=this.document?.scenes||[];
+      let index=scenes.indexOf(scene);
+      if(index<0&&scene?.id)index=scenes.findIndex(item=>item.id===scene.id);
+      if(index<0)return scene?.presentation?.text?.writingMode==='vertical-rl';
+      // A horizontal run keeps its direction even when its text switches
+      // writing mode. A later vertical-flow Scene starts a fresh run.
+      while(index>0&&scenes[index-1]?.presentation?.flow==='horizontal')index--;
+      return scenes[index]?.presentation?.text?.writingMode==='vertical-rl';
+    }
+
     _sceneGap(prevScene, nextScene) {
       // Consecutive chat bubbles form one speaker's message group.
       if (nextScene?.presentation?.flow !== 'horizontal' && this._chatContinues(prevScene, nextScene)) return 8;
@@ -3500,7 +3511,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       for(let g=groups.length-2;g>=0;g-=1){
         const current=groups[g],next=groups[g+1],currentBounds=bounds(current),nextBounds=bounds(next),currentLast=metrics[current[current.length-1]],nextFirst=metrics[next[0]],flow=nextFirst.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
         let dx=0,dy=0;
-        if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap,verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
+        if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap,verticalReading=this._horizontalFlowIsVertical(nextFirst.scene);dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
         else{const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl',gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;dx=0;dy=nextBounds.top-gap-currentBounds.bottom;}
         current.forEach(i=>{positions[i].x+=dx;positions[i].y+=dy;});
       }
@@ -3543,7 +3554,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const eitherVertical=current.scene?.presentation?.text?.writingMode==='vertical-rl'||next.scene?.presentation?.text?.writingMode==='vertical-rl';
         if(flow==='horizontal'){
           const gap=Math.max(this._sceneGap(current.scene,next.scene),stageWidth*.09)+extraGap;
-          const verticalReading=next.scene?.presentation?.text?.writingMode==='vertical-rl';
+          const verticalReading=this._horizontalFlowIsVertical(next.scene);
           positions[i]={
             x:verticalReading
               ? nextPosition.x+next.inkRight+gap-current.inkLeft
@@ -3578,7 +3589,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           previous.node.style.zIndex='20';
           newest.node.style.zIndex='30';
           if(flow==='horizontal'){
-            const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl';
+            const verticalReading=this._horizontalFlowIsVertical(newest.scene);
             const fits=currentWidth+previousWidth+gap<=availableWidth-margin*2;
             const groupWidth=currentWidth+previousWidth+gap;
             const groupLeft=(availableWidth-groupWidth)/2;
@@ -3614,7 +3625,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){
           const availableWidth=Math.max(1,newest.node.clientWidth||newest.node.getBoundingClientRect().width/this._layoutScale()),margin=stageWidth<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
           if(flow==='horizontal'){
-            const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;
+            const verticalReading=this._horizontalFlowIsVertical(newest.scene),previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;
             positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};
           }else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};
         }
@@ -6057,12 +6068,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
-      // Keep static reflection independent from entrance animation transforms.
-      node.style.scale = ({horizontal:'-1 1',vertical:'1 -1',both:'-1 -1'})[style.flip] || '';
-      // Entrance effects may switch the pivot to the left edge. Reflection
-      // must keep the same center during measurement, entrance and rest.
-      if (node.style.scale) node.style.setProperty('transform-origin','50% 50%','important');
-      else node.style.removeProperty('transform-origin');
+      // Only the inner ink is reflected. The outer text retains entrance
+      // transforms and the Scene retains its original movement coordinates.
+      const previousReflection=node.querySelector(':scope > .sp-text-reflection');
+      if(previousReflection)previousReflection.replaceWith(...previousReflection.childNodes);
+      if(node.style.scale){node.style.scale='';node.style.removeProperty('transform-origin');}
       if (style.color) node.style.color = String(style.color);
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       const shadows={
@@ -6134,6 +6144,19 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.style.marginRight='auto';
       }
       if (style.writingMode !== 'vertical-rl' && (style.align === 'left' || style.align === 'center' || style.align === 'right')) node.style.textAlign = style.align;
+      const reflection=({horizontal:'-1 1',vertical:'1 -1',both:'-1 -1'})[style.flip];
+      if(reflection){
+        const ink=document.createElement('span');
+        ink.className='sp-text-reflection';
+        ink.style.display='block';
+        ink.style.inlineSize='100%';
+        ink.style.writingMode='inherit';
+        ink.style.scale=reflection;
+        ink.style.transformOrigin='50% 50%';
+        ink.append(...node.childNodes);
+        node.appendChild(ink);
+      }
+
     }
 
     _applyCorePresentation(scene) {
