@@ -11622,13 +11622,13 @@ function openDesktopEffectDetail(){
       openDesktopEffectDetail();
     });
     basicGrid.append(
-      desktopDetailSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{setSceneTextFlip(scene,v);apply();}),
       effectSelect,
       v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
       desktopDetailSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')]],p.view||'world',v=>{p.view=v;if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);apply();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
-      desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();})
+      desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();}),
+      desktopDetailSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{setSceneTextFlip(scene,v);apply();})
     );
 
     const timing=section(u('タイミング','Timing'));timing.classList.add('desktop-effect-timing-section');
@@ -14156,7 +14156,6 @@ function openDesktopTextDetail(){
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
-      desktopMakeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);refresh();}),
       desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
         ensureDesktopEffectVisibleDefaults(scene,{save:false});
         if(v==='typewriter'){
@@ -14174,7 +14173,8 @@ function openDesktopTextDetail(){
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()}),
       desktopMakeSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')]],p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);if(v==='web-comment')initWebCommentMeta(scene,index);if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
-      desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();})
+      desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
+      desktopMakeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);refresh();})
     );
     effectCard.append(effectGrid);
     effectCard.append(desktopDetail(t('detail.effect'),'effect'));
@@ -15162,7 +15162,8 @@ function openDesktopTextDetail(){
         values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
         select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
       };
-      liveEditSheetBody.append(makeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);scheduleDraftSave(40);refreshLivePlayer();}));
+      const textFlipField=makeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);scheduleDraftSave(40);refreshLivePlayer();});
+      if((p.view||'world')==='chat')liveEditSheetBody.append(textFlipField);
       const makeEffectAction=(label,cls='')=>{const b=document.createElement('button');b.type='button';b.className=`live-edit-action ${cls}`.trim();b.textContent=label;return b;};
       const viewValues=[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')]];
 
@@ -15187,7 +15188,8 @@ function openDesktopTextDetail(){
           v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderLiveEditSheet('effect')}),
           makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
-          makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();})
+          makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();}),
+          textFlipField
         );
         liveEditSheetBody.append(grid);
         if((p.view||'world')==='web-board'){
