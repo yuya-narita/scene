@@ -6094,6 +6094,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
+      // Keep static reflection independent from entrance animation transforms.
+      node.style.scale = ({horizontal:'-1 1',vertical:'1 -1',both:'-1 -1'})[style.flip] || '';
       if (style.color) node.style.color = String(style.color);
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       const shadows={

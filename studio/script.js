@@ -6726,6 +6726,16 @@ return flowCommentCard;}
   }
 
   function currentScene(){ return workingDocument?.scenes?.[selectedSceneIndex] || null; }
+  function textFlipOptions(){
+    return uiLanguage==='en'
+      ? [['none','Normal'],['horizontal','Mirror (left / right)'],['vertical','Flip top / bottom'],['both','Rotate 180°']]
+      : [['none','通常'],['horizontal','左右反転（鏡文字）'],['vertical','上下反転'],['both','180度回転']];
+  }
+  function setSceneTextFlip(scene,value){
+    const text=ensurePresentation(scene).text;
+    if(['horizontal','vertical','both'].includes(value))text.flip=value;
+    else delete text.flip;
+  }
   function ensurePresentation(scene){ scene.presentation ||= {}; scene.presentation.text ||= {}; if(scene.presentation.view==='credits'){scene.presentation.view='world';scene.presentation.credits ||= {};scene.presentation.credits.enabled=scene.presentation.credits.enabled!==false;scene.presentation.credits.colorMode ||= 'auto';} return scene.presentation; }
 
   const pct = (value, fallback=0) => Math.max(0, Math.min(100, Number(value ?? fallback))) / 100;
@@ -7079,6 +7089,7 @@ return flowCommentCard;}
       p.effect=advancedEffect;
     }
     p.text.size=$('#sceneSizeSelect').value;
+    setSceneTextFlip(scene,$('#sceneTextFlipSelect')?.value||'none');
     const writingMode=$('#sceneWritingModeSelect')?.value || 'horizontal-tb';
     if(writingMode==='vertical-rl')p.text.writingMode='vertical-rl';else delete p.text.writingMode;
     const frameType=$('#sceneFrameSelect')?.value || 'none';
@@ -7117,6 +7128,7 @@ return flowCommentCard;}
     $('#sceneTypeSelect').value=scene.type || 'text'; $('#sceneDisplaySelect').value=scene.presentation?.display || 'stack'; if($('#sceneFlowSelect'))$('#sceneFlowSelect').value=scene.presentation?.flow==='horizontal'?'horizontal':'vertical';
     if($('#sceneViewSelect')) $('#sceneViewSelect').value=scene.presentation?.view || 'world';
     if($('#sceneEntryMotionSelect')) $('#sceneEntryMotionSelect').value=scene.presentation?.entryMotion || 'flow';
+    if($('#sceneTextFlipSelect'))$('#sceneTextFlipSelect').value=scene.presentation?.text?.flip||'none';
     $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto'; if($('#sceneWritingModeSelect')) $('#sceneWritingModeSelect').value=scene.presentation?.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb'; if($('#sceneFrameSelect'))$('#sceneFrameSelect').value=isFrameType(scene.presentation?.frame?.type)?scene.presentation.frame.type:'none'; if($('#sceneFramePositionSelect'))$('#sceneFramePositionSelect').value=framePositionPreset(scene); if($('#sceneFramePositionAdjust'))$('#sceneFramePositionAdjust').disabled=typeof scene.text!=='string'||!scene.text.length; if($('#sceneWeightSelect')) $('#sceneWeightSelect').value=String(scene.presentation?.text?.fontWeight||0);
     const sceneColor=scene.presentation?.text?.color || '';
     $('#sceneColorSelect').value=!sceneColor?'auto':(sceneColor.toLowerCase()==='#ffffff'||sceneColor.toLowerCase()==='white'?'white':(sceneColor.toLowerCase()==='#000000'||sceneColor.toLowerCase()==='black'?'black':'custom'));
@@ -8448,7 +8460,7 @@ return flowCommentCard;}
   // create one history entry per interaction instead of one per input tick.
   const V36_UNDO_SETTING_IDS=new Set([
     'sceneTypeSelect','sceneDisplaySelect','sceneFlowSelect','sceneViewSelect',
-    'sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect',
+    'sceneEntryMotionSelect','sceneEffectSelect','sceneTextFlipSelect','sceneSizeSelect',
     'sceneWritingModeSelect','sceneFrameSelect','sceneFramePositionSelect',
     'sceneWeightSelect','sceneColorSelect','sceneColorCustomInput',
     'sceneShadowSelect','sceneFontSelect'
@@ -11546,6 +11558,7 @@ function openDesktopEffectDetail(){
     const p=ensurePresentation(scene);
     const before={
       effect:p.effect,
+      textFlip:p.text?.flip,
       display:p.display,
       view:p.view,
       entryMotion:p.entryMotion,
@@ -11558,6 +11571,7 @@ function openDesktopEffectDetail(){
     const apply=()=>{scheduleDraftSave(40);replayCurrentDesktopEffect();};
     const restore=()=>{
       if(before.effect===undefined)delete p.effect;else p.effect=before.effect;
+      setSceneTextFlip(scene,before.textFlip);
       if(before.display===undefined)delete p.display;else p.display=before.display;
       if(before.view===undefined)delete p.view;else p.view=before.view;
       if(before.entryMotion===undefined)delete p.entryMotion;else p.entryMotion=before.entryMotion;
@@ -11608,6 +11622,7 @@ function openDesktopEffectDetail(){
       openDesktopEffectDetail();
     });
     basicGrid.append(
+      desktopDetailSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{setSceneTextFlip(scene,v);apply();}),
       effectSelect,
       v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
@@ -14141,6 +14156,7 @@ function openDesktopTextDetail(){
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
+      desktopMakeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);refresh();}),
       desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
         ensureDesktopEffectVisibleDefaults(scene,{save:false});
         if(v==='typewriter'){
@@ -15146,6 +15162,7 @@ function openDesktopTextDetail(){
         values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
         select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
       };
+      liveEditSheetBody.append(makeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);scheduleDraftSave(40);refreshLivePlayer();}));
       const makeEffectAction=(label,cls='')=>{const b=document.createElement('button');b.type='button';b.className=`live-edit-action ${cls}`.trim();b.textContent=label;return b;};
       const viewValues=[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')]];
 

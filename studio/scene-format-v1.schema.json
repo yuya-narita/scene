@@ -451,6 +451,9 @@
             "right"
           ]
         },
+        "flip": {
+          "enum": ["none", "horizontal", "vertical", "both"]
+        },
         "writingMode": {
           "enum": [
             "horizontal-tb",
