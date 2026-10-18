@@ -88,11 +88,61 @@ function authorHeaders(extra={}){return {...extra,...(authorToken?{Authorization
 function publicAuthorShelfUrl(author=signedInAuthor){const data=typeof author==='string'?{authorId:author}:author||{},url=new URL('../author/',location.href);if(data.slug)url.searchParams.set('u',data.slug);else url.searchParams.set('id',String(data.authorId||''));return url.toString();}
 function readerBookAuthorShelfUrl(book){const slug=String(book?.authorSlug||'').trim().toLowerCase(),authorId=String(book?.authorId||'').trim().toLowerCase();if(/^[a-z0-9][a-z0-9_-]{2,29}$/.test(slug))return publicAuthorShelfUrl({slug});if(/^author_[a-f0-9]{32}$/.test(authorId))return publicAuthorShelfUrl({authorId});return'';}
 function publicAuthorShelfShareUrl(author=signedInAuthor){const data=typeof author==='string'?{authorId:author}:author||{},reference=data.slug||data.authorId;return reference?`${API_BASE}/s/${encodeURIComponent(reference)}`:publicAuthorShelfUrl(data);}
-function readAuthorSession(){try{const row=JSON.parse(localStorage.getItem(AUTHOR_AUTH_STORAGE_KEY)||'null');if(row?.token&&row?.author?.authorId){authorToken=String(row.token);signedInAuthor=row.author;}}catch(_){}}
-function saveAuthorSession(token,author){authorToken=String(token||'');signedInAuthor=author||null;if(authorToken&&signedInAuthor)localStorage.setItem(AUTHOR_AUTH_STORAGE_KEY,JSON.stringify({token:authorToken,author:signedInAuthor}));else localStorage.removeItem(AUTHOR_AUTH_STORAGE_KEY);syncBookshelfAuthorUI();loadCommerceWallet().catch(()=>{});}
+const AUTHOR_SERIES_CACHE_PREFIX='ahako:bookshelf:author-series:v1:';
+let seriesReadyOwner='';
+function restoreAuthorSeriesCache(){
+  const owner=String(signedInAuthor?.authorId||'');
+  if(!authorToken||!owner)return false;
+  if(seriesReadyOwner===owner)return true;
+  try{
+    const cache=JSON.parse(localStorage.getItem(AUTHOR_SERIES_CACHE_PREFIX+owner)||'null');
+    if(cache?.authorId!==owner||!Array.isArray(cache.series))return false;
+    authorSeries=cache.series;seriesReadyOwner=owner;return true;
+  }catch(_){return false;}
+}
+function persistAuthorSeriesCache(){
+  const owner=String(signedInAuthor?.authorId||'');if(!authorToken||!owner)return;
+  seriesReadyOwner=owner;
+  // Only BOX identity, titles and membership; no credentials or scene bytes.
+  const series=authorSeries.map(box=>({seriesId:box.seriesId,title:box.title,episodeCount:box.episodeCount,
+    episodes:(box.episodes||[]).map(item=>({workId:item.workId,episodeNumber:item.episodeNumber}))}));
+  try{localStorage.setItem(AUTHOR_SERIES_CACHE_PREFIX+owner,JSON.stringify({authorId:owner,series}));}catch(error){console.warn('Series layout cache unavailable',error);}
+}
+async function ensureAuthorSeriesReady(){
+  const owner=String(signedInAuthor?.authorId||'');
+  if(!authorToken||!owner||restoreAuthorSeriesCache())return;
+  try{
+    const payload=await authorRequest('/author/series');
+    if(signedInAuthor?.authorId!==owner||!authorToken)return;
+    if(!Array.isArray(payload.series))throw new Error('シリーズBOX情報を確認できませんでした。');
+    authorSeries=payload.series;persistAuthorSeriesCache();
+  }catch(error){
+    if(signedInAuthor?.authorId!==owner)return;
+    seriesReadyOwner=owner;
+    toast(error.message||'シリーズBOX情報を取得できませんでした。接続を確認して再読み込みしてください。');
+  }
+}
+function readAuthorSession(){try{const row=JSON.parse(localStorage.getItem(AUTHOR_AUTH_STORAGE_KEY)||'null');if(row?.token&&row?.author?.authorId){authorToken=String(row.token);signedInAuthor=row.author;restoreAuthorSeriesCache();}}catch(_){}}
+function saveAuthorSession(token,author){const previousOwner=signedInAuthor?.authorId;authorToken=String(token||'');signedInAuthor=author||null;if(previousOwner!==signedInAuthor?.authorId){authorSeries=[];authorWorks=[];seriesReadyOwner='';restoreAuthorSeriesCache();}if(authorToken&&signedInAuthor)localStorage.setItem(AUTHOR_AUTH_STORAGE_KEY,JSON.stringify({token:authorToken,author:signedInAuthor}));else localStorage.removeItem(AUTHOR_AUTH_STORAGE_KEY);syncBookshelfAuthorUI();loadCommerceWallet().catch(()=>{});}
 function syncBookshelfAuthorUI(){const active=!!(authorToken&&signedInAuthor?.authorId),button=$('#bookshelfAuthorButton');if(button){button.textContent=active?(signedInAuthor.displayName||'ログイン中'):'作者ログイン';button.classList.toggle('is-signed-in',active);}$('#bookshelfAuthorSignedIn').hidden=!active;$('#bookshelfAuthorEmailForm').hidden=active;$('#bookshelfAuthorCodeForm').hidden=true;if(active){$('#bookshelfAuthorName').textContent=signedInAuthor.displayName||'';$('#bookshelfAuthorId').textContent=signedInAuthor.slug?`@${signedInAuthor.slug}`:'短い本棚IDは未設定です';if($('#openPublicAuthorShelf'))$('#openPublicAuthorShelf').href=publicAuthorShelfUrl(signedInAuthor);}syncAuthorProfileUI();syncAuthorHeaderUI();syncSeriesShelf();}
 async function restoreBookshelfAuthorSession(){readAuthorSession();syncBookshelfAuthorUI();if(!authorToken)return;try{const response=await fetch(`${API_BASE}/author-auth/me`,{headers:authorHeaders({Accept:'application/json'}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);return;}if(response.ok&&payload?.author)saveAuthorSession(authorToken,payload.author);}catch(_){syncBookshelfAuthorUI();}if(authorToken)await loadAuthorShelfData();}
-async function authorRequest(path,options={}){const response=await fetch(`${API_BASE}${path}`,{...options,headers:authorHeaders(options.headers||{}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);throw new Error(payload?.error||'ログインの有効期限が切れました。');}if(!response.ok||!payload?.ok)throw new Error(payload?.error||'通信できませんでした。');return payload;}
+async function authorRequest(path,options={}){
+  const token=authorToken,requestOptions={...options,headers:authorHeaders(options.headers||{}),cache:'no-store'};
+  let response;
+  try{
+    // Retry read-only network failures. Never repeat a mutation automatically.
+    response=await (String(options.method||'GET').toUpperCase()==='GET'
+      ?shelfGet(`${API_BASE}${path}`,requestOptions):fetch(`${API_BASE}${path}`,requestOptions));
+  }catch(error){
+    console.warn('Author request failed',path,error);
+    throw new Error('サーバーに接続できませんでした。接続を確認して、もう一度お試しください。');
+  }
+  const payload=await response.json().catch(()=>null);
+  if(response.status===401||response.status===403){if(authorToken===token)saveAuthorSession('',null);throw new Error(payload?.error||'ログインの有効期限が切れました。');}
+  if(!response.ok||!payload?.ok)throw new Error(payload?.error||'通信できませんでした。');
+  return payload;
+}
+
 async function loadCommerceWallet({open=false}={}){
   const button=$('#commerceWalletButton');
   if(!authorToken||!signedInAuthor?.authorId){if(button)button.hidden=true;return;}
@@ -214,19 +264,25 @@ async function syncRecoveredMasterSeriesMetadata({workIds=null}={}){
 }
 async function loadAuthorShelfData({recoverMasters=true,masterWorkIds=null,throwOnError=false}={}){
   if(!authorToken)return;
+  const owner=signedInAuthor?.authorId;
   try{
-    const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);
-    authorSeries=series.series||[];authorWorks=works.works||[];
-    // Show the published shelf before recovering missing editable Masters.
-    // Recovery remains automatic, but no longer holds up the visible list.
-    if(recoverMasters){mergeServerPublishedWorksIntoCreatedCache();await refreshSeriesShelfFromCache();}
-    const restored=recoverMasters?await restoreServerPublishedMasters():0;
-    const changed=await syncRecoveredMasterSeriesMetadata({workIds:masterWorkIds});
-    if(!recoverMasters||restored||changed){
-      mergeServerPublishedWorksIntoCreatedCache();
-      await refreshSeriesShelfFromCache();
+    const [series,works]=await Promise.allSettled([authorRequest('/author/series'),authorRequest('/author/works')]);
+    if(!authorToken||signedInAuthor?.authorId!==owner)return;
+    const failure=[series,works].find(result=>result.status==='rejected');
+    if(failure&&(throwOnError||(series.status==='rejected'&&works.status==='rejected')))throw failure.reason;
+    if(series.status==='fulfilled'){
+      if(!Array.isArray(series.value.series))throw new Error('シリーズBOX情報を確認できませんでした。');
+      authorSeries=series.value.series;persistAuthorSeriesCache();
     }
-    if(recoverMasters){
+    if(works.status==='fulfilled')authorWorks=works.value.works||[];
+    // Both the retained membership and successful partial results can be shown
+    // before expensive Master recovery; a failed GET never empties the boxes.
+    mergeServerPublishedWorksIntoCreatedCache();await refreshSeriesShelfFromCache();
+    const restored=recoverMasters&&works.status==='fulfilled'?await restoreServerPublishedMasters():0;
+    const changed=series.status==='fulfilled'&&works.status==='fulfilled'?await syncRecoveredMasterSeriesMetadata({workIds:masterWorkIds}):0;
+    if(restored||changed){mergeServerPublishedWorksIntoCreatedCache();await refreshSeriesShelfFromCache();}
+    if(failure)toast(failure.reason?.message||'一部の情報を更新できませんでした。保存済みの表示を維持しています。');
+    if(recoverMasters&&works.status==='fulfilled'){
       const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);
       await queuePublishedWorkOrderSync(createdIds,{immediate:true});
     }
@@ -1466,6 +1522,8 @@ function revokeUnusedCoverUrls(urls){
   }
 }
 async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
+  // Resolve BOX membership before building or revealing the first local grid.
+  await ensureAuthorSeriesReady();
   const staleCoverUrls=coverUrls;coverUrls=[];
   ownedSeriesBoxes=readOwnedSeriesBoxes();
   const [masterRows,draftRows,readerRecords]=await Promise.all([getAllWorks(),getAllStudioDraftMeta(),getAllReaderBooks()]);
