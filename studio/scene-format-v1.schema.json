@@ -1491,6 +1491,11 @@
                 "reveal"
               ]
             },
+            "revealDelay": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 60
+            },
             "stopPosition": {
               "type": "number",
               "minimum": 10,

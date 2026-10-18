@@ -2712,8 +2712,8 @@ html.sp-scene-image-open body{
 /* V43: scroll fully out before revealing the original final item in place. */
 .sp-credits.is-roll.is-revealed:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list{transform:translateY(var(--credits-final-y,0px))!important;}
 .sp-credits.is-roll.is-revealed:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list>*{visibility:hidden;}
-.sp-credits.is-roll.is-revealed:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list>.sp-credits-final-target{visibility:visible;animation:sp-credits-final-reveal 1.2s ease-out both;}
-@keyframes sp-credits-final-reveal{from{opacity:0;filter:blur(14px)}to{filter:blur(0)}}
+.sp-credits.is-roll.is-revealed:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list>.sp-credits-final-target{visibility:visible;animation:sp-credits-final-reveal 1.2s ease-out both;animation-delay:var(--credits-reveal-delay,0s);}
+@keyframes sp-credits-final-reveal{from{opacity:0;filter:blur(14px);visibility:hidden}0.01%{visibility:visible}to{filter:blur(0);visibility:visible}}
 @media(prefers-reduced-motion:reduce){.sp-credits.is-revealed .sp-credits-final-target{animation:none!important;filter:none;}}
 
 /* V44: reserve the last item for its reveal instead of showing it twice. */
