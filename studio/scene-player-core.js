@@ -153,6 +153,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.audioTimers = [];
       this.audioFadeFrames = new Map();
       this.audioState = { bgm: null, ambient: null };
+      this._audioStopGeneration = { bgm: 0, ambient: 0 };
       this.audioEls = {
         bgm: this._createAudioElement('bgm'),
         ambient: this._createAudioElement('ambient')
@@ -1081,13 +1082,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
       if (stopAfter > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
-      else if (command.loop === false) {
-        const schedule = () => {
-          const remain = Math.max(0, (audio.duration - Math.max(0, audio.currentTime || startAt)) * 1000 - 20);
-          if (remain > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), remain);
-        };
-        if (Number.isFinite(audio.duration) && audio.duration > 0) schedule();
-        else audio.addEventListener('loadedmetadata', schedule, { once:true });
+      else if (command.loop === false && command.stopAt == null) {
+        this._scheduleNaturalPersistentFade(channel, audio, startAt, command.fadeOut || 0);
       }
       emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'ios-live-media-bank' });
       emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct, transport:'ios-live-media-bank' });
@@ -1227,6 +1223,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if (remain > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), remain);
         }
         this.audioState[channel] = { src:command.src, volume:target, loop:command.loop !== false, startAt, stopAt:command.stopAt ?? null, fadeOut:Math.max(0, asNumber(command.fadeOut,0)) };
+        if (command.loop === false && command.stopAfter <= 0 && command.stopAt == null) this._scheduleNaturalPersistentFade(channel, null, startAt, command.fadeOut || 0, buffer.duration);
         emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'audio-buffer' });
         emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct, transport:'audio-buffer' });
         return true;
@@ -1348,7 +1345,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       audio.__spGainValue = target;
       const gain = this._ensureAudioNode(audio);
       if (gain && this.audioContext) {
-        try { gain.gain.setValueAtTime(target, this.audioContext.currentTime); } catch (_) { gain.gain.value = target; }
+        try {
+          const now = this.audioContext.currentTime;
+          // A new explicit level is authoritative. Cancel any fade automation
+          // still scheduled by the previous Scene before setting this value.
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(target, now);
+        } catch (_) { gain.gain.value = target; }
       } else {
         // Native-media transport is deliberate for external HTTP(S) audio.
         // On iOS the system may own final hardware volume, but playback remains
@@ -1697,11 +1700,44 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return audio;
     }
 
+    _cancelNaturalPersistentFade(channel) {
+      const state = this.audioState?.[channel];
+      const timer = state?._naturalEndTimer;
+      if (!timer) return;
+      clearTimeout(timer);
+      const i = this.audioTimers.indexOf(timer);
+      if (i >= 0) this.audioTimers.splice(i, 1);
+      state._naturalEndTimer = null;
+    }
+
+    _scheduleNaturalPersistentFade(channel, audio, startAt, fadeOut, knownDuration = null) {
+      const state = this.audioState?.[channel];
+      if (!state || state.loop !== false) return;
+      const schedule = () => {
+        if (this.audioState?.[channel] !== state) return;
+        const duration = Number.isFinite(knownDuration) ? knownDuration : Number(audio?.duration);
+        if (!Number.isFinite(duration) || duration <= 0) return;
+        const position = Math.max(Math.max(0, asNumber(startAt, 0)), Math.max(0, asNumber(audio?.currentTime, startAt)));
+        const remaining = Math.max(0, (duration - position) * 1000);
+        const fade = Math.min(remaining, Math.max(0, asNumber(fadeOut, 0)));
+        state._naturalEndTimer = this._audioTimeout(() => {
+          state._naturalEndTimer = null;
+          if (this.audioState?.[channel] === state) this._stopPersistentChannel(channel, fade);
+        }, Math.max(0, remaining - fade));
+      };
+      if (Number.isFinite(knownDuration) && knownDuration > 0) schedule();
+      else if (Number.isFinite(audio?.duration) && audio.duration > 0) schedule();
+      else if (audio?.addEventListener) audio.addEventListener('loadedmetadata', schedule, { once: true });
+    }
+
     _stopPersistentChannel(channel, fadeOut = 0) {
+      if (channel !== 'bgm' && channel !== 'ambient') return;
+      const stopGeneration = this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
+      this._cancelNaturalPersistentFade(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         if (entry) {
-          const finish = () => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
+          const finish = () => { if (this._audioStopGeneration[channel] !== stopGeneration) return; this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
           if (fadeOut > 0 && entry.active) this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
           else finish();
         } else this.audioState[channel] = null;
@@ -1711,6 +1747,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const audio = this.audioEls[channel];
       if (!audio) return;
       const finish = () => {
+        if (this._audioStopGeneration[channel] !== stopGeneration) return;
         audio.pause();
         try { audio.currentTime = 0; } catch (_) {}
         this.audioState[channel] = null;
@@ -1721,6 +1758,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _startPersistentChannel(channel, command, reconstruct = false, forceSeek = false) {
+      if (channel === 'bgm' || channel === 'ambient') {
+        this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
+        this._cancelNaturalPersistentFade(channel);
+        // Stop any HTMLAudio/rAF fade from the previous Scene. Web Audio
+        // automation is cancelled by _setAudioVolume below.
+        for (const key of [channel, `exit:${channel}`]) {
+          const frame = this.audioFadeFrames?.get(key);
+          if (frame) cancelAnimationFrame(frame);
+          this.audioFadeFrames?.delete(key);
+        }
+      }
       if (this._iosStableMediaBank && this._startIOSBankPersistent(channel, command, reconstruct, forceSeek)) return;
       if (this._startBufferedPersistent(channel, command, reconstruct, forceSeek)) return;
       let audio = this.audioEls[channel];
@@ -1778,6 +1826,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (fadeIn > 0) this._fadeVolume(audio, targetVolume, fadeIn, channel);
         const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
         if (stopAfter > 0) this._audioTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
+        else if (command.loop === false && command.stopAt == null) this._scheduleNaturalPersistentFade(channel, audio, startAt, command.fadeOut || 0);
       });
       emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct });
     }
@@ -5214,15 +5263,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'){
-              span.dataset.spTextOrientation=r.orientation;
-              if(r.orientation==='tcy'){
-                span.style.setProperty('-webkit-text-combine','horizontal','important');
-                span.style.setProperty('-webkit-text-combine-upright','all','important');
-                span.style.setProperty('text-combine-upright','all','important');
-              }else if(r.orientation==='sideways'||r.orientation==='upright'){
-                span.style.setProperty('-webkit-text-orientation',r.orientation,'important');
-                span.style.setProperty('text-orientation',r.orientation,'important');
-              }
+              if(r.orientation==='tcy')span.style.textCombineUpright='all';
+              else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
             }
           });
           // Keep undecorated text in text nodes. Fragmented inline spans plus
