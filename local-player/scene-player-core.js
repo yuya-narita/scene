@@ -674,9 +674,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _isCorsWebAudioAsset(src) {
       const value = String(src || '').trim();
-      if (!this._isExternalHttpAudio(value)) return false;
       try {
         const url = new URL(value, global.location?.href || undefined);
+        const pageOrigin = global.location?.origin;
+        // Same-origin and package-relative assets are CORS-safe too. Published
+        // .scene files may keep `assets/...` URLs; if these bypass GainNode,
+        // iPhone Safari ignores scripted media.volume changes and the authored
+        // fade becomes an abrupt mute at completion.
+        if (pageOrigin && url.origin === pageOrigin && ['http:', 'https:'].includes(url.protocol)) return true;
+        if (pageOrigin && url.protocol === 'blob:' && url.origin === pageOrigin) return true;
         // Scene Studio's R2 asset endpoint explicitly returns
         // Access-Control-Allow-Origin: *. These files can therefore be routed
         // through Web Audio safely, which is required for programmable volume
@@ -5594,9 +5600,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       span.classList.add('sp-emoji-upright');
       span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
       span.style.setProperty('text-orientation', 'upright', 'important');
-      span.style.setProperty('-webkit-text-combine', 'horizontal', 'important');
-      span.style.setProperty('-webkit-text-combine-upright', 'all', 'important');
-      span.style.setProperty('text-combine-upright', 'all', 'important');
+      // Preserve VS16 emoji presentation (especially ‼️ and ⁉️). Combining
+      // text in WebKit can force a monochrome glyph; an atomic horizontal inline
+      // box keeps a grouped expression together while preserving the emoji.
+      span.style.setProperty('-webkit-text-combine', 'none', 'important');
+      span.style.setProperty('-webkit-text-combine-upright', 'none', 'important');
+      span.style.setProperty('text-combine-upright', 'none', 'important');
+      span.style.setProperty('-webkit-writing-mode', 'horizontal-tb', 'important');
+      span.style.setProperty('writing-mode', 'horizontal-tb', 'important');
+      span.style.setProperty('white-space', 'nowrap', 'important');
       span.style.setProperty('display', 'inline-block', 'important');
       span.style.setProperty('line-height', '1', 'important');
     }
