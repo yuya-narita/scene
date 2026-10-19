@@ -54,8 +54,42 @@
 
   const params = new URLSearchParams(location.search);
   const requested = (params.get('src') || '').trim();
-  const DEFAULT_SCENE = './works/external-signal/scene.json';
+  const DEFAULT_SCENE = './works/ahako-guide/scene.json';
   const source = () => requested || DEFAULT_SCENE;
+  const OPERATOR_GUIDE_COPY_KEY='ahako:operator-guide:copy:v1';
+  const isOperatorGuide=()=>{try{return new URL(source(),location.href).href===new URL(DEFAULT_SCENE,location.href).href;}catch(_){return false;}};
+  const guideReceive=document.getElementById('publicGuideReceive');
+  const guideStatus=document.getElementById('publicGuideStatus');
+  function mirrorGuideReceive(){
+    if(!guideReceive)return;
+    intro?.classList.toggle('is-operator-guide',isOperatorGuide());
+    guideReceive.hidden=!isOperatorGuide();guideReceive.disabled=!!ownCopyButton?.disabled;
+    guideReceive.textContent=ownCopyButton?.textContent||'説明書を無料で本棚に入れる';
+    if(guideStatus){guideStatus.textContent=ownCopyStatus?.textContent||'';guideStatus.hidden=!isOperatorGuide()||!guideStatus.textContent;}
+  }
+  guideReceive?.addEventListener('click',()=>ownCopyButton?.click());
+  if(guideReceive&&ownCopyButton){
+    const observer=new MutationObserver(mirrorGuideReceive);
+    observer.observe(ownCopyButton,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});
+    if(ownCopyStatus)observer.observe(ownCopyStatus,{childList:true,subtree:true,characterData:true});
+  }
+  async function savedOperatorGuideCopy(){
+    let id='';try{id=localStorage.getItem(OPERATOR_GUIDE_COPY_KEY)||'';}catch(_){}
+    if(!/^copy_[a-f0-9]{32}$/.test(id)||!window.indexedDB)return '';
+    return new Promise(resolve=>{
+      let request;try{request=indexedDB.open('ahako-local-bookshelf');}catch(_){resolve('');return;}
+      request.onupgradeneeded=()=>request.transaction.abort();
+      request.onerror=()=>resolve('');
+      request.onsuccess=()=>{
+        const db=request.result;
+        if(!db.objectStoreNames.contains('readerBooks')){db.close();resolve('');return;}
+        try{const row=db.transaction('readerBooks','readonly').objectStore('readerBooks').get(id);
+          row.onsuccess=()=>{const exists=row.result?.workId==='operator_guide_01';db.close();resolve(exists?id:'');};
+          row.onerror=()=>{db.close();resolve('');};
+        }catch(_){db.close();resolve('');}
+      };
+    });
+  }
   const storageKey = () => `scene-public-progress:${source()}`;
   const PUBLIC_READER_ID_KEY='ahako:public-own-copy-reader-id';
   const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
@@ -550,6 +584,7 @@
   }
 
   function currentWorkId(){
+    if(isOperatorGuide())return 'operator_guide_01';
     const src=source();
     const m=src.match(/\/work\/([^/?#]+)/i);
     return m?decodeURIComponent(m[1]):'';
@@ -719,7 +754,18 @@
     if(ownCopyStatus)ownCopyStatus.textContent='';
     if(!allowed)return;
     const gate=commerceGateMode(doc);
-    if(gate==='free')return;
+    if(gate==='free'){
+      if(isOperatorGuide()){
+        ownCopyButton.textContent='説明書を無料で本棚に入れる';mirrorGuideReceive();
+        const existing=await savedOperatorGuideCopy();
+        if(existing&&!ownCopyButton.disabled){
+          ownCopyButton.textContent='本棚で読む';
+          ownCopyButton.onclick=()=>{location.href=`./local-player/?bookshelfCopy=${encodeURIComponent(existing)}`;};
+        }
+        mirrorGuideReceive();
+      }
+      return;
+    }
     ownCopyButton.disabled=true;
     ownCopyButton.textContent='購入状態を確認しています…';
     try{
@@ -1086,7 +1132,8 @@
     ownCopyButton.disabled=true;
     if(ownCopyStatus)ownCopyStatus.textContent='自分の一冊を用意しています…';
     try{
-      const response=await fetch(`${publicOwnCopyApiBase()}/work/${encodeURIComponent(workId)}/own-copy`,{
+      const endpoint=isOperatorGuide()?`${publicOwnCopyApiBase()}/operator-guide/own-copy`:`${publicOwnCopyApiBase()}/work/${encodeURIComponent(workId)}/own-copy`;
+      const response=await fetch(endpoint,{
         method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
         body:JSON.stringify({readerId:publicOwnCopyReaderId()})
       });
@@ -1098,6 +1145,7 @@
         if(code==='WORK_NOT_PUBLIC')throw new Error('この作品は現在公開されていません。');
         throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
       }
+      if(isOperatorGuide()&&/^copy_[a-f0-9]{32}$/.test(payload?.distribution?.copyId||'')){try{localStorage.setItem(OPERATOR_GUIDE_COPY_KEY,payload.distribution.copyId);}catch(_){}}
       const token=String(payload?.bookshelfClaim?.token||'');
       const external=needsExternalSafariHandoff();
       if(external){

@@ -642,7 +642,7 @@ async function packRemoteAssetsIntoScene(scene){
   const assetUrls=new Set();
   function collect(value){
     if(typeof value==='string'){
-      try{const u=new URL(value,location.href);if(u.origin===apiOrigin&&/^\/asset\//.test(u.pathname))assetUrls.add(u.href);}catch(_){}
+      try{const u=new URL(value,location.href);const guideAssets=new URL('../works/ahako-guide/assets/',location.href);const approvedGuideAsset=u.origin===guideAssets.origin&&u.pathname.startsWith(guideAssets.pathname)&&/^[A-Za-z0-9._-]+$/.test(u.pathname.slice(guideAssets.pathname.length));if((u.origin===apiOrigin&&/^\/asset\//.test(u.pathname))||approvedGuideAsset)assetUrls.add(u.href);}catch(_){}
       return;
     }
     if(Array.isArray(value)){value.forEach(collect);return;}
@@ -2008,7 +2008,7 @@ async function makeSelfContainedRecoveredMasterBlob(w){
   const apiOrigin=new URL(API_BASE,location.href).origin;
   function collect(value){
     if(typeof value==='string'){
-      try{const u=new URL(value,location.href);if(u.origin===apiOrigin&&/^\/asset\//.test(u.pathname))assetUrls.add(u.href);}catch(_){}
+      try{const u=new URL(value,location.href);const guideAssets=new URL('../works/ahako-guide/assets/',location.href);const approvedGuideAsset=u.origin===guideAssets.origin&&u.pathname.startsWith(guideAssets.pathname)&&/^[A-Za-z0-9._-]+$/.test(u.pathname.slice(guideAssets.pathname.length));if((u.origin===apiOrigin&&/^\/asset\//.test(u.pathname))||approvedGuideAsset)assetUrls.add(u.href);}catch(_){}
       return;
     }
     if(Array.isArray(value)){value.forEach(collect);return;}

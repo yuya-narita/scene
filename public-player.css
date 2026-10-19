@@ -1339,3 +1339,12 @@ body:has(.public-player.sp-immersive:not(.sp-immersive-controls):not(.sp-cover-o
 .public-ending .public-ending-inner>.public-own-copy-wrap>.public-own-copy{
   max-width:100%!important;min-width:0;box-sizing:border-box;
 }
+
+/* V48: the operator guide can be saved without finishing the guide first. */
+.public-intro-actions #publicGuideReceive{white-space:normal;line-height:1.4;}
+.public-intro-actions #publicGuideStatus{flex:0 0 100%;grid-column:1/-1;max-width:100%;text-align:center;font-size:12px;line-height:1.5;}
+
+.public-intro.is-operator-guide .public-intro-actions{flex-wrap:wrap!important;flex-direction:row!important;width:min(480px,calc(100% - 32px))!important;}
+.public-intro.is-operator-guide #publicGuideReceive{order:2;flex:0 0 100%;width:100%!important;max-width:100%!important;}
+.public-intro.is-operator-guide #publicContinue{order:1;}
+.public-intro.is-operator-guide #publicGuideStatus{order:3;margin:0;}

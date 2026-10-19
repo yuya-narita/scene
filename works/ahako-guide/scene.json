@@ -1,0 +1,7163 @@
+{
+  "format": "scene-format",
+  "version": "1.0",
+  "title": "あ箱の説明書",
+  "author": "未来確定プロジェクト",
+  "language": "ja",
+  "theme": "cinema",
+  "metadata": {
+    "description": "ズレア、クエリナ、ゼリス、ニクスによる体験型ガイド。読む・待つ・音・資料の視点移動から、文章をSceneにして保存・公開するまで。",
+    "subtitle": "読者と作者のための体験型ガイド",
+    "episode": "GUIDE 01",
+    "episodeTitle": "その説明書、押すまで開きません。",
+    "chatSpeakers": [
+      {
+        "id": "ズレア-qskmv",
+        "name": "ズレア",
+        "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+        "iconPreset": "",
+        "iconText": "●",
+        "side": "left",
+        "textColor": "#f5c779",
+        "bubbleColor": "",
+        "bubbleTextColor": ""
+      },
+      {
+        "id": "クエリナ-pmsta",
+        "name": "クエリナ",
+        "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+        "iconPreset": "",
+        "iconText": "●",
+        "side": "right",
+        "textColor": "#f2a4c6",
+        "bubbleColor": "",
+        "bubbleTextColor": ""
+      },
+      {
+        "id": "ニクス-2z3pj",
+        "name": "ニクス",
+        "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+        "iconPreset": "",
+        "iconText": "●",
+        "side": "left",
+        "textColor": "#b4bad2",
+        "bubbleColor": "",
+        "bubbleTextColor": ""
+      },
+      {
+        "id": "ゼリス-61v25",
+        "name": "ゼリス",
+        "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+        "iconPreset": "",
+        "iconText": "●",
+        "side": "right",
+        "textColor": "#9cced5",
+        "bubbleColor": "",
+        "bubbleTextColor": ""
+      }
+    ],
+    "seriesTitle": ""
+  },
+  "ending": {
+    "label": "観測終了",
+    "fontFamily": "serif",
+    "style": {
+      "fontFamily": "serif"
+    },
+    "coverButton": {
+      "kicker": "COVER",
+      "label": "表紙に戻る"
+    },
+    "links": [
+      {
+        "position": "left",
+        "kicker": "no+e",
+        "label": "開発室",
+        "url": "https://note.com/future_certainty"
+      },
+      {
+        "position": "right",
+        "kicker": "a-hako",
+        "label": "あ□",
+        "url": "https://yuya-narita.github.io/scene/studio/"
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "ahako-guide-001",
+      "type": "text",
+      "text": "この説明書には、\nまだ見えていない続きがあります。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-002",
+      "type": "text",
+      "text": "少しだけ、\nここで止まってみてください。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-003",
+      "type": "text",
+      "text": "……読めたら、画面をタップ。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-004",
+      "type": "text",
+      "text": "今、\nあなたが続きを出しました。",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-005",
+      "type": "dialogue",
+      "text": "まず聞きたいんやけど\n\n説明書から、こっち試してくるん？",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "ズレア",
+      "audio": [
+        {
+          "channel": "ambient",
+          "action": "stop",
+          "fadeOut": 1600
+        },
+        {
+          "channel": "bgm",
+          "action": "start",
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/007_bgm_guide_bgm.mp3",
+          "volume": 0.29,
+          "fadeIn": 1800,
+          "loop": true,
+          "restart": false
+        }
+      ]
+    },
+    {
+      "id": "ahako-guide-006",
+      "type": "dialogue",
+      "text": "でも、今ちょっと分かった！\n\n待ってもいいし、自分で次へ進めるんだね。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-007",
+      "type": "dialogue",
+      "text": "それが、あ箱の入口だ。\n\n文章をSceneに分け、読む人のタイミングで進める。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-008",
+      "type": "dialogue",
+      "text": "次の言葉は、まだ未開封。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-009",
+      "type": "dialogue",
+      "text": "説明書まで、いちいちカッコつけるな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "pop",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-010",
+      "type": "text",
+      "text": "01\n\n読む人へ\n\n最初に覚えるのは、次へ進むこと。",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-011",
+      "type": "dialogue",
+      "text": "基本は、文章を読んでからタップ。\n\n読み終わる速さは、人それぞれでいいんだよ。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-012",
+      "type": "dialogue",
+      "text": "一つのSceneには、短い一文も、\n少し長い文章も置ける。\n\n一文ごとに押すと決まっているわけではない。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-013",
+      "type": "dialogue",
+      "text": "短く刻むか、まとめて読ませるかも\n作者のさじ加減なんやな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-014",
+      "type": "dialogue",
+      "text": "読書速度の主導権。\n\n現在、あなたが保持している。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-015",
+      "type": "dialogue",
+      "text": "前の文章を見返したいときは、PAST。\n\n読むための履歴もあるんだね。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-016",
+      "type": "dialogue",
+      "text": "自動で進めたいときにはAUTOも使える。\n\n自分で進める読み方と、使い分けられる。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-017",
+      "type": "dialogue",
+      "text": "今日は自分で押して読んでみてな。\n\n俺らが黙ったら、ちょっと待つのもアリや。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-018",
+      "type": "text",
+      "text": "02\n\n同じ言葉、違う間\n\nここからは、説明より実験。",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-019",
+      "type": "text",
+      "text": "そこに、誰かがいる。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-020",
+      "type": "text",
+      "text": "……いる？",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-021",
+      "type": "dialogue",
+      "text": "誰もおらんかった。\n\n俺の上着やった。",
+      "presentation": {
+        "display": "solo",
+        "effect": "pop",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-022",
+      "type": "dialogue",
+      "text": "ちょっと身構えちゃった……！\n\n次が見えないと、頭の中で想像するね。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-023",
+      "type": "dialogue",
+      "text": "さっきの間は、固定の待ち時間ではない。\n\nあなたが次を押すまでの時間だった。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-024",
+      "type": "dialogue",
+      "text": "読者参加型・上着誤認事件。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-025",
+      "type": "dialogue",
+      "text": "機能名にすな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "pop",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-026",
+      "type": "dialogue",
+      "text": "ここで一度、BGMを止める。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス",
+      "audio": [
+        {
+          "channel": "bgm",
+          "action": "stop",
+          "fadeOut": 2200
+        }
+      ]
+    },
+    {
+      "id": "ahako-guide-027",
+      "type": "text",
+      "text": "何も鳴らない。\n\nそれだけで、\n少し空気が変わる。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-028",
+      "type": "dialogue",
+      "text": "……音がなくなるのも、演出なんだね。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-029",
+      "type": "dialogue",
+      "text": "BGMは場面を支え、SEは瞬間を作る。\n\n環境音を添えることもできる。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-030",
+      "type": "dialogue",
+      "text": "全部鳴らしたら、\n会議室がゲームセンターになるからな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-031",
+      "type": "dialogue",
+      "text": "音量は、あなたの聞きやすさを優先。\n\n音を出せない場所では、文章からどうぞ。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス",
+      "audio": [
+        {
+          "channel": "ambient",
+          "action": "stop",
+          "fadeOut": 1600
+        },
+        {
+          "channel": "bgm",
+          "action": "start",
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/008_bgm_guide_skit_bgm.mp3",
+          "volume": 0.29,
+          "fadeIn": 1800,
+          "loop": true,
+          "restart": false
+        }
+      ]
+    },
+    {
+      "id": "ahako-guide-032",
+      "type": "text",
+      "text": "03\n\n会話も、文章も\n\n置き方が変わると、読み方も変わる。",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-033",
+      "type": "dialogue",
+      "text": "この会議は、話者ごとのアイコンと色で\n誰が話しているか見えるようにしてるよ。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-034",
+      "type": "dialogue",
+      "text": "毎回「ズレア：」って書かんでも、\n俺やって分かるわけやな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-035",
+      "type": "dialogue",
+      "text": "文字の大きさ、位置、色。\n\n縦書きや横書き、吹き出しなど、\n場面に合わせて組み立てられる。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-036",
+      "type": "text",
+      "text": "次の言葉を、\n待つ場所。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          },
+          "writingMode": "vertical-rl"
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "flow": "horizontal",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-037",
+      "type": "dialogue",
+      "text": "今度は、縦に読む言葉になった！",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-038",
+      "type": "dialogue",
+      "text": "余韻にも、読み方がある。\n\n難しい読みには、ルビを添えられる。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス",
+      "richText": {
+        "version": 1,
+        "ranges": [
+          {
+            "start": 0,
+            "end": 2,
+            "kind": "ruby",
+            "reading": "よいん"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ahako-guide-039",
+      "type": "dialogue",
+      "text": "読める字まで全部ふりがな付けるかは、\n読みやすさと相談やな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-040",
+      "type": "dialogue",
+      "text": "配置、出現、消失。\n\n文字にも、登場の仕方がある。",
+      "presentation": {
+        "display": "stack",
+        "effect": "blur",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-041",
+      "type": "dialogue",
+      "text": "お前は普通に登場せえ。",
+      "presentation": {
+        "display": "stack",
+        "effect": "pop",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-042",
+      "type": "text",
+      "text": "04\n\n資料を、開いてみる\n\n小説の途中に、別の読み物がある。",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-043",
+      "type": "dialogue",
+      "text": "補足資料を作成した。\n\n今回は、恋愛漫画ではない。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-044",
+      "type": "dialogue",
+      "text": "先に言わな信用されへん自覚はあるんや。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-045",
+      "type": "dialogue",
+      "text": "次のカードをタップして開いてね。\n\n開いたら、画面をタップして\n九つの視点を順番に見てみて！",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-046",
+      "type": "text",
+      "text": "",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "image": {
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/009_sceneImage_guide_viewpoint_cards.jpg",
+          "alt": "あ箱の九つの入口。各段を右から左、上から下へ。タップ、待つ、次へ、会話、音、画像、書く、保存、共有。",
+          "fit": "contain",
+          "size": "small",
+          "align": "speaker",
+          "rotation": -3,
+          "tapAction": "viewRec",
+          "fullscreen": true,
+          "showPageCount": false,
+          "shadow": true,
+          "rounded": true,
+          "pageDirection": "rtl",
+          "viewPoints": {
+            "version": 3,
+            "coordinateSpace": "source",
+            "sizing": "source-rect",
+            "bounded": true,
+            "mode": "tap",
+            "points": [
+              {
+                "type": "focus",
+                "rect": {
+                  "x": 0.6666666666666666,
+                  "y": 0,
+                  "width": 0.3333333333333333,
+                  "height": 0.3333333333333333
+                },
+                "transitionMs": 1100,
+                "transitionCurve": "ease-in-out"
+              },
+              {
+                "type": "focus",
+                "rect": {
+                  "x": 0.3333333333333333,
+                  "y": 0,
+                  "width": 0.3333333333333333,
+                  "height": 0.3333333333333333
+                },
+                "transitionMs": 700,
+                "transitionCurve": "ease-in-out"
+              },
+              {
+                "type": "focus",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 0.3333333333333333,
+                  "height": 0.3333333333333333
+                },
+                "transitionMs": 700,
+                "transitionCurve": "ease-in-out"
+              },
+              {
+                "type": "focus",
+                "rect": {
+                  "x": 0.6666666666666666,
+                  "y": 0.3333333333333333,
+                  "width": 0.3333333333333333,
+                  "height": 0.3333333333333333
+                },
+                "transitionMs": 1100,
+                "transitionCurve": "ease-in-out"
+              },
+              {
+                "type": "focus",
+                "rect": {
+                  "x": 0.3333333333333333,
+                  "y": 0.3333333333333333,
+                  "width": 0.3333333333333333,
+                  "height": 0.3333333333333333
+                },
+                "transitionMs": 700,
+                "transitionCurve": "ease-in-out"
+              },
+              {
+                "type": "focus",
+                "rect": {
+                  "x": 0,
+                  "y": 0.3333333333333333,
+                  "width": 0.3333333333333333,
+                  "height": 0.3333333333333333
+                },
+                "transitionMs": 700,
+                "transitionCurve": "ease-in-out"
+              },
+              {
+                "type": "focus",
+                "rect": {
+                  "x": 0.6666666666666666,
+                  "y": 0.6666666666666666,
+                  "width": 0.3333333333333333,
+                  "height": 0.3333333333333333
+                },
+                "transitionMs": 1100,
+                "transitionCurve": "ease-in-out"
+              },
+              {
+                "type": "focus",
+                "rect": {
+                  "x": 0.3333333333333333,
+                  "y": 0.6666666666666666,
+                  "width": 0.3333333333333333,
+                  "height": 0.3333333333333333
+                },
+                "transitionMs": 700,
+                "transitionCurve": "ease-in-out"
+              },
+              {
+                "type": "focus",
+                "rect": {
+                  "x": 0,
+                  "y": 0.6666666666666666,
+                  "width": 0.3333333333333333,
+                  "height": 0.3333333333333333
+                },
+                "transitionMs": 700,
+                "transitionCurve": "ease-in-out"
+              },
+              {
+                "type": "fit",
+                "transitionMs": 1400,
+                "transitionCurve": "ease-in-out"
+              }
+            ]
+          },
+          "pages": [
+            {
+              "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/009_sceneImage_guide_viewpoint_cards.jpg",
+              "alt": "九つの入口",
+              "viewPoints": {
+                "version": 3,
+                "coordinateSpace": "source",
+                "sizing": "source-rect",
+                "bounded": true,
+                "mode": "tap",
+                "points": [
+                  {
+                    "type": "focus",
+                    "rect": {
+                      "x": 0.6666666666666666,
+                      "y": 0,
+                      "width": 0.3333333333333333,
+                      "height": 0.3333333333333333
+                    },
+                    "transitionMs": 1100,
+                    "transitionCurve": "ease-in-out"
+                  },
+                  {
+                    "type": "focus",
+                    "rect": {
+                      "x": 0.3333333333333333,
+                      "y": 0,
+                      "width": 0.3333333333333333,
+                      "height": 0.3333333333333333
+                    },
+                    "transitionMs": 700,
+                    "transitionCurve": "ease-in-out"
+                  },
+                  {
+                    "type": "focus",
+                    "rect": {
+                      "x": 0,
+                      "y": 0,
+                      "width": 0.3333333333333333,
+                      "height": 0.3333333333333333
+                    },
+                    "transitionMs": 700,
+                    "transitionCurve": "ease-in-out"
+                  },
+                  {
+                    "type": "focus",
+                    "rect": {
+                      "x": 0.6666666666666666,
+                      "y": 0.3333333333333333,
+                      "width": 0.3333333333333333,
+                      "height": 0.3333333333333333
+                    },
+                    "transitionMs": 1100,
+                    "transitionCurve": "ease-in-out"
+                  },
+                  {
+                    "type": "focus",
+                    "rect": {
+                      "x": 0.3333333333333333,
+                      "y": 0.3333333333333333,
+                      "width": 0.3333333333333333,
+                      "height": 0.3333333333333333
+                    },
+                    "transitionMs": 700,
+                    "transitionCurve": "ease-in-out"
+                  },
+                  {
+                    "type": "focus",
+                    "rect": {
+                      "x": 0,
+                      "y": 0.3333333333333333,
+                      "width": 0.3333333333333333,
+                      "height": 0.3333333333333333
+                    },
+                    "transitionMs": 700,
+                    "transitionCurve": "ease-in-out"
+                  },
+                  {
+                    "type": "focus",
+                    "rect": {
+                      "x": 0.6666666666666666,
+                      "y": 0.6666666666666666,
+                      "width": 0.3333333333333333,
+                      "height": 0.3333333333333333
+                    },
+                    "transitionMs": 1100,
+                    "transitionCurve": "ease-in-out"
+                  },
+                  {
+                    "type": "focus",
+                    "rect": {
+                      "x": 0.3333333333333333,
+                      "y": 0.6666666666666666,
+                      "width": 0.3333333333333333,
+                      "height": 0.3333333333333333
+                    },
+                    "transitionMs": 700,
+                    "transitionCurve": "ease-in-out"
+                  },
+                  {
+                    "type": "focus",
+                    "rect": {
+                      "x": 0,
+                      "y": 0.6666666666666666,
+                      "width": 0.3333333333333333,
+                      "height": 0.3333333333333333
+                    },
+                    "transitionMs": 700,
+                    "transitionCurve": "ease-in-out"
+                  },
+                  {
+                    "type": "fit",
+                    "transitionMs": 1400,
+                    "transitionCurve": "ease-in-out"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-047",
+      "type": "dialogue",
+      "text": "戻ってこられた？\n\n資料を閉じると、会議の続きが読めるよ。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-048",
+      "type": "dialogue",
+      "text": "画像のどこを見るかを決めるのが、\nVIEW POINTだ。\n\n拡大する場所や移動時間を、作者が設定できる。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-049",
+      "type": "dialogue",
+      "text": "漫画のコマも、図の細部も。\n\n一枚の中に、読む順番を作れる。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-050",
+      "type": "dialogue",
+      "text": "横長のコマが、縦画面いっぱいに\n魔法で収まるわけやないけどな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-051",
+      "type": "dialogue",
+      "text": "一度に全部見せるか、部分ごとに見せるか。\n\n読める文字の大きさも見ながら決める。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-052",
+      "type": "dialogue",
+      "text": "視点だけじゃなくて、\n画像を何ページかまとめることもできるんだね。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-053",
+      "type": "text",
+      "text": "05\n\n作る人へ\n\nまずは、一場面だけ箱に入れる。",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-054",
+      "type": "dialogue",
+      "text": "読む方は分かった。\n\n作る方、いきなり映画監督にならなアカン？",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-055",
+      "type": "dialogue",
+      "text": "まずはStudioで文章を入れる。\n\nSceneに分けて、区切りを確認する。\n長すぎたら分け、細かすぎたらまとめる。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-056",
+      "type": "dialogue",
+      "text": "改行だけで、いつも理想の区切りに\nなるわけじゃないんだね。\n\n読んで、直せばいいんだ！",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-057",
+      "type": "dialogue",
+      "text": "例えば、この三つだけで始められる。\n\n① ドアの前に立つ。\n② 中から音がする。\n③ 開ける。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-058",
+      "type": "dialogue",
+      "text": "お前らの説明、ドア開けさせすぎや。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-059",
+      "type": "dialogue",
+      "text": "次に、背景か音を一つ。\n\n全部の機能を入れる必要はない。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-060",
+      "type": "dialogue",
+      "text": "会話なら、話者を登録して\nアイコンや左右の配置を選べる。\n\n同じ話者を、続けて使えるよ。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-061",
+      "type": "dialogue",
+      "text": "文字の向きや大きさ、吹き出し、ルビ。\n\n足したら、スマホでも読めるか確認する。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-062",
+      "type": "dialogue",
+      "text": "作る画面でカッコよくても、\n読む画面で小さすぎたら困るもんな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-063",
+      "type": "dialogue",
+      "text": "画像を添えたら、必要に応じて視点を設定。\n\n広く見せる、寄る、少し待つ。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-064",
+      "type": "dialogue",
+      "text": "プレビューで、実際に読むんだね。\n\n自分でタップしたときの気持ちも確かめたい！",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-065",
+      "type": "dialogue",
+      "text": "文章を入れる。区切る。演出を選ぶ。\n\nそして、読んで調整する。\nまずは、その一周でいい。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-066",
+      "type": "text",
+      "text": "06\n\n箱に入るもの\n\n小説だけに、決まってはいない。",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-067",
+      "type": "dialogue",
+      "text": "手紙も、絵本も、\nこんな会議も作れるんだよね。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-068",
+      "type": "dialogue",
+      "text": "チャットのほかに、掲示板やコメント欄、\nレビュー、Q&Aなどの見せ方もある。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-069",
+      "type": "dialogue",
+      "text": "投稿画面の形で、物語を語る。\n\n誰が書いたか。何に返信したか。\n消された言葉は何だったか。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-070",
+      "type": "dialogue",
+      "text": "表示形式が、そのまま話の仕掛けになるんやな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-071",
+      "type": "dialogue",
+      "text": "ここで挙げたものは、表現の選択肢だ。\n\n作品内の掲示板やコメントが、\nそのまま読者同士の投稿場所になるわけではない。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-072",
+      "type": "dialogue",
+      "text": "説明書も、説明のためだけじゃなくて\n一つの作品にできるんだね。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-073",
+      "type": "dialogue",
+      "text": "今まさに、それやらされてる。",
+      "presentation": {
+        "display": "stack",
+        "effect": "pop",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-074",
+      "type": "text",
+      "text": "07\n\n保存する。届ける。\n\n作った箱を、手元に残す。",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-075",
+      "type": "dialogue",
+      "text": "編集した作品は、.sceneとして書き出す。\n\n文章や設定と、作品で使う素材を\nひとつのファイルにまとめられる。",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-076",
+      "type": "dialogue",
+      "text": "また編集したいときは、Studioで\n作品を開いて、その.sceneを読み込むんだね。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-077",
+      "type": "dialogue",
+      "text": "完成版だけやなく、\n途中でも手元に残しとくと安心やな。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-078",
+      "type": "dialogue",
+      "text": "公開するときは、作品情報や\n公開画面の条件を確認する。\n\n読むためのリンクで、人に届けられる。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-079",
+      "type": "dialogue",
+      "text": "読むことと、自分の一冊を持つことは\n同じ手続きとは限らないんだね。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-080",
+      "type": "dialogue",
+      "text": "My copyなどの発行や購入に進む前に、\nその画面に出ている金額と条件を確認する。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-081",
+      "type": "dialogue",
+      "text": "ここ、勝手に全部タダって説明したらアカン所や。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-082",
+      "type": "dialogue",
+      "text": "素材の使用条件、原作者の許可。\n\n他の人の作品を使うときは、そこも確認。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-083",
+      "type": "dialogue",
+      "text": "あ箱を紹介するときは、\nリンクと一緒に「どこが好きだったか」も\n伝えると、入口になりそうだね。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-084",
+      "type": "text",
+      "text": "08\n\n説明書の、説明しきれない所\n\n最後に、もう一度。",
+      "presentation": {
+        "display": "solo",
+        "effect": "blur",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 1.2,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-085",
+      "type": "dialogue",
+      "text": "これ、動画で見せたら\n全部伝わるんちゃう？",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          },
+          "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/006_background_9206726af6a743eb.jpg"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-086",
+      "type": "dialogue",
+      "text": "動きや音は伝わるけど……\n\n自分で次を押す感じは、\nやってみて初めて分かるかも。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-087",
+      "type": "dialogue",
+      "text": "この説明書の最初。\n\n次の文章を出したのは、あなただった。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-088",
+      "type": "dialogue",
+      "text": "文字と音の間に、\n読む人の時間が入っている。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-089",
+      "type": "dialogue",
+      "text": "せやから説明書のくせに、\n俺らと会議させたんか。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-090",
+      "type": "dialogue",
+      "text": "もう、使い方を一つ体験できたね！",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-091",
+      "type": "dialogue",
+      "text": "最後に、エンドロールを実装した。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス",
+      "audio": [
+        {
+          "channel": "ambient",
+          "action": "stop",
+          "fadeOut": 1600
+        }
+      ]
+    },
+    {
+      "id": "ahako-guide-092",
+      "type": "dialogue",
+      "text": "説明書にスタッフロール要る！？",
+      "presentation": {
+        "display": "stack",
+        "effect": "pop",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-093",
+      "type": "dialogue",
+      "text": "説明に参加した全員を記録する。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#9cced5",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ゼリス-61v25",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/005_chatSpeaker_31951ab70843426e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ゼリス"
+    },
+    {
+      "id": "ahako-guide-094",
+      "type": "dialogue",
+      "text": "じゃあ、読んでくれた人もだね。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f2a4c6",
+          "align": "right"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "クエリナ-pmsta",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/003_chatSpeaker_4aab783b35a04d3a.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "クエリナ"
+    },
+    {
+      "id": "ahako-guide-095",
+      "type": "dialogue",
+      "text": "最終操作担当。\n\nあなた。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#b4bad2",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ニクス-2z3pj",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/004_chatSpeaker_0c26fde3027c46b3.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ニクス"
+    },
+    {
+      "id": "ahako-guide-096",
+      "type": "dialogue",
+      "text": "ほな、最後の一回。\n\n自分のタイミングで、どうぞ。",
+      "presentation": {
+        "display": "stack",
+        "effect": "fade",
+        "text": {
+          "size": "auto",
+          "fontFamily": "sans",
+          "color": "#f5c779",
+          "align": "left"
+        },
+        "view": "chat",
+        "entryMotion": "flow",
+        "chat": {
+          "speakerId": "ズレア-qskmv",
+          "icon": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/002_chatSpeaker_9350c5f9103b491e.jpg",
+          "iconPreset": "",
+          "iconText": "●",
+          "bubbleColor": "",
+          "bubbleTextColor": ""
+        },
+        "logTime": {
+          "mode": "none",
+          "workTime": "",
+          "editedAt": ""
+        },
+        "messageState": {
+          "mode": "normal",
+          "delay": 0
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        },
+        "background": {
+          "transition": "fade",
+          "transitionDuration": 1600,
+          "fit": "cover",
+          "position": "48.16% 46.62%",
+          "tone": "dark",
+          "dim": 0.38,
+          "blur": 0,
+          "motion": {
+            "type": "none"
+          },
+          "textures": {
+            "vignette": 1
+          }
+        }
+      },
+      "subText": "ズレア"
+    },
+    {
+      "id": "ahako-guide-097",
+      "type": "text",
+      "text": "次の言葉を、\nまだ見せない。\n\nscene studio「あ箱」",
+      "presentation": {
+        "display": "solo",
+        "effect": "fade",
+        "text": {
+          "size": "small",
+          "fontFamily": "serif",
+          "color": "#eee9df",
+          "align": "center",
+          "position": {
+            "preset": "custom",
+            "x": 0.5,
+            "y": 0.43
+          }
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "entryMotion": "still",
+        "view": "void",
+        "flow": "vertical",
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "credits": {
+          "enabled": false,
+          "mode": "card",
+          "title": "CREDITS",
+          "duration": 30,
+          "fontSize": 22,
+          "gap": 28,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": []
+        }
+      }
+    },
+    {
+      "id": "ahako-guide-credits",
+      "type": "text",
+      "text": "",
+      "presentation": {
+        "display": "solo",
+        "effect": "auto",
+        "text": {
+          "size": "auto"
+        },
+        "flowComments": {
+          "enabled": false,
+          "density": "normal",
+          "comments": []
+        },
+        "effectTiming": {
+          "duration": 0.8,
+          "delay": 0
+        },
+        "credits": {
+          "enabled": true,
+          "mode": "roll",
+          "title": "",
+          "duration": 95,
+          "fontSize": 16,
+          "gap": 26,
+          "align": "center",
+          "colorMode": "auto",
+          "opacity": 0.72,
+          "entries": [
+            {
+              "kind": "heading",
+              "name": "あ箱の説明書"
+            },
+            {
+              "heading": "副題",
+              "name": "その説明書、押すまで開きません。",
+              "note": "",
+              "url": ""
+            },
+            {
+              "kind": "spacer",
+              "height": 64
+            },
+            {
+              "heading": "企画・制作",
+              "name": "未来確定プロジェクト",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "構成・制作支援",
+              "name": "ChatGPT",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "背景・キャラクター画像",
+              "name": "既存のConference素材",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "BGM制作ツール",
+              "name": "SUNO",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "作品制作・演出",
+              "name": "scene studio「あ箱」",
+              "note": "",
+              "url": ""
+            },
+            {
+              "kind": "spacer",
+              "height": 64
+            },
+            {
+              "kind": "heading",
+              "name": "案内係"
+            },
+            {
+              "heading": "読者のツッコミ",
+              "name": "ズレア",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "最初の一歩",
+              "name": "クエリナ",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "操作の整理",
+              "name": "ゼリス",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "説明をSFにする係",
+              "name": "ニクス",
+              "note": "",
+              "url": ""
+            },
+            {
+              "kind": "spacer",
+              "height": 64
+            },
+            {
+              "kind": "heading",
+              "name": "架空協賛団体"
+            },
+            {
+              "heading": "特別協賛",
+              "name": "説明書を最後まで読む会",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "協賛",
+              "name": "押す前に一回ためらう研究所",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "協賛",
+              "name": "機能を全部入れなくていい協会",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "協賛",
+              "name": "音量を先に確認する夜間調整室",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "協賛",
+              "name": "資料から無事に戻ってくる局",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "協賛",
+              "name": "保存してから安心する委員会",
+              "note": "",
+              "url": ""
+            },
+            {
+              "kind": "spacer",
+              "height": 64
+            },
+            {
+              "kind": "heading",
+              "name": "SPECIAL THANKS"
+            },
+            {
+              "heading": "進行担当",
+              "name": "次へ進めた、あなた",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "間の演出",
+              "name": "すぐに押さなかった、あなた",
+              "note": "",
+              "url": ""
+            },
+            {
+              "heading": "次の作者",
+              "name": "一場面だけ作ってみようと思った、あなた",
+              "note": "",
+              "url": ""
+            },
+            {
+              "kind": "spacer",
+              "height": 64
+            },
+            {
+              "kind": "heading",
+              "name": "説明書は、ここで閉じられます。"
+            },
+            {
+              "kind": "heading",
+              "name": "次は、あなたの箱で。"
+            },
+            {
+              "kind": "spacer",
+              "height": 64
+            },
+            {
+              "heading": "制作・開発室",
+              "name": "未来確定プロジェクト",
+              "note": "",
+              "url": "https://note.com/future_certainty"
+            }
+          ],
+          "columns": 1,
+          "startDelay": 2,
+          "endMode": "hold",
+          "stopPosition": 35,
+          "surface": "none"
+        },
+        "background": {
+          "src": "",
+          "transition": "fade"
+        },
+        "view": "void",
+        "entryMotion": "still"
+      }
+    }
+  ],
+  "appearance": {
+    "typography": {
+      "fontFamily": "serif"
+    },
+    "cinemaTone": "dark"
+  },
+  "languages": [
+    "ja"
+  ],
+  "cover": {
+    "src": "https://yuya-narita.github.io/scene/works/ahako-guide/assets/001_cover_cover.jpg",
+    "fit": "cover",
+    "position": "64.47% 49.36%",
+    "positions": {
+      "phone": "64.47% 49.36%",
+      "tablet": "52.32% 50.16%",
+      "pc": "50% 50%"
+    },
+    "fontFamily": "serif",
+    "startMode": "scene",
+    "startTrigger": "tap",
+    "styles": {
+      "title": {},
+      "author": {
+        "size": "xl"
+      },
+      "episode": {
+        "size": "xl"
+      },
+      "subtitle": {},
+      "episodeTitle": {}
+    },
+    "visibility": {
+      "episode": false,
+      "subtitle": false
+    }
+  },
+  "player": {
+    "navigation": {
+      "allowPrevious": true
+    }
+  },
+  "package": {
+    "format": "scene-package",
+    "version": "1.0",
+    "role": "distribution"
+  },
+  "sharing": {
+    "relay": {
+      "schemaVersion": "2",
+      "enabled": true,
+      "transport": "url"
+    },
+    "ownCopy": {
+      "schemaVersion": "1",
+      "enabled": true
+    }
+  },
+  "commerce": {
+    "ownCopyGate": {
+      "schemaVersion": "1",
+      "mode": "free",
+      "access": "full"
+    }
+  },
+  "workId": "operator_guide_01"
+}
