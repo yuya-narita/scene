@@ -1159,11 +1159,27 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         fadeOut: Math.max(0, asNumber(command.fadeOut, 0))
       };
       const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
-      if (stopAfter > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
-      else if (command.loop === false) {
+      const fadeOutMs = Math.max(0, asNumber(command.fadeOut, 0));
+      const scheduleStop = (remainingMs) => {
+        if (!(remainingMs > 0) || !entry.active) return;
+        // Start the iOS GainNode ramp before the media endpoint. Waiting until
+        // the exact end lets Safari's native `ended`/media-session handling
+        // silence the element before the authored fade can finish.
+        const fadeMs = Math.min(remainingMs, fadeOutMs);
+        const leadMs = Math.max(0, remainingMs - fadeMs - 35);
+        entry.timer = this._audioTimeout(() => {
+          entry.timer = null;
+          this._stopPersistentChannel(channel, fadeMs);
+        }, leadMs);
+      };
+      if (stopAfter > 0) entry.timer = this._audioTimeout(() => { entry.timer = null; this._stopPersistentChannel(channel, fadeOutMs); }, stopAfter);
+      else if (command.stopAt != null) {
+        const remaining = Math.max(0, (Math.max(0, asNumber(command.stopAt, 0)) - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
+        scheduleStop(remaining);
+      } else if (command.loop === false) {
         const schedule = () => {
-          const remain = Math.max(0, (audio.duration - Math.max(0, audio.currentTime || startAt)) * 1000 - 20);
-          if (remain > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), remain);
+          const remain = Math.max(0, (audio.duration - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
+          scheduleStop(remain);
         };
         if (Number.isFinite(audio.duration) && audio.duration > 0) schedule();
         else audio.addEventListener('loadedmetadata', schedule, { once:true });
@@ -5557,21 +5573,45 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return node?.dataset?.writingMode === 'vertical-rl' || node?.style?.writingMode === 'vertical-rl' || scene?.presentation?.text?.writingMode === 'vertical-rl';
     }
 
+    _verticalGlyphUnits(text) {
+      const parts = typeof Intl?.Segmenter === 'function'
+        ? [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].map((part) => part.segment)
+        : Array.from(text);
+      const units = [];
+      for (let i = 0; i < parts.length; i++) {
+        // Japanese laughter notation is a single visual unit: keep the
+        // ideographic わらい marker attached to the following emoji.
+        if (parts[i] === 'ꉂ' && i + 1 < parts.length && this._isVerticalEmojiCluster(parts[i + 1])) {
+          let unit = parts[i] + parts[++i];
+          if (parts[i + 1] === '𐤔') unit += parts[++i];
+          units.push(unit);
+        } else units.push(parts[i]);
+      }
+      return units;
+    }
+
+    _styleVerticalEmoji(span) {
+      span.classList.add('sp-emoji-upright');
+      span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
+      span.style.setProperty('text-orientation', 'upright', 'important');
+      span.style.setProperty('-webkit-text-combine', 'horizontal', 'important');
+      span.style.setProperty('-webkit-text-combine-upright', 'all', 'important');
+      span.style.setProperty('text-combine-upright', 'all', 'important');
+      span.style.setProperty('display', 'inline-block', 'important');
+      span.style.setProperty('line-height', '1', 'important');
+    }
+
     _appendVerticalEmojiAwareText(node, text) {
-      if (typeof Intl?.Segmenter !== 'function') { node.textContent = text; return; }
-      const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
       let plain = '';
       const flush = () => { if (plain) { node.appendChild(document.createTextNode(plain)); plain = ''; } };
-      for (const part of segmenter.segment(text)) {
-        if (this._isVerticalEmojiCluster(part.segment)) {
+      for (const unit of this._verticalGlyphUnits(text)) {
+        if (this._isVerticalEmojiCluster(unit)) {
           flush();
           const span = document.createElement('span');
-          span.className = 'sp-emoji-upright';
-          span.textContent = part.segment;
-          span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
-          span.style.setProperty('text-orientation', 'upright', 'important');
+          this._styleVerticalEmoji(span);
+          span.textContent = unit;
           node.appendChild(span);
-        } else plain += part.segment;
+        } else plain += unit;
       }
       flush();
     }
@@ -5601,13 +5641,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const cuts=new Set([from,to]);
         normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
         if (this._isVerticalWriting(node, scene) && typeof Intl?.Segmenter === 'function') {
-          const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
           const fragment = source.slice(from, to);
-          for (const part of segmenter.segment(fragment)) {
-            if (this._isVerticalEmojiCluster(part.segment)) {
-              cuts.add(from + part.index);
-              cuts.add(from + part.index + part.segment.length);
+          let unitOffset = 0;
+          for (const unit of this._verticalGlyphUnits(fragment)) {
+            if (this._isVerticalEmojiCluster(unit)) {
+              cuts.add(from + unitOffset);
+              cuts.add(from + unitOffset + unit.length);
             }
+            unitOffset += unit.length;
           }
         }
         const points=[...cuts].sort((a,b)=>a-b);
@@ -5644,12 +5685,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             }
           });
           if (emojiCluster) {
-            span.classList.add('sp-emoji-upright');
-            span.style.setProperty('-webkit-text-combine', 'none', 'important');
-            span.style.setProperty('-webkit-text-combine-upright', 'none', 'important');
-            span.style.setProperty('text-combine-upright', 'none', 'important');
-            span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
-            span.style.setProperty('text-orientation', 'upright', 'important');
+            this._styleVerticalEmoji(span);
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.

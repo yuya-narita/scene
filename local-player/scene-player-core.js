@@ -540,7 +540,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         e.preventDefault();
         e.stopImmediatePropagation();
-        // Reuse the wrapper's own handler to keep VIEW POINT and page bundles in sync.
+        // Reuse the exact handler installed on the image. This keeps VIEW POINT,
+        // first-page fallback, and page-bundle navigation on one code path.
         imageTarget._sceneImageOpen?.(e);
       }, true);
 
@@ -1158,11 +1159,27 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         fadeOut: Math.max(0, asNumber(command.fadeOut, 0))
       };
       const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
-      if (stopAfter > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
-      else if (command.loop === false) {
+      const fadeOutMs = Math.max(0, asNumber(command.fadeOut, 0));
+      const scheduleStop = (remainingMs) => {
+        if (!(remainingMs > 0) || !entry.active) return;
+        // Start the iOS GainNode ramp before the media endpoint. Waiting until
+        // the exact end lets Safari's native `ended`/media-session handling
+        // silence the element before the authored fade can finish.
+        const fadeMs = Math.min(remainingMs, fadeOutMs);
+        const leadMs = Math.max(0, remainingMs - fadeMs - 35);
+        entry.timer = this._audioTimeout(() => {
+          entry.timer = null;
+          this._stopPersistentChannel(channel, fadeMs);
+        }, leadMs);
+      };
+      if (stopAfter > 0) entry.timer = this._audioTimeout(() => { entry.timer = null; this._stopPersistentChannel(channel, fadeOutMs); }, stopAfter);
+      else if (command.stopAt != null) {
+        const remaining = Math.max(0, (Math.max(0, asNumber(command.stopAt, 0)) - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
+        scheduleStop(remaining);
+      } else if (command.loop === false) {
         const schedule = () => {
-          const remain = Math.max(0, (audio.duration - Math.max(0, audio.currentTime || startAt)) * 1000 - 20);
-          if (remain > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), remain);
+          const remain = Math.max(0, (audio.duration - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
+          scheduleStop(remain);
         };
         if (Number.isFinite(audio.duration) && audio.duration > 0) schedule();
         else audio.addEventListener('loadedmetadata', schedule, { once:true });
@@ -1905,8 +1922,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _stopPersistentChannel(channel, fadeOut = 0) {
-      this._cancelAudioDuck(channel);
       if (channel !== 'bgm' && channel !== 'ambient') return;
+      this._cancelAudioDuck(channel);
       const stopGeneration = this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
       this._cancelNaturalPersistentFade(channel);
       if (this._iosStableMediaBank) {
@@ -1933,8 +1950,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _startPersistentChannel(channel, command, reconstruct = false, forceSeek = false) {
-      this._cancelAudioDuck(channel);
       if (channel === 'bgm' || channel === 'ambient') {
+        this._cancelAudioDuck(channel);
         this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
         this._cancelNaturalPersistentFade(channel);
         for (const key of [channel, `exit:${channel}`]) {
@@ -3355,8 +3372,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const firstImage=this.els?.stage?.querySelector('.sp-scene.is-active .sp-scene-image');
         firstImage?._sceneImageOpenForReading?.(startEvent);
       }
-      // V112 — keyboard reading starts immediately after START. Do not require
-      // an extra click on the Scene just to move focus from the Cover controls.
+      // V112 — keyboard reading starts immediately after START. Move focus now
+      // and once more after the frame so mouse and keyboard starts both leave
+      // the Player ready for Enter without an extra Scene click.
       this.els?.stage?.focus?.({preventScroll:true});
       requestAnimationFrame(()=>this.els?.stage?.focus?.({preventScroll:true}));
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
@@ -4552,6 +4570,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const totalDy=t.clientY-viewState.touchStartY;
             if(Math.hypot(totalDx,totalDy)>10)viewState.moved=true;
 
+            // Follow the finger while turning a page. The current sheet slides
+            // away and exposes the adjacent page underneath; release decides
+            // whether the turn completes or springs back.
             const activePages=viewer._scenePages||[];
             const activeIndex=viewer._scenePageIndex||0;
             if(viewState.scale<=1.01 && activePages.length>1 && Math.abs(totalDx)>12 && Math.abs(totalDx)>Math.abs(totalDy)*1.15){
@@ -4560,15 +4581,23 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               const target=activeIndex+(advances?1:-1);
               if(target>=0&&target<activePages.length){
                 if(!viewState.pageDrag){
-                  const underlay=document.createElement('img');underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
+                  const underlay=document.createElement('img');
+                  underlay.className='sp-scene-image-page-follow-underlay';
+                  underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
                   const rect=img.getBoundingClientRect(),frameRect=frame.getBoundingClientRect();
                   underlay.style.position='absolute';underlay.style.left=`${rect.left-frameRect.left}px`;underlay.style.top=`${rect.top-frameRect.top}px`;
-                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
+                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';
+                  underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
                   frame.insertBefore(underlay,img);img.style.zIndex='2';img.style.willChange='translate';
-                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
+                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);
+                  viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
                 }
-                const drag=viewState.pageDrag;if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
-                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));img.style.translate=`${dx}px 0`;drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;event.preventDefault();
+                const drag=viewState.pageDrag;
+                if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
+                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));
+                img.style.translate=`${dx}px 0`;
+                drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;
+                event.preventDefault();
               }
             }
 
@@ -4596,18 +4625,33 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             viewState.dragging=false;
 
             // Horizontal swipes turn pages only at fit scale; zoomed manga remains pannable.
-            const activePages=viewer._scenePages||[],activeIndex=viewer._scenePageIndex||0,draggedPage=viewState.pageDrag;
+            const activePages=viewer._scenePages||[];
+            const activeIndex=viewer._scenePageIndex||0;
+            const draggedPage=viewState.pageDrag;
             if(draggedPage){
-              const dx=x-viewState.touchStartX,commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32))&&Math.abs(dx)>Math.abs(vertical)*1.2&&duration<900;
+              const dx=x-viewState.touchStartX;
+              const commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32)) && Math.abs(dx)>Math.abs(vertical)*1.2 && duration<900;
               draggedPage.underlay.remove();viewState.pageDrag=null;img.style.willChange='';img.style.zIndex='';
-                if(commit){const advances=viewer._scenePageDirection==='rtl'?dx>0:dx<0,target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));if(target!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}}else img.style.translate='';}
-              else img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
-              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;viewState.multiTouch=false;return;
+              if(commit){
+                const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
+                const advances=direction==='rtl'?dx>0:dx<0;
+                const target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
+                if(target!==activeIndex){
+                  if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}
+                  else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}
+                }else img.style.translate='';
+              }else{
+                img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
+              }
+              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
+              viewState.multiTouch=false;return;
             }
             if(!viewState.multiTouch && viewState.scale<=1.01 && activePages.length>1 && Math.abs(x-viewState.touchStartX)>78 && Math.abs(x-viewState.touchStartX)>Math.abs(vertical)*1.2 && duration<700){
               clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
-              const dx=x-viewState.touchStartX,advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
-              const targetPage=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
+              const dx=x-viewState.touchStartX;
+              const advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
+              const requested=activeIndex+(advances?1:-1);
+              const targetPage=Math.max(0,Math.min(activePages.length-1,requested));
               if(targetPage!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange)viewer._sceneOnPageChange(targetPage);else{viewer._sceneShowPage?.(targetPage);viewer._sceneOnPageChange?.(targetPage);}}
               viewState.multiTouch=false;
               return;
@@ -4642,6 +4686,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               }
             }
 
+            // VIEW POINT owns the image transform. Resetting the manual zoom state
+            // on iPhone touchend briefly writes FIT between two authored points.
             if(viewState.scale<=1.01 && !frame.classList.contains('is-view-rec-playing')) resetView();
             viewState.multiTouch=false;
           }else if(event.touches.length===1 && viewState.scale>1.01){
@@ -4820,7 +4866,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       })();
       const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&typeof page.src==='string'&&page.src);
       let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
-      viewer._scenePages=pages;viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';viewer._scenePageIndex=pageIndex;
+      viewer._scenePages=pages;
+      viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';
       viewer._sceneOnPageChange=options?.onPageChange;
       const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
       const oldRestart=pageControls?.querySelector('.sp-image-reading-restart');if(oldRestart)oldRestart.hidden=!options?.readingResumeKey;
@@ -4870,6 +4917,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           img.src=nextSrc;
         }else frame?._fitSceneImageFrame?.();
       };
+      viewer._scenePageIndex=pageIndex;
       viewer._sceneShowPage=showPage;
       const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
       const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
@@ -4943,10 +4991,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
 
       const fallbackPageChange=(pageIndex)=>{
-        const pages=Array.isArray(image.pages)?image.pages:[],page=pages[pageIndex];if(!page?.src)return;
+        const pages=Array.isArray(image.pages)?image.pages:[];
+        const page=pages[pageIndex];if(!page?.src)return;
         const pagePoints=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
-        if((pagePoints?.points||[]).length)this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
-        else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
+        if((pagePoints?.points||[]).length){
+          this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
+        }else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
       };
       const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
       const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0||Number(image.resumePoint)>0||!!pageGhost;
@@ -5103,7 +5153,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // not need an extra fullscreen click before keyboard/tap progression begins.
           // Let the V110 pickup transition finish, then move straight to point 1.
           if(index<0&&points.length){
-            if(startAtAuthoredPoint){index=0;apply(coords(points[0]));initializing=false;img.style.visibility='';return;}
+            if(startAtAuthoredPoint){
+              index=Math.max(0,Math.min(points.length-1,Number(image.resumePoint)||0));apply(coords(points[index]));initializing=false;img.style.visibility='';rememberPoint();finishPageHandoff();
+              return;
+            }
             // Wait for the V110 pickup animation, then establish point 1 as a real
             // settled state. Only after that may Enter/tap advance to point 2.
             setTimeout(()=>{
@@ -5520,21 +5573,45 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return node?.dataset?.writingMode === 'vertical-rl' || node?.style?.writingMode === 'vertical-rl' || scene?.presentation?.text?.writingMode === 'vertical-rl';
     }
 
+    _verticalGlyphUnits(text) {
+      const parts = typeof Intl?.Segmenter === 'function'
+        ? [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].map((part) => part.segment)
+        : Array.from(text);
+      const units = [];
+      for (let i = 0; i < parts.length; i++) {
+        // Japanese laughter notation is a single visual unit: keep the
+        // ideographic わらい marker attached to the following emoji.
+        if (parts[i] === 'ꉂ' && i + 1 < parts.length && this._isVerticalEmojiCluster(parts[i + 1])) {
+          let unit = parts[i] + parts[++i];
+          if (parts[i + 1] === '𐤔') unit += parts[++i];
+          units.push(unit);
+        } else units.push(parts[i]);
+      }
+      return units;
+    }
+
+    _styleVerticalEmoji(span) {
+      span.classList.add('sp-emoji-upright');
+      span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
+      span.style.setProperty('text-orientation', 'upright', 'important');
+      span.style.setProperty('-webkit-text-combine', 'horizontal', 'important');
+      span.style.setProperty('-webkit-text-combine-upright', 'all', 'important');
+      span.style.setProperty('text-combine-upright', 'all', 'important');
+      span.style.setProperty('display', 'inline-block', 'important');
+      span.style.setProperty('line-height', '1', 'important');
+    }
+
     _appendVerticalEmojiAwareText(node, text) {
-      if (typeof Intl?.Segmenter !== 'function') { node.textContent = text; return; }
-      const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
       let plain = '';
       const flush = () => { if (plain) { node.appendChild(document.createTextNode(plain)); plain = ''; } };
-      for (const part of segmenter.segment(text)) {
-        if (this._isVerticalEmojiCluster(part.segment)) {
+      for (const unit of this._verticalGlyphUnits(text)) {
+        if (this._isVerticalEmojiCluster(unit)) {
           flush();
           const span = document.createElement('span');
-          span.className = 'sp-emoji-upright';
-          span.textContent = part.segment;
-          span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
-          span.style.setProperty('text-orientation', 'upright', 'important');
+          this._styleVerticalEmoji(span);
+          span.textContent = unit;
           node.appendChild(span);
-        } else plain += part.segment;
+        } else plain += unit;
       }
       flush();
     }
@@ -5563,14 +5640,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(to<=from)return;
         const cuts=new Set([from,to]);
         normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
-        if ((this._isVerticalWriting(node, scene)) && typeof Intl?.Segmenter === 'function') {
-          const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+        if (this._isVerticalWriting(node, scene) && typeof Intl?.Segmenter === 'function') {
           const fragment = source.slice(from, to);
-          for (const part of segmenter.segment(fragment)) {
-            if (this._isVerticalEmojiCluster(part.segment)) {
-              cuts.add(from + part.index);
-              cuts.add(from + part.index + part.segment.length);
+          let unitOffset = 0;
+          for (const unit of this._verticalGlyphUnits(fragment)) {
+            if (this._isVerticalEmojiCluster(unit)) {
+              cuts.add(from + unitOffset);
+              cuts.add(from + unitOffset + unit.length);
             }
+            unitOffset += unit.length;
           }
         }
         const points=[...cuts].sort((a,b)=>a-b);
@@ -5579,7 +5657,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const span=document.createElement('span');
           const active=normal.filter(r=>r.start<=a&&r.end>=b);
           const segmentText=source.slice(a,b);
-          const emojiCluster = (this._isVerticalWriting(node, scene)) && this._isVerticalEmojiCluster(segmentText);
+          const emojiCluster = this._isVerticalWriting(node, scene) && this._isVerticalEmojiCluster(segmentText);
           // Rich Text Player v0.18: list markers live in canonical Scene text.
           // Never synthesize a bullet from semantic ranges; that can decorate an
           // unrelated repeated word when offsets were re-anchored fuzzily.
@@ -5607,12 +5685,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             }
           });
           if (emojiCluster) {
-            span.classList.add('sp-emoji-upright');
-            span.style.setProperty('-webkit-text-combine', 'none', 'important');
-            span.style.setProperty('-webkit-text-combine-upright', 'none', 'important');
-            span.style.setProperty('text-combine-upright', 'none', 'important');
-            span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
-            span.style.setProperty('text-orientation', 'upright', 'important');
+            this._styleVerticalEmoji(span);
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.

@@ -1,5 +1,5 @@
 /*
- * Scene Player Core v1.12.10
+ * Scene Player Core v1.13.0
  * Runtime for Scene Format v1.0
  * No splitter / studio authoring logic lives here.
  */
@@ -135,6 +135,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._backgroundStateCacheDocument = null;
       this.backgroundLayerIndex = 0;
       this.backgroundTimers = [];
+      this.backgroundMotionEpoch = 0;
       this.audioUnlocked = false;
       // AudioContext unlock and story playback are separate states.
       // A restarted story must wait for the reader's next stage gesture even
@@ -152,6 +153,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.audioFadeStates = new Map();
       this.audioDuckTimers = { bgm: null, ambient: null };
       this.audioState = { bgm: null, ambient: null };
+      this._audioStopGeneration = { bgm: 0, ambient: 0 };
       this.audioEls = {
         bgm: this._createAudioElement('bgm'),
         ambient: this._createAudioElement('ambient')
@@ -192,6 +194,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       this._buildShell();
       this._bindControls();
+      this._bindLandscapeImmersion();
     }
 
     _buildShell() {
@@ -221,6 +224,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           </div>
           <button class="sp-cover-start" type="button">はじめる</button>
         </section>
+        <button class="sp-immersive-toggle" type="button" aria-label="操作を表示" aria-expanded="false">⋯</button>
         <header class="sp-header">
           <button class="sp-button sp-prev" type="button" aria-label="Previous scene">‹</button>
           <div class="sp-meta">
@@ -231,7 +235,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         </header>
         <main class="sp-stage" tabindex="0" aria-live="polite">
           <div class="sp-scenes"></div>
-          <span class="sp-tap-hint">TAP</span>
+          <button class="sp-tap-hint" type="button" aria-label="Next scene">TAP</button>
         </main>
         <section class="sp-history" hidden aria-label="Past scenes">
           <div class="sp-history-top">
@@ -351,6 +355,29 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
+    _bindLandscapeImmersion() {
+      if(typeof global.matchMedia!=='function')return;
+      const mq=global.matchMedia('(orientation: landscape) and (max-height: 600px) and (any-pointer: coarse)');
+      const button=this.host.querySelector('.sp-immersive-toggle');
+      const updateLabel=()=>{const shown=this.host.classList.contains('sp-immersive-controls'),en=this.uiLanguage==='en';button.setAttribute('aria-expanded',String(shown));button.setAttribute('aria-label',shown?(en?'Hide controls':'操作を隠す'):(en?'Show controls':'操作を表示'));button.textContent=shown?'×':'⋯';};
+      const reflow=()=>{
+        if(this.destroyed||!this.document||!this.els.stage?.clientHeight)return;
+        const nodes=Array.from(this.els.scenes.children),entries=nodes.map(node=>({scene:this.document.scenes.find(sc=>sc.id===node.dataset.sceneId)}));
+        if(!nodes.length||entries.some(e=>!e.scene))return;
+        nodes.forEach(node=>node.querySelectorAll('.sp-text[data-writing-mode="vertical-rl"],.sp-subtext[data-writing-mode="vertical-rl"]').forEach(text=>this._syncVerticalTextHeight(text)));
+        if(this.host.dataset.display==='overlay')this._positionOverlayNodes(nodes,entries);else this._positionSceneNodes(nodes,entries,0);
+        // Existing viewers/rolls keep their timeline; no Scene/audio replay on rotation.
+        this.els.scenes.querySelectorAll('.sp-credits-viewport').forEach(v=>v.dispatchEvent(new Event('sceneplayer:reflow')));
+      };
+      const scheduleReflow=()=>{if(this._immersiveRaf)cancelAnimationFrame(this._immersiveRaf);this._immersiveRaf=requestAnimationFrame(()=>{this._immersiveRaf=0;reflow();});};
+      const orientationChanged=()=>{this.host.classList.toggle('sp-immersive',mq.matches);this.host.classList.remove('sp-immersive-controls');updateLabel();scheduleReflow();};
+      this._on(mq,'change',orientationChanged);
+      this._on(global,'resize',scheduleReflow,{passive:true});
+      if(global.visualViewport)this._on(global.visualViewport,'resize',scheduleReflow,{passive:true});
+      this._on(button,'click',e=>{e.preventDefault();e.stopPropagation();this.host.classList.toggle('sp-immersive-controls');updateLabel();});
+      orientationChanged();
+    }
+
     _bindControls() {
       // iOS/WebKit: the reading gesture unlocks Web Audio and arms playback.
       const pressPaper = () => {
@@ -371,12 +398,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // not fire it twice. Ignore controls/images so merely pressing UI on the
         // last Scene cannot trigger the ending sound.
         const target = e?.target;
-        const isControl = target?.closest?.('button, a, .sp-scene-image.is-zoomable');
+        const isControl = target?.closest?.('button, a, .sp-scene-image.is-zoomable, .sp-scene-image.is-view-rec');
         const isEditableText = this.host.classList.contains('live-edit-enabled')
           && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
         const atLastScene = !!this.document && !this.ended
           && this.index >= Math.max(0, (this.document.scenes?.length || 1) - 1);
-        if (atLastScene && !isControl && !isEditableText) this._playEndingAudio();
+        if (this._iosStableMediaBank && atLastScene && !isControl && !isEditableText
+          && !this.host.classList.contains('live-edit-enabled')) this._playEndingAudio();
       };
       if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', armFromStageGesture, { passive: true });
       else this._on(this.els.stage, 'touchstart', armFromStageGesture, { passive: true });
@@ -387,7 +415,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.showCover({restart:true});
       });
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
-      if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover();});
+      if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover(e);});
+      this._on(this.els.cover,'click',(e)=>{
+        if(this.els.cover.hidden||this.document?.cover?.startTrigger!=='tap'||this.host.classList.contains('live-edit-enabled'))return;
+        if(e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
+        e.stopPropagation();this._beginFromCover(e);
+      });
+
       if(this.els.endingCover)this._on(this.els.endingCover,'click',()=>this.showCover({restart:true}));
       this._on(this.els.auto, 'click', (e) => {
         e.stopPropagation();
@@ -415,21 +449,132 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.suppressNextClick = false;
       });
       this._on(this.els.historyScroll, 'scroll', () => this._scheduleHistoryDepth(), { passive: true });
+      this._on(window, 'resize', () => {
+        if (!this.historyOpen) return;
+        this.historyMetrics = null;
+        requestAnimationFrame(() => {
+          if (this._historyAutoCenter) this._centerHistoryOnCurrent();
+          this._scheduleHistoryDepth();
+        });
+      });
+      for (const event of ['touchstart', 'pointerdown', 'wheel']) {
+        this._on(this.els.historyScroll, event, () => { this._historyAutoCenter = false; }, { passive: true });
+      }
+      this._on(this.els.historyScroll, 'wheel', (e) => {
+        if (!this._historyHorizontal || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+        e.preventDefault();
+        const unit = e.deltaMode === 1 ? 20 : e.deltaMode === 2 ? this.els.historyScroll.clientWidth : 1;
+        this.els.historyScroll.scrollLeft += e.deltaY * unit;
+      }, { passive: false });
+      let historyDrag = null;
+      this._on(this.els.historyScroll, 'pointerdown', (e) => {
+        this._historyDragged = false;
+        if (!this._historyHorizontal || e.pointerType !== 'mouse' || e.button !== 0
+            || e.target.closest('a, input, textarea, select')) return;
+        historyDrag = { x: e.clientX, scroll: this.els.historyScroll.scrollLeft };
+      });
+      this._on(this.els.historyScroll, 'pointermove', (e) => {
+        if (!historyDrag || !(e.buttons & 1)) { historyDrag = null; return; }
+        const scroll = this.els.historyScroll;
+        const scale = scroll.getBoundingClientRect().width / scroll.offsetWidth || 1;
+        const distance = (e.clientX - historyDrag.x) / scale;
+        if (Math.abs(distance) < 6 && !this._historyDragged) return;
+        this._historyDragged = true;
+        scroll.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+        scroll.scrollLeft = historyDrag.scroll - distance;
+      });
+      for (const event of ['pointerup', 'pointercancel']) {
+        this._on(this.els.historyScroll, event, () => { historyDrag = null; });
+      }
+      this._on(this.els.historyScroll, 'click', (e) => {
+        if (!this._historyDragged) return;
+        this._historyDragged = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+
+      // V135 — TAP itself is the highest-priority Scene-advance control.
+      // Its visible design stays unchanged; CSS expands only its invisible hit area.
+      const isTapAdvanceSafeZone = (e) => !!e?.target?.closest?.('.sp-tap-hint');
+      this._on(this.els.tapHint, 'click', (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (this.historyOpen || this.ended) return;
+        this.unlockAudio(true);
+        if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()});
+        this.next();
+      });
+
+      // V129 — Public Player can place visual/tap layers above the foreground image.
+      // On iPhone Safari that means event.target is not always the .sp-scene-image
+      // even though the user's finger is physically inside the image. Studio does
+      // not have that shell-layer mismatch. Route the tap geometrically in capture
+      // phase so VIEW POINT owns the gesture before generic Scene advance can run.
+      this._on(this.els.stage, 'click', (e) => {
+        if (this.historyOpen || e.defaultPrevented) return;
+        // TAP safe zone always belongs to generic Scene advance, never image open.
+        if (isTapAdvanceSafeZone(e)) return;
+        const currentScene = this.document?.scenes?.[this.index];
+        const sceneImage = currentScene?.presentation?.image;
+        const pages = Array.isArray(sceneImage?.pages)
+          ? sceneImage.pages.filter(page => page && typeof page.src === 'string' && page.src)
+          : [];
+        // Bundles may store the first page only in pages[0], with no legacy src
+        // on the parent image. Resolve the same first page as _appendSceneImage.
+        const firstImage = pages[0] || sceneImage;
+        const hasViewPoints = pages.some(page => (page.viewPoints?.points || page.viewRec?.points || []).length) || (sceneImage?.viewPoints?.points || sceneImage?.viewRec?.points || []).length > 0;
+        const action = sceneImage?.tapAction || (hasViewPoints ? 'viewRec' : pages.length > 1 ? 'fullscreen' : sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
+        if (!firstImage?.src || action === 'none') return;
+
+        const activeScene = this.els.stage.querySelector('.sp-scene.is-active');
+        const imageTarget = activeScene?.querySelector('.sp-scene-image');
+        if (!imageTarget) return;
+        // The media is rotated independently of its layout wrapper. Hit-test its
+        // painted bounds so taps near the visible corners still open the image.
+        const rect = (imageTarget.querySelector('.sp-scene-image-media') || imageTarget).getBoundingClientRect();
+        const x = Number(e.clientX);
+        const y = Number(e.clientY);
+        if (!Number.isFinite(x) || !Number.isFinite(y)
+            || x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        // Reuse the exact handler installed on the image. This keeps VIEW POINT,
+        // first-page fallback, and page-bundle navigation on one code path.
+        imageTarget._sceneImageOpen?.(e);
+      }, true);
 
       this._on(this.els.stage, 'click', (e) => {
         if (e.target.closest('button')) return;
 
-        // Foreground Scene images are interactive content, not the stage's
-        // generic "next Scene" tap surface. Handle them here at the same level
-        // as navigation so Studio and the public Player behave identically.
-        const imageTarget = e.target.closest('.sp-scene-image.is-zoomable');
-        if (imageTarget) {
-          e.preventDefault();
-          e.stopPropagation();
+        // V133 — even when a large image physically overlaps this area, tapping
+        // around the visible TAP hint must fall through to this handler's next().
+        const inTapAdvanceSafeZone = isTapAdvanceSafeZone(e);
+
+        // V128 — match Studio's proven V96 image routing exactly.
+        // Never depend on decoration classes (`is-view-rec` / `is-zoomable`):
+        // the Scene document is the source of truth for the tap action.
+        const imageTarget = e.target.closest('.sp-scene-image');
+        if (imageTarget && !inTapAdvanceSafeZone) {
           const currentScene = this.document?.scenes?.[this.index];
           const sceneImage = currentScene?.presentation?.image;
-          if (sceneImage?.src) this._openSceneImage(sceneImage.src, sceneImage.alt || '');
-          return;
+          const action = sceneImage?.tapAction || (sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
+          if (action !== 'none') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (sceneImage?.src) {
+              if (action === 'viewRec') {
+                // VIEW POINT owns this tap even if its authored point data is
+                // empty/malformed; it must never become a generic Scene advance.
+                if ((sceneImage.viewPoints?.points||sceneImage.viewRec?.points)?.length > 0) this._openSceneImageViewRec(sceneImage, imageTarget);
+                else this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+              } else if (action === 'fullscreen') {
+                this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
+              }
+            }
+            return;
+          }
         }
 
         if (this.host.classList.contains('live-edit-enabled')
@@ -477,9 +622,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // the future discrete, so it never reveals an unread Scene.
       this._on(this.els.stage, 'wheel', (e) => {
         if (!this.options.allowPrevious || this.historyOpen) return;
-        if (e.deltaY < -8) {
+        const vertical = this.currentScene?.presentation?.text?.writingMode === 'vertical-rl'
+          && !this._hasCredits(this.currentScene?.presentation);
+        if (e.deltaY < -8 || (vertical && e.deltaX > 8)) {
           e.preventDefault();
-          this.openHistory({ wheelDelta: e.deltaY });
+          this.openHistory({ wheelDelta: vertical && e.deltaX > 8 ? e.deltaX : e.deltaY });
         }
       }, { passive: false });
 
@@ -512,7 +659,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if (dy > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dy });
             else if (dy < 0) { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
           } else {
-            if (dx > 0 && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
+            const vertical = this.currentScene?.presentation?.text?.writingMode === 'vertical-rl'
+              && !this._hasCredits(this.currentScene?.presentation);
+            if ((vertical ? dx < 0 : dx > 0) && this.options.allowPrevious) this.openHistory({ dragDistance: dx });
             else { if(!this.typingState)emit(this.host,'sceneplayer:advanceintent',{index:this.index,scene:this.currentScene,at:performance.now()}); this.next(); }
           }
         }, { passive: true });
@@ -872,6 +1021,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _silenceIOSBankEntry(entry, reset = false) {
       if (!entry?.audio) return;
+      entry._gainLevel = 0;
       if (entry._volumeFadeState) {
         const ramp = entry._volumeFadeState;
         if (ramp.frame) cancelAnimationFrame(ramp.frame);
@@ -1009,11 +1159,27 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         fadeOut: Math.max(0, asNumber(command.fadeOut, 0))
       };
       const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
-      if (stopAfter > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
-      else if (command.loop === false) {
+      const fadeOutMs = Math.max(0, asNumber(command.fadeOut, 0));
+      const scheduleStop = (remainingMs) => {
+        if (!(remainingMs > 0) || !entry.active) return;
+        // Start the iOS GainNode ramp before the media endpoint. Waiting until
+        // the exact end lets Safari's native `ended`/media-session handling
+        // silence the element before the authored fade can finish.
+        const fadeMs = Math.min(remainingMs, fadeOutMs);
+        const leadMs = Math.max(0, remainingMs - fadeMs - 35);
+        entry.timer = this._audioTimeout(() => {
+          entry.timer = null;
+          this._stopPersistentChannel(channel, fadeMs);
+        }, leadMs);
+      };
+      if (stopAfter > 0) entry.timer = this._audioTimeout(() => { entry.timer = null; this._stopPersistentChannel(channel, fadeOutMs); }, stopAfter);
+      else if (command.stopAt != null) {
+        const remaining = Math.max(0, (Math.max(0, asNumber(command.stopAt, 0)) - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
+        scheduleStop(remaining);
+      } else if (command.loop === false) {
         const schedule = () => {
-          const remain = Math.max(0, (audio.duration - Math.max(0, audio.currentTime || startAt)) * 1000 - 20);
-          if (remain > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), remain);
+          const remain = Math.max(0, (audio.duration - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
+          scheduleStop(remain);
         };
         if (Number.isFinite(audio.duration) && audio.duration > 0) schedule();
         else audio.addEventListener('loadedmetadata', schedule, { once:true });
@@ -1172,6 +1338,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if (remain > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), remain);
         }
         this.audioState[channel] = { src:command.src, volume:target, loop:command.loop !== false, startAt, stopAt:command.stopAt ?? null, fadeOut:Math.max(0, asNumber(command.fadeOut,0)) };
+        if (command.loop === false && command.stopAfter <= 0 && command.stopAt == null) this._scheduleNaturalPersistentFade(channel, null, startAt, command.fadeOut || 0, buffer.duration);
         emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'audio-buffer' });
         emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct, transport:'audio-buffer' });
         return true;
@@ -1294,7 +1461,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       audio.__spGainValue = target;
       const gain = this._ensureAudioNode(audio);
       if (gain && this.audioContext) {
-        try { gain.gain.setValueAtTime(target, this.audioContext.currentTime); } catch (_) { gain.gain.value = target; }
+        try {
+          const now = this.audioContext.currentTime;
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(target, now);
+        } catch (_) { gain.gain.value = target; }
       } else {
         // Native-media transport is deliberate for external HTTP(S) audio.
         // On iOS the system may own final hardware volume, but playback remains
@@ -1720,12 +1891,45 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return audio;
     }
 
+    _cancelNaturalPersistentFade(channel) {
+      const state = this.audioState?.[channel];
+      const timer = state?._naturalEndTimer;
+      if (!timer) return;
+      clearTimeout(timer);
+      const i = this.audioTimers.indexOf(timer);
+      if (i >= 0) this.audioTimers.splice(i, 1);
+      state._naturalEndTimer = null;
+    }
+
+    _scheduleNaturalPersistentFade(channel, audio, startAt, fadeOut, knownDuration = null) {
+      const state = this.audioState?.[channel];
+      if (!state || state.loop !== false) return;
+      const schedule = () => {
+        if (this.audioState?.[channel] !== state) return;
+        const duration = Number.isFinite(knownDuration) ? knownDuration : Number(audio?.duration);
+        if (!Number.isFinite(duration) || duration <= 0) return;
+        const position = Math.max(Math.max(0, asNumber(startAt, 0)), Math.max(0, asNumber(audio?.currentTime, startAt)));
+        const remaining = Math.max(0, (duration - position) * 1000);
+        const fade = Math.min(remaining, Math.max(0, asNumber(fadeOut, 0)));
+        state._naturalEndTimer = this._audioTimeout(() => {
+          state._naturalEndTimer = null;
+          if (this.audioState?.[channel] === state) this._stopPersistentChannel(channel, fade);
+        }, Math.max(0, remaining - fade));
+      };
+      if (Number.isFinite(knownDuration) && knownDuration > 0) schedule();
+      else if (Number.isFinite(audio?.duration) && audio.duration > 0) schedule();
+      else if (audio?.addEventListener) audio.addEventListener('loadedmetadata', schedule, { once: true });
+    }
+
     _stopPersistentChannel(channel, fadeOut = 0) {
+      if (channel !== 'bgm' && channel !== 'ambient') return;
       this._cancelAudioDuck(channel);
+      const stopGeneration = this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
+      this._cancelNaturalPersistentFade(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         if (entry) {
-          const finish = () => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
+          const finish = () => { if (this._audioStopGeneration[channel] !== stopGeneration) return; this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
           if (fadeOut > 0 && entry.active) this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
           else finish();
         } else this.audioState[channel] = null;
@@ -1735,6 +1939,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const audio = this.audioEls[channel];
       if (!audio) return;
       const finish = () => {
+        if (this._audioStopGeneration[channel] !== stopGeneration) return;
         audio.pause();
         try { audio.currentTime = 0; } catch (_) {}
         this.audioState[channel] = null;
@@ -1745,11 +1950,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _startPersistentChannel(channel, command, reconstruct = false, forceSeek = false) {
-      this._cancelAudioDuck(channel);
       if (channel === 'bgm' || channel === 'ambient') {
+        this._cancelAudioDuck(channel);
         this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
         this._cancelNaturalPersistentFade(channel);
-        for (const key of [channel, `exit:${channel}`]) this._cancelAudioFade(key);
+        for (const key of [channel, `exit:${channel}`]) {
+          this._cancelAudioFade(key);
+        }
       }
       if (this._iosStableMediaBank && this._startIOSBankPersistent(channel, command, reconstruct, forceSeek)) return;
       if (this._startBufferedPersistent(channel, command, reconstruct, forceSeek)) return;
@@ -1808,6 +2015,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (fadeIn > 0) this._fadeVolume(audio, targetVolume, fadeIn, channel);
         const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
         if (stopAfter > 0) this._audioTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
+        else if (command.loop === false && command.stopAt == null) this._scheduleNaturalPersistentFade(channel, audio, startAt, command.fadeOut || 0);
       });
       emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct });
     }
@@ -1878,7 +2086,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold });
     }
 
-    _playOneShot(command) {
+    _playOneShot(command, onEnded = null) {
       if (!command.src) return;
       if (this._iosStableMediaBank && this._playIOSBankOneShot(command)) return;
       if (this._playBufferedOneShot(command)) return;
@@ -1904,6 +2112,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         audio.removeEventListener('ended', cleanup);
         audio.__spInUse = false;
         audio.loop = false;
+        if (typeof onEnded === 'function') { try { onEnded(); } catch (_) {} }
       };
       audio.addEventListener('ended', cleanup);
       this.oneshots.add(audio);
@@ -1929,7 +2138,23 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const action = command.action;
       if (channel === 'oneshot') {
         // One-shots represent an event, so history reconstruction never replays them.
-        if (!reconstruct && (action === 'play' || action === 'start')) this._playOneShot(command);
+        if (!reconstruct && (action === 'play' || action === 'start')) {
+          // V52: authorable SE timing. `delay` and `repeat` were already written
+          // by Studio but the Player ignored both fields. Delay is before the
+          // first hit; repeat schedules additional hits after the previous clip
+          // duration when known (fallback 250ms), preserving one-shot semantics.
+          const delay = Math.max(0, asNumber(command.delay, 0));
+          const repeat = Math.max(1, Math.round(asNumber(command.repeat, 1)));
+          // V53: chain repeats from the actual `ended` event. The old
+          // duration probe usually had NaN before metadata loaded, fell back to
+          // 250ms and caused overlapping/incorrect repeat counts.
+          const playSeries = (remaining) => {
+            if (remaining <= 0) return;
+            this._playOneShot(command, remaining > 1 ? () => playSeries(remaining - 1) : null);
+          };
+          if (delay > 0) this._audioTimeout(() => playSeries(repeat), delay);
+          else playSeries(repeat);
+        }
         return;
       }
       if (!(channel === 'bgm' || channel === 'ambient')) return;
@@ -2110,9 +2335,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!state) return false;
       clearInterval(state.timer);
       if (complete && state.node?.isConnected) {
-        state.node.textContent = state.text;
+        if(state.complete)state.complete();else state.node.textContent = state.text;
         state.node.classList.remove('is-typing');
       }
+      state.cleanup?.();
       this.typingState = null;
       return true;
     }
@@ -2309,6 +2535,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.els.ending.hidden = true;
       this.backgroundState = null;
       this.backgroundLayerIndex = 0;
+      this.backgroundMotionEpoch = 0;
       this._resetBackgroundLayers();
       // Studio loads Scene 1 underneath the cover for layout/background,
       // but Cover is not a Scene and must not execute Scene audio.
@@ -2339,6 +2566,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         mono: 'var(--sp-font-mono)'
       };
       const coverFamily = families[doc.cover?.fontFamily] || families.serif;
+      this.els.cover.dataset.startTrigger=['center','bottom','tap'].includes(doc.cover?.startTrigger)?doc.cover.startTrigger:'bottom';
       const endingFamily = families[doc.ending?.fontFamily] || families.serif;
       this.host.style.setProperty('--sp-cover-font', coverFamily);
 
@@ -2453,8 +2681,31 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return (this.index + 1) / this.document.scenes.length;
     }
 
+    _openCurrentMailBeforeAdvance() {
+      const scene = this.currentScene;
+      const presentation = scene?.presentation || {};
+      if (presentation.view !== 'web-mail') return false;
+      const mail = presentation.webMail || {};
+      if (mail.folder === 'draft') return false;
+      const activeScene = this.els?.stage?.querySelector?.('.sp-scene.is-active');
+      const card = activeScene?.querySelector?.('.sp-web-mail-card');
+      if (!card || card.classList.contains('is-open')) return false;
+      card.classList.add('is-open');
+      return true;
+    }
+
     next() {
       if (!this.document || this.ended) return false;
+      // Web Mail v0.3: the first advance action opens the current mail instead
+      // of skipping straight to the next Scene. Drafts are authored as already
+      // open. Once opened, the next tap/Enter/swipe/auto advance behaves normally.
+      if (this._openCurrentMailBeforeAdvance()) {
+        if (this._stopTyping(true)) {
+          emit(this.host, 'sceneplayer:typingend', { index: this.index, scene: this.currentScene, skipped: true });
+        }
+        this._scheduleAuto();
+        return true;
+      }
       if (this._stopTyping(true)) {
         emit(this.host, 'sceneplayer:typingend', { index: this.index, scene: this.currentScene, skipped: true });
         this._scheduleAuto();
@@ -2495,28 +2746,29 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._clearPresentationTimers();
       this.historyOpen = true;
       this.host.classList.add('sp-history-open');
+      this._historyHorizontal = this.currentScene?.presentation?.text?.writingMode === 'vertical-rl'
+        && !this._hasCredits(this.currentScene?.presentation);
+      this.els.history.classList.toggle('is-horizontal', this._historyHorizontal);
+      this._historyAutoCenter = true;
+      const help = this.els.history.querySelector('.sp-history-help');
+      if (help) help.textContent = this._historyHorizontal ? '左右にスワイプして過去Sceneへ' : '過去Sceneをスクロール';
       this.els.history.hidden = false;
       this._renderHistory();
 
       requestAnimationFrame(() => {
-        const current = this.els.historyList.querySelector(`.sp-history-item[data-index="${this.index}"]`);
-        if (current) {
-          const box = current.getBoundingClientRect();
-          const viewport = this.els.historyScroll.getBoundingClientRect();
-          const target = this.els.historyScroll.scrollTop
-            + (box.top - viewport.top)
-            - ((viewport.height - box.height) / 2);
-          this.els.historyScroll.scrollTop = Math.max(0, target);
+        if (!this.historyOpen || this.destroyed) return;
+        this._centerHistoryOnCurrent();
+        const scroll = this.els.historyScroll;
+        {
 
           // A pull gesture should feel like grabbing the drum and moving into the past.
           // Give it a small initial offset while preserving native momentum afterwards.
           const drag = Math.abs(asNumber(options.dragDistance, 0));
           const wheel = Math.abs(asNumber(options.wheelDelta, 0));
           if (drag > 0 || wheel > 0) {
-            this.els.historyScroll.scrollTop = Math.max(
-              0,
-              this.els.historyScroll.scrollTop - clamp((drag || wheel) * 0.7, 18, 110)
-            );
+            const axis = this._historyHorizontal ? 'scrollLeft' : 'scrollTop';
+            const direction = this._historyHorizontal ? 1 : -1;
+            scroll[axis] = Math.max(0, scroll[axis] + direction * clamp((drag || wheel) * 0.7, 18, 110));
           }
         }
         this._updateHistoryDepth();
@@ -2534,6 +2786,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.historyOpen = false;
       this.host.classList.remove('sp-history-open');
       this.els.history.hidden = true;
+      // Hidden history can retain decoded images and a long document's DOM.
+      this.els.historyList.replaceChildren();
+      this.historyMetrics = null;
+      this.historyDepthItems.clear();
+      if (this.historyScrollRaf) cancelAnimationFrame(this.historyScrollRaf);
+      this.historyScrollRaf = 0;
       if (!options.keepVisualState) this.els.stage.focus({ preventScroll: true });
       emit(this.host, 'sceneplayer:historyclose', {
         index: this.index,
@@ -2609,6 +2867,28 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       document.body.appendChild(overlay);
     }
 
+    _historyItemCenter(item) {
+      const horizontal = this._historyHorizontal;
+      let center = (horizontal ? item.offsetWidth : item.offsetHeight) / 2;
+      // All values are layout pixels, even inside Studio's scaled preview.
+      for (let node = item; node && node !== this.els.historyScroll; node = node.offsetParent) {
+        center += horizontal ? node.offsetLeft : node.offsetTop;
+      }
+      return center;
+    }
+
+    _centerHistoryOnCurrent() {
+      if (!this.historyOpen || this.destroyed) return;
+      const item = this.els.historyList.querySelector(`.sp-history-item[data-index="${this.index}"]`);
+      if (!item) return;
+      const scroll = this.els.historyScroll;
+      const horizontal = this._historyHorizontal;
+      scroll[horizontal ? 'scrollTop' : 'scrollLeft'] = 0;
+      scroll[horizontal ? 'scrollLeft' : 'scrollTop'] = Math.max(0,
+        this._historyItemCenter(item) - (horizontal ? scroll.clientWidth : scroll.clientHeight) / 2);
+      this.historyMetrics = null;
+    }
+
     _renderHistory() {
       if (!this.document) return;
       const fragment = document.createDocumentFragment();
@@ -2632,6 +2912,61 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         body.className = 'sp-history-body';
 
         const historyPresentation = scene.presentation || {};
+        if(this._hasCredits(historyPresentation)){body.appendChild(this._creditsNode(scene,historyPresentation,false));item.append(num,body);fragment.appendChild(item);continue;}
+        if (historyPresentation.view === 'web-qa') {
+          item.classList.add('sp-history-web-qa');const q=historyPresentation.webQA||{},a=q.answer||{},qaIndex=(this.document?.scenes||[]).indexOf(scene);let kind=q.kind||'legacy-answer';
+          let qScene=scene,qPresentation=historyPresentation,qData=q;
+          if(kind==='answer'&&q.qaId){for(let j=qaIndex-1;j>=0;j--){const cand=this.document?.scenes?.[j],cp=cand?.presentation||{},cq=cp.webQA||{};if(cp.view!=='web-qa')break;if(cq.qaId===q.qaId&&cq.kind==='question'){qScene=cand;qPresentation=cp;qData=cq;break;}}}
+          const qu=qData.question||{},wrap=document.createElement('div');wrap.className='sp-web-qa-wrap';
+          const makeQuestion=()=>{const qbox=document.createElement('div');qbox.className='sp-web-qa-question';const qt=document.createElement('div');qt.className='sp-web-qa-title';qt.textContent=qu.title||'質問';const qb=document.createElement('div');qb.className='sp-web-qa-question-body';if(kind==='question'&&qScene===scene)qb.classList.add('is-question-scene-text');qb.textContent=qData.kind==='question'?String(qScene.text||''):String(qu.body||'');const qmeta=document.createElement('div');qmeta.className='sp-web-qa-question-meta';const qav=document.createElement('span');qav.className='sp-web-qa-icon sp-web-qa-question-icon';const qsrc=ahakoAvatarSrc(qu.iconPreset);if(qsrc){const qi=document.createElement('img');qi.src=qsrc;qi.alt='';qav.appendChild(qi);}else qav.textContent=String(qu.name||'質').trim().slice(0,1)||'質';const qname=document.createElement('span');qname.textContent=qu.name||'質問者';qmeta.append(qav,qname);qbox.append(qt,qb,qmeta);return qbox;};
+          const makeAnswer=()=>{const ans=document.createElement('div');ans.className='sp-web-qa-answer';if(a.best)ans.classList.add('is-best');const badge=document.createElement('div');badge.className='sp-web-qa-answer-label';badge.textContent=a.best?'🏆 ベストアンサー':'回答';const tx=document.createElement('div');tx.className='sp-web-qa-answer-text';tx.textContent=a.deleted?'この回答は削除されました':String(scene.text||'');const meta=document.createElement('div');meta.className='sp-web-qa-meta';meta.textContent=`${a.name||'回答者'}${Number(a.good)>0?'  GOOD '+Number(a.good):''}`;ans.append(badge,tx,meta);return ans;};
+          if(kind==='question')wrap.appendChild(makeQuestion());else if(kind==='answer'){if(a.best)wrap.appendChild(makeQuestion());wrap.appendChild(makeAnswer());}else{const qaPrev=qaIndex>0?this.document.scenes[qaIndex-1]:null,qaFirst=!qaPrev||qaPrev?.presentation?.view!=='web-qa';if(qaFirst)wrap.appendChild(makeQuestion());wrap.appendChild(makeAnswer());}
+          body.appendChild(wrap);item.append(num,body);fragment.appendChild(item);continue;
+        }
+
+        if (historyPresentation.view === 'web-notification') {
+          item.classList.add('sp-history-web-notification');
+          const m=historyPresentation.webNotification||{},card=document.createElement('div');card.className='sp-web-notification-card';
+          const icon=document.createElement('div');icon.className='sp-web-notification-icon';const iconSrc=m.icon||ahakoAvatarSrc(m.iconPreset);if(iconSrc){const img=document.createElement('img');img.src=iconSrc;img.alt='';icon.appendChild(img);}else icon.textContent=({social:'💬',mail:'✉',system:'⚙',message:'●',other:'🔔'})[m.kind]||'🔔';
+          const content=document.createElement('div');content.className='sp-web-notification-content';
+          const head=document.createElement('div');head.className='sp-web-notification-head';const source=document.createElement('strong');source.textContent=m.source||'通知';head.appendChild(source);const tm=this._logTimeText(scene,historyPresentation);if(tm){const time=document.createElement('span');time.className='sp-web-notification-time';time.textContent=tm;head.appendChild(time);}
+          const title=document.createElement('div');title.className='sp-web-notification-title';title.textContent=m.title||'お知らせ';
+          const tx=document.createElement('div');tx.className='sp-web-notification-text';tx.textContent=String(scene.text||'');
+          content.append(head,title,tx);card.append(icon,content);body.appendChild(card);item.append(num,body);fragment.appendChild(item);continue;
+        } else
+        if (historyPresentation.view === 'web-mail') {
+          item.classList.add('sp-history-web-mail');
+          const m=historyPresentation.webMail||{},wrap=document.createElement('div');
+          wrap.className='sp-web-mail-card'+(m.folder==='draft'?' is-open':'');
+          const summary=document.createElement('button');summary.type='button';summary.className='sp-web-mail-summary';
+          const sav=document.createElement('span');sav.className='sp-web-mail-summary-avatar';const ssrc=m.icon||ahakoAvatarSrc(m.iconPreset);if(ssrc){const si=document.createElement('img');si.src=ssrc;si.alt='';sav.appendChild(si);}else sav.textContent=String(m.senderName||'差').trim().slice(0,1)||'差';
+          const smain=document.createElement('span');smain.className='sp-web-mail-summary-main';const swho=document.createElement('strong');swho.textContent=(m.folder==='sent'||m.folder==='draft')?(`To: ${String(m.to||'宛先未設定')}`):(m.senderName||'差出人');const ssub=document.createElement('span');ssub.textContent=m.subject||'件名なし';smain.append(swho,ssub);
+          const smeta=document.createElement('span');smeta.className='sp-web-mail-summary-meta';const stm=this._logTimeText(scene,historyPresentation);if(m.attachmentName){const clip=document.createElement('span');clip.textContent='📎';smeta.appendChild(clip);}const sstar=document.createElement('span');sstar.className='sp-web-mail-star';sstar.textContent=m.starred?'★':'☆';if(m.starred)sstar.style.color='#e5b20a';smeta.appendChild(sstar);if(stm){const stime=document.createElement('span');stime.textContent=stm;smeta.appendChild(stime);}summary.append(sav,smain,smeta);
+          const detail=document.createElement('div');detail.className='sp-web-mail-detail';
+          const top=document.createElement('div');top.className='sp-web-mail-top';const folder=document.createElement('span');folder.className='sp-web-mail-folder';folder.textContent=({inbox:'受信',sent:'送信済み',draft:'下書き',spam:'迷惑メール'})[m.folder]||'受信';const star=document.createElement('span');star.className='sp-web-mail-star';star.textContent=m.starred?'★':'☆';if(m.starred)star.style.color='#e5b20a';const time=document.createElement('span');time.className='sp-web-mail-time';time.textContent=stm||'';top.append(folder,star,time);
+          const subject=document.createElement('div');subject.className='sp-web-mail-subject';subject.textContent=m.subject||'件名なし';
+          const identity=document.createElement('div');identity.className='sp-web-mail-identity';const av=document.createElement('span');av.className='sp-web-mail-avatar';if(ssrc){const img=document.createElement('img');img.src=ssrc;img.alt='';av.appendChild(img);}else av.textContent=String(m.senderName||'差').trim().slice(0,1)||'差';const who=document.createElement('div');who.className='sp-web-mail-who';const name=document.createElement('strong');name.textContent=m.senderName||'差出人';const addr=document.createElement('span');addr.textContent=m.senderAddress||'';who.append(name,addr);identity.append(av,who);
+          const routes=document.createElement('div');routes.className='sp-web-mail-routes';const to=String(m.to||'').trim(),cc=String(m.cc||'').trim();if(to){const x=document.createElement('div');x.textContent='To: '+to;routes.appendChild(x);}if(cc){const x=document.createElement('div');x.textContent='CC: '+cc;routes.appendChild(x);}
+          const tx=document.createElement('div');tx.className='sp-web-mail-text';tx.textContent=String(scene.text||'');
+          detail.append(top,subject,identity,routes,tx);if(m.attachmentName){const att=document.createElement('div');att.className='sp-web-mail-attachment';att.textContent='📎 '+String(m.attachmentName);detail.appendChild(att);}wrap.append(summary,detail);body.appendChild(wrap);item.append(num,body);fragment.appendChild(item);
+          const toggle=e=>{e.preventDefault();e.stopPropagation();wrap.classList.toggle('is-open');};summary.addEventListener('pointerdown',e=>e.stopPropagation());summary.addEventListener('click',toggle);continue;
+        }
+
+        if (historyPresentation.view === 'web-sns') {
+          item.classList.add('sp-history-web-sns');
+          const m=historyPresentation.webSNS||{},row=document.createElement('div');row.className='sp-web-sns-row';
+          const profileUrl=(()=>{try{const u=new URL(String(m.profileUrl||''),location.href);return /^https?:$/.test(u.protocol)?u.href:'';}catch(_){return '';}})();
+          const avatar=document.createElement(profileUrl?'a':'div');avatar.className='sp-web-sns-avatar';if(profileUrl){avatar.href=profileUrl;avatar.target='_blank';avatar.rel='noopener noreferrer';avatar.addEventListener('click',e=>{e.stopPropagation();if(!window.confirm('外部プロフィールを開きます。'))e.preventDefault();});}
+          const src=m.icon||ahakoAvatarSrc(m.iconPreset);if(src){const img=document.createElement('img');img.src=src;img.alt='';avatar.appendChild(img);}else avatar.textContent=String(m.name||'ユ').trim().slice(0,1)||'ユ';
+          const content=document.createElement('div');content.className='sp-web-sns-content';
+          const head=document.createElement('div');head.className='sp-web-sns-head';
+          const identity=document.createElement(profileUrl?'a':'span');identity.className='sp-web-sns-identity';if(profileUrl){identity.href=profileUrl;identity.target='_blank';identity.rel='noopener noreferrer';identity.addEventListener('click',e=>{e.stopPropagation();if(!window.confirm('外部プロフィールを開きます。'))e.preventDefault();});}
+          const nm=document.createElement('strong');nm.textContent=m.name||'ユーザー';const hd=document.createElement('span');hd.className='sp-web-sns-handle';hd.textContent=m.handle||'@user';identity.append(nm,hd);head.appendChild(identity);
+          const tm=this._logTimeText(scene,historyPresentation);if(tm){const time=document.createElement('span');time.className='sp-web-sns-time';time.textContent=tm;head.appendChild(time);}
+          const tx=document.createElement('div');tx.className='sp-web-sns-text';tx.textContent=m.deleted?'この投稿は削除されました':String(scene.text||'');
+          const metrics=document.createElement('div');metrics.className='sp-web-sns-metrics';metrics.textContent=`♡ ${Math.max(0,Number(m.likes)||0)}   ↻ ${Math.max(0,Number(m.reposts)||0)}   💬 ${Math.max(0,Number(m.replies)||0)}`;
+          content.append(head,tx,metrics);row.append(avatar,content);body.appendChild(row);item.append(num,body);fragment.appendChild(item);continue;
+        }
         if (historyPresentation.view === 'web-review' && (scene.text || scene.subText)) {
           item.classList.add('sp-history-web-review');
           const r=historyPresentation.webReview||{};const row=document.createElement('div');row.className='sp-web-review-row';
@@ -2770,6 +3105,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         item.append(num, body);
         fragment.appendChild(item);
       }
+      // Keep native LTR scrolling (no negative RTL scrollLeft), with older
+      // Scenes physically to the right for Japanese vertical reading.
+      if (this._historyHorizontal) fragment.replaceChildren(...Array.from(fragment.childNodes).reverse());
       this.els.historyList.appendChild(fragment);
       // Measure the drum once after rebuilding it. Scroll-time depth updates can
       // then use cached centers instead of forcing layout for every Scene.
@@ -2796,12 +3134,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!this.historyMetrics || this.historyMetrics.length !== items.length) {
         this.historyMetrics = items.map((item) => ({
           item,
-          center: item.offsetTop + item.offsetHeight / 2
-        }));
+          center: this._historyItemCenter(item)
+        })).sort((a, b) => a.center - b.center);
       }
 
       const metrics = this.historyMetrics;
-      const center = scroll.scrollTop + scroll.clientHeight / 2;
+      const extent = this._historyHorizontal ? scroll.clientWidth : scroll.clientHeight;
+      const center = (this._historyHorizontal ? scroll.scrollLeft : scroll.scrollTop) + extent / 2;
 
       // Binary-search the nearest cached Scene center.
       let lo = 0, hi = metrics.length - 1;
@@ -2826,7 +3165,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const radius = 6;
       const start = Math.max(0, nearestIndex - radius);
       const end = Math.min(metrics.length - 1, nearestIndex + radius);
-      const depthRange = Math.max(1, scroll.clientHeight * 0.58);
+      const depthRange = Math.max(1, extent * 0.58);
       for (let i = start; i <= end; i += 1) {
         const entry = metrics[i];
         const distance = Math.abs(entry.center - center);
@@ -2850,6 +3189,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._clearAutoTimer();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
+      this._endingAudioStarted = false;
       this.ended = false;
       if (this.els?.ending) this.els.ending.hidden = true;
       this.index = nextIndex;
@@ -2895,6 +3235,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._clearAutoTimer();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
+      this._endingAudioStarted = false;
       this.ended = false;
       this.els.ending.hidden = true;
       this.index = nextIndex;
@@ -2995,12 +3336,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(this.els.coverEpisodeTitle){const epTitle=coverValue('episodeTitle',this.document.metadata?.episodeTitle||this.document.episodeTitle||'');this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!coverVisible('episodeTitle',epTitle);}
       if(this.els.coverTitle){const title=coverValue('title',this.document.title||'');this.els.coverTitle.textContent=title;this.els.coverTitle.hidden=Boolean(logoSrc)||!coverVisible('title',title);}
       if(this.els.coverSubtitle){const sub=coverValue('subtitle',this.document.metadata?.subtitle||this.document.subtitle||'');this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!coverVisible('subtitle',sub);}
+      this.els.cover.dataset.startTrigger=['center','bottom','tap'].includes(this.document.cover?.startTrigger)?this.document.cover.startTrigger:'bottom';
       this.els.cover.hidden=false;
       this.host.classList.add('sp-cover-open');
       return true;
     }
 
-    _beginFromCover() {
+    _beginFromCover(startEvent) {
       if(!this.document || !this.els?.cover)return false;
       // Cover -> Scene 1 must always re-arm navigation as well as audio.
       // Without this reset a synthetic click suppressed at the end of the first
@@ -3023,6 +3365,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
       this._render();
+      // A work may start directly in its comic viewer. Open the first Scene's
+      // image from the same trusted cover gesture so iOS Safari keeps the action
+      // attached to the user's tap. Works without a usable image fall back to Scene.
+      if(this.document?.cover?.startMode==='comic'){
+        const firstImage=this.els?.stage?.querySelector('.sp-scene.is-active .sp-scene-image');
+        firstImage?._sceneImageOpenForReading?.(startEvent);
+      }
+      // V112 — keyboard reading starts immediately after START. Move focus now
+      // and once more after the frame so mouse and keyboard starts both leave
+      // the Player ready for Enter without an extra Scene click.
       this.els?.stage?.focus?.({preventScroll:true});
       requestAnimationFrame(()=>this.els?.stage?.focus?.({preventScroll:true}));
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
@@ -3240,46 +3592,95 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return this.options.baseGap;
     }
 
+    // All layout/drag coordinates are logical CSS pixels, including scaled Studio previews.
+    _layoutScale() {
+      const stage=this.els?.stage;
+      return stage?.clientWidth ? Math.max(.01,stage.getBoundingClientRect().width/stage.clientWidth) : 1;
+    }
+
+    _logicalRect(rect) {
+      const scale=this._layoutScale();
+      return Object.fromEntries(['left','right','top','bottom','width','height'].map(key=>[key,rect[key]/scale]));
+    }
+
     _measureSceneGeometry(node, stageRect) {
       node.classList.add('sp-layout-measuring');
-      const nodeRect=node.getBoundingClientRect();
+      const nodeRect=this._logicalRect(node.getBoundingClientRect());
       const boxHeight=Math.max(1,nodeRect.height);
       const text=node.querySelector('.sp-text');
       const frame=node.querySelector('.sp-handdrawn-frame');
       const vertical=text?.dataset?.writingMode==='vertical-rl';
       let inkLeft=0,inkRight=Math.max(1,nodeRect.width),inkTop=0,inkBottom=boxHeight;
+      const contentRects=[];
+      const addElementRect=(element)=>{
+        if(!element)return;
+        const rect=this._logicalRect(element.getBoundingClientRect());
+        if(rect.width>0&&rect.height>0)contentRects.push(rect);
+      };
+      const addTextRects=(element)=>{
+        if(!element)return;
+        try{
+          const range=document.createRange();
+          range.selectNodeContents(element);
+          const rects=[...range.getClientRects()].map(rect=>this._logicalRect(rect)).filter(rect=>rect.width>0&&rect.height>0);
+          range.detach?.();
+          if(rects.length)contentRects.push(...rects);else addElementRect(element);
+        }catch(_){addElementRect(element);}
+      };
+
+      // Measure the complete painted Scene. Previously only the main text or
+      // frame participated in stack placement, so subtext and foreground
+      // images could occupy the landing space reserved for the next Scene.
       const boardPost=node.querySelector(':scope > .sp-web-board-post');
       const chatRow=node.querySelector(':scope > .sp-chat-row');
-      if(boardPost||chatRow){
-        // Include the bubble padding and speaker header in chat stack spacing.
-        const r=(boardPost||chatRow).getBoundingClientRect();inkLeft=r.left-nodeRect.left;inkRight=r.right-nodeRect.left;inkTop=r.top-nodeRect.top;inkBottom=r.bottom-nodeRect.top;
-      }else if(frame){
-        const frameRect=frame.getBoundingClientRect();
-        inkLeft=frameRect.left-nodeRect.left;
-        inkRight=frameRect.right-nodeRect.left;
-        inkTop=frameRect.top-nodeRect.top;
-        inkBottom=frameRect.bottom-nodeRect.top;
-      }else try{
-        const range=document.createRange();
-        range.selectNodeContents(text||node);
-        const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
-        range.detach?.();
-        if(rects.length){inkLeft=Math.min(...rects.map(rect=>rect.left))-nodeRect.left;inkRight=Math.max(...rects.map(rect=>rect.right))-nodeRect.left;inkTop=Math.min(...rects.map(rect=>rect.top))-nodeRect.top;inkBottom=Math.max(...rects.map(rect=>rect.bottom))-nodeRect.top;}
-      }catch(_){}
+      if(boardPost){
+        // Board text is nested inside the post. Measure the complete post so
+        // long responses reserve their real height before the next Scene lands.
+        addElementRect(boardPost);
+      }else if(chatRow){
+        addElementRect(chatRow);
+      }else{
+        if(frame)addElementRect(frame);else addTextRects(text);
+        addTextRects(node.querySelector(':scope > .sp-subtext'));
+        addElementRect(node.querySelector(':scope > .sp-sound-mark'));
+      }
+      addElementRect(node.querySelector(':scope > .sp-scene-image > .sp-scene-image-media')||node.querySelector(':scope > .sp-scene-image'));
+      if(contentRects.length){
+        inkLeft=Math.min(...contentRects.map(rect=>rect.left))-nodeRect.left;
+        inkRight=Math.max(...contentRects.map(rect=>rect.right))-nodeRect.left;
+        inkTop=Math.min(...contentRects.map(rect=>rect.top))-nodeRect.top;
+        inkBottom=Math.max(...contentRects.map(rect=>rect.bottom))-nodeRect.top;
+      }
       const inkHeight=Math.max(1,inkBottom-inkTop);
-      const height=vertical?Math.min(boxHeight,Math.max(48,Math.min(stageRect.height*.52,inkHeight+8))):boxHeight;
+      const height=vertical?Math.min(boxHeight,Math.max(48,Math.min((stageRect.height/this._layoutScale())*.52,inkHeight+8))):boxHeight;
       node.classList.remove('sp-layout-measuring');
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
 
     _framePosition(scene) {
-      const common=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{},viewportWidth=Math.max(1,Number(this.host?.clientWidth)||Number(global.innerWidth)||1),source=viewportWidth>=1100&&common?.pc&&typeof common.pc==='object'?common.pc:common,preset=String(source.preset||'auto'),presets={'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],left:[.18,.5],center:[.5,.5],right:[.82,.5],'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]};
-      if(preset==='custom'){const x=Number(source.x),y=Number(source.y);return {preset,x:Number.isFinite(x)?Math.max(0,Math.min(1,x)):.5,y:Number.isFinite(y)?Math.max(0,Math.min(1,y)):.5};}if(presets[preset])return {preset,x:presets[preset][0],y:presets[preset][1]};return {preset:'auto'};
+      const common=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
+      const viewportWidth=Math.max(1,Number(this.host?.clientWidth)||Number(global.innerWidth)||1);
+      const source=viewportWidth>=1100&&common?.pc&&typeof common.pc==='object'?common.pc:common;
+      const preset=String(source.preset||'auto');
+      const presets={
+        'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],
+        left:[.18,.5],center:[.5,.5],right:[.82,.5],
+        'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]
+      };
+      if(preset==='custom'){
+        const x=Number(source.x),y=Number(source.y);
+        return {preset,x:Number.isFinite(x)?Math.max(0,Math.min(1,x)):.5,y:Number.isFinite(y)?Math.max(0,Math.min(1,y)):.5};
+      }
+      if(presets[preset])return {preset,x:presets[preset][0],y:presets[preset][1]};
+      return {preset:'auto'};
     }
 
     _customPositionTransform(item, position, stageWidth, stageHeight, margin) {
-      const contentWidth=Math.max(1,item.node.clientWidth||item.node.getBoundingClientRect().width),contentLeft=Math.max(0,(stageWidth-contentWidth)/2),width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
-      const centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,stageWidth*position.x)),centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
+      const contentWidth=Math.max(1,item.node.clientWidth||item.node.getBoundingClientRect().width);
+      const contentLeft=Math.max(0,(stageWidth-contentWidth)/2);
+      const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
+      const centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,stageWidth*position.x));
+      const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
       return {x:centerX-contentLeft-item.inkCenterX,y:centerY-item.inkCenterY};
     }
 
@@ -3310,9 +3711,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
-      const stageHeight = stageRect.height;
+      const stageHeight = Math.max(1,this.els.stage.clientHeight||stageRect.height/this._layoutScale());
       const stageWidth = Math.max(1,this.els.stage.clientWidth||stageRect.width);
-      const focusRatio = global.innerWidth <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
+      const focusRatio = stageWidth <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
       const focusY = stageHeight * focusRatio;
 
       const metrics = nodes.map((node, i) => ({
@@ -3341,21 +3742,83 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const flow=next.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
         const eitherVertical=current.scene?.presentation?.text?.writingMode==='vertical-rl'||next.scene?.presentation?.text?.writingMode==='vertical-rl';
         if(flow==='horizontal'){
-          const gap=Math.max(this._sceneGap(current.scene,next.scene),stageRect.width*.09)+extraGap;
+          const gap=Math.max(this._sceneGap(current.scene,next.scene),stageWidth*.09)+extraGap;
           const verticalReading=next.scene?.presentation?.text?.writingMode==='vertical-rl';
-          positions[i]={x:verticalReading?nextPosition.x+next.inkRight+gap-current.inkLeft:nextPosition.x+next.inkLeft-gap-current.inkRight,y:nextPosition.y+next.inkCenterY-current.inkCenterY};
+          positions[i]={
+            x:verticalReading
+              ? nextPosition.x+next.inkRight+gap-current.inkLeft
+              : nextPosition.x+next.inkLeft-gap-current.inkRight,
+            y:nextPosition.y+next.inkCenterY-current.inkCenterY
+          };
         }else{
           const verticalGap=eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0;
           const gap=this._sceneGap(current.scene,next.scene)+verticalGap+extraGap;
-          const ownPosition=this._framePosition(current.scene),ownX=ownPosition.preset==='auto'?0:this._customPositionTransform(current,ownPosition,stageWidth,stageHeight,global.innerWidth<=600?10:16).x;
+          const ownPosition=this._framePosition(current.scene);
+          const ownX=ownPosition.preset==='auto'?0:this._customPositionTransform(current,ownPosition,stageWidth,stageHeight,stageWidth<=600?10:16).x;
           positions[i]={x:ownX,y:nextPosition.y+next.inkTop-gap-current.inkBottom};
         }
       }
 
       const currentFrame=newest.node.querySelector('.sp-handdrawn-frame');
       if(currentFrame&&metrics.length>1)metrics.slice(0,-2).forEach(item=>{item.node.style.visibility='hidden';});
-      if(currentFrame&&metrics.length>1&&this._framePosition(newest.scene).preset==='auto'){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');if(previousFrame){const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical',gap=global.innerWidth<=600?14:24,currentWidth=newest.inkRight-newest.inkLeft,previousWidth=previous.inkRight-previous.inkLeft,currentHeight=newest.inkBottom-newest.inkTop,previousHeight=previous.inkBottom-previous.inkTop,availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),availableHeight=stageHeight*.86,margin=global.innerWidth<=600?10:16;previous.node.style.visibility='';previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',fits=currentWidth+previousWidth+gap<=availableWidth-margin*2,groupWidth=currentWidth+previousWidth+gap,groupLeft=(availableWidth-groupWidth)/2,currentLeft=fits?(verticalReading?groupLeft:groupLeft+previousWidth+gap):(verticalReading?margin:availableWidth-margin-currentWidth),previousLeft=fits?(verticalReading?groupLeft+currentWidth+gap:groupLeft):(verticalReading?availableWidth-margin-previousWidth:margin),centerY=stageHeight*.48;positions[metrics.length-1]={x:currentLeft-newest.inkLeft,y:centerY-newest.inkCenterY};positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:centerY-previous.inkCenterY};}else{const fits=currentHeight+previousHeight+gap<=availableHeight,groupHeight=currentHeight+previousHeight+gap,groupTop=(stageHeight-groupHeight)/2,previousTop=fits?groupTop:margin,currentTop=fits?groupTop+previousHeight+gap:stageHeight-margin-currentHeight;positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:previousTop-previous.inkTop};positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:currentTop-newest.inkTop};}}}
-      metrics.forEach((item,i)=>{if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;positions[i]=this._customPositionTransform(item,position,stageWidth,stageHeight,global.innerWidth<=600?10:16);});if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){const availableWidth=Math.max(1,newest.node.getBoundingClientRect().width),margin=global.innerWidth<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};}else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};}}
+      if(currentFrame&&metrics.length>1&&this._framePosition(newest.scene).preset==='auto'){
+        const previous=metrics[metrics.length-2];
+        const previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
+        if(previousFrame){
+          const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
+          const gap=stageWidth<=600?14:24;
+          const currentWidth=newest.inkRight-newest.inkLeft;
+          const previousWidth=previous.inkRight-previous.inkLeft;
+          const currentHeight=newest.inkBottom-newest.inkTop;
+          const previousHeight=previous.inkBottom-previous.inkTop;
+          const availableWidth=Math.max(1,newest.node.clientWidth||newest.node.getBoundingClientRect().width/this._layoutScale());
+          const availableHeight=stageHeight*.86;
+          const margin=stageWidth<=600?10:16;
+          previous.node.style.visibility='';
+          previous.node.style.zIndex='20';
+          newest.node.style.zIndex='30';
+          if(flow==='horizontal'){
+            const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl';
+            const fits=currentWidth+previousWidth+gap<=availableWidth-margin*2;
+            const groupWidth=currentWidth+previousWidth+gap;
+            const groupLeft=(availableWidth-groupWidth)/2;
+            const currentLeft=fits?(verticalReading?groupLeft:groupLeft+previousWidth+gap):(verticalReading?margin:availableWidth-margin-currentWidth);
+            const previousLeft=fits?(verticalReading?groupLeft+currentWidth+gap:groupLeft):(verticalReading?availableWidth-margin-previousWidth:margin);
+            const centerY=stageHeight*.48;
+            positions[metrics.length-1]={x:currentLeft-newest.inkLeft,y:centerY-newest.inkCenterY};
+            positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:centerY-previous.inkCenterY};
+          }else{
+            const fits=currentHeight+previousHeight+gap<=availableHeight;
+            const groupHeight=currentHeight+previousHeight+gap;
+            const groupTop=(stageHeight-groupHeight)/2;
+            const previousTop=fits?groupTop:margin;
+            const currentTop=fits?groupTop+previousHeight+gap:stageHeight-margin-currentHeight;
+            positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:previousTop-previous.inkTop};
+            positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:currentTop-newest.inkTop};
+          }
+        }
+      }
+
+      metrics.forEach((item,i)=>{
+        if(i!==metrics.length-1)return;
+        if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;
+        const position=this._framePosition(item.scene);
+        if(position.preset==='auto')return;
+        const margin=stageWidth<=600?10:16;
+        positions[i]=this._customPositionTransform(item,position,stageWidth,stageHeight,margin);
+      });
+
+      if(currentFrame&&metrics.length>1){
+        const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
+        previous.node.style.zIndex='20';newest.node.style.zIndex='30';
+        if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){
+          const availableWidth=Math.max(1,newest.node.clientWidth||newest.node.getBoundingClientRect().width/this._layoutScale()),margin=stageWidth<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
+          if(flow==='horizontal'){
+            const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;
+            positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};
+          }else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};
+        }
+      }
 
       return metrics.map((item, i) => ({ ...item, ...positions[i] }));
     }
@@ -3374,9 +3837,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const stageWidth=Math.max(1,this.els.stage.clientWidth||stageRect.width),stageHeight=Math.max(1,this.els.stage.clientHeight||stageRect.height);
       const focusY = stageHeight * (stageWidth <= 520 ? .48 : .46);
       return nodes.map((node, i) => {
-        const geometry=this._measureSceneGeometry(node,stageRect),position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
-        let x=0,y=focusY-Math.max(1,node.getBoundingClientRect().height)/2;
-        if(position.preset!=='auto')({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,global.innerWidth<=600?10:16));
+        const geometry=this._measureSceneGeometry(node,stageRect);
+        const position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
+        let x=0,y=focusY-geometry.height/2;
+        if(position.preset!=='auto'){
+          ({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,stageWidth<=600?10:16));
+        }
         node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
         node.style.zIndex = String(20 + i);
         return { node, scene: sceneEntries[i]?.scene, x, y, height: geometry.height };
@@ -3507,7 +3973,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const scenes = this.document.scenes;
       const active = scenes[this.index];
-      const display = active?.presentation?.display || 'stack';
+      const display = this._hasCredits(active?.presentation) ? 'solo' : active?.presentation?.display || 'stack';
       const visible = this._visibleScenes(display);
       const isForwardStack = this._audioRenderMode === 'advance' && (display === 'stack' || display === 'overlay');
 
@@ -3685,14 +4151,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const previous = this.backgroundState;
       const sceneBg = this.document?.scenes?.[index]?.presentation?.background || null;
       const transition = sceneBg?.transition || next.transition || 'fade';
+      const exit = sceneBg?.exit || 'auto';
       const srcChanged = !previous || previous.src !== next.src;
+      const nextMotion = next.motion;
+      const carryMotion = nextMotion?.continuity === 'carry'
+        && previous?.motion?.type === nextMotion?.type
+        && this.backgroundMotionEpoch > 0;
+      const motionPhase = carryMotion ? Math.max(0, performance.now() - this.backgroundMotionEpoch) : 0;
+      if (nextMotion?.type && nextMotion.type !== 'none' && !carryMotion) this.backgroundMotionEpoch = performance.now();
+      if (!nextMotion || nextMotion.type === 'none') this.backgroundMotionEpoch = 0;
 
       this._resetBackgroundRuntime();
       this.backgroundState = next;
-      this.host.classList.toggle('sp-has-background', Boolean(next.src));
+      const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
+      // Keep the outgoing layer drawable until its exit animation completes.
+      this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
 
-      if (srcChanged) this._swapBackground(next, transition);
-      else this._styleCurrentBackground(next, Boolean(sceneBg?.motion));
+      if (srcChanged) this._swapBackground(next, transition, exit, motionPhase, leavingBackground);
+      else this._styleCurrentBackground(next, Boolean(sceneBg?.motion), motionPhase);
 
       this._applyBackgroundOverlays(next);
       this._runBackgroundReveal(sceneBg?.reveal, transition);
@@ -3707,18 +4183,19 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return this.backgroundLayerIndex === 0 ? this.els.bgB : this.els.bgA;
     }
 
-    _swapBackground(state, transition) {
+    _swapBackground(state, transition, exit = 'auto', motionPhase = 0, clearHostAfter = false) {
       const current = this._currentBackgroundLayer();
       const incoming = this._nextBackgroundLayer();
       const transitionDuration=Math.min(10000,Math.max(0,asNumber(state.transitionDuration,700)));
       incoming.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
       current.style.setProperty('--sp-bg-transition-duration',`${transitionDuration}ms`);
-      this._prepareBackgroundLayer(incoming, state);
+      this._prepareBackgroundLayer(incoming, state, motionPhase);
 
       const mode = ['fade','cut','flash','glitch'].includes(transition) ? transition : 'fade';
       this.host.dataset.bgTransition = mode;
       incoming.classList.add('is-current');
       current.classList.remove('is-current');
+      this._applyBackgroundExit(current, exit, transitionDuration);
 
       if (mode === 'cut') {
         incoming.classList.add('sp-bg-cut');
@@ -3734,14 +4211,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
 
       this.backgroundLayerIndex = this.backgroundLayerIndex === 0 ? 1 : 0;
-      this._styleCurrentBackground(state, true);
+      this._styleCurrentBackground(state, true, motionPhase);
+      const hasCustomExit=!['auto','fade'].includes(exit);
       this._backgroundTimeout(() => {
         current.style.backgroundImage = '';
         current.className = current.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
-      }, mode === 'cut' ? 20 : transitionDuration+120);
+        if(clearHostAfter) this.host.classList.remove('sp-has-background');
+      }, mode === 'cut' && !hasCustomExit ? 20 : transitionDuration+120);
     }
 
-    _prepareBackgroundLayer(layer, state) {
+    _prepareBackgroundLayer(layer, state, motionPhase = 0) {
+      layer.getAnimations?.().forEach(animation=>animation.cancel());
       layer.className = layer.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
       layer.style.backgroundImage = state.src ? `url("${String(state.src).replace(/"/g, '\"')}")` : 'none';
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
@@ -3754,10 +4234,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (monochrome > 0) filters.push(`grayscale(${monochrome})`);
         layer.style.filter = filters.join(' ');
       }
-      this._applyBackgroundMotion(layer, state.motion);
+      this._applyBackgroundMotion(layer, state.motion, motionPhase);
     }
 
-    _styleCurrentBackground(state, resetMotion) {
+    _styleCurrentBackground(state, resetMotion, motionPhase = 0) {
       const layer = this._currentBackgroundLayer();
       if (!layer) return;
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
@@ -3770,26 +4250,53 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (monochrome > 0) filters.push(`grayscale(${monochrome})`);
         layer.style.filter = filters.join(' ');
       }
-      if (resetMotion) this._applyBackgroundMotion(layer, state.motion);
+      if (resetMotion) this._applyBackgroundMotion(layer, state.motion, motionPhase);
     }
 
-    _applyBackgroundMotion(layer, motion) {
-      layer.classList.remove('sp-motion-parallax','sp-motion-breath','sp-motion-slowZoom','sp-motion-panLeft','sp-motion-panRight','sp-motion-panUp','sp-motion-panDown');
+    _applyBackgroundExit(layer, exit, duration) {
+      const type=['auto','fade','dark','light','blur','zoomOut','zoomIn','afterimage'].includes(exit)?exit:'auto';
+      if(type==='auto'||type==='fade'||duration<=0||!layer?.animate)return;
+      const computed=getComputedStyle(layer);
+      const transform=computed.transform==='none'?'scale(1.001)':computed.transform;
+      const filter=computed.filter==='none'?'':computed.filter;
+      const addFilter=value=>`${filter} ${value}`.trim();
+      let frames=[{opacity:computed.opacity||1,transform,filter:filter||'none'},{opacity:0,transform,filter:filter||'none'}];
+      if(type==='dark')frames[1]={opacity:0,transform,filter:addFilter('brightness(0)')};
+      if(type==='light')frames[1]={opacity:0,transform:`${transform} scale(1.015)`,filter:addFilter('brightness(2) blur(2px)')};
+      if(type==='blur')frames[1]={opacity:0,transform:`${transform} scale(1.025)`,filter:addFilter('blur(14px)')};
+      if(type==='zoomOut')frames[1]={opacity:0,transform:`${transform} scale(.94)`,filter:addFilter('blur(1px)')};
+      if(type==='zoomIn')frames[1]={opacity:0,transform:`${transform} scale(1.09)`,filter:addFilter('blur(1px)')};
+      if(type==='afterimage')frames=[
+        {offset:0,opacity:computed.opacity||1,transform,filter:filter||'none'},
+        {offset:.22,opacity:.92,transform:`${transform} scale(1.008)`,filter:addFilter('brightness(1.75) contrast(1.15)')},
+        {offset:1,opacity:0,transform:`${transform} scale(1.025)`,filter:addFilter('brightness(.55) blur(5px)')}
+      ];
+      layer.animate(frames,{duration:Math.max(120,duration),easing:'cubic-bezier(.37,0,.63,1)',fill:'forwards'});
+    }
+
+    _applyBackgroundMotion(layer, motion, motionPhase = 0) {
+      layer.classList.remove('sp-motion-parallax','sp-motion-breath','sp-motion-slowZoom','sp-motion-zoomOut','sp-motion-panLeft','sp-motion-panRight','sp-motion-panUp','sp-motion-panDown','sp-motion-panUpLeft','sp-motion-panUpRight','sp-motion-panDownLeft','sp-motion-panDownRight');
       layer.style.removeProperty('--sp-bg-duration');
       layer.style.removeProperty('--sp-bg-scale-from');
       layer.style.removeProperty('--sp-bg-scale-to');
       layer.style.removeProperty('--sp-bg-pan');
+      layer.style.removeProperty('--sp-bg-delay');
       if (!motion || !motion.type || motion.type === 'none') return;
-      const type = ['parallax','breath','slowZoom','panLeft','panRight','panUp','panDown'].includes(motion.type) ? motion.type : null;
+      const type = ['parallax','breath','slowZoom','zoomOut','panLeft','panRight','panUp','panDown','panUpLeft','panUpRight','panDownLeft','panDownRight'].includes(motion.type) ? motion.type : null;
       if (!type) return;
       layer.classList.add(`sp-motion-${type}`);
       const defaultDuration = type === 'breath' ? 4200 : 6500;
-      const defaultFrom = type === 'slowZoom' ? 1.0 : 1.06;
-      const defaultTo = type === 'slowZoom' ? 1.14 : (type === 'breath' ? 1.11 : 1.08);
-      layer.style.setProperty('--sp-bg-duration', `${Math.max(250, asNumber(motion.duration, defaultDuration))}ms`);
+      const defaultFrom = type === 'slowZoom' ? 1.0 : (type === 'zoomOut' ? 1.08 : 1.06);
+      const defaultTo = type === 'slowZoom' ? 1.14 : (type === 'zoomOut' ? 1 : (type === 'breath' ? 1.11 : 1.08));
+      const duration=Math.max(250,asNumber(motion.duration,defaultDuration));
+      layer.style.setProperty('--sp-bg-duration', `${duration}ms`);
       layer.style.setProperty('--sp-bg-scale-from', String(asNumber(motion.scaleFrom, defaultFrom)));
       layer.style.setProperty('--sp-bg-scale-to', String(asNumber(motion.scaleTo, defaultTo)));
       layer.style.setProperty('--sp-bg-pan', `${asNumber(motion.pan, 9)}%`);
+      if(motionPhase>0){
+        const phase=(type==='breath'||type==='parallax')?motionPhase%duration:Math.min(motionPhase,duration);
+        layer.style.setProperty('--sp-bg-delay',`${-phase}ms`);
+      }
     }
 
     _applyBackgroundOverlays(state) {
@@ -3797,8 +4304,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const sceneTone = state?.tone === 'light' ? 'light' : (state?.tone === 'dark' ? 'dark' : null);
       const useLightWash = sceneTone ? sceneTone === 'light' : isCinemaLight;
       const themeDefaultDim = this.document?.theme === 'cinema' ? (useLightWash ? 0.72 : 0.34) : (useLightWash ? 0.64 : 0);
-      const dim = clamp(asNumber(state.dim, themeDefaultDim), 0, 1);
-      // A Scene may explicitly choose a light paper wash or a dark veil.
+      // Rich Text Player v0.9: the veil belongs to an actual background image.
+      // Editor refreshes call this path even on paper-only Scenes; applying the
+      // cinema theme default there made the whole preview suddenly dark after
+      // changing font/size/background/Scene image/etc.
+      const hasBackground = Boolean(state?.src);
+      const dim = hasBackground ? clamp(asNumber(state.dim, themeDefaultDim), 0, 1) : 0;
       this.els.veil.style.background = useLightWash
         ? `rgba(250,247,240,${dim})`
         : `rgba(0,0,0,${dim})`;
@@ -3840,7 +4351,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
     }
 
-    _openSceneImage(src, alt='') {
+    _openSceneImage(src, alt='', options={}) {
       if (!src) return;
       let viewer = document.querySelector('.sp-scene-image-viewer');
       if (!viewer) {
@@ -3890,13 +4401,51 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           touchStartTime: 0,
           lastTapTime: 0,
           lastTapX: 0,
-          lastTapY: 0
+          lastTapY: 0,
+          multiTouch: false
         };
 
         const viewportSize = () => ({
           w: Math.max(1, frame.clientWidth),
           h: Math.max(1, frame.clientHeight)
         });
+
+        // V106 — keep authored VIEW POINT framing and reader fullscreen freedom separate.
+        // VIEW POINT starts in the V104 image-bounded viewport so portrait manga
+        // keeps the same composition on phone / tablet / PC. Plain fullscreen uses
+        // the whole device viewport from the start.
+        const fitViewerFrame = () => {
+          const host = viewer.getBoundingClientRect();
+          const nw = Math.max(1, img.naturalWidth || 1);
+          const nh = Math.max(1, img.naturalHeight || 1);
+          const availW = Math.max(1, host.width - 28);
+          const availH = Math.max(1, host.height - 36);
+          const fit = Math.min(availW / nw, availH / nh);
+          img.style.width = `${Math.max(1,nw*fit)}px`;
+          img.style.height = `${Math.max(1,nh*fit)}px`;
+          if (frame._sceneImageMode === 'viewPoint') {
+            frame.style.setProperty('--sp-image-frame-w', `${Math.max(1,nw*fit)}px`);
+            frame.style.setProperty('--sp-image-frame-h', `${Math.max(1,nh*fit)}px`);
+            frame.classList.add('is-image-bounded');
+          } else {
+            frame.classList.remove('is-image-bounded');
+            frame.style.removeProperty('--sp-image-frame-w');
+            frame.style.removeProperty('--sp-image-frame-h');
+          }
+        };
+        frame._fitSceneImageFrame = fitViewerFrame;
+        const unlockViewPointCanvas = () => {
+          if (frame._sceneImageMode !== 'viewPoint') return;
+          // V108 — the moment the reader manually zooms/pans, authored VIEW POINT
+          // playback yields for the rest of this open viewer. Reader inspection must
+          // never snap back to an authored point after a drag.
+          frame._onViewPointManualControl?.();
+          frame._sceneImageMode = 'viewPointFree';
+          frame.classList.remove('is-image-bounded');
+          frame.style.removeProperty('--sp-image-frame-w');
+          frame.style.removeProperty('--sp-image-frame-h');
+        };
+        frame._unlockViewPointCanvas = unlockViewPointCanvas;
 
         const panBounds = () => {
           const vp = viewportSize();
@@ -3970,7 +4519,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         };
 
         frame.addEventListener('touchstart',(event)=>{
+          // V109 — the close control must always win over zoom/pan gestures.
+          if(event.target.closest?.('.sp-scene-image-viewer-close')) return;
           if(event.touches.length===2){
+            viewState.multiTouch=true;
+            frame._unlockViewPointCanvas?.();
             event.preventDefault();
             const c=center(event.touches[0],event.touches[1]);
             viewState.startDistance=distance(event.touches[0],event.touches[1]);
@@ -3982,12 +4535,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             viewState.dragging=false;
             viewState.moved=true;
           }else if(event.touches.length===1){
+            if(!viewState.multiTouch)viewState.multiTouch=false;
             const t=event.touches[0];
             viewState.touchStartX=t.clientX;
             viewState.touchStartY=t.clientY;
             viewState.touchStartTime=performance.now();
             viewState.moved=false;
             if(viewState.scale>1.01){
+              frame._unlockViewPointCanvas?.();
               event.preventDefault();
               viewState.dragging=true;
               viewState.lastX=t.clientX;
@@ -4013,7 +4568,38 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const t=event.touches[0];
             const totalDx=t.clientX-viewState.touchStartX;
             const totalDy=t.clientY-viewState.touchStartY;
-            if(Math.hypot(totalDx,totalDy)>6)viewState.moved=true;
+            if(Math.hypot(totalDx,totalDy)>10)viewState.moved=true;
+
+            // Follow the finger while turning a page. The current sheet slides
+            // away and exposes the adjacent page underneath; release decides
+            // whether the turn completes or springs back.
+            const activePages=viewer._scenePages||[];
+            const activeIndex=viewer._scenePageIndex||0;
+            if(viewState.scale<=1.01 && activePages.length>1 && Math.abs(totalDx)>12 && Math.abs(totalDx)>Math.abs(totalDy)*1.15){
+              const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
+              const advances=direction==='rtl'?totalDx>0:totalDx<0;
+              const target=activeIndex+(advances?1:-1);
+              if(target>=0&&target<activePages.length){
+                if(!viewState.pageDrag){
+                  const underlay=document.createElement('img');
+                  underlay.className='sp-scene-image-page-follow-underlay';
+                  underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
+                  const rect=img.getBoundingClientRect(),frameRect=frame.getBoundingClientRect();
+                  underlay.style.position='absolute';underlay.style.left=`${rect.left-frameRect.left}px`;underlay.style.top=`${rect.top-frameRect.top}px`;
+                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';
+                  underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
+                  frame.insertBefore(underlay,img);img.style.zIndex='2';img.style.willChange='translate';
+                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);
+                  viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
+                }
+                const drag=viewState.pageDrag;
+                if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
+                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));
+                img.style.translate=`${dx}px 0`;
+                drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;
+                event.preventDefault();
+              }
+            }
 
             if(viewState.scale>1.01){
               event.preventDefault();
@@ -4038,10 +4624,42 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
             viewState.dragging=false;
 
+            // Horizontal swipes turn pages only at fit scale; zoomed manga remains pannable.
+            const activePages=viewer._scenePages||[];
+            const activeIndex=viewer._scenePageIndex||0;
+            const draggedPage=viewState.pageDrag;
+            if(draggedPage){
+              const dx=x-viewState.touchStartX;
+              const commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32)) && Math.abs(dx)>Math.abs(vertical)*1.2 && duration<900;
+              draggedPage.underlay.remove();viewState.pageDrag=null;img.style.willChange='';img.style.zIndex='';
+              if(commit){
+                const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
+                const advances=direction==='rtl'?dx>0:dx<0;
+                const target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
+                if(target!==activeIndex){
+                  if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}
+                  else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}
+                }else img.style.translate='';
+              }else{
+                img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
+              }
+              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
+              viewState.multiTouch=false;return;
+            }
+            if(!viewState.multiTouch && viewState.scale<=1.01 && activePages.length>1 && Math.abs(x-viewState.touchStartX)>78 && Math.abs(x-viewState.touchStartX)>Math.abs(vertical)*1.2 && duration<700){
+              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
+              const dx=x-viewState.touchStartX;
+              const advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
+              const requested=activeIndex+(advances?1:-1);
+              const targetPage=Math.max(0,Math.min(activePages.length-1,requested));
+              if(targetPage!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange)viewer._sceneOnPageChange(targetPage);else{viewer._sceneShowPage?.(targetPage);viewer._sceneOnPageChange?.(targetPage);}}
+              viewState.multiTouch=false;
+              return;
+            }
             // Downward flick closes only at 1×, so it never fights with image panning.
             if(viewState.scale<=1.01 && !wasMoved && false){
               // reserved
-            } else if(viewState.scale<=1.01 && vertical>90 && duration<700){
+            } else if(!viewState.multiTouch && viewState.scale<=1.01 && vertical>100 && vertical>Math.abs(x-viewState.touchStartX)*1.3 && duration<650){
               const closeButton=viewer.querySelector('.sp-scene-image-viewer-close');
               closeButton?.click();
               return;
@@ -4051,8 +4669,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(!wasMoved && duration<320){
               const dt=now-viewState.lastTapTime;
               const near=Math.hypot(x-viewState.lastTapX,y-viewState.lastTapY)<42;
-              if(dt<340 && near){
-                event.preventDefault();
+              if(dt<340 && near && (event.target===img||event.target.closest?.('.sp-scene-image-viewer-img'))){
+                event.preventDefault();clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+480;
+                frame._unlockViewPointCanvas?.();
                 if(viewState.scale>1.01) resetView({animate:true});
                 else zoomAt(x,y,2.5,{animate:true});
                 viewState.lastTapTime=0;
@@ -4061,9 +4680,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               viewState.lastTapTime=now;
               viewState.lastTapX=x;
               viewState.lastTapY=y;
+              if(frame.classList.contains('is-view-rec-playing')){
+                clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+420;
+                frame._viewPointTapTimer=setTimeout(()=>{if(!viewer.hidden)frame._viewPointAdvanceTouch?.();},360);
+              }
             }
 
-            if(viewState.scale<=1.01) resetView();
+            // VIEW POINT owns the image transform. Resetting the manual zoom state
+            // on iPhone touchend briefly writes FIT between two authored points.
+            if(viewState.scale<=1.01 && !frame.classList.contains('is-view-rec-playing')) resetView();
+            viewState.multiTouch=false;
           }else if(event.touches.length===1 && viewState.scale>1.01){
             viewState.dragging=true;
             viewState.lastX=event.touches[0].clientX;
@@ -4073,6 +4699,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         // Desktop convenience: wheel to zoom, drag to pan while zoomed.
         frame.addEventListener('wheel',(event)=>{
+          if(event.target.closest?.('.sp-scene-image-viewer-close')) return;
+          frame._unlockViewPointCanvas?.();
           event.preventDefault();
           const next=viewState.scale * (event.deltaY<0 ? 1.12 : 0.89);
           zoomAt(event.clientX,event.clientY,next);
@@ -4080,7 +4708,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         },{passive:false});
 
         frame.addEventListener('pointerdown',(event)=>{
+          // Do not capture/prevent the pointer that belongs to the × button.
+          if(event.target.closest?.('.sp-scene-image-viewer-close')) return;
           if(event.pointerType==='touch' || viewState.scale<=1.01) return;
+          frame._unlockViewPointCanvas?.();
           viewState.dragging=true;
           viewState.moved=false;
           viewState.lastX=event.clientX;
@@ -4106,9 +4737,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         frame.addEventListener('pointerup',endPointer);
         frame.addEventListener('pointercancel',endPointer);
 
-        img.addEventListener('dblclick',(event)=>{
+        // V109 — listen on the fullscreen gesture canvas, not only the transformed image.
+        // After the first desktop zoom the image can move under the pointer; keeping dblclick
+        // on IMG made the second double-click unreliable. The frame is stable.
+        frame.addEventListener('dblclick',(event)=>{
+          if(event.target.closest?.('.sp-scene-image-viewer-close')) return;
+          frame._unlockViewPointCanvas?.();
           event.preventDefault();
           event.stopPropagation();
+          event.stopImmediatePropagation?.();
           if(viewState.scale>1.01) resetView({animate:true});
           else zoomAt(event.clientX,event.clientY,2.5,{animate:true});
         });
@@ -4116,6 +4753,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // Tap empty black area to close at 1×. At zoom > 1 the same gesture is
         // reserved for panning, avoiding accidental dismissal.
         frame.addEventListener('click',(event)=>{
+          if(frame._sceneImageMode==='viewPoint'||frame.classList.contains('is-view-rec-playing'))return;
           if(event.target===frame && viewState.scale<=1.01){
             event.preventDefault();
             event.stopPropagation();
@@ -4123,50 +4761,432 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           }
         });
 
-        window.addEventListener('resize',()=>{ if(!viewer.hidden) applyView(); });
+        window.addEventListener('resize',()=>{
+          // V98: iPhone changes the visual viewport when the fullscreen viewer opens.
+          // The manual viewer reset must not overwrite authored VIEW REC transforms.
+          if(!viewer.hidden && !frame.classList.contains('is-view-rec-playing')) applyView();
+        });
 
-        frame._sceneImageReset = resetView;
+        frame._sceneImageReset = () => {
+          resetView();
+          viewState.lastTapTime=0;viewState.lastTapX=0;viewState.lastTapY=0;
+        };
 
-        const pageControls=document.createElement('div');pageControls.className='sp-scene-image-viewer-pages';pageControls.hidden=true;
+        const pageControls = document.createElement('div');
+        pageControls.className='sp-scene-image-viewer-pages';
+        pageControls.hidden=true;
         const prevPage=document.createElement('button');prevPage.type='button';prevPage.className='sp-scene-image-viewer-page-prev';prevPage.setAttribute('aria-label','Previous page');prevPage.textContent='‹';
         const pageCount=document.createElement('span');pageCount.className='sp-scene-image-viewer-page-count';pageCount.setAttribute('aria-live','polite');
-        const nextPage=document.createElement('button');nextPage.type='button';nextPage.className='sp-scene-image-viewer-page-next';nextPage.setAttribute('aria-label','Next page');nextPage.textContent='›';pageControls.append(prevPage,pageCount,nextPage);
-        frame.append(close,img);viewer.append(shade,frame,pageControls);
+        const nextPage=document.createElement('button');nextPage.type='button';nextPage.className='sp-scene-image-viewer-page-next';nextPage.setAttribute('aria-label','Next page');nextPage.textContent='›';
+        pageControls.append(prevPage,pageCount,nextPage);
+        frame.append(img);
+        viewer.append(shade,frame,close,pageControls);
         document.body.appendChild(viewer);
 
-        const shut = (event) => {
+        // V110 — object continuity transition. The fullscreen viewer still owns all
+        // V109 interaction logic; this only animates the boundary between the Scene
+        // object and the viewer so the image feels picked up / put back.
+        const sceneObjectRect = (sourceEl) => {
+          const media = sourceEl?.querySelector?.('.sp-scene-image-media') || sourceEl?.closest?.('.sp-scene-image-media') || sourceEl;
+          const sourceImg = media?.querySelector?.('img') || (media?.tagName === 'IMG' ? media : null);
+          if (!sourceImg?.isConnected) return null;
+          const r = sourceImg.getBoundingClientRect();
+          if (!r.width || !r.height) return null;
+          const raw = getComputedStyle(media || sourceImg).getPropertyValue('--sp-scene-image-rotation');
+          const rotation = Number.parseFloat(raw) || 0;
+          return {left:r.left,top:r.top,width:r.width,height:r.height,rotation,sourceImg};
+        };
+        const animateObjectBoundary = (from, to, {closing=false}={}) => {
+          if (!from || !to || matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return Promise.resolve();
+          const ghost = document.createElement('img');
+          ghost.className='sp-scene-image-transition-ghost';
+          ghost.src=img.currentSrc || img.src; ghost.alt='';
+          document.body.appendChild(ghost);
+          const key = r => ({left:`${r.left}px`,top:`${r.top}px`,width:`${r.width}px`,height:`${r.height}px`,transform:`rotate(${r.rotation||0}deg)`});
+          const anim=ghost.animate([key(from),key(to)],{duration:360,easing:'cubic-bezier(.22,.74,.18,1)',fill:'forwards'});
+          return anim.finished.catch(()=>{}).then(()=>ghost.remove());
+        };
+        viewer._sceneImageSourceEl = null;
+        viewer._sceneImageOpening = false;
+        viewer._sceneImageClosing = false;
+
+        const shut = async (event) => {
+          clearTimeout(frame._viewPointTapTimer);
+          frame._viewPointSuppressClickUntil=0;
+          frame?._viewRecCancel?.();
+          viewer._sceneOutgoingPage?.remove?.();viewer._sceneOutgoingPage=null;
           event?.preventDefault?.();
           event?.stopPropagation?.();
+          if (viewer._sceneImageClosing) return;
+          viewer._sceneImageClosing = true;
+          const source = sceneObjectRect(viewer._sceneImageCloseTargetEl || viewer._sceneImageSourceEl);
+          const current = img.getBoundingClientRect();
+          const from = current.width ? {left:current.left,top:current.top,width:current.width,height:current.height,rotation:0} : null;
+          if (from) {
+            viewer.classList.add('is-object-transitioning','is-object-closing');
+            img.style.visibility='hidden';
+            // Comic-start VIEW POINT intentionally opens without a pickup animation,
+            // but still returns to its Scene object. If no object exists, ease the
+            // image away so closing never feels like a hard cut.
+            const destination=source||{left:from.left+from.width*.04,top:from.top+from.height*.04,width:from.width*.92,height:from.height*.92,rotation:0};
+            await animateObjectBoundary(from,destination,{closing:true});
+          }
           viewer.hidden = true;
+          viewer.classList.remove('is-object-transitioning','is-object-closing');
+          img.style.visibility='';
+          viewer._sceneImageClosing = false;
           document.documentElement.classList.remove('sp-scene-image-open');
         };
         close.addEventListener('click',shut);
         document.addEventListener('keydown',(event)=>{
-          if(event.key==='Escape' && !viewer.hidden)shut(event);
+          if(viewer.hidden)return;
+          if(event.key==='Escape'){shut(event);return;}
+          if((event.key!=='ArrowLeft'&&event.key!=='ArrowRight')||frame._sceneImageMode==='viewPoint'||frame.classList.contains('is-view-rec-playing')||(viewer._scenePages||[]).length<2||event.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+          event.preventDefault();event.stopPropagation();
+          const target=Math.max(0,Math.min(viewer._scenePages.length-1,(viewer._scenePageIndex||0)+(event.key==='ArrowRight'?1:-1)));
+          if(target!==(viewer._scenePageIndex||0)){viewer._sceneShowPage?.(target);viewer._sceneOnPageChange?.(target);}
         });
       }
 
       const img = viewer.querySelector('.sp-scene-image-viewer-img');
       const frame = viewer.querySelector('.sp-scene-image-viewer-frame');
+      if (frame) frame._sceneImageMode = options?.mode === 'viewPoint' ? 'viewPoint' : 'fullscreen';
+      if(options?.mode==='viewPoint')img.style.visibility=options?.viewPointStartHidden?'hidden':'';
+      if(options?.mode!=='viewPoint')frame?._viewRecCancel?.();
       frame?._sceneImageReset?.();
-      const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&page.src);let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
-      const controls=viewer.querySelector('.sp-scene-image-viewer-pages');
-      const showPage=index=>{if(!pages.length)return;pageIndex=Math.max(0,Math.min(pages.length-1,index));const page=pages[pageIndex];img.src=page.src;img.alt=page.alt??alt??'';controls.hidden=pages.length<2;controls.querySelector('.sp-scene-image-viewer-page-count').textContent=`${pageIndex+1} / ${pages.length}`;controls.querySelector('.sp-scene-image-viewer-page-prev').disabled=pageIndex===0;controls.querySelector('.sp-scene-image-viewer-page-next').disabled=pageIndex===pages.length-1;};
-      controls.querySelector('.sp-scene-image-viewer-page-prev').onclick=e=>{e.stopPropagation();showPage(pageIndex-1);};controls.querySelector('.sp-scene-image-viewer-page-next').onclick=e=>{e.stopPropagation();showPage(pageIndex+1);};
-      if(pages.length)showPage(pageIndex);else{img.src=src;img.alt=alt||'';}
+      viewer._sceneImageSourceEl = options?.sourceEl || null;
+      viewer._sceneImageCloseTargetEl = options?.closeTargetEl || options?.sourceEl || null;
+      const openingSource = (()=>{
+        const el=viewer._sceneImageSourceEl;
+        const media=el?.querySelector?.('.sp-scene-image-media')||el?.closest?.('.sp-scene-image-media')||el;
+        const si=media?.querySelector?.('img')||(media?.tagName==='IMG'?media:null);
+        if(!si?.isConnected)return null; const r=si.getBoundingClientRect(); if(!r.width||!r.height)return null;
+        const rotation=Number.parseFloat(getComputedStyle(media||si).getPropertyValue('--sp-scene-image-rotation'))||0;
+        return {left:r.left,top:r.top,width:r.width,height:r.height,rotation};
+      })();
+      const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&typeof page.src==='string'&&page.src);
+      let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
+      viewer._scenePages=pages;
+      viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';
+      viewer._sceneOnPageChange=options?.onPageChange;
+      const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
+      const oldRestart=pageControls?.querySelector('.sp-image-reading-restart');if(oldRestart)oldRestart.hidden=!options?.readingResumeKey;
+      let pageLoadToken=0;
+      const showPage=(index)=>{
+        if(!pages.length)return;
+        const previousIndex=pageIndex;
+        pageIndex=Math.max(0,Math.min(pages.length-1,index));
+        viewer._scenePageIndex=pageIndex;
+        if(pageIndex!==previousIndex){clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=performance.now()+420;}
+        const page=pages[pageIndex];
+        const nextSrc=page.src;
+        const changed=img.getAttribute('src')!==nextSrc;
+        const animateTurn=options?.mode!=='viewPoint'&&changed&&!viewer.hidden&&(previousIndex!==pageIndex||options?.animatePageEntry===true);
+        const direction=(options?.direction==='rtl'?-1:1)*(pageIndex>=previousIndex?1:-1);
+        img.alt=page.alt??alt??'';
+        pageControls.hidden=pages.length<2;
+        pageControls.querySelector('.sp-scene-image-viewer-page-count').textContent=`${pageIndex+1} / ${pages.length}`;
+        pageControls.querySelector('.sp-scene-image-viewer-page-prev').disabled=pageIndex===0;
+        pageControls.querySelector('.sp-scene-image-viewer-page-next').disabled=pageIndex===pages.length-1;
+        frame?._sceneImageReset?.();
+        if(changed){
+          const token=++pageLoadToken;
+          viewer._sceneOutgoingPage?.remove?.();viewer._sceneOutgoingPage=null;
+          const outgoingShift=Number.parseFloat(img.style.translate)||0;
+          let outgoing=null;
+          if(animateTurn&&img.complete&&img.naturalWidth>0){
+            outgoing=img.cloneNode(false);outgoing.classList.add('sp-scene-image-page-outgoing');
+            outgoing.src=img.currentSrc||img.src;outgoing.alt='';outgoing.setAttribute('aria-hidden','true');
+            outgoing.style.position='absolute';outgoing.style.left='50%';outgoing.style.top='50%';outgoing.style.margin='0';
+            outgoing.style.width=`${Math.max(1,img.clientWidth)}px`;outgoing.style.height=`${Math.max(1,img.clientHeight)}px`;
+            outgoing.style.setProperty('max-width','none','important');outgoing.style.setProperty('max-height','none','important');
+            outgoing.style.transform=`translate(-50%,-50%) ${img.style.transform||'translate3d(0,0,0) scale(1)'}`;outgoing.style.zIndex='1';outgoing.style.pointerEvents='none';
+            frame.appendChild(outgoing);viewer._sceneOutgoingPage=outgoing;
+          }
+          const finishLoad=()=>{
+            if(token!==pageLoadToken)return;
+            frame?._fitSceneImageFrame?.();frame?._sceneImageReset?.();
+            if(animateTurn&&typeof img.animate==='function'){
+              const incomingOffset=Number.isFinite(viewer._scenePageIncomingOffset)?viewer._scenePageIncomingOffset:direction*34;viewer._scenePageIncomingOffset=null;
+              img.animate([{opacity:.58,translate:`${incomingOffset}px 0`},{opacity:1,translate:'0 0'}],{duration:270,easing:'cubic-bezier(.22,.74,.18,1)'});
+              if(outgoing){const animation=outgoing.animate([{opacity:1,translate:`${outgoingShift}px 0`},{opacity:0,translate:`${outgoingShift-direction*34}px 0`}],{duration:270,easing:'cubic-bezier(.22,.74,.18,1)'});animation.finished.catch(()=>{}).then(()=>{outgoing.remove();if(viewer._sceneOutgoingPage===outgoing)viewer._sceneOutgoingPage=null;});}
+            }else outgoing?.remove();
+          };
+          img.addEventListener('load',finishLoad,{once:true});
+          img.addEventListener('error',()=>{if(token===pageLoadToken){outgoing?.remove();if(viewer._sceneOutgoingPage===outgoing)viewer._sceneOutgoingPage=null;}},{once:true});
+          img.src=nextSrc;
+        }else frame?._fitSceneImageFrame?.();
+      };
+      viewer._scenePageIndex=pageIndex;
+      viewer._sceneShowPage=showPage;
+      const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
+      const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
+      if(pageControls)pageControls.hidden=pages.length<2;
+      if(prevButton)prevButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();if(frame._sceneImageMode==='viewPoint'&&options?.onPageChange)options.onPageChange(Math.max(0,pageIndex-1));else{showPage(pageIndex-1);options?.onPageChange?.(pageIndex);}};
+      if(nextButton)nextButton.onclick=(event)=>{event.preventDefault();event.stopPropagation();if(frame._sceneImageMode==='viewPoint'&&options?.onPageChange)options.onPageChange(Math.min(pages.length-1,pageIndex+1));else{showPage(pageIndex+1);options?.onPageChange?.(pageIndex);}};
+      if(pages.length)showPage(pageIndex);else img.src = src;
+        const syncBoundedFrame=()=>{frame?._fitSceneImageFrame?.();frame?._sceneImageReset?.();};
+        if(img.complete&&img.naturalWidth>0)requestAnimationFrame(syncBoundedFrame);
+        else img.addEventListener('load',()=>requestAnimationFrame(syncBoundedFrame),{once:true});
+        if('ResizeObserver' in window){
+          const ro=new ResizeObserver(()=>{if(!viewer.hidden&&img.naturalWidth>0)frame?._fitSceneImageFrame?.();});
+          ro.observe(viewer);viewer._imageBoundedRO?.disconnect?.();viewer._imageBoundedRO=ro;
+        }
+      if(!pages.length)img.alt = alt || '';
       viewer.hidden = false;
       document.documentElement.classList.add('sp-scene-image-open');
-      viewer.querySelector('.sp-scene-image-viewer-close')?.focus({preventScroll:true});
+      if (openingSource) {
+        viewer.classList.add('is-object-transitioning','is-object-opening');
+        img.style.visibility='hidden';
+        const runOpening=()=>requestAnimationFrame(()=>requestAnimationFrame(async()=>{
+          frame?._fitSceneImageFrame?.();
+          const r=img.getBoundingClientRect();
+          const target=r.width?{left:r.left,top:r.top,width:r.width,height:r.height,rotation:0}:null;
+          if(target){
+            const ghost=document.createElement('img'); ghost.className='sp-scene-image-transition-ghost'; ghost.src=img.currentSrc||img.src; ghost.alt=''; document.body.appendChild(ghost);
+            const key=x=>({left:`${x.left}px`,top:`${x.top}px`,width:`${x.width}px`,height:`${x.height}px`,transform:`rotate(${x.rotation||0}deg)`});
+            const a=ghost.animate([key(openingSource),key(target)],{duration:360,easing:'cubic-bezier(.22,.74,.18,1)',fill:'forwards'});
+            await a.finished.catch(()=>{}); ghost.remove();
+          }
+          img.style.visibility=''; viewer.classList.remove('is-object-transitioning','is-object-opening');
+        }));
+        if(img.complete&&img.naturalWidth>0)runOpening(); else img.addEventListener('load',runOpening,{once:true});
+      }
+      // V116 — VIEW POINT must not leave keyboard focus on the × button.
+      // Otherwise Enter is also the button's native activation key and can close
+      // the viewer independently of VIEW POINT navigation.
+      const focusClose = viewer.querySelector('.sp-scene-image-viewer-close');
+      if (options?.mode === 'viewPoint' && frame) {
+        frame.tabIndex = -1;
+        frame.focus({preventScroll:true});
+      } else {
+        focusClose?.focus({preventScroll:true});
+      }
+    }
+
+    // Phase 6 / V99 — tap-driven VIEW POINT playback.
+    // The author chooses WHERE to look; the reader chooses WHEN to advance.
+    _openSceneImageViewRec(image, sourceEl=null) {
+      // Hold the current authored camera while the next sheet loads.
+      const oldViewer=document.querySelector('.sp-scene-image-viewer');
+      const oldFrame=oldViewer?.querySelector('.sp-scene-image-viewer-frame');
+      const oldImg=oldViewer?.querySelector('.sp-scene-image-viewer-img');
+      const previousPage=Number(oldViewer?._scenePageIndex)||0;
+      let pageGhost=null;
+      oldViewer?._viewPointPageGhost?.remove?.();
+      if(oldViewer&&!oldViewer.hidden&&oldImg?.naturalWidth&&oldImg.getAttribute('src')!==image?.src){
+        const box=oldFrame.getBoundingClientRect();
+        pageGhost=document.createElement('div');pageGhost.className='sp-viewpoint-page-handoff';
+        Object.assign(pageGhost.style,{position:'fixed',left:`${box.left}px`,top:`${box.top}px`,width:`${box.width}px`,height:`${box.height}px`,overflow:'hidden',pointerEvents:'none',zIndex:'100002',background:getComputedStyle(oldViewer).backgroundColor});
+        const old=oldImg.cloneNode(false);
+        Object.assign(old.style,{position:'absolute',left:'50%',top:'50%',width:`${oldImg.clientWidth}px`,height:`${oldImg.clientHeight}px`,margin:'0',maxWidth:'none',maxHeight:'none',visibility:'visible',transform:`translate(-50%,-50%) ${getComputedStyle(oldImg).transform}`,translate:'0 0'});
+        pageGhost.append(old);document.body.append(pageGhost);oldViewer._viewPointPageGhost=pageGhost;
+      }
+      const handoffGhost=pageGhost;
+      const pointSet=image?.viewPoints||image?.viewRec||null;
+      const rawPoints = Array.isArray(pointSet?.points) ? pointSet.points : [];
+      if (!image?.src || rawPoints.length < 1) {
+        if (image?.src) this._openSceneImage(image.src, image.alt || '', {sourceEl});
+        return;
+      }
+
+      const fallbackPageChange=(pageIndex)=>{
+        const pages=Array.isArray(image.pages)?image.pages:[];
+        const page=pages[pageIndex];if(!page?.src)return;
+        const pagePoints=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
+        if((pagePoints?.points||[]).length){
+          this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
+        }else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
+      };
+      const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
+      const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0||Number(image.resumePoint)>0||!!pageGhost;
+      this._openSceneImage(image.src, image.alt || '', {mode:'viewPoint', sourceEl,closeTargetEl:image.closeTargetEl||sourceEl,pages:image.pages,pageIndex:image.pageIndex,onPageChange,animatePageEntry:false,viewPointStartHidden:startAtAuthoredPoint,readingResumeKey:image.readingResumeKey,direction:image.pageDirection||'ltr'});
+      const viewer = document.querySelector('.sp-scene-image-viewer');
+      const frame = viewer?.querySelector('.sp-scene-image-viewer-frame');
+      const img = viewer?.querySelector('.sp-scene-image-viewer-img');
+      if (!viewer || !frame || !img) return;
+      if (frame._viewRecCancel) frame._viewRecCancel();
+
+      const sourceSpace=pointSet?.coordinateSpace==='source';
+      const points = rawPoints.map(p=>{
+        if(sourceSpace){
+          if(p?.type==='fit')return{type:'fit'};
+          if(p?.rect){
+            const r=p.rect;return{type:'rect',x:Math.max(0,Math.min(.99,Number(r.x)||0)),y:Math.max(0,Math.min(.99,Number(r.y)||0)),width:Math.max(.01,Math.min(1,Number(r.width)||1)),height:Math.max(.01,Math.min(1,Number(r.height)||1)),fit:p.fit==='contain'?'contain':undefined};
+          }
+          return{type:'focus',cx:Number.isFinite(Number(p?.cx))?Number(p.cx):.5,cy:Number.isFinite(Number(p?.cy))?Number(p.cy):.5,width:Math.max(.01,Math.min(1,Number(p?.width)||1)),height:Math.max(.01,Math.min(1,Number(p?.height)||1)),occupancy:Number.isFinite(Number(p?.occupancy))?Math.max(1,Math.min(8,Number(p.occupancy))):null};
+        }
+        // V99 compatibility: old device-relative point.
+        return{type:'legacy',cx:Number.isFinite(Number(p?.cx))?Number(p.cx):.5,cy:Number.isFinite(Number(p?.cy))?Number(p.cy):.5,scale:Math.max(1,Math.min(5,Number(p?.scale)||1))};
+      }).map((point,i)=>({...point,transitionMs:Number.isFinite(Number(rawPoints[i]?.transitionMs))?Math.max(100,Math.min(30000,Number(rawPoints[i].transitionMs))):420,transitionCurve:['linear','ease-in','ease-in-out'].includes(rawPoints[i]?.transitionCurve)?rawPoints[i].transitionCurve:'ease-out'}));
+      // V114 — keep the opening/first-point handoff separate from normal advancement.
+      // V112 assigned index=0 before point 1 had actually settled. That allowed the
+      // opening Enter/click to be interpreted as an advance/close. `initializing`
+      // blocks progression until point 1 is visibly in place.
+      let index=-1, raf=0, cancelled=false, moving=false, initializing=true;
+
+      const coords=(gaze)=>{
+        const bw=Math.max(1,img.clientWidth),bh=Math.max(1,img.clientHeight);
+        if(gaze.type==='fit')return{x:0,y:0,scale:1};
+        let scale=gaze.scale||1;
+        if(gaze.type==='rect'){
+          // V102 — source-rectangle playback. A focus view may never expose
+          // outside-image black space: zoom enough to cover this viewer, then
+          // center the authored source rectangle and clamp to the source edges.
+          const rw=Math.max(.01,gaze.width),rh=Math.max(.01,gaze.height);
+          // V107 — authored VIEW POINT stays in the bounded image viewport.
+          // Resolve the recorded source rectangle against that viewport exactly as V104 did.
+          // The V105 source-only scale (1/rw, 1/rh) over-amplified horizontal travel on
+          // portrait manga, especially on wide desktop screens.
+          let panW=bw,panH=bh;
+          let rectScale;
+          if(gaze.fit==='contain'){
+            // Use the image's actual object-fit:contain footprint. This lets a wide
+            // panel fill the viewport as much as possible while staying entirely visible.
+            const fit=Math.min(frame.clientWidth/Math.max(1,img.naturalWidth||bw),frame.clientHeight/Math.max(1,img.naturalHeight||bh));
+            panW=Math.max(1,(img.naturalWidth||bw)*fit);panH=Math.max(1,(img.naturalHeight||bh)*fit);
+            rectScale=Math.min(frame.clientWidth/(panW*rw),frame.clientHeight/(panH*rh));
+          }else{
+            rectScale=Math.max(1,Math.max(frame.clientWidth/(bw*rw),frame.clientHeight/(bh*rh)));
+          }
+          scale=Math.max(.05,Math.min(12,rectScale));
+          const cx=Math.max(0,Math.min(1,gaze.x+rw/2)),cy=Math.max(0,Math.min(1,gaze.y+rh/2));
+          const rawX=(.5-cx)*panW*scale,rawY=(.5-cy)*panH*scale;
+          const maxX=Math.max(0,(panW*scale-frame.clientWidth)/2),maxY=Math.max(0,(panH*scale-frame.clientHeight)/2);
+          return{x:Math.max(-maxX,Math.min(maxX,rawX)),y:Math.max(-maxY,Math.min(maxY,rawY)),scale};
+        }
+        if(gaze.type==='focus'){
+          // Resolve the authored source-image region against THIS viewer.
+          // The same point therefore becomes a stronger zoom on a wide PC and
+          // a gentler zoom on a narrow phone when needed to show the same region.
+          const targetW=Math.max(1,bw*gaze.width),targetH=Math.max(1,bh*gaze.height);
+          const regionScale=Math.max(1,Math.min(8,Math.min(frame.clientWidth/targetW,frame.clientHeight/targetH)));
+          // V101 — preserve the authored visual occupancy as well as the source region.
+          // A huge desktop viewport must not flatten several viewpoints into the same row view.
+          // `occupancy` is the author's zoom relative to FIT, so it is device-independent.
+          scale=Math.max(regionScale, gaze.occupancy||1);
+        }
+        const cx=Number.isFinite(gaze.cx)?gaze.cx:.5,cy=Number.isFinite(gaze.cy)?gaze.cy:.5;
+        const rawX=(.5-cx)*bw*scale,rawY=(.5-cy)*bh*scale;
+        const maxX=Math.max(0,(bw*scale-frame.clientWidth)/2),maxY=Math.max(0,(bh*scale-frame.clientHeight)/2);
+        return{x:Math.max(-maxX,Math.min(maxX,rawX)),y:Math.max(-maxY,Math.min(maxY,rawY)),scale};
+      };
+      const rememberPoint=()=>{if(image.readingResumeKey&&index>=0){try{localStorage.setItem(image.readingResumeKey,JSON.stringify({page:Number(image.pageIndex)||0,point:index}));}catch(_){}}};
+      const finishPageHandoff=()=>{
+        if(!pageGhost)return;
+        const ghost=pageGhost;pageGhost=null;
+        const sign=(image.pageDirection==='rtl'?-1:1)*((Number(image.pageIndex)||0)>=previousPage?1:-1);
+        const width=Math.max(1,frame.clientWidth),duration=360;
+        initializing=true;
+        if(typeof img.animate==='function'){
+          const incoming=img.animate([{translate:`${sign*width}px 0`},{translate:'0 0'}],{duration,easing:'ease-in-out'});
+          ghost.animate([{translate:'0 0'},{translate:`${-sign*width}px 0`}],{duration,easing:'ease-in-out'});
+          incoming.finished.catch(()=>{}).then(()=>{ghost.remove();if(viewer._viewPointPageGhost===ghost)viewer._viewPointPageGhost=null;if(!cancelled)initializing=false;});
+        }else{ghost.remove();initializing=false;}
+      };
+      let current={x:0,y:0,scale:1};
+      const apply=(v)=>{current=v;img.style.transform=`translate3d(${v.x}px, ${v.y}px, 0) scale(${v.scale})`;frame.classList.toggle('is-zoomed',v.scale>1.01);};
+      const moveTo=(gaze,duration=gaze.transitionMs??420)=>{
+        if(raf)cancelAnimationFrame(raf);moving=true;
+        const from={...current},to=coords(gaze),started=performance.now(),ease=t=>gaze.transitionCurve==='linear'?t:gaze.transitionCurve==='ease-in'?t*t*t:gaze.transitionCurve==='ease-in-out'?(t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2):1-Math.pow(1-t,3);
+        const tick=now=>{if(cancelled||viewer.hidden)return;const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);apply({x:from.x+(to.x-from.x)*e,y:from.y+(to.y-from.y)*e,scale:from.scale+(to.scale-from.scale)*e});if(q<1)raf=requestAnimationFrame(tick);else{raf=0;moving=false;rememberPoint();}};raf=requestAnimationFrame(tick);
+      };
+      let onViewPointKey=null,onViewPointClick=null;
+      const cancel=()=>{cancelled=true;handoffGhost?.remove();pageGhost?.remove();pageGhost=null;clearTimeout(frame._viewPointTapTimer);if(raf)cancelAnimationFrame(raf);raf=0;moving=false;frame._viewRecCancel=null;frame._viewPointAdvanceTouch=null;frame._onViewPointManualControl=null;frame.classList.remove('is-view-rec-playing');if(onViewPointClick)frame.removeEventListener('click',onViewPointClick,true);if(onViewPointKey)document.removeEventListener('keydown',onViewPointKey,true);};
+      // Manual pinch / wheel / double-click hands the viewer to the reader completely.
+      // Do not resume VIEW POINT on the synthetic click that follows a drag.
+      frame._onViewPointManualControl=()=>cancel();
+      const advance=(event)=>{
+        const eventTarget=event?.target;
+        if(cancelled||viewer.hidden||frame._sceneImageMode==='viewPointFree'||eventTarget?.closest?.('.sp-scene-image-viewer-close'))return;
+        event?.preventDefault?.();event?.stopPropagation?.();event?.stopImmediatePropagation?.();
+        // Do not let the key/click that opened VIEW POINT also advance or close it.
+        if(initializing||moving)return;
+        if(index<points.length-1){
+          frame._sceneImageMode='viewPoint';
+          // V109 — do not refit/rewrite the viewport between authored points.
+          // Re-fitting here can force a layout/paint between two transforms and show up
+          // as a one-frame flash. Opening + actual resize already perform the fit.
+          index++;moveTo(points[index]);
+        }
+        // V116 — after the final authored point, the NEXT deliberate Enter/tap
+        // closes the viewer. This is intentional VIEW POINT completion, not native
+        // activation of the × button (focus is kept on the viewer frame above).
+        else{
+          const pages=Array.isArray(image.pages)?image.pages:[];
+          const currentPage=Math.max(0,Number(image.pageIndex)||0);
+          const nextIndex=currentPage+1;
+          const nextPage=pages[nextIndex];
+          const nextPoints=nextPage?.viewPoints||nextPage?.viewRec||null;
+          if(nextPage?.src&&(nextPoints?.points||[]).length){
+            const nextImage={...image,src:nextPage.src,alt:nextPage.alt??image.alt??'',viewPoints:nextPoints,pageIndex:nextIndex,resumePoint:0,animatePageEntry:true};
+            cancel();
+            this._openSceneImageViewRec(nextImage,null);
+            return;
+          }
+          if(image.readingResumeKey&&currentPage>=pages.length-1){try{localStorage.removeItem(image.readingResumeKey);}catch(_){}}
+          const closeButton=viewer.querySelector('.sp-scene-image-viewer-close');
+          cancel();
+          closeButton?.click();
+          return;
+        }
+      };
+      frame._viewRecCancel=cancel;frame._viewPointAdvanceTouch=()=>{if(moving){frame._viewPointTapTimer=setTimeout(()=>frame._viewPointAdvanceTouch?.(),60);return;}advance(null);};frame.classList.add('is-view-rec-playing');onViewPointClick=(event)=>{if(performance.now()<frame._viewPointSuppressClickUntil){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();return;}advance(event);};frame.addEventListener('click',onViewPointClick,true);
+      // V111 — desktop keyboard parity: Enter advances VIEW POINT exactly like a tap.
+      // Once the reader takes manual zoom/pan control, VIEW POINT is cancelled, so Enter
+      // intentionally stops advancing as well.
+      onViewPointKey=(event)=>{
+        if(event.key!=='Enter'||event.repeat||cancelled||viewer.hidden||frame._sceneImageMode==='viewPointFree')return;
+        advance(event);
+      };
+      document.addEventListener('keydown',onViewPointKey,true);
+
+      const beginWhenReady=(attempt=0)=>{
+        if(cancelled||viewer.hidden)return;
+        const ready=img.naturalWidth>0&&img.clientWidth>2&&img.clientHeight>2&&frame.clientWidth>2&&frame.clientHeight>2;
+        if(!ready&&attempt<24){setTimeout(()=>beginWhenReady(attempt+1),16);return;}
+        requestAnimationFrame(()=>requestAnimationFrame(()=>{
+          if(cancelled||viewer.hidden)return;
+          frame?._fitSceneImageFrame?.();
+          apply({x:0,y:0,scale:1});
+          // V112 — opening VIEW POINT is itself the first step. The reader should
+          // not need an extra fullscreen click before keyboard/tap progression begins.
+          // Let the V110 pickup transition finish, then move straight to point 1.
+          if(index<0&&points.length){
+            if(startAtAuthoredPoint){
+              index=Math.max(0,Math.min(points.length-1,Number(image.resumePoint)||0));apply(coords(points[index]));initializing=false;img.style.visibility='';rememberPoint();finishPageHandoff();
+              return;
+            }
+            // Wait for the V110 pickup animation, then establish point 1 as a real
+            // settled state. Only after that may Enter/tap advance to point 2.
+            setTimeout(()=>{
+              if(cancelled||viewer.hidden)return;
+              index=0;
+              moveTo(points[0]);
+              const release=()=>{
+                if(cancelled||viewer.hidden)return;
+                if(moving){setTimeout(release,24);return;}
+                initializing=false;
+              };
+              setTimeout(release,24);
+            },380);
+          }
+        }));
+      };
+      if(img.complete&&img.naturalWidth>0)beginWhenReady();else img.addEventListener('load',()=>beginWhenReady(),{once:true});
     }
 
     _appendSceneImage(container, scene, presentation, { history=false } = {}) {
       const image = presentation?.image;
-      const pages=Array.isArray(image?.pages)?image.pages.filter(page=>page?.src):[];const firstImage=pages[0]||image;
+      const pages=Array.isArray(image?.pages)?image.pages.filter(page=>page&&typeof page.src==='string'&&page.src):[];
+      const firstImage=pages[0]||image;
+      const displayImage=image?.cover?.src?image.cover:firstImage;
       if (!firstImage?.src || !container) return;
 
       const wrap = document.createElement(history ? 'span' : 'div');
       wrap.className = history ? 'sp-history-scene-image' : 'sp-scene-image';
-      if(pages.length>1){wrap.dataset.pageCount=String(pages.length);wrap.classList.add('has-page-stack');}
+      wrap.dataset.showPageCount=image.showPageCount===false?'false':'true';
+      if(pages.length>1||image?.cover?.src){wrap.dataset.pageCount=String(Math.max(1,pages.length));wrap.classList.add('has-page-stack');}
       wrap.dataset.imageRounded=image.rounded===false?'false':'true';
       wrap.dataset.imageSize = ['small','large'].includes(image.size)
         ? image.size
@@ -4181,9 +5201,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const media = document.createElement(history ? 'span' : 'div');
       media.className = history ? 'sp-history-scene-image-media' : 'sp-scene-image-media';
+      // V125 — keep public Player Scene-image object styling in sync with Studio.
+      // Rotation is intentionally clamped to the same authoring range used by Studio.
+      const rotation = Math.max(-20, Math.min(20, Number(image.rotation) || 0));
+      media.style.setProperty('--sp-scene-image-rotation', `${rotation}deg`);
+      if (image.shadow === true) media.classList.add('has-object-shadow');
 
       const img = document.createElement('img');
-      img.alt = firstImage.alt ?? image.alt ?? '';
+      img.alt = displayImage.alt ?? firstImage.alt ?? image.alt ?? '';
       img.loading = history ? 'lazy' : 'eager';
       img.decoding = 'async';
 
@@ -4200,7 +5225,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const run = () => {
           const activeScene = this.document?.scenes?.[this.index];
           if (!activeScene || activeScene.id !== scene.id) return;
-          const display = activeScene.presentation?.display || 'stack';
+          const display = this._hasCredits(activeScene.presentation) ? 'solo' : activeScene.presentation?.display || 'stack';
           const visible = this._visibleScenes(display);
           const nodeMap = new Map(
             [...this.els.scenes.querySelectorAll('.sp-scene')]
@@ -4208,7 +5233,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               .map(node => [node.dataset.sceneId, node])
           );
           const nodes = visible.map(entry => nodeMap.get(entry.scene.id)).filter(Boolean);
-          if (nodes.length === visible.length) this._positionSceneNodes(nodes, visible, 0);
+          if (nodes.length === visible.length) {
+            if(display==='overlay')this._positionOverlayNodes(nodes,visible);
+            else this._positionSceneNodes(nodes,visible,0);
+          }
         };
 
         // Give Safari one painted frame to apply the decoded image dimensions.
@@ -4225,15 +5253,54 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (!history) return;
         this.historyMetrics = null;
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => this._scheduleHistoryDepth());
+          requestAnimationFrame(() => {
+            if (this._historyAutoCenter) this._centerHistoryOnCurrent();
+            this._scheduleHistoryDepth();
+          });
         });
       };
       img.addEventListener('load', refreshHistoryGeometryAfterImageLoad, {once:true});
 
-      img.src = firstImage.src;
-      if(pages.length>1){const back=document.createElement('span');back.className='scene-image-stack-sheet is-back';const middle=document.createElement('span');middle.className='scene-image-stack-sheet is-middle';media.append(back,middle);}
+      img.src = displayImage.src;
+      if(pages.length>1 || image?.cover?.src){
+        const backSheet=document.createElement('span');backSheet.className='scene-image-stack-sheet is-back';backSheet.setAttribute('aria-hidden','true');
+        const middleSheet=document.createElement('span');middleSheet.className='scene-image-stack-sheet is-middle';middleSheet.setAttribute('aria-hidden','true');
+        media.append(backSheet,middleSheet);
+      }
       media.appendChild(img);
-      wrap.appendChild(media);
+
+      const object = document.createElement(history ? 'span' : 'div');
+      object.className = history ? 'sp-history-scene-image-object' : 'sp-scene-image-object';
+      object.appendChild(media);
+      let caption = null;
+      const captionText=String(firstImage.alt||image.alt||'').trim();
+      if (image.caption === true && captionText) {
+        caption = document.createElement(history ? 'span' : 'div');
+        caption.className = history ? 'sp-history-scene-image-caption' : 'sp-scene-image-caption';
+        caption.textContent = captionText;
+        object.appendChild(caption);
+      }
+      wrap.appendChild(object);
+
+      // V89 — keep a horizontal caption clear of the lowest rotated image corner.
+      // Rotation changes the visual bounding box without changing layout height,
+      // so derive only the extra downward reach and add that to the normal gap.
+      const updateCaptionClearance = () => {
+        if (!caption) return;
+        const w = media.offsetWidth || img.getBoundingClientRect().width || 0;
+        const h = media.offsetHeight || img.getBoundingClientRect().height || 0;
+        if (!w || !h) return;
+        const rad = Math.abs(rotation) * Math.PI / 180;
+        const rotatedHeight = Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad));
+        const extraBelow = Math.max(0, (rotatedHeight - h) / 2);
+        object.style.setProperty('--sp-scene-image-caption-clearance', `${extraBelow.toFixed(2)}px`);
+      };
+      img.addEventListener('load', updateCaptionClearance, {once:true});
+      if (typeof ResizeObserver !== 'undefined' && caption) {
+        const captionResizeObserver = new ResizeObserver(updateCaptionClearance);
+        captionResizeObserver.observe(media);
+      }
+      requestAnimationFrame(updateCaptionClearance);
 
       // Data/blob/cached images can already be complete before the load event
       // is observed by this render pass.
@@ -4242,16 +5309,51 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         refreshHistoryGeometryAfterImageLoad();
       }
 
-      if (image.fullscreen !== false) {
-        wrap.classList.add('is-zoomable');
+      const hasViewPoints = pages.some(page => (page.viewPoints?.points || page.viewRec?.points || []).length) || (image.viewPoints?.points || image.viewRec?.points || []).length > 0;
+      const imageTapAction = image.tapAction || (hasViewPoints ? 'viewRec' : pages.length > 1 ? 'fullscreen' : image.fullscreen === false ? 'none' : 'fullscreen');
+      const firstViewPoints=firstImage.viewPoints||firstImage.viewRec||image.viewPoints||image.viewRec;
+      const hasViewRec = imageTapAction === 'viewRec' && (firstViewPoints?.points||image.viewRec?.points)?.length > 0;
+      let readingResumeKey=null;
+      // Reading progress is separate from the .scene and disabled in Studio.
+      if(!/\/studio(?:\/|$)/.test(location.pathname)&&this.options?.readingResume!==false){
+        const identity=JSON.stringify([this.document?.id||this.document?.metadata?.workId||'',this.document?.title||'',this.document?.author||this.document?.metadata?.author||'',scene?.id||this.index||0,pages.length||1,(pages.length?pages:[image]).map(p=>[p._editorFileName||p.alt||'',p.viewPoints?.points||p.viewRec?.points||[]])]);
+        let hash=2166136261;for(let i=0;i<identity.length;i++){hash^=identity.charCodeAt(i);hash=Math.imul(hash,16777619);}readingResumeKey=`ahako:image-reading:v1:${(hash>>>0).toString(16)}`;
+      }
+      const readProgress=()=>{if(!readingResumeKey)return null;try{const value=JSON.parse(localStorage.getItem(readingResumeKey));return value&&Number.isInteger(value.page)&&value.page>=0&&value.page<Math.max(1,pages.length)&&Number.isInteger(value.point)&&value.point>=0?value:null;}catch(_){return null;}};
+      const openBundlePage=(pageIndex,{fromScene=false,forceFullscreen=false,startAtAuthoredPoint=false,resumePoint=0}={})=>{
+        const page=pages[pageIndex]||firstImage;
+        const sourceEl=fromScene?wrap:null;
+        const pointSet=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
+        const pageImage={...image,src:page.src,alt:page.alt??image.alt??'',viewPoints:pointSet,pages,pageIndex,resumePoint,readingResumeKey,onPageChange:openBundlePage,startAtAuthoredPoint,closeTargetEl:sourceEl};
+        if(!forceFullscreen&&imageTapAction==='viewRec'&&(pointSet?.points||[]).length)this._openSceneImageViewRec(pageImage,startAtAuthoredPoint?null:sourceEl);
+        else this._openSceneImage(page.src,page.alt??image.alt??'',{sourceEl,pages:pages.length>1?pages:undefined,pageIndex,onPageChange:openBundlePage,direction:image.pageDirection||'ltr'});
+        if(readingResumeKey){
+          const viewer=document.querySelector('.sp-scene-image-viewer'),controls=viewer?.querySelector('.sp-scene-image-viewer-pages');
+          if(controls){controls.hidden=false;if(!pages.length){controls.querySelector('.sp-scene-image-viewer-page-count').textContent='1 / 1';controls.querySelector('.sp-scene-image-viewer-page-prev').disabled=true;controls.querySelector('.sp-scene-image-viewer-page-next').disabled=true;}let restart=controls.querySelector('.sp-image-reading-restart');if(!restart){restart=document.createElement('button');restart.type='button';restart.className='sp-image-reading-restart';Object.assign(restart.style,{width:'auto',font:'600 12px/1 system-ui,sans-serif',whiteSpace:'nowrap',padding:'0 8px',borderRadius:'8px'});restart.textContent=this.options?.uiLanguage==='en'?'Start over':'最初から';controls.append(restart);}restart.hidden=false;restart.onclick=e=>{e.preventDefault();e.stopPropagation();try{localStorage.removeItem(readingResumeKey);}catch(_){}openBundlePage(0,{startAtAuthoredPoint:true});};}
+          try{localStorage.setItem(readingResumeKey,JSON.stringify({page:pageIndex,point:resumePoint}));}catch(_){}
+        }
+      };
+      const openReading=opts=>{const progress=readProgress();openBundlePage(progress?.page||0,{...opts,resumePoint:progress?.point||0,startAtAuthoredPoint:opts.startAtAuthoredPoint||!!progress});};
+      // The cover's comic-start mode opens the image even when ordinary Scene
+      // tapping was disabled. Preserve authored VIEW POINT behavior when selected.
+      wrap._sceneImageOpenForReading=(event)=>{
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        openReading({fromScene:true,forceFullscreen:imageTapAction!=='viewRec',startAtAuthoredPoint:true});
+      };
+      if (imageTapAction === 'fullscreen' || imageTapAction === 'viewRec') {
+        wrap.classList.add(hasViewRec ? 'is-view-rec' : 'is-zoomable');
         wrap.setAttribute('role','button');
         wrap.setAttribute('tabindex','0');
-        wrap.setAttribute('aria-label', image.alt ? `Open image: ${image.alt}` : 'Open image fullscreen');
+        wrap.setAttribute('aria-label', hasViewRec
+          ? (image.alt ? `Play VIEW REC: ${image.alt}` : 'Play VIEW REC')
+          : (image.alt ? `Open image: ${image.alt}` : 'Open image fullscreen'));
         const open = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          this._openSceneImage(firstImage.src, firstImage.alt||image.alt||'', {pages:pages.length>1?pages:undefined,pageIndex:0});
+          openReading({fromScene:true});
         };
+        wrap._sceneImageOpen=open;
         wrap.addEventListener('click',open);
         wrap.addEventListener('keydown',(event)=>{
           if(event.key==='Enter' || event.key===' '){ open(event); }
@@ -4262,23 +5364,385 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _handdrawnSeed(source) {
-      let hash=2166136261;const value=String(source||'');
-      for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619);}
+      let hash=2166136261;
+      const value=String(source||'');
+      for(let i=0;i<value.length;i++){
+        hash^=value.charCodeAt(i);
+        hash=Math.imul(hash,16777619);
+      }
       return hash>>>0;
     }
-    _handdrawnRandom(seed) {let state=seed>>>0;return ()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};}
+
+    _handdrawnRandom(seed) {
+      let state=seed>>>0;
+      return ()=>{
+        state=(Math.imul(state,1664525)+1013904223)>>>0;
+        return state/4294967296;
+      };
+    }
+
     _handdrawnPath(width,height,seed,trace=0,shapeLevel=0,frameType='handdrawn-voice') {
-      const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0),inset=5.5+trace*.35,rx=Math.max(8,(width-inset*2)/2),ry=Math.max(8,(height-inset*2)/2),cx=width/2+(random()-.5)*1.8,cy=height/2+(random()-.5)*1.8,count=32,phase=random()*Math.PI*2,points=[];
-      for(let i=0;i<count;i++){const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=frameType==='handdrawn-voice'?2.05+Math.max(0,Math.min(1,shapeLevel))*2.35:(['handdrawn-rounded','handdrawn-panel'].includes(frameType)?4.7:8.5),baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx,baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry,wobble=1+Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006+(random()-.5)*.018+(trace-1)*.0025;points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});}
+      const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0);
+      const inset=5.5+trace*.35;
+      const rx=Math.max(8,(width-inset*2)/2);
+      const ry=Math.max(8,(height-inset*2)/2);
+      const cx=width/2+(random()-.5)*1.8;
+      const cy=height/2+(random()-.5)*1.8;
+      const count=32;
+      const phase=random()*Math.PI*2;
+      const points=[];
+      for(let i=0;i<count;i++){
+        const angle=(Math.PI*2*i/count)-Math.PI/2;
+        const ca=Math.cos(angle),sa=Math.sin(angle);
+        const n=frameType==='handdrawn-voice'?2.05+Math.max(0,Math.min(1,shapeLevel))*2.35:(['handdrawn-rounded','handdrawn-panel'].includes(frameType)?4.7:8.5);
+        const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx;
+        const baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
+        const harmonic=Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006;
+        const grain=(random()-.5)*.018;
+        const wobble=1+harmonic+grain+(trace-1)*.0025;
+        points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});
+      }
       let d=`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
-      for(let i=0;i<count;i++){const p0=points[(i-1+count)%count],p1=points[i],p2=points[(i+1)%count],p3=points[(i+2)%count];d+=` C ${(p1.x+(p2.x-p0.x)/6).toFixed(2)} ${(p1.y+(p2.y-p0.y)/6).toFixed(2)} ${(p2.x-(p3.x-p1.x)/6).toFixed(2)} ${(p2.y-(p3.y-p1.y)/6).toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;}
+      for(let i=0;i<count;i++){
+        const p0=points[(i-1+count)%count],p1=points[i],p2=points[(i+1)%count],p3=points[(i+2)%count];
+        const c1x=p1.x+(p2.x-p0.x)/6;
+        const c1y=p1.y+(p2.y-p0.y)/6;
+        const c2x=p2.x-(p3.x-p1.x)/6;
+        const c2y=p2.y-(p3.y-p1.y)/6;
+        d+=` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+      }
       return `${d} Z`;
     }
+
     _mountHanddrawnFrame(frame,scene,presentation) {
-      const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.classList.add('sp-handdrawn-frame-svg');svg.setAttribute('aria-hidden','true');svg.setAttribute('preserveAspectRatio','none');
-      const defs=document.createElementNS(ns,'defs'),filter=document.createElementNS(ns,'filter'),filterId=`sp-ink-bleed-${String(scene.id||'scene').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24)}-${this._handdrawnSeed(scene.text)&65535}`;filter.id=filterId;filter.setAttribute('x','-5%');filter.setAttribute('y','-5%');filter.setAttribute('width','110%');filter.setAttribute('height','110%');const blur=document.createElementNS(ns,'feGaussianBlur');blur.setAttribute('stdDeviation','.72');filter.appendChild(blur);defs.appendChild(filter);svg.appendChild(defs);
-      const makePath=className=>{const path=document.createElementNS(ns,'path');path.classList.add(className);svg.appendChild(path);return path;},fill=makePath('sp-handdrawn-fill'),bleed=makePath('sp-handdrawn-bleed'),ghost=makePath('sp-handdrawn-ghost'),ink=makePath('sp-handdrawn-ink'),scuff=makePath('sp-handdrawn-scuff');bleed.setAttribute('filter',`url(#${filterId})`);frame.prepend(svg);let lastWidth=0,lastHeight=0;
-      const draw=()=>{if(!frame.isConnected)return;const text=frame.querySelector(':scope > .sp-text');let fitted=false;if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){text.style.maxWidth='none';text.style.width='max-content';const measureRects=()=>{try{const range=document.createRange();range.selectNodeContents(text);const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);range.detach?.();return measured;}catch(_){return [];}};let rects=measureRects();const initialTextRect=text.getBoundingClientRect();let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;rects=measureRects();const fittedTextRect=text.getBoundingClientRect();inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=global.innerWidth<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;}const rect=frame.getBoundingClientRect(),width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;lastWidth=width;lastHeight=height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);const frameType=frame.dataset.frameType||'handdrawn-voice',seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}|${frameType}`),shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0)),primary=this._handdrawnPath(width,height,seed,0,shapeLevel,frameType);fill.setAttribute('d',primary);ink.setAttribute('d',primary);bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel,frameType));ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel,frameType));scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel,frameType));const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);scuff.setAttribute('stroke-dashoffset',String(seed%29));const article=frame.closest('.sp-scene');if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{if(!frame.isConnected||!this.document)return;const active=this.document.scenes?.[this.index],display=active?.presentation?.display||'stack',entries=this._visibleScenes(display),byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node])),present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node),presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);else this._positionSceneNodes(presentNodes,presentEntries,0);});};requestAnimationFrame(draw);if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();return;}draw();});observer.observe(frame);}
+      const ns='http://www.w3.org/2000/svg';
+      const svg=document.createElementNS(ns,'svg');
+      svg.classList.add('sp-handdrawn-frame-svg');
+      svg.setAttribute('aria-hidden','true');
+      svg.setAttribute('preserveAspectRatio','none');
+      const defs=document.createElementNS(ns,'defs');
+      const filter=document.createElementNS(ns,'filter');
+      const filterId=`sp-ink-bleed-${String(scene.id||'scene').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24)}-${this._handdrawnSeed(scene.text)&65535}`;
+      filter.id=filterId;
+      filter.setAttribute('x','-5%');filter.setAttribute('y','-5%');filter.setAttribute('width','110%');filter.setAttribute('height','110%');
+      const blur=document.createElementNS(ns,'feGaussianBlur');blur.setAttribute('stdDeviation','.72');
+      filter.appendChild(blur);defs.appendChild(filter);svg.appendChild(defs);
+      const makePath=(className)=>{const path=document.createElementNS(ns,'path');path.classList.add(className);svg.appendChild(path);return path;};
+      const fill=makePath('sp-handdrawn-fill');
+      const bleed=makePath('sp-handdrawn-bleed');bleed.setAttribute('filter',`url(#${filterId})`);
+      const ghost=makePath('sp-handdrawn-ghost');
+      const ink=makePath('sp-handdrawn-ink');
+      const scuff=makePath('sp-handdrawn-scuff');
+      frame.prepend(svg);
+      let lastWidth=0,lastHeight=0;
+      const draw=()=>{
+        if(!frame.isConnected)return;
+        const text=frame.querySelector(':scope > .sp-text');
+        let fitted=false;
+        frame.classList.add('sp-frame-measuring');
+        if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){
+          text.style.maxWidth='none';
+          text.style.width='max-content';
+          const measureRects=()=>{try{
+            const range=document.createRange();
+            range.selectNodeContents(text);
+            const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);
+            range.detach?.();
+            return measured.map(rect=>this._logicalRect(rect));
+          }catch(_){return [];}};
+          let rects=measureRects();
+          const initialTextRect=this._logicalRect(text.getBoundingClientRect());
+          let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left;
+          let inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;
+          const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);
+          text.style.width=`${fittedWidth}px`;
+          rects=measureRects();
+          const fittedTextRect=this._logicalRect(text.getBoundingClientRect());
+          inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;
+          inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;
+          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top;
+          const inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom;
+          const columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1;
+          const charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length;
+          const shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58)));
+          const mobile=(this.host.clientWidth||global.innerWidth)<=600;
+          const padX=(mobile?27:34)+shapeLevel*(mobile?8:12);
+          const padY=(mobile?30:38)+shapeLevel*(mobile?13:18);
+          const inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
+          text.style.position='absolute';
+          text.style.margin='0';
+          text.style.height=`${Math.ceil(fittedTextRect.height)}px`;
+          text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;
+          text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;
+          frame.style.padding='0';
+          frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;
+          frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;
+          frame.dataset.shapeLevel=String(shapeLevel);
+          frame.dataset.inkFitted='true';
+          fitted=true;
+        }
+        frame.classList.remove('sp-frame-measuring');
+        const rect=this._logicalRect(frame.getBoundingClientRect());
+        const width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
+        if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
+        lastWidth=width;lastHeight=height;
+        svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
+        const frameType=frame.dataset.frameType||'handdrawn-voice';
+        const seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}|${frameType}`);
+        const shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0));
+        const primary=this._handdrawnPath(width,height,seed,0,shapeLevel,frameType);
+        fill.setAttribute('d',primary);ink.setAttribute('d',primary);
+        bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel,frameType));
+        ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel,frameType));
+        scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel,frameType));
+        const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);
+        scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);
+        scuff.setAttribute('stroke-dashoffset',String(seed%29));
+        const article=frame.closest('.sp-scene');
+        if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{
+          if(!frame.isConnected||!this.document)return;
+          const active=this.document.scenes?.[this.index];
+          const display=active?.presentation?.display||'stack';
+          const entries=this._visibleScenes(display);
+          const byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node]));
+          const present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node);
+          const presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);
+          if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);
+          else this._positionSceneNodes(presentNodes,presentEntries,0);
+        });
+      };
+      requestAnimationFrame(draw);
+      if(typeof ResizeObserver==='function'){
+        const observer=new ResizeObserver(()=>{
+          if(!frame.isConnected){observer.disconnect();return;}
+          draw();
+        });
+        observer.observe(frame);
+      }
+    }
+
+
+    _normalizeRichTextRanges(source, ranges) {
+      if (!Array.isArray(ranges) || !ranges.length) return [];
+      const codepoints = Array.from(source);
+      const cpToUtf16 = [0];
+      for (const ch of codepoints) cpToUtf16.push(cpToUtf16[cpToUtf16.length - 1] + ch.length);
+      const boundaries = new Set(cpToUtf16);
+      const offsets = ranges.flatMap((r) => [Number(r?.start), Number(r?.end)]).filter(Number.isFinite);
+      const hasSplitSurrogate = offsets.some((i) => Number.isInteger(i) && i > 0 && i < source.length && !boundaries.has(i));
+      // Some imported Scenes count Unicode code points. Player slicing uses
+      // UTF-16 offsets, so detect the telltale split-surrogate boundary and
+      // convert every range consistently before rendering any span.
+      const mapped = hasSplitSurrogate ? ranges.map((r) => {
+        const map = (value) => {
+          const i = Math.max(0, Math.min(codepoints.length, Math.trunc(Number(value) || 0)));
+          return cpToUtf16[i];
+        };
+        return { ...r, start: map(r?.start), end: map(r?.end) };
+      }) : ranges;
+      if (typeof Intl?.Segmenter !== 'function') return mapped;
+      const graphemeBounds = new Set([0, source.length]);
+      for (const part of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(source)) {
+        graphemeBounds.add(part.index);
+        graphemeBounds.add(part.index + part.segment.length);
+      }
+      const sorted = [...graphemeBounds].sort((a, b) => a - b);
+      const floorBoundary = (value) => { let result = 0; for (const i of sorted) { if (i > value) break; result = i; } return result; };
+      const ceilBoundary = (value) => sorted.find((i) => i >= value) ?? source.length;
+      return mapped.map((r) => {
+        if (r?.kind === 'table') return r;
+        const start = Math.max(0, Math.min(source.length, Math.trunc(Number(r?.start) || 0)));
+        const end = Math.max(start, Math.min(source.length, Math.trunc(Number(r?.end) || 0)));
+        // If an old Scene splits a grapheme cluster, leave that cluster
+        // unformatted instead of splitting a surrogate or variation sequence.
+        return { ...r, start: graphemeBounds.has(start) ? start : ceilBoundary(start), end: graphemeBounds.has(end) ? end : floorBoundary(end) };
+      }).filter((r) => r?.kind === 'table' || r.end > r.start);
+    }
+
+    _isVerticalEmojiCluster(text) {
+      try {
+        if (new RegExp('\\p{Extended_Pictographic}', 'u').test(text)) return true;
+      } catch (_) {}
+      // Supplementary-plane glyphs (including decorative Phoenician letters
+      // used in emoji-style laughter such as 𐤔) should remain upright too.
+      if (Array.from(text).some((ch) => ch.codePointAt(0) > 0xFFFF)) return true;
+      return /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u00A9\u00AE\u203C\u2049\u2122\u2139]/u.test(text);
+    }
+
+    _isVerticalWriting(node, scene) {
+      return node?.dataset?.writingMode === 'vertical-rl' || node?.style?.writingMode === 'vertical-rl' || scene?.presentation?.text?.writingMode === 'vertical-rl';
+    }
+
+    _verticalGlyphUnits(text) {
+      const parts = typeof Intl?.Segmenter === 'function'
+        ? [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].map((part) => part.segment)
+        : Array.from(text);
+      const units = [];
+      for (let i = 0; i < parts.length; i++) {
+        // Japanese laughter notation is a single visual unit: keep the
+        // ideographic わらい marker attached to the following emoji.
+        if (parts[i] === 'ꉂ' && i + 1 < parts.length && this._isVerticalEmojiCluster(parts[i + 1])) {
+          let unit = parts[i] + parts[++i];
+          if (parts[i + 1] === '𐤔') unit += parts[++i];
+          units.push(unit);
+        } else units.push(parts[i]);
+      }
+      return units;
+    }
+
+    _styleVerticalEmoji(span) {
+      span.classList.add('sp-emoji-upright');
+      span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
+      span.style.setProperty('text-orientation', 'upright', 'important');
+      span.style.setProperty('-webkit-text-combine', 'horizontal', 'important');
+      span.style.setProperty('-webkit-text-combine-upright', 'all', 'important');
+      span.style.setProperty('text-combine-upright', 'all', 'important');
+      span.style.setProperty('display', 'inline-block', 'important');
+      span.style.setProperty('line-height', '1', 'important');
+    }
+
+    _appendVerticalEmojiAwareText(node, text) {
+      let plain = '';
+      const flush = () => { if (plain) { node.appendChild(document.createTextNode(plain)); plain = ''; } };
+      for (const unit of this._verticalGlyphUnits(text)) {
+        if (this._isVerticalEmojiCluster(unit)) {
+          flush();
+          const span = document.createElement('span');
+          this._styleVerticalEmoji(span);
+          span.textContent = unit;
+          node.appendChild(span);
+        } else plain += unit;
+      }
+      flush();
+    }
+
+    _renderRichText(node, scene, displayText = null) {
+      const source = String(displayText ?? scene?.text ?? '');
+      const rawRanges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
+      const ranges = this._normalizeRichTextRanges(source, rawRanges);
+      const tables = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table') : [];
+      node.classList.remove('sp-has-ruby');
+      if (!ranges.length && !tables.length) {
+        if (this._isVerticalWriting(node, scene)) this._appendVerticalEmojiAwareText(node, source);
+        else node.textContent = source;
+        return false;
+      }
+      node.textContent = '';
+      const tableById = new Map(tables.map(t => [String(t.id||''), t]));
+      const tableRanges = ranges.filter(r => r?.kind === 'table' && tableById.has(String(r.tableId||'')))
+        .map(r => ({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)}))
+        .sort((a,b)=>a.start-b.start);
+      const normal = ranges.filter(r => r?.kind !== 'table').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
+      const rubies=normal.filter(r=>r.kind==='ruby'&&String(r.reading||'').trim()&&!source.slice(r.start,r.end).includes('\n')).sort((a,b)=>a.start-b.start);
+      node.classList.toggle('sp-has-ruby',rubies.length>0);
+      const appendTextRange=(from,to)=>{
+        const rubyNodes=new Map();
+        if(to<=from)return;
+        const cuts=new Set([from,to]);
+        normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
+        if (this._isVerticalWriting(node, scene) && typeof Intl?.Segmenter === 'function') {
+          const fragment = source.slice(from, to);
+          let unitOffset = 0;
+          for (const unit of this._verticalGlyphUnits(fragment)) {
+            if (this._isVerticalEmojiCluster(unit)) {
+              cuts.add(from + unitOffset);
+              cuts.add(from + unitOffset + unit.length);
+            }
+            unitOffset += unit.length;
+          }
+        }
+        const points=[...cuts].sort((a,b)=>a-b);
+        for(let i=0;i<points.length-1;i++){
+          const a=points[i],b=points[i+1]; if(b<=a)continue;
+          const span=document.createElement('span');
+          const active=normal.filter(r=>r.start<=a&&r.end>=b);
+          const segmentText=source.slice(a,b);
+          const emojiCluster = this._isVerticalWriting(node, scene) && this._isVerticalEmojiCluster(segmentText);
+          // Rich Text Player v0.18: list markers live in canonical Scene text.
+          // Never synthesize a bullet from semantic ranges; that can decorate an
+          // unrelated repeated word when offsets were re-anchored fuzzily.
+          span.textContent=segmentText;
+          active.forEach(r=>{
+            if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}
+            if(r.kind==='quote')span.classList.add('sp-rich-quote');
+            if(r.kind==='listItem')span.classList.add('sp-rich-list-item');
+            if(r.kind==='paragraph')span.classList.add('sp-rich-paragraph');
+            if(r.kind==='span'&&r.style?.bold)span.classList.add('sp-rich-bold');
+            if(r.kind==='span'&&r.style?.italic)span.classList.add('sp-rich-italic');
+            if(r.kind==='span'&&r.style?.color)span.style.color=String(r.style.color);
+            if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
+            if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
+            if(r.kind==='orientation'){
+              span.dataset.spTextOrientation=r.orientation;
+              if(r.orientation==='tcy' && !emojiCluster){
+                span.style.setProperty('-webkit-text-combine','horizontal','important');
+                span.style.setProperty('-webkit-text-combine-upright','all','important');
+                span.style.setProperty('text-combine-upright','all','important');
+              }else if(r.orientation==='sideways'||r.orientation==='upright'){
+                span.style.setProperty('-webkit-text-orientation',r.orientation,'important');
+                span.style.setProperty('text-orientation',r.orientation,'important');
+              }
+            }
+          });
+          if (emojiCluster) {
+            this._styleVerticalEmoji(span);
+          }
+          // Keep undecorated text in text nodes. Fragmented inline spans plus
+          // ruby and pretty wrapping can produce short lines on WebKit.
+          const content=span.className||span.getAttribute('style')||span.hasAttribute('data-sp-text-orientation')?span:document.createTextNode(segmentText);
+          const annotation=rubies.find(r=>r.start<=a&&r.end>=b&&r.start>=from&&r.end<=to);
+          if(annotation){
+            let group=rubyNodes.get(annotation);
+            if(!group){
+              const ruby=document.createElement('ruby');ruby.className='sp-rich-ruby';
+              const base=document.createElement('span');base.className='sp-ruby-base';
+              const rt=document.createElement('rt');rt.textContent=String(annotation.reading);rt.setAttribute('contenteditable','false');
+              ruby.append(base,rt);node.appendChild(ruby);group={base};rubyNodes.set(annotation,group);
+            }
+            group.base.appendChild(content);
+          }else node.appendChild(content);
+        }
+      };
+      let cursor=0;
+      tableRanges.forEach(r=>{
+        appendTextRange(cursor,r.start);
+        const table=tableById.get(String(r.tableId||''));
+        const card=document.createElement('div'); card.className='sp-rich-table-card';
+        const wrap=document.createElement('div'); wrap.className='sp-rich-table-scroll';
+        wrap.appendChild(this._buildRichTable(table)); card.appendChild(wrap);
+        // V25: no fullscreen affordance until the viewer contract is complete.
+        // Swallow table taps so they do not accidentally advance the Scene.
+        card.addEventListener('click',(e)=>{e.stopPropagation();});
+        node.appendChild(card); cursor=Math.max(cursor,r.end);
+      });
+      appendTextRange(cursor,source.length);
+      return true;
+    }
+
+    _buildRichTable(table) {
+      const el=document.createElement('table'); el.className='sp-rich-table';
+      const rows=Array.isArray(table?.rows)?table.rows:[]; const headerRows=Math.max(0,Number(table?.headerRows)||0);
+      rows.forEach((row,ri)=>{const tr=document.createElement('tr');(Array.isArray(row)?row:[]).forEach(cell=>{const c=document.createElement(ri<headerRows?'th':'td');c.textContent=String(cell??'');tr.appendChild(c);});el.appendChild(tr);});
+      return el;
+    }
+
+    _openRichTable(table) {
+      const overlay=document.createElement('div'); overlay.className='sp-rich-table-overlay'; overlay.setAttribute('role','dialog'); overlay.setAttribute('aria-modal','true');
+      const panel=document.createElement('div'); panel.className='sp-rich-table-full';
+      const head=document.createElement('div'); head.className='sp-rich-table-full-head';
+      const title=document.createElement('strong'); title.textContent='表';
+      const close=document.createElement('button'); close.type='button'; close.textContent='×'; close.setAttribute('aria-label','閉じる');
+      head.append(title,close); const scroll=document.createElement('div'); scroll.className='sp-rich-table-full-scroll'; scroll.appendChild(this._buildRichTable(table)); panel.append(head,scroll); overlay.appendChild(panel);
+      const previousOverflow=document.documentElement.style.overflow;
+      const dismiss=()=>{document.removeEventListener('keydown',onKey,true);document.documentElement.style.overflow=previousOverflow;overlay.remove();};
+      const onKey=(e)=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();dismiss();}};
+      close.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();dismiss();});
+      overlay.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();if(e.target===overlay)dismiss();});
+      panel.addEventListener('click',e=>e.stopPropagation());
+      document.addEventListener('keydown',onKey,true);
+      document.documentElement.style.overflow='hidden';
+      document.body.appendChild(overlay);
+      requestAnimationFrame(()=>{try{close.focus({preventScroll:true});}catch(_){close.focus();}});
     }
 
     _commentReactionValue(presentation) {
@@ -4391,6 +5855,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const d=new Date(),z=n=>String(n).padStart(2,'0'),wd=['日','月','火','水','木','金','土'][d.getDay()];
         return `${d.getFullYear()}/${z(d.getMonth()+1)}/${z(d.getDate())}(${wd}) ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`;
       }
+      if(mode==='relative')return String(lt.relativeText||'1時間前');
       return '';
     }
 
@@ -4561,6 +6026,103 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return '';
     }
 
+
+
+    _hasCredits(p={}) { return p?.credits?.enabled===true || (p?.view==='credits' && p?.credits?.enabled!==false); }
+
+    _creditsNode(scene, presentation, active=false) {
+      const m=presentation.credits||{},roll=m.mode==='roll'&&active;
+      const wrap=document.createElement('section');wrap.className='sp-credits'+(roll?' is-roll':'');
+      wrap.dataset.creditsMode=m.mode||'card';
+      wrap.dataset.endMode=m.endMode==='hold'?'hold':'exit';wrap.style.setProperty('--credits-delay',`${Math.max(0,Math.min(60,Number(m.startDelay)||0))}s`);
+      wrap.dataset.surface=m.surface==='none'?'none':'card';wrap.dataset.columns=Number(m.columns)===2?'2':'1';
+      wrap.style.setProperty('--credits-size',`${Math.max(12,Math.min(48,Number(m.fontSize)||22))}px`);
+      wrap.style.setProperty('--credits-gap',`${Math.max(8,Math.min(80,Number(m.gap)||28))}px`);
+      wrap.style.setProperty('--credits-duration',`${Math.max(5,Math.min(600,Number(m.duration)||30))}s`);
+      wrap.style.setProperty('--credits-align',m.align==='left'?'left':'center');
+      wrap.style.setProperty('--credits-opacity',String(Math.max(0,Math.min(1,Number.isFinite(Number(m.opacity))?Number(m.opacity):.72))));
+      if(m.colorMode==='custom'&&/^#[0-9a-f]{3,8}$/i.test(m.color||''))wrap.style.color=m.color;
+      const viewport=document.createElement('div');viewport.className='sp-credits-viewport';
+      const list=document.createElement('div');list.className='sp-credits-list';
+      const applyCreditStyle=(node,style)=>{if(style&&typeof style==='object'&&Object.keys(style).length){const family=node.style.fontFamily;this._applyTextStyle(node,style,false);if(!style.fontFamily)node.style.fontFamily=family||'';}};
+      const setField=(node,key,index)=>{node.dataset.creditField=key;if(index!==undefined)node.dataset.creditIndex=String(index);const holder=index===undefined?m:entries[index];this._renderRichText(node,{text:String(holder?.[key]||''),richText:holder?.richTextFields?.[key]});};
+      const entries=Array.isArray(m.entries)?m.entries:[];
+      const title=document.createElement('div');title.className='sp-credits-title';title.textContent=m.title||'';setField(title,'title');applyCreditStyle(title,m.titleStyle);list.appendChild(title);
+      entries.forEach((entry,index)=>{
+        if(!entry||typeof entry!=='object')return;
+        if(entry.kind==='spacer'){
+          const space=document.createElement('div');space.className='sp-credits-spacer';space.setAttribute('aria-hidden','true');
+          const height=Number(entry.height);space.style.height=`${Number.isFinite(height)?Math.max(0,Math.min(240,height)):40}px`;list.appendChild(space);return;
+        }
+        if(entry.kind==='heading'){
+          const section=document.createElement('div');section.className='sp-credits-section';
+          let url='';try{const u=new URL(String(entry.url||''));if(/^https?:$/.test(u.protocol))url=u.href;}catch(_){}
+          const label=document.createElement(url?'a':'div');label.className='sp-credits-name';if(url){label.href=url;label.target='_blank';label.rel='noopener noreferrer';}
+          if(entry.logoUrl){const img=document.createElement('img');img.className='sp-credits-logo';img.src=String(entry.logoUrl);img.alt=String(entry.heading||entry.name||'');label.appendChild(img);}
+          const text=document.createElement('span'),key=entry.heading?'heading':'name';setField(text,key,index);applyCreditStyle(text,entry.styles?.[key]);label.appendChild(text);section.appendChild(label);
+          if(entry.note){const note=document.createElement('div');note.className='sp-credits-note';setField(note,'note',index);applyCreditStyle(note,entry.styles?.note);section.appendChild(note);}list.appendChild(section);return;
+        }
+        const row=document.createElement('div');row.className='sp-credits-entry';
+        const heading=document.createElement('div');heading.className='sp-credits-heading';heading.textContent=String(entry.heading||'');setField(heading,'heading',index);applyCreditStyle(heading,entry.styles?.heading);
+        let url='';try{const u=new URL(String(entry.url||''));if(/^https?:$/.test(u.protocol))url=u.href;}catch(_){}
+        const name=document.createElement(url?'a':'div');name.className='sp-credits-name';
+        if(url){name.href=url;name.target='_blank';name.rel='noopener noreferrer';name.title='外部リンクを開く';}
+        if(entry.logoUrl){const img=document.createElement('img');img.className='sp-credits-logo';img.src=String(entry.logoUrl);img.alt=String(entry.name||'');name.appendChild(img);}
+        const nameText=document.createElement('span');nameText.className='sp-credits-name-text';nameText.textContent=String(entry.name||'');setField(nameText,'name',index);applyCreditStyle(nameText,entry.styles?.name);name.appendChild(nameText);
+        if(url){const mark=document.createElement('span');mark.className='sp-credits-link-mark';mark.textContent=' ↗';name.appendChild(mark);}
+        const note=document.createElement('div');note.className='sp-credits-note';note.textContent=String(entry.note||'');setField(note,'note',index);applyCreditStyle(note,entry.styles?.note);
+        row.append(heading,name,note);list.appendChild(row);
+      });
+      const live=active&&this.host?.classList?.contains('live-edit-enabled');
+      if(scene.text||live){const tx=document.createElement('div');tx.className='sp-text sp-credits-body';this._renderRichText(tx,scene);this._applyTextStyle(tx,presentation.text||{},false);tx.style.color='inherit';if(!presentation.text?.size||presentation.text.size==='auto'||presentation.text.size==='normal')tx.style.fontSize='inherit';tx.style.writingMode='horizontal-tb';applyCreditStyle(tx,m.bodyStyle);list.appendChild(tx);}
+      if(scene.subText){const sub=document.createElement('div');sub.className='sp-subtext sp-credits-subtext';sub.textContent=String(scene.subText);applyCreditStyle(sub,m.subTextStyle);list.appendChild(sub);}
+      viewport.appendChild(list);wrap.appendChild(viewport);
+      if(roll){
+        wrap.classList.add('is-preparing');
+        let attempts=0,ready=false;
+        const configureRoll=()=>{
+          if(!wrap.isConnected||viewport.clientHeight<=0){if(++attempts<180)requestAnimationFrame(configureRoll);return;}
+          if(wrap.classList.contains('is-static')||wrap.classList.contains('is-editing')||wrap.classList.contains('is-body-editing')){if(!ready&&++attempts<180)requestAnimationFrame(configureRoll);return;}
+          const first=Array.from(list.children).find(n=>!n.classList.contains('sp-credits-spacer')&&(n.textContent.trim()||n.querySelector('img')));
+          const last=Array.from(list.children).reverse().find(n=>!n.classList.contains('sp-credits-spacer')&&(n.textContent.trim()||n.querySelector('img')));
+          const start=first?viewport.clientHeight-first.offsetTop:0;
+          const value=Number(m.stopPosition),position=Number.isFinite(value)?Math.max(10,Math.min(90,value)):50;
+          const end=m.endMode==='hold'&&last?Math.min(start,viewport.clientHeight*position/100-last.offsetTop-last.offsetHeight/2):-list.offsetHeight;
+          // Resolve lengths before playback; no changing custom property inside keyframes.
+          const animation=list.getAnimations?.().find(a=>['sp-credits-roll','sp-credits-roll-hold'].includes(a.animationName));
+          if(animation?.effect?.setKeyframes){
+            const frames=m.endMode==='hold'?[{transform:`translateY(${start}px)`,offset:0,easing:'linear'},{transform:`translateY(${start+(end-start)*.94}px)`,offset:.85,easing:'ease-out'},{transform:`translateY(${end}px)`,offset:1}]:[{transform:`translateY(${start}px)`},{transform:`translateY(${end}px)`}];
+            animation.effect.setKeyframes(frames);
+          }
+          if(!ready){ready=true;wrap.classList.remove('is-preparing');}
+        };
+        requestAnimationFrame(configureRoll);
+        viewport.addEventListener('click',()=>requestAnimationFrame(configureRoll));
+        viewport.addEventListener('sceneplayer:reflow',configureRoll);
+        list.querySelectorAll('img').forEach(img=>img.addEventListener('load',configureRoll,{once:true}));
+        document.fonts?.ready.then(()=>{if(ready)configureRoll();});
+      }
+      const editing=()=>this.host?.classList?.contains('live-edit-enabled');
+      let down=null,dragged=false,completed=false;
+      viewport.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY};dragged=false;e.stopPropagation();});
+      viewport.addEventListener('pointermove',e=>{if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>12)dragged=true;e.stopPropagation();});
+      ['pointerup','touchstart','touchmove','touchend'].forEach(type=>viewport.addEventListener(type,e=>e.stopPropagation()));
+      viewport.addEventListener('click',e=>{
+        if(editing()){if(roll){const isStatic=wrap.classList.toggle('is-static');wrap.classList.toggle('is-paused',isStatic);}e.preventDefault();e.stopPropagation();return;}
+        if(dragged){e.preventDefault();e.stopPropagation();return;}
+        // Links open in one tap, including a held final entry; other taps reveal the list.
+        if(e.target.closest('a')){e.stopPropagation();return;}
+        if(roll){
+          const isStatic=wrap.classList.contains('is-static');
+          e.preventDefault();e.stopPropagation();
+          if(!isStatic){wrap.classList.add('is-static','is-paused');}
+          else{viewport.scrollTop=0;wrap.classList.remove('is-static','is-paused');if(completed){const animation=list.getAnimations?.()[0];if(animation){animation.currentTime=0;animation.play();}completed=false;}}
+        }else if(e.target.closest('a'))e.stopPropagation();
+      });
+      if(roll)list.addEventListener('animationend',e=>{if(e.target!==list||!['sp-credits-roll','sp-credits-roll-hold'].includes(e.animationName))return;completed=true;if(m.endMode!=='hold')wrap.classList.add('is-complete');else wrap.classList.add('is-held');});
+      return wrap;
+    }
+
     _sceneNode(scene, active, age) {
       const article = document.createElement('article');
       article.className = `sp-scene sp-type-${scene.type}`;
@@ -4589,6 +6151,62 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const entryMotion = presentation.entryMotion === 'still' ? 'still' : 'flow';
       article.dataset.entryMotion = entryMotion;
       article.dataset.fit = this._resolveAutoFit(scene, presentation.text || {});
+
+      if(this._hasCredits(presentation)){article.dataset.credits='on';article.appendChild(this._creditsNode(scene,presentation,active));return article;}
+
+      if (presentation.view === 'web-qa') {
+        article.classList.add('sp-web-qa-scene');const q=presentation.webQA||{},a=q.answer||{},qaIndex=(this.document?.scenes||[]).indexOf(scene);let kind=q.kind||'legacy-answer';
+        let qScene=scene,qPresentation=presentation,qData=q;
+        if(kind==='answer'&&q.qaId){for(let j=qaIndex-1;j>=0;j--){const cand=this.document?.scenes?.[j],cp=cand?.presentation||{},cq=cp.webQA||{};if(cp.view!=='web-qa')break;if(cq.qaId===q.qaId&&cq.kind==='question'){qScene=cand;qPresentation=cp;qData=cq;break;}}}
+        const qu=qData.question||{},wrap=document.createElement('div');wrap.className='sp-web-qa-wrap';
+        const makeQuestion=()=>{const qbox=document.createElement('section');qbox.className='sp-web-qa-question';const status=document.createElement('span');status.className='sp-web-qa-status';status.textContent=qu.status==='resolved'?'解決済み':'受付中';const qt=document.createElement('div');qt.className='sp-web-qa-title';qt.textContent=qu.title||'質問';const qb=document.createElement('div');qb.className='sp-web-qa-question-body';if(kind==='question'&&qScene===scene)qb.classList.add('is-question-scene-text');qb.textContent=qData.kind==='question'?String(qScene.text||''):String(qu.body||'');const qm=document.createElement('div');qm.className='sp-web-qa-question-meta';const qav=document.createElement('span');qav.className='sp-web-qa-icon sp-web-qa-question-icon';const qsrc=ahakoAvatarSrc(qu.iconPreset);if(qsrc){const qi=document.createElement('img');qi.src=qsrc;qi.alt='';qav.appendChild(qi);}else qav.textContent=String(qu.name||'質').trim().slice(0,1)||'質';const qname=document.createElement('span');qname.textContent=qu.name||'質問者';qm.append(qav,qname);qbox.append(status,qt,qb,qm);return qbox;};
+        const makeAnswer=()=>{const ans=document.createElement('section');ans.className='sp-web-qa-answer';if(a.best)ans.classList.add('is-best');const head=document.createElement('div');head.className='sp-web-qa-answer-head';const av=document.createElement('div');av.className='sp-web-qa-icon';const src=ahakoAvatarSrc(a.iconPreset);if(src){const img=document.createElement('img');img.src=src;img.alt='';av.appendChild(img);}else av.textContent=String(a.name||'回').trim().slice(0,1)||'回';const who=document.createElement('strong');who.textContent=a.name||'回答者';const badge=document.createElement('span');badge.className='sp-web-qa-answer-label';badge.textContent=a.best?'🏆 ベストアンサー':'回答';head.append(av,who,badge);const tx=document.createElement('div');tx.className='sp-web-qa-answer-text';tx.textContent=a.deleted?'この回答は削除されました':String(scene.text||'');const meta=document.createElement('div');meta.className='sp-web-qa-meta';const tm=this._logTimeText(scene,presentation);meta.textContent=[Number(a.good)>0?'GOOD '+Number(a.good):'',tm].filter(Boolean).join(' · ');ans.append(head,tx,meta);return ans;};
+        if(kind==='question'){wrap.appendChild(makeQuestion());}
+        else if(kind==='answer'){if(a.best)wrap.appendChild(makeQuestion());wrap.appendChild(makeAnswer());}
+        else{const qaPrev=qaIndex>0?this.document.scenes[qaIndex-1]:null,qaFirst=!qaPrev||qaPrev?.presentation?.view!=='web-qa';if(qaFirst)wrap.appendChild(makeQuestion());wrap.appendChild(makeAnswer());}
+        article.appendChild(wrap);article.dataset.view='web-qa';return article;
+      }
+
+      if (presentation.view === 'web-sns') {
+        article.classList.add('sp-web-sns-scene');const m=presentation.webSNS||{},row=document.createElement('div');row.className='sp-web-sns-row';
+        const profileUrl=(()=>{try{const u=new URL(String(m.profileUrl||''),location.href);return /^https?:$/.test(u.protocol)?u.href:'';}catch(_){return '';}})();
+        const avatar=document.createElement(profileUrl?'a':'div');avatar.className='sp-web-sns-avatar';if(profileUrl){avatar.href=profileUrl;avatar.target='_blank';avatar.rel='noopener noreferrer';avatar.title='外部プロフィールを開く';avatar.addEventListener('click',e=>{e.stopPropagation();if(!window.confirm('外部プロフィールを開きます。'))e.preventDefault();});}
+        const src=m.icon||ahakoAvatarSrc(m.iconPreset);if(src){const img=document.createElement('img');img.src=src;img.alt='';avatar.appendChild(img);}else avatar.textContent=String(m.name||'ユ').trim().slice(0,1)||'ユ';
+        const content=document.createElement('div');content.className='sp-web-sns-content';const head=document.createElement('div');head.className='sp-web-sns-head';
+        const identity=document.createElement(profileUrl?'a':'span');identity.className='sp-web-sns-identity';if(profileUrl){identity.href=profileUrl;identity.target='_blank';identity.rel='noopener noreferrer';identity.title='外部プロフィールを開く';identity.addEventListener('click',e=>{e.stopPropagation();if(!window.confirm('外部プロフィールを開きます。'))e.preventDefault();});}
+        const nm=document.createElement('strong');nm.textContent=m.name||'ユーザー';const hd=document.createElement('span');hd.className='sp-web-sns-handle';hd.textContent=m.handle||'@user';identity.append(nm,hd);head.appendChild(identity);
+        const tm=this._logTimeText(scene,presentation);if(tm){const time=document.createElement('span');time.className='sp-web-sns-time';time.textContent=tm;head.appendChild(time);}
+        const tx=document.createElement('div');tx.className='sp-web-sns-text sp-message-original';tx.textContent=m.deleted?'この投稿は削除されました':String(scene.text||'');
+        const metrics=document.createElement('div');metrics.className='sp-web-sns-metrics';const likes=Math.max(0,Number(m.likes)||0),reposts=Math.max(0,Number(m.reposts)||0),replies=Math.max(0,Number(m.replies)||0);metrics.innerHTML=`<span>♡ ${likes}</span><span>↻ ${reposts}</span><span>💬 ${replies}</span>`;
+        content.append(head,tx,metrics);row.append(avatar,content);article.appendChild(row);article.dataset.view='web-sns';return article;
+      }
+
+      if (presentation.view === 'web-notification') {
+        article.classList.add('sp-web-notification-scene');const m=presentation.webNotification||{},card=document.createElement('div');card.className='sp-web-notification-card';
+        const icon=document.createElement('div');icon.className='sp-web-notification-icon';const iconSrc=m.icon||ahakoAvatarSrc(m.iconPreset);if(iconSrc){const img=document.createElement('img');img.src=iconSrc;img.alt='';icon.appendChild(img);}else icon.textContent=({social:'💬',mail:'✉',system:'⚙',message:'●',other:'🔔'})[m.kind]||'🔔';
+        const content=document.createElement('div');content.className='sp-web-notification-content';
+        const head=document.createElement('div');head.className='sp-web-notification-head';const source=document.createElement('strong');source.textContent=m.source||'通知';head.appendChild(source);const tm=this._logTimeText(scene,presentation);if(tm){const time=document.createElement('span');time.className='sp-web-notification-time';time.textContent=tm;head.appendChild(time);}
+        const title=document.createElement('div');title.className='sp-web-notification-title';title.textContent=m.title||'お知らせ';
+        const tx=document.createElement('div');tx.className='sp-web-notification-text sp-message-original';tx.textContent=String(scene.text||'');
+        content.append(head,title,tx);card.append(icon,content);article.appendChild(card);article.dataset.view='web-notification';return article;
+      }
+
+      if (presentation.view === 'web-mail') {
+        article.classList.add('sp-web-mail-scene');const m=presentation.webMail||{},wrap=document.createElement('div');
+        wrap.className='sp-web-mail-card'+(m.folder==='draft'?' is-open':'');
+        const summary=document.createElement('button');summary.type='button';summary.className='sp-web-mail-summary';
+        const sav=document.createElement('span');sav.className='sp-web-mail-summary-avatar';const src=m.icon||ahakoAvatarSrc(m.iconPreset);if(src){const img=document.createElement('img');img.src=src;img.alt='';sav.appendChild(img);}else sav.textContent=String(m.senderName||'差').trim().slice(0,1)||'差';
+        const smain=document.createElement('span');smain.className='sp-web-mail-summary-main';const swho=document.createElement('strong');swho.textContent=(m.folder==='sent'||m.folder==='draft')?(`To: ${String(m.to||'宛先未設定')}`):(m.senderName||'差出人');const ssub=document.createElement('span');ssub.textContent=m.subject||'件名なし';smain.append(swho,ssub);
+        const smeta=document.createElement('span');smeta.className='sp-web-mail-summary-meta';const tm=this._logTimeText(scene,presentation);if(m.attachmentName){const clip=document.createElement('span');clip.textContent='📎';smeta.appendChild(clip);}const sstar=document.createElement('span');sstar.className='sp-web-mail-star';sstar.textContent=m.starred?'★':'☆';if(m.starred)sstar.style.color='#e5b20a';smeta.appendChild(sstar);if(tm){const stime=document.createElement('span');stime.textContent=tm;smeta.appendChild(stime);}summary.append(sav,smain,smeta);
+        const detail=document.createElement('div');detail.className='sp-web-mail-detail';
+        const top=document.createElement('div');top.className='sp-web-mail-top';const folder=document.createElement('span');folder.className='sp-web-mail-folder';folder.textContent=({inbox:'受信',sent:'送信済み',draft:'下書き',spam:'迷惑メール'})[m.folder]||'受信';const star=document.createElement('span');star.className='sp-web-mail-star';star.textContent=m.starred?'★':'☆';if(m.starred)star.style.color='#e5b20a';const time=document.createElement('span');time.className='sp-web-mail-time';time.textContent=tm||'';top.append(folder,star,time);
+        const subject=document.createElement('div');subject.className='sp-web-mail-subject';subject.textContent=m.subject||'件名なし';
+        const identity=document.createElement('div');identity.className='sp-web-mail-identity';const av=document.createElement('span');av.className='sp-web-mail-avatar';if(src){const img=document.createElement('img');img.src=src;img.alt='';av.appendChild(img);}else av.textContent=String(m.senderName||'差').trim().slice(0,1)||'差';const who=document.createElement('div');who.className='sp-web-mail-who';const name=document.createElement('strong');name.textContent=m.senderName||'差出人';const addr=document.createElement('span');addr.textContent=m.senderAddress||'';who.append(name,addr);identity.append(av,who);
+        const routes=document.createElement('div');routes.className='sp-web-mail-routes';const to=String(m.to||'').trim(),cc=String(m.cc||'').trim();if(to){const x=document.createElement('div');x.textContent='To: '+to;routes.appendChild(x);}if(cc){const x=document.createElement('div');x.textContent='CC: '+cc;routes.appendChild(x);}
+        const tx=document.createElement('div');tx.className='sp-web-mail-text sp-message-original';tx.textContent=String(scene.text||'');
+        detail.append(top,subject,identity,routes,tx);if(m.attachmentName){const att=document.createElement('div');att.className='sp-web-mail-attachment';att.textContent='📎 '+String(m.attachmentName);detail.appendChild(att);}wrap.append(summary,detail);article.appendChild(wrap);article.dataset.view='web-mail';
+        const toggle=e=>{e.preventDefault();e.stopPropagation();wrap.classList.toggle('is-open');};summary.addEventListener('pointerdown',e=>e.stopPropagation());summary.addEventListener('click',toggle);return article;
+      }
 
       if (presentation.view === 'web-review' && (scene.text || scene.subText)) {
         article.classList.add('sp-web-review-scene');const r=presentation.webReview||{};const row=document.createElement('div');row.className='sp-web-review-row';
@@ -4672,8 +6290,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           bubble.className = 'sp-chat-bubble';
           if (presentation.chat?.bubbleColor) bubble.style.background = presentation.chat.bubbleColor;
           const text = document.createElement('div');
-          text.className = 'sp-text';
-          text.textContent = chatDisplayText(scene.text);
+          text.className = 'sp-text sp-message-original';
+          this._renderRichText(text, scene, chatDisplayText(scene.text));
           this._applyTextStyle(text, presentation.text || {}, false);
           if (presentation.chat?.bubbleTextColor) text.style.setProperty('color', String(presentation.chat.bubbleTextColor), 'important');
           bubble.appendChild(text);
@@ -4718,11 +6336,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (typeof scene.text === 'string' && scene.text.length) {
           const text = document.createElement('div');
           text.className = 'sp-text';
-          text.textContent = scene.text;
-          this._renderTextOrientations(text,scene);
+          this._renderRichText(text, scene);
           this._applyTextStyle(text, presentation.text || {}, false);
           if(String(presentation.frame?.type||'').startsWith('handdrawn-')){
-            const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';const inkColor=String(presentation.text?.color||'').trim().toLowerCase();if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';frame.appendChild(text);article.appendChild(frame);article.dataset.frame=presentation.frame.type;this._mountHanddrawnFrame(frame,scene,presentation);
+            const frame=document.createElement('div');
+            frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;
+            frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
+            const align=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';
+            frame.dataset.frameAlign=align;
+            const inkColor=String(presentation.text?.color||'').trim().toLowerCase();
+            if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';
+            frame.appendChild(text);
+            article.appendChild(frame);
+            article.dataset.frame=presentation.frame.type;
+            this._mountHanddrawnFrame(frame,scene,presentation);
           }else article.appendChild(text);
         }
 
@@ -4780,105 +6407,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return 'fadeRise';
     }
 
-    _normalizeRichTextRanges(source, ranges) {
-      if (!Array.isArray(ranges) || !ranges.length) return [];
-      const codepoints = Array.from(source);
-      const cpToUtf16 = [0];
-      for (const ch of codepoints) cpToUtf16.push(cpToUtf16[cpToUtf16.length - 1] + ch.length);
-      const boundaries = new Set(cpToUtf16);
-      const offsets = ranges.flatMap((r) => [Number(r?.start), Number(r?.end)]).filter(Number.isFinite);
-      const hasSplitSurrogate = offsets.some((i) => Number.isInteger(i) && i > 0 && i < source.length && !boundaries.has(i));
-      // Some imported Scenes count Unicode code points. Player slicing uses
-      // UTF-16 offsets, so detect the telltale split-surrogate boundary and
-      // convert every range consistently before rendering any span.
-      const mapped = hasSplitSurrogate ? ranges.map((r) => {
-        const map = (value) => {
-          const i = Math.max(0, Math.min(codepoints.length, Math.trunc(Number(value) || 0)));
-          return cpToUtf16[i];
-        };
-        return { ...r, start: map(r?.start), end: map(r?.end) };
-      }) : ranges;
-      if (typeof Intl?.Segmenter !== 'function') return mapped;
-      const graphemeBounds = new Set([0, source.length]);
-      for (const part of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(source)) {
-        graphemeBounds.add(part.index);
-        graphemeBounds.add(part.index + part.segment.length);
-      }
-      const sorted = [...graphemeBounds].sort((a, b) => a - b);
-      const floorBoundary = (value) => { let result = 0; for (const i of sorted) { if (i > value) break; result = i; } return result; };
-      const ceilBoundary = (value) => sorted.find((i) => i >= value) ?? source.length;
-      return mapped.map((r) => {
-        if (r?.kind === 'table') return r;
-        const start = Math.max(0, Math.min(source.length, Math.trunc(Number(r?.start) || 0)));
-        const end = Math.max(start, Math.min(source.length, Math.trunc(Number(r?.end) || 0)));
-        // If an old Scene splits a grapheme cluster, leave that cluster
-        // unformatted instead of splitting a surrogate or variation sequence.
-        return { ...r, start: graphemeBounds.has(start) ? start : ceilBoundary(start), end: graphemeBounds.has(end) ? end : floorBoundary(end) };
-      }).filter((r) => r?.kind === 'table' || r.end > r.start);
-    }
-
-    _isVerticalEmojiCluster(text) {
-      try {
-        if (new RegExp('\\p{Extended_Pictographic}', 'u').test(text)) return true;
-      } catch (_) {}
-      // Supplementary-plane glyphs (including decorative Phoenician letters
-      // used in emoji-style laughter such as 𐤔) should remain upright too.
-      if (Array.from(text).some((ch) => ch.codePointAt(0) > 0xFFFF)) return true;
-      return /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u00A9\u00AE\u203C\u2049\u2122\u2139]/u.test(text);
-    }
-
-    _isVerticalWriting(node, scene) {
-      return node?.dataset?.writingMode === 'vertical-rl' || node?.style?.writingMode === 'vertical-rl' || scene?.presentation?.text?.writingMode === 'vertical-rl';
-    }
-
-    _appendVerticalEmojiAwareText(node, text) {
-      if (typeof Intl?.Segmenter !== 'function') { node.textContent = text; return; }
-      const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-      let plain = '';
-      const flush = () => { if (plain) { node.appendChild(document.createTextNode(plain)); plain = ''; } };
-      for (const part of segmenter.segment(text)) {
-        if (this._isVerticalEmojiCluster(part.segment)) {
-          flush();
-          const span = document.createElement('span');
-          span.className = 'sp-emoji-upright';
-          span.textContent = part.segment;
-          span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
-          span.style.setProperty('text-orientation', 'upright', 'important');
-          node.appendChild(span);
-        } else plain += part.segment;
-      }
-      flush();
-    }
-
-    _renderTextOrientations(node,scene){
-      const source=String(scene?.text||'');
-      const raw=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
-      const ranges=this._normalizeRichTextRanges(source,raw)
-        .filter(r=>r?.kind==='orientation'&&['tcy','sideways','upright'].includes(String(r.orientation)))
-        .map(r=>({start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0),orientation:String(r.orientation)}))
-        .filter(r=>r.end>r.start).sort((a,b)=>a.start-b.start);
-      const vertical=this._isVerticalWriting(node,scene);
-      node.textContent='';let cursor=0;
-      const appendPlain=(text)=>{if(vertical)this._appendVerticalEmojiAwareText(node,text);else if(text)node.appendChild(document.createTextNode(text));};
-      const appendOriented=(text,orientation)=>{
-        const appendPart=(part)=>{
-          const emoji=vertical&&this._isVerticalEmojiCluster(part);
-          const span=document.createElement('span');span.dataset.spTextOrientation=emoji?'upright':orientation;span.textContent=part;
-          if(emoji){span.className='sp-emoji-upright';span.style.setProperty('-webkit-text-combine','none','important');span.style.setProperty('-webkit-text-combine-upright','none','important');span.style.setProperty('text-combine-upright','none','important');span.style.setProperty('-webkit-text-orientation','upright','important');span.style.setProperty('text-orientation','upright','important');}
-          else if(orientation==='tcy'){span.style.setProperty('-webkit-text-combine','horizontal','important');span.style.setProperty('-webkit-text-combine-upright','all','important');span.style.setProperty('text-combine-upright','all','important');}
-          else{span.style.setProperty('-webkit-text-orientation',orientation,'important');span.style.setProperty('text-orientation',orientation,'important');}
-          node.appendChild(span);
-        };
-        if(vertical&&typeof Intl?.Segmenter==='function'){
-          for(const part of new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text))appendPart(part.segment);
-        }else appendPart(text);
-      };
-      for(const r of ranges){
-        if(r.start<cursor)continue;
-        appendPlain(source.slice(cursor,r.start));
-        appendOriented(source.slice(r.start,r.end),r.orientation);cursor=r.end;
-      }
-      appendPlain(source.slice(cursor));
+    _syncVerticalTextHeight(node) {
+      const chars = Math.max(4, Math.min(22, Number(node.dataset.verticalMaxChars) || 4));
+      const screenHeight = Math.max(1, this.host.clientHeight || global.innerHeight) * .52;
+      node.style.setProperty('--sp-vertical-screen-height', `${screenHeight}px`);
+      node.style.setProperty('--sp-vertical-content-height', `${chars * 1.15}em`);
+      node.style.height = `min(${screenHeight}px, ${chars * 1.15}em)`;
     }
 
     _applyTextStyle(node, style, isSubText) {
@@ -4901,9 +6435,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       node.style.fontFamily = families[family] || families.serif;
 
       const size = style.size;
+      // Flag auto/normal sizes so landscape immersion can tune only defaults;
+      // explicit author-selected sizes remain untouched.
+      node.dataset.spSizeMode = size == null || size === '' || size === 'auto' || size === 'normal' ? 'auto' : 'fixed';
+      const landscapeSizes = isSubText
+        ? { small: 9, normal: 11, large: 13, xl: 15 }
+        : { small: 16, normal: 19, large: 24, xl: 30 };
+      const landscapeSize = typeof size === 'number' && Number.isFinite(size) && size > 0
+        ? size * .75 : (landscapeSizes[size] || (isSubText ? 11 : 19));
+      node.style.setProperty('--sp-landscape-font', `${landscapeSize}px`);
       const tokenSizes = isSubText
         ? { small: '11px', normal: '14px', large: '17px', xl: '20px' }
-        : { small: 'clamp(17px,3.8vw,24px)', normal: 'clamp(21px,4.8vw,34px)', large: 'clamp(26px,5.8vw,42px)', xl: 'clamp(32px,7vw,54px)' };
+        : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)' };
       if (typeof size === 'number' && Number.isFinite(size) && size > 0) node.style.fontSize = `${size}px`;
       else if (typeof size === 'string' && size !== 'auto' && tokenSizes[size]) node.style.fontSize = tokenSizes[size];
 
@@ -4920,7 +6463,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.dataset.writingMode='vertical-rl';
         node.style.writingMode='vertical-rl';
         node.style.textOrientation='mixed';
-        node.style.height=`min(52dvh, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
+        node.dataset.verticalMaxChars=String(longest+1);
+        this._syncVerticalTextHeight(node);
         node.style.textAlign='start';
         const blockAlign=style.align==='left'||style.align==='right'?style.align:'center';
         node.dataset.verticalBlockAlign=blockAlign;
@@ -4932,6 +6476,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.style.textOrientation='';
         node.style.height='';
         delete node.dataset.verticalBlockAlign;
+        delete node.dataset.verticalMaxChars;
         node.style.marginLeft='';
         node.style.marginRight='';
       }
@@ -4994,7 +6539,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // or because another Scene is revealed above/below it.
       this._playEntranceEffectOnce(article);
 
-      if (textNode && typing?.enabled && typeof scene.text === 'string' && scene.text.length) {
+      if (textNode && typing?.enabled && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
         this._startTyping(scene, textNode, typing);
       }
 
@@ -5037,33 +6582,54 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _startTyping(scene, node, typing) {
       this._stopTyping(true);
-      const chars = Array.from(scene.text || '');
+      // Animate the rendered text nodes so rich-text spans and chat formatting
+      // survive typing, skipping and Live Editor refreshes.
+      const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
+      const parts=[];
+      let text;
+      while((text=walker.nextNode())){if(!text.parentElement?.closest('rt,rp'))parts.push({node:text,chars:Array.from(text.data)});}
+      const readings=[...node.querySelectorAll('ruby')].map(ruby=>({ruby,rt:ruby.querySelector('rt')}));
+      const length=parts.reduce((sum,part)=>sum+part.chars.length,0);
+      if(!length)return;
       const speed = Math.max(10, asNumber(typing.speed, 55));
-      const cursor = typing.cursor === false ? '' : '▍';
-      let position = 0;
-
+      const cursor=document.createElement('span');
+      cursor.className='sp-typing-cursor';
+      cursor.setAttribute('aria-hidden','true');
+      cursor.textContent=typing.cursor===false?'':'▍';
+      let position=0;
+      const reveal=count=>{
+        let remaining=count,last=null;
+        for(const part of parts){
+          const shown=Math.min(part.chars.length,Math.max(0,remaining));
+          part.node.data=part.chars.slice(0,shown).join('');
+          if(shown>0)last=part.node;
+          remaining-=part.chars.length;
+        }
+        for(const item of readings){if(item.rt)item.rt.style.visibility=item.ruby.querySelector('.sp-ruby-base')?.textContent.length?'':'hidden';}
+        if(count>=length)cursor.remove();
+        else if(last)last.after(cursor);
+        else if(parts[0])parts[0].node.after(cursor);
+      };
       node.classList.add('is-typing');
-      node.textContent = cursor;
+      reveal(0);
       emit(this.host, 'sceneplayer:typingstart', { index: this.index, scene });
-
-      const timer = setInterval(() => {
-        position += 1;
-        node.textContent = chars.slice(0, position).join('') + (position < chars.length ? cursor : '');
-        if (position >= chars.length) {
+      const timer=setInterval(()=>{
+        reveal(++position);
+        if(position>=length){
           clearInterval(timer);
-          if (this.typingState?.timer === timer) this.typingState = null;
+          if(this.typingState?.timer===timer)this.typingState=null;
           node.classList.remove('is-typing');
-          emit(this.host, 'sceneplayer:typingend', { index: this.index, scene, skipped: false });
+          emit(this.host,'sceneplayer:typingend',{index:this.index,scene,skipped:false});
           this._scheduleAuto();
         }
-      }, speed);
-
-      this.typingState = { timer, node, text: scene.text, sceneId: scene.id };
+      },speed);
+      this.typingState={timer,node,text:scene.text,sceneId:scene.id,complete:()=>reveal(length),cleanup:()=>{cursor.remove();readings.forEach(item=>{if(item.rt)item.rt.style.visibility='';});}};
     }
 
     destroy(options = {}) {
       if (this.destroyed) return;
       const preserveHost = options?.preserveHost === true;
+      if(this._immersiveRaf)cancelAnimationFrame(this._immersiveRaf);this._immersiveRaf=0;
       this.stopAuto();
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
@@ -5094,7 +6660,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // shared host, otherwise its delayed destroy wipes out the second read.
       if (!preserveHost) {
         this.host.innerHTML = '';
-        this.host.classList.remove('sp-core');
+        this.host.classList.remove('sp-core','sp-immersive','sp-immersive-controls');
       }
       if (this._chatIconPreloadTimer) clearTimeout(this._chatIconPreloadTimer);
       this._chatIconPreloadTimer = 0;
