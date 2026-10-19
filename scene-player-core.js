@@ -1125,8 +1125,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
       if (stopAfter > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
-      else if (command.loop === false && command.stopAt == null) {
-        this._scheduleNaturalPersistentFade(channel, audio, startAt, command.fadeOut || 0);
+      else if (command.loop === false) {
+        const schedule = () => {
+          const remain = Math.max(0, (audio.duration - Math.max(0, audio.currentTime || startAt)) * 1000 - 20);
+          if (remain > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), remain);
+        };
+        if (Number.isFinite(audio.duration) && audio.duration > 0) schedule();
+        else audio.addEventListener('loadedmetadata', schedule, { once:true });
       }
       emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'ios-live-media-bank' });
       emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct, transport:'ios-live-media-bank' });
@@ -1389,8 +1394,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (gain && this.audioContext) {
         try {
           const now = this.audioContext.currentTime;
-          // A new explicit level is authoritative. Cancel any fade automation
-          // still scheduled by the previous Scene before setting this value.
           gain.gain.cancelScheduledValues(now);
           gain.gain.setValueAtTime(target, now);
         } catch (_) { gain.gain.value = target; }
@@ -1803,8 +1806,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (channel === 'bgm' || channel === 'ambient') {
         this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
         this._cancelNaturalPersistentFade(channel);
-        // Stop any HTMLAudio/rAF fade from the previous Scene. Web Audio
-        // automation is cancelled by _setAudioVolume below.
         for (const key of [channel, `exit:${channel}`]) {
           const frame = this.audioFadeFrames?.get(key);
           if (frame) cancelAnimationFrame(frame);
@@ -5413,13 +5414,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'){
-              if(r.orientation==='tcy')span.style.textCombineUpright='all';
-              else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
+              span.dataset.spTextOrientation=r.orientation;
+              if(r.orientation==='tcy'){
+                span.style.setProperty('-webkit-text-combine','horizontal','important');
+                span.style.setProperty('-webkit-text-combine-upright','all','important');
+                span.style.setProperty('text-combine-upright','all','important');
+              }else if(r.orientation==='sideways'||r.orientation==='upright'){
+                span.style.setProperty('-webkit-text-orientation',r.orientation,'important');
+                span.style.setProperty('text-orientation',r.orientation,'important');
+              }
             }
           });
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
-          const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
+          const content=span.className||span.getAttribute('style')||span.hasAttribute('data-sp-text-orientation')?span:document.createTextNode(segmentText);
           const annotation=rubies.find(r=>r.start<=a&&r.end>=b&&r.start>=from&&r.end<=to);
           if(annotation){
             let group=rubyNodes.get(annotation);
