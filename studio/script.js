@@ -236,12 +236,12 @@
   let endingFontFamily = 'serif';
   // Rich Paste v0.1 — keep semantic clipboard structure beside the existing plain-text source.
   // The existing Splitter still receives plain text; semantic ranges are mapped back after splitting.
-  let easyRichSource = { version: 1, marks: [], tables: [] };
+  let easyRichSource = { version: 1, marks: [], tables: [], cards: [] };
   let applyingRichPaste = false;
   let easyRichTextSnapshot = '';
 
   function normalizeIncomingRichFragment(fragment){
-    const f={text:String(fragment?.text||''),marks:(fragment?.marks||[]).map(x=>clone(x)),tables:(fragment?.tables||[]).map(x=>clone(x))};
+    const f={text:String(fragment?.text||''),marks:(fragment?.marks||[]).map(x=>clone(x)),tables:(fragment?.tables||[]).map(x=>clone(x)),cards:(fragment?.cards||[]).map(x=>clone(x))};
     if(!f.tables.length)return f;
     let nextNo=(easyRichSource.tables||[]).length+1;
     f.tables.sort((a,b)=>(a.start||0)-(b.start||0)).forEach(table=>{
@@ -283,12 +283,13 @@
     };
     easyRichSource.marks=(easyRichSource.marks||[]).map(adjust).filter(Boolean);
     easyRichSource.tables=(easyRichSource.tables||[]).map(adjust).filter(Boolean);
+    easyRichSource.cards=(easyRichSource.cards||[]).map(adjust).filter(Boolean);
   }
 
   function cloneRichSource(src=easyRichSource){
-    return {version:1,marks:(src?.marks||[]).map(x=>clone(x)),tables:(src?.tables||[]).map(x=>clone(x))};
+    return {version:1,marks:(src?.marks||[]).map(x=>clone(x)),tables:(src?.tables||[]).map(x=>clone(x)),cards:(src?.cards||[]).map(x=>clone(x))};
   }
-  function resetEasyRichSource(){ easyRichSource={version:1,marks:[],tables:[]}; }
+  function resetEasyRichSource(){ easyRichSource={version:1,marks:[],tables:[],cards:[]}; }
   function richTextFromClipboardHtml(html){
     const doc=new DOMParser().parseFromString(String(html||''),'text/html');
     const out=[]; const marks=[]; const tables=[];
@@ -414,8 +415,10 @@
     const shift=m=>m.start>=end?{...m,start:m.start+delta,end:m.end+delta}:m;
     easyRichSource.marks=(easyRichSource.marks||[]).filter(keepMark).map(shift);
     easyRichSource.tables=(easyRichSource.tables||[]).filter(keepMark).map(shift);
+    easyRichSource.cards=(easyRichSource.cards||[]).filter(keepMark).map(shift);
     easyRichSource.marks.push(...fragment.marks.map(m=>({...m,start:m.start+start,end:m.end+start})));
     easyRichSource.tables.push(...fragment.tables.map(m=>({...m,start:m.start+start,end:m.end+start})));
+    easyRichSource.cards.push(...fragment.cards.map(c=>({...c,start:c.start+start,end:c.end+start})));
     applyingRichPaste=true; bodyInput.value=before+fragment.text+after; applyingRichPaste=false;
     const caret=start+fragment.text.length; bodyInput.setSelectionRange(caret,caret);
     easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();
@@ -426,14 +429,14 @@
     let start=source.indexOf(chunkText,searchFrom);
     if(start<0){ const compact=String(chunkText||'').trim(); start=source.indexOf(compact,searchFrom); chunkText=compact; }
     const chunk=String(chunkText||'');
-    const ranges=[]; const tableIds=new Set();
+    const ranges=[]; const tableIds=new Set(); const cardIds=new Set();
 
     // Fast path: exact Splitter slice.
     if(start>=0){
       const end=start+chunk.length;
       (easyRichSource.marks||[]).filter(m=>m.end>start&&m.start<end).forEach(m=>{
         const r={...m,start:Math.max(0,m.start-start),end:Math.min(end,m.end)-start};
-        if(r.end>r.start){ranges.push(r);if(r.kind==='table')tableIds.add(r.tableId);}
+        if(r.end>r.start){ranges.push(r);if(r.kind==='table')tableIds.add(r.tableId);if(r.kind==='linkCard')cardIds.add(r.cardId);}
       });
     }
 
@@ -449,12 +452,16 @@
       // they are accepted only from the exact source slice or rebuilt from a Splitter
       // list-block whose canonical text already contains a real list marker.
       if(m?.kind==='listItem')return;
-      if(ranges.some(r=>r.kind===m.kind&&r.tableId===m.tableId&&r.start===Math.max(0,(m.start-(start>=0?start:0)))))return;
+      if(ranges.some(r=>r.kind===m.kind&&r.tableId===m.tableId&&r.cardId===m.cardId&&r.start===Math.max(0,(m.start-(start>=0?start:0)))))return;
       let marked=source.slice(Math.max(0,m.start),Math.max(0,m.end));
       let needle=marked.trim();
       if(m.kind==='table' && m.tableId){
         const t=(easyRichSource.tables||[]).find(x=>x.id===m.tableId);
         needle=String(t?.label||needle).trim();
+      }
+      if(m.kind==='linkCard' && m.cardId){
+        const c=(easyRichSource.cards||[]).find(x=>x.id===m.cardId);
+        needle=String(c?.label||needle).trim();
       }
       if(!needle)return;
       let local=chunk.indexOf(needle);
@@ -470,12 +477,14 @@
       if(local>=0&&localEnd>local){
         ranges.push({...m,start:local,end:localEnd});
         if(m.kind==='table'&&m.tableId)tableIds.add(m.tableId);
+        if(m.kind==='linkCard'&&m.cardId)cardIds.add(m.cardId);
       }
     });
     // Rich Text Player v0.18: listItem has no word-based fallback.
     ranges.sort((a,b)=>(a.start-b.start)||(a.end-b.end));
     const tables=(easyRichSource.tables||[]).filter(t=>tableIds.has(t.id)).map(t=>({type:'table',id:t.id,headerRows:t.headerRows||0,rows:clone(t.rows||[]),display:{mode:'compact',expand:'fullscreen'}}));
-    return {next:start>=0?start+chunk.length:searchFrom,ranges,tables};
+    const cards=(easyRichSource.cards||[]).filter(c=>cardIds.has(c.id)).map(c=>({type:'linkCard',id:c.id,url:c.url,title:c.title,description:c.description,image:c.image,siteName:c.siteName||''}));
+    return {next:start>=0?start+chunk.length:searchFrom,ranges,tables,cards};
   }
   const bodyInput = $('#bodyInput');
   const charCount = $('#charCount');
@@ -1461,7 +1470,7 @@
     latestPublishedFingerprint=row.publication?.fingerprint||'';
     latestPublishedAt=Number(row.publication?.publishedAt)||0;
     latestPublicationStoppedAt=Number(row.publication?.stoppedAt)||0;
-    titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';easyRichSource=row.richSource?cloneRichSource(row.richSource):{version:1,marks:[],tables:[]};easyRichTextSnapshot=bodyInput.value;renderEasyRichComposition();
+    titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';easyRichSource=row.richSource?cloneRichSource(row.richSource):{version:1,marks:[],tables:[],cards:[]};easyRichTextSnapshot=bodyInput.value;renderEasyRichComposition();renderEasyOgpCardList();
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
     if(episodeNumberInput)episodeNumberInput.value=String(row.easy?.episodeNumber||row.document?.metadata?.episodeNumber||'');
@@ -1825,7 +1834,7 @@
     latestPublishedUrl='';
     latestPublishedFingerprint='';
     latestPublishedAt=0;
-    titleInput.value='';authorInput.value='';bodyInput.value='';resetEasyRichSource();easyRichTextSnapshot='';renderEasyRichComposition();
+    titleInput.value='';authorInput.value='';bodyInput.value='';resetEasyRichSource();easyRichTextSnapshot='';renderEasyRichComposition();renderEasyOgpCardList();
     if(densitySelect)densitySelect.value='normal';
     // "New work" must be genuinely blank. Remembered work identity is useful
     // when restoring a draft/session, but applying it here resurrected the
@@ -2743,15 +2752,15 @@
   function isolateTablesIntoScenes(scene){
     const source=String(scene?.text||'');
     const ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
-    const tableRanges=ranges.filter(r=>r?.kind==='table').slice().sort((a,b)=>(Number(a.start)||0)-(Number(b.start)||0));
-    if(!tableRanges.length)return [scene];
+    const cardRanges=ranges.filter(r=>r?.kind==='table'||r?.kind==='linkCard').slice().sort((a,b)=>(Number(a.start)||0)-(Number(b.start)||0));
+    if(!cardRanges.length)return [scene];
     const content=Array.isArray(scene.content)?scene.content:[];
     const out=[];
     const pushProse=(a,b)=>{
       const raw=source.slice(a,b); const lead=(raw.match(/^\s*/)||[''])[0].length; const trail=(raw.match(/\s*$/)||[''])[0].length;
       const segStart=a+lead,segEnd=Math.max(segStart,b-trail); if(segEnd<=segStart)return;
       const segText=source.slice(segStart,segEnd);
-      const segRanges=ranges.filter(r=>r?.kind!=='table'&&(Number(r.end)||0)>segStart&&(Number(r.start)||0)<segEnd).map(r=>({
+      const segRanges=ranges.filter(r=>r?.kind!=='table'&&r?.kind!=='linkCard'&&(Number(r.end)||0)>segStart&&(Number(r.start)||0)<segEnd).map(r=>({
         ...r,start:Math.max(segStart,Number(r.start)||0)-segStart,end:Math.min(segEnd,Number(r.end)||0)-segStart
       })).filter(r=>r.end>r.start);
       out.push({...scene,text:segText,
@@ -2760,18 +2769,19 @@
       });
     };
     let cursor=0;
-    tableRanges.forEach((r,idx)=>{
+    cardRanges.forEach((r,idx)=>{
       const a=Math.max(0,Math.min(source.length,Number(r.start)||0));
       const b=Math.max(a,Math.min(source.length,Number(r.end)||a));
       pushProse(cursor,a);
-      const tableId=String(r.tableId||'');
-      const table=content.find(c=>c?.type==='table'&&String(c.id||'')===tableId);
-      if(table){
-        const marker=source.slice(a,b)||String(table.label||`［表 ${idx+1}］`);
+      const contentId=String(r.kind==='table'?r.tableId:r.cardId||'');
+      const contentType=r.kind==='table'?'table':'linkCard';
+      const block=content.find(c=>c?.type===contentType&&String(c.id||'')===contentId);
+      if(block){
+        const marker=source.slice(a,b)||String(block.label||(contentType==='table'?`［表 ${idx+1}］`:'［リンクカード］'));
         out.push({...scene,text:marker,
           richText:{version:1,ranges:[{...r,start:0,end:marker.length}]},
-          content:[clone(table)],
-          presentation:{...(scene.presentation||{}),display:'solo'}
+          content:[clone(block)],
+          presentation:{...(scene.presentation||{}),display:'solo',text:contentType==='linkCard'?{...(scene.presentation?.text||{}),writingMode:'horizontal-tb'}:{...(scene.presentation?.text||{})}}
         });
       }
       cursor=b;
@@ -2781,7 +2791,7 @@
   }
 
   function sceneHasTable(scene){
-    return Boolean((Array.isArray(scene?.content)?scene.content:[]).some(c=>c?.type==='table'));
+    return Boolean((Array.isArray(scene?.content)?scene.content:[]).some(c=>c?.type==='table'||c?.type==='linkCard'));
   }
 
   function buildSceneDocument() {
@@ -2814,7 +2824,7 @@
       return {
         id: makeSceneId(index), type: chunk.type || 'text', text: sceneText,
         ...(semantic.ranges?.length ? { richText:{version:1,ranges:semantic.ranges} } : {}),
-        ...(semantic.tables?.length ? { content:semantic.tables } : {}),
+        ...(semantic.tables?.length||semantic.cards?.length ? { content:[...(semantic.tables||[]),...(semantic.cards||[])] } : {}),
         ...(languageSummary.language === 'mul' && chunk.language ? { language: chunk.language } : {}),
         presentation: { display: 'stack', effect: 'auto', text: { size: 'auto' } }
       };
@@ -5442,6 +5452,100 @@ return flowCommentCard;}
   // Replace only publishAdapter.publish() when Hosting API is ready.
   // ---------------------------------------------------------
   const SCENE_STUDIO_API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  let ogpEditTarget=null;
+  let ogpInsertionRange={start:0,end:0};
+  const ogpCardDialog=$('#ogpCardDialog');
+  const ogpCardUrl=$('#ogpCardUrl'),ogpCardTitle=$('#ogpCardTitle'),ogpCardDescription=$('#ogpCardDescription'),ogpCardImage=$('#ogpCardImage');
+  const ogpCardStatus=$('#ogpCardStatus'),ogpFetchButton=$('#ogpFetchButton'),ogpCardSave=$('#ogpCardSave');
+  const safeWebUrl=value=>{try{const u=new URL(String(value||'').trim());return /^https?:$/.test(u.protocol)&&!u.username&&!u.password?u.href:'';}catch(_){return '';}};
+  function updateOgpCardPreview(){
+    const url=safeWebUrl(ogpCardUrl?.value);let host='';try{host=new URL(url).hostname;}catch(_){}
+    $('#ogpCardPreviewTitle').textContent=String(ogpCardTitle?.value||'').trim()||'タイトル';
+    $('#ogpCardPreviewDescription').textContent=String(ogpCardDescription?.value||'').trim()||'説明文';
+    $('#ogpCardPreviewDomain').textContent=host||'example.com';
+    const image=safeWebUrl(ogpCardImage?.value),img=$('#ogpCardPreviewImage');
+    img.hidden=!image;img.src=image||'';
+    img.onerror=()=>{img.hidden=true;};
+  }
+  function renderEasyOgpCardList(){
+    const host=$('#easyOgpCardList');if(!host)return;
+    const cards=Array.isArray(easyRichSource?.cards)?easyRichSource.cards:[];
+    host.replaceChildren();host.hidden=!cards.length;
+    cards.forEach(card=>{
+      const row=document.createElement('div');row.className='easy-ogp-card-row';
+      const image=document.createElement('img');image.alt='';image.loading='lazy';image.src=safeWebUrl(card.image)||'';image.hidden=!image.src;image.onerror=()=>{image.hidden=true;};
+      const copy=document.createElement('div');const title=document.createElement('strong');title.textContent=card.title||'URLカード';const url=document.createElement('small');url.textContent=card.url||'';copy.append(title,url);
+      const edit=document.createElement('button');edit.type='button';edit.textContent='編集';edit.addEventListener('click',()=>openOgpCardDialog({mode:'easy',card}));
+      const remove=document.createElement('button');remove.type='button';remove.textContent='削除';remove.addEventListener('click',()=>removeEasyOgpCard(card.id));
+      row.append(image,copy,edit,remove);host.appendChild(row);
+    });
+  }
+  function removeEasyOgpCard(id){
+    const card=(easyRichSource.cards||[]).find(x=>String(x.id)===String(id));if(!card)return;
+    const before=bodyInput.value,start=Math.max(0,Number(card.start)||0),end=Math.max(start,Number(card.end)||start);
+    const next=before.slice(0,start)+before.slice(end);
+    easyRichSource.cards=easyRichSource.cards.filter(x=>x!==card);
+    easyRichSource.marks=easyRichSource.marks.filter(x=>!(x.kind==='linkCard'&&String(x.cardId)===String(id)));
+    bodyInput.value=next;reconcileRichSourceAfterPlainEdit(before,next);easyRichTextSnapshot=next;renderEasyRichComposition();updateCount();easySourceDirty=true;syncEasyPublishButton();scheduleDraftSave?.(80);renderEasyOgpCardList();
+  }
+  function openOgpCardDialog({mode='new',card=null,scene=null}={}){
+    if(!ogpCardDialog)return;
+    ogpEditTarget=card?{mode,card,scene}:null;
+    if(mode==='new')ogpInsertionRange={start:bodyInput.selectionStart||0,end:bodyInput.selectionEnd||bodyInput.selectionStart||0};
+    $('#ogpCardDialogTitle').textContent=card?'URLカードを編集':'URLカードを追加';
+    ogpCardSave.textContent=card?'変更を保存':'カードを追加';
+    ogpCardUrl.value=card?.url||'';ogpCardTitle.value=card?.title||'';ogpCardDescription.value=card?.description||'';ogpCardImage.value=card?.image||'';
+    ogpCardStatus.textContent='URLを入力してOGP取得を押してください。取得できない場合も手入力できます。';ogpCardStatus.className='ogp-card-status';
+    updateOgpCardPreview();
+    if(typeof ogpCardDialog.showModal==='function')ogpCardDialog.showModal();
+  }
+  async function fetchOgpForDialog(){
+    const target=safeWebUrl(ogpCardUrl.value);
+    if(!target){ogpCardStatus.textContent='http:// または https:// から始まるURLを入力してください。';ogpCardStatus.className='ogp-card-status is-error';return;}
+    ogpFetchButton.disabled=true;ogpCardStatus.textContent='OGP情報を取得しています…';ogpCardStatus.className='ogp-card-status';
+    try{
+      const response=await fetchWithTimeout(`${SCENE_STUDIO_API_BASE}/ogp?url=${encodeURIComponent(target)}`,{headers:{'Accept':'application/json'},cache:'no-store'},12000);
+      const data=await response.json().catch(()=>null);
+      if(!response.ok||!data?.ok)throw new Error(data?.error||`OGPを取得できませんでした (${response.status})`);
+      ogpCardUrl.value=data.url||target;
+      if(data.title)ogpCardTitle.value=data.title;
+      if(data.description)ogpCardDescription.value=data.description;
+      if(data.image)ogpCardImage.value=data.image;
+      ogpCardStatus.textContent='取得できました。各項目はこの画面で編集できます。';ogpCardStatus.className='ogp-card-status is-success';
+    }catch(error){
+      if(!ogpCardTitle.value)try{ogpCardTitle.value=new URL(target).hostname;}catch(_){}
+      ogpCardStatus.textContent=`OGPを取得できませんでした。タイトル・説明文・画像URLを手入力できます。${error?.message?` (${error.message})`:''}`;ogpCardStatus.className='ogp-card-status is-error';
+    }finally{ogpFetchButton.disabled=false;updateOgpCardPreview();}
+  }
+  function saveOgpCardFromDialog(){
+    const url=safeWebUrl(ogpCardUrl.value),image=safeWebUrl(ogpCardImage.value);
+    if(!url){ogpCardStatus.textContent='リンク先URLを確認してください。';ogpCardStatus.className='ogp-card-status is-error';return;}
+    const card={url,title:String(ogpCardTitle.value||'').trim().slice(0,240)||new URL(url).hostname,description:String(ogpCardDescription.value||'').trim().slice(0,1000),image,siteName:(()=>{try{return new URL(url).hostname;}catch(_){return '';}})()};
+    if(ogpEditTarget?.mode==='easy'){
+      Object.assign(ogpEditTarget.card,card);scheduleDraftSave?.(60);renderEasyOgpCardList();
+    }else if(ogpEditTarget?.mode==='scene'&&ogpEditTarget.scene){
+      const scene=ogpEditTarget.scene,existing=(scene.content||[]).find(x=>x?.type==='linkCard'&&String(x.id)===String(ogpEditTarget.card.id));
+      if(existing){captureUndo('URLカードの変更を元に戻せます');Object.assign(existing,card);scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();}
+    }else{
+      const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+      const label=`［URLカード ${id.slice(-4)}］`;
+      const start=ogpInsertionRange.start,end=ogpInsertionRange.end;
+      const prefix=start>0&&!bodyInput.value.slice(0,start).endsWith('\n\n')?'\n\n':'';
+      const suffix=end<bodyInput.value.length&&!bodyInput.value.slice(end).startsWith('\n\n')?'\n\n':'';
+      const markerStart=prefix.length,fragmentText=prefix+label+suffix;
+      const easyCard={...card,id,start:markerStart,end:markerStart+label.length,label};
+      insertRichFragment({text:fragmentText,marks:[{start:markerStart,end:markerStart+label.length,kind:'linkCard',cardId:id}],tables:[],cards:[easyCard]},start,end);
+      renderEasyOgpCardList();bodyInput.focus();
+    }
+    ogpEditTarget=null;if(ogpCardDialog.open)ogpCardDialog.close();
+  }
+  $('#insertOgpCardButton')?.addEventListener('click',()=>openOgpCardDialog());
+  ogpFetchButton?.addEventListener('click',fetchOgpForDialog);
+  ogpCardSave?.addEventListener('click',saveOgpCardFromDialog);
+  $('#ogpCardClose')?.addEventListener('click',()=>ogpCardDialog.close());
+  $('#ogpCardCancel')?.addEventListener('click',()=>ogpCardDialog.close());
+  [ogpCardUrl,ogpCardTitle,ogpCardDescription,ogpCardImage].forEach(el=>el?.addEventListener('input',updateOgpCardPreview));
+  ogpCardUrl?.addEventListener('paste',()=>setTimeout(fetchOgpForDialog,0));
   const AUTHOR_AUTH_STORAGE_KEY='ahako-author-session-v1';
   const AUTHOR_AUTH_PENDING_KEY='ahako-author-auth-pending-v1';
   const AUTHOR_TERMS_VERSION='author-publish-v1';
@@ -7845,7 +7949,7 @@ return flowCommentCard;}
     if(!fragment.text)return;
     event.preventDefault();insertRichFragment(fragment,bodyInput.selectionStart||0,bodyInput.selectionEnd||0);
   });
-  bodyInput.addEventListener('input',()=>{ if(!applyingRichPaste)reconcileRichSourceAfterPlainEdit(easyRichTextSnapshot,bodyInput.value); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition(); updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
+  bodyInput.addEventListener('input',()=>{ if(!applyingRichPaste)reconcileRichSourceAfterPlainEdit(easyRichTextSnapshot,bodyInput.value); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();renderEasyOgpCardList(); updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
   $('#sceneSubTextInput').addEventListener('input',autoGrowSubText);
   coverLogoChoose?.addEventListener('click',()=>coverLogoInput?.click());
   coverLogoInput?.addEventListener('change',async()=>{
@@ -8842,7 +8946,7 @@ return flowCommentCard;}
   function applySample(){
     captureUndo('サンプル置換を元に戻せます');
     titleInput.value='声のそろう通り';
-    bodyInput.value=SAMPLE; resetEasyRichSource(); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();
+    bodyInput.value=SAMPLE; resetEasyRichSource(); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();renderEasyOgpCardList();
     easySourceDirty=true;
     updateCount();
     updateCoverPreview();
@@ -9555,15 +9659,15 @@ return flowCommentCard;}
     const scene=liveInlineEditSceneRef;
     if(!scene)return '';
     let value;
-    if(liveInlineEditField==='text' && el.querySelector('.sp-rich-table-card, ruby')){
+    if(liveInlineEditField==='text' && el.querySelector('.sp-rich-table-card, .sp-rich-link-card, ruby')){
       const copy=stripRubyReadings(el.cloneNode(true));
-      const tableRanges=(Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[])
-        .filter(r=>r?.kind==='table').sort((a,b)=>(a.start||0)-(b.start||0));
-      const cards=[...copy.querySelectorAll('.sp-rich-table-card')];
-      cards.forEach((card,i)=>{
-        const r=tableRanges[i];
+      const blockRanges=(Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[])
+        .filter(r=>r?.kind==='table'||r?.kind==='linkCard').sort((a,b)=>(a.start||0)-(b.start||0));
+      const blocks=[...copy.querySelectorAll('.sp-rich-table-card, .sp-rich-link-card')];
+      blocks.forEach((block,i)=>{
+        const r=blockRanges[i];
         const label=r?String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)):'';
-        card.replaceWith(document.createTextNode(label||`［表 ${i+1}］`));
+        block.replaceWith(document.createTextNode(label||(r?.kind==='linkCard'?'［リンクカード］':`［表 ${i+1}］`)));
       });
       value=editablePlainText(copy);
     }else{
@@ -9760,7 +9864,7 @@ return flowCommentCard;}
     if(!startEl||startEl!==endEl||!playerHost.contains(startEl))return null;
     const article=startEl.closest('.sp-scene');
     if(!article||!article.classList.contains('is-active'))return null;
-    if(r.cloneContents().querySelector?.('.sp-rich-table-card'))return null;
+    if(r.cloneContents().querySelector?.('.sp-rich-table-card, .sp-rich-link-card'))return null;
     // Bind the selection to the Scene represented by the selected DOM itself.
     // This avoids depending on selectedSceneIndex/player.index timing while a drag is ending.
     const sceneId=article.dataset.sceneId||'';
@@ -9786,7 +9890,7 @@ return flowCommentCard;}
       }
       if(found)return total;
       // Element-boundary fallback: clone only DOM content, then strip table UI text.
-      try{const pre=document.createRange();pre.selectNodeContents(startEl);pre.setEnd(container,offset);const frag=pre.cloneContents();frag.querySelectorAll?.('.sp-rich-table-card,rt,rp,.sp-typing-cursor').forEach(x=>x.remove());return String(frag.textContent||'').length;}catch(_){return 0;}
+      try{const pre=document.createRange();pre.selectNodeContents(startEl);pre.setEnd(container,offset);const frag=pre.cloneContents();frag.querySelectorAll?.('.sp-rich-table-card,.sp-rich-link-card,rt,rp,.sp-typing-cursor').forEach(x=>x.remove());return String(frag.textContent||'').length;}catch(_){return 0;}
     };
     const start=pointOffset(r.startContainer,r.startOffset),end=pointOffset(r.endContainer,r.endOffset);if(end<=start)return null;
     let rect=r.getBoundingClientRect();
@@ -10238,7 +10342,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     // contenteditable=true is the most reliable option on iPhone Safari.
     // The element itself stays in the Player; no duplicate textarea/modal is created.
     el.setAttribute('contenteditable','true');
-    el.querySelectorAll('.sp-rich-table-card').forEach(card=>card.setAttribute('contenteditable','false'));
+    el.querySelectorAll('.sp-rich-table-card, .sp-rich-link-card').forEach(card=>card.setAttribute('contenteditable','false'));
     el.setAttribute('role','textbox');
     el.setAttribute('aria-label',liveInlineEditField==='subText'?'Scene subtext':'Scene text');
     el.classList.add('live-inline-editing');
@@ -13632,14 +13736,14 @@ function openDesktopTextDetail(){
       const ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
       const contents=Array.isArray(scene?.content)?scene.content:[];
       const removedIds=new Set();
-      ranges.filter(r=>r?.kind==='table').forEach((r,i)=>{
-        const oldLabel=String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)) || `［表 ${i+1}］`;
-        const variants=[oldLabel,`［表 ${i+1}］`,`[表 ${i+1}]`];
-        if(!variants.some(label=>label&&ta.value.includes(label)))removedIds.add(String(r.tableId||''));
+      ranges.filter(r=>r?.kind==='table'||r?.kind==='linkCard').forEach((r,i)=>{
+        const isCard=r.kind==='linkCard',id=String(isCard?r.cardId||'':r.tableId||'');
+        const label=String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)) || (isCard?'［リンクカード］':`［表 ${i+1}］`);
+        if(!label||!ta.value.includes(label))removedIds.add(`${r.kind}:${id}`);
       });
       if(removedIds.size){
-        scene.richText.ranges=ranges.filter(r=>!(r?.kind==='table'&&removedIds.has(String(r.tableId||''))));
-        scene.content=contents.filter(c=>!(c?.type==='table'&&removedIds.has(String(c.id||''))));
+        scene.richText.ranges=ranges.filter(r=>!((r?.kind==='table'||r?.kind==='linkCard')&&removedIds.has(`${r.kind}:${String(r.kind==='table'?r.tableId||'':r.cardId||'')}`)));
+        scene.content=contents.filter(c=>!((c?.type==='table'||c?.type==='linkCard')&&removedIds.has(`${c.type}:${String(c.id||'')}`)));
         if(!scene.richText.ranges.length&&!scene.richText.autoRubyExcluded?.length)delete scene.richText;
         if(!scene.content.length)delete scene.content;
       }
@@ -17148,6 +17252,16 @@ function openDesktopTextDetail(){
     const card=cell.closest('.sp-rich-table-card');
     e.preventDefault();e.stopImmediatePropagation();
     startPreviewTableCellEdit(card,cell);
+  },true);
+  playerHost.addEventListener('click',(e)=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen||playerHost.classList.contains('sp-cover-open')||player?.ended)return;
+    const element=e.target.closest?.('.sp-scene.is-active .sp-rich-link-card');
+    if(!element)return;
+    const {scene}=liveEditScene();if(!scene)return;
+    const id=String(element.dataset.cardId||'');
+    const card=(Array.isArray(scene.content)?scene.content:[]).find(x=>x?.type==='linkCard'&&String(x.id||'')===id);
+    if(!card)return;
+    e.preventDefault();e.stopImmediatePropagation();openOgpCardDialog({mode:'scene',card,scene});
   },true);
 
 

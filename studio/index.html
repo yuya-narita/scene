@@ -371,8 +371,9 @@
 
     <div class="form-stack">
       <label class="field body-field">
-        <span class="field-label">本文</span>
+        <span class="field-label">本文 <button id="insertOgpCardButton" class="text-button ogp-insert-button" type="button">＋ URLカード</button></span>
         <textarea id="bodyInput" placeholder="ここに文章を貼り付けてください。"></textarea>
+        <div id="easyOgpCardList" class="easy-ogp-card-list" hidden aria-label="URLカード一覧"></div>
         <div class="body-meta">
           <span id="charCount">0文字</span>
           <button id="sampleButton" class="text-button" type="button">サンプルを入れる</button>
@@ -1268,8 +1269,21 @@
 
   <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
 
+  <dialog id="ogpCardDialog" class="ogp-card-dialog" aria-labelledby="ogpCardDialogTitle">
+    <form method="dialog" class="ogp-card-dialog-card" id="ogpCardForm">
+      <div class="ogp-card-dialog-head"><div><small>LINK CARD</small><strong id="ogpCardDialogTitle">URLカード</strong></div><button id="ogpCardClose" type="button" aria-label="閉じる">×</button></div>
+      <label class="ogp-card-field"><span>リンク先URL</span><div class="ogp-card-url-row"><input id="ogpCardUrl" type="url" inputmode="url" placeholder="https://example.com/..." required><button id="ogpFetchButton" type="button">OGP取得</button></div></label>
+      <p id="ogpCardStatus" class="ogp-card-status" role="status" aria-live="polite">URLを入力してOGP取得を押してください。取得できない場合も手入力できます。</p>
+      <div class="ogp-card-preview" id="ogpCardPreview"><div class="ogp-card-preview-copy"><strong id="ogpCardPreviewTitle">タイトル</strong><p id="ogpCardPreviewDescription">説明文</p><small id="ogpCardPreviewDomain">example.com</small></div><img id="ogpCardPreviewImage" alt="カード画像のプレビュー" hidden></div>
+      <label class="ogp-card-field"><span>タイトル</span><input id="ogpCardTitle" type="text" maxlength="240"></label>
+      <label class="ogp-card-field"><span>説明文</span><textarea id="ogpCardDescription" rows="3" maxlength="1000"></textarea></label>
+      <label class="ogp-card-field"><span>カード画像URL</span><input id="ogpCardImage" type="url" inputmode="url" placeholder="画像URL（空欄でも可）"></label>
+      <div class="ogp-card-dialog-actions"><button id="ogpCardCancel" type="button">キャンセル</button><button id="ogpCardSave" type="button" class="is-primary">カードを追加</button></div>
+    </form>
+  </dialog>
+
 <script src="./scene-studio-i18n.js?v=142"></script>
-<script src="./scene-player-core.js?v=20261020-emoji-audio-ramp-v38"></script>
+<script src="./scene-player-core.js?v=20261020-ogp-link-card-v1"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
@@ -1277,7 +1291,7 @@
 <link rel="stylesheet" href="./auto-ruby-ui.css?v=1">
 <script src="./auto-ruby-ui.js?v=2" defer></script>
 <script src="../ahako-file-save.js?v=20261015-v20"></script>
-<script src="./script.js?v=20261020-emoji-audio-ramp-v38"></script>
+<script src="./script.js?v=20261020-ogp-link-card-v1"></script>
 <script src="./cage.js?v=25"></script>
 <script src="./easy-illustration.js?v=11"></script>
 

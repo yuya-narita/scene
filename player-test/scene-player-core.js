@@ -5556,13 +5556,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const floorBoundary = (value) => { let result = 0; for (const i of sorted) { if (i > value) break; result = i; } return result; };
       const ceilBoundary = (value) => sorted.find((i) => i >= value) ?? source.length;
       return mapped.map((r) => {
-        if (r?.kind === 'table') return r;
+        if (r?.kind === 'table' || r?.kind === 'linkCard') return r;
         const start = Math.max(0, Math.min(source.length, Math.trunc(Number(r?.start) || 0)));
         const end = Math.max(start, Math.min(source.length, Math.trunc(Number(r?.end) || 0)));
         // If an old Scene splits a grapheme cluster, leave that cluster
         // unformatted instead of splitting a surrogate or variation sequence.
         return { ...r, start: graphemeBounds.has(start) ? start : ceilBoundary(start), end: graphemeBounds.has(end) ? end : floorBoundary(end) };
-      }).filter((r) => r?.kind === 'table' || r.end > r.start);
+      }).filter((r) => r?.kind === 'table' || r?.kind === 'linkCard' || r.end > r.start);
     }
 
     _isVerticalEmojiCluster(text) {
@@ -5632,19 +5632,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const source = String(displayText ?? scene?.text ?? '');
       const rawRanges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
       const ranges = this._normalizeRichTextRanges(source, rawRanges);
-      const tables = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table') : [];
+      const content = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table' || x?.type === 'linkCard') : [];
       node.classList.remove('sp-has-ruby');
-      if (!ranges.length && !tables.length) {
+      if (!ranges.length && !content.length) {
         if (this._isVerticalWriting(node, scene)) this._appendVerticalEmojiAwareText(node, source);
         else node.textContent = source;
         return false;
       }
       node.textContent = '';
-      const tableById = new Map(tables.map(t => [String(t.id||''), t]));
-      const tableRanges = ranges.filter(r => r?.kind === 'table' && tableById.has(String(r.tableId||'')))
+      const tableById = new Map(content.filter(t=>t.type==='table').map(t => [String(t.id||''), t]));
+      const cardById = new Map(content.filter(t=>t.type==='linkCard').map(t => [String(t.id||''), t]));
+      const blockRanges = ranges.filter(r => (r?.kind === 'table' && tableById.has(String(r.tableId||''))) || (r?.kind === 'linkCard' && cardById.has(String(r.cardId||''))))
         .map(r => ({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)}))
         .sort((a,b)=>a.start-b.start);
-      const normal = ranges.filter(r => r?.kind !== 'table').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
+      const normal = ranges.filter(r => r?.kind !== 'table' && r?.kind !== 'linkCard').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
       const rubies=normal.filter(r=>r.kind==='ruby'&&String(r.reading||'').trim()&&!source.slice(r.start,r.end).includes('\n')).sort((a,b)=>a.start-b.start);
       node.classList.toggle('sp-has-ruby',rubies.length>0);
       const appendTextRange=(from,to)=>{
@@ -5716,16 +5717,30 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
       };
       let cursor=0;
-      tableRanges.forEach(r=>{
+      blockRanges.forEach(r=>{
         appendTextRange(cursor,r.start);
-        const table=tableById.get(String(r.tableId||''));
-        const card=document.createElement('div'); card.className='sp-rich-table-card';
-        const wrap=document.createElement('div'); wrap.className='sp-rich-table-scroll';
-        wrap.appendChild(this._buildRichTable(table)); card.appendChild(wrap);
-        // V25: no fullscreen affordance until the viewer contract is complete.
-        // Swallow table taps so they do not accidentally advance the Scene.
-        card.addEventListener('click',(e)=>{e.stopPropagation();});
-        node.appendChild(card); cursor=Math.max(cursor,r.end);
+        if(r.kind==='table'){
+          const table=tableById.get(String(r.tableId||''));
+          const card=document.createElement('div'); card.className='sp-rich-table-card';
+          const wrap=document.createElement('div'); wrap.className='sp-rich-table-scroll';
+          wrap.appendChild(this._buildRichTable(table)); card.appendChild(wrap);
+          card.addEventListener('click',(e)=>{e.stopPropagation();});
+          node.appendChild(card);
+        }else{
+          const data=cardById.get(String(r.cardId||''));
+          const href=(()=>{try{const u=new URL(String(data?.url||''));return /^https?:$/.test(u.protocol)&&!u.username&&!u.password?u.href:'';}catch(_){return '';}})();
+          const card=document.createElement('a');card.className='sp-rich-link-card';card.dataset.cardId=String(data?.id||'');card.href=href||'#';card.target='_blank';card.rel='noopener noreferrer';card.setAttribute('aria-label',String(data?.title||'外部リンク'));
+          const copy=document.createElement('span');copy.className='sp-rich-link-card-copy';
+          const title=document.createElement('strong');title.textContent=String(data?.title||href||'リンク');
+          const description=document.createElement('span');description.className='sp-rich-link-card-description';description.textContent=String(data?.description||'');
+          const site=document.createElement('small');site.textContent=String(data?.siteName||(()=>{try{return new URL(href).hostname;}catch(_){return '';}})());
+          copy.append(title,description,site);card.appendChild(copy);
+          const imageUrl=(()=>{try{const u=new URL(String(data?.image||''));return /^https?:$/.test(u.protocol)?u.href:'';}catch(_){return '';}})();
+          if(imageUrl){card.classList.add('has-image');const image=document.createElement('img');image.className='sp-rich-link-card-image';image.src=imageUrl;image.alt='';image.loading='lazy';image.referrerPolicy='no-referrer';image.onerror=()=>{image.remove();card.classList.remove('has-image');};card.appendChild(image);}
+          card.addEventListener('click',e=>{e.stopPropagation();if(!href)e.preventDefault();});
+          node.appendChild(card);
+        }
+        cursor=Math.max(cursor,r.end);
       });
       appendTextRange(cursor,source.length);
       return true;

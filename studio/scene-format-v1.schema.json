@@ -319,7 +319,11 @@
                   },
                   "orientation": {
                     "type": "string",
-                    "enum": ["tcy", "sideways", "upright"],
+                    "enum": [
+                      "tcy",
+                      "sideways",
+                      "upright"
+                    ],
                     "description": "Vertical text orientation: tcy (縦中横), sideways (横倒し), or upright (正立)."
                   }
                 },
@@ -358,6 +362,90 @@
             }
           },
           "additionalProperties": true
+        },
+        "content": {
+          "type": "array",
+          "description": "Scene embedded content blocks. A linkCard stores resolved, editable OGP fields.",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "id",
+                  "rows"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "table"
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "headerRows": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "display": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "id",
+                  "url",
+                  "title"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "linkCard"
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "pattern": "^https?://"
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "uri",
+                    "pattern": "^https?://"
+                  },
+                  "siteName": {
+                    "type": "string",
+                    "maxLength": 120
+                  }
+                },
+                "additionalProperties": true
+              }
+            ]
+          }
         }
       },
       "allOf": [
