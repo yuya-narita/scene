@@ -9631,6 +9631,7 @@ return flowCommentCard;}
     dropdown('見出し','heading',[['1','見出し1'],['2','見出し2'],['3','見出し3']],'見出し');
     dropdown('リスト','list',[['bullet','・ 箇条書き'],['number','1. 番号付き']],'リスト');
     button('❝','quote','引用');
+    dropdown('文字向き','orientation',[[ 'tcy','縦中横' ],[ 'sideways','横倒し' ],[ 'upright','正立' ]],'選択した文字の縦書きでの向き');
     const sep=document.createElement('span');sep.className='rich-toolbar-separator';sep.setAttribute('aria-hidden','true');bar.appendChild(sep);
     button('解除','clear','選択範囲の書式を解除','rich-clear-button');
     document.body.appendChild(bar);richSelectionToolbar=bar;
@@ -9802,6 +9803,7 @@ return flowCommentCard;}
     const heading=ranges.find(r=>r?.kind==='heading'&&overlap(r));
     const list=ranges.find(r=>r?.kind==='listItem'&&overlap(r));
     const quote=ranges.find(r=>r?.kind==='quote'&&overlap(r));
+    const orientation=ranges.find(r=>r?.kind==='orientation'&&covers(r));
     const font=spanWith(st=>st.fontFamily)?.style?.fontFamily||'';
     const scale=spanWith(st=>Number(st.fontScale)>0)?.style?.fontScale;
     const color=spanWith(st=>st.color)?.style?.color||'';
@@ -9809,12 +9811,13 @@ return flowCommentCard;}
     setActive('[data-rich-action="bold"]',bold);setActive('[data-rich-action="quote"]',!!quote);
     const labels={font:{serif:'明朝',sans:'ゴシック',mono:'等幅'},size:{'0.85':'小','1':'標準','1.2':'大','1.45':'特大'}};
     bar.querySelectorAll('.rich-dropdown').forEach(w=>{const action=w.dataset.richDropdown,tr=w.querySelector('.rich-dropdown-trigger');let value='';
-      if(action==='font')value=String(font||''); else if(action==='size'&&scale)value=String(Number(scale)); else if(action==='heading'&&heading)value=String(heading.level||''); else if(action==='list'&&list)value=list.ordered?'number':'bullet';
+      if(action==='font')value=String(font||''); else if(action==='size'&&scale)value=String(Number(scale)); else if(action==='heading'&&heading)value=String(heading.level||''); else if(action==='list'&&list)value=list.ordered?'number':'bullet'; else if(action==='orientation'&&orientation)value=String(orientation.orientation||'');
       w.classList.toggle('is-active',!!value);tr.classList.toggle('is-active',!!value);
       if(action==='font')tr.textContent=(value?(labels.font[value]||'書体'):'書体')+' ▼';
       if(action==='size')tr.textContent=(value?(labels.size[value]||'サイズ'):'サイズ')+' ▼';
       if(action==='heading')tr.textContent=(value?`見出し${value}`:'見出し')+' ▼';
       if(action==='list')tr.textContent=(value==='number'?'番号付き':value==='bullet'?'箇条書き':'リスト')+' ▼';
+      if(action==='orientation')tr.textContent=({tcy:'縦中横',sideways:'横倒し',upright:'正立'})[value]||'文字向き';
       w.querySelectorAll('.rich-dropdown-item').forEach(item=>item.classList.toggle('is-current',!!value&&item.dataset.richValue===value));
     });
     const input=bar.querySelector('input[data-rich-action="color"]');if(input&&/^#[0-9a-f]{6}$/i.test(color))input.value=color;
@@ -9857,7 +9860,7 @@ return flowCommentCard;}
     const canonical=String(scene.text||''),picked=String(snap.selectedText||'');
     if(picked){const hits=[];let at=canonical.indexOf(picked);while(at>=0){hits.push(at);at=canonical.indexOf(picked,at+1);}if(hits.length){const best=hits.reduce((a,b)=>Math.abs(b-start)<Math.abs(a-start)?b:a,hits[0]);start=best;end=best+picked.length;}}
     if(end<=start)return;
-    if(action==='clear'){for(const r of ranges.filter(r=>r.kind==='ruby'&&r.source==='auto'&&overlaps(r)))excludeAutomaticRuby(scene,r.start,r.end);ranges=removeRichKindsInSelection(ranges,start,end,['span','heading','quote','listItem','ruby']);}
+    if(action==='clear'){for(const r of ranges.filter(r=>r.kind==='ruby'&&r.source==='auto'&&overlaps(r)))excludeAutomaticRuby(scene,r.start,r.end);ranges=removeRichKindsInSelection(ranges,start,end,['span','heading','quote','listItem','ruby','orientation']);}
     else if(action==='ruby'){
       if(/\n/.test(canonical.slice(start,end))){appAlert('ルビは改行を含まない文字列を選択してください。');return;}
       if(!value)excludeAutomaticRuby(scene,start,end);
@@ -9869,6 +9872,14 @@ return flowCommentCard;}
     else if(action==='font'&&value){const cur=spanCover(st=>String(st.fontFamily||'')===String(value));ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&r?.style?.fontFamily));if(!cur)ranges.push({start,end,kind:'span',style:{fontFamily:String(value)}});}
     else if(action==='size'&&value){const num=Number(value)||1,cur=spanCover(st=>Number(st.fontScale)===num);ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&Number(r?.style?.fontScale)>0));if(!cur)ranges.push({start,end,kind:'span',style:{fontScale:num}});}
     else if(action==='color'&&value)ranges.push({start,end,kind:'span',style:{color:String(value)}});
+    else if(action==='orientation'&&['tcy','sideways','upright'].includes(String(value))){
+      // Keep portions outside the selected interval and replace only its orientation.
+      ranges=ranges.flatMap(r=>{
+        if(r?.kind!=='orientation'||!overlaps(r))return [r];
+        const out=[];if(Number(r.start)<start)out.push({...r,end:start});if(Number(r.end)>end)out.push({...r,start:end});return out;
+      });
+      ranges.push({start,end,kind:'orientation',orientation:String(value)});
+    }
     else if(action==='heading'||action==='quote'||action==='bullet'||action==='number'){
       // V123: block Rich Text is paragraph structure, not an inline range mutation.
       // Rebuild the selected whole-line block from canonical text in one transaction.

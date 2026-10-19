@@ -316,6 +316,11 @@
                   "word": {
                     "type": "string",
                     "description": "Base word recorded for automatic ruby."
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "enum": ["tcy", "sideways", "upright"],
+                    "description": "Vertical text orientation for kind orientation: tcy (縦中横), sideways (横倒し), or upright (正立)."
                   }
                 },
                 "required": [
