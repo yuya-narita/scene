@@ -1867,7 +1867,7 @@
     clearTimeout(liveInlineIntroTimer);clearTimeout(liveInlineDockTimer);
     clearTimeout(undoBarTimer);undoBarTimer=null;
     liveEditSoundAbort?.abort();liveEditSoundAbort=null;liveEditSoundBound=false;
-    player?.destroy();player=null;
+    disposeStudioPreviewSeek();player?.destroy();player=null;
     desktopBodyResizeObserver?.disconnect();desktopBodyResizeObserver=null;
     desktopDetailRangeFlushActive=null;desktopDetailRangeInteracting=false;
     hideRichSelectionToolbar();
@@ -6358,9 +6358,68 @@ return flowCommentCard;}
     liveEditChromeObserver.observe(playerHost,{attributes:true,attributeFilter:['class']});
   }
 
+  let disposeStudioPreviewSeek=()=>{};
+  function installStudioPreviewSeek(instance){
+    disposeStudioPreviewSeek();
+    const track=playerHost.querySelector('.sp-progress-track');if(!track)return;
+    const abort=new AbortController(),listen=(node,type,fn)=>node?.addEventListener(type,fn,{signal:abort.signal});
+    const input=document.createElement('input');input.type='range';input.className='studio-preview-seek';input.min='1';input.step='1';
+    track.removeAttribute('aria-hidden');track.classList.add('studio-preview-seek-track');track.appendChild(input);
+    let pending=null,target=0,queuedDocument=null,prepared=false;
+    const cancel=()=>{clearTimeout(pending);pending=null;queuedDocument=null;prepared=false;};
+    const sync=()=>{
+      const total=instance.document?.scenes?.length||0;
+      input.max=String(Math.max(1,total));input.disabled=total<2||autoRecActive;
+      const value=pending!==null?Math.min(total,target+1):Math.min(total,Math.max(1,instance.index+1));
+      input.value=String(Math.max(1,value));
+      const text=total?`Scene ${value} / ${total}`:'Scene 0 / 0';
+      input.setAttribute('aria-label',uiLanguage==='ja'?'Sceneを移動':'Seek Scene');input.setAttribute('aria-valuetext',text);
+      input.title=autoRecActive?(uiLanguage==='ja'?'AUTO REC中は移動できません':'Seeking is unavailable during AUTO REC'):text;
+      track.style.setProperty('--studio-seek-percent',`${total>1?(value-1)/(total-1)*100:0}%`);
+    };
+    const prepare=()=>{
+      if(prepared||autoRecActive)return;
+      prepared=true;
+      if(instance.auto)instance.stopAuto();
+      syncInlineTextToScene();finishInlineTextEdit();finishCreditsInlineEdit();finishLiveCoverInlineEdit({refresh:false});
+    };
+    const commit=()=>{
+      clearTimeout(pending);pending=null;
+      const doc=queuedDocument;queuedDocument=null;
+      if(player!==instance||instance.destroyed||autoRecActive||doc!==instance.document){sync();return;}
+      const index=Math.max(0,Math.min(target,(doc?.scenes?.length||1)-1));
+      if(index!==instance.index||instance.ended){
+        liveEditRenderAt(index,{preserveSheet:false});
+        syncPublishPreviewButton(false);syncLiveEditPreviewChrome();
+      }
+      sync();
+    };
+    listen(input,'input',()=>{
+      if(autoRecActive){cancel();sync();return;}
+      const requested=Number(input.value);prepare();target=Math.max(0,requested-1);queuedDocument=instance.document;
+      if(pending===null)pending=setTimeout(commit,75);
+      sync();
+    });
+    listen(input,'change',()=>{
+      if(autoRecActive){cancel();sync();return;}
+      const requested=Number(input.value);prepare();target=Math.max(0,requested-1);queuedDocument=instance.document;commit();prepared=false;
+    });
+    for(const type of ['click','dblclick','pointerdown','pointermove','pointerup','touchstart','touchmove','touchend','keydown','keyup']){
+      listen(input,type,event=>{event.stopPropagation();if(type==='pointerdown'||type==='keydown')prepare();});
+    }
+    listen(input,'pointercancel',()=>{if(pending!==null)commit();prepared=false;});
+    listen(input,'blur',()=>{if(pending!==null)commit();prepared=false;});
+    for(const type of ['sceneplayer:load','sceneplayer:scenechange','sceneplayer:restart'])listen(playerHost,type,()=>{cancel();sync();});
+    for(const type of ['sceneplayer:refresh','sceneplayer:coverstart','sceneplayer:end','sceneplayer:autochange'])listen(playerHost,type,sync);
+    for(const selector of ['#autoRecStart','#autoRecCancel'])listen($(selector),'click',()=>requestAnimationFrame(sync));
+    disposeStudioPreviewSeek=()=>{cancel();abort.abort();input.remove();track.classList.remove('studio-preview-seek-track');track.setAttribute('aria-hidden','true');};
+    sync();
+  }
+
   function ensurePlayer(){
     if(player)return player;
     player=new ScenePlayerCore(playerHost,{allowPrevious:true,keyboard:true,swipe:true,endOnNextAction:true,maxStackVisible:4,autoDelay:2600,uiLanguage});
+    installStudioPreviewSeek(player);
     if(!studioPlayerEventsBound){
     studioPlayerEventsBound=true;
     playerHost.addEventListener('sceneplayer:advanceintent',(event)=>{

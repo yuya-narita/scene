@@ -14340,3 +14340,16 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .draft-manager-dialog .unified-work-title-line{flex-wrap:wrap;align-items:flex-start;}
 .draft-manager-dialog .unified-work-title-line strong{white-space:normal;overflow-wrap:anywhere;line-height:1.45;}
 .draft-manager-dialog .unified-work-identity{min-width:0;font-size:11px;line-height:1.5;color:#68717e;white-space:normal;overflow-wrap:anywhere;}
+
+/* V47: native, keyboard-accessible seeking in the Studio preview only. */
+#scenePlayer .studio-preview-seek-track{position:relative;height:32px;overflow:visible;background:transparent;min-width:0;touch-action:none;}
+.studio-preview-seek-track::before{content:"";position:absolute;left:6px;right:6px;top:calc(50% - 1px);height:2px;background:linear-gradient(to right,var(--sp-text) 0 var(--studio-seek-percent,0%),var(--sp-line) var(--studio-seek-percent,0%) 100%);pointer-events:none;}
+.studio-preview-seek-track .sp-progress-bar{display:none;}
+.studio-preview-seek{position:relative;display:block;width:100%;height:32px;min-width:0;box-sizing:border-box;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:var(--sp-text);appearance:none;-webkit-appearance:none;cursor:pointer;touch-action:none;direction:ltr;}
+.studio-preview-seek::-webkit-slider-runnable-track{height:2px;border:0;background:transparent;}
+.studio-preview-seek::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:12px;height:12px;border:0;border-radius:50%;margin-top:-5px;background:var(--sp-text);box-shadow:0 0 0 2px var(--sp-bg);}
+.studio-preview-seek::-moz-range-track{height:2px;border:0;background:transparent;}
+.studio-preview-seek::-moz-range-thumb{width:12px;height:12px;border:0;border-radius:50%;background:var(--sp-text);box-shadow:0 0 0 2px var(--sp-bg);}
+.studio-preview-seek:focus-visible{outline:2px solid var(--sp-accent,var(--sp-text));outline-offset:2px;border-radius:6px;}
+.studio-preview-seek:disabled{cursor:default;opacity:.45;}
+#scenePlayer input.studio-preview-seek{margin:0!important;touch-action:none!important;}
