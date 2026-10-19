@@ -150,6 +150,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.audioSourceNodes = new Map();
       this.audioTimers = [];
       this.audioFadeFrames = new Map();
+      this.audioFadeStates = new Map();
+      this.audioDuckTimers = { bgm: null, ambient: null };
       this.audioState = { bgm: null, ambient: null };
       this._audioStopGeneration = { bgm: 0, ambient: 0 };
       this.audioEls = {
@@ -804,6 +806,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         gain.connect(ctx.destination);
         entry.sourceNode = source;
         entry.gainNode = gain;
+        entry._gainLevel = 0;
         entry.useGain = true;
         try { entry.audio.volume = 1; } catch (_) {}
         emit(this.host, 'sceneplayer:iosmediabankgainready', { channel:entry.channel, src:entry.src, contextState:ctx.state });
@@ -956,6 +959,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!entry?.audio) { if (done) done(); return; }
       const audio = entry.audio;
       const to = clamp(asNumber(target, entry.targetVolume ?? 1), 0, 1);
+      const previous = entry._volumeFadeState;
+      let from = clamp(asNumber(entry.gainNode ? entry._gainLevel : audio.volume, entry.targetVolume ?? 0), 0, 1);
+      if (previous) {
+        from = this._volumeRampValue(previous);
+        if (previous.frame) cancelAnimationFrame(previous.frame);
+        if (previous.timer) {
+          clearTimeout(previous.timer);
+          const i = this.audioTimers.indexOf(previous.timer);
+          if (i >= 0) this.audioTimers.splice(i, 1);
+        }
+        entry._volumeFadeState = null;
+      }
       entry.targetVolume = to;
       const ms = Math.max(0, asNumber(duration, 0));
 
@@ -965,37 +980,57 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // src or issuing a late play().
       const gain = entry.gainNode;
       const ctx = this.audioContext;
+      const ramp = { audio, gain, ctx, from, to, duration: ms, startTime: performance.now(), startContextTime: ctx?.currentTime, frame: null, timer: null };
+      entry._volumeFadeState = ramp;
+      const finish = () => {
+        if (entry._volumeFadeState !== ramp) return;
+        entry._volumeFadeState = null;
+        entry._gainLevel = to;
+        if (gain && ctx) { try { gain.gain.setValueAtTime(to, ctx.currentTime); } catch (_) {} }
+        else try { audio.volume = to; } catch (_) {}
+        if (done) done();
+      };
       if (gain && ctx) {
         const now = ctx.currentTime;
-        const from = Number.isFinite(gain.gain.value) ? gain.gain.value : 0;
         try {
           gain.gain.cancelScheduledValues(now);
           gain.gain.setValueAtTime(from, now);
           if (ms > 0) gain.gain.linearRampToValueAtTime(to, now + ms / 1000);
           else gain.gain.setValueAtTime(to, now);
         } catch (_) { gain.gain.value = to; }
-        if (done) { if (ms > 0) this._audioTimeout(done, ms); else done(); }
+        if (ms > 0) ramp.timer = this._audioTimeout(finish, ms + 20);
+        else finish();
         return;
       }
 
-      const from = clamp(asNumber(audio.volume, 0), 0, 1);
       if (!ms) {
         try { audio.volume = to; } catch (_) {}
-        if (done) done();
+        finish();
         return;
       }
-      const started = performance.now();
       const step = (now) => {
-        const t = clamp((now - started) / ms, 0, 1);
-        try { audio.volume = from + (to - from) * t; } catch (_) {}
-        if (t < 1) requestAnimationFrame(step);
-        else if (done) done();
+        if (entry._volumeFadeState !== ramp) return;
+        const value = this._volumeRampValue(ramp);
+        try { audio.volume = value; } catch (_) {}
+        if (value < to ? value < to : value > to) ramp.frame = requestAnimationFrame(step);
+        else finish();
       };
-      requestAnimationFrame(step);
+      ramp.frame = requestAnimationFrame(step);
     }
 
     _silenceIOSBankEntry(entry, reset = false) {
       if (!entry?.audio) return;
+      entry._gainLevel = 0;
+      if (entry._volumeFadeState) {
+        const ramp = entry._volumeFadeState;
+        if (ramp.frame) cancelAnimationFrame(ramp.frame);
+        if (ramp.timer) {
+          clearTimeout(ramp.timer);
+          const i = this.audioTimers.indexOf(ramp.timer);
+          if (i >= 0) this.audioTimers.splice(i, 1);
+        }
+        entry._volumeFadeState = null;
+      }
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
       entry.active = false;
       if (entry.gainNode && this.audioContext) {
@@ -1178,13 +1213,30 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const ctx = this.audioContext;
       if (!ctx || !gainNode) return;
       const t = ctx.currentTime;
-      const current = Number.isFinite(gainNode.gain.value) ? gainNode.gain.value : 1;
+      const previous = gainNode.__spVolumeFade;
+      let current = Number.isFinite(gainNode.gain.value) ? gainNode.gain.value : 1;
+      if (previous) {
+        current = this._volumeRampValue(previous);
+        if (previous.timer) {
+          clearTimeout(previous.timer);
+          const i = this.audioTimers.indexOf(previous.timer);
+          if (i >= 0) this.audioTimers.splice(i, 1);
+        }
+        gainNode.__spVolumeFade = null;
+      }
+      const to = clamp(asNumber(target, current), 0, 1);
+      const ms = Math.max(0, asNumber(duration, 0));
+      const ramp = { gain: gainNode, ctx, from: current, to, duration: ms, startTime: performance.now(), startContextTime: t };
       try {
         gainNode.gain.cancelScheduledValues(t);
         gainNode.gain.setValueAtTime(current, t);
-        if (duration > 0) gainNode.gain.linearRampToValueAtTime(target, t + duration / 1000);
-        else gainNode.gain.setValueAtTime(target, t);
-      } catch (_) { gainNode.gain.value = target; }
+        if (ms > 0) gainNode.gain.linearRampToValueAtTime(to, t + ms / 1000);
+        else gainNode.gain.setValueAtTime(to, t);
+      } catch (_) { gainNode.gain.value = to; }
+      if (ms > 0) {
+        gainNode.__spVolumeFade = ramp;
+        ramp.timer = this._audioTimeout(() => { if (gainNode.__spVolumeFade === ramp) { gainNode.__spVolumeFade = null; try { gainNode.gain.setValueAtTime(to, ctx.currentTime); } catch (_) {} } }, ms + 20);
+      }
     }
 
     _playBufferedOneShot(command) {
@@ -1388,6 +1440,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _setAudioVolume(audio, value) {
       const target = clamp(asNumber(value, 1), 0, 1);
+      if (audio?.__spVolumeFadeKey != null) this._cancelAudioFade(audio.__spVolumeFadeKey);
       audio.__spGainValue = target;
       const gain = this._ensureAudioNode(audio);
       if (gain && this.audioContext) {
@@ -1405,6 +1458,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _getAudioVolume(audio) {
+      const key = audio?.__spVolumeFadeKey;
+      const ramp = key == null ? null : this.audioFadeStates?.get(key);
+      if (ramp) return this._volumeRampValue(ramp);
       if (Number.isFinite(audio?.__spGainValue)) return audio.__spGainValue;
       return clamp(asNumber(audio?.volume, 1), 0, 1);
     }
@@ -1478,6 +1534,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.audioTimers.length = 0;
       this.audioFadeFrames.forEach((frame) => cancelAnimationFrame(frame));
       this.audioFadeFrames.clear();
+      this.audioFadeStates.forEach((state) => {
+        if (state.gain && this.audioContext) {
+          const now = this.audioContext.currentTime;
+          try { state.gain.gain.cancelScheduledValues(now); } catch (_) {}
+        }
+      });
+      this.audioFadeStates.clear();
+      this.audioDuckTimers = { bgm: null, ambient: null };
     }
 
     _audioTimeout(fn, delay) {
@@ -1490,54 +1554,120 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return timer;
     }
 
+    _cancelAudioDuck(channel) {
+      const timer = this.audioDuckTimers?.[channel];
+      if (!timer) return;
+      clearTimeout(timer);
+      const i = this.audioTimers.indexOf(timer);
+      if (i >= 0) this.audioTimers.splice(i, 1);
+      this.audioDuckTimers[channel] = null;
+    }
+
+    _scheduleAudioDuckRestore(channel, delay, restore) {
+      this._cancelAudioDuck(channel);
+      const timer = this._audioTimeout(() => {
+        if (this.audioDuckTimers[channel] !== timer) return;
+        this.audioDuckTimers[channel] = null;
+        restore();
+      }, delay);
+      this.audioDuckTimers[channel] = timer;
+      return timer;
+    }
+
+    _volumeRampValue(state) {
+      if (!state) return 1;
+      const elapsed = state.ctx && Number.isFinite(state.startContextTime)
+        ? (state.ctx.currentTime - state.startContextTime) * 1000
+        : performance.now() - state.startTime;
+      const t = state.duration > 0 ? clamp(elapsed / state.duration, 0, 1) : 1;
+      return state.from + (state.to - state.from) * t;
+    }
+
+    _cancelAudioFade(key) {
+      const state = this.audioFadeStates.get(key);
+      const frame = this.audioFadeFrames.get(key);
+      if (frame) cancelAnimationFrame(frame);
+      this.audioFadeFrames.delete(key);
+      if (!state) return null;
+      const value = this._volumeRampValue(state);
+      if (state.doneTimer) {
+        clearTimeout(state.doneTimer);
+        const i = this.audioTimers.indexOf(state.doneTimer);
+        if (i >= 0) this.audioTimers.splice(i, 1);
+      }
+      if (state.gain && state.ctx) {
+        const now = state.ctx.currentTime;
+        try {
+          state.gain.gain.cancelScheduledValues(now);
+          state.gain.gain.setValueAtTime(value, now);
+        } catch (_) { try { state.gain.gain.value = value; } catch (_) {} }
+      } else {
+        try { state.audio.volume = value; } catch (_) {}
+      }
+      state.audio.__spGainValue = value;
+      delete state.audio.__spVolumeFadeKey;
+      this.audioFadeStates.delete(key);
+      return value;
+    }
+
     _fadeVolume(audio, target, duration, key, done) {
       target = clamp(asNumber(target, this._getAudioVolume(audio)), 0, 1);
       duration = Math.max(0, asNumber(duration, 0));
-      const previous = this.audioFadeFrames.get(key);
-      if (previous) cancelAnimationFrame(previous);
-
+      const held = this._cancelAudioFade(key);
       const gain = this._ensureAudioNode(audio);
       const ctx = this.audioContext;
-      const from = this._getAudioVolume(audio);
-      audio.__spGainValue = target;
-
-      // Web Audio path: reliable gain automation on iOS/WebKit.
+      const from = held == null ? this._getAudioVolume(audio) : held;
+      const state = { audio, gain, ctx, from, to: target, duration, startTime: performance.now(), startContextTime: ctx?.currentTime, doneTimer: null };
+      audio.__spGainValue = from;
+      audio.__spVolumeFadeKey = key;
+      if (!duration) {
+        if (gain && ctx) {
+          const now = ctx.currentTime;
+          try { gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(target, now); } catch (_) { gain.gain.value = target; }
+        } else try { audio.volume = target; } catch (_) {}
+        audio.__spGainValue = target;
+        delete audio.__spVolumeFadeKey;
+        if (done) done();
+        return;
+      }
+      this.audioFadeStates.set(key, state);
+      // Web Audio path: hold the actual in-flight level before replacing a ramp.
       if (gain && ctx) {
         try {
           const now = ctx.currentTime;
           gain.gain.cancelScheduledValues(now);
           gain.gain.setValueAtTime(from, now);
-          if (!duration) {
-            gain.gain.setValueAtTime(target, now);
-            if (done) done();
-          } else {
-            gain.gain.linearRampToValueAtTime(target, now + duration / 1000);
-            this._audioTimeout(() => { if (done) done(); }, duration);
-          }
-          return;
+          gain.gain.linearRampToValueAtTime(target, now + duration / 1000);
         } catch (_) {
-          // Fall through to HTMLMediaElement/rAF fallback.
+          state.gain = null;
+          try { audio.volume = from; } catch (_) {}
         }
       }
-
-      if (!duration) {
-        try { audio.volume = target; } catch (_) {}
+      const finish = () => {
+        if (this.audioFadeStates.get(key) !== state) return;
+        this.audioFadeStates.delete(key);
         this.audioFadeFrames.delete(key);
+        state.doneTimer = null;
+        audio.__spGainValue = target;
+        delete audio.__spVolumeFadeKey;
+        if (state.gain && state.ctx) {
+          try { state.gain.gain.setValueAtTime(target, state.ctx.currentTime); } catch (_) {}
+        } else try { audio.volume = target; } catch (_) {}
         if (done) done();
-        return;
-      }
-      const start = performance.now();
-      const step = (now) => {
-        const t = clamp((now - start) / duration, 0, 1);
-        const value = from + (target - from) * t;
-        try { audio.volume = value; } catch (_) {}
-        if (t < 1) this.audioFadeFrames.set(key, requestAnimationFrame(step));
-        else {
-          this.audioFadeFrames.delete(key);
-          if (done) done();
-        }
       };
-      this.audioFadeFrames.set(key, requestAnimationFrame(step));
+      if (state.gain && ctx) {
+        state.doneTimer = this._audioTimeout(finish, duration + 20);
+      } else {
+        const step = () => {
+          if (this.audioFadeStates.get(key) !== state) return;
+          const value = this._volumeRampValue(state);
+          try { audio.volume = value; } catch (_) {}
+          audio.__spGainValue = value;
+          if (value !== target) this.audioFadeFrames.set(key, requestAnimationFrame(step));
+          else finish();
+        };
+        this.audioFadeFrames.set(key, requestAnimationFrame(step));
+      }
     }
 
     _safePlay(audio, detail, onStarted) {
@@ -1775,6 +1905,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _stopPersistentChannel(channel, fadeOut = 0) {
+      this._cancelAudioDuck(channel);
       if (channel !== 'bgm' && channel !== 'ambient') return;
       const stopGeneration = this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
       this._cancelNaturalPersistentFade(channel);
@@ -1802,13 +1933,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _startPersistentChannel(channel, command, reconstruct = false, forceSeek = false) {
+      this._cancelAudioDuck(channel);
       if (channel === 'bgm' || channel === 'ambient') {
         this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
         this._cancelNaturalPersistentFade(channel);
         for (const key of [channel, `exit:${channel}`]) {
-          const frame = this.audioFadeFrames?.get(key);
-          if (frame) cancelAnimationFrame(frame);
-          this.audioFadeFrames?.delete(key);
+          this._cancelAudioFade(key);
         }
       }
       if (this._iosStableMediaBank && this._startIOSBankPersistent(channel, command, reconstruct, forceSeek)) return;
@@ -1874,6 +2004,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _volumePersistentChannel(channel, command) {
+      this._cancelAudioDuck(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         if (!entry || !this.audioState[channel]) return;
@@ -1901,6 +2032,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _duckPersistentChannel(channel, command) {
+      this._cancelAudioDuck(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         const state = this.audioState[channel];
@@ -1910,7 +2042,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const fade = Math.max(0, asNumber(command.fade, 250));
         const hold = Math.max(0, asNumber(command.hold, 1200));
         this._setIOSBankEntryVolume(entry, target, fade);
-        this._audioTimeout(() => this._setIOSBankEntryVolume(entry, this.muted ? 0 : restore, fade), fade + hold);
+        this._scheduleAudioDuckRestore(channel, fade + hold, () => this._setIOSBankEntryVolume(entry, this.muted ? 0 : restore, fade));
         emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold, transport:'ios-live-media-bank' });
         return;
       }
@@ -1921,7 +2053,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const fade = Math.max(0, asNumber(command.fade, 250));
         const hold = Math.max(0, asNumber(command.hold, 1200));
         this._fadeBufferGain(buffered.gain, target, fade);
-        this._audioTimeout(() => this._fadeBufferGain(buffered.gain, restore, fade), fade + hold);
+        this._scheduleAudioDuckRestore(channel, fade + hold, () => this._fadeBufferGain(buffered.gain, restore, fade));
         emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold, transport:'audio-buffer' });
         return;
       }
@@ -1933,7 +2065,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const fade = Math.max(0, asNumber(command.fade, 250));
       const hold = Math.max(0, asNumber(command.hold, 1200));
       this._fadeVolume(audio, target, fade, channel);
-      this._audioTimeout(() => this._fadeVolume(audio, restore, fade, channel), fade + hold);
+      this._scheduleAudioDuckRestore(channel, fade + hold, () => this._fadeVolume(audio, restore, fade, channel));
       emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold });
     }
 
@@ -5337,12 +5469,87 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
+    _normalizeRichTextRanges(source, ranges) {
+      if (!Array.isArray(ranges) || !ranges.length) return [];
+      const codepoints = Array.from(source);
+      const cpToUtf16 = [0];
+      for (const ch of codepoints) cpToUtf16.push(cpToUtf16[cpToUtf16.length - 1] + ch.length);
+      const boundaries = new Set(cpToUtf16);
+      const offsets = ranges.flatMap((r) => [Number(r?.start), Number(r?.end)]).filter(Number.isFinite);
+      const hasSplitSurrogate = offsets.some((i) => Number.isInteger(i) && i > 0 && i < source.length && !boundaries.has(i));
+      // Some imported Scenes count Unicode code points. Player slicing uses
+      // UTF-16 offsets, so detect the telltale split-surrogate boundary and
+      // convert every range consistently before rendering any span.
+      const mapped = hasSplitSurrogate ? ranges.map((r) => {
+        const map = (value) => {
+          const i = Math.max(0, Math.min(codepoints.length, Math.trunc(Number(value) || 0)));
+          return cpToUtf16[i];
+        };
+        return { ...r, start: map(r?.start), end: map(r?.end) };
+      }) : ranges;
+      if (typeof Intl?.Segmenter !== 'function') return mapped;
+      const graphemeBounds = new Set([0, source.length]);
+      for (const part of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(source)) {
+        graphemeBounds.add(part.index);
+        graphemeBounds.add(part.index + part.segment.length);
+      }
+      const sorted = [...graphemeBounds].sort((a, b) => a - b);
+      const floorBoundary = (value) => { let result = 0; for (const i of sorted) { if (i > value) break; result = i; } return result; };
+      const ceilBoundary = (value) => sorted.find((i) => i >= value) ?? source.length;
+      return mapped.map((r) => {
+        if (r?.kind === 'table') return r;
+        const start = Math.max(0, Math.min(source.length, Math.trunc(Number(r?.start) || 0)));
+        const end = Math.max(start, Math.min(source.length, Math.trunc(Number(r?.end) || 0)));
+        // If an old Scene splits a grapheme cluster, leave that cluster
+        // unformatted instead of splitting a surrogate or variation sequence.
+        return { ...r, start: graphemeBounds.has(start) ? start : ceilBoundary(start), end: graphemeBounds.has(end) ? end : floorBoundary(end) };
+      }).filter((r) => r?.kind === 'table' || r.end > r.start);
+    }
+
+    _isVerticalEmojiCluster(text) {
+      try {
+        if (new RegExp('\\p{Extended_Pictographic}', 'u').test(text)) return true;
+      } catch (_) {}
+      // Supplementary-plane glyphs (including decorative Phoenician letters
+      // used in emoji-style laughter such as 𐤔) should remain upright too.
+      if (Array.from(text).some((ch) => ch.codePointAt(0) > 0xFFFF)) return true;
+      return /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u00A9\u00AE\u203C\u2049\u2122\u2139]/u.test(text);
+    }
+
+    _isVerticalWriting(node, scene) {
+      return node?.dataset?.writingMode === 'vertical-rl' || node?.style?.writingMode === 'vertical-rl' || scene?.presentation?.text?.writingMode === 'vertical-rl';
+    }
+
+    _appendVerticalEmojiAwareText(node, text) {
+      if (typeof Intl?.Segmenter !== 'function') { node.textContent = text; return; }
+      const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+      let plain = '';
+      const flush = () => { if (plain) { node.appendChild(document.createTextNode(plain)); plain = ''; } };
+      for (const part of segmenter.segment(text)) {
+        if (this._isVerticalEmojiCluster(part.segment)) {
+          flush();
+          const span = document.createElement('span');
+          span.className = 'sp-emoji-upright';
+          span.textContent = part.segment;
+          span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
+          span.style.setProperty('text-orientation', 'upright', 'important');
+          node.appendChild(span);
+        } else plain += part.segment;
+      }
+      flush();
+    }
+
     _renderRichText(node, scene, displayText = null) {
       const source = String(displayText ?? scene?.text ?? '');
-      const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
+      const rawRanges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
+      const ranges = this._normalizeRichTextRanges(source, rawRanges);
       const tables = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table') : [];
       node.classList.remove('sp-has-ruby');
-      if (!ranges.length && !tables.length) { node.textContent = source; return false; }
+      if (!ranges.length && !tables.length) {
+        if (this._isVerticalWriting(node, scene)) this._appendVerticalEmojiAwareText(node, source);
+        else node.textContent = source;
+        return false;
+      }
       node.textContent = '';
       const tableById = new Map(tables.map(t => [String(t.id||''), t]));
       const tableRanges = ranges.filter(r => r?.kind === 'table' && tableById.has(String(r.tableId||'')))
@@ -5356,12 +5563,23 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(to<=from)return;
         const cuts=new Set([from,to]);
         normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
+        if ((this._isVerticalWriting(node, scene)) && typeof Intl?.Segmenter === 'function') {
+          const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+          const fragment = source.slice(from, to);
+          for (const part of segmenter.segment(fragment)) {
+            if (this._isVerticalEmojiCluster(part.segment)) {
+              cuts.add(from + part.index);
+              cuts.add(from + part.index + part.segment.length);
+            }
+          }
+        }
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
           const span=document.createElement('span');
           const active=normal.filter(r=>r.start<=a&&r.end>=b);
           const segmentText=source.slice(a,b);
+          const emojiCluster = (this._isVerticalWriting(node, scene)) && this._isVerticalEmojiCluster(segmentText);
           // Rich Text Player v0.18: list markers live in canonical Scene text.
           // Never synthesize a bullet from semantic ranges; that can decorate an
           // unrelated repeated word when offsets were re-anchored fuzzily.
@@ -5378,7 +5596,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'){
               span.dataset.spTextOrientation=r.orientation;
-              if(r.orientation==='tcy'){
+              if(r.orientation==='tcy' && !emojiCluster){
                 span.style.setProperty('-webkit-text-combine','horizontal','important');
                 span.style.setProperty('-webkit-text-combine-upright','all','important');
                 span.style.setProperty('text-combine-upright','all','important');
@@ -5388,6 +5606,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               }
             }
           });
+          if (emojiCluster) {
+            span.classList.add('sp-emoji-upright');
+            span.style.setProperty('-webkit-text-combine', 'none', 'important');
+            span.style.setProperty('-webkit-text-combine-upright', 'none', 'important');
+            span.style.setProperty('text-combine-upright', 'none', 'important');
+            span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
+            span.style.setProperty('text-orientation', 'upright', 'important');
+          }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
           const content=span.className||span.getAttribute('style')||span.hasAttribute('data-sp-text-orientation')?span:document.createTextNode(segmentText);
