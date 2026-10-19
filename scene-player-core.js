@@ -3383,17 +3383,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return timer;
     }
 
-    _horizontalFlowIsVertical(scene) {
-      const scenes=this.document?.scenes||[];
-      let index=scenes.indexOf(scene);
-      if(index<0&&scene?.id)index=scenes.findIndex(item=>item.id===scene.id);
-      if(index<0)return scene?.presentation?.text?.writingMode==='vertical-rl';
-      // A horizontal run keeps its direction even when its text switches
-      // writing mode. A later vertical-flow Scene starts a fresh run.
-      while(index>0&&scenes[index-1]?.presentation?.flow==='horizontal')index--;
-      return scenes[index]?.presentation?.text?.writingMode==='vertical-rl';
-    }
-
     _sceneGap(prevScene, nextScene) {
       // Consecutive chat bubbles form one speaker's message group.
       if (nextScene?.presentation?.flow !== 'horizontal' && this._chatContinues(prevScene, nextScene)) return 8;
@@ -3513,7 +3502,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       for(let g=groups.length-2;g>=0;g-=1){
         const current=groups[g],next=groups[g+1],currentBounds=bounds(current),nextBounds=bounds(next),currentLast=metrics[current[current.length-1]],nextFirst=metrics[next[0]],flow=nextFirst.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
         let dx=0,dy=0;
-        if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap,verticalReading=this._horizontalFlowIsVertical(nextFirst.scene);dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
+        if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap,verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
         else{const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl',gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;dx=0;dy=nextBounds.top-gap-currentBounds.bottom;}
         current.forEach(i=>{positions[i].x+=dx;positions[i].y+=dy;});
       }
@@ -3556,7 +3545,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const eitherVertical=current.scene?.presentation?.text?.writingMode==='vertical-rl'||next.scene?.presentation?.text?.writingMode==='vertical-rl';
         if(flow==='horizontal'){
           const gap=Math.max(this._sceneGap(current.scene,next.scene),stageWidth*.09)+extraGap;
-          const verticalReading=this._horizontalFlowIsVertical(next.scene);
+          const verticalReading=next.scene?.presentation?.text?.writingMode==='vertical-rl';
           positions[i]={
             x:verticalReading
               ? nextPosition.x+next.inkRight+gap-current.inkLeft
@@ -3591,7 +3580,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           previous.node.style.zIndex='20';
           newest.node.style.zIndex='30';
           if(flow==='horizontal'){
-            const verticalReading=this._horizontalFlowIsVertical(newest.scene);
+            const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl';
             const fits=currentWidth+previousWidth+gap<=availableWidth-margin*2;
             const groupWidth=currentWidth+previousWidth+gap;
             const groupLeft=(availableWidth-groupWidth)/2;
@@ -3627,7 +3616,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){
           const availableWidth=Math.max(1,newest.node.clientWidth||newest.node.getBoundingClientRect().width/this._layoutScale()),margin=stageWidth<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
           if(flow==='horizontal'){
-            const verticalReading=this._horizontalFlowIsVertical(newest.scene),previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;
+            const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;
             positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};
           }else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};
         }
@@ -5726,8 +5715,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const m=presentation.credits||{},roll=m.mode==='roll'&&active;
       const wrap=document.createElement('section');wrap.className='sp-credits'+(roll?' is-roll':'');
       wrap.dataset.creditsMode=m.mode||'card';
-      wrap.dataset.endMode=['hold','reveal'].includes(m.endMode)?m.endMode:'exit';wrap.style.setProperty('--credits-delay',`${Math.max(0,Math.min(60,Number(m.startDelay)||0))}s`);
-      wrap.style.setProperty('--credits-reveal-delay',`${Math.max(0,Math.min(60,Number(m.revealDelay)||0))}s`);
+      wrap.dataset.endMode=m.endMode==='hold'?'hold':'exit';wrap.style.setProperty('--credits-delay',`${Math.max(0,Math.min(60,Number(m.startDelay)||0))}s`);
       wrap.dataset.surface=m.surface==='none'?'none':'card';wrap.dataset.columns=Number(m.columns)===2?'2':'1';
       wrap.style.setProperty('--credits-size',`${Math.max(12,Math.min(48,Number(m.fontSize)||22))}px`);
       wrap.style.setProperty('--credits-gap',`${Math.max(8,Math.min(80,Number(m.gap)||28))}px`);
@@ -5780,14 +5768,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const last=Array.from(list.children).reverse().find(n=>!n.classList.contains('sp-credits-spacer')&&(n.textContent.trim()||n.querySelector('img')));
           const start=first?viewport.clientHeight-first.offsetTop:0;
           const value=Number(m.stopPosition),position=Number.isFinite(value)?Math.max(10,Math.min(90,value)):50;
-          const finalY=last?Math.min(start,viewport.clientHeight*position/100-last.offsetTop-last.offsetHeight/2):0;
-          wrap.style.setProperty('--credits-final-y',`${finalY}px`);
-          list.querySelectorAll('.sp-credits-final-target').forEach(node=>node.classList.remove('sp-credits-final-target'));
-          if(last)last.classList.add('sp-credits-final-target');
-          // The final item is reserved for the reveal; only earlier content rolls.
-          const preceding=last?Array.from(list.children).slice(0,Array.from(list.children).indexOf(last)).reverse().find(n=>!n.classList.contains('sp-credits-spacer')&&(n.textContent.trim()||n.querySelector('img'))):null;
-          const exitY=m.endMode==='reveal'?(preceding?-(preceding.offsetTop+preceding.offsetHeight):-(last?.offsetTop||0)):-list.offsetHeight;
-          const end=m.endMode==='hold'&&last?finalY:exitY;
+          const end=m.endMode==='hold'&&last?Math.min(start,viewport.clientHeight*position/100-last.offsetTop-last.offsetHeight/2):-list.offsetHeight;
           // Resolve lengths before playback; no changing custom property inside keyframes.
           const animation=list.getAnimations?.().find(a=>['sp-credits-roll','sp-credits-roll-hold'].includes(a.animationName));
           if(animation?.effect?.setKeyframes){
@@ -5816,10 +5797,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const isStatic=wrap.classList.contains('is-static');
           e.preventDefault();e.stopPropagation();
           if(!isStatic){wrap.classList.add('is-static','is-paused');}
-          else{viewport.scrollTop=0;wrap.classList.remove('is-static','is-paused');if(completed){const animation=list.getAnimations?.()[0];if(animation){animation.currentTime=0;animation.play();}completed=false;wrap.classList.remove('is-complete','is-held','is-revealed');}}
+          else{viewport.scrollTop=0;wrap.classList.remove('is-static','is-paused');if(completed){const animation=list.getAnimations?.()[0];if(animation){animation.currentTime=0;animation.play();}completed=false;}}
         }else if(e.target.closest('a'))e.stopPropagation();
       });
-      if(roll)list.addEventListener('animationend',e=>{if(e.target!==list||!['sp-credits-roll','sp-credits-roll-hold'].includes(e.animationName))return;completed=true;if(m.endMode==='reveal')wrap.classList.add('is-revealed');else if(m.endMode==='hold')wrap.classList.add('is-held');else wrap.classList.add('is-complete');});
+      if(roll)list.addEventListener('animationend',e=>{if(e.target!==list||!['sp-credits-roll','sp-credits-roll-hold'].includes(e.animationName))return;completed=true;if(m.endMode!=='hold')wrap.classList.add('is-complete');else wrap.classList.add('is-held');});
       return wrap;
     }
 
@@ -6117,11 +6098,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
-      // Only the inner ink is reflected. The outer text retains entrance
-      // transforms and the Scene retains its original movement coordinates.
-      const previousReflection=node.querySelector(':scope > .sp-text-reflection');
-      if(previousReflection)previousReflection.replaceWith(...previousReflection.childNodes);
-      if(node.style.scale){node.style.scale='';node.style.removeProperty('transform-origin');}
       if (style.color) node.style.color = String(style.color);
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       const shadows={
@@ -6193,19 +6169,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.style.marginRight='auto';
       }
       if (style.writingMode !== 'vertical-rl' && (style.align === 'left' || style.align === 'center' || style.align === 'right')) node.style.textAlign = style.align;
-      const reflection=({horizontal:'-1 1',vertical:'1 -1',both:'-1 -1'})[style.flip];
-      if(reflection){
-        const ink=document.createElement('span');
-        ink.className='sp-text-reflection';
-        ink.style.display='block';
-        ink.style.inlineSize='100%';
-        ink.style.writingMode='inherit';
-        ink.style.scale=reflection;
-        ink.style.transformOrigin='50% 50%';
-        ink.append(...node.childNodes);
-        node.appendChild(ink);
-      }
-
     }
 
     _applyCorePresentation(scene) {

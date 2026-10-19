@@ -320,7 +320,7 @@
                   "orientation": {
                     "type": "string",
                     "enum": ["tcy", "sideways", "upright"],
-                    "description": "Vertical text orientation for kind orientation: tcy (縦中横), sideways (横倒し), or upright (正立)."
+                    "description": "Vertical text orientation: tcy (縦中横), sideways (横倒し), or upright (正立)."
                   }
                 },
                 "required": [
@@ -455,9 +455,6 @@
             "center",
             "right"
           ]
-        },
-        "flip": {
-          "enum": ["none", "horizontal", "vertical", "both"]
         },
         "writingMode": {
           "enum": [
@@ -1492,14 +1489,8 @@
               "type": "string",
               "enum": [
                 "exit",
-                "hold",
-                "reveal"
+                "hold"
               ]
-            },
-            "revealDelay": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 60
             },
             "stopPosition": {
               "type": "number",
