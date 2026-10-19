@@ -5327,8 +5327,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'){
-              if(r.orientation==='tcy')span.style.textCombineUpright='all';
-              else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
+              span.dataset.spTextOrientation=r.orientation;
+              if(r.orientation==='tcy'){
+                span.style.setProperty('-webkit-text-combine','horizontal','important');
+                span.style.setProperty('-webkit-text-combine-upright','all','important');
+                span.style.setProperty('text-combine-upright','all','important');
+              }else if(r.orientation==='sideways'||r.orientation==='upright'){
+                span.style.setProperty('-webkit-text-orientation',r.orientation,'important');
+                span.style.setProperty('text-orientation',r.orientation,'important');
+              }
             }
           });
           // Keep undecorated text in text nodes. Fragmented inline spans plus

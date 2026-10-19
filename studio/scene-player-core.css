@@ -3212,3 +3212,18 @@ html.sp-scene-image-open body{
 /* V44: reserve the last item for its reveal instead of showing it twice. */
 .sp-credits.is-roll[data-end-mode="reveal"]:not(.is-revealed):not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list>.sp-credits-final-target{visibility:hidden;pointer-events:none;}
 @media(prefers-reduced-motion:reduce){.sp-credits.is-roll[data-end-mode="reveal"] .sp-credits-list>.sp-credits-final-target{visibility:visible!important;pointer-events:auto;}}
+
+/* V53: explicit vertical text orientation with legacy WebKit fallback. */
+.sp-text [data-sp-text-orientation="tcy"]{
+  -webkit-text-combine:horizontal!important;
+  -webkit-text-combine-upright:all!important;
+  text-combine-upright:all!important;
+}
+.sp-text [data-sp-text-orientation="sideways"]{
+  -webkit-text-orientation:sideways!important;
+  text-orientation:sideways!important;
+}
+.sp-text [data-sp-text-orientation="upright"]{
+  -webkit-text-orientation:upright!important;
+  text-orientation:upright!important;
+}

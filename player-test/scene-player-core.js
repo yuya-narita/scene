@@ -4581,6 +4581,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const text = document.createElement('div');
           text.className = 'sp-text';
           text.textContent = scene.text;
+          this._renderTextOrientations(text,scene);
           this._applyTextStyle(text, presentation.text || {}, false);
           if(String(presentation.frame?.type||'').startsWith('handdrawn-')){
             const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';const inkColor=String(presentation.text?.color||'').trim().toLowerCase();if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';frame.appendChild(text);article.appendChild(frame);article.dataset.frame=presentation.frame.type;this._mountHanddrawnFrame(frame,scene,presentation);
@@ -4639,6 +4640,33 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // during the default entrance. True Jump Landing owns the movement;
       // Auto only adds a quiet opacity reveal.
       return 'fadeRise';
+    }
+
+    _renderTextOrientations(node,scene){
+      const source=String(scene?.text||'');
+      const ranges=(Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[])
+        .filter(r=>r?.kind==='orientation'&&['tcy','sideways','upright'].includes(String(r.orientation)))
+        .map(r=>({start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0),orientation:String(r.orientation)}))
+        .filter(r=>r.end>r.start).sort((a,b)=>a.start-b.start);
+      if(!ranges.length)return;
+      node.textContent='';let cursor=0;
+      const append=(text)=>{if(text)node.appendChild(document.createTextNode(text));};
+      for(const r of ranges){
+        if(r.start<cursor)continue;
+        append(source.slice(cursor,r.start));
+        const span=document.createElement('span');span.dataset.spTextOrientation=r.orientation;
+        span.textContent=source.slice(r.start,r.end);
+        if(r.orientation==='tcy'){
+          span.style.setProperty('-webkit-text-combine','horizontal','important');
+          span.style.setProperty('-webkit-text-combine-upright','all','important');
+          span.style.setProperty('text-combine-upright','all','important');
+        }else{
+          span.style.setProperty('-webkit-text-orientation',r.orientation,'important');
+          span.style.setProperty('text-orientation',r.orientation,'important');
+        }
+        node.appendChild(span);cursor=r.end;
+      }
+      append(source.slice(cursor));
     }
 
     _applyTextStyle(node, style, isSubText) {
