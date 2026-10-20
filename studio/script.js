@@ -9565,7 +9565,8 @@ return flowCommentCard;}
 
   function liveEditScene(){
     const advancedActive=advancedScreen && !advancedScreen.hidden;
-    const sourceIndex=advancedActive ? selectedSceneIndex : (player?.index ?? selectedSceneIndex);
+    const rawIndex=advancedActive ? selectedSceneIndex : (player?.index ?? selectedSceneIndex);
+    const sourceIndex=Number.isFinite(Number(rawIndex)) ? Number(rawIndex) : Number(selectedSceneIndex)||0;
     const i=Math.max(0,Math.min(sourceIndex,(workingDocument?.scenes?.length||1)-1));
     return {scene:workingDocument?.scenes?.[i]||null,index:i};
   }
@@ -11581,7 +11582,11 @@ function startInlineTextEdit(field='text',targetEl=null){
     if(cleanup)cleanup({save,reset});
   }
   function openFramePositionDragEditor(scene){
-    if(!scene)return;
+    if(!scene){
+      desktopLivePanel.hidden=false;
+      desktopLivePanelBody.innerHTML=`<div class="desktop-live-empty-state"><strong>${u('Sceneを読み込めませんでした','No Scene is available')}</strong><p>${u('作品を再読み込みするか、Sceneを追加してください。','Reload the work or add a Scene.')}</p></div>`;
+      return;
+    }
     const p=ensurePresentation(scene);p.text||={};
     finishFramePositionDrag();
     closeDesktopTextDetail();
@@ -13727,7 +13732,12 @@ function openDesktopTextDetail(){
     desktopSpecialIntent='scene';
     document.body.classList.remove('desktop-live-special-open');
     if(desktopTimingButton)desktopTimingButton.disabled=false;
-    const {scene,index}=liveEditScene();if(!scene)return;
+    let {scene,index}=liveEditScene();
+    // Player index can be briefly unset while the Live Editor is being opened
+    // from a restored draft. Fall back to the selected Scene so the inspector
+    // never stays as a blank white panel during that transition.
+    if(!scene&&workingDocument?.scenes?.length){index=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));scene=workingDocument.scenes[index]||null;}
+    if(!scene)return;
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');
     desktopSceneLabel.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     desktopPrevScene.disabled=index<=0;desktopNextScene.disabled=index>=workingDocument.scenes.length-1;
@@ -14791,13 +14801,13 @@ function openDesktopTextDetail(){
       ['frequent','★'],['body',u('本文','Body')],['text',u('文字','Text')],['effect',u('演出','Effects')],
       ['background',u('背景','Background')],['image',u('画像','Image')],['audio',u('音','Audio')],['timing','⌛']
     ];
-    let activeTab=localStorage.getItem('ahako-editor-v2-tab')||'frequent';
+    let activeTab='frequent';try{activeTab=localStorage.getItem('ahako-editor-v2-tab')||'frequent';}catch{}
     const creditScene=p.credits?.enabled===true;if(creditScene&&desktopCreditsInspectorScene!==scene)activeTab='effect';desktopCreditsInspectorScene=creditScene?scene:null;
     // One-time migration from the retired Scene tab.
     if(activeTab==='scene')activeTab='body';
     if(!panes[activeTab])activeTab='frequent';
     const activate=(key)=>{
-      activeTab=key;localStorage.setItem('ahako-editor-v2-tab',key);
+      activeTab=key;try{localStorage.setItem('ahako-editor-v2-tab',key);}catch{}
       tabRail.querySelectorAll('button').forEach(b=>b.classList.toggle('is-active',b.dataset.editorTab===key));
       Object.entries(panes).forEach(([k,el])=>el.classList.toggle('is-active',k===key));
     };
