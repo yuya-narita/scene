@@ -64,7 +64,7 @@
     if(!guideReceive)return;
     intro?.classList.toggle('is-operator-guide',isOperatorGuide());
     guideReceive.hidden=!isOperatorGuide();guideReceive.disabled=!!ownCopyButton?.disabled;
-    guideReceive.textContent=ownCopyButton?.textContent||'説明書を無料で本棚に入れる';
+    guideReceive.textContent=ownCopyButton?.textContent||'説明書を本棚に入れる';
     if(guideStatus){guideStatus.textContent=ownCopyStatus?.textContent||'';guideStatus.hidden=!isOperatorGuide()||!guideStatus.textContent;}
   }
   guideReceive?.addEventListener('click',()=>ownCopyButton?.click());
@@ -756,7 +756,7 @@
     const gate=commerceGateMode(doc);
     if(gate==='free'){
       if(isOperatorGuide()){
-        ownCopyButton.textContent='説明書を無料で本棚に入れる';mirrorGuideReceive();
+        ownCopyButton.textContent='説明書を本棚に入れる';mirrorGuideReceive();
         const existing=await savedOperatorGuideCopy();
         if(existing&&!ownCopyButton.disabled){
           ownCopyButton.textContent='本棚で読む';
