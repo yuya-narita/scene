@@ -11582,11 +11582,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     if(cleanup)cleanup({save,reset});
   }
   function openFramePositionDragEditor(scene){
-    if(!scene){
-      desktopLivePanel.hidden=false;
-      desktopLivePanelBody.innerHTML=`<div class="desktop-live-empty-state"><strong>${u('Sceneを読み込めませんでした','No Scene is available')}</strong><p>${u('作品を再読み込みするか、Sceneを追加してください。','Reload the work or add a Scene.')}</p></div>`;
-      return;
-    }
+    if(!scene)return;
     const p=ensurePresentation(scene);p.text||={};
     finishFramePositionDrag();
     closeDesktopTextDetail();
@@ -13698,14 +13694,14 @@ function openDesktopTextDetail(){
   window.addEventListener('pointerup',finishDesktopV2RangeDrag,true);
   window.addEventListener('pointercancel',finishDesktopV2RangeDrag,true);
 
-  function renderDesktopLivePanel(){
+  function renderDesktopLivePanelInternal(){
     if(desktopV2RangeDragging||desktopDetailRangeInteracting){desktopV2RangeRenderPending=true;return;}
     desktopV2RangeRenderPending=false;
     if(!desktopLivePanel)return;
     if(!desktopLiveActive()){
       desktopLivePanel.hidden=true;
       if(desktopV2Chrome)desktopV2Chrome.hidden=true;
-      document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open');
+      document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open','desktop-v2-settings-closed');
       return;
     }
     // Shell-page mode must be decided by the Player's authoritative state, not
@@ -13737,7 +13733,11 @@ function openDesktopTextDetail(){
     // from a restored draft. Fall back to the selected Scene so the inspector
     // never stays as a blank white panel during that transition.
     if(!scene&&workingDocument?.scenes?.length){index=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));scene=workingDocument.scenes[index]||null;}
-    if(!scene)return;
+    if(!scene){
+      desktopLivePanel.hidden=false;
+      desktopLivePanelBody.innerHTML=`<div class="desktop-live-empty-state"><strong>${u('Sceneを読み込めませんでした','No Scene is available')}</strong><p>${u('作品を再読み込みするか、Sceneを追加してください。','Reload the work or add a Scene.')}</p></div>`;
+      return;
+    }
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');
     desktopSceneLabel.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     desktopPrevScene.disabled=index<=0;desktopNextScene.disabled=index>=workingDocument.scenes.length-1;
@@ -13750,7 +13750,7 @@ function openDesktopTextDetail(){
     if(desktopV2Settings)desktopV2Settings.setAttribute('aria-expanded',document.body.classList.contains('desktop-v2-settings-open')?'true':'false');
     if(desktopTimingOpen){renderDesktopTimingPanel();return;}
     if(desktopTimingButton){desktopTimingButton.classList.remove('is-active');desktopTimingButton.textContent=u('⌛ 時間','⌛ Time');}
-    desktopLivePanelBody.innerHTML='';
+    desktopLivePanelBody.innerHTML=`<div class="desktop-live-empty-state"><strong>${u('右Editorを読み込み中…','Loading Live Editor…')}</strong></div>`;
     const p=ensurePresentation(scene);p.text ||= {};
     const refresh=()=>{scheduleDraftSave(70);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();};
 
@@ -14822,11 +14822,35 @@ function openDesktopTextDetail(){
       tabRail.appendChild(b);
     });
     tabShell.append(tabRail,tabStage);
+    desktopLivePanelBody.innerHTML='';
     desktopLivePanelBody.append(tabShell);
     activate(activeTab);
     desktopSceneUnderlaySnapshot=desktopLivePanelBody.cloneNode(true);
     if(desktopShortcutButton)desktopShortcutButton.hidden=false;
     maybeShowDesktopWritingGuide();
+  }
+
+  // Keep a rendering exception from silently turning the entire inspector
+  // into an empty white pane. This boundary also provides the failing reason
+  // on-screen so it can be diagnosed from a screenshot.
+  function renderDesktopLivePanel(){
+    try{return renderDesktopLivePanelInternal();}
+    catch(error){
+      console.error('[LiveEditor] right panel render failed',error);
+      if(!desktopLivePanel||!desktopLivePanelBody||!desktopLiveActive())return;
+      desktopLivePanel.hidden=false;
+      document.body.classList.add('desktop-live-edit');
+      document.body.classList.remove('desktop-v2-settings-closed');
+      desktopLivePanelBody.innerHTML='';
+      const state=document.createElement('div');
+      state.className='desktop-live-empty-state';
+      const title=document.createElement('strong');
+      title.textContent=u('右Editorの描画でエラーが発生しました','The right editor could not be rendered');
+      const detail=document.createElement('pre');
+      detail.textContent=String(error?.message||error||'Unknown error');
+      state.append(title,detail);
+      desktopLivePanelBody.append(state);
+    }
   }
 
 
@@ -16045,6 +16069,7 @@ function openDesktopTextDetail(){
     // the right side is never mistaken for an empty/failed Live Editor pane.
     if(desktopLiveMQ.matches){
       document.body.classList.add('desktop-v2-settings-open');
+      document.body.classList.remove('desktop-v2-settings-closed');
       desktopV2Settings?.setAttribute('aria-expanded','true');
     }
     // Re-entering Live Editor must not inherit a stale Cover/Ending inspector
@@ -16073,7 +16098,7 @@ function openDesktopTextDetail(){
     liveEditChromeObserver?.disconnect?.();
     liveEditChromeObserver=null;
     playerHost.classList.remove('live-edit-enabled');
-    if(desktopLivePanel)desktopLivePanel.hidden=true;document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open');
+    if(desktopLivePanel)desktopLivePanel.hidden=true;document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open','desktop-v2-settings-closed');
     desktopV2Settings?.setAttribute('aria-expanded','false');
     syncStudioPreviewDevice();
     const recPanel=$('#autoRecPanel');if(recPanel)recPanel.hidden=false;
@@ -16334,6 +16359,7 @@ function openDesktopTextDetail(){
   desktopV2Settings?.addEventListener('click',()=>{
     const open=!document.body.classList.contains('desktop-v2-settings-open');
     document.body.classList.toggle('desktop-v2-settings-open',open);
+    document.body.classList.toggle('desktop-v2-settings-closed',!open);
     desktopV2Settings.setAttribute('aria-expanded',open?'true':'false');
     // Recompute the authoring canvas immediately: closed = full width,
     // open = width remaining to the left of the inspector.
