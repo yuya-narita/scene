@@ -5614,6 +5614,35 @@ return flowCommentCard;}
       ogpCardStatus.textContent=`OGPを取得できませんでした。タイトル・説明文・画像URLを手入力できます。${error?.message?` (${error.message})`:''}`;ogpCardStatus.className='ogp-card-status is-error';
     }finally{ogpFetchButton.disabled=false;updateOgpCardPreview();}
   }
+  async function requestOgpCardData(url){
+    const target=safeWebUrl(url);
+    if(!target)throw new Error('URLを確認してください。');
+    const response=await fetchWithTimeout(`${SCENE_STUDIO_API_BASE}/ogp?url=${encodeURIComponent(target)}`,{headers:{'Accept':'application/json'},cache:'no-store'},12000);
+    const data=await response.json().catch(()=>null);
+    if(!response.ok||!data?.ok)throw new Error(data?.error||`OGPを取得できませんでした (${response.status})`);
+    return data;
+  }
+  async function refreshSceneOgpCards(scene,cards,status,button){
+    const targets=(Array.isArray(cards)?cards:[]).filter(card=>safeWebUrl(card?.url));
+    if(!targets.length){status.textContent=u('取得できるURLカードがありません','No URL cards to refresh');return;}
+    button.disabled=true;
+    status.textContent=u('OGP情報を取得しています…','Refreshing OGP…');
+    let updated=0,failed=0,undoCaptured=false;
+    for(const card of targets){
+      try{
+        const data=await requestOgpCardData(card.url);
+        if(!undoCaptured){captureUndo('URLカードのOGP更新を元に戻せます');undoCaptured=true;}
+        if(data.title)card.title=data.title;
+        if(data.description)card.description=data.description;
+        if(data.image)card.image=data.image;
+        if(data.siteName)card.siteName=data.siteName;
+        updated++;
+      }catch(_){failed++;}
+    }
+    if(updated){scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();}
+    status.textContent=failed?u(`${updated}件更新・${failed}件取得できず`,`${updated} updated, ${failed} failed`):u(`${updated}件のOGPを更新しました`,`Updated ${updated} OGP cards`);
+    button.disabled=false;
+  }
   function saveOgpCardFromDialog(){
     const url=safeWebUrl(ogpCardUrl.value),image=safeWebUrl(ogpCardImage.value);
     if(!url){ogpCardStatus.textContent='リンク先URLを確認してください。';ogpCardStatus.className='ogp-card-status is-error';return;}
@@ -13941,7 +13970,12 @@ function openDesktopTextDetail(){
     const sceneCards=(Array.isArray(scene.content)?scene.content:[]).filter(c=>c?.type==='linkCard');
     if(sceneCards.length){
       const cardManager=document.createElement('div');cardManager.className='desktop-ogp-card-manager';
-      const managerLabel=document.createElement('strong');managerLabel.textContent=u('このSceneのURLカード','URL cards in this Scene');cardManager.appendChild(managerLabel);
+      const managerHead=document.createElement('div');managerHead.className='desktop-ogp-card-head';
+      const managerLabel=document.createElement('strong');managerLabel.textContent=u('このSceneのURLカード','URL cards in this Scene');
+      const refreshButton=document.createElement('button');refreshButton.type='button';refreshButton.className='desktop-ogp-refresh';refreshButton.textContent=u('OGPを再取得','Refresh OGP');
+      const refreshStatus=document.createElement('small');refreshStatus.className='desktop-ogp-refresh-status';
+      refreshButton.addEventListener('click',()=>refreshSceneOgpCards(scene,sceneCards,refreshStatus,refreshButton));
+      managerHead.append(managerLabel,refreshButton,refreshStatus);cardManager.appendChild(managerHead);
       sceneCards.forEach(card=>{
         const row=document.createElement('div');row.className='desktop-ogp-card-row';
         const info=document.createElement('div');info.className='desktop-ogp-card-info';
