@@ -236,6 +236,33 @@
     setStatus('作者本棚から開いています…');
     if(openButton)openButton.disabled=true;
     try{
+      // Published Masters should be read from the canonical publication, not the
+      // locally stored editing package. The bookshelf card may have a recovered
+      // server cover while an older local Master still contains a stale/missing
+      // cover asset. Reading the canonical document keeps the author shelf and
+      // public/official reading routes visually identical.
+      try{
+        const lookup=await fetch(`${API_BASE}/publication/${encodeURIComponent(workId)}`,{cache:'no-store'});
+        const identity=lookup.ok?await lookup.json():null;
+        const publicationId=identity?.ok&&identity?.exists?String(identity.id||'').trim():'';
+        if(publicationId){
+          setStatus('公開中の本を読み込んでいます…');
+          const response=await fetch(`${API_BASE}/work/${encodeURIComponent(publicationId)}?raw=1`,{cache:'no-store'});
+          const canonical=response.ok?await response.json():null;
+          if(canonical&&typeof canonical==='object'){
+            try{sessionStorage.removeItem('ahako:bookshelf:open-master');}catch(_){}
+            currentPackage=null;
+            if(relayButton)relayButton.hidden=true;
+            renderJourney(canonical);
+            await window.ScenePublicPlayer.loadDocument(canonical,{sourceKey:`bookshelf-master-public:${publicationId}`});
+            launcher.hidden=true;
+            if(backButton)backButton.hidden=true;
+            setStatus('');
+            finishAutoOpen();
+            return true;
+          }
+        }
+      }catch(error){console.warn('Published Master read fallback to local package',error);}
       const rec=await masterBookFromBookshelf(workId);
       try{sessionStorage.removeItem('ahako:bookshelf:open-master');}catch(_){}
       const file=new File([rec.blob],rec.fileName||`${rec.title||'book'}.scene`,{type:'application/octet-stream'});

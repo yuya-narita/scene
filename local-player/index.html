@@ -15,7 +15,7 @@
   <meta name="twitter:title" content="あ箱 Local Player">
   <meta name="twitter:description" content="あなたの本棚にある一冊を読むためのプレイヤーです。">
   <meta name="twitter:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
-  <script>try{if(/^copy_[a-f0-9]{32}$/i.test(new URLSearchParams(location.search).get('bookshelfCopy')||''))document.documentElement.classList.add('local-auto-open-pending')}catch(_){}</script>
+  <script>try{const q=new URLSearchParams(location.search),copy=q.get('bookshelfCopy')||'',master=q.get('bookshelfMaster')||'';if(/^copy_[a-f0-9]{32}$/i.test(copy)||/^[A-Za-z0-9_-]{12,80}$/.test(master))document.documentElement.classList.add('local-auto-open-pending')}catch(_){}</script>
   <link rel="stylesheet" href="./scene-player-core.css?v=20261020-start-cover-tap-v34">
   <link rel="stylesheet" href="./public-player.css?v=20261015-ending-v17">
   <link rel="stylesheet" href="./local-loader.css?v=63.35.5-auto-open">
@@ -152,6 +152,6 @@
   <script src="./scene-player-core.js?v=20261021-url-card-render-v1"></script>
   <script src="./public-player.js?v=20261016-restore-v26"></script>
   <script src="../ahako-dialog.js?v=70.3"></script>
-  <script src="./local-loader.js?v=20261016-restore-v26"></script>
+  <script src="./local-loader.js?v=20261021-master-public-cover-v27"></script>
 </body>
 </html>
