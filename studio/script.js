@@ -475,6 +475,25 @@
 
   function insertRichFragment(fragment,start,end){
     fragment=normalizeIncomingRichFragment(fragment);
+    // Some clipboard sources (including embedded link previews) include a
+    // literal placeholder alongside the real URL. Once that URL has become a
+    // card, the placeholder must not remain visible as ordinary prose.
+    if(fragment.cards?.length){
+      const source=String(fragment.text||'');
+      const placeholder=/(?:\*\*)?\s*(?:\[|［)\s*(?:\*\*)?\s*(?:リンクカード|URLカード)\s*(?:\*\*)?\s*(?:\]|］)\s*(?:\*\*)?/gi;
+      const matches=[...source.matchAll(placeholder)];
+      if(matches.length){
+        const removedBefore=position=>matches.reduce((sum,m)=>sum+(m.index+m[0].length<=position?m[0].length:0),0);
+        const rebase=item=>({...item,start:Math.max(0,(Number(item.start)||0)-removedBefore(Number(item.start)||0)),end:Math.max(0,(Number(item.end)||0)-removedBefore(Number(item.end)||0))});
+        let text='',cursor=0;
+        matches.forEach(match=>{text+=source.slice(cursor,match.index);cursor=match.index+match[0].length;});
+        text+=source.slice(cursor);
+        fragment.text=text;
+        fragment.marks=(fragment.marks||[]).map(rebase).filter(item=>item.end>item.start);
+        fragment.tables=(fragment.tables||[]).map(rebase).filter(item=>item.end>item.start);
+        fragment.cards=(fragment.cards||[]).map(rebase).filter(item=>item.end>item.start);
+      }
+    }
     const old=bodyInput.value; const before=old.slice(0,start), after=old.slice(end);
     const delta=fragment.text.length-(end-start);
     const keepMark=m=>m.end<=start||m.start>=end;
