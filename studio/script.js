@@ -314,7 +314,7 @@
   }
   function richTextFromClipboardHtml(html){
     const doc=new DOMParser().parseFromString(String(html||''),'text/html');
-    const out=[]; const marks=[]; const tables=[];
+    const out=[]; const marks=[]; const tables=[]; const cards=[];
     const push=(text)=>{ if(!text)return; out.push(text); };
     const length=()=>out.join('').length;
     const blockBreak=()=>{ const cur=out.join(''); if(cur && !cur.endsWith('\n\n')) push(cur.endsWith('\n')?'\n':'\n\n'); };
@@ -338,6 +338,24 @@
       if(el.nodeType!==Node.ELEMENT_NODE)return;
       const tag=el.tagName.toLowerCase();
       const role=(el.getAttribute?.('role')||'').toLowerCase();
+      const headingHint=[el.getAttribute?.('data-contents-type'),el.getAttribute?.('data-type'),el.getAttribute?.('aria-level'),el.getAttribute?.('class')].filter(Boolean).join(' ').toLowerCase();
+      const embedHint=[el.getAttribute?.('data-contents-type'),el.getAttribute?.('data-type'),el.getAttribute?.('class')].filter(Boolean).join(' ').toLowerCase();
+      const headingLevel=/^h[1-6]$/.test(tag)?Number(tag[1]):(/heading|title/.test(headingHint)||role==='heading'?Math.max(1,Math.min(6,Number(el.getAttribute?.('aria-level'))||2)):0);
+      const standaloneAnchor=()=>{
+        if(!['p','div','section','article','blockquote','figure'].includes(tag))return null;
+        const links=Array.from(el.querySelectorAll('a[href]'));
+        if(links.length!==1)return null;
+        const link=links[0],outside=el.cloneNode(true);outside.querySelectorAll('a').forEach(a=>a.remove());
+        if(String(outside.textContent||'').trim()&&!/(?:embed|link.?card|url.?card)/i.test(embedHint))return null;
+        const url=safeWebUrl(link.getAttribute('href')||'');if(!url)return null;
+        return url;
+      };
+      const emitLinkCard=(url)=>{
+        blockBreak();const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+        const label=`［URLカード ${id.slice(-4)}］`,start=length();push(label);const end=length();
+        cards.push({id,url,title:'',description:'',image:'',siteName:'',start,end,label});
+        marks.push({start,end,kind:'linkCard',cardId:id});blockBreak();
+      };
       if(tag==='table'||role==='table'||role==='grid'){
         blockBreak(); const index=tables.length+1; const label=`［表 ${index}］`; const start=length(); push(label); const end=length();
         const rowEls=Array.from(el.querySelectorAll('tr,[role="row"]'));
@@ -352,8 +370,14 @@
         // fall through and preserve its text instead of creating an empty table.
         out.pop();
       }
-      if(/^h[1-6]$/.test(tag)){
-        blockBreak();const start=length();inline(el);const end=length();marks.push({start,end,kind:'heading',level:Number(tag[1])});blockBreak();return;
+      if(headingLevel){
+        blockBreak();const start=length();inline(el);const end=length();marks.push({start,end,kind:'heading',level:headingLevel});blockBreak();return;
+      }
+      const embedUrl=/(?:embed|link.?card|url.?card)/i.test(embedHint)?standaloneAnchor():null;
+      if(embedUrl){emitLinkCard(embedUrl);return;}
+      if(tag==='figure'){
+        const cardUrl=standaloneAnchor();if(cardUrl){emitLinkCard(cardUrl);return;}
+        blockBreak();Array.from(el.childNodes).forEach(n=>walkBlock(n));blockBreak();return;
       }
       if(tag==='blockquote'){
         blockBreak();const start=length();Array.from(el.childNodes).forEach(n=>inline(n));const end=length();marks.push({start,end,kind:'quote'});blockBreak();return;
@@ -376,9 +400,11 @@
         blockBreak(); const start=length();push('・');Array.from(el.childNodes).forEach(n=>inline(n));const end=length();marks.push({start,end,kind:'listItem',ordered:false});push('\n');blockBreak();return;
       }
       if(tag==='p'){
+        const cardUrl=standaloneAnchor();if(cardUrl){emitLinkCard(cardUrl);return;}
         blockBreak();const start=length();Array.from(el.childNodes).forEach(n=>inline(n));const end=length();if(end>start)marks.push({start,end,kind:'paragraph'});blockBreak();return;
       }
       if(['div','section','article'].includes(tag)){
+        const cardUrl=standaloneAnchor();if(cardUrl){emitLinkCard(cardUrl);return;}
         // Rich Text Player v0.17: container elements are not paragraphs.
         // ChatGPT/Chrome clipboard can wrap a real <ul>/<ol>/<li> inside a DIV.
         // Treating the whole DIV as inline text flattened that nested list before
@@ -402,11 +428,11 @@
     const raw=out.join(''); const lead=raw.length-raw.trimStart().length;
     const max=text.length;
     const adjust=x=>({...x,start:Math.max(0,x.start-lead),end:Math.min(max,x.end-lead)});
-    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start)};
+    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start),cards:cards.map(adjust).filter(x=>x.end>x.start)};
   }
   // Rich Paste v0.2 — Markdown/plain fallback for clipboard tables.
   function richTextFromClipboardPlain(plain){
-    const src=String(plain||'').replace(/\r\n?/g,'\n'),lines=src.split('\n'),out=[],marks=[],tables=[];
+    const src=String(plain||'').replace(/\r\n?/g,'\n'),lines=src.split('\n'),out=[],marks=[],tables=[],cards=[];
     const push=t=>{if(t)out.push(t)},length=()=>out.join('').length;
     const blockBreak=()=>{const cur=out.join('');if(cur&&!cur.endsWith('\n\n'))push(cur.endsWith('\n')?'\n':'\n\n')};
     const addInline=raw=>{let pos=0,m,re=/\*\*([^*\n]+)\*\*/g;while((m=re.exec(raw))){push(raw.slice(pos,m.index));const start=length();push(m[1]);const end=length();if(end>start)marks.push({start,end,kind:'span',style:{bold:true}});pos=m.index+m[0].length;}push(raw.slice(pos));};
@@ -416,6 +442,8 @@
     const isTsvRow=line=>String(line||'').split('\t').length>=2;
     let i=0;
     while(i<lines.length){const line=lines[i],trimmed=line.trim();let m;
+      const standaloneUrl=pastedWebUrl(trimmed);
+      if(standaloneUrl){blockBreak();const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`,label=`［URLカード ${id.slice(-4)}］`,start=length();push(label);const end=length();cards.push({id,url:standaloneUrl,title:'',description:'',image:'',siteName:'',start,end,label});marks.push({start,end,kind:'linkCard',cardId:id});blockBreak();i++;continue;}
       if(isPipeRow(line)&&i+1<lines.length&&isDivider(lines[i+1])){blockBreak();const rows=[splitPipe(line)];i+=2;while(i<lines.length&&isPipeRow(lines[i])&&lines[i].trim()){rows.push(splitPipe(lines[i++]));}const n=tables.length+1,label=`［表 ${n}］`,start=length();push(label);const end=length(),id=`table-${n}`;tables.push({id,start,end,label,headerRows:1,rows});marks.push({start,end,kind:'table',tableId:id});blockBreak();continue;}
       if(isTsvRow(line)&&i+1<lines.length&&isTsvRow(lines[i+1])){blockBreak();const rows=[];while(i<lines.length&&isTsvRow(lines[i])&&lines[i].trim())rows.push(lines[i++].split('\t').map(v=>v.trim()));const n=tables.length+1,label=`［表 ${n}］`,start=length();push(label);const end=length(),id=`table-${n}`;tables.push({id,start,end,label,headerRows:1,rows});marks.push({start,end,kind:'table',tableId:id});blockBreak();continue;}
       if(!trimmed){blockBreak();i++;continue;}
@@ -426,7 +454,7 @@
       blockBreak();const start=length();addInline(trimmed);const end=length();if(end>start)marks.push({start,end,kind:'paragraph'});blockBreak();i++;
     }
     const raw=out.join(''),lead=raw.length-raw.trimStart().length,text=raw.trim(),max=text.length,adjust=x=>({...x,start:Math.max(0,x.start-lead),end:Math.min(max,x.end-lead)});
-    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start)};
+    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start),cards:cards.map(adjust).filter(x=>x.end>x.start)};
   }
 
   function insertRichFragment(fragment,start,end){
@@ -5622,6 +5650,22 @@ return flowCommentCard;}
     if(!response.ok||!data?.ok)throw new Error(data?.error||`OGPを取得できませんでした (${response.status})`);
     return data;
   }
+  async function hydrateEasyOgpCards(cards){
+    const pending=(Array.isArray(cards)?cards:[]).filter(card=>safeWebUrl(card?.url));
+    if(!pending.length)return;
+    await Promise.all(pending.map(async card=>{
+      try{
+        const data=await requestOgpCardData(card.url);
+        const current=(easyRichSource.cards||[]).find(item=>String(item.id)===String(card.id));
+        if(!current)return;
+        Object.assign(current,{url:data.url||current.url,title:data.title||current.title,description:data.description||current.description,image:data.image||current.image,siteName:data.siteName||current.siteName});
+      }catch(error){
+        const current=(easyRichSource.cards||[]).find(item=>String(item.id)===String(card.id));
+        if(current&&!current.title){try{current.title=new URL(current.url).hostname;}catch(_){}}
+      }
+    }));
+    renderEasyOgpCardList();easySourceDirty=true;syncEasyPublishButton();scheduleDraftSave?.(80);
+  }
   async function refreshSceneOgpCards(scene,cards,status,button){
     const targets=(Array.isArray(cards)?cards:[]).filter(card=>safeWebUrl(card?.url));
     if(!targets.length){status.textContent=u('取得できるURLカードがありません','No URL cards to refresh');return;}
@@ -7979,8 +8023,8 @@ return flowCommentCard;}
     // Some clipboard producers expose list items as <li> or ARIA role=list/listitem
     // without a literal <ul>/<ol> wrapper. V0.2 parsed every HTML clipboard, while
     // later versions added this fast gate and accidentally skipped those lists.
-    const htmlHasRich=/<(h[1-6]|strong|b|blockquote|ul|ol|li|table)\b/i.test(html)
-      || /role=["'](?:table|grid|list|listitem)["']/i.test(html);
+    const htmlHasRich=/<(h[1-6]|strong|b|blockquote|ul|ol|li|table|a)\b/i.test(html)
+      || /(?:data-contents-type|aria-level|role)=["'](?:[^"']*heading|[^"']*(?:table|grid|list|listitem))["']/i.test(html);
     if(!plainHasTable&&!plainHasRich&&!htmlHasRich)return;
     // Rich Paste v0.3: prefer the structured HTML whenever it carries semantics.
     // V0.2 preferred plain text as soon as it *looked* table-like; that threw away
@@ -8075,6 +8119,7 @@ return flowCommentCard;}
     }
     if(!fragment.text)return;
     event.preventDefault();insertRichFragment(fragment,bodyInput.selectionStart||0,bodyInput.selectionEnd||0);
+    if(fragment.cards?.length)hydrateEasyOgpCards(fragment.cards);
   });
   bodyInput.addEventListener('input',()=>{ if(!applyingRichPaste)reconcileRichSourceAfterPlainEdit(easyRichTextSnapshot,bodyInput.value); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();renderEasyOgpCardList(); updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
   $('#sceneSubTextInput').addEventListener('input',autoGrowSubText);
