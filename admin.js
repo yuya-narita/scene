@@ -654,7 +654,7 @@ async function loadAuthors(){
     const data=await api('/admin/authors');
     const rows=data.authors||[];
     if(els.authorCount)els.authorCount.textContent=`${rows.length.toLocaleString('ja-JP')}人`;
-    els.authorList.innerHTML=rows.length?rows.map(author=>{const active=author.accountStatus!=='suspended';return `<article class="contact-card${active?'':' is-resolved'}" data-author-id="${escapeHtml(author.authorId||'')}"><div class="meta"><span>作者名</span><strong>${escapeHtml(author.displayName||'未設定')}</strong><span>メール</span><a class="inline-link" href="mailto:${escapeHtml(author.email||'')}">${escapeHtml(author.email||'')}</a><span>authorId</span><code>${escapeHtml(author.authorId||'')}</code><span>状態</span><strong>${active?'利用中':'停止中'}</strong><span>登録</span><span>${escapeHtml(formatJstDate(author.createdAt))}</span></div><div class="actions"><button type="button" data-author-action="${active?'suspend':'activate'}" class="${active?'stop':''}">${active?'利用を停止':'利用を再開'}</button><button type="button" data-author-sale-check="${escapeHtml(author.authorId||'')}">販売準備を確認</button></div></article>`;}).join(''):'<div class="empty">作者アカウントはまだありません。</div>';
+    els.authorList.innerHTML=rows.length?rows.map(author=>{const active=author.accountStatus!=='suspended';return `<article class="contact-card${active?'':' is-resolved'}" data-author-id="${escapeHtml(author.authorId||'')}"><div class="meta"><span>作者名</span><strong>${escapeHtml(author.displayName||'未設定')}</strong><span>メール</span><a class="inline-link" href="mailto:${escapeHtml(author.email||'')}">${escapeHtml(author.email||'')}</a><span>authorId</span><code>${escapeHtml(author.authorId||'')}</code><span>状態</span><strong>${active?'利用中':'停止中'}</strong><span>登録</span><span>${escapeHtml(formatJstDate(author.createdAt))}</span></div><div class="actions"><button type="button" data-author-action="${active?'suspend':'activate'}" class="${active?'stop':''}">${active?'利用を停止':'利用を再開'}</button><button type="button" data-author-sale-check="${escapeHtml(author.authorId||'')}">販売準備を確認</button><button type="button" data-author-shadow-check="${escapeHtml(author.authorId||'')}">リスク監視</button></div></article>`;}).join(''):'<div class="empty">作者アカウントはまだありません。</div>';
   }catch(error){
     if(els.authorCount)els.authorCount.textContent='–';
     els.authorList.innerHTML=`<div class="empty">作者を読み込めませんでした: ${escapeHtml(error.message)}</div>`;
@@ -1076,5 +1076,53 @@ function installDisputeRiskPanel(){
   panel.addEventListener('toggle',()=>{if(panel.open)load();});
 }
 installDisputeRiskPanel();
+
+let openShadowRiskCheck=null;
+els.authorList?.addEventListener('click',event=>{
+  const button=event.target.closest('[data-author-shadow-check]');
+  if(button&&openShadowRiskCheck){setAdminTab('audit');openShadowRiskCheck(button.dataset.authorShadowCheck);}
+});
+function installShadowRiskPanel(){
+  if(!els.auditOrdersList)return;
+  const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
+  panel.innerHTML='<summary>リスク監視（Shadow・資金操作なし）</summary><p>作者のStripe残高・内部保留・注文・Webhookの一部を確認し、観測記録を保存します。出金許可、保留の追加・解除、返金、購入権の変更は行いません。</p><label>作者ID <input data-shadow-author placeholder="author_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><p><button type="button" data-shadow-run>現在状態を確認・記録</button> <button type="button" data-shadow-history>保存済みの観測を見る</button></p><div data-shadow-result aria-live="polite"></div><div data-shadow-history-result aria-live="polite"></div>';
+  els.auditOrdersList.parentNode.appendChild(panel);
+  const input=panel.querySelector('[data-shadow-author]'),button=panel.querySelector('[data-shadow-run]'),historyButton=panel.querySelector('[data-shadow-history]'),result=panel.querySelector('[data-shadow-result]'),historyResult=panel.querySelector('[data-shadow-history-result]');
+  let busy=false,last=null;
+  const labels={PROVENANCE_UNVERIFIED:'資金の出所：未検証',FUND_AGE_UNVERIFIED:'原資の年齢：未検証',PAYOUT_PATHS_UNVERIFIED:'全出金経路の制御：未検証',BUDGET_UNCONFIGURED:'損失上限：未設定',DEADLINE_UNVERIFIED:'Stripe資金保有期限：未検証',AUTHOR_NOT_AUTHORIZED:'新規販売：許可を確認できない',SELLER_CHECK_UNVERIFIED:'販売準備の取得：未確認',CONNECT_UNVERIFIED:'Stripe連携：未確認',BALANCE_UNVERIFIED:'Stripe残高：未確認',NEGATIVE_STRIPE_BALANCE:'Stripe残高にマイナスあり',INTERNAL_HOLD_RECORDED:'保存済みの内部保留あり',DISPUTE_LOST_UNRECOVERED:'敗訴あり・回収確認が必要',DISPUTE_REVIEW:'異議申立ての確認が必要',REFUND_PENDING:'Stripeで返金処理中',RECONCILIATION_MISMATCH:'注文の個別監査に不一致あり',ENTITLEMENT_REPAIR_CANDIDATE:'MY COPY権利だけの修復候補あり',PAYMENT_SYNC_REVIEW:'Stripe支払済み・注文反映の確認が必要',ORDER_UNVERIFIED:'注文の照会結果：未確認',WEBHOOK_QUEUE_REVIEW:'この決済環境にWebhook未処理あり（作者への帰属未確認）',ORDER_ATTRIBUTION_UNVERIFIED:'口座に紐付かない注文あり（仮注文等を含む）',ORDER_SCAN_PARTIAL:'注文は一部の範囲を確認',WEBHOOK_SCAN_PARTIAL:'Webhookは一部の範囲を確認',LOOKUP_UNVERIFIED:'取得・記録の検証に失敗あり'};
+  const stateLabels={confirmation_only:'購入確定前・決済IDなし（売上計上なし）',unverified:'未確認',paid_review:'支払済み',payment_sync_review:'支払済み・注文反映要確認',purchase_incomplete:'購入確定前（未払いと断定しない）',refund_complete:'全額返金・権利反映確認',refund_sync_review:'全額返金・権利反映要確認',refund_pending:'返金処理中',partial_refund_review:'部分返金・要確認',refund_failure_review:'返金失敗記録・要確認',dispute_review:'異議申立て記録あり',entitlement_repair:'購入権の修復候補',audit_review:'個別監査に不一致',debit_recovery_complete:'Debitのみ成功した事故の復旧確認'};
+  function lock(value){busy=value;input.disabled=value;button.disabled=value;historyButton.disabled=value;result.querySelectorAll('button').forEach(b=>b.disabled=value);button.textContent=value?'確認中…':'現在状態を確認・記録';}
+  function validId(){const id=input.value.trim().toLowerCase();if(!/^author_[a-f0-9]{32}$/.test(id))throw new Error('作者IDを確認してください。');return id;}
+  function render(r){
+    const esc=escapeHtml,money=v=>Number.isSafeInteger(v)?'¥'+v.toLocaleString('ja-JP'):'未確認';
+    result.innerHTML=`<div class="audit-order-card" style="display:block;overflow-wrap:anywhere"><strong>監視のみ・出金判断は未完了</strong><p>${esc(r.seller.displayName)} / ${r.environment==='live'?'本番LIVE':'Sandbox TEST'}<br>確認日時：${esc(formatJstDate(r.checkedAt))}<br>観測記録：${esc(r.observationId)}</p><p>Stripe利用可能残高 ${money(r.balance?.availableJPY)}<br>Stripe入金待ち ${money(r.balance?.pendingJPY)}<br>残高購入の候補額：未算定 / 出金候補額：未算定<br>原資の年齢・保有期限：未検証 / 銀行出金の完全停止：未検証</p><p>保存済み通知による内部保留：${r.holds?(r.holds.internalHeld||r.holds.disputes.some(x=>x.blocked)?'あり':'記録なし'):'未確認'}。Stripeの全異議申立てを確認した意味ではありません。</p>${r.holds?.disputes.length?'<details><summary>保存済みの保留理由</summary>'+r.holds.disputes.map(x=>'<p>'+esc(x.disputeId)+' / '+esc({won:'勝訴',lost:'敗訴',needs_response:'回答待ち',under_review:'審査中',warning_closed:'事前照会終了',prevented:'未然防止'}[x.status]||x.status)+'<br>当該保留：'+(x.blocked?'あり':'解除記録あり')+' / 通知記録の更新：'+esc(x.updatedAt?formatJstDate(x.updatedAt):'未取得')+'</p>').join('')+'</details>':''}<ul>${r.reasonCodes.map(x=>'<li>'+esc(labels[x]||x)+'</li>').join('')}</ul><details><summary>販売準備の確認結果</summary>${r.seller.checks.map(x=>'<p>'+esc(x.label)+'：'+esc({ok:'確認済み',blocked:'条件未達',unknown:'未確認'}[x.status]||'未確認')+'<br>'+esc(x.detail)+'</p>').join('')}</details><p><strong>今回の注文ページ</strong><br>環境内を${r.coverage.orders.scanned??'未確認'}件走査／現在の連携口座に一致 ${r.coverage.orders.matched}件。口座未設定 ${r.coverage.orders.unattributed}件、他口座 ${r.coverage.orders.otherAccounts}件。後者はこの作者の売上に計上しません。</p>${r.orders.map(x=>`<p>${esc(x.orderId)}<br>${esc(stateLabels[x.state]||'未確認')}<br>${x.checkoutState?'Checkout照会：'+esc(x.checkoutState):''}</p>`).join('')||'<p>このページに対象口座の注文はありません。売上ゼロや異常なしを意味しません。</p>'}<p><strong>決済環境全体のWebhook待機キュー</strong><br>今回 ${r.coverage.webhooks.scanned??'未確認'}件。対象作者への帰属は未確認です。</p>${r.webhooks.map(x=>'<p>'+esc(x.eventId)+' / '+esc({pending:'待機',processing:'処理中',failed:'失敗',waiting:'後続処理待ち',needs_review:'運営確認待ち',applied:'反映済み',ignored:'対象外として処理済み'}[x.status]||'未確認')+'</p>').join('')||'<p>このページに待機通知はありません。Stripe側の未到達通知を調査した意味ではありません。</p>'}<p>注文は1回2件、Webhookは1回5件まで。表示は今回取得したページだけで、合算した全体監査ではありません。別の取得時刻の結果は同一時点の残高として合算できません。過去の連携口座、Stripeだけにある決済、日次照合、出所・期限の厳密な照合は別途確認します。</p>${r.errors.length||r.seller.errors.length?'<p>取得エラー：'+esc([...r.errors,...r.seller.errors].map(x=>x.source+': '+x.code).join(', '))+'</p>':''}</div>`;
+    if(r.coverage.orders.nextCursor){const next=document.createElement('button');next.type='button';next.textContent='次の注文ページを確認・記録';next.onclick=()=>run({orderCursor:r.coverage.orders.nextCursor,webhookCursor:r.coverage.webhooks.startCursor,expectedEnvironment:r.environment,expectedAccountId:r.accountId});result.appendChild(next);}
+    if(r.coverage.webhooks.nextCursor){const next=document.createElement('button');next.type='button';next.textContent='次のWebhookページを確認・記録';next.onclick=()=>run({orderCursor:r.coverage.orders.startCursor,webhookCursor:r.coverage.webhooks.nextCursor,expectedEnvironment:r.environment,expectedAccountId:r.accountId});result.appendChild(next);}
+    for(const order of r.orders){const next=document.createElement('button');next.type='button';next.textContent='注文の対応確認：'+order.orderId.slice(-8);next.onclick=()=>openOrderResponseCheck?.(order.orderId);result.appendChild(next);}
+  }
+  async function history(authorId){
+    const data=await apiWithTimeout('/admin/commerce/shadow-risk?authorId='+encodeURIComponent(authorId),{},30000);
+    if(!['live','test'].includes(data.environment)||!Array.isArray(data.history))throw new Error('Workerの監視機能を確認してください。');
+    historyResult.innerHTML='<p><strong>保存済みの観測（現在状態の照会ではありません）</strong></p>'+data.history.map(x=>'<p>'+escapeHtml(formatJstDate(x.checkedAt))+' / '+escapeHtml(x.observationId)+'<br>監視のみ・出金判断は未完了</p>').join('');
+    if(!data.history.length)historyResult.innerHTML+='<p>観測記録はまだありません。</p>';
+    return data;
+  }
+  async function run(page={}){
+    if(busy)return;
+    let authorId;try{authorId=validId();}catch(e){result.textContent=e.message;return;}
+    lock(true);last=null;result.textContent='Stripeとあ箱の記録を照会しています。完了すると観測記録を保存します…';
+    try{
+      const environment=page.expectedEnvironment||(await history(authorId)).environment;
+      const data=await apiWithTimeout('/admin/commerce/shadow-risk',{method:'POST',body:JSON.stringify({authorId,...page,expectedEnvironment:environment})},45000),r=data.observation;
+      if(!r||r.subjectId!==authorId||r.environment!==environment||r.decisionMode!=='shadow'||r.enforcementApplied!==false||r.spendableCandidateJPY!==null||r.payoutableCandidateJPY!==null)throw new Error('監視結果の対応を確認できません。');
+      last=r;render(r);historyResult.textContent='今回の観測記録を保存しました。履歴は「保存済みの観測を見る」で再取得できます。';
+    }catch(e){last=null;result.textContent='監視結果は未確認です：'+e.message+'。通信断の場合、観測記録だけ保存されている可能性があります。保存済みの観測を確認してください。';}
+    finally{lock(false);}
+  }
+  button.onclick=()=>run();historyButton.onclick=async()=>{if(busy)return;try{const id=validId();lock(true);await history(id);}catch(e){historyResult.textContent='履歴を確認できません：'+e.message;}finally{lock(false);}};
+  input.addEventListener('input',()=>{last=null;result.textContent='';historyResult.textContent='';});
+  openShadowRiskCheck=authorId=>{if(busy)return;panel.open=true;input.value=authorId;result.textContent='';historyResult.textContent='';panel.scrollIntoView({behavior:'smooth',block:'start'});run();};
+}
+installShadowRiskPanel();
 
 })();
