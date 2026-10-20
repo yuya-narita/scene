@@ -653,7 +653,7 @@ async function loadAuthors(){
     const data=await api('/admin/authors');
     const rows=data.authors||[];
     if(els.authorCount)els.authorCount.textContent=`${rows.length.toLocaleString('ja-JP')}人`;
-    els.authorList.innerHTML=rows.length?rows.map(author=>{const active=author.accountStatus!=='suspended';return `<article class="contact-card${active?'':' is-resolved'}" data-author-id="${escapeHtml(author.authorId||'')}"><div class="meta"><span>作者名</span><strong>${escapeHtml(author.displayName||'未設定')}</strong><span>メール</span><a class="inline-link" href="mailto:${escapeHtml(author.email||'')}">${escapeHtml(author.email||'')}</a><span>authorId</span><code>${escapeHtml(author.authorId||'')}</code><span>状態</span><strong>${active?'利用中':'停止中'}</strong><span>登録</span><span>${escapeHtml(formatJstDate(author.createdAt))}</span></div><div class="actions"><button type="button" data-author-action="${active?'suspend':'activate'}" class="${active?'stop':''}">${active?'利用を停止':'利用を再開'}</button></div></article>`;}).join(''):'<div class="empty">作者アカウントはまだありません。</div>';
+    els.authorList.innerHTML=rows.length?rows.map(author=>{const active=author.accountStatus!=='suspended';return `<article class="contact-card${active?'':' is-resolved'}" data-author-id="${escapeHtml(author.authorId||'')}"><div class="meta"><span>作者名</span><strong>${escapeHtml(author.displayName||'未設定')}</strong><span>メール</span><a class="inline-link" href="mailto:${escapeHtml(author.email||'')}">${escapeHtml(author.email||'')}</a><span>authorId</span><code>${escapeHtml(author.authorId||'')}</code><span>状態</span><strong>${active?'利用中':'停止中'}</strong><span>登録</span><span>${escapeHtml(formatJstDate(author.createdAt))}</span></div><div class="actions"><button type="button" data-author-action="${active?'suspend':'activate'}" class="${active?'stop':''}">${active?'利用を停止':'利用を再開'}</button><button type="button" data-author-sale-check="${escapeHtml(author.authorId||'')}">販売準備を確認</button></div></article>`;}).join(''):'<div class="empty">作者アカウントはまだありません。</div>';
   }catch(error){
     if(els.authorCount)els.authorCount.textContent='–';
     els.authorList.innerHTML=`<div class="empty">作者を読み込めませんでした: ${escapeHtml(error.message)}</div>`;
@@ -863,6 +863,57 @@ function installWebhookInbox(){
 }
 installWebhookInbox();
 
+let openSellerReadinessCheck=null;
+els.authorList?.addEventListener('click',event=>{
+  const button=event.target.closest('[data-author-sale-check]');
+  if(!button||!openSellerReadinessCheck)return;
+  setAdminTab('audit');openSellerReadinessCheck(button.dataset.authorSaleCheck);
+});
+function installSellerReadinessPanel(){
+  if(!els.auditOrdersList)return;
+  const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
+  panel.innerHTML='<summary>作者の本番販売チェック</summary><p>作者IDを指定して、販売許可とStripe設定を確認します。作者のStripe登録が完了したら、ここで販売開始の準備を確認してください。</p><label>作者ID <input data-seller-id placeholder="author_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><button type="button" data-seller-run>販売準備を確認</button><div data-seller-result aria-live="polite"></div>';
+  els.auditOrdersList.parentNode.appendChild(panel);
+  const input=panel.querySelector('[data-seller-id]'),button=panel.querySelector('[data-seller-run]'),result=panel.querySelector('[data-seller-result]');
+  let busy=false;
+  async function run(){
+    if(busy)return;
+    const authorId=input.value.trim();
+    result.textContent='';
+    if(!/^author_[a-f0-9]{32}$/.test(authorId)){result.textContent='author_から始まる作者IDを確認してください。';return;}
+    busy=true;button.disabled=true;input.disabled=true;button.textContent='確認中…';result.textContent='現在の販売許可とStripe設定を照会しています…';
+    try{
+      const data=await apiWithTimeout('/admin/commerce/seller-readiness?authorId='+encodeURIComponent(authorId),{},30000);
+      const s=data.sellerReadiness;
+      if(!s||s.authorId!==authorId||!Array.isArray(s.checks))throw new Error('販売チェック結果を確認できません。Workerを更新してください。');
+      const labels={ready:'現在の販売開始チェック：OK',awaiting_allowlist:'Stripe設定の確認完了・販売許可への追加待ち',paused:'作者設定の確認完了・新規購入は停止中',blocked:'販売開始前に確認が必要です',sandbox:'Sandboxの確認結果です。本番販売の準備完了ではありません。'};
+      const checkLabel={ok:'✓',blocked:'要対応',unknown:'未確認'};
+      result.innerHTML=`<div class="audit-order-card" style="display:block;overflow-wrap:anywhere"><strong>${escapeHtml(s.displayName)}</strong><p>${escapeHtml(labels[s.state]||'状態未確認')}</p><p>環境：${escapeHtml(s.environment)} / 新規購入：${s.paymentsEnabled?'有効':'停止'}<br>販売許可リスト：${s.policyValid?(s.listed?'登録済み':'未登録'):'未設定・形式エラー'}</p><p>${escapeHtml(s.authorId)}<br>${escapeHtml(s.accountId||'Stripe連携未確認')}</p>${s.checks.map(c=>`<p><strong>${escapeHtml(checkLabel[c.status]||'未確認')} ${escapeHtml(c.label)}</strong><br>${escapeHtml(c.detail)}</p>`).join('')}${s.errors?.length?`<p>取得エラー：${escapeHtml(s.errors.map(e=>e.source+': '+e.code).join(', '))}</p>`:''}<small>確認日時 ${escapeHtml(formatJstDate(s.checkedAt))}</small></div>`;
+      if(s.environment==='live'){
+        const note=document.createElement('p');note.textContent='この結果は販売開始の技術的な確認です。運営による作品・販売条件の確認と、本番の初回購入の確認も行ってください。';result.appendChild(note);
+      }
+      if(s.suggestedAllowlistValue){
+        const box=document.createElement('div');
+        box.innerHTML='<p><strong>この作者を追加する設定値</strong></p><p>Cloudflare Worker → 設定 → 変数とシークレット → AHAKO_LIVE_SELLER_AUTHOR_IDS に設定します。既存の作者IDを含む値です。Cloudflareの現在値と照合して保存・デプロイしてください。</p><textarea data-seller-value readonly aria-label="作者追加後の販売許可リスト" rows="3" style="width:100%;box-sizing:border-box;overflow-wrap:anywhere"></textarea><button type="button" data-seller-copy>設定値をコピー</button><p data-seller-copy-status aria-live="polite"></p><p>反映後、もう一度「販売準備を確認」を押して登録済みになったことを確認してください。</p>';
+        const value=box.querySelector('[data-seller-value]'),copyStatus=box.querySelector('[data-seller-copy-status]');value.value=s.suggestedAllowlistValue;
+        box.querySelector('[data-seller-copy]').onclick=async()=>{
+          try{await navigator.clipboard.writeText(value.value);copyStatus.textContent='コピーしました。Cloudflareの現在値と照合してから保存してください。';}
+          catch(_){value.focus();value.select();copyStatus.textContent='設定値を選択しました。端末のコピー操作でコピーしてください。';}
+        };
+        result.appendChild(box);
+      }
+    }catch(error){result.textContent='確認できませんでした：'+error.message+'。未確認のまま販売許可へ追加せず、再取得してください。';}
+    finally{busy=false;button.disabled=false;input.disabled=false;button.textContent='販売準備を確認';}
+  }
+  button.onclick=run;
+  input.addEventListener('input',()=>{result.textContent='';});
+  openSellerReadinessCheck=authorId=>{
+    if(busy)return;
+    panel.open=true;input.value=authorId;panel.scrollIntoView({behavior:'smooth',block:'start'});run();
+  };
+}
+installSellerReadinessPanel();
+
 function installDisputeRiskPanel(){
   if(!els.auditOrdersList)return;
   const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
@@ -918,8 +969,9 @@ function installDisputeRiskPanel(){
     payoutList.innerHTML=`<p>環境：${escapeHtml(payoutEnvironment)} / 取得 ${payoutRows.length}件 / manual確認済み ${verified}件（取得済み分）</p>`+payoutRows.map(x=>{
       const p=x.payout,errors=[...(x.errors||[]),...(p?.errors||[])];
       const state=!p||errors.length?'未確認・取得エラー':p.payoutInterval==='manual'?'自動出金は停止設定':p.payoutInterval==='unknown'?'スケジュール未確認':'自動出金は停止設定ではありません';
-      return `<div class="audit-order-card" style="display:block;overflow-wrap:anywhere"><strong>${escapeHtml(x.displayName)}</strong><p>${escapeHtml(x.authorId)}<br>${escapeHtml(x.accountId||'Account ID未確認')}</p><p>${escapeHtml(state)} / ${escapeHtml(p?.payoutInterval||'unknown')}</p><p>Stripe利用可能 ${shown(p?.availableJPY)} / 入金待ち ${shown(p?.pendingJPY)}</p><p>内部保留：${p?(p.internalHeld?'あり':'なし'):'未確認'} / 銀行出金能力：${!p||p.payoutsEnabled===null?'未確認':p.payoutsEnabled?'有効':'無効'}</p>${errors.length?`<p>取得エラー：${escapeHtml(errors.map(e=>e.source+': '+e.code).join(', '))}</p>`:''}${x.accountId?`<button type="button" data-payout-list-select="${escapeHtml(x.accountId)}">個別に確認</button>`:''}</div>`;
+      return `<div class="audit-order-card" style="display:block;overflow-wrap:anywhere"><strong>${escapeHtml(x.displayName)}</strong><p>${escapeHtml(x.authorId)}<br>${escapeHtml(x.accountId||'Account ID未確認')}</p><p>${escapeHtml(state)} / ${escapeHtml(p?.payoutInterval||'unknown')}</p><p>Stripe利用可能 ${shown(p?.availableJPY)} / 入金待ち ${shown(p?.pendingJPY)}</p><p>内部保留：${p?(p.internalHeld?'あり':'なし'):'未確認'} / 銀行出金能力：${!p||p.payoutsEnabled===null?'未確認':p.payoutsEnabled?'有効':'無効'}</p>${errors.length?`<p>取得エラー：${escapeHtml(errors.map(e=>e.source+': '+e.code).join(', '))}</p>`:''}${x.accountId?`<button type="button" data-payout-list-select="${escapeHtml(x.accountId)}">個別に確認</button>`:''}<button type="button" data-seller-list-check="${escapeHtml(x.authorId)}">販売準備を確認</button></div>`;
     }).join('')+'<p>manualは自動出金の停止設定です。手動・Instant出金や、作成済み出金の停止確認は含みません。</p>';
+    payoutList.querySelectorAll('[data-seller-list-check]').forEach(button=>button.onclick=()=>openSellerReadinessCheck?.(button.dataset.sellerListCheck));
     payoutList.querySelectorAll('[data-payout-list-select]').forEach(button=>button.onclick=()=>{panel.querySelector('[data-risk-account]').value=button.dataset.payoutListSelect;checkPayout();});
   }
   async function loadPayoutList(reset){
