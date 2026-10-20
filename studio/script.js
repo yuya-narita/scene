@@ -290,6 +290,28 @@
     return {version:1,marks:(src?.marks||[]).map(x=>clone(x)),tables:(src?.tables||[]).map(x=>clone(x)),cards:(src?.cards||[]).map(x=>clone(x))};
   }
   function resetEasyRichSource(){ easyRichSource={version:1,marks:[],tables:[],cards:[]}; }
+  function richSourceFromSceneDocument(doc,body){
+    const source={version:1,marks:[],tables:[],cards:[]};let offset=0;const scenes=Array.isArray(doc?.scenes)?doc.scenes:[];
+    scenes.forEach((scene,index)=>{
+      const text=String(scene?.text||'');if(!text)return;
+      if(source.marks.length||source.tables.length||source.cards.length||offset)offset+=2;
+      const ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
+      const contents=Array.isArray(scene?.content)?scene.content:[];
+      ranges.forEach(range=>{
+        const start=offset+Math.max(0,Number(range.start)||0),end=offset+Math.max(0,Number(range.end)||0);if(end<=start)return;
+        source.marks.push({...clone(range),start,end});
+        if(range.kind==='linkCard'&&range.cardId){
+          const card=contents.find(item=>item?.type==='linkCard'&&String(item.id)===String(range.cardId));if(!card)return;
+          source.cards.push({...clone(card),start,end,label:String(body||'').slice(start,end)});
+        }
+        if(range.kind==='table'&&range.tableId){
+          const table=contents.find(item=>item?.type==='table'&&String(item.id)===String(range.tableId));if(table)source.tables.push({...clone(table),start,end,label:String(body||'').slice(start,end)});
+        }
+      });
+      offset+=text.length;
+    });
+    return source;
+  }
   function richTextFromClipboardHtml(html){
     const doc=new DOMParser().parseFromString(String(html||''),'text/html');
     const out=[]; const marks=[]; const tables=[];
@@ -2955,6 +2977,18 @@
       reused.presentation ||= {};
       reused.presentation.background=clone(freshScene.presentation.background);
     }
+    // Easy and Live Editor share one card source. Refresh the card payload and
+    // its text anchors from the rebuilt Easy document while retaining other
+    // Scene-specific content and styling.
+    if(Array.isArray(freshScene.content)||Array.isArray(reused.content)){
+      const other=(reused.content||[]).filter(item=>item?.type!=='linkCard');
+      const freshCards=(freshScene.content||[]).filter(item=>item?.type==='linkCard').map(clone);
+      reused.content=[...other,...freshCards];if(!reused.content.length)delete reused.content;
+      const oldRanges=Array.isArray(reused.richText?.ranges)?reused.richText.ranges.filter(range=>range?.kind!=='linkCard'):[];
+      const freshRanges=(freshScene.richText?.ranges||[]).filter(range=>range?.kind==='linkCard').map(clone);
+      const exclusions=reused.richText?.autoRubyExcluded||[];
+      assignSceneRichText(reused,[...oldRanges,...freshRanges],exclusions);
+    }
     return reused;
   }
 
@@ -3116,11 +3150,21 @@
     const oldScenes=oldDoc.scenes||[];
     const newTextScenes=fresh.scenes||[];
     const result=[];
+    const freshLinkCardIds=new Set(newTextScenes.flatMap(scene=>(scene.content||[]).filter(item=>item?.type==='linkCard').map(item=>String(item.id||''))));
 
     let ni=0;
 
     for(let oi=0; oi<oldScenes.length; oi++){
       const old=oldScenes[oi];
+      const oldCards=(old.content||[]).filter(item=>item?.type==='linkCard');
+      if(oldCards.length&&oldCards.every(card=>!freshLinkCardIds.has(String(card.id||'')))&&/^\s*［URLカード [^］]+］\s*$/.test(String(old.text||''))){
+        const shell=clone(old);shell.text='';shell.content=(shell.content||[]).filter(item=>item?.type!=='linkCard');
+        if(!shell.content.length)delete shell.content;
+        if(Array.isArray(shell.richText?.ranges)){shell.richText.ranges=shell.richText.ranges.filter(range=>range?.kind!=='linkCard');if(!shell.richText.ranges.length&&!shell.richText.autoRubyExcluded?.length)delete shell.richText;}
+        if(sceneHasAdvancedMeaning(shell))result.push(shell);
+        else lastEasyReconcileDeletedCount++;
+        continue;
+      }
       const oldText=normalizedSceneText(old.text);
 
       // Advanced-only / image-only / sound-only Scene:
@@ -5079,7 +5123,7 @@ return flowCommentCard;}
         if(pair.url)pair.url.value=item.url||item.href||'';
       });
     }
-    bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n'); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();
+    bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n'); easyRichSource=richSourceFromSceneDocument(doc,bodyInput.value); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();renderEasyOgpCardList();
     updateCount();updateCoverPreview();updateEndingPreview();
     protectedResplitPending=false;
    
@@ -5541,7 +5585,7 @@ return flowCommentCard;}
     if(!url){ogpCardStatus.textContent='リンク先URLを確認してください。';ogpCardStatus.className='ogp-card-status is-error';return;}
     const card={url,title:String(ogpCardTitle.value||'').trim().slice(0,240)||new URL(url).hostname,description:String(ogpCardDescription.value||'').trim().slice(0,1000),image,siteName:(()=>{try{return new URL(url).hostname;}catch(_){return '';}})()};
     if(ogpEditTarget?.mode==='easy'){
-      Object.assign(ogpEditTarget.card,card);scheduleDraftSave?.(60);renderEasyOgpCardList();
+      Object.assign(ogpEditTarget.card,card);easySourceDirty=true;syncEasyPublishButton();scheduleDraftSave?.(60);renderEasyOgpCardList();
     }else if(ogpEditTarget?.mode==='scene'&&ogpEditTarget.scene){
       const scene=ogpEditTarget.scene,existing=ogpEditTarget.card&&(scene.content||[]).find(x=>x?.type==='linkCard'&&String(x.id)===String(ogpEditTarget.card.id));
       if(existing){captureUndo('URLカードの変更を元に戻せます');Object.assign(existing,card);scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();}
@@ -7866,8 +7910,6 @@ return flowCommentCard;}
   bodyInput.addEventListener('paste',(event)=>{
     const html=event.clipboardData?.getData('text/html')||'';
     const plain=event.clipboardData?.getData('text/plain')||'';
-    const url=pastedWebUrl(plain);
-    if(url){event.preventDefault();openOgpCardDialog({mode:'new',initialUrl:url});return;}
     const plainHasTable=/(^|\n)\s*\|?.+\|.+\|?\s*\n\s*\|?\s*:?-{3,}/m.test(plain) || /(^|\n)[^\n\t]+\t[^\n]+\n[^\n\t]+\t/m.test(plain);
     const plainHasRich=/(^|\n)\s*(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)|\*\*[^*\n]+\*\*/m.test(plain);
     // Rich Text Player v0.16: do not gate HTML list semantics out before parsing.
@@ -9210,17 +9252,12 @@ return flowCommentCard;}
     renderSceneList();
     if(liveEditEnabled && player && !playerScreen?.hidden) refreshLivePlayer({preserveSheet:true});
   }));
-  $('#sceneTextInput')?.addEventListener('paste',event=>{
-    const url=pastedWebUrl(event.clipboardData?.getData('text/plain')||'');if(!url)return;
-    event.preventDefault();syncAdvancedFieldsToScene();const scene=currentScene();if(!scene)return;
-    openOgpCardDialog({mode:'scene',scene,range:{start:$('#sceneTextInput').selectionStart||0,end:$('#sceneTextInput').selectionEnd||$('#sceneTextInput').selectionStart||0},initialUrl:url});
-  });
   $('#sceneOgpCardButton')?.addEventListener('click',()=>{
     const input=$('#sceneTextInput'),scene=currentScene();if(!input||!scene)return;
-    let start=input.selectionStart||0,end=input.selectionEnd||start,url=pastedWebUrl(input.value.slice(start,end));
-    if(!url){start=0;end=input.value.length;url=pastedWebUrl(input.value);}
-    if(!url){showToast?.('本文全体または選択範囲をURLだけにしてください');return;}
-    syncAdvancedFieldsToScene();openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:url});
+    const selectionStart=input.selectionStart||0,selectionEnd=input.selectionEnd||selectionStart;
+    const selectedUrl=selectionEnd>selectionStart?pastedWebUrl(input.value.slice(selectionStart,selectionEnd)):'';
+    const start=selectedUrl?selectionStart:selectionEnd,end=selectedUrl?selectionEnd:selectionEnd;
+    syncAdvancedFieldsToScene();openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:selectedUrl});
   });
 
   ['sceneBackgroundMode','sceneBackgroundTransition','sceneBackgroundExit','sceneBackgroundFit','sceneBackgroundMotion','sceneBackgroundDim','sceneBgmAction','sceneBgmLoop','sceneBgmVolume','sceneBgmFadeIn','sceneBgmFadeOut','sceneBgmVolumeChange','sceneBgmVolumeFade','sceneBgmStopFade','sceneAmbientAction','sceneAmbientLoop','sceneAmbientVolume','sceneAmbientFadeIn','sceneAmbientFadeOut','sceneAmbientVolumeChange','sceneAmbientVolumeFade','sceneAmbientStopFade','sceneSeEnabled','sceneSeVolume','sceneSeFadeIn'].forEach(id=>{
@@ -10397,20 +10434,6 @@ function startInlineTextEdit(field='text',targetEl=null){
     const abort=new AbortController();
     el._liveEditAbort?.abort();
     el._liveEditAbort=abort;
-    el.addEventListener('paste',event=>{
-      const url=pastedWebUrl(event.clipboardData?.getData('text/plain')||'');
-      if(!url||liveInlineEditField!=='text'||liveInlineEditSceneRef!==scene)return;
-      event.preventDefault();
-      const selection=getSelection();let start=String(scene.text||'').length,end=start;
-      try{
-        if(selection?.rangeCount){const range=selection.getRangeAt(0);if(el.contains(range.startContainer)&&el.contains(range.endContainer)){
-          const before=document.createRange();before.selectNodeContents(el);before.setEnd(range.startContainer,range.startOffset);start=before.toString().length;
-          const selected=range.toString();end=start+selected.length;
-        }}
-      }catch(_){}
-      syncInlineTextToScene();finishInlineTextEdit();
-      openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:url});
-    },{signal:abort.signal});
     el.addEventListener('input',sync,{signal:abort.signal});
     el.addEventListener('keyup',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
     el.addEventListener('click',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
@@ -13751,18 +13774,11 @@ function openDesktopTextDetail(){
     sceneTypeControl.append(sceneTypeLabel,sceneTypeOptions);
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder=u('本文を入力','Enter text');
     bindRememberedDesktopBodyHeight(ta);
-    const cardButton=makeActionButton(u('＋ URLカード','＋ URL card'));cardButton.classList.add('desktop-ogp-card-action');cardButton.title=u('URLを本文に貼るとカード編集画面が開きます','Pasting a URL opens the link card editor');
+    const cardButton=makeActionButton(u('＋ URLカード','＋ URL card'));cardButton.classList.add('desktop-ogp-card-action');cardButton.title=u('カーソル位置にURLカードを追加します','Add a URL card at the cursor');
     cardButton.addEventListener('click',()=>{
-      let start=ta.selectionStart||0,end=ta.selectionEnd||start,url=pastedWebUrl(ta.value.slice(start,end));
-      if(!url){start=0;end=ta.value.length;url=pastedWebUrl(ta.value);}
-      if(!url){showToast?.(u('本文全体または選択範囲をURLだけにしてください','Select a URL, or make the whole text a URL.'));return;}
-      scene.text=ta.value;openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:url});
-    });
-    ta.addEventListener('paste',event=>{
-      const url=pastedWebUrl(event.clipboardData?.getData('text/plain')||'');if(!url)return;
-      event.preventDefault();const start=ta.selectionStart||0,end=ta.selectionEnd||start;
-      scene.text=ta.value;scheduleDraftSave(100);
-      openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:url});
+      const a=ta.selectionStart||0,b=ta.selectionEnd||a,selectedUrl=b>a?pastedWebUrl(ta.value.slice(a,b)):'';
+      const start=selectedUrl?a:b,end=selectedUrl?b:b;
+      scene.text=ta.value;openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:selectedUrl});
     });
     // Writing should feel like writing, not replaying a Scene on every key.
     // While the field is focused, update only the visible text node. This keeps
