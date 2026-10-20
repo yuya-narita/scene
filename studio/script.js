@@ -140,7 +140,6 @@
   const coverQuickEpisodeTitle=$('#coverQuickEpisodeTitle');
   const coverQuickDescription=$('#coverQuickDescription');
   const coverQuickStartMode=$('#coverQuickStartMode');
-  const coverQuickStartTrigger=$('#coverQuickStartTrigger');
   const coverQuickFont=$('#coverQuickFont');
   const coverQuickLogo=$('#coverQuickLogo');
   const coverQuickLogoClear=$('#coverQuickLogoClear');
@@ -231,8 +230,8 @@
   let coverLogoFileName = '';
   let coverFontFamily = 'serif';
   let coverStartMode = 'scene';
-  let coverStartTrigger = 'bottom';
-  const normalizeCoverStartTrigger=value=>['center','bottom','tap'].includes(value)?value:'bottom';
+  let coverStartTrigger = 'tap';
+  const normalizeCoverStartTrigger=()=> 'tap';
   let endingFontFamily = 'serif';
   // Rich Paste v0.1 — keep semantic clipboard structure beside the existing plain-text source.
   // The existing Splitter still receives plain text; semantic ranges are mapped back after splitting.
@@ -1913,7 +1912,7 @@
   async function startNewDraft(){
     requestPersistentDraftStorage();
     if(!await prepareWorkReplacement())return false;
-    workingDocument=null;coverStartMode='scene';coverStartTrigger='bottom';relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceModeLocked)commerceModeLocked.checked=false;if(commerceSupportEnabled)commerceSupportEnabled.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    workingDocument=null;coverStartMode='scene';coverStartTrigger='tap';relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceModeLocked)commerceModeLocked.checked=false;if(commerceSupportEnabled)commerceSupportEnabled.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     latestPublishedId='';
     latestPublishedUrl='';
@@ -8396,7 +8395,7 @@ return flowCommentCard;}
     if(descriptionInput)descriptionInput.value=coverQuickDescription?.value||'';
     if(coverQuickFont)coverFontFamily=coverQuickFont.value||'serif';
     if(coverQuickStartMode)coverStartMode=coverQuickStartMode.value==='comic'?'comic':'scene';
-    if(coverQuickStartTrigger)coverStartTrigger=normalizeCoverStartTrigger(coverQuickStartTrigger.value);
+    coverStartTrigger='tap';
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
 
@@ -8845,7 +8844,7 @@ return flowCommentCard;}
     coverQuickEpisodeTitle.value=episodeTitleInput?.value||'';
     if(coverQuickDescription)coverQuickDescription.value=descriptionInput?.value||'';
     if(coverQuickFont)coverQuickFont.value=coverFontFamily;
-    if(coverQuickStartTrigger)coverQuickStartTrigger.value=normalizeCoverStartTrigger(workingDocument?.cover?.startTrigger||coverStartTrigger);
+    coverStartTrigger='tap';
     if(coverQuickStartMode)coverQuickStartMode.value=(workingDocument?.cover?.startMode==='comic'||coverStartMode==='comic')?'comic':'scene';
     ensureCoverVisibilityPanel();
     syncCoverVisibilityControls();
@@ -8879,7 +8878,6 @@ return flowCommentCard;}
   [coverQuickWorkTitle,coverQuickAuthor,coverQuickSubtitle,coverQuickEpisode,coverQuickEpisodeTitle,coverQuickDescription].forEach(el=>el?.addEventListener('input',syncCoverQuickToMain));
   coverQuickFont?.addEventListener('change',syncCoverQuickToMain);
   coverQuickStartMode?.addEventListener('change',syncCoverQuickToMain);
-  coverQuickStartTrigger?.addEventListener('change',syncCoverQuickToMain);
   coverQuickLogo?.addEventListener('click',()=>coverLogoInput?.click());
   coverQuickLogoClear?.addEventListener('click',()=>coverLogoClear?.click());
   coverQuickImage?.addEventListener('click',()=>coverImageInput?.click());
@@ -13856,10 +13854,6 @@ function openDesktopTextDetail(){
     }
     imageCard.appendChild(imageOps);
     const startCard=desktopCard(u('「はじめる」後の動作','After tapping START'));
-    startCard.append(desktopMakeSelect(u('開始方法','Start control'),[['center',u('中央ボタン','Centered button')],['bottom',u('下部の小型ボタン','Small bottom button')],['tap',u('表紙タップ','Tap the cover')]],normalizeCoverStartTrigger(workingDocument?.cover?.startTrigger),value=>{
-      coverStartTrigger=normalizeCoverStartTrigger(value);
-      syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();updateCoverPreview();syncEasyPublishButton();scheduleDraftSave(70);
-    }));
     const savedStartMode=workingDocument?.cover?.startMode==='comic'?'comic':'scene';
     startCard.append(desktopMakeSelect(u('開始後','After start'),[['scene',u('Sceneから読む','Start with Scene')],['comic',u('漫画ビューアで1ページ目を開く','Open page 1 in comic viewer')]],savedStartMode,value=>{
       coverStartMode=value==='comic'?'comic':'scene';

@@ -150,10 +150,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.audioSourceNodes = new Map();
       this.audioTimers = [];
       this.audioFadeFrames = new Map();
-      this.audioFadeStates = new Map();
-      this.audioDuckTimers = { bgm: null, ambient: null };
       this.audioState = { bgm: null, ambient: null };
-      this._audioStopGeneration = { bgm: 0, ambient: 0 };
       this.audioEls = {
         bgm: this._createAudioElement('bgm'),
         ambient: this._createAudioElement('ambient')
@@ -417,7 +414,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
       if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover(e);});
       this._on(this.els.cover,'click',(e)=>{
-        if(this.els.cover.hidden||this.document?.cover?.startTrigger!=='tap'||this.host.classList.contains('live-edit-enabled'))return;
+        if(this.els.cover.hidden||this.host.classList.contains('live-edit-enabled'))return;
         if(e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
         e.stopPropagation();this._beginFromCover(e);
       });
@@ -540,8 +537,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         e.preventDefault();
         e.stopImmediatePropagation();
-        // Reuse the exact handler installed on the image. This keeps VIEW POINT,
-        // first-page fallback, and page-bundle navigation on one code path.
+        // Reuse the wrapper's own handler to keep VIEW POINT and page bundles in sync.
         imageTarget._sceneImageOpen?.(e);
       }, true);
 
@@ -674,15 +670,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _isCorsWebAudioAsset(src) {
       const value = String(src || '').trim();
+      if (!this._isExternalHttpAudio(value)) return false;
       try {
         const url = new URL(value, global.location?.href || undefined);
-        const pageOrigin = global.location?.origin;
-        // Same-origin and package-relative assets are CORS-safe too. Published
-        // .scene files may keep `assets/...` URLs; if these bypass GainNode,
-        // iPhone Safari ignores scripted media.volume changes and the authored
-        // fade becomes an abrupt mute at completion.
-        if (pageOrigin && url.origin === pageOrigin && ['http:', 'https:'].includes(url.protocol)) return true;
-        if (pageOrigin && url.protocol === 'blob:' && url.origin === pageOrigin) return true;
         // Scene Studio's R2 asset endpoint explicitly returns
         // Access-Control-Allow-Origin: *. These files can therefore be routed
         // through Web Audio safely, which is required for programmable volume
@@ -813,7 +803,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         gain.connect(ctx.destination);
         entry.sourceNode = source;
         entry.gainNode = gain;
-        entry._gainLevel = 0;
         entry.useGain = true;
         try { entry.audio.volume = 1; } catch (_) {}
         emit(this.host, 'sceneplayer:iosmediabankgainready', { channel:entry.channel, src:entry.src, contextState:ctx.state });
@@ -966,18 +955,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!entry?.audio) { if (done) done(); return; }
       const audio = entry.audio;
       const to = clamp(asNumber(target, entry.targetVolume ?? 1), 0, 1);
-      const previous = entry._volumeFadeState;
-      let from = clamp(asNumber(entry.gainNode ? entry._gainLevel : audio.volume, entry.targetVolume ?? 0), 0, 1);
-      if (previous) {
-        from = this._volumeRampValue(previous);
-        if (previous.frame) cancelAnimationFrame(previous.frame);
-        if (previous.timer) {
-          clearTimeout(previous.timer);
-          const i = this.audioTimers.indexOf(previous.timer);
-          if (i >= 0) this.audioTimers.splice(i, 1);
-        }
-        entry._volumeFadeState = null;
-      }
       entry.targetVolume = to;
       const ms = Math.max(0, asNumber(duration, 0));
 
@@ -987,57 +964,37 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // src or issuing a late play().
       const gain = entry.gainNode;
       const ctx = this.audioContext;
-      const ramp = { audio, gain, ctx, from, to, duration: ms, startTime: performance.now(), startContextTime: ctx?.currentTime, frame: null, timer: null };
-      entry._volumeFadeState = ramp;
-      const finish = () => {
-        if (entry._volumeFadeState !== ramp) return;
-        entry._volumeFadeState = null;
-        entry._gainLevel = to;
-        if (gain && ctx) { try { gain.gain.setValueAtTime(to, ctx.currentTime); } catch (_) {} }
-        else try { audio.volume = to; } catch (_) {}
-        if (done) done();
-      };
       if (gain && ctx) {
         const now = ctx.currentTime;
+        const from = Number.isFinite(gain.gain.value) ? gain.gain.value : 0;
         try {
           gain.gain.cancelScheduledValues(now);
           gain.gain.setValueAtTime(from, now);
           if (ms > 0) gain.gain.linearRampToValueAtTime(to, now + ms / 1000);
           else gain.gain.setValueAtTime(to, now);
         } catch (_) { gain.gain.value = to; }
-        if (ms > 0) ramp.timer = this._audioTimeout(finish, ms + 20);
-        else finish();
+        if (done) { if (ms > 0) this._audioTimeout(done, ms); else done(); }
         return;
       }
 
+      const from = clamp(asNumber(audio.volume, 0), 0, 1);
       if (!ms) {
         try { audio.volume = to; } catch (_) {}
-        finish();
+        if (done) done();
         return;
       }
+      const started = performance.now();
       const step = (now) => {
-        if (entry._volumeFadeState !== ramp) return;
-        const value = this._volumeRampValue(ramp);
-        try { audio.volume = value; } catch (_) {}
-        if (value < to ? value < to : value > to) ramp.frame = requestAnimationFrame(step);
-        else finish();
+        const t = clamp((now - started) / ms, 0, 1);
+        try { audio.volume = from + (to - from) * t; } catch (_) {}
+        if (t < 1) requestAnimationFrame(step);
+        else if (done) done();
       };
-      ramp.frame = requestAnimationFrame(step);
+      requestAnimationFrame(step);
     }
 
     _silenceIOSBankEntry(entry, reset = false) {
       if (!entry?.audio) return;
-      entry._gainLevel = 0;
-      if (entry._volumeFadeState) {
-        const ramp = entry._volumeFadeState;
-        if (ramp.frame) cancelAnimationFrame(ramp.frame);
-        if (ramp.timer) {
-          clearTimeout(ramp.timer);
-          const i = this.audioTimers.indexOf(ramp.timer);
-          if (i >= 0) this.audioTimers.splice(i, 1);
-        }
-        entry._volumeFadeState = null;
-      }
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
       entry.active = false;
       if (entry.gainNode && this.audioContext) {
@@ -1165,27 +1122,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         fadeOut: Math.max(0, asNumber(command.fadeOut, 0))
       };
       const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
-      const fadeOutMs = Math.max(0, asNumber(command.fadeOut, 0));
-      const scheduleStop = (remainingMs) => {
-        if (!(remainingMs > 0) || !entry.active) return;
-        // Start the iOS GainNode ramp before the media endpoint. Waiting until
-        // the exact end lets Safari's native `ended`/media-session handling
-        // silence the element before the authored fade can finish.
-        const fadeMs = Math.min(remainingMs, fadeOutMs);
-        const leadMs = Math.max(0, remainingMs - fadeMs - 35);
-        entry.timer = this._audioTimeout(() => {
-          entry.timer = null;
-          this._stopPersistentChannel(channel, fadeMs);
-        }, leadMs);
-      };
-      if (stopAfter > 0) entry.timer = this._audioTimeout(() => { entry.timer = null; this._stopPersistentChannel(channel, fadeOutMs); }, stopAfter);
-      else if (command.stopAt != null) {
-        const remaining = Math.max(0, (Math.max(0, asNumber(command.stopAt, 0)) - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
-        scheduleStop(remaining);
-      } else if (command.loop === false) {
+      if (stopAfter > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
+      else if (command.loop === false) {
         const schedule = () => {
-          const remain = Math.max(0, (audio.duration - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
-          scheduleStop(remain);
+          const remain = Math.max(0, (audio.duration - Math.max(0, audio.currentTime || startAt)) * 1000 - 20);
+          if (remain > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), remain);
         };
         if (Number.isFinite(audio.duration) && audio.duration > 0) schedule();
         else audio.addEventListener('loadedmetadata', schedule, { once:true });
@@ -1236,30 +1177,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const ctx = this.audioContext;
       if (!ctx || !gainNode) return;
       const t = ctx.currentTime;
-      const previous = gainNode.__spVolumeFade;
-      let current = Number.isFinite(gainNode.gain.value) ? gainNode.gain.value : 1;
-      if (previous) {
-        current = this._volumeRampValue(previous);
-        if (previous.timer) {
-          clearTimeout(previous.timer);
-          const i = this.audioTimers.indexOf(previous.timer);
-          if (i >= 0) this.audioTimers.splice(i, 1);
-        }
-        gainNode.__spVolumeFade = null;
-      }
-      const to = clamp(asNumber(target, current), 0, 1);
-      const ms = Math.max(0, asNumber(duration, 0));
-      const ramp = { gain: gainNode, ctx, from: current, to, duration: ms, startTime: performance.now(), startContextTime: t };
+      const current = Number.isFinite(gainNode.gain.value) ? gainNode.gain.value : 1;
       try {
         gainNode.gain.cancelScheduledValues(t);
         gainNode.gain.setValueAtTime(current, t);
-        if (ms > 0) gainNode.gain.linearRampToValueAtTime(to, t + ms / 1000);
-        else gainNode.gain.setValueAtTime(to, t);
-      } catch (_) { gainNode.gain.value = to; }
-      if (ms > 0) {
-        gainNode.__spVolumeFade = ramp;
-        ramp.timer = this._audioTimeout(() => { if (gainNode.__spVolumeFade === ramp) { gainNode.__spVolumeFade = null; try { gainNode.gain.setValueAtTime(to, ctx.currentTime); } catch (_) {} } }, ms + 20);
-      }
+        if (duration > 0) gainNode.gain.linearRampToValueAtTime(target, t + duration / 1000);
+        else gainNode.gain.setValueAtTime(target, t);
+      } catch (_) { gainNode.gain.value = target; }
     }
 
     _playBufferedOneShot(command) {
@@ -1344,7 +1268,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if (remain > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), remain);
         }
         this.audioState[channel] = { src:command.src, volume:target, loop:command.loop !== false, startAt, stopAt:command.stopAt ?? null, fadeOut:Math.max(0, asNumber(command.fadeOut,0)) };
-        if (command.loop === false && command.stopAfter <= 0 && command.stopAt == null) this._scheduleNaturalPersistentFade(channel, null, startAt, command.fadeOut || 0, buffer.duration);
         emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'audio-buffer' });
         emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct, transport:'audio-buffer' });
         return true;
@@ -1463,15 +1386,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _setAudioVolume(audio, value) {
       const target = clamp(asNumber(value, 1), 0, 1);
-      if (audio?.__spVolumeFadeKey != null) this._cancelAudioFade(audio.__spVolumeFadeKey);
       audio.__spGainValue = target;
       const gain = this._ensureAudioNode(audio);
       if (gain && this.audioContext) {
-        try {
-          const now = this.audioContext.currentTime;
-          gain.gain.cancelScheduledValues(now);
-          gain.gain.setValueAtTime(target, now);
-        } catch (_) { gain.gain.value = target; }
+        try { gain.gain.setValueAtTime(target, this.audioContext.currentTime); } catch (_) { gain.gain.value = target; }
       } else {
         // Native-media transport is deliberate for external HTTP(S) audio.
         // On iOS the system may own final hardware volume, but playback remains
@@ -1481,9 +1399,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _getAudioVolume(audio) {
-      const key = audio?.__spVolumeFadeKey;
-      const ramp = key == null ? null : this.audioFadeStates?.get(key);
-      if (ramp) return this._volumeRampValue(ramp);
       if (Number.isFinite(audio?.__spGainValue)) return audio.__spGainValue;
       return clamp(asNumber(audio?.volume, 1), 0, 1);
     }
@@ -1557,14 +1472,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.audioTimers.length = 0;
       this.audioFadeFrames.forEach((frame) => cancelAnimationFrame(frame));
       this.audioFadeFrames.clear();
-      this.audioFadeStates.forEach((state) => {
-        if (state.gain && this.audioContext) {
-          const now = this.audioContext.currentTime;
-          try { state.gain.gain.cancelScheduledValues(now); } catch (_) {}
-        }
-      });
-      this.audioFadeStates.clear();
-      this.audioDuckTimers = { bgm: null, ambient: null };
     }
 
     _audioTimeout(fn, delay) {
@@ -1577,120 +1484,54 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return timer;
     }
 
-    _cancelAudioDuck(channel) {
-      const timer = this.audioDuckTimers?.[channel];
-      if (!timer) return;
-      clearTimeout(timer);
-      const i = this.audioTimers.indexOf(timer);
-      if (i >= 0) this.audioTimers.splice(i, 1);
-      this.audioDuckTimers[channel] = null;
-    }
-
-    _scheduleAudioDuckRestore(channel, delay, restore) {
-      this._cancelAudioDuck(channel);
-      const timer = this._audioTimeout(() => {
-        if (this.audioDuckTimers[channel] !== timer) return;
-        this.audioDuckTimers[channel] = null;
-        restore();
-      }, delay);
-      this.audioDuckTimers[channel] = timer;
-      return timer;
-    }
-
-    _volumeRampValue(state) {
-      if (!state) return 1;
-      const elapsed = state.ctx && Number.isFinite(state.startContextTime)
-        ? (state.ctx.currentTime - state.startContextTime) * 1000
-        : performance.now() - state.startTime;
-      const t = state.duration > 0 ? clamp(elapsed / state.duration, 0, 1) : 1;
-      return state.from + (state.to - state.from) * t;
-    }
-
-    _cancelAudioFade(key) {
-      const state = this.audioFadeStates.get(key);
-      const frame = this.audioFadeFrames.get(key);
-      if (frame) cancelAnimationFrame(frame);
-      this.audioFadeFrames.delete(key);
-      if (!state) return null;
-      const value = this._volumeRampValue(state);
-      if (state.doneTimer) {
-        clearTimeout(state.doneTimer);
-        const i = this.audioTimers.indexOf(state.doneTimer);
-        if (i >= 0) this.audioTimers.splice(i, 1);
-      }
-      if (state.gain && state.ctx) {
-        const now = state.ctx.currentTime;
-        try {
-          state.gain.gain.cancelScheduledValues(now);
-          state.gain.gain.setValueAtTime(value, now);
-        } catch (_) { try { state.gain.gain.value = value; } catch (_) {} }
-      } else {
-        try { state.audio.volume = value; } catch (_) {}
-      }
-      state.audio.__spGainValue = value;
-      delete state.audio.__spVolumeFadeKey;
-      this.audioFadeStates.delete(key);
-      return value;
-    }
-
     _fadeVolume(audio, target, duration, key, done) {
       target = clamp(asNumber(target, this._getAudioVolume(audio)), 0, 1);
       duration = Math.max(0, asNumber(duration, 0));
-      const held = this._cancelAudioFade(key);
+      const previous = this.audioFadeFrames.get(key);
+      if (previous) cancelAnimationFrame(previous);
+
       const gain = this._ensureAudioNode(audio);
       const ctx = this.audioContext;
-      const from = held == null ? this._getAudioVolume(audio) : held;
-      const state = { audio, gain, ctx, from, to: target, duration, startTime: performance.now(), startContextTime: ctx?.currentTime, doneTimer: null };
-      audio.__spGainValue = from;
-      audio.__spVolumeFadeKey = key;
-      if (!duration) {
-        if (gain && ctx) {
-          const now = ctx.currentTime;
-          try { gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(target, now); } catch (_) { gain.gain.value = target; }
-        } else try { audio.volume = target; } catch (_) {}
-        audio.__spGainValue = target;
-        delete audio.__spVolumeFadeKey;
-        if (done) done();
-        return;
-      }
-      this.audioFadeStates.set(key, state);
-      // Web Audio path: hold the actual in-flight level before replacing a ramp.
+      const from = this._getAudioVolume(audio);
+      audio.__spGainValue = target;
+
+      // Web Audio path: reliable gain automation on iOS/WebKit.
       if (gain && ctx) {
         try {
           const now = ctx.currentTime;
           gain.gain.cancelScheduledValues(now);
           gain.gain.setValueAtTime(from, now);
-          gain.gain.linearRampToValueAtTime(target, now + duration / 1000);
+          if (!duration) {
+            gain.gain.setValueAtTime(target, now);
+            if (done) done();
+          } else {
+            gain.gain.linearRampToValueAtTime(target, now + duration / 1000);
+            this._audioTimeout(() => { if (done) done(); }, duration);
+          }
+          return;
         } catch (_) {
-          state.gain = null;
-          try { audio.volume = from; } catch (_) {}
+          // Fall through to HTMLMediaElement/rAF fallback.
         }
       }
-      const finish = () => {
-        if (this.audioFadeStates.get(key) !== state) return;
-        this.audioFadeStates.delete(key);
+
+      if (!duration) {
+        try { audio.volume = target; } catch (_) {}
         this.audioFadeFrames.delete(key);
-        state.doneTimer = null;
-        audio.__spGainValue = target;
-        delete audio.__spVolumeFadeKey;
-        if (state.gain && state.ctx) {
-          try { state.gain.gain.setValueAtTime(target, state.ctx.currentTime); } catch (_) {}
-        } else try { audio.volume = target; } catch (_) {}
         if (done) done();
-      };
-      if (state.gain && ctx) {
-        state.doneTimer = this._audioTimeout(finish, duration + 20);
-      } else {
-        const step = () => {
-          if (this.audioFadeStates.get(key) !== state) return;
-          const value = this._volumeRampValue(state);
-          try { audio.volume = value; } catch (_) {}
-          audio.__spGainValue = value;
-          if (value !== target) this.audioFadeFrames.set(key, requestAnimationFrame(step));
-          else finish();
-        };
-        this.audioFadeFrames.set(key, requestAnimationFrame(step));
+        return;
       }
+      const start = performance.now();
+      const step = (now) => {
+        const t = clamp((now - start) / duration, 0, 1);
+        const value = from + (target - from) * t;
+        try { audio.volume = value; } catch (_) {}
+        if (t < 1) this.audioFadeFrames.set(key, requestAnimationFrame(step));
+        else {
+          this.audioFadeFrames.delete(key);
+          if (done) done();
+        }
+      };
+      this.audioFadeFrames.set(key, requestAnimationFrame(step));
     }
 
     _safePlay(audio, detail, onStarted) {
@@ -1897,45 +1738,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return audio;
     }
 
-    _cancelNaturalPersistentFade(channel) {
-      const state = this.audioState?.[channel];
-      const timer = state?._naturalEndTimer;
-      if (!timer) return;
-      clearTimeout(timer);
-      const i = this.audioTimers.indexOf(timer);
-      if (i >= 0) this.audioTimers.splice(i, 1);
-      state._naturalEndTimer = null;
-    }
-
-    _scheduleNaturalPersistentFade(channel, audio, startAt, fadeOut, knownDuration = null) {
-      const state = this.audioState?.[channel];
-      if (!state || state.loop !== false) return;
-      const schedule = () => {
-        if (this.audioState?.[channel] !== state) return;
-        const duration = Number.isFinite(knownDuration) ? knownDuration : Number(audio?.duration);
-        if (!Number.isFinite(duration) || duration <= 0) return;
-        const position = Math.max(Math.max(0, asNumber(startAt, 0)), Math.max(0, asNumber(audio?.currentTime, startAt)));
-        const remaining = Math.max(0, (duration - position) * 1000);
-        const fade = Math.min(remaining, Math.max(0, asNumber(fadeOut, 0)));
-        state._naturalEndTimer = this._audioTimeout(() => {
-          state._naturalEndTimer = null;
-          if (this.audioState?.[channel] === state) this._stopPersistentChannel(channel, fade);
-        }, Math.max(0, remaining - fade));
-      };
-      if (Number.isFinite(knownDuration) && knownDuration > 0) schedule();
-      else if (Number.isFinite(audio?.duration) && audio.duration > 0) schedule();
-      else if (audio?.addEventListener) audio.addEventListener('loadedmetadata', schedule, { once: true });
-    }
-
     _stopPersistentChannel(channel, fadeOut = 0) {
-      if (channel !== 'bgm' && channel !== 'ambient') return;
-      this._cancelAudioDuck(channel);
-      const stopGeneration = this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
-      this._cancelNaturalPersistentFade(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         if (entry) {
-          const finish = () => { if (this._audioStopGeneration[channel] !== stopGeneration) return; this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
+          const finish = () => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
           if (fadeOut > 0 && entry.active) this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
           else finish();
         } else this.audioState[channel] = null;
@@ -1945,7 +1752,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const audio = this.audioEls[channel];
       if (!audio) return;
       const finish = () => {
-        if (this._audioStopGeneration[channel] !== stopGeneration) return;
         audio.pause();
         try { audio.currentTime = 0; } catch (_) {}
         this.audioState[channel] = null;
@@ -1956,14 +1762,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _startPersistentChannel(channel, command, reconstruct = false, forceSeek = false) {
-      if (channel === 'bgm' || channel === 'ambient') {
-        this._cancelAudioDuck(channel);
-        this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
-        this._cancelNaturalPersistentFade(channel);
-        for (const key of [channel, `exit:${channel}`]) {
-          this._cancelAudioFade(key);
-        }
-      }
       if (this._iosStableMediaBank && this._startIOSBankPersistent(channel, command, reconstruct, forceSeek)) return;
       if (this._startBufferedPersistent(channel, command, reconstruct, forceSeek)) return;
       let audio = this.audioEls[channel];
@@ -2021,13 +1819,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (fadeIn > 0) this._fadeVolume(audio, targetVolume, fadeIn, channel);
         const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
         if (stopAfter > 0) this._audioTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
-        else if (command.loop === false && command.stopAt == null) this._scheduleNaturalPersistentFade(channel, audio, startAt, command.fadeOut || 0);
       });
       emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct });
     }
 
     _volumePersistentChannel(channel, command) {
-      this._cancelAudioDuck(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         if (!entry || !this.audioState[channel]) return;
@@ -2055,7 +1851,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _duckPersistentChannel(channel, command) {
-      this._cancelAudioDuck(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         const state = this.audioState[channel];
@@ -2065,7 +1860,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const fade = Math.max(0, asNumber(command.fade, 250));
         const hold = Math.max(0, asNumber(command.hold, 1200));
         this._setIOSBankEntryVolume(entry, target, fade);
-        this._scheduleAudioDuckRestore(channel, fade + hold, () => this._setIOSBankEntryVolume(entry, this.muted ? 0 : restore, fade));
+        this._audioTimeout(() => this._setIOSBankEntryVolume(entry, this.muted ? 0 : restore, fade), fade + hold);
         emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold, transport:'ios-live-media-bank' });
         return;
       }
@@ -2076,7 +1871,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const fade = Math.max(0, asNumber(command.fade, 250));
         const hold = Math.max(0, asNumber(command.hold, 1200));
         this._fadeBufferGain(buffered.gain, target, fade);
-        this._scheduleAudioDuckRestore(channel, fade + hold, () => this._fadeBufferGain(buffered.gain, restore, fade));
+        this._audioTimeout(() => this._fadeBufferGain(buffered.gain, restore, fade), fade + hold);
         emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold, transport:'audio-buffer' });
         return;
       }
@@ -2088,7 +1883,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const fade = Math.max(0, asNumber(command.fade, 250));
       const hold = Math.max(0, asNumber(command.hold, 1200));
       this._fadeVolume(audio, target, fade, channel);
-      this._scheduleAudioDuckRestore(channel, fade + hold, () => this._fadeVolume(audio, restore, fade, channel));
+      this._audioTimeout(() => this._fadeVolume(audio, restore, fade, channel), fade + hold);
       emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold });
     }
 
@@ -2572,7 +2367,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         mono: 'var(--sp-font-mono)'
       };
       const coverFamily = families[doc.cover?.fontFamily] || families.serif;
-      this.els.cover.dataset.startTrigger=['center','bottom','tap'].includes(doc.cover?.startTrigger)?doc.cover.startTrigger:'bottom';
+      this.els.cover.dataset.startTrigger='tap';
       const endingFamily = families[doc.ending?.fontFamily] || families.serif;
       this.host.style.setProperty('--sp-cover-font', coverFamily);
 
@@ -3342,7 +3137,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(this.els.coverEpisodeTitle){const epTitle=coverValue('episodeTitle',this.document.metadata?.episodeTitle||this.document.episodeTitle||'');this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!coverVisible('episodeTitle',epTitle);}
       if(this.els.coverTitle){const title=coverValue('title',this.document.title||'');this.els.coverTitle.textContent=title;this.els.coverTitle.hidden=Boolean(logoSrc)||!coverVisible('title',title);}
       if(this.els.coverSubtitle){const sub=coverValue('subtitle',this.document.metadata?.subtitle||this.document.subtitle||'');this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!coverVisible('subtitle',sub);}
-      this.els.cover.dataset.startTrigger=['center','bottom','tap'].includes(this.document.cover?.startTrigger)?this.document.cover.startTrigger:'bottom';
+      this.els.cover.dataset.startTrigger='tap';
       this.els.cover.hidden=false;
       this.host.classList.add('sp-cover-open');
       return true;
@@ -3378,9 +3173,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const firstImage=this.els?.stage?.querySelector('.sp-scene.is-active .sp-scene-image');
         firstImage?._sceneImageOpenForReading?.(startEvent);
       }
-      // V112 — keyboard reading starts immediately after START. Move focus now
-      // and once more after the frame so mouse and keyboard starts both leave
-      // the Player ready for Enter without an extra Scene click.
+      // V112 — keyboard reading starts immediately after START. Do not require
+      // an extra click on the Scene just to move focus from the Cover controls.
       this.els?.stage?.focus?.({preventScroll:true});
       requestAnimationFrame(()=>this.els?.stage?.focus?.({preventScroll:true}));
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
@@ -4576,9 +4370,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const totalDy=t.clientY-viewState.touchStartY;
             if(Math.hypot(totalDx,totalDy)>10)viewState.moved=true;
 
-            // Follow the finger while turning a page. The current sheet slides
-            // away and exposes the adjacent page underneath; release decides
-            // whether the turn completes or springs back.
             const activePages=viewer._scenePages||[];
             const activeIndex=viewer._scenePageIndex||0;
             if(viewState.scale<=1.01 && activePages.length>1 && Math.abs(totalDx)>12 && Math.abs(totalDx)>Math.abs(totalDy)*1.15){
@@ -4587,23 +4378,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               const target=activeIndex+(advances?1:-1);
               if(target>=0&&target<activePages.length){
                 if(!viewState.pageDrag){
-                  const underlay=document.createElement('img');
-                  underlay.className='sp-scene-image-page-follow-underlay';
-                  underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
+                  const underlay=document.createElement('img');underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
                   const rect=img.getBoundingClientRect(),frameRect=frame.getBoundingClientRect();
                   underlay.style.position='absolute';underlay.style.left=`${rect.left-frameRect.left}px`;underlay.style.top=`${rect.top-frameRect.top}px`;
-                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';
-                  underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
+                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
                   frame.insertBefore(underlay,img);img.style.zIndex='2';img.style.willChange='translate';
-                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);
-                  viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
+                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
                 }
-                const drag=viewState.pageDrag;
-                if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
-                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));
-                img.style.translate=`${dx}px 0`;
-                drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;
-                event.preventDefault();
+                const drag=viewState.pageDrag;if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
+                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));img.style.translate=`${dx}px 0`;drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;event.preventDefault();
               }
             }
 
@@ -4631,33 +4414,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             viewState.dragging=false;
 
             // Horizontal swipes turn pages only at fit scale; zoomed manga remains pannable.
-            const activePages=viewer._scenePages||[];
-            const activeIndex=viewer._scenePageIndex||0;
-            const draggedPage=viewState.pageDrag;
+            const activePages=viewer._scenePages||[],activeIndex=viewer._scenePageIndex||0,draggedPage=viewState.pageDrag;
             if(draggedPage){
-              const dx=x-viewState.touchStartX;
-              const commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32)) && Math.abs(dx)>Math.abs(vertical)*1.2 && duration<900;
+              const dx=x-viewState.touchStartX,commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32))&&Math.abs(dx)>Math.abs(vertical)*1.2&&duration<900;
               draggedPage.underlay.remove();viewState.pageDrag=null;img.style.willChange='';img.style.zIndex='';
-              if(commit){
-                const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
-                const advances=direction==='rtl'?dx>0:dx<0;
-                const target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
-                if(target!==activeIndex){
-                  if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}
-                  else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}
-                }else img.style.translate='';
-              }else{
-                img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
-              }
-              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
-              viewState.multiTouch=false;return;
+                if(commit){const advances=viewer._scenePageDirection==='rtl'?dx>0:dx<0,target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));if(target!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}}else img.style.translate='';}
+              else img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
+              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;viewState.multiTouch=false;return;
             }
             if(!viewState.multiTouch && viewState.scale<=1.01 && activePages.length>1 && Math.abs(x-viewState.touchStartX)>78 && Math.abs(x-viewState.touchStartX)>Math.abs(vertical)*1.2 && duration<700){
               clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
-              const dx=x-viewState.touchStartX;
-              const advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
-              const requested=activeIndex+(advances?1:-1);
-              const targetPage=Math.max(0,Math.min(activePages.length-1,requested));
+              const dx=x-viewState.touchStartX,advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
+              const targetPage=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
               if(targetPage!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange)viewer._sceneOnPageChange(targetPage);else{viewer._sceneShowPage?.(targetPage);viewer._sceneOnPageChange?.(targetPage);}}
               viewState.multiTouch=false;
               return;
@@ -4692,8 +4460,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               }
             }
 
-            // VIEW POINT owns the image transform. Resetting the manual zoom state
-            // on iPhone touchend briefly writes FIT between two authored points.
             if(viewState.scale<=1.01 && !frame.classList.contains('is-view-rec-playing')) resetView();
             viewState.multiTouch=false;
           }else if(event.touches.length===1 && viewState.scale>1.01){
@@ -4872,8 +4638,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       })();
       const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&typeof page.src==='string'&&page.src);
       let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
-      viewer._scenePages=pages;
-      viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';
+      viewer._scenePages=pages;viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';viewer._scenePageIndex=pageIndex;
       viewer._sceneOnPageChange=options?.onPageChange;
       const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
       const oldRestart=pageControls?.querySelector('.sp-image-reading-restart');if(oldRestart)oldRestart.hidden=!options?.readingResumeKey;
@@ -4923,7 +4688,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           img.src=nextSrc;
         }else frame?._fitSceneImageFrame?.();
       };
-      viewer._scenePageIndex=pageIndex;
       viewer._sceneShowPage=showPage;
       const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
       const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
@@ -4997,12 +4761,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
 
       const fallbackPageChange=(pageIndex)=>{
-        const pages=Array.isArray(image.pages)?image.pages:[];
-        const page=pages[pageIndex];if(!page?.src)return;
+        const pages=Array.isArray(image.pages)?image.pages:[],page=pages[pageIndex];if(!page?.src)return;
         const pagePoints=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
-        if((pagePoints?.points||[]).length){
-          this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
-        }else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
+        if((pagePoints?.points||[]).length)this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
+        else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
       };
       const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
       const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0||Number(image.resumePoint)>0||!!pageGhost;
@@ -5159,10 +4921,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // not need an extra fullscreen click before keyboard/tap progression begins.
           // Let the V110 pickup transition finish, then move straight to point 1.
           if(index<0&&points.length){
-            if(startAtAuthoredPoint){
-              index=Math.max(0,Math.min(points.length-1,Number(image.resumePoint)||0));apply(coords(points[index]));initializing=false;img.style.visibility='';rememberPoint();finishPageHandoff();
-              return;
-            }
+            if(startAtAuthoredPoint){index=0;apply(coords(points[0]));initializing=false;img.style.visibility='';return;}
             // Wait for the V110 pickup animation, then establish point 1 as a real
             // settled state. Only after that may Enter/tap advance to point 2.
             setTimeout(()=>{
@@ -5528,124 +5287,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
-    _normalizeRichTextRanges(source, ranges) {
-      if (!Array.isArray(ranges) || !ranges.length) return [];
-      const codepoints = Array.from(source);
-      const cpToUtf16 = [0];
-      for (const ch of codepoints) cpToUtf16.push(cpToUtf16[cpToUtf16.length - 1] + ch.length);
-      const boundaries = new Set(cpToUtf16);
-      const offsets = ranges.flatMap((r) => [Number(r?.start), Number(r?.end)]).filter(Number.isFinite);
-      const hasSplitSurrogate = offsets.some((i) => Number.isInteger(i) && i > 0 && i < source.length && !boundaries.has(i));
-      // Some imported Scenes count Unicode code points. Player slicing uses
-      // UTF-16 offsets, so detect the telltale split-surrogate boundary and
-      // convert every range consistently before rendering any span.
-      const mapped = hasSplitSurrogate ? ranges.map((r) => {
-        const map = (value) => {
-          const i = Math.max(0, Math.min(codepoints.length, Math.trunc(Number(value) || 0)));
-          return cpToUtf16[i];
-        };
-        return { ...r, start: map(r?.start), end: map(r?.end) };
-      }) : ranges;
-      if (typeof Intl?.Segmenter !== 'function') return mapped;
-      const graphemeBounds = new Set([0, source.length]);
-      for (const part of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(source)) {
-        graphemeBounds.add(part.index);
-        graphemeBounds.add(part.index + part.segment.length);
-      }
-      const sorted = [...graphemeBounds].sort((a, b) => a - b);
-      const floorBoundary = (value) => { let result = 0; for (const i of sorted) { if (i > value) break; result = i; } return result; };
-      const ceilBoundary = (value) => sorted.find((i) => i >= value) ?? source.length;
-      return mapped.map((r) => {
-        if (r?.kind === 'table' || r?.kind === 'linkCard') return r;
-        const start = Math.max(0, Math.min(source.length, Math.trunc(Number(r?.start) || 0)));
-        const end = Math.max(start, Math.min(source.length, Math.trunc(Number(r?.end) || 0)));
-        // If an old Scene splits a grapheme cluster, leave that cluster
-        // unformatted instead of splitting a surrogate or variation sequence.
-        return { ...r, start: graphemeBounds.has(start) ? start : ceilBoundary(start), end: graphemeBounds.has(end) ? end : floorBoundary(end) };
-      }).filter((r) => r?.kind === 'table' || r?.kind === 'linkCard' || r.end > r.start);
-    }
-
-    _isVerticalEmojiCluster(text) {
-      try {
-        if (new RegExp('\\p{Extended_Pictographic}', 'u').test(text)) return true;
-      } catch (_) {}
-      // Supplementary-plane glyphs (including decorative Phoenician letters
-      // used in emoji-style laughter such as 𐤔) should remain upright too.
-      if (Array.from(text).some((ch) => ch.codePointAt(0) > 0xFFFF)) return true;
-      return /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u00A9\u00AE\u203C\u2049\u2122\u2139]/u.test(text);
-    }
-
-    _isVerticalWriting(node, scene) {
-      return node?.dataset?.writingMode === 'vertical-rl' || node?.style?.writingMode === 'vertical-rl' || scene?.presentation?.text?.writingMode === 'vertical-rl';
-    }
-
-    _verticalGlyphUnits(text) {
-      const parts = typeof Intl?.Segmenter === 'function'
-        ? [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].map((part) => part.segment)
-        : Array.from(text);
-      const units = [];
-      for (let i = 0; i < parts.length; i++) {
-        // Japanese laughter notation is a single visual unit: keep the
-        // ideographic わらい marker attached to the following emoji.
-        if (parts[i] === 'ꉂ' && i + 1 < parts.length && this._isVerticalEmojiCluster(parts[i + 1])) {
-          let unit = parts[i] + parts[++i];
-          if (parts[i + 1] === '𐤔') unit += parts[++i];
-          units.push(unit);
-        } else units.push(parts[i]);
-      }
-      return units;
-    }
-
-    _styleVerticalEmoji(span) {
-      span.classList.add('sp-emoji-upright');
-      span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
-      span.style.setProperty('text-orientation', 'upright', 'important');
-      // Preserve VS16 emoji presentation (especially ‼️ and ⁉️). Combining
-      // text in WebKit can force a monochrome glyph; an atomic horizontal inline
-      // box keeps a grouped expression together while preserving the emoji.
-      span.style.setProperty('-webkit-text-combine', 'none', 'important');
-      span.style.setProperty('-webkit-text-combine-upright', 'none', 'important');
-      span.style.setProperty('text-combine-upright', 'none', 'important');
-      span.style.setProperty('-webkit-writing-mode', 'horizontal-tb', 'important');
-      span.style.setProperty('writing-mode', 'horizontal-tb', 'important');
-      span.style.setProperty('white-space', 'nowrap', 'important');
-      span.style.setProperty('display', 'inline-block', 'important');
-      span.style.setProperty('line-height', '1', 'important');
-    }
-
-    _appendVerticalEmojiAwareText(node, text) {
-      let plain = '';
-      const flush = () => { if (plain) { node.appendChild(document.createTextNode(plain)); plain = ''; } };
-      for (const unit of this._verticalGlyphUnits(text)) {
-        if (this._isVerticalEmojiCluster(unit)) {
-          flush();
-          const span = document.createElement('span');
-          this._styleVerticalEmoji(span);
-          span.textContent = unit;
-          node.appendChild(span);
-        } else plain += unit;
-      }
-      flush();
-    }
-
     _renderRichText(node, scene, displayText = null) {
       const source = String(displayText ?? scene?.text ?? '');
-      const rawRanges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
-      const ranges = this._normalizeRichTextRanges(source, rawRanges);
-      const content = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table' || x?.type === 'linkCard') : [];
+      const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
+      const tables = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table') : [];
       node.classList.remove('sp-has-ruby');
-      if (!ranges.length && !content.length) {
-        if (this._isVerticalWriting(node, scene)) this._appendVerticalEmojiAwareText(node, source);
-        else node.textContent = source;
-        return false;
-      }
+      if (!ranges.length && !tables.length) { node.textContent = source; return false; }
       node.textContent = '';
-      const tableById = new Map(content.filter(t=>t.type==='table').map(t => [String(t.id||''), t]));
-      const cardById = new Map(content.filter(t=>t.type==='linkCard').map(t => [String(t.id||''), t]));
-      const blockRanges = ranges.filter(r => (r?.kind === 'table' && tableById.has(String(r.tableId||''))) || (r?.kind === 'linkCard' && cardById.has(String(r.cardId||''))))
+      const tableById = new Map(tables.map(t => [String(t.id||''), t]));
+      const tableRanges = ranges.filter(r => r?.kind === 'table' && tableById.has(String(r.tableId||'')))
         .map(r => ({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)}))
         .sort((a,b)=>a.start-b.start);
-      const normal = ranges.filter(r => r?.kind !== 'table' && r?.kind !== 'linkCard').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
+      const normal = ranges.filter(r => r?.kind !== 'table').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
       const rubies=normal.filter(r=>r.kind==='ruby'&&String(r.reading||'').trim()&&!source.slice(r.start,r.end).includes('\n')).sort((a,b)=>a.start-b.start);
       node.classList.toggle('sp-has-ruby',rubies.length>0);
       const appendTextRange=(from,to)=>{
@@ -5653,24 +5306,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(to<=from)return;
         const cuts=new Set([from,to]);
         normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
-        if (this._isVerticalWriting(node, scene) && typeof Intl?.Segmenter === 'function') {
-          const fragment = source.slice(from, to);
-          let unitOffset = 0;
-          for (const unit of this._verticalGlyphUnits(fragment)) {
-            if (this._isVerticalEmojiCluster(unit)) {
-              cuts.add(from + unitOffset);
-              cuts.add(from + unitOffset + unit.length);
-            }
-            unitOffset += unit.length;
-          }
-        }
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
           const span=document.createElement('span');
           const active=normal.filter(r=>r.start<=a&&r.end>=b);
           const segmentText=source.slice(a,b);
-          const emojiCluster = this._isVerticalWriting(node, scene) && this._isVerticalEmojiCluster(segmentText);
           // Rich Text Player v0.18: list markers live in canonical Scene text.
           // Never synthesize a bullet from semantic ranges; that can decorate an
           // unrelated repeated word when offsets were re-anchored fuzzily.
@@ -5686,23 +5327,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'){
-              span.dataset.spTextOrientation=r.orientation;
-              if(r.orientation==='tcy' && !emojiCluster){
-                span.style.setProperty('-webkit-text-combine','horizontal','important');
-                span.style.setProperty('-webkit-text-combine-upright','all','important');
-                span.style.setProperty('text-combine-upright','all','important');
-              }else if(r.orientation==='sideways'||r.orientation==='upright'){
-                span.style.setProperty('-webkit-text-orientation',r.orientation,'important');
-                span.style.setProperty('text-orientation',r.orientation,'important');
-              }
+              if(r.orientation==='tcy')span.style.textCombineUpright='all';
+              else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
             }
           });
-          if (emojiCluster) {
-            this._styleVerticalEmoji(span);
-          }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
-          const content=span.className||span.getAttribute('style')||span.hasAttribute('data-sp-text-orientation')?span:document.createTextNode(segmentText);
+          const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
           const annotation=rubies.find(r=>r.start<=a&&r.end>=b&&r.start>=from&&r.end<=to);
           if(annotation){
             let group=rubyNodes.get(annotation);
@@ -5717,30 +5348,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
       };
       let cursor=0;
-      blockRanges.forEach(r=>{
+      tableRanges.forEach(r=>{
         appendTextRange(cursor,r.start);
-        if(r.kind==='table'){
-          const table=tableById.get(String(r.tableId||''));
-          const card=document.createElement('div'); card.className='sp-rich-table-card';
-          const wrap=document.createElement('div'); wrap.className='sp-rich-table-scroll';
-          wrap.appendChild(this._buildRichTable(table)); card.appendChild(wrap);
-          card.addEventListener('click',(e)=>{e.stopPropagation();});
-          node.appendChild(card);
-        }else{
-          const data=cardById.get(String(r.cardId||''));
-          const href=(()=>{try{const u=new URL(String(data?.url||''));return /^https?:$/.test(u.protocol)&&!u.username&&!u.password?u.href:'';}catch(_){return '';}})();
-          const card=document.createElement('a');card.className='sp-rich-link-card';card.dataset.cardId=String(data?.id||'');card.href=href||'#';card.target='_blank';card.rel='noopener noreferrer';card.setAttribute('aria-label',String(data?.title||'外部リンク'));
-          const copy=document.createElement('span');copy.className='sp-rich-link-card-copy';
-          const title=document.createElement('strong');title.textContent=String(data?.title||href||'リンク');
-          const description=document.createElement('span');description.className='sp-rich-link-card-description';description.textContent=String(data?.description||'');
-          const site=document.createElement('small');site.textContent=String(data?.siteName||(()=>{try{return new URL(href).hostname;}catch(_){return '';}})());
-          copy.append(title,description,site);card.appendChild(copy);
-          const imageUrl=(()=>{try{const u=new URL(String(data?.image||''));return /^https?:$/.test(u.protocol)?u.href:'';}catch(_){return '';}})();
-          if(imageUrl){card.classList.add('has-image');const image=document.createElement('img');image.className='sp-rich-link-card-image';image.src=imageUrl;image.alt='';image.loading='lazy';image.referrerPolicy='no-referrer';image.onerror=()=>{image.remove();card.classList.remove('has-image');};card.appendChild(image);}
-          card.addEventListener('click',e=>{e.stopPropagation();if(!href)e.preventDefault();});
-          node.appendChild(card);
-        }
-        cursor=Math.max(cursor,r.end);
+        const table=tableById.get(String(r.tableId||''));
+        const card=document.createElement('div'); card.className='sp-rich-table-card';
+        const wrap=document.createElement('div'); wrap.className='sp-rich-table-scroll';
+        wrap.appendChild(this._buildRichTable(table)); card.appendChild(wrap);
+        // V25: no fullscreen affordance until the viewer contract is complete.
+        // Swallow table taps so they do not accidentally advance the Scene.
+        card.addEventListener('click',(e)=>{e.stopPropagation();});
+        node.appendChild(card); cursor=Math.max(cursor,r.end);
       });
       appendTextRange(cursor,source.length);
       return true;
