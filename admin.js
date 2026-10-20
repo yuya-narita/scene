@@ -872,7 +872,7 @@ els.authorList?.addEventListener('click',event=>{
 function installSellerReadinessPanel(){
   if(!els.auditOrdersList)return;
   const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
-  panel.innerHTML='<summary>作者の本番販売チェック</summary><p>作者IDを指定して、販売許可とStripe設定を確認します。作者のStripe登録が完了したら、ここで販売開始の準備を確認してください。</p><label>作者ID <input data-seller-id placeholder="author_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><button type="button" data-seller-run>販売準備を確認</button><div data-seller-result aria-live="polite"></div>';
+  panel.innerHTML='<summary>作者の本番販売チェック</summary><p>作者IDを指定して、販売許可とStripe設定を確認します。準備完了後は、この画面で本番販売を許可・停止できます。</p><label>作者ID <input data-seller-id placeholder="author_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><button type="button" data-seller-run>販売準備を確認</button><div data-seller-result aria-live="polite"></div>';
   els.auditOrdersList.parentNode.appendChild(panel);
   const input=panel.querySelector('[data-seller-id]'),button=panel.querySelector('[data-seller-run]'),result=panel.querySelector('[data-seller-result]');
   let busy=false;
@@ -886,23 +886,48 @@ function installSellerReadinessPanel(){
       const data=await apiWithTimeout('/admin/commerce/seller-readiness?authorId='+encodeURIComponent(authorId),{},30000);
       const s=data.sellerReadiness;
       if(!s||s.authorId!==authorId||!Array.isArray(s.checks))throw new Error('販売チェック結果を確認できません。Workerを更新してください。');
-      const labels={ready:'現在の販売開始チェック：OK',awaiting_allowlist:'Stripe設定の確認完了・販売許可への追加待ち',paused:'作者設定の確認完了・新規購入は停止中',blocked:'販売開始前に確認が必要です',sandbox:'Sandboxの確認結果です。本番販売の準備完了ではありません。'};
+      const labels={ready:'現在の販売開始チェック：OK',awaiting_allowlist:'Stripe設定の確認完了・販売許可待ち',paused:'作者設定の確認完了・新規購入は停止中',blocked:'販売開始前に確認が必要です',sandbox:'Sandboxの確認結果です。本番販売の準備完了ではありません。'};
       const checkLabel={ok:'✓',blocked:'要対応',unknown:'未確認'};
-      result.innerHTML=`<div class="audit-order-card" style="display:block;overflow-wrap:anywhere"><strong>${escapeHtml(s.displayName)}</strong><p>${escapeHtml(labels[s.state]||'状態未確認')}</p><p>環境：${escapeHtml(s.environment)} / 新規購入：${s.paymentsEnabled?'有効':'停止'}<br>販売許可リスト：${s.policyValid?(s.listed?'登録済み':'未登録'):'未設定・形式エラー'}</p><p>${escapeHtml(s.authorId)}<br>${escapeHtml(s.accountId||'Stripe連携未確認')}</p>${s.checks.map(c=>`<p><strong>${escapeHtml(checkLabel[c.status]||'未確認')} ${escapeHtml(c.label)}</strong><br>${escapeHtml(c.detail)}</p>`).join('')}${s.errors?.length?`<p>取得エラー：${escapeHtml(s.errors.map(e=>e.source+': '+e.code).join(', '))}</p>`:''}<small>確認日時 ${escapeHtml(formatJstDate(s.checkedAt))}</small></div>`;
+      result.innerHTML=`<div class="audit-order-card" style="display:block;overflow-wrap:anywhere"><strong>${escapeHtml(s.displayName)}</strong><p>${escapeHtml(labels[s.state]||'状態未確認')}</p><p>環境：${escapeHtml(s.environment)} / 新規購入：${s.paymentsEnabled?'有効':'停止'}<br>販売許可：${s.authorization?.unverified?'未確認':s.policyValid?(s.listed?'許可中':'未許可・停止中'):'初期設定エラー'}</p><p>${escapeHtml(s.authorId)}<br>${escapeHtml(s.accountId||'Stripe連携未確認')}</p>${s.checks.map(c=>`<p><strong>${escapeHtml(checkLabel[c.status]||'未確認')} ${escapeHtml(c.label)}</strong><br>${escapeHtml(c.detail)}</p>`).join('')}${s.errors?.length?`<p>取得エラー：${escapeHtml(s.errors.map(e=>e.source+': '+e.code).join(', '))}</p>`:''}<small>確認日時 ${escapeHtml(formatJstDate(s.checkedAt))}</small></div>`;
       if(s.environment==='live'){
         const note=document.createElement('p');note.textContent='この結果は販売開始の技術的な確認です。運営による作品・販売条件の確認と、本番の初回購入の確認も行ってください。';result.appendChild(note);
       }
-      if(s.suggestedAllowlistValue){
-        const box=document.createElement('div');
-        box.innerHTML='<p><strong>この作者を追加する設定値</strong></p><p>Cloudflare Worker → 設定 → 変数とシークレット → AHAKO_LIVE_SELLER_AUTHOR_IDS に設定します。既存の作者IDを含む値です。Cloudflareの現在値と照合して保存・デプロイしてください。</p><textarea data-seller-value readonly aria-label="作者追加後の販売許可リスト" rows="3" style="width:100%;box-sizing:border-box;overflow-wrap:anywhere"></textarea><button type="button" data-seller-copy>設定値をコピー</button><p data-seller-copy-status aria-live="polite"></p><p>反映後、もう一度「販売準備を確認」を押して登録済みになったことを確認してください。</p>';
-        const value=box.querySelector('[data-seller-value]'),copyStatus=box.querySelector('[data-seller-copy-status]');value.value=s.suggestedAllowlistValue;
-        box.querySelector('[data-seller-copy]').onclick=async()=>{
-          try{await navigator.clipboard.writeText(value.value);copyStatus.textContent='コピーしました。Cloudflareの現在値と照合してから保存してください。';}
-          catch(_){value.focus();value.select();copyStatus.textContent='設定値を選択しました。端末のコピー操作でコピーしてください。';}
-        };
-        result.appendChild(box);
+      if(s.environment==='live'&&s.authorization){
+        const auth=s.authorization;
+        const source=document.createElement('p');
+        source.textContent='許可の取得元：'+(auth.unverified?'未確認':auth.source==='admin'?'adminの設定':'初期の許可リスト')+(auth.error?' / '+auth.error:'');
+        result.appendChild(source);
+        const stopNote=document.createElement('p');stopNote.textContent='販売停止は新しい購入手続きを止めます。既に発行済みのStripe決済画面の取消し・返金・銀行出金停止は行いません。';result.appendChild(stopNote);
+        if(s.canAllow||s.canStop){
+          const action=s.canAllow?'allow':'deny';
+          const actionButton=document.createElement('button');actionButton.type='button';
+          actionButton.textContent=action==='allow'?'この作者の本番販売を許可':'この作者の新規販売を停止';
+          result.appendChild(actionButton);
+          actionButton.onclick=async()=>{
+            if(busy)return;
+            busy=true;button.disabled=true;input.disabled=true;actionButton.disabled=true;
+            let submitted=false,message='';
+            try{
+              const confirmed=await AhakoDialog.confirm(`${s.displayName}\n${s.authorId}\n\n`+(action==='allow'?'この作者の本番販売を許可します。Stripe設定を再確認して反映します。':'この作者の新しい購入手続きを停止します。既存のStripe決済画面・購入済みの権利・資金は変更しません。'),{title:action==='allow'?'本番販売を許可':'新規販売を停止',danger:action==='deny',confirmLabel:action==='allow'?'販売を許可する':'新規販売を停止する'});
+              if(!confirmed)return;
+              submitted=true;
+              const data=await apiWithTimeout('/admin/commerce/seller-authorization',{method:'POST',body:JSON.stringify({authorId,action,expectedVersion:auth.version,expectedAccountId:s.accountId,confirmation:action==='allow'?'ALLOW_LIVE_SELLER':'STOP_LIVE_SELLER'})},30000);
+              if(data.authorization?.authorId!==authorId||data.authorization?.decision!==action)throw new Error('反映結果を確認できません。');
+              message=action==='allow'?'本番販売の許可を保存しました。再取得した現在の状態を確認してください。':'新規販売の停止を保存しました。再取得した現在の状態を確認してください。';
+            }catch(error){message='操作結果を確認してください：'+error.message+'。現在の設定を再取得します。';}
+            finally{
+              busy=false;button.disabled=false;input.disabled=false;actionButton.disabled=false;
+              if(submitted){await run();const status=document.createElement('p');status.textContent=message;result.appendChild(status);}
+            }
+          };
+        }
+        if(auth.history?.length){
+          const history=document.createElement('details');
+          history.innerHTML='<summary>最近の許可・停止履歴</summary>'+auth.history.map(item=>`<p>${escapeHtml(formatJstDate(item.at))} / ${item.decision==='allow'?'販売を許可':'新規販売を停止'} / 管理者</p>`).join('');
+          result.appendChild(history);
+        }
       }
-    }catch(error){result.textContent='確認できませんでした：'+error.message+'。未確認のまま販売許可へ追加せず、再取得してください。';}
+    }catch(error){result.textContent='確認できませんでした：'+error.message+'。状態を再取得してください。';}
     finally{busy=false;button.disabled=false;input.disabled=false;button.textContent='販売準備を確認';}
   }
   button.onclick=run;
