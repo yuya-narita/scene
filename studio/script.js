@@ -16041,6 +16041,12 @@ function openDesktopTextDetail(){
 
   function enableLiveEdit(){
     liveEditEnabled=true;
+    // The desktop inspector is the main editing surface. Open it on entry so
+    // the right side is never mistaken for an empty/failed Live Editor pane.
+    if(desktopLiveMQ.matches){
+      document.body.classList.add('desktop-v2-settings-open');
+      desktopV2Settings?.setAttribute('aria-expanded','true');
+    }
     // Re-entering Live Editor must not inherit a stale Cover/Ending inspector
     // from the previous session. Seed the mode from the pane that is visible now.
     desktopSpecialIntent=desktopSceneIsActuallyVisible()?'scene':(player?.ended?'ending':(liveCoverIsVisible()?'cover':'scene'));
@@ -16067,7 +16073,8 @@ function openDesktopTextDetail(){
     liveEditChromeObserver?.disconnect?.();
     liveEditChromeObserver=null;
     playerHost.classList.remove('live-edit-enabled');
-    if(desktopLivePanel)desktopLivePanel.hidden=true;document.body.classList.remove('desktop-live-edit');
+    if(desktopLivePanel)desktopLivePanel.hidden=true;document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open');
+    desktopV2Settings?.setAttribute('aria-expanded','false');
     syncStudioPreviewDevice();
     const recPanel=$('#autoRecPanel');if(recPanel)recPanel.hidden=false;
     if(player)player.options.historyAllScenes=false;
