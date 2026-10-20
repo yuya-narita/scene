@@ -567,7 +567,7 @@
     ['#makeButton span','make'],['#makeButton small','make.note'],['#easyAdvancedReturnButton span','advanced.open'],['#projectIoTitle','io.heading'],['#exportSceneButton strong','io.export'],['label[for="importSceneInput"] strong','io.import'],['.footer-note','footer.note'],
     ['.advanced-topbar h1','advanced.title'],
     ['.advanced-policy strong','nav.previous.policy'],['.advanced-policy small','nav.previous.note'],
-    ['#sceneTextInput','scene.text','aria-label'],['.scene-inspector > .adv-field:nth-of-type(1) > span','scene.text'],
+    ['#sceneTextInput','scene.text','aria-label'],['.scene-inspector .scene-body-field-heading > label','scene.text'],
     ['.subtext-field > span','scene.subtext'],['#sceneSubTextInput','scene.subtext.ph','placeholder'],
     ['#sceneTypeSelect','scene.type','aria-label'],['#sceneTypeSelect option[value="text"]','scene.type.text'],['#sceneTypeSelect option[value="dialogue"]','scene.type.dialogue'],['#sceneTypeSelect option[value="sound"]','scene.type.sound'],
     ['#sceneDisplaySelect option[value="stack"]','scene.display.stack'],['#sceneDisplaySelect option[value="solo"]','scene.display.solo'],
@@ -5458,6 +5458,24 @@ return flowCommentCard;}
   const ogpCardUrl=$('#ogpCardUrl'),ogpCardTitle=$('#ogpCardTitle'),ogpCardDescription=$('#ogpCardDescription'),ogpCardImage=$('#ogpCardImage');
   const ogpCardStatus=$('#ogpCardStatus'),ogpFetchButton=$('#ogpFetchButton'),ogpCardSave=$('#ogpCardSave');
   const safeWebUrl=value=>{try{const u=new URL(String(value||'').trim());return /^https?:$/.test(u.protocol)&&!u.username&&!u.password?u.href:'';}catch(_){return '';}};
+  const pastedWebUrl=value=>{const text=String(value||'').trim();return /^(?:https?:\/\/)[^\s<>]+$/i.test(text)?safeWebUrl(text):'';};
+  function insertOgpCardIntoScene(scene,range,card){
+    if(!scene)return;
+    const before=String(scene.text||''),start=Math.max(0,Math.min(before.length,Number(range?.start)||0)),end=Math.max(start,Math.min(before.length,Number(range?.end)||start));
+    const label=`［URLカード ${String(card.id).slice(-4)}］`;
+    const prefix=start>0&&!before.slice(0,start).endsWith('\n\n')?'\n\n':'';
+    const suffix=end<before.length&&!before.slice(end).startsWith('\n\n')?'\n\n':'';
+    const fragment=prefix+label+suffix,after=before.slice(0,start)+fragment+before.slice(end),delta=fragment.length-(end-start);
+    const ranges=Array.isArray(scene.richText?.ranges)?scene.richText.ranges:[];
+    const adjust=r=>{if((Number(r.end)||0)<=start)return {...r};if((Number(r.start)||0)>=end)return {...r,start:(Number(r.start)||0)+delta,end:(Number(r.end)||0)+delta};return null;};
+    const kept=ranges.map(adjust).filter(Boolean);
+    const exclusions=Array.isArray(scene.richText?.autoRubyExcluded)?scene.richText.autoRubyExcluded.map(adjust).filter(Boolean):[];
+    captureUndo('URLカードの追加を元に戻せます');scene.text=after;scene.content=Array.isArray(scene.content)?scene.content:[];
+    const cardStart=start+prefix.length;scene.content.push({type:'linkCard',...card});
+    kept.push({start:cardStart,end:cardStart+label.length,kind:'linkCard',cardId:card.id});
+    assignSceneRichText(scene,kept,exclusions);
+    scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();
+  }
   function updateOgpCardPreview(){
     const url=safeWebUrl(ogpCardUrl?.value);let host='';try{host=new URL(url).hostname;}catch(_){}
     $('#ogpCardPreviewTitle').textContent=String(ogpCardTitle?.value||'').trim()||'タイトル';
@@ -5488,16 +5506,17 @@ return flowCommentCard;}
     easyRichSource.marks=easyRichSource.marks.filter(x=>!(x.kind==='linkCard'&&String(x.cardId)===String(id)));
     bodyInput.value=next;reconcileRichSourceAfterPlainEdit(before,next);easyRichTextSnapshot=next;renderEasyRichComposition();updateCount();easySourceDirty=true;syncEasyPublishButton();scheduleDraftSave?.(80);renderEasyOgpCardList();
   }
-  function openOgpCardDialog({mode='new',card=null,scene=null}={}){
+  function openOgpCardDialog({mode='new',card=null,scene=null,range=null,initialUrl=''}={}){
     if(!ogpCardDialog)return;
-    ogpEditTarget=card?{mode,card,scene}:null;
+    ogpEditTarget=card?{mode,card,scene}:scene?{mode,scene,range}:null;
     if(mode==='new')ogpInsertionRange={start:bodyInput.selectionStart||0,end:bodyInput.selectionEnd||bodyInput.selectionStart||0};
     $('#ogpCardDialogTitle').textContent=card?'URLカードを編集':'URLカードを追加';
     ogpCardSave.textContent=card?'変更を保存':'カードを追加';
-    ogpCardUrl.value=card?.url||'';ogpCardTitle.value=card?.title||'';ogpCardDescription.value=card?.description||'';ogpCardImage.value=card?.image||'';
+    ogpCardUrl.value=card?.url||initialUrl||'';ogpCardTitle.value=card?.title||'';ogpCardDescription.value=card?.description||'';ogpCardImage.value=card?.image||'';
     ogpCardStatus.textContent='URLを入力してOGP取得を押してください。取得できない場合も手入力できます。';ogpCardStatus.className='ogp-card-status';
     updateOgpCardPreview();
     if(typeof ogpCardDialog.showModal==='function')ogpCardDialog.showModal();
+    if(!card&&initialUrl)setTimeout(fetchOgpForDialog,0);
   }
   async function fetchOgpForDialog(){
     const target=safeWebUrl(ogpCardUrl.value);
@@ -5524,8 +5543,9 @@ return flowCommentCard;}
     if(ogpEditTarget?.mode==='easy'){
       Object.assign(ogpEditTarget.card,card);scheduleDraftSave?.(60);renderEasyOgpCardList();
     }else if(ogpEditTarget?.mode==='scene'&&ogpEditTarget.scene){
-      const scene=ogpEditTarget.scene,existing=(scene.content||[]).find(x=>x?.type==='linkCard'&&String(x.id)===String(ogpEditTarget.card.id));
+      const scene=ogpEditTarget.scene,existing=ogpEditTarget.card&&(scene.content||[]).find(x=>x?.type==='linkCard'&&String(x.id)===String(ogpEditTarget.card.id));
       if(existing){captureUndo('URLカードの変更を元に戻せます');Object.assign(existing,card);scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();}
+      else{const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;insertOgpCardIntoScene(scene,ogpEditTarget.range,{...card,id});}
     }else{
       const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
       const label=`［URLカード ${id.slice(-4)}］`;
@@ -7846,6 +7866,8 @@ return flowCommentCard;}
   bodyInput.addEventListener('paste',(event)=>{
     const html=event.clipboardData?.getData('text/html')||'';
     const plain=event.clipboardData?.getData('text/plain')||'';
+    const url=pastedWebUrl(plain);
+    if(url){event.preventDefault();openOgpCardDialog({mode:'new',initialUrl:url});return;}
     const plainHasTable=/(^|\n)\s*\|?.+\|.+\|?\s*\n\s*\|?\s*:?-{3,}/m.test(plain) || /(^|\n)[^\n\t]+\t[^\n]+\n[^\n\t]+\t/m.test(plain);
     const plainHasRich=/(^|\n)\s*(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)|\*\*[^*\n]+\*\*/m.test(plain);
     // Rich Text Player v0.16: do not gate HTML list semantics out before parsing.
@@ -9188,6 +9210,18 @@ return flowCommentCard;}
     renderSceneList();
     if(liveEditEnabled && player && !playerScreen?.hidden) refreshLivePlayer({preserveSheet:true});
   }));
+  $('#sceneTextInput')?.addEventListener('paste',event=>{
+    const url=pastedWebUrl(event.clipboardData?.getData('text/plain')||'');if(!url)return;
+    event.preventDefault();syncAdvancedFieldsToScene();const scene=currentScene();if(!scene)return;
+    openOgpCardDialog({mode:'scene',scene,range:{start:$('#sceneTextInput').selectionStart||0,end:$('#sceneTextInput').selectionEnd||$('#sceneTextInput').selectionStart||0},initialUrl:url});
+  });
+  $('#sceneOgpCardButton')?.addEventListener('click',()=>{
+    const input=$('#sceneTextInput'),scene=currentScene();if(!input||!scene)return;
+    let start=input.selectionStart||0,end=input.selectionEnd||start,url=pastedWebUrl(input.value.slice(start,end));
+    if(!url){start=0;end=input.value.length;url=pastedWebUrl(input.value);}
+    if(!url){showToast?.('本文全体または選択範囲をURLだけにしてください');return;}
+    syncAdvancedFieldsToScene();openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:url});
+  });
 
   ['sceneBackgroundMode','sceneBackgroundTransition','sceneBackgroundExit','sceneBackgroundFit','sceneBackgroundMotion','sceneBackgroundDim','sceneBgmAction','sceneBgmLoop','sceneBgmVolume','sceneBgmFadeIn','sceneBgmFadeOut','sceneBgmVolumeChange','sceneBgmVolumeFade','sceneBgmStopFade','sceneAmbientAction','sceneAmbientLoop','sceneAmbientVolume','sceneAmbientFadeIn','sceneAmbientFadeOut','sceneAmbientVolumeChange','sceneAmbientVolumeFade','sceneAmbientStopFade','sceneSeEnabled','sceneSeVolume','sceneSeFadeIn'].forEach(id=>{
     const el=$('#'+id); if(!el)return; const evt=el.type==='range'?'input':'change'; el.addEventListener(evt,()=>{updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
@@ -10363,6 +10397,20 @@ function startInlineTextEdit(field='text',targetEl=null){
     const abort=new AbortController();
     el._liveEditAbort?.abort();
     el._liveEditAbort=abort;
+    el.addEventListener('paste',event=>{
+      const url=pastedWebUrl(event.clipboardData?.getData('text/plain')||'');
+      if(!url||liveInlineEditField!=='text'||liveInlineEditSceneRef!==scene)return;
+      event.preventDefault();
+      const selection=getSelection();let start=String(scene.text||'').length,end=start;
+      try{
+        if(selection?.rangeCount){const range=selection.getRangeAt(0);if(el.contains(range.startContainer)&&el.contains(range.endContainer)){
+          const before=document.createRange();before.selectNodeContents(el);before.setEnd(range.startContainer,range.startOffset);start=before.toString().length;
+          const selected=range.toString();end=start+selected.length;
+        }}
+      }catch(_){}
+      syncInlineTextToScene();finishInlineTextEdit();
+      openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:url});
+    },{signal:abort.signal});
     el.addEventListener('input',sync,{signal:abort.signal});
     el.addEventListener('keyup',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
     el.addEventListener('click',()=>requestAnimationFrame(keepInlineCaretVisible),{signal:abort.signal});
@@ -13703,6 +13751,19 @@ function openDesktopTextDetail(){
     sceneTypeControl.append(sceneTypeLabel,sceneTypeOptions);
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder=u('本文を入力','Enter text');
     bindRememberedDesktopBodyHeight(ta);
+    const cardButton=makeActionButton(u('＋ URLカード','＋ URL card'));cardButton.classList.add('desktop-ogp-card-action');cardButton.title=u('URLを本文に貼るとカード編集画面が開きます','Pasting a URL opens the link card editor');
+    cardButton.addEventListener('click',()=>{
+      let start=ta.selectionStart||0,end=ta.selectionEnd||start,url=pastedWebUrl(ta.value.slice(start,end));
+      if(!url){start=0;end=ta.value.length;url=pastedWebUrl(ta.value);}
+      if(!url){showToast?.(u('本文全体または選択範囲をURLだけにしてください','Select a URL, or make the whole text a URL.'));return;}
+      scene.text=ta.value;openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:url});
+    });
+    ta.addEventListener('paste',event=>{
+      const url=pastedWebUrl(event.clipboardData?.getData('text/plain')||'');if(!url)return;
+      event.preventDefault();const start=ta.selectionStart||0,end=ta.selectionEnd||start;
+      scene.text=ta.value;scheduleDraftSave(100);
+      openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:url});
+    });
     // Writing should feel like writing, not replaying a Scene on every key.
     // While the field is focused, update only the visible text node. This keeps
     // typography/background stable and deliberately does NOT replay entrance,
@@ -13759,7 +13820,7 @@ function openDesktopTextDetail(){
         e.preventDefault();desktopAddSceneAndFocus();return;
       }
     });
-    bodyCard.append(sceneTypeControl,ta);
+    bodyCard.append(sceneTypeControl,cardButton,ta);
 
     // Rich Text Player v0.10: table cells are edited directly in Live Preview.
     // Keep the inline [表 n] anchor in the body textarea, but do not duplicate

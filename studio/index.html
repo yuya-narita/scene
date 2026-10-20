@@ -370,15 +370,15 @@
     </section>
 
     <div class="form-stack">
-      <label class="field body-field">
-        <span class="field-label">本文 <button id="insertOgpCardButton" class="text-button ogp-insert-button" type="button">＋ URLカード</button></span>
+      <div class="field body-field">
+        <div class="body-field-heading"><label class="field-label" for="bodyInput">本文</label><button id="insertOgpCardButton" class="text-button ogp-insert-button" type="button">＋ URLカード</button></div>
         <textarea id="bodyInput" placeholder="ここに文章を貼り付けてください。"></textarea>
         <div id="easyOgpCardList" class="easy-ogp-card-list" hidden aria-label="URLカード一覧"></div>
         <div class="body-meta">
           <span id="charCount">0文字</span>
           <button id="sampleButton" class="text-button" type="button">サンプルを入れる</button>
         </div>
-      </label>
+      </div>
 
       <details class="easy-illustration" id="easyIllustrationPanel">
         <summary><img src="./cage-icons/cage.png" alt=""><span>この子に一枚描いてもらう</span><span id="easyIllustrationCount" class="easy-illustration-count"></span></summary>
@@ -675,7 +675,7 @@
           <button id="liveCommerceLockButton" type="button" class="live-commerce-lock">🔒 このSceneから有料にする</button>
         </section>
 
-        <label class="adv-field"><span>本文</span><textarea id="sceneTextInput" rows="7"></textarea></label>
+        <div class="adv-field"><div class="scene-body-field-heading"><label for="sceneTextInput">本文</label><button id="sceneOgpCardButton" class="text-button ogp-insert-button" type="button">＋ URLカード</button></div><textarea id="sceneTextInput" rows="7"></textarea></div>
         <label class="adv-field subtext-field"><span>サブテキスト <small>任意</small></span><textarea id="sceneSubTextInput" rows="2" placeholder="補足が必要なSceneだけ"></textarea></label>
 
         <section class="auto-timing-editor">
@@ -1283,7 +1283,7 @@
   </dialog>
 
 <script src="./scene-studio-i18n.js?v=142"></script>
-<script src="./scene-player-core.js?v=20261020-ogp-link-card-v1"></script>
+<script src="./scene-player-core.js?v=20261020-ogp-link-card-v4"></script>
 <script src="./japanese-splitter.js"></script>
 <script src="./english-splitter.js"></script>
 <script src="./scene-text-splitter.js"></script>
@@ -1291,7 +1291,7 @@
 <link rel="stylesheet" href="./auto-ruby-ui.css?v=1">
 <script src="./auto-ruby-ui.js?v=2" defer></script>
 <script src="../ahako-file-save.js?v=20261015-v20"></script>
-<script src="./script.js?v=20261020-ogp-link-card-v1"></script>
+<script src="./script.js?v=20261020-ogp-link-card-v4"></script>
 <script src="./cage.js?v=25"></script>
 <script src="./easy-illustration.js?v=11"></script>
 

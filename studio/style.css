@@ -6267,7 +6267,8 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
   border-radius:18px!important;
   background:#fff!important;
 }
-.scene-inspector>.adv-field>span{
+.scene-inspector>.adv-field>span,
+.scene-inspector>.adv-field>.scene-body-field-heading>label{
   color:#353431!important;
   font-size:12px!important;
 }
@@ -14374,3 +14375,9 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .ogp-card-preview-copy{display:flex;min-width:0;flex-direction:column;justify-content:center;gap:6px;padding:12px 14px}.ogp-card-preview-copy strong{font:750 14px/1.4 system-ui;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.ogp-card-preview-copy p{margin:0;color:var(--muted);font:12px/1.45 system-ui;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.ogp-card-preview-copy small{font:11px system-ui;color:#52606d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ogp-card-preview>img{display:block;width:100%;height:100%;min-height:106px;max-height:148px;object-fit:cover;background:#ecece8}.ogp-card-dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
 @media(max-width:520px){.ogp-card-dialog-card{padding:15px}.ogp-card-preview{grid-template-columns:minmax(0,1fr) 34%;min-height:90px}.ogp-card-preview>img{min-height:90px;max-height:110px}.easy-ogp-card-row{grid-template-columns:42px minmax(0,1fr) auto auto}.easy-ogp-card-row img{width:42px;height:38px}.easy-ogp-card-row button{padding:0 7px}}
+
+.body-field-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.body-field-heading .field-label{margin:0}.body-field-heading .ogp-insert-button{flex:0 0 auto;padding:7px 10px;border:1px solid #d9dce3;border-radius:10px;background:#fff;white-space:nowrap}
+.desktop-ogp-card-action{align-self:flex-start;min-width:150px;margin:2px 0 4px}
+.scene-body-field-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+.scene-body-field-heading>label{font-size:10px;font-weight:800;color:#777;letter-spacing:.04em}
+.scene-body-field-heading .ogp-insert-button{flex:0 0 auto;padding:7px 10px;border:1px solid #d9dce3;border-radius:10px;background:#fff;white-space:nowrap}
