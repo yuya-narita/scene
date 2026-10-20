@@ -715,6 +715,17 @@ function newOwnedSeriesId(){
 }
 function seriesBookIds(series,shelf){return shelf==='owned'?(series?.copyIds||[]):(series?.episodes||[]).map(item=>item.workId);}
 function shelfIdOf(w){if(w?.role==='distribution')return String(w.copyId||'');if(w?.role==='studio-draft')return `draft:${String(w.draftId||w.id||'')}`;return String(w?.workId||'');}
+function normalizeAuthorWorkCoverUrl(value){
+  const raw=String(value||'').trim();
+  if(!raw)return '';
+  if(/^https?:\/\//i.test(raw))return raw;
+  if(/^blob:|^data:/i.test(raw))return '';
+  try{
+    if(raw.startsWith('/'))return new URL(raw,API_BASE).href;
+    if(raw.startsWith('assets/'))return `${API_BASE}/asset/${encodeURIComponent(raw.slice('assets/'.length))}`;
+    return `${API_BASE}/asset/${encodeURIComponent(raw.replace(/^\.\//,''))}`;
+  }catch(_){return '';}
+}
 function serverPublishedWorkView(work){
   const workId=String(work?.workId||'').trim();
   if(!workId)return null;
@@ -727,7 +738,7 @@ function serverPublishedWorkView(work){
     seriesId:String(work?.seriesId||''),seriesTitle:String(work?.seriesTitle||work?.series||''),
     episode:String(work?.episode||work?.episodeLabel||''),episodeNumber:Number(work?.position||work?.episodeNumber||0)||0,
     episodeTitle:String(work?.episodeTitle||''),sceneCount:Number(work?.sceneCount||work?.scenes||0)||0,
-    updatedAt:String(work?.updatedAt||work?.publishedAt||work?.createdAt||''),coverUrl:String(work?.coverUrl||''),
+    updatedAt:String(work?.updatedAt||work?.publishedAt||work?.createdAt||''),coverUrl:normalizeAuthorWorkCoverUrl(work?.coverUrl),
     coverPresentation:work?.coverPresentation||{fontFamily:'',styles:{},visibility:{}}
   };
 }
