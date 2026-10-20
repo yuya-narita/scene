@@ -13784,7 +13784,7 @@ function openDesktopTextDetail(){
     sceneTypeControl.append(sceneTypeLabel,sceneTypeOptions);
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder=u('本文を入力','Enter text');
     bindRememberedDesktopBodyHeight(ta);
-    const cardButton=makeActionButton(u('＋ URLカード','＋ URL card'));cardButton.classList.add('desktop-ogp-card-action');cardButton.title=u('カーソル位置にURLカードを追加します','Add a URL card at the cursor');
+    const cardButton=document.createElement('button');cardButton.type='button';cardButton.className='live-edit-action desktop-ogp-card-action';cardButton.textContent=u('＋ URLカード','＋ URL card');cardButton.title=u('カーソル位置にURLカードを追加します','Add a URL card at the cursor');
     cardButton.addEventListener('click',()=>{
       const a=ta.selectionStart||0,b=ta.selectionEnd||a,selectedUrl=b>a?pastedWebUrl(ta.value.slice(a,b)):'';
       const start=selectedUrl?a:b,end=selectedUrl?b:b;
