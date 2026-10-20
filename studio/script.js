@@ -338,22 +338,34 @@
       if(el.nodeType!==Node.ELEMENT_NODE)return;
       const tag=el.tagName.toLowerCase();
       const role=(el.getAttribute?.('role')||'').toLowerCase();
-      const headingHint=[el.getAttribute?.('data-contents-type'),el.getAttribute?.('data-type'),el.getAttribute?.('aria-level'),el.getAttribute?.('class')].filter(Boolean).join(' ').toLowerCase();
-      const embedHint=[el.getAttribute?.('data-contents-type'),el.getAttribute?.('data-type'),el.getAttribute?.('class')].filter(Boolean).join(' ').toLowerCase();
-      const headingLevel=/^h[1-6]$/.test(tag)?Number(tag[1]):(/heading|title/.test(headingHint)||role==='heading'?Math.max(1,Math.min(6,Number(el.getAttribute?.('aria-level'))||2)):0);
+      const semanticHint=['data-contents-type','data-type','data-block-type','data-node-type','aria-level','class','role'].map(name=>el.getAttribute?.(name)||'').join(' ').toLowerCase();
+      const headingHint=semanticHint,embedHint=semanticHint;
+      const styledHeading=()=>{
+        if(el.querySelector?.('h1,h2,h3,h4,h5,h6,p,blockquote,ul,ol,table'))return false;
+        return [el,...Array.from(el.querySelectorAll?.('[style],[role="heading"]')||[])].some(node=>{
+        const style=String(node.getAttribute?.('style')||''),size=style.match(/font-size\s*:\s*([\d.]+)(px|rem|em)/i);
+        const px=size?Number(size[1])*(size[2]==='rem'||size[2]==='em'?16:1):0;
+        return (node.getAttribute?.('role')||'').toLowerCase()==='heading'||px>=21||(/font-weight\s*:\s*(?:bold|[7-9]00)/i.test(style)&&el.children.length===0);
+        });
+      };
+      const levelAttr=Number(el.getAttribute?.('aria-level')||el.getAttribute?.('data-level')||0);
+      const headingLevel=/^h[1-6]$/.test(tag)?Number(tag[1]):(/heading|title/.test(headingHint)||role==='heading'||styledHeading()?Math.max(1,Math.min(6,levelAttr||2)):0);
       const standaloneAnchor=()=>{
         if(!['p','div','section','article','blockquote','figure'].includes(tag))return null;
         const links=Array.from(el.querySelectorAll('a[href]'));
-        if(links.length!==1)return null;
-        const link=links[0],outside=el.cloneNode(true);outside.querySelectorAll('a').forEach(a=>a.remove());
-        if(String(outside.textContent||'').trim()&&!/(?:embed|link.?card|url.?card)/i.test(embedHint))return null;
-        const url=safeWebUrl(link.getAttribute('href')||'');if(!url)return null;
-        return url;
+        const cardLike=/(?:embed|link.?card|url.?card|ogp|external.?link)/i.test(embedHint)||!!el.querySelector('img,iframe,[data-embed-url],[data-url]');
+        if(!links.length||links.length>1&&!cardLike)return null;
+        const link=links.find(a=>safeWebUrl(a.getAttribute('href')||''))||links[0],outside=el.cloneNode(true);outside.querySelectorAll('a').forEach(a=>a.remove());
+        if(!cardLike&&link.querySelector('img,iframe'))return null;
+        if(String(outside.textContent||'').trim()&&!cardLike)return null;
+        const url=safeWebUrl(link.getAttribute('href')||el.getAttribute('data-embed-url')||el.getAttribute('data-url')||'');if(!url)return null;
+        return {url,title:String(link.querySelector('img')?.getAttribute('alt')||link.getAttribute('aria-label')||link.textContent||'').replace(/\s+/g,' ').trim(),image:link.querySelector('img')?.getAttribute('src')||el.querySelector('img')?.getAttribute('src')||''};
       };
-      const emitLinkCard=(url)=>{
+      const emitLinkCard=(candidate)=>{
+        const item=typeof candidate==='string'?{url:candidate}:candidate;
         blockBreak();const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
         const label=`［URLカード ${id.slice(-4)}］`,start=length();push(label);const end=length();
-        cards.push({id,url,title:'',description:'',image:'',siteName:'',start,end,label});
+        cards.push({id,url:item.url,title:item.title||'',description:'',image:item.image||'',siteName:'',start,end,label});
         marks.push({start,end,kind:'linkCard',cardId:id});blockBreak();
       };
       if(tag==='table'||role==='table'||role==='grid'){
@@ -373,7 +385,7 @@
       if(headingLevel){
         blockBreak();const start=length();inline(el);const end=length();marks.push({start,end,kind:'heading',level:headingLevel});blockBreak();return;
       }
-      const embedUrl=/(?:embed|link.?card|url.?card)/i.test(embedHint)?standaloneAnchor():null;
+      const embedUrl=/(?:embed|link.?card|url.?card|ogp|external.?link)/i.test(embedHint)?standaloneAnchor():null;
       if(embedUrl){emitLinkCard(embedUrl);return;}
       if(tag==='figure'){
         const cardUrl=standaloneAnchor();if(cardUrl){emitLinkCard(cardUrl);return;}
@@ -8023,9 +8035,8 @@ return flowCommentCard;}
     // Some clipboard producers expose list items as <li> or ARIA role=list/listitem
     // without a literal <ul>/<ol> wrapper. V0.2 parsed every HTML clipboard, while
     // later versions added this fast gate and accidentally skipped those lists.
-    const htmlHasRich=/<(h[1-6]|strong|b|blockquote|ul|ol|li|table|a)\b/i.test(html)
-      || /(?:data-contents-type|aria-level|role)=["'](?:[^"']*heading|[^"']*(?:table|grid|list|listitem))["']/i.test(html);
-    if(!plainHasTable&&!plainHasRich&&!htmlHasRich)return;
+    const htmlHasRich=!!html;
+    if(!htmlHasRich&&!plainHasTable&&!plainHasRich)return;
     // Rich Paste v0.3: prefer the structured HTML whenever it carries semantics.
     // V0.2 preferred plain text as soon as it *looked* table-like; that threw away
     // HTML-only bold/list/quote information from ChatGPT and similar editors.
