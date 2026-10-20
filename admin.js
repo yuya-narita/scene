@@ -654,7 +654,7 @@ async function loadAuthors(){
     const data=await api('/admin/authors');
     const rows=data.authors||[];
     if(els.authorCount)els.authorCount.textContent=`${rows.length.toLocaleString('ja-JP')}人`;
-    els.authorList.innerHTML=rows.length?rows.map(author=>{const active=author.accountStatus!=='suspended';return `<article class="contact-card${active?'':' is-resolved'}" data-author-id="${escapeHtml(author.authorId||'')}"><div class="meta"><span>作者名</span><strong>${escapeHtml(author.displayName||'未設定')}</strong><span>メール</span><a class="inline-link" href="mailto:${escapeHtml(author.email||'')}">${escapeHtml(author.email||'')}</a><span>authorId</span><code>${escapeHtml(author.authorId||'')}</code><span>状態</span><strong>${active?'利用中':'停止中'}</strong><span>登録</span><span>${escapeHtml(formatJstDate(author.createdAt))}</span></div><div class="actions"><button type="button" data-author-action="${active?'suspend':'activate'}" class="${active?'stop':''}">${active?'利用を停止':'利用を再開'}</button><button type="button" data-author-sale-check="${escapeHtml(author.authorId||'')}">販売準備を確認</button><button type="button" data-author-shadow-check="${escapeHtml(author.authorId||'')}">リスク監視</button><button type="button" data-author-fund-ledger="${escapeHtml(author.authorId||'')}">原資台帳</button></div></article>`;}).join(''):'<div class="empty">作者アカウントはまだありません。</div>';
+    els.authorList.innerHTML=rows.length?rows.map(author=>{const active=author.accountStatus!=='suspended';return `<article class="contact-card${active?'':' is-resolved'}" data-author-id="${escapeHtml(author.authorId||'')}"><div class="meta"><span>作者名</span><strong>${escapeHtml(author.displayName||'未設定')}</strong><span>メール</span><a class="inline-link" href="mailto:${escapeHtml(author.email||'')}">${escapeHtml(author.email||'')}</a><span>authorId</span><code>${escapeHtml(author.authorId||'')}</code><span>状態</span><strong>${active?'利用中':'停止中'}</strong><span>登録</span><span>${escapeHtml(formatJstDate(author.createdAt))}</span></div><div class="actions"><button type="button" data-author-action="${active?'suspend':'activate'}" class="${active?'stop':''}">${active?'利用を停止':'利用を再開'}</button><button type="button" data-author-sale-check="${escapeHtml(author.authorId||'')}">販売準備を確認</button><button type="button" data-author-shadow-check="${escapeHtml(author.authorId||'')}">リスク監視</button><button type="button" data-author-fund-ledger="${escapeHtml(author.authorId||'')}">原資台帳</button><button type="button" data-author-allocation="${escapeHtml(author.authorId||'')}">残額割当</button></div></article>`;}).join(''):'<div class="empty">作者アカウントはまだありません。</div>';
   }catch(error){
     if(els.authorCount)els.authorCount.textContent='–';
     els.authorList.innerHTML=`<div class="empty">作者を読み込めませんでした: ${escapeHtml(error.message)}</div>`;
@@ -1182,5 +1182,51 @@ function installFundLedgerPanel(){
   openFundLedgerCheck=(kind,id)=>{if(busy)return;panel.open=true;(kind==='account'?author:order).value=id;panel.scrollIntoView({behavior:'smooth',block:'start'});run(kind);};
 }
 installFundLedgerPanel();
+
+let openFundAllocation=null;
+els.authorList?.addEventListener('click',event=>{const button=event.target.closest('[data-author-allocation]');if(button&&openFundAllocation){setAdminTab('audit');openFundAllocation(button.dataset.authorAllocation);}});
+function installFundAllocationPanel(){
+  if(!els.auditOrdersList)return;
+  const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
+  panel.innerHTML='<summary>原資別の残額割当（FIFO・照合専用）</summary><p>全入出金履歴を取得し、確認できたカード原資から古い順に使ったものとして記帳します。実際の出金・返金・保留変更は行いません。途中の取得結果を確定した残額として表示しません。</p><label>作者ID <input data-allocation-author placeholder="author_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><p><button type="button" data-allocation-start>全履歴を取得して残額を割当</button> <button type="button" data-allocation-resume>途中の取得を再開</button> <button type="button" data-allocation-stop disabled>区切りで停止</button> <button type="button" data-allocation-history>割当履歴を見る</button></p><div data-allocation-status aria-live="polite"></div><div data-allocation-result></div><div data-allocation-history-result></div>';
+  els.auditOrdersList.parentNode.appendChild(panel);
+  const input=panel.querySelector('[data-allocation-author]'),start=panel.querySelector('[data-allocation-start]'),resume=panel.querySelector('[data-allocation-resume]'),stop=panel.querySelector('[data-allocation-stop]'),history=panel.querySelector('[data-allocation-history]'),status=panel.querySelector('[data-allocation-status]'),result=panel.querySelector('[data-allocation-result]'),historyResult=panel.querySelector('[data-allocation-history-result]');
+  let busy=false,stopRequested=false,active=null;
+  const labels={transactions:'全入出金履歴を取得中',origins:'カード原資を照合中',returns:'銀行出金の戻りを照合中',finalize:'残高の再照会・割当を計算中',complete:'取得・割当の観測を保存',limited:'取得上限に到達・割当は未完了'};
+  const reasons={UNATTRIBUTED_CREDIT:'出所未確認の入金あり',UNEXPLAINED_DEBIT:'使途を分類できない支出あり',RETURN_PARENT_UNVERIFIED:'戻り入金の元の支出が未確認',RETURN_EXCESS_OR_UNVERIFIED:'元の支出へ割り当てられない戻り入金あり',ROOT_RECOVERY_SHORTFALL:'対象原資だけでは返金・取消を賄えない記録あり',OUTFLOW_WITHOUT_ELIGIBLE_LOTS:'利用可能な原資を説明できない支出あり',HISTORY_OR_BALANCE_INCOMPLETE:'取得範囲・照合に未確認事項あり',BALANCE_DIFFERENCE:'Stripe残高と入出金に差額あり',NON_PAYMENT_BALANCE_PRESENT:'通常の決済残高以外の入出金が含まれるため追加確認が必要'};
+  const money=v=>Number.isSafeInteger(v)?'¥'+v.toLocaleString('ja-JP'):'未算定';
+  function authorId(){const id=input.value.trim().toLowerCase();if(!/^author_[a-f0-9]{32}$/.test(id))throw new Error('作者IDを確認してください。');return id;}
+  function lock(value){busy=value;input.disabled=value;start.disabled=value;resume.disabled=value;history.disabled=value;stop.disabled=!value;}
+  function validate(job,id,environment){if(!job||job.authorId!==id||job.environment!==environment||job.mode!=='observation'||job.enforcementApplied!==false||job.payoutableJPY!==null||job.spendableJPY!==null)throw new Error('割当結果の対応を確認できません。');return job;}
+  function show(job){
+    const p=job.projection;
+    result.innerHTML='<div class="audit-order-card" style="display:block;overflow-wrap:anywhere"><strong>'+escapeHtml(labels[job.stage]||'状態未確認')+'</strong><p>'+(job.environment==='live'?'本番LIVE':'Sandbox TEST')+' / '+escapeHtml(formatJstDate(job.updatedAt))+'<br>'+escapeHtml(job.jobId)+'</p><p>取得した入出金 '+job.transactionCount+'件 / 原資確認 '+job.originProgress+'／'+job.originCandidates+'件 / 出金の戻り '+job.returnProgress+'／'+job.returnCandidates+'件</p>'+(p?'<p><strong>'+(p.calculationComplete?'今回の全履歴に基づくFIFO帳簿計算を完了':'割当は未完了・帳簿案だけを表示')+'</strong><br>確認したカード原資 '+p.roots.length+'件<br>出所不明の入金累計 '+money(p.unattributedCreditsTotalJPY)+' / 出所不明の帳簿残額 '+money(p.unattributedRemainingJPY)+'<br>使途不明の支出 '+money(p.unexplainedDebitsJPY)+' / 原資不足の未説明額 '+money(p.uncoveredJPY)+'<br>Stripe利用可能との差額 '+money(p.balanceDifference?.availableJPY)+' / 入金待ちとの差額 '+money(p.balanceDifference?.pendingJPY)+'</p><ul>'+p.reasonCodes.map(x=>'<li>'+escapeHtml(reasons[x]||x)+'</li>').join('')+'</ul>'+p.roots.map(x=>'<details><summary>原資 '+escapeHtml(x.chargeId)+'：FIFO残額 '+money(x.remainingUnspentJPY)+'</summary><p>Order '+escapeHtml(x.orderId)+'<br>元の作者配分 '+money(x.originalAuthorShareJPY)+' / 帳簿案 '+money(x.bookRemainingJPY)+'<br>元Charge作成日時 '+escapeHtml(formatJstDate(x.chargeCreatedAt))+'</p><p>原資確認時の保留・確認理由：'+escapeHtml(x.holdReasons.map(h=>h.code).join(', ')||'記録なし')+'</p></details>').join('')+'<details><summary>支出への割当の根拠</summary>'+p.movements.filter(x=>x.kind==='fifo_outflow'||x.kind==='root_reversal'||x.kind==='outflow_return').map(x=>'<p>'+escapeHtml(x.transactionId)+' / '+escapeHtml({fifo_outflow:'古い利用可能原資から支出',root_reversal:'対象原資への送金取消',outflow_return:'元の支出へ戻す入金'}[x.kind])+' / '+money(x.netJPY)+(x.parentTransactionId?'<br>元取引 '+escapeHtml(x.parentTransactionId):'')+(x.slices?x.slices.map(s=>'<br>'+escapeHtml(s.chargeId||'出所不明の原資')+'：'+money(s.amountJPY)).join(''):'')+'</p>').join('')+'</details>':'<p>まだ全履歴の取得・照合が終わっていないため残額は表示しません。</p>')+(job.errors.length?'<p>未確認事項：'+escapeHtml(job.errors.map(x=>x.source+': '+x.code).join(', '))+'。権限・状態を確認した後、新しく全履歴を取得してください。</p>':'')+'<p>FIFOは帳簿上の割当です。Stripe内の実際の資金を個別に識別する保証ではありません。取得した履歴に基づく観測であり、同一時点の残高を保証するものではありません。検出した変動や未確認事項がある場合は確定額にしません。銀行出金の戻りでも元の原資の日付を引き継ぎます。</p><p>出金可能額・残高購入の許可額・出金期限は未確定です。この計算から資金を動かすことはありません。</p></div>';
+  }
+  async function getHistory(id){const data=await apiWithTimeout('/admin/commerce/fund-allocation?authorId='+encodeURIComponent(id),{},30000);if(!['live','test'].includes(data.environment)||!Array.isArray(data.jobs))throw new Error('Workerの割当機能を確認してください。');historyResult.innerHTML='<p><strong>最近5件の割当履歴（現在状態の再照会ではありません）</strong></p>'+data.jobs.map(x=>'<p>'+escapeHtml(formatJstDate(x.updatedAt))+' / '+escapeHtml(labels[x.stage]||x.stage)+'<br>'+escapeHtml(x.jobId)+'</p>').join('');return data;}
+  async function run(fresh){
+    if(busy)return;let id;try{id=authorId();}catch(e){status.textContent=e.message;return;}
+    lock(true);stopRequested=false;result.textContent='';status.textContent='取得する環境と履歴を確認中…';
+    try{
+      const data=await getHistory(id),environment=data.environment;
+      if(fresh){active=validate((await apiWithTimeout('/admin/commerce/fund-allocation',{method:'POST',body:JSON.stringify({action:'start',authorId:id,expectedEnvironment:environment})},45000)).job,id,environment);}
+      else{
+        const target=active?.authorId===id&&active.environment===environment?data.jobs.find(x=>x.jobId===active.jobId):data.jobs.find(x=>!['complete','limited'].includes(x.stage));
+        if(!target)throw new Error('再開できる取得はありません。新しく取得してください。');active=validate(target,id,environment);
+      }
+      show(active);
+      for(let step=0;step<20&&!['complete','limited'].includes(active.stage)&&!stopRequested;step++){
+        status.textContent=(labels[active.stage]||'確認中')+'… 入出金 '+active.transactionCount+'件';
+        active=validate((await apiWithTimeout('/admin/commerce/fund-allocation',{method:'POST',body:JSON.stringify({action:'step',authorId:id,jobId:active.jobId,expectedRevisionId:active.revisionId,expectedEnvironment:environment})},45000)).job,id,environment);show(active);
+      }
+      status.textContent=active.stage==='complete'?'全履歴の取得と割当の観測を保存しました。残額・差額・未確認事項を確認してください。':active.stage==='limited'?'取得上限に到達しました。全体の割当は未完了です。':'区切りで停止しました。「途中の取得を再開」で続けられます。';
+    }catch(e){status.textContent='割当の確認は未完了です：'+e.message+'。通信断・同時更新の場合は保存済み履歴を取得して再開してください。';}
+    finally{lock(false);}
+  }
+  start.onclick=()=>run(true);resume.onclick=()=>run(false);stop.onclick=()=>{stopRequested=true;stop.disabled=true;status.textContent='実行中の確認が終わった区切りで停止します…';};
+  history.onclick=async()=>{if(busy)return;try{const id=authorId();lock(true);const data=await getHistory(id);if(data.jobs[0]){active=validate(data.jobs[0],id,data.environment);show(active);}status.textContent='保存済み履歴を取得しました。Stripeの現在状態は再照会していません。';}catch(e){status.textContent='履歴を確認できません：'+e.message;}finally{lock(false);}};
+  input.addEventListener('input',()=>{active=null;result.textContent='';historyResult.textContent='';status.textContent='';});
+  openFundAllocation=id=>{if(busy)return;panel.open=true;input.value=id;active=null;panel.scrollIntoView({behavior:'smooth',block:'start'});run(true);};
+}
+installFundAllocationPanel();
 
 })();
