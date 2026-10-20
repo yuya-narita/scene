@@ -64,6 +64,7 @@ function renderPaymentAudit(audit){
     recoveryHtml=`<div class="audit-recovery is-blocked"><strong>RECOVERY_REQUIRED</strong><span>金銭系または原因不明の不一致です。自動で返金・送金・reversalは行いません。</span></div>`;
   }
   els.auditOrderResult.innerHTML=`<div class="audit-verdict ${ok?'is-ok':'is-mismatch'}"><small>${ok?'AUDIT OK':'MISMATCH'}</small><strong>${ok?'✓ 一致しています':'⚠ 不一致を検出'}</strong><span>${escapeHtml(audit.orderId||'')}</span></div><div class="audit-summary"><div><small>注文額</small><strong>${yen(audit.amount)}</strong></div><div><small>作者</small><strong>${yen(audit.expectedSellerAmount)}</strong></div><div><small>あ箱</small><strong>${yen(audit.expectedPlatformFee)}</strong></div><div><small>決済経路</small><strong>${escapeHtml(audit.paymentRail||'–')}</strong></div><div><small>Order状態</small><strong>${escapeHtml(audit.orderStatus||'–')}</strong></div><div><small>不一致</small><strong>${mismatches.length}</strong></div></div>${sandboxTestHtml}${recoveryHtml}${errorHtml}<div class="audit-checks">${rows||'<div class="empty">照合項目がありません。</div>'}</div><small class="audit-time">監査日時 ${escapeHtml(formatJstDate(audit.checkedAt))}</small>`;
+  const responseButton=document.createElement('button');responseButton.type='button';responseButton.textContent='この注文の対応確認';responseButton.onclick=()=>openOrderResponseCheck?.(audit.orderId);els.auditOrderResult.appendChild(responseButton);
   els.auditOrderResult.querySelectorAll('[data-recover-entitlement]').forEach(button=>button.addEventListener('click',()=>recoverEntitlement(button.dataset.recoverEntitlement,button)));
   els.auditOrderResult.querySelectorAll('[data-test-missing-entitlement]').forEach(button=>button.addEventListener('click',()=>injectMissingEntitlement(button.dataset.testMissingEntitlement,button)));
   els.auditOrderResult.querySelectorAll('[data-test-full-refund]').forEach(button=>button.addEventListener('click',()=>testFullCardRefund(button.dataset.testFullRefund,button)));
@@ -939,20 +940,79 @@ function installSellerReadinessPanel(){
 }
 installSellerReadinessPanel();
 
+function disputeResponsePresentation(dispute,now=Date.now()){
+  const status=String(dispute?.status||'unknown');
+  const labels={needs_response:'異議申立て・証拠提出待ち',under_review:'異議申立て・審査中',won:'勝訴',lost:'敗訴',warning_needs_response:'事前照会・回答待ち',warning_under_review:'事前照会・審査中',warning_closed:'事前照会終了',prevented:'未然防止'};
+  const responseNeeded=['needs_response','warning_needs_response'].includes(status);
+  let next=responseNeeded?'Stripeで提出期限と理由を確認し、購入時の販売条件・提供記録・連絡記録を準備してください。':
+    ['under_review','warning_under_review'].includes(status)?'Stripeで審査状況を確認してください。通常返金を重ねず、結果通知を待ちます。':
+    status==='won'?'Webhookと内部保留の解除を確認してください。他の異議申立てやadminの販売停止は別に確認します。':
+    status==='lost'?'追加返金をせず、作者配分の回収状況をStripeで確認してください。現在の実装では内部保留を維持します。':
+    ['warning_closed','prevented'].includes(status)?'Stripeの確定状態と内部保留の解除を確認してください。':
+    '状態を判定できません。Stripeで確認し、資金操作を進めないでください。';
+  const due=Date.parse(dispute?.evidenceDueAt||'');
+  const deadline=responseNeeded?(Number.isFinite(due)?(due<=now?'提出期限を過ぎている可能性があります。Stripeで確認してください。':'提出期限：'+formatJstDate(dispute.evidenceDueAt)):'提出期限が未取得です。Stripeで確認してください。'):'';
+  return {label:labels[status]||'状態未確認',next,deadline};
+}
+function responseStripeLink(environment,kind,id){
+  if(!['live','test'].includes(environment))return '';
+  if(kind==='disputes'?!/^du_[A-Za-z0-9_]+$/.test(id||''):!/^((pi|ch|py)_[A-Za-z0-9_]+)$/.test(id||''))return '';
+  return `https://dashboard.stripe.com/${environment==='test'?'test/':''}${kind}/${encodeURIComponent(id)}`;
+}
+function renderDisputeResponseNote(dispute,environment){
+  const p=disputeResponsePresentation(dispute),url=responseStripeLink(environment,'disputes',dispute.disputeId||dispute.id);
+  return `<div><p><strong>${escapeHtml(p.label)}</strong>${p.deadline?'<br>'+escapeHtml(p.deadline):''}</p><p>${escapeHtml(p.next)}</p>${url?`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Stripeで異議申立てを確認（${environment==='live'?'本番LIVE':'TEST'}）</a>`:''}</div>`;
+}
+let openOrderResponseCheck=null;
+function installOrderResponsePanel(){
+  if(!els.auditOrdersList)return;
+  const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
+  panel.innerHTML='<summary>返金・異議申立て対応（読取専用）</summary><p>注文のStripe返金・異議申立てと、あ箱の購入権を確認します。この確認では資金・注文・購入権を変更しません。</p><label>Order ID <input data-response-id placeholder="order_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><button type="button" data-response-run>対応確認を取得</button><div data-response-result aria-live="polite"></div><details><summary>運営の対応手順</summary><ol><li>支払済みなのにMY COPYがない場合は個別監査を行い、「MY COPYを再発行」が案内された時に権利だけを修復します。</li><li>通常返金は、Stripeの既存返金・異議申立て・作者配分の回収状況を先に確認します。現在の操作は全額返金用です。部分返金は別途確認します。</li><li>異議申立てはStripeで対応します。通常返金を重ねず、提出期限と証拠を確認してください。提出後は内容を修正できないため、提出前に確認します。</li><li>作者が出金済み、残高不足、送金取消失敗の場合は回収済みと判断しません。独立した返金や送金を追加せず、Stripeの実績を照合します。</li><li>復旧・返金の反映後は個別監査、Webhook処理状況、日次照合を確認します。履歴は残します。</li></ol><p>売上残高購入では、作者への送金取消を確認してから購入者のDebitを返金します。Debitだけ成功した事故の復旧とは分けて扱います。本番の売上残高購入は現在停止中です。</p><p>販売停止・内部保留・manual設定は、銀行出金を完全停止した証明にはなりません。銀行出金済額・回収可能額は未算定です。</p><p><a href="https://docs.stripe.com/disputes/responding" target="_blank" rel="noopener noreferrer">Stripe：異議申立て対応</a> ／ <a href="https://docs.stripe.com/connect/destination-charges" target="_blank" rel="noopener noreferrer">Stripe：返金と送金取消</a></p></details>';
+  els.auditOrdersList.parentNode.appendChild(panel);
+  const input=panel.querySelector('[data-response-id]'),button=panel.querySelector('[data-response-run]'),result=panel.querySelector('[data-response-result]');
+  let busy=false;
+  async function run(){
+    if(busy)return;
+    const orderId=input.value.trim().toLowerCase();result.textContent='';
+    if(!/^order_[a-f0-9]{32}$/.test(orderId)){result.textContent='Order IDを確認してください。';return;}
+    busy=true;input.disabled=true;button.disabled=true;button.textContent='確認中…';result.textContent='Stripeの現在状態とあ箱の記録を確認しています…';
+    try{
+      const data=await apiWithTimeout(`/admin/commerce/order/${encodeURIComponent(orderId)}/response-check`,{},30000),r=data.responseCheck;
+      if(!r||r.orderId!==orderId||r.readOnly!==true)throw new Error('対応確認の結果を確認できません。Workerを更新してください。');
+      const states={payment_sync_review:['Stripe支払済み・購入確定の反映を確認','追加購入や返金を先に行わず、Webhookの処理状況と個別監査を確認してください。購入確定の反映を優先します。'],debit_recovery_complete:['購入不成立のDebit・復旧返金を確認','作者送金がない事故の復旧です。正常購入後の返金とは別に扱います。MY COPYを新たに発行せず、復旧履歴と日次照合を確認してください。'],unverified:['未確認・照会エラー','Stripeと取得エラーを確認してください。未確認のまま返金・送金取消・再発行を進めないでください。'],dispute_review:['異議申立ての確認を優先','通常返金を重ねず、下のStripe状態と提出期限を確認してください。勝訴・敗訴後も回収と保留反映の確認が必要です。'],refund_pending:['Stripeで返金処理中','返金を再度作成せず、Stripeの結果とWebhook反映を確認してください。'],refund_complete:['Stripe全額返金・あ箱の失効反映を確認','追加返金は不要です。日次照合も確認してください。'],refund_sync_review:['Stripe全額返金済み・照合と権利反映を確認','再返金せず、Webhookの処理状況と個別監査を確認してください。'],partial_refund_review:['部分返金あり・個別確認','現在の全額返金・全失効の処理では判断できません。Stripeの返金累計と購入権の扱いを確認してください。'],refund_failure_review:['失敗・取消済みの返金記録あり','送金取消と返金の実績を先に確認してください。別の返金を新規作成せず、元の処理を調べます。'],entitlement_repair:['金銭照合済み・MY COPY権利だけの修復候補','個別監査を再取得し、「MY COPYを再発行」の案内から修復してください。返金を先に行う必要はありません。'],audit_review:['監査に不一致あり','個別監査で原因を確認してください。金銭系の自動修復は行いません。'],purchase_incomplete:['購入確定前の注文','Stripe未払いと断定する表示ではありません。下のCheckout照会と個別監査を確認してください。'],paid_review:['支払済み・対応内容を判断','通常の購入です。返金が必要な場合は、理由・既存返金・異議申立て・作者配分の回収を確認してから判断します。']};
+      const [title,next]=states[r.state]||states.unverified;
+      const money=v=>v===null||v===undefined||!Number.isFinite(Number(v))?'未確認':r.currency==='JPY'?'¥'+Number(v).toLocaleString('ja-JP'):`${escapeHtml(r.currency)} ${Number(v).toLocaleString('ja-JP')}（最小単位）`;
+      const status=v=>({active:'有効',refunded:'返金による失効',revoked_refund:'返金による失効',missing:'記録なし',not_issued:'未発行'}[v]||v||'未確認');
+      const stripe=r.stripe,refundLabels={pending:'処理中',requires_action:'追加対応待ち',succeeded:'成功',failed:'失敗',canceled:'取消済み'};
+      const paymentUrl=stripe?responseStripeLink(r.environment,'payments',stripe.paymentIntentId||stripe.chargeId):'';
+      result.innerHTML=`<div class="audit-order-card" style="display:block;overflow-wrap:anywhere"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(next)}</p><p>環境：${escapeHtml(r.environment)} / 確認日時 ${escapeHtml(formatJstDate(r.checkedAt))}<br>${escapeHtml(r.orderId)}</p><p>購入額 ${money(r.amount)} / 作者配分 ${money(r.revenue?.authorAmount)} / あ箱 ${money(r.revenue?.platformAmount)}<br>分配の基準：${r.revenue?.basis==='order_snapshot'?'購入時のOrder snapshot':r.revenue?.basis==='legacy_current_rule_fallback'?'旧注文の代替計算（snapshotなし）':'未確認'}</p><p>Stripe返金済額：${money(stripe?.amountRefunded)}<br>個別監査：${r.audit?.status==='ok'?'一致':r.audit?.status==='mismatch'?'不一致':'未確認'}<br>あ箱の注文状態：${escapeHtml(r.orderStatus)}</p><p>購入権：${escapeHtml(status(r.rights?.entitlementStatus))} / MY COPY：${escapeHtml(status(r.rights?.copyStatus))}<br>注文の異議申立て保留記録：${r.rights?.disputeAccessBlocked?'あり':'なし'}</p>${stripe?.refunds?.length?'<p><strong>Stripeの返金記録</strong></p>'+stripe.refunds.map(x=>`<p>${escapeHtml(refundLabels[x.status]||x.status)} ${money(x.amount)} / ${escapeHtml(x.id)}${x.failureReason?'<br>'+escapeHtml(x.failureReason):''}</p>`).join(''):stripe?.refunds?'<p>Stripeの返金記録：なし</p>':''}${stripe?.disputes?.map(x=>renderDisputeResponseNote(x,r.environment)).join('')||''}${r.checkout?`<p>Checkout照会：${escapeHtml(r.checkout.message||'未確認')}</p>`:''}${stripe?.transfer?`<p>Stripe送金額 ${money(stripe.transfer.amount)} / 取消累計 ${money(stripe.transfer.amountReversed)}<br>Stripe上の送金総額です。作者配分の回収済額・回収可能額とは区別します。</p>`:''}<p>作者のStripe利用可能残高 ${money(r.seller?.balance?.available)} / 入金待ち ${money(r.seller?.balance?.pending)}<br>この注文の作者配分の回収可能額・銀行出金済額：未算定。銀行出金停止の確認：未実施。</p><p>本番admin返金：${r.environment==='live'?(r.adminRefundEnabled?'有効':'無効'):'Sandbox'}。この確認から返金は実行しません。</p>${paymentUrl?`<a href="${escapeHtml(paymentUrl)}" target="_blank" rel="noopener noreferrer">Stripeで支払いを確認（${r.environment==='live'?'本番LIVE':'TEST'}）</a>`:''}${r.errors?.length?'<p>取得エラー：'+escapeHtml(r.errors.map(x=>x.source+': '+x.code).join(', '))+'</p>':''}</div>`;
+      const auditButton=document.createElement('button');auditButton.type='button';auditButton.textContent='個別監査を再取得';auditButton.onclick=()=>{els.auditOrderId.value=orderId;runPaymentAudit();};result.appendChild(auditButton);
+    }catch(error){result.textContent='対応確認できませんでした：'+error.message+'。結果は未確認です。';}
+    finally{busy=false;input.disabled=false;button.disabled=false;button.textContent='対応確認を取得';}
+  }
+  button.onclick=run;input.addEventListener('input',()=>{result.textContent='';});
+  openOrderResponseCheck=orderId=>{if(busy)return;panel.open=true;input.value=orderId;panel.scrollIntoView({behavior:'smooth',block:'start'});run();};
+}
+installOrderResponsePanel();
+
 function installDisputeRiskPanel(){
   if(!els.auditOrdersList)return;
   const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
-  panel.innerHTML='<summary>異議申立て・出金確認</summary><p>内部保留とStripeの銀行出金設定を分けて確認します。資金回収・返金・銀行出金は実行しません。Sandboxでは自動出金スケジュールをmanualへ変更できます。</p><button type="button" data-risk-refresh>異議申立てを更新</button><div data-risk-list></div><p>作者のConnected Account ID</p><input data-risk-account placeholder="acct_…" autocomplete="off" style="max-width:100%;width:320px"><button type="button" data-payout-check>出金設定を確認</button><div data-payout-result></div><hr><p><strong>登録済み作者の出金設定一覧</strong></p><p>現在の決済環境の登録を5件ずつ確認します。設定変更・出金は実行しません。</p><button type="button" data-payout-list-refresh>作者一覧を確認</button><div data-payout-list></div><button type="button" data-payout-list-more hidden>次の5件を確認</button>';
+  panel.innerHTML='<summary>異議申立て・出金確認</summary><p>内部保留とStripeの銀行出金設定を分けて確認します。資金回収・返金・銀行出金は実行しません。Sandboxでは自動出金スケジュールをmanualへ変更できます。</p><button type="button" data-risk-refresh>保存済み通知を更新</button><div data-risk-list></div><p>作者のConnected Account ID</p><input data-risk-account placeholder="acct_…" autocomplete="off" style="max-width:100%;width:320px"><button type="button" data-payout-check>出金設定を確認</button><div data-payout-result></div><hr><p><strong>登録済み作者の出金設定一覧</strong></p><p>現在の決済環境の登録を5件ずつ確認します。設定変更・出金は実行しません。</p><button type="button" data-payout-list-refresh>作者一覧を確認</button><div data-payout-list></div><button type="button" data-payout-list-more hidden>次の5件を確認</button>';
   els.auditOrdersList.parentNode.append(panel);
-  const list=panel.querySelector('[data-risk-list]');
+  const list=panel.querySelector('[data-risk-list]'),riskRefresh=panel.querySelector('[data-risk-refresh]');
+  let riskLoading=false;
   async function load(){
-    list.textContent='確認中…';
+    if(riskLoading)return;riskLoading=true;riskRefresh.disabled=true;riskRefresh.textContent='取得中…';
+    list.textContent='保存済みの通知記録を確認しています…';
     try{
       const data=await api('/admin/commerce/risk');const items=data.disputes||[];
       items.sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
-      list.innerHTML=`<p>内部保留 ${items.filter(x=>x.blocked).length}件 / 記録 ${items.length}件</p>`+items.map(x=>`<div class="audit-order-card" style="display:block"><strong>${escapeHtml(x.status)} · ${yen(x.amount)}</strong><p>理由 ${escapeHtml(x.reason)} / 注文 ${escapeHtml(x.orderId||'未照合')}</p><p>証拠提出期限 ${escapeHtml(x.evidenceDueAt?formatJstDate(x.evidenceDueAt):'未設定')}</p><p>${x.blocked?'購入権・作者の内部取引を保留':'この異議申立てによる内部保留は解除'} / Stripeの銀行出金停止：未実施</p><p>購入時の作者配分 ${x.sellerShareAtSale===null?'未確認':yen(x.sellerShareAtSale)} / 後続の残高購入候補 ${(x.possibleDownstreamPurchases||[]).length}件（資金の出所は未確定）</p>${(x.possibleDownstreamPurchases||[]).length?`<details><summary>後続取引候補</summary>${x.possibleDownstreamPurchases.map(t=>`<p>${escapeHtml(t.orderId)} · ${yen(t.amount)}<br>${escapeHtml(t.buyerAccountId)} → ${escapeHtml(t.sellerAccountId||'あ箱')}</p>`).join('')}</details>`:''}${x.accountId?`<button type="button" data-risk-select="${escapeHtml(x.accountId)}">この作者の出金設定を確認</button>`:''}</div>`).join('');
+      list.innerHTML=`<p>内部保留 ${items.filter(x=>x.blocked).length}件 / 保存済み通知 ${items.length}件 / 取得 ${escapeHtml(formatJstDate(new Date().toISOString()))}</p><p>Stripeの現在状態は「この注文の対応確認」またはStripeで確認してください。</p>`+items.map(x=>`<div class="audit-order-card" style="display:block"><strong>${escapeHtml(x.status)} · ${yen(x.amount)}</strong><p>理由 ${escapeHtml(x.reason)} / 注文 ${escapeHtml(x.orderId||'未照合')}</p><p>証拠提出期限 ${escapeHtml(x.evidenceDueAt?formatJstDate(x.evidenceDueAt):'未設定')}</p><p>${x.blocked?'購入権・作者の内部取引を保留':'この異議申立てによる内部保留は解除'} / Stripeの銀行出金停止：未実施</p><p>購入時の作者配分 ${x.sellerShareAtSale===null?'未確認':yen(x.sellerShareAtSale)} / 後続の残高購入候補 ${(x.possibleDownstreamPurchases||[]).length}件（資金の出所は未確定）</p>${(x.possibleDownstreamPurchases||[]).length?`<details><summary>後続取引候補</summary>${x.possibleDownstreamPurchases.map(t=>`<p>${escapeHtml(t.orderId)} · ${yen(t.amount)}<br>${escapeHtml(t.buyerAccountId)} → ${escapeHtml(t.sellerAccountId||'あ箱')}</p>`).join('')}</details>`:''}${renderDisputeResponseNote(x,data.environment)}${x.orderId?`<button type="button" data-response-order="${escapeHtml(x.orderId)}">この注文の対応確認</button>`:'<p>注文未照合：Stripeで支払いとの対応を確認してください。</p>'}${x.accountId?`<button type="button" data-risk-select="${escapeHtml(x.accountId)}">この作者の出金設定を確認</button>`:''}</div>`).join('');
+      list.querySelectorAll('[data-response-order]').forEach(button=>button.onclick=()=>openOrderResponseCheck?.(button.dataset.responseOrder));
       list.querySelectorAll('[data-risk-select]').forEach(button=>button.onclick=()=>{panel.querySelector('[data-risk-account]').value=button.dataset.riskSelect;checkPayout();});
     }catch(error){list.textContent=error.message;}
+    finally{riskLoading=false;riskRefresh.disabled=false;riskRefresh.textContent='保存済み通知を更新';}
   }
   async function checkPayout(){
     const accountId=panel.querySelector('[data-risk-account]').value.trim(),result=panel.querySelector('[data-payout-result]');
