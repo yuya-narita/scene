@@ -14382,6 +14382,15 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 
 .body-field-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.body-field-heading .field-label{margin:0}.body-field-heading .ogp-insert-button{flex:0 0 auto;padding:7px 10px;border:1px solid #d9dce3;border-radius:10px;background:#fff;white-space:nowrap}
 .desktop-ogp-card-action{align-self:flex-start;min-width:150px;margin:2px 0 4px}
+.desktop-ogp-card-manager{display:grid;gap:7px;margin-top:8px;padding-top:10px;border-top:1px solid #e2e3e5}
+.desktop-ogp-card-manager>strong{font:750 12px/1.4 system-ui;color:#555b63}
+.desktop-ogp-card-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px;min-width:0;padding:7px;border:1px solid #e0e1e4;border-radius:10px;background:#fff}
+.desktop-ogp-card-info{display:grid;min-width:0;gap:3px}
+.desktop-ogp-card-info span,.desktop-ogp-card-info small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.desktop-ogp-card-info span{font:700 12px/1.35 system-ui;color:#27292d}
+.desktop-ogp-card-info small{font:10px/1.35 system-ui;color:#737981}
+.desktop-ogp-card-row button{min-height:32px;padding:0 10px;border:1px solid #d8dce0;border-radius:8px;background:#fff;color:#4b5057;font:700 11px system-ui;cursor:pointer}
+.desktop-ogp-card-row button:last-child{color:#a63f37}
 .scene-body-field-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
 .scene-body-field-heading>label{font-size:10px;font-weight:800;color:#777;letter-spacing:.04em}
 .scene-body-field-heading .ogp-insert-button{flex:0 0 auto;padding:7px 10px;border:1px solid #d9dce3;border-radius:10px;background:#fff;white-space:nowrap}

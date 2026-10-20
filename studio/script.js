@@ -5520,6 +5520,40 @@ return flowCommentCard;}
     assignSceneRichText(scene,kept,exclusions);
     scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();
   }
+  function removeSceneOgpCard(scene,id){
+    if(!scene)return;
+    const ranges=Array.isArray(scene.richText?.ranges)?scene.richText.ranges:[];
+    const text=String(scene.text||'');
+    const mark=ranges.find(r=>r?.kind==='linkCard'&&String(r.cardId)===String(id));
+    const fallbackLabel=`［URLカード ${String(id).slice(-4)}］`,fallbackAt=text.indexOf(fallbackLabel);
+    const location=mark|| (fallbackAt>=0?{start:fallbackAt,end:fallbackAt+fallbackLabel.length}:null);
+    let cutStart=location?Math.max(0,Math.min(text.length,Number(location.start)||0)):-1;
+    let cutEnd=location?Math.max(cutStart,Math.min(text.length,Number(location.end)||cutStart)):-1;
+    if(cutStart>=0){
+      const left=text.slice(0,cutStart),right=text.slice(cutEnd);
+      if(left.endsWith('\n\n'))cutStart-=2;else if(left.endsWith('\n'))cutStart--;
+      if(right.startsWith('\n\n'))cutEnd+=2;else if(right.startsWith('\n'))cutEnd++;
+    }
+    const next=cutStart>=0?text.slice(0,cutStart)+text.slice(cutEnd):text;
+    const shift=cutStart>=0?cutEnd-cutStart:0;
+    const nextRanges=ranges.filter(r=>!(r?.kind==='linkCard'&&String(r.cardId)===String(id))).map(r=>{
+      const a=Number(r.start)||0,b=Number(r.end)||a;
+      if(cutStart<0||b<=cutStart)return {...r};
+      if(a>=cutEnd)return {...r,start:a-shift,end:b-shift};
+      return null;
+    }).filter(Boolean);
+    const exclusions=Array.isArray(scene.richText?.autoRubyExcluded)?scene.richText.autoRubyExcluded.map(r=>{
+      const a=Number(r.start)||0,b=Number(r.end)||a;
+      if(cutStart<0||b<=cutStart)return {...r};
+      if(a>=cutEnd)return {...r,start:a-shift,end:b-shift};
+      return null;
+    }).filter(Boolean):[];
+    captureUndo('URLカードの削除を元に戻せます');
+    scene.text=next;
+    scene.content=(Array.isArray(scene.content)?scene.content:[]).filter(c=>!(c?.type==='linkCard'&&String(c.id)===String(id)));
+    assignSceneRichText(scene,nextRanges,exclusions);
+    scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();
+  }
   function updateOgpCardPreview(){
     const url=safeWebUrl(ogpCardUrl?.value);let host='';try{host=new URL(url).hostname;}catch(_){}
     $('#ogpCardPreviewTitle').textContent=String(ogpCardTitle?.value||'').trim()||'タイトル';
@@ -13846,7 +13880,7 @@ function openDesktopTextDetail(){
         e.preventDefault();desktopAddSceneAndFocus();return;
       }
     });
-    bodyCard.append(sceneTypeControl,cardButton,ta);
+    bodyCard.append(sceneTypeControl,ta);
 
     // Rich Text Player v0.10: table cells are edited directly in Live Preview.
     // Keep the inline [表 n] anchor in the body textarea, but do not duplicate
@@ -13904,6 +13938,22 @@ function openDesktopTextDetail(){
       writingButton(u('前Sceneと結合','Merge with previous'),'',liveEditMergePrevious,index<=0,'',false)
     );
     bodyCard.appendChild(writingActions);
+    const sceneCards=(Array.isArray(scene.content)?scene.content:[]).filter(c=>c?.type==='linkCard');
+    if(sceneCards.length){
+      const cardManager=document.createElement('div');cardManager.className='desktop-ogp-card-manager';
+      const managerLabel=document.createElement('strong');managerLabel.textContent=u('このSceneのURLカード','URL cards in this Scene');cardManager.appendChild(managerLabel);
+      sceneCards.forEach(card=>{
+        const row=document.createElement('div');row.className='desktop-ogp-card-row';
+        const info=document.createElement('div');info.className='desktop-ogp-card-info';
+        const title=document.createElement('span');title.textContent=card.title||'URLカード';
+        const url=document.createElement('small');url.textContent=card.url||'';info.append(title,url);
+        const edit=document.createElement('button');edit.type='button';edit.textContent=u('編集','Edit');edit.addEventListener('click',()=>openOgpCardDialog({mode:'scene',card,scene}));
+        const remove=document.createElement('button');remove.type='button';remove.textContent=u('削除','Delete');remove.addEventListener('click',()=>removeSceneOgpCard(scene,card.id));
+        row.append(info,edit,remove);cardManager.appendChild(row);
+      });
+      bodyCard.appendChild(cardManager);
+    }
+    bodyCard.appendChild(cardButton);
 
     const three=document.createElement('div');three.className='desktop-live-three';
     const textCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');
