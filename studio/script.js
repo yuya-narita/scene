@@ -435,7 +435,11 @@
       Array.from(el.childNodes).forEach(n=>walkBlock(n));
     };
     Array.from(doc.body.childNodes).forEach(walkBlock);
-    let text=out.join('').replace(/\n{3,}/g,'\n\n').trim();
+    // Keep newlines unchanged here: ranges above use JavaScript string offsets.
+    // Collapsing repeated newlines only in `text` shifts later mark ranges while
+    // their start/end remain tied to the pre-collapsed string. This can detach
+    // heading marks from their first characters after rich clipboard paste.
+    let text=out.join('').trim();
     // Trim offsets by the same leading whitespace removed above.
     const raw=out.join(''); const lead=raw.length-raw.trimStart().length;
     const max=text.length;
