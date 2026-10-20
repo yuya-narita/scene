@@ -2900,7 +2900,13 @@
       const start=match.index,end=start+match[0].length;
       if(!operations.some(op=>start<op.end&&end>op.start))operations.push({start,end,replacement:''});
     }
-    if(!operations.length)return false;
+    // Remove leftover invisible anchors created by older drafts, except the one
+    // represented by each card range. This prevents duplicate cards and odd gaps.
+    for(const match of source.matchAll(/\u2060/g)){
+      const start=match.index,end=start+1;
+      if(!operations.some(op=>op.cardId&&start>=op.start&&end<=op.end))operations.push({start,end,replacement:''});
+    }
+    if(!operations.length&&!cardMarks.length)return false;
     operations.sort((a,b)=>a.start-b.start||a.end-b.end);
     const merged=[];
     operations.forEach(op=>{
@@ -2910,32 +2916,86 @@
         if(op.cardId){last.cardIds||=[];last.cardIds.push(op.cardId);last.replacement='\u2060';}
       }else merged.push({...op,cardIds:op.cardId?[op.cardId]:[]});
     });
-    let next='',cursor=0;
-    merged.forEach(op=>{next+=source.slice(cursor,op.start)+op.replacement;cursor=op.end;});
-    next+=source.slice(cursor);
-    const mapPosition=(position,bias='start')=>{
+    let raw='',cursor=0;
+    merged.forEach(op=>{raw+=source.slice(cursor,op.start)+op.replacement;cursor=op.end;});
+    raw+=source.slice(cursor);
+    const mapToRaw=(position,bias='start')=>{
       const pos=Math.max(0,Math.min(source.length,Number(position)||0));let removed=0;
       for(const op of merged){
         if(pos<op.start)break;
-        if(pos<=op.end){
-          const replacementLength=op.replacement.length;
-          return op.start-removed+(bias==='end'?replacementLength:0);
-        }
+        if(pos<=op.end)return op.start-removed+(bias==='end'?op.replacement.length:0);
         removed+=op.end-op.start-op.replacement.length;
       }
       return pos-removed;
     };
-    const cardAnchor=new Map();
-    cardMarks.forEach(mark=>cardAnchor.set(String(mark.cardId||''),mapPosition(mark.start)));
+    const rawAnchors=new Map();
+    cardMarks.forEach(mark=>rawAnchors.set(String(mark.cardId||''),mapToRaw(mark.start)));
+    cards.forEach(card=>{const id=String(card.id||'');if(!rawAnchors.has(id))rawAnchors.set(id,mapToRaw(card.start));});
+    // Cards are block elements. Canonicalize their text boundary to one blank
+    // line on each side when prose exists, regardless of how the URL was pasted.
+    const anchors=[...rawAnchors.entries()].map(([id,pos])=>({id,pos})).sort((a,b)=>a.pos-b.pos);
+    const pieces=[],segments=[],canonicalAnchors=new Map();let rawCursor=0,outputLength=0;
+    const appendSegment=(a,b,trimLeading,trimTrailing)=>{
+      let start=a,end=b;
+      if(trimLeading)while(start<end&&/[ \t\n]/.test(raw[start]))start++;
+      if(trimTrailing)while(end>start&&/[ \t\n]/.test(raw[end-1]))end--;
+      const content=raw.slice(start,end),targetStart=outputLength;
+      pieces.push(content);outputLength+=content.length;
+      segments.push({start:a,end:b,keptStart:start,keptEnd:end,targetStart});
+      return content.length>0;
+    };
+    anchors.forEach((anchor,index)=>{
+      const hasText=appendSegment(rawCursor,anchor.pos,true,true);
+      const hasPrevious=pieces.length>0&&pieces.some(piece=>piece.length>0);
+      if(hasText||(!hasText&&index>0&&hasPrevious)){pieces.push('\n\n');outputLength+=2;}
+      canonicalAnchors.set(anchor.id,outputLength);pieces.push('\u2060');outputLength++;rawCursor=anchor.pos+1;
+    });
+    let tailStart=rawCursor;while(tailStart<raw.length&&/[ \t\n]/.test(raw[tailStart]))tailStart++;
+    if(tailStart<raw.length){pieces.push('\n\n');outputLength+=2;appendSegment(rawCursor,raw.length,true,false);}
+    const next=pieces.join('');
+    const anchorsAreStable=cardMarks.length===cards.length&&cards.every(card=>{
+      const mark=cardMarks.find(item=>String(item.cardId||'')===String(card.id||''));
+      if(!mark)return false;
+      const a=Number(mark.start)||0,b=Number(mark.end)||0;
+      return b===a+1&&source.slice(a,b)==='\u2060'&&Number(card.start)===a&&Number(card.end)===b;
+    });
+    // Most keystrokes do not touch a card boundary. Keep the textarea value,
+    // selection and native undo stack untouched when nothing needs normalizing.
+    if(next===source&&anchorsAreStable){easyRichTextSnapshot=source;return false;}
+    const mapRawToCanonical=(position,bias='start')=>{
+      const pos=Math.max(0,Math.min(raw.length,Number(position)||0));
+      for(const segment of segments){
+        if(pos<segment.start)break;
+        if(pos<=segment.end){
+          if(pos<=segment.keptStart)return segment.targetStart;
+          if(pos>=segment.keptEnd)return segment.targetStart+(segment.keptEnd-segment.keptStart);
+          return segment.targetStart+(pos-segment.keptStart);
+        }
+      }
+      // Positions at/after a card anchor are shifted by the accumulated output delta.
+      let delta=0;
+      for(const anchor of anchors){
+        const target=canonicalAnchors.get(anchor.id);
+        const rawEnd=anchor.pos+1;
+        if(pos<anchor.pos)break;
+        if(pos<=rawEnd)return target+(pos===rawEnd?1:0);
+        delta=target+1-rawEnd;
+      }
+      return pos+delta;
+    };
+    const cardAnchor=new Map(anchors.map(anchor=>[anchor.id,canonicalAnchors.get(anchor.id)]));
+    const existingCardMarkIds=new Set(cardMarks.map(mark=>String(mark.cardId||'')));
     easyRichSource.marks=(easyRichSource.marks||[]).map(mark=>{
-      if(mark?.kind==='linkCard'&&cardIds.has(String(mark.cardId||''))){const at=cardAnchor.get(String(mark.cardId||''))??mapPosition(mark.start);return {...mark,start:at,end:at+1};}
-      return {...mark,start:mapPosition(mark.start),end:mapPosition(mark.end,'end')};
+      if(mark?.kind==='linkCard'&&cardIds.has(String(mark.cardId||''))){const at=cardAnchor.get(String(mark.cardId||''))??0;return {...mark,start:at,end:at+1};}
+      const a=mapRawToCanonical(mapToRaw(mark.start)),b=mapRawToCanonical(mapToRaw(mark.end,'end'),'end');
+      return {...mark,start:a,end:b};
     }).filter(mark=>mark.kind==='linkCard'||mark.end>mark.start);
-    easyRichSource.tables=(easyRichSource.tables||[]).map(item=>({...item,start:mapPosition(item.start),end:mapPosition(item.end,'end')})).filter(item=>item.end>item.start);
-    easyRichSource.cards=cards.map(card=>{const at=cardAnchor.get(String(card.id||''))??mapPosition(card.start);return {...card,start:at,end:at+1,label:'\u2060'};});
+    cards.forEach(card=>{const id=String(card.id||'');if(!existingCardMarkIds.has(id)){const at=cardAnchor.get(id);easyRichSource.marks.push({start:at,end:at+1,kind:'linkCard',cardId:id});}});
+    easyRichSource.tables=(easyRichSource.tables||[]).map(item=>{const a=mapRawToCanonical(mapToRaw(item.start)),b=mapRawToCanonical(mapToRaw(item.end,'end'),'end');return {...item,start:a,end:b};}).filter(item=>item.end>item.start);
+    easyRichSource.cards=cards.map(card=>{const at=cardAnchor.get(String(card.id||''))??mapRawToCanonical(mapToRaw(card.start));return {...card,start:at,end:at+1,label:'\u2060'};});
     const selectionStart=bodyInput.selectionStart,selectionEnd=bodyInput.selectionEnd;
     bodyInput.value=next;
-    try{bodyInput.setSelectionRange(mapPosition(selectionStart),mapPosition(selectionEnd,'end'));}catch(_){}
+    try{bodyInput.setSelectionRange(mapRawToCanonical(mapToRaw(selectionStart)),mapRawToCanonical(mapToRaw(selectionEnd,'end'),'end'));}catch(_){}
     easyRichTextSnapshot=next;
     return true;
   }
