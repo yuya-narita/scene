@@ -715,17 +715,6 @@ function newOwnedSeriesId(){
 }
 function seriesBookIds(series,shelf){return shelf==='owned'?(series?.copyIds||[]):(series?.episodes||[]).map(item=>item.workId);}
 function shelfIdOf(w){if(w?.role==='distribution')return String(w.copyId||'');if(w?.role==='studio-draft')return `draft:${String(w.draftId||w.id||'')}`;return String(w?.workId||'');}
-function normalizeAuthorWorkCoverUrl(value){
-  const raw=String(value||'').trim();
-  if(!raw)return '';
-  if(/^https?:\/\//i.test(raw))return raw;
-  if(/^blob:|^data:/i.test(raw))return '';
-  try{
-    if(raw.startsWith('/'))return new URL(raw,API_BASE).href;
-    if(raw.startsWith('assets/'))return `${API_BASE}/asset/${encodeURIComponent(raw.slice('assets/'.length))}`;
-    return `${API_BASE}/asset/${encodeURIComponent(raw.replace(/^\.\//,''))}`;
-  }catch(_){return '';}
-}
 function serverPublishedWorkView(work){
   const workId=String(work?.workId||'').trim();
   if(!workId)return null;
@@ -738,21 +727,32 @@ function serverPublishedWorkView(work){
     seriesId:String(work?.seriesId||''),seriesTitle:String(work?.seriesTitle||work?.series||''),
     episode:String(work?.episode||work?.episodeLabel||''),episodeNumber:Number(work?.position||work?.episodeNumber||0)||0,
     episodeTitle:String(work?.episodeTitle||''),sceneCount:Number(work?.sceneCount||work?.scenes||0)||0,
-    updatedAt:String(work?.updatedAt||work?.publishedAt||work?.createdAt||''),coverUrl:normalizeAuthorWorkCoverUrl(work?.coverUrl),
+    updatedAt:String(work?.updatedAt||work?.publishedAt||work?.createdAt||''),coverUrl:String(work?.coverUrl||''),
     coverPresentation:work?.coverPresentation||{fontFamily:'',styles:{},visibility:{}}
   };
 }
 function mergeServerPublishedWorksIntoCreatedCache(){
   if(!authorToken||!Array.isArray(authorWorks)||!authorWorks.length)return;
-  const created=Array.isArray(shelfDataCache.created)?shelfDataCache.created:[];
-  const localIds=new Set(created.map(item=>String(item?.workId||'')).filter(Boolean));
-  const remote=[];
+  // Published works can also exist as older local Master rows. Previously those
+  // local rows won by workId, so the fresh server cover URL was discarded and
+  // Created shelf kept rendering an obsolete/missing local cover reference.
+  const remoteById=new Map();
   for(const work of authorWorks){
     const view=serverPublishedWorkView(work);
-    if(!view||localIds.has(view.workId))continue;
-    remote.push(view);localIds.add(view.workId);
+    if(view)remoteById.set(view.workId,view);
   }
-  shelfDataCache.created=[...created,...remote];
+  const created=(Array.isArray(shelfDataCache.created)?shelfDataCache.created:[]).map(item=>{
+    const workId=String(item?.workId||'').trim(),remote=remoteById.get(workId);
+    if(!remote)return item;
+    remoteById.delete(workId);
+    return {...item,
+      publicationId:remote.publicationId||item.publicationId||'',publicId:remote.publicId||item.publicId||'',
+      coverUrl:remote.coverUrl||item.coverUrl||'',
+      updatedAt:remote.updatedAt||item.updatedAt||'',
+      serverPublished:true
+    };
+  });
+  shelfDataCache.created=[...created,...remoteById.values()];
   shelfCounts.created=shelfDataCache.created.length;
   const tab=$('#createdTab');if(tab)tab.textContent=`つくった本${shelfCounts.created?` ${shelfCounts.created}`:''}`;
 }
