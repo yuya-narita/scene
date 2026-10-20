@@ -364,7 +364,7 @@
       const emitLinkCard=(candidate)=>{
         const item=typeof candidate==='string'?{url:candidate}:candidate;
         blockBreak();const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
-        const label=`［URLカード ${id.slice(-4)}］`,start=length();push(label);const end=length();
+        const label='\u2060',start=length();push(label);const end=length();
         cards.push({id,url:item.url,title:item.title||'',description:'',image:item.image||'',siteName:'',start,end,label});
         marks.push({start,end,kind:'linkCard',cardId:id});blockBreak();
       };
@@ -459,7 +459,7 @@
     let i=0;
     while(i<lines.length){const line=lines[i],trimmed=line.trim();let m;
       const standaloneUrl=pastedWebUrl(trimmed);
-      if(standaloneUrl){blockBreak();const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`,label=`［URLカード ${id.slice(-4)}］`,start=length();push(label);const end=length();cards.push({id,url:standaloneUrl,title:'',description:'',image:'',siteName:'',start,end,label});marks.push({start,end,kind:'linkCard',cardId:id});blockBreak();i++;continue;}
+      if(standaloneUrl){blockBreak();const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`,label='\u2060',start=length();push(label);const end=length();cards.push({id,url:standaloneUrl,title:'',description:'',image:'',siteName:'',start,end,label});marks.push({start,end,kind:'linkCard',cardId:id});blockBreak();i++;continue;}
       if(isPipeRow(line)&&i+1<lines.length&&isDivider(lines[i+1])){blockBreak();const rows=[splitPipe(line)];i+=2;while(i<lines.length&&isPipeRow(lines[i])&&lines[i].trim()){rows.push(splitPipe(lines[i++]));}const n=tables.length+1,label=`［表 ${n}］`,start=length();push(label);const end=length(),id=`table-${n}`;tables.push({id,start,end,label,headerRows:1,rows});marks.push({start,end,kind:'table',tableId:id});blockBreak();continue;}
       if(isTsvRow(line)&&i+1<lines.length&&isTsvRow(lines[i+1])){blockBreak();const rows=[];while(i<lines.length&&isTsvRow(lines[i])&&lines[i].trim())rows.push(lines[i++].split('\t').map(v=>v.trim()));const n=tables.length+1,label=`［表 ${n}］`,start=length();push(label);const end=length(),id=`table-${n}`;tables.push({id,start,end,label,headerRows:1,rows});marks.push({start,end,kind:'table',tableId:id});blockBreak();continue;}
       if(!trimmed){blockBreak();i++;continue;}
@@ -1555,7 +1555,7 @@
     latestPublishedFingerprint=row.publication?.fingerprint||'';
     latestPublishedAt=Number(row.publication?.publishedAt)||0;
     latestPublicationStoppedAt=Number(row.publication?.stoppedAt)||0;
-    titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';easyRichSource=row.richSource?cloneRichSource(row.richSource):{version:1,marks:[],tables:[],cards:[]};easyRichTextSnapshot=bodyInput.value;renderEasyRichComposition();renderEasyOgpCardList();
+    titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';easyRichSource=row.richSource?cloneRichSource(row.richSource):{version:1,marks:[],tables:[],cards:[]};normalizeEasyLinkCardPlaceholders();easyRichTextSnapshot=bodyInput.value;renderEasyRichComposition();renderEasyOgpCardList();
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
     if(episodeNumberInput)episodeNumberInput.value=String(row.easy?.episodeNumber||row.document?.metadata?.episodeNumber||'');
@@ -2862,7 +2862,7 @@
       const contentType=r.kind==='table'?'table':'linkCard';
       const block=content.find(c=>c?.type===contentType&&String(c.id||'')===contentId);
       if(block){
-        const marker=source.slice(a,b)||String(block.label||(contentType==='table'?`［表 ${idx+1}］`:'［リンクカード］'));
+        const marker=source.slice(a,b)||(contentType==='table'?String(block.label||`［表 ${idx+1}］`):'\u2060');
         out.push({...scene,text:marker,
           richText:{version:1,ranges:[{...r,start:0,end:marker.length}]},
           content:[clone(block)],
@@ -2879,7 +2879,69 @@
     return Boolean((Array.isArray(scene?.content)?scene.content:[]).some(c=>c?.type==='table'||c?.type==='linkCard'));
   }
 
+  // Link cards are rendered from richText ranges; their source marker is only
+  // an anchor and must never be visible as prose. Replace old human-readable
+  // markers with an invisible word-joiner anchor, and remove unbound generic
+  // placeholders that came from pasted article text. This also makes the fix
+  // survive Easy re-splitting and draft reloads.
+  function normalizeEasyLinkCardPlaceholders(){
+    const cards=Array.isArray(easyRichSource?.cards)?easyRichSource.cards:[];
+    if(!cards.length)return false;
+    const source=String(bodyInput.value||''),cardIds=new Set(cards.map(card=>String(card.id||'')));
+    const cardMarks=(easyRichSource.marks||[]).filter(mark=>mark?.kind==='linkCard'&&cardIds.has(String(mark.cardId||'')));
+    const operations=[];
+    cardMarks.forEach(mark=>{
+      const start=Math.max(0,Math.min(source.length,Number(mark.start)||0));
+      const end=Math.max(start,Math.min(source.length,Number(mark.end)||start));
+      if(end>start)operations.push({start,end,replacement:'\u2060',cardId:String(mark.cardId||'')});
+    });
+    const generic=/(?:\*\*)?[ \t]*(?:\[|［)[ \t]*(?:\*\*)?[ \t]*(?:リンクカード|URLカード)[ \t]*(?:\*\*)?[ \t]*(?:\]|］)[ \t]*(?:\*\*)?/gi;
+    for(const match of source.matchAll(generic)){
+      const start=match.index,end=start+match[0].length;
+      if(!operations.some(op=>start<op.end&&end>op.start))operations.push({start,end,replacement:''});
+    }
+    if(!operations.length)return false;
+    operations.sort((a,b)=>a.start-b.start||a.end-b.end);
+    const merged=[];
+    operations.forEach(op=>{
+      const last=merged[merged.length-1];
+      if(last&&op.start<last.end){
+        last.end=Math.max(last.end,op.end);
+        if(op.cardId){last.cardIds||=[];last.cardIds.push(op.cardId);last.replacement='\u2060';}
+      }else merged.push({...op,cardIds:op.cardId?[op.cardId]:[]});
+    });
+    let next='',cursor=0;
+    merged.forEach(op=>{next+=source.slice(cursor,op.start)+op.replacement;cursor=op.end;});
+    next+=source.slice(cursor);
+    const mapPosition=(position,bias='start')=>{
+      const pos=Math.max(0,Math.min(source.length,Number(position)||0));let removed=0;
+      for(const op of merged){
+        if(pos<op.start)break;
+        if(pos<=op.end){
+          const replacementLength=op.replacement.length;
+          return op.start-removed+(bias==='end'?replacementLength:0);
+        }
+        removed+=op.end-op.start-op.replacement.length;
+      }
+      return pos-removed;
+    };
+    const cardAnchor=new Map();
+    cardMarks.forEach(mark=>cardAnchor.set(String(mark.cardId||''),mapPosition(mark.start)));
+    easyRichSource.marks=(easyRichSource.marks||[]).map(mark=>{
+      if(mark?.kind==='linkCard'&&cardIds.has(String(mark.cardId||''))){const at=cardAnchor.get(String(mark.cardId||''))??mapPosition(mark.start);return {...mark,start:at,end:at+1};}
+      return {...mark,start:mapPosition(mark.start),end:mapPosition(mark.end,'end')};
+    }).filter(mark=>mark.kind==='linkCard'||mark.end>mark.start);
+    easyRichSource.tables=(easyRichSource.tables||[]).map(item=>({...item,start:mapPosition(item.start),end:mapPosition(item.end,'end')})).filter(item=>item.end>item.start);
+    easyRichSource.cards=cards.map(card=>{const at=cardAnchor.get(String(card.id||''))??mapPosition(card.start);return {...card,start:at,end:at+1,label:'\u2060'};});
+    const selectionStart=bodyInput.selectionStart,selectionEnd=bodyInput.selectionEnd;
+    bodyInput.value=next;
+    try{bodyInput.setSelectionRange(mapPosition(selectionStart),mapPosition(selectionEnd,'end'));}catch(_){}
+    easyRichTextSnapshot=next;
+    return true;
+  }
+
   function buildSceneDocument() {
+    normalizeEasyLinkCardPlaceholders();
     const chunks = splitBody(bodyInput.value);
     const languageSummary = SceneTextSplitter.summarizeLanguages?.(chunks) || { language: detectWorkLanguage(), languages: [detectWorkLanguage()] };
     let richCursor=0;
@@ -5186,7 +5248,7 @@ return flowCommentCard;}
         if(pair.url)pair.url.value=item.url||item.href||'';
       });
     }
-    bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n'); easyRichSource=richSourceFromSceneDocument(doc,bodyInput.value); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();renderEasyOgpCardList();
+    bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n'); easyRichSource=richSourceFromSceneDocument(doc,bodyInput.value); normalizeEasyLinkCardPlaceholders(); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();renderEasyOgpCardList();
     updateCount();updateCoverPreview();updateEndingPreview();
     protectedResplitPending=false;
    
@@ -5569,7 +5631,7 @@ return flowCommentCard;}
   function insertOgpCardIntoScene(scene,range,card){
     if(!scene)return;
     const before=String(scene.text||''),start=Math.max(0,Math.min(before.length,Number(range?.start)||0)),end=Math.max(start,Math.min(before.length,Number(range?.end)||start));
-    const label=`［URLカード ${String(card.id).slice(-4)}］`;
+    const label='\u2060';
     const prefix=start>0&&!before.slice(0,start).endsWith('\n\n')?'\n\n':'';
     const suffix=end<before.length&&!before.slice(end).startsWith('\n\n')?'\n\n':'';
     const fragment=prefix+label+suffix,after=before.slice(0,start)+fragment+before.slice(end),delta=fragment.length-(end-start);
@@ -8155,7 +8217,7 @@ return flowCommentCard;}
     event.preventDefault();insertRichFragment(fragment,bodyInput.selectionStart||0,bodyInput.selectionEnd||0);
     if(fragment.cards?.length)hydrateEasyOgpCards(fragment.cards);
   });
-  bodyInput.addEventListener('input',()=>{ if(!applyingRichPaste)reconcileRichSourceAfterPlainEdit(easyRichTextSnapshot,bodyInput.value); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();renderEasyOgpCardList(); updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
+  bodyInput.addEventListener('input',()=>{ if(!applyingRichPaste)reconcileRichSourceAfterPlainEdit(easyRichTextSnapshot,bodyInput.value); easyRichTextSnapshot=bodyInput.value; normalizeEasyLinkCardPlaceholders(); renderEasyRichComposition();renderEasyOgpCardList(); updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
   $('#sceneSubTextInput').addEventListener('input',autoGrowSubText);
   coverLogoChoose?.addEventListener('click',()=>coverLogoInput?.click());
   coverLogoInput?.addEventListener('change',async()=>{
@@ -9881,7 +9943,7 @@ return flowCommentCard;}
       blocks.forEach((block,i)=>{
         const r=blockRanges[i];
         const label=r?String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)):'';
-        block.replaceWith(document.createTextNode(label||(r?.kind==='linkCard'?'［リンクカード］':`［表 ${i+1}］`)));
+        block.replaceWith(document.createTextNode(r?.kind==='linkCard'?'\u2060':(label||`［表 ${i+1}］`)));
       });
       value=editablePlainText(copy);
     }else{
