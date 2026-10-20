@@ -85,64 +85,14 @@ let suppressSeriesBoxClick=false;
 let draggingSeriesWorkId='';
 
 function authorHeaders(extra={}){return {...extra,...(authorToken?{Authorization:`Bearer ${authorToken}`}:{})};}
-function publicAuthorShelfUrl(author=signedInAuthor){const data=typeof author==='string'?{authorId:author}:author||{},url=new URL('../author/',location.href);if(data.slug)url.searchParams.set('u',data.slug);else url.searchParams.set('id',String(data.authorId||''));return url.toString();}
-function readerBookAuthorShelfUrl(book){const slug=String(book?.authorSlug||'').trim().toLowerCase(),authorId=String(book?.authorId||'').trim().toLowerCase();if(/^[a-z0-9][a-z0-9_-]{2,29}$/.test(slug))return publicAuthorShelfUrl({slug});if(/^author_[a-f0-9]{32}$/.test(authorId))return publicAuthorShelfUrl({authorId});return'';}
-function publicAuthorShelfShareUrl(author=signedInAuthor){const data=typeof author==='string'?{authorId:author}:author||{},reference=data.slug||data.authorId;return reference?`${API_BASE}/s/${encodeURIComponent(reference)}`:publicAuthorShelfUrl(data);}
-const AUTHOR_SERIES_CACHE_PREFIX='ahako:bookshelf:author-series:v1:';
-let seriesReadyOwner='';
-function restoreAuthorSeriesCache(){
-  const owner=String(signedInAuthor?.authorId||'');
-  if(!authorToken||!owner)return false;
-  if(seriesReadyOwner===owner)return true;
-  try{
-    const cache=JSON.parse(localStorage.getItem(AUTHOR_SERIES_CACHE_PREFIX+owner)||'null');
-    if(cache?.authorId!==owner||!Array.isArray(cache.series))return false;
-    authorSeries=cache.series;seriesReadyOwner=owner;return true;
-  }catch(_){return false;}
-}
-function persistAuthorSeriesCache(){
-  const owner=String(signedInAuthor?.authorId||'');if(!authorToken||!owner)return;
-  seriesReadyOwner=owner;
-  // Only BOX identity, titles and membership; no credentials or scene bytes.
-  const series=authorSeries.map(box=>({seriesId:box.seriesId,title:box.title,episodeCount:box.episodeCount,
-    episodes:(box.episodes||[]).map(item=>({workId:item.workId,episodeNumber:item.episodeNumber}))}));
-  try{localStorage.setItem(AUTHOR_SERIES_CACHE_PREFIX+owner,JSON.stringify({authorId:owner,series}));}catch(error){console.warn('Series layout cache unavailable',error);}
-}
-async function ensureAuthorSeriesReady(){
-  const owner=String(signedInAuthor?.authorId||'');
-  if(!authorToken||!owner||restoreAuthorSeriesCache())return;
-  try{
-    const payload=await authorRequest('/author/series');
-    if(signedInAuthor?.authorId!==owner||!authorToken)return;
-    if(!Array.isArray(payload.series))throw new Error('シリーズBOX情報を確認できませんでした。');
-    authorSeries=payload.series;persistAuthorSeriesCache();
-  }catch(error){
-    if(signedInAuthor?.authorId!==owner)return;
-    seriesReadyOwner=owner;
-    toast(error.message||'シリーズBOX情報を取得できませんでした。接続を確認して再読み込みしてください。');
-  }
-}
-function readAuthorSession(){try{const row=JSON.parse(localStorage.getItem(AUTHOR_AUTH_STORAGE_KEY)||'null');if(row?.token&&row?.author?.authorId){authorToken=String(row.token);signedInAuthor=row.author;restoreAuthorSeriesCache();}}catch(_){}}
-function saveAuthorSession(token,author){const previousOwner=signedInAuthor?.authorId;authorToken=String(token||'');signedInAuthor=author||null;if(previousOwner!==signedInAuthor?.authorId){authorSeries=[];authorWorks=[];seriesReadyOwner='';restoreAuthorSeriesCache();}if(authorToken&&signedInAuthor)localStorage.setItem(AUTHOR_AUTH_STORAGE_KEY,JSON.stringify({token:authorToken,author:signedInAuthor}));else localStorage.removeItem(AUTHOR_AUTH_STORAGE_KEY);syncBookshelfAuthorUI();loadCommerceWallet().catch(()=>{});}
+function publicAuthorShelfUrl(author=signedInAuthor){const data=typeof author==='string'?{authorId:author}:author||{},url=new URL('../author/',location.href);if(data.authorId)url.searchParams.set('id',String(data.authorId));else if(data.slug)url.searchParams.set('u',data.slug);return url.toString();}
+function readerBookAuthorShelfUrl(book){const authorId=String(book?.authorId||'').trim().toLowerCase(),slug=String(book?.authorSlug||'').trim().toLowerCase();if(/^author_[a-f0-9]{32}$/.test(authorId))return publicAuthorShelfUrl({authorId});if(/^[a-z0-9][a-z0-9_-]{2,29}$/.test(slug))return publicAuthorShelfUrl({slug});return'';}
+function publicAuthorShelfShareUrl(author=signedInAuthor){const data=typeof author==='string'?{authorId:author}:author||{},reference=String(data.authorId||'').trim().toLowerCase()||String(data.slug||'').trim().toLowerCase();return reference?`${API_BASE}/s/${encodeURIComponent(reference)}`:publicAuthorShelfUrl(data);}
+function readAuthorSession(){try{const row=JSON.parse(localStorage.getItem(AUTHOR_AUTH_STORAGE_KEY)||'null');if(row?.token&&row?.author?.authorId){authorToken=String(row.token);signedInAuthor=row.author;}}catch(_){}}
+function saveAuthorSession(token,author){authorToken=String(token||'');signedInAuthor=author||null;if(authorToken&&signedInAuthor)localStorage.setItem(AUTHOR_AUTH_STORAGE_KEY,JSON.stringify({token:authorToken,author:signedInAuthor}));else localStorage.removeItem(AUTHOR_AUTH_STORAGE_KEY);syncBookshelfAuthorUI();loadCommerceWallet().catch(()=>{});}
 function syncBookshelfAuthorUI(){const active=!!(authorToken&&signedInAuthor?.authorId),button=$('#bookshelfAuthorButton');if(button){button.textContent=active?(signedInAuthor.displayName||'ログイン中'):'作者ログイン';button.classList.toggle('is-signed-in',active);}$('#bookshelfAuthorSignedIn').hidden=!active;$('#bookshelfAuthorEmailForm').hidden=active;$('#bookshelfAuthorCodeForm').hidden=true;if(active){$('#bookshelfAuthorName').textContent=signedInAuthor.displayName||'';$('#bookshelfAuthorId').textContent=signedInAuthor.slug?`@${signedInAuthor.slug}`:'短い本棚IDは未設定です';if($('#openPublicAuthorShelf'))$('#openPublicAuthorShelf').href=publicAuthorShelfUrl(signedInAuthor);}syncAuthorProfileUI();syncAuthorHeaderUI();syncSeriesShelf();}
 async function restoreBookshelfAuthorSession(){readAuthorSession();syncBookshelfAuthorUI();if(!authorToken)return;try{const response=await fetch(`${API_BASE}/author-auth/me`,{headers:authorHeaders({Accept:'application/json'}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);return;}if(response.ok&&payload?.author)saveAuthorSession(authorToken,payload.author);}catch(_){syncBookshelfAuthorUI();}if(authorToken)await loadAuthorShelfData();}
-async function authorRequest(path,options={}){
-  const token=authorToken,requestOptions={...options,headers:authorHeaders(options.headers||{}),cache:'no-store'};
-  let response;
-  try{
-    // Retry read-only network failures. Never repeat a mutation automatically.
-    response=await (String(options.method||'GET').toUpperCase()==='GET'
-      ?shelfGet(`${API_BASE}${path}`,requestOptions):fetch(`${API_BASE}${path}`,requestOptions));
-  }catch(error){
-    console.warn('Author request failed',path,error);
-    throw new Error('サーバーに接続できませんでした。接続を確認して、もう一度お試しください。');
-  }
-  const payload=await response.json().catch(()=>null);
-  if(response.status===401||response.status===403){if(authorToken===token)saveAuthorSession('',null);throw new Error(payload?.error||'ログインの有効期限が切れました。');}
-  if(!response.ok||!payload?.ok)throw new Error(payload?.error||'通信できませんでした。');
-  return payload;
-}
-
+async function authorRequest(path,options={}){const response=await fetch(`${API_BASE}${path}`,{...options,headers:authorHeaders(options.headers||{}),cache:'no-store'});const payload=await response.json().catch(()=>null);if(response.status===401||response.status===403){saveAuthorSession('',null);throw new Error(payload?.error||'ログインの有効期限が切れました。');}if(!response.ok||!payload?.ok)throw new Error(payload?.error||'通信できませんでした。');return payload;}
 async function loadCommerceWallet({open=false}={}){
   const button=$('#commerceWalletButton');
   if(!authorToken||!signedInAuthor?.authorId){if(button)button.hidden=true;return;}
@@ -195,9 +145,7 @@ async function recoveredMasterFileFromServer(work){
 }
 async function restoreServerPublishedMasters(){
   if(!authorToken||!Array.isArray(authorWorks)||!authorWorks.length)return 0;
-  const db=await openDb();
-  let localIds;
-  try{localIds=new Set(await request(db.transaction(WORKS,'readonly').objectStore(WORKS).getAllKeys()));}finally{db.close();}
+  const localIds=new Set((await getAllWorks()).map(item=>String(item?.workId||'')).filter(Boolean));
   let restored=0;
   for(const work of authorWorks){
     const workId=String(work?.workId||'').trim();
@@ -225,21 +173,12 @@ async function restoreServerPublishedMasters(){
   }
   return restored;
 }
-async function syncRecoveredMasterSeriesMetadata({workIds=null}={}){
-  const affected=workIds?new Set(workIds):null;
+async function syncRecoveredMasterSeriesMetadata(){
   if(!Array.isArray(authorWorks)||!authorWorks.length)return 0;
   let changed=0;
-  const localById=new Map((shelfDataCache.created||[]).filter(item=>item.role!=='server-published').map(item=>[item.workId,item]));
   for(const work of authorWorks){
-    const workId=String(work?.workId||'').trim();if(!workId||(affected&&!affected.has(workId)))continue;
-    const cached=localById.get(workId);
-    if(cached&&!cached.serverRecovered)continue;
-    const expected={seriesId:String(work.seriesId||'').trim(),seriesTitle:String(work.seriesTitle||'').trim(),episodeNumber:Number(work.episodeNumber||0)||0,episode:String(work.episodeLabel||work.episode||''),episodeTitle:String(work.episodeTitle||'')};
-    // These fields are written atomically with the rebuilt ZIP below. An equal
-    // sidecar means there is no reason to read or copy the large Master again.
-    const matches=item=>Object.entries(expected).every(([key,value])=>key==='episodeNumber'?(Number(item[key])||0)===value:String(item[key]||'')===value);
-    if(cached&&matches(cached))continue;
-    const row=await getWork(workId);if(!row?.serverRecovered||!row?.blob||matches(row))continue;
+    const workId=String(work?.workId||'').trim();if(!workId)continue;
+    const row=await getWork(workId);if(!row?.serverRecovered||!row?.blob)continue;
     try{
       const entries=await readZipEntries(row.blob),sceneBytes=entries.get('scene.json');if(!sceneBytes)continue;
       const doc=parseJson(sceneBytes);doc.metadata ||= {};
@@ -256,39 +195,12 @@ async function syncRecoveredMasterSeriesMetadata({workIds=null}={}){
       const out=[];for(const [name,bytes] of entries){if(name!=='scene.json')out.push({name,bytes});}
       out.push({name:'scene.json',bytes:te.encode(JSON.stringify(doc,null,2))});
       const blob=await makeStoreZip(out);
-      const next={...row,blob,seriesId,seriesTitle,episodeNumber,episode:String(work?.episodeLabel||work?.episode||''),episodeTitle:String(work?.episodeTitle||''),updatedAt:row.updatedAt||new Date().toISOString()};
-      await putWork(next);if(cached)Object.assign(cached,{...expected,blob});changed++;
+      await putWork({...row,blob,seriesId,seriesTitle,episodeNumber,episode:String(work?.episodeLabel||work?.episode||''),episodeTitle:String(work?.episodeTitle||''),updatedAt:row.updatedAt||new Date().toISOString()});changed++;
     }catch(error){console.warn('Recovered Master series sync skipped',workId,error);}
   }
   return changed;
 }
-async function loadAuthorShelfData({recoverMasters=true,masterWorkIds=null,throwOnError=false}={}){
-  if(!authorToken)return;
-  const owner=signedInAuthor?.authorId;
-  try{
-    const [series,works]=await Promise.allSettled([authorRequest('/author/series'),authorRequest('/author/works')]);
-    if(!authorToken||signedInAuthor?.authorId!==owner)return;
-    const failure=[series,works].find(result=>result.status==='rejected');
-    if(failure&&(throwOnError||(series.status==='rejected'&&works.status==='rejected')))throw failure.reason;
-    if(series.status==='fulfilled'){
-      if(!Array.isArray(series.value.series))throw new Error('シリーズBOX情報を確認できませんでした。');
-      authorSeries=series.value.series;persistAuthorSeriesCache();
-    }
-    if(works.status==='fulfilled')authorWorks=works.value.works||[];
-    // Both the retained membership and successful partial results can be shown
-    // before expensive Master recovery; a failed GET never empties the boxes.
-    mergeServerPublishedWorksIntoCreatedCache();await refreshSeriesShelfFromCache();
-    const restored=recoverMasters&&works.status==='fulfilled'?await restoreServerPublishedMasters():0;
-    const changed=series.status==='fulfilled'&&works.status==='fulfilled'?await syncRecoveredMasterSeriesMetadata({workIds:masterWorkIds}):0;
-    if(restored||changed){mergeServerPublishedWorksIntoCreatedCache();await refreshSeriesShelfFromCache();}
-    if(failure)toast(failure.reason?.message||'一部の情報を更新できませんでした。保存済みの表示を維持しています。');
-    if(recoverMasters&&works.status==='fulfilled'){
-      const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);
-      await queuePublishedWorkOrderSync(createdIds,{immediate:true});
-    }
-  }catch(error){if(throwOnError)throw error;toast(error.message||'作者情報を確認できませんでした。');}
-}
-
+async function loadAuthorShelfData(){if(!authorToken)return;try{const [series,works]=await Promise.all([authorRequest('/author/series'),authorRequest('/author/works')]);authorSeries=series.series||[];authorWorks=works.works||[];await restoreServerPublishedMasters();await syncRecoveredMasterSeriesMetadata();mergeServerPublishedWorksIntoCreatedCache();rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});syncSeriesShelf();const createdIds=Array.from(localShelfViews.created?.querySelectorAll('.book')||[]).map(book=>book.dataset.id).filter(Boolean);await queuePublishedWorkOrderSync(createdIds,{immediate:true});}catch(error){toast(error.message||'作者情報を確認できませんでした。');}}
 
 function shelfScrollShouldLock(){
   return !!($('#bookshelfMenu')?.open||$('#detailDialog')?.open||$('#archiveDialog')?.open||$('#deleteArchiveDialog')?.open||$('#bookshelfAuthorDialog')?.open||$('#seriesBoxDialog')?.open||$('#readLaterDialog')?.open||$('#publicWorkDialog')?.open||$('#commerceWalletDialog')?.open);
@@ -362,24 +274,13 @@ async function assertMyCopyImportable(copyId){
     console.warn('MY COPY status check skipped during import',copyId,error);
   }
 }
-async function mapShelfLimited(items,limit,job){
-  const results=new Array(items.length);let next=0;
-  await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{
-    while(next<items.length){const index=next++;results[index]=await job(items[index],index);}
-  }));
-  return results;
-}
 async function pruneRevokedReaderBooks(books){
-  const rows=Array.isArray(books)?books:[];
-  const statuses=await mapShelfLimited(rows,4,async book=>{
-    try{return await fetchMyCopyStatus(book?.copyId);}catch(error){console.warn('MY COPY refund status could not be checked',book?.copyId,error);return null;}
-  });
   const kept=[];
-  for(const [index,book] of rows.entries()){
+  for(const book of Array.isArray(books)?books:[]){
     const copyId=String(book?.copyId||'').trim();
     if(!/^copy_[a-f0-9]{32}$/i.test(copyId)){kept.push(book);continue;}
     try{
-      const status=statuses[index];
+      const status=await fetchMyCopyStatus(copyId);
       if(isRefundRevokedCopyStatus(status)){
         // V177: entitlement reconciliation must never destroy the local MY COPY blob.
         // Hide a revoked copy from the shelf, but keep its bytes recoverable in IndexedDB.
@@ -642,7 +543,7 @@ async function packRemoteAssetsIntoScene(scene){
   const assetUrls=new Set();
   function collect(value){
     if(typeof value==='string'){
-      try{const u=new URL(value,location.href);const guideAssets=new URL('../works/ahako-guide/assets/',location.href);const approvedGuideAsset=u.origin===guideAssets.origin&&u.pathname.startsWith(guideAssets.pathname)&&/^[A-Za-z0-9._-]+$/.test(u.pathname.slice(guideAssets.pathname.length));if((u.origin===apiOrigin&&/^\/asset\//.test(u.pathname))||approvedGuideAsset)assetUrls.add(u.href);}catch(_){}
+      try{const u=new URL(value,location.href);if(u.origin===apiOrigin&&/^\/asset\//.test(u.pathname))assetUrls.add(u.href);}catch(_){}
       return;
     }
     if(Array.isArray(value)){value.forEach(collect);return;}
@@ -949,7 +850,7 @@ function authoredCoverOverlayHtml(w){
 function bookCardHtml(w,{archived=false}={}){
   const isPublishedCreated=w.role!=='distribution'&&authorWorks.some(work=>work.workId===w.workId);
   const badge=w.role==='distribution'?'MY COPY':isPublishedCreated?'MASTER':w.role==='studio-draft'?'DRAFT':'MASTER',id=shelfIdOf(w);
-  const image=storedCoverBlob(w)?(()=>{const u=URL.createObjectURL(storedCoverBlob(w));coverUrls.push(u);return`<img src="${u}" alt="" draggable="false" loading="lazy" decoding="async">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false" loading="lazy" decoding="async">`:`<div class="cover-fallback">□</div>`);
+  const image=storedCoverBlob(w)?(()=>{const u=URL.createObjectURL(storedCoverBlob(w));coverUrls.push(u);return`<img src="${u}" alt="" draggable="false">`})():(w.coverUrl?`<img src="${escapeHtml(w.coverUrl)}" alt="" draggable="false">`:`<div class="cover-fallback">□</div>`);
   if(archived)return`<label class="archive-item" data-role="${w.role}" data-id="${escapeHtml(id)}"><input class="archive-check" type="checkbox" aria-label="${escapeHtml(w.title)}を選択"><div class="archive-thumb">${image}</div><div class="archive-item-copy"><strong>${escapeHtml(w.title)}</strong><span>${escapeHtml(w.author||'作者未設定')} · ${w.sceneCount||0} Scene</span></div></label>`;
   const episode=String(w.episode||'').trim();
   const episodeTitle=String(w.episodeTitle||'').trim();
@@ -981,21 +882,11 @@ function writeShelfScrollY(y){
   document.body.scrollTop=target;
   try{window.scrollTo({left:0,top:target,behavior:'instant'});}catch(_){window.scrollTo(0,target);}
 }
-function scrollShelfToTop(){
-  if(shelfScrollShouldLock()||document.querySelector('dialog[open]'))return;
-  const behavior=matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth';
+$('#shelfStatusTapTop')?.addEventListener('click',()=>{
   const scroller=$('#shelfBodyViewport');
-  if(usesInternalShelfScroller())scroller?.scrollTo({top:0,left:0,behavior});
-  else window.scrollTo({top:0,left:0,behavior});
-}
-$('#shelfStatusTapTop')?.addEventListener('click',scrollShelfToTop);
-$('#shelfScrollTopButton')?.addEventListener('click',scrollShelfToTop);
-// Safari owns status-bar taps; keep an actual in-page control available even
-// when safe-area-inset-top is zero or native UI consumes the status-bar tap.
-$('.topbar')?.addEventListener('click',event=>{
-  if(event.target===event.currentTarget)scrollShelfToTop();
+  if(usesInternalShelfScroller())scroller?.scrollTo({top:0,left:0,behavior:'smooth'});
+  else window.scrollTo({top:0,left:0,behavior:'smooth'});
 });
-
 function shelfMeaningfulMaxScroll(el=currentShelfBodyElement()){
   if(!el||el.hidden)return 0;
   if(usesInternalShelfScroller()){
@@ -1481,37 +1372,19 @@ function syncSeriesShelf(){
   });
 }
 
-let seriesDropBusy=false;
-async function refreshSeriesShelfFromCache(){
-  const tab=currentShelfTab,y=readShelfScrollY(),stale=coverUrls;coverUrls=[];
-  try{rebuildLocalShelfViews();await presentShelfFromCache({refreshOfficial:false});if(currentShelfTab===tab)writeShelfScrollY(y);}
-  finally{revokeUnusedCoverUrls(stale);}
-}
 async function addBookToSeries(shelf,seriesId,bookId,target){
-  if(seriesDropBusy){toast('BOXへの保存中です。少し待ってから追加してください。');return;}
-  const series=(shelf==='owned'?ownedSeriesBoxes:authorSeries).find(item=>item.seriesId===seriesId);
-  if(!series)return;
-  if(shelf==='owned'&&(shelfDataCache.owned||[]).every(item=>item.copyId!==bookId))return;
-  if(shelf!=='owned'&&!authorWorks.some(item=>item.workId===bookId))return;
-  if(seriesBookIds(series,shelf).includes(bookId))return;
-  seriesDropBusy=true;draggingBookId='';
-  target?.setAttribute('aria-busy','true');target?.classList.add('is-saving');
-  try{
-    if(shelf==='owned'){
-      await animateBookIntoBox(bookId,target);
-      const next=ownedSeriesBoxes.map(box=>box.seriesId===seriesId?{...box,copyIds:[...box.copyIds,bookId]}:box);
-      if(!writeOwnedSeriesBoxes(next))return;
-      await refreshSeriesShelfFromCache();
-    }else{
-      const workIds=[...(series.episodes||[]).map(item=>item.workId),bookId];
-      const affected=new Set([bookId,...authorSeries.filter(box=>(box.episodes||[]).some(item=>item.workId===bookId)).flatMap(box=>(box.episodes||[]).map(item=>item.workId))]);
-      // Start the save while the short drop animation is playing.
-      await Promise.all([animateBookIntoBox(bookId,target),authorRequest(`/author/series/${seriesId}/books`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds})})]);
-      await loadAuthorShelfData({recoverMasters:false,masterWorkIds:[...affected],throwOnError:true});
-    }
+  if(shelf==='owned'){
+    const series=ownedSeriesBoxes.find(item=>item.seriesId===seriesId);
+    if(!series||(shelfDataCache.owned||[]).every(item=>item.copyId!==bookId))return;
+    await animateBookIntoBox(bookId,target);
+    series.copyIds=[...series.copyIds.filter(id=>id!==bookId),bookId];
+    writeOwnedSeriesBoxes(ownedSeriesBoxes);
+    draggingBookId='';
+    await render();
     toast(`「${series.title}」へ入れました。`);
-  }catch(error){toast(error.message||'シリーズBOXへ入れられませんでした。');}
-  finally{seriesDropBusy=false;target?.removeAttribute('aria-busy');target?.classList.remove('is-saving');}
+    return;
+  }
+  const series=authorSeries.find(item=>item.seriesId===seriesId);if(!series||!authorWorks.some(item=>item.workId===bookId))return;const workIds=(series.episodes||[]).map(item=>item.workId).filter(id=>id!==bookId);workIds.push(bookId);try{await animateBookIntoBox(bookId,target);await authorRequest(`/author/series/${seriesId}/books`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds})});draggingBookId='';await loadAuthorShelfData();toast(`「${series.title}」へ入れました。`);}catch(error){toast(error.message||'シリーズBOXへ入れられませんでした。');}
 }
 
 function revokeUnusedCoverUrls(urls){
@@ -1522,16 +1395,12 @@ function revokeUnusedCoverUrls(urls){
   }
 }
 async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
-  // Resolve BOX membership before building or revealing the first local grid.
-  await ensureAuthorSeriesReady();
   const staleCoverUrls=coverUrls;coverUrls=[];
   ownedSeriesBoxes=readOwnedSeriesBoxes();
-  const [masterRows,draftRows,readerRecords]=await Promise.all([getAllWorks(),getAllStudioDraftMeta(),getAllReaderBooks()]);
-  const readerCheck=pruneRevokedReaderBooks(readerRecords);
-  const storedMasters=await mapShelfLimited(masterRows,2,async w=>({...await hydrateStoredBookMetadata({...w,role:'master'}),role:'master'}));
+  const storedMasters=await Promise.all((await getAllWorks()).map(async w=>({...await hydrateStoredBookMetadata({...w,role:'master'}),role:'master'})));
   const mastersByWorkId=new Map(storedMasters.map(work=>[work.workId,work]));
   const masters=[...storedMasters];
-  for(const meta of draftRows){
+  for(const meta of await getAllStudioDraftMeta()){
     if(!meta?.draftId)continue;
     const old=meta.workId?mastersByWorkId.get(meta.workId):null;
     const draftView={...meta,workId:String(meta.workId||''),draftId:meta.draftId,role:'studio-draft',updatedAt:new Date(Number(meta.updatedAt)||Date.now()).toISOString()};
@@ -1542,8 +1411,8 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
       mastersByWorkId.set(meta.workId,merged);
     }else masters.push(draftView);
   }
-  const readerRows=await readerCheck;
-  const readers=await mapShelfLimited(readerRows,2,async w=>({...await hydrateStoredBookMetadata({...w,role:'distribution'}),role:'distribution'}));
+  const readerRows=await pruneRevokedReaderBooks(await getAllReaderBooks());
+  const readers=await Promise.all(readerRows.map(async w=>({...await hydrateStoredBookMetadata({...w,role:'distribution'}),role:'distribution'})));
   shelfCounts={owned:readers.length,created:masters.length};
   shelfDataCache={owned:readers,created:masters};
   mergeServerPublishedWorksIntoCreatedCache();
@@ -2008,7 +1877,7 @@ async function makeSelfContainedRecoveredMasterBlob(w){
   const apiOrigin=new URL(API_BASE,location.href).origin;
   function collect(value){
     if(typeof value==='string'){
-      try{const u=new URL(value,location.href);const guideAssets=new URL('../works/ahako-guide/assets/',location.href);const approvedGuideAsset=u.origin===guideAssets.origin&&u.pathname.startsWith(guideAssets.pathname)&&/^[A-Za-z0-9._-]+$/.test(u.pathname.slice(guideAssets.pathname.length));if((u.origin===apiOrigin&&/^\/asset\//.test(u.pathname))||approvedGuideAsset)assetUrls.add(u.href);}catch(_){}
+      try{const u=new URL(value,location.href);if(u.origin===apiOrigin&&/^\/asset\//.test(u.pathname))assetUrls.add(u.href);}catch(_){}
       return;
     }
     if(Array.isArray(value)){value.forEach(collect);return;}
@@ -2416,142 +2285,12 @@ function setBookshelfAuthStatus(message='',error=false){const el=$('#bookshelfAu
 function openBookshelfAuthor(){syncBookshelfAuthorUI();setBookshelfAuthStatus('');$('#bookshelfAuthorDialog').showModal();syncShelfScrollLock();}
 async function requestBookshelfAuthorCode(){const email=$('#bookshelfAuthorEmail').value.trim(),displayName=$('#bookshelfAuthorDisplayName').value.trim();setBookshelfAuthStatus('送信しています…');try{await authorRequest('/author-auth/request-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});$('#bookshelfAuthorEmailForm').hidden=true;$('#bookshelfAuthorCodeForm').hidden=false;$('#bookshelfAuthorCode').focus();setBookshelfAuthStatus('メールに届いた6桁のコードを入力してください。');sessionStorage.setItem('ahako:author-login-email',email);sessionStorage.setItem('ahako:author-login-name',displayName);}catch(error){setBookshelfAuthStatus(error.message,true);}}
 async function verifyBookshelfAuthorCode(){const email=sessionStorage.getItem('ahako:author-login-email')||$('#bookshelfAuthorEmail').value.trim(),displayName=sessionStorage.getItem('ahako:author-login-name')||$('#bookshelfAuthorDisplayName').value.trim(),code=$('#bookshelfAuthorCode').value.trim();setBookshelfAuthStatus('確認しています…');try{const payload=await authorRequest('/author-auth/verify-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,displayName,code})});saveAuthorSession(payload.token,payload.author);await loadAuthorShelfData();$('#bookshelfAuthorDialog').close();toast('作者アカウントでログインしました。');}catch(error){setBookshelfAuthStatus(error.message,true);}}
-const seriesChoiceCoverUrls=new Map();
-function releaseSeriesChoiceCovers(){for(const item of seriesChoiceCoverUrls.values())URL.revokeObjectURL(item.url);seriesChoiceCoverUrls.clear();}
-function seriesChoiceCoverHtml(book){
-  const key=shelfIdOf(book),source=book.coverBytes||book.coverBlob;
-  let url=String(book.coverUrl||authorWorks.find(work=>work.workId===book.workId)?.coverUrl||'');
-  if(source){
-    let cached=seriesChoiceCoverUrls.get(key);
-    if(cached?.source!==source){
-      if(cached)URL.revokeObjectURL(cached.url);
-      cached=null;
-      const blob=storedCoverBlob(book);
-      if(blob){cached={source,url:URL.createObjectURL(blob)};seriesChoiceCoverUrls.set(key,cached);}
-    }
-    if(cached)url=cached.url;
-  }
-  return `<span class="series-choice-cover">${url?`<img src="${escapeHtml(url)}" alt="" loading="lazy" decoding="async" draggable="false">`:'<span aria-hidden="true">□</span>'}</span>`;
-}
-$('#seriesBoxDialog')?.addEventListener('close',releaseSeriesChoiceCovers);
-function seriesChoiceTitleHtml(book){
-  const published=authorWorks.find(work=>work.workId===book.workId);
-  const title=String(book.title||published?.title||'Untitled').trim();
-  const episodeTitle=String(book.episodeTitle||published?.episodeTitle||'').trim();
-  const episode=String(book.episode||published?.episodeLabel||published?.episode||'').trim();
-  const secondary=[episode,episodeTitle&&episodeTitle!==title?title:''].filter(Boolean).join(' ／ ');
-  return `<strong>${escapeHtml(episodeTitle||title)}</strong>${secondary?`<span class="series-choice-work-title">${escapeHtml(secondary)}</span>`:''}`;
-}
-// Keep the original card as a moving gap. Neighbours animate into their new
-// positions; a floating copy follows the finger without rebuilding the list.
-let cancelSeriesCardReorder=()=>{};
-function moveSeriesCard(row,to){
-  const list=row.parentElement,rows=[...list.querySelectorAll('.series-choice.is-selected')];
-  const from=rows.indexOf(row);if(from<0||to<0||to>=rows.length||from===to)return;
-  const before=new Map(rows.map(item=>[item,item.getBoundingClientRect().top]));
-  const target=rows[to];
-  if(to>from)target.after(row);else target.before(row);
-  const ids=[...list.querySelectorAll('.series-choice.is-selected')].map(item=>item.dataset.workId);
-  editingSeriesWorkIds=ids;
-  if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
-    for(const item of rows){
-      if(item===row)continue;
-      const dy=before.get(item)-item.getBoundingClientRect().top;
-      if(dy&&item.animate){item.getAnimations?.().forEach(animation=>animation.cancel());item.animate([{transform:`translateY(${dy}px)`},{transform:'translateY(0)'}],{duration:160,easing:'ease-out'});}
-    }
-  }
-}
-function installSeriesCardReorder(){
-  cancelSeriesCardReorder();
-  const list=$('#seriesBookChoices'),dialog=$('#seriesBoxDialog');
-  if(!list||!dialog)return;
-  const controller=new AbortController(),options={signal:controller.signal};
-  let pending=null,active=null,frame=0,suppressClick=false;
-  function clearPending(){if(pending)clearTimeout(pending.timer);pending=null;}
-  function finish(cancel=false,redraw=true){
-    clearPending();cancelAnimationFrame(frame);frame=0;
-    if(active){
-      if(cancel)editingSeriesWorkIds=active.original;
-      active.row.classList.remove('is-sort-gap');active.ghost.remove();active=null;
-      list.classList.remove('is-sorting');
-      if(redraw)renderSeriesBookChoices();
-    }
-  }
-  cancelSeriesCardReorder=()=>{finish(true,false);controller.abort();};
-  function tick(){
-    if(!active)return;
-    const bounds=list.getBoundingClientRect(),y=active.y;
-    const edge=Math.min(48,bounds.height/4);
-    const delta=y<bounds.top+edge?-Math.min(10,(bounds.top+edge-y)/4):y>bounds.bottom-edge?Math.min(10,(y-bounds.bottom+edge)/4):0;
-    if(delta)list.scrollTop+=delta;
-    active.ghost.style.top=`${y-active.offset}px`;
-    const rows=[...list.querySelectorAll('.series-choice.is-selected')];
-    let to=rows.indexOf(active.row);
-    for(let i=0;i<rows.length;i++){
-      if(rows[i]===active.row)continue;
-      const top=bounds.top+list.clientTop+rows[i].offsetTop-list.scrollTop;
-      const middle=top+rows[i].offsetHeight/2;
-      if(i<to&&y<middle){to=i;break;}
-      if(i>to&&y>middle)to=i;
-    }
-    moveSeriesCard(active.row,to);
-    frame=requestAnimationFrame(tick);
-  }
-  list.addEventListener('touchstart',event=>{
-    if(event.touches.length!==1){finish(true);return;}
-    const row=event.target.closest('.series-choice.is-selected');
-    if(!row||event.target.closest('button,a,input'))return;
-    const touch=event.touches[0],original=[...editingSeriesWorkIds];
-    pending={x:touch.clientX,y:touch.clientY,id:touch.identifier,timer:setTimeout(()=>{
-      if(!pending)return;
-      const rect=row.getBoundingClientRect(),ghost=row.cloneNode(true);
-      ghost.classList.add('series-sort-ghost');ghost.removeAttribute('draggable');ghost.setAttribute('aria-hidden','true');
-      Object.assign(ghost.style,{left:`${rect.left}px`,top:`${rect.top}px`,width:`${rect.width}px`,height:`${rect.height}px`});
-      dialog.append(ghost);
-      active={row,ghost,y:pending.y,offset:pending.y-rect.top,id:pending.id,original};
-      clearPending();row.classList.add('is-sort-gap');list.classList.add('is-sorting');
-      suppressClick=true;frame=requestAnimationFrame(tick);
-    },350)};
-  },{...options,passive:true});
-  list.addEventListener('touchmove',event=>{
-    if(active){
-      if(event.cancelable)event.preventDefault();
-      const touch=[...event.touches].find(item=>item.identifier===active.id);
-      if(touch)active.y=touch.clientY;else finish(true);
-    }else if(pending){
-      const touch=event.touches[0];
-      if(!touch||Math.hypot(touch.clientX-pending.x,touch.clientY-pending.y)>8)clearPending();
-    }
-  },{...options,passive:false});
-  // Listen outside the list as the finger may leave its bounds while sorting.
-  window.addEventListener('touchend',()=>finish(false),options);
-  window.addEventListener('touchcancel',()=>finish(true),options);
-  window.addEventListener('blur',()=>finish(true),options);
-  dialog.addEventListener('close',()=>{finish(true,false);controller.abort();},options);
-  list.addEventListener('contextmenu',event=>{if(active||pending)event.preventDefault();},options);
-  list.addEventListener('click',event=>{if(suppressClick){event.preventDefault();event.stopImmediatePropagation();suppressClick=false;}},{...options,capture:true});
-  let dragged=null;
-  list.querySelectorAll('.series-choice.is-selected').forEach(row=>{
-    row.ondragstart=event=>{
-      if(active||pending){event.preventDefault();return;}
-      dragged=row;draggingSeriesWorkId=row.dataset.workId;
-      event.dataTransfer.setData('text/ahako-series-work',draggingSeriesWorkId);event.dataTransfer.effectAllowed='move';row.classList.add('is-dragging');
-    };
-    row.ondragover=event=>{
-      if(!dragged)return;event.preventDefault();event.dataTransfer.dropEffect='move';
-      moveSeriesCard(dragged,[...list.querySelectorAll('.series-choice.is-selected')].indexOf(row));
-    };
-    row.ondrop=event=>{if(dragged)event.preventDefault();};
-    row.ondragend=()=>{dragged=null;draggingSeriesWorkId='';renderSeriesBookChoices();};
-  });
-}
-
-function renderSeriesBookChoices(){const owned=editingSeriesShelf==='owned',published=new Set(authorWorks.map(work=>work.workId)),seriesSource=owned?ownedSeriesBoxes:authorSeries,occupiedByOther=new Set(seriesSource.filter(series=>series.seriesId!==editingSeriesId).flatMap(series=>seriesBookIds(series,editingSeriesShelf))),archived=new Set(readIdList(SHELF_ARCHIVE_KEYS[editingSeriesShelf])),local=(shelfDataCache[editingSeriesShelf]||[]).filter(book=>!archived.has(shelfIdOf(book))&&(owned||published.has(book.workId))&&(!occupiedByOther.has(shelfIdOf(book))||editingSeriesWorkIds.includes(shelfIdOf(book)))),byId=new Map(local.map(book=>[shelfIdOf(book),book])),selected=editingSeriesWorkIds.map(id=>byId.get(id)).filter(Boolean),available=local.filter(book=>!editingSeriesWorkIds.includes(shelfIdOf(book))&&!occupiedByOther.has(shelfIdOf(book))),ordered=[...selected,...available];$('#seriesBookChoices').innerHTML=ordered.length?ordered.map(book=>{const id=shelfIdOf(book),inBox=editingSeriesWorkIds.includes(id),position=editingSeriesWorkIds.indexOf(id);return`<div class="series-choice ${inBox?'is-selected':''}" draggable="${inBox}" data-work-id="${escapeHtml(id)}"><span class="series-choice-handle"><span class="series-choice-grip">${inBox?'☰':'○'}</span>${seriesChoiceCoverHtml(book)}</span><span>${seriesChoiceTitleHtml(book)}<small>${inBox?`${position+1}冊目・長押しで並び替え`:'このBOXへ追加できます'}</small></span>${inBox?'<span class="series-choice-actions"><button type="button" data-action="detail">詳細</button><button type="button" data-action="up" aria-label="上へ">↑</button><button type="button" data-action="down" aria-label="下へ">↓</button><button type="button" data-action="remove">外す</button></span>':'<button type="button" data-action="add">追加</button>'}</div>`;}).join(''):`<p class="series-choice-empty">${owned?'追加できる本はありません。':'追加できる公開作品はありません。'}</p>`;
+function renderSeriesBookChoices(){const owned=editingSeriesShelf==='owned',published=new Set(authorWorks.map(work=>work.workId)),seriesSource=owned?ownedSeriesBoxes:authorSeries,occupiedByOther=new Set(seriesSource.filter(series=>series.seriesId!==editingSeriesId).flatMap(series=>seriesBookIds(series,editingSeriesShelf))),archived=new Set(readIdList(SHELF_ARCHIVE_KEYS[editingSeriesShelf])),local=(shelfDataCache[editingSeriesShelf]||[]).filter(book=>!archived.has(shelfIdOf(book))&&(owned||published.has(book.workId))&&(!occupiedByOther.has(shelfIdOf(book))||editingSeriesWorkIds.includes(shelfIdOf(book)))),byId=new Map(local.map(book=>[shelfIdOf(book),book])),selected=editingSeriesWorkIds.map(id=>byId.get(id)).filter(Boolean),available=local.filter(book=>!editingSeriesWorkIds.includes(shelfIdOf(book))&&!occupiedByOther.has(shelfIdOf(book))),ordered=[...selected,...available];$('#seriesBookChoices').innerHTML=ordered.length?ordered.map(book=>{const id=shelfIdOf(book),inBox=editingSeriesWorkIds.includes(id),position=editingSeriesWorkIds.indexOf(id);return`<div class="series-choice ${inBox?'is-selected':''}" draggable="${inBox}" data-work-id="${escapeHtml(id)}"><span class="series-choice-handle">${inBox?'☰':'○'}</span><span><strong>${escapeHtml(book.title)}</strong><small>${inBox?`${position+1}冊目・ドラッグで並び替え`:'このBOXへ追加できます'}</small></span>${inBox?'<span class="series-choice-actions"><button type="button" data-action="detail">詳細</button><button type="button" data-action="up" aria-label="上へ">↑</button><button type="button" data-action="down" aria-label="下へ">↓</button><button type="button" data-action="remove">外す</button></span>':'<button type="button" data-action="add">追加</button>'}</div>`;}).join(''):`<p class="series-choice-empty">${owned?'追加できる本はありません。':'追加できる公開作品はありません。'}</p>`;
   document.querySelectorAll('#seriesBookChoices .series-choice button').forEach(button=>button.onclick=()=>{const id=button.closest('.series-choice').dataset.workId,index=editingSeriesWorkIds.indexOf(id),action=button.dataset.action;if(action==='detail'){const selectedBook=byId.get(id);openDetail(owned?'distribution':(selectedBook?.role==='server-published'?'server-published':'master'),id);return;}if(action==='add'&&index<0)editingSeriesWorkIds.push(id);if(action==='remove'&&index>=0)editingSeriesWorkIds.splice(index,1);if(action==='up'&&index>0)[editingSeriesWorkIds[index-1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index-1]];if(action==='down'&&index>=0&&index<editingSeriesWorkIds.length-1)[editingSeriesWorkIds[index+1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index+1]];renderSeriesBookChoices();});
-  installSeriesCardReorder();
+  let dragged='';document.querySelectorAll('#seriesBookChoices .series-choice.is-selected').forEach(row=>{row.ondragstart=e=>{dragged=row.dataset.workId;draggingSeriesWorkId=dragged;e.dataTransfer.setData('text/ahako-series-work',dragged);e.dataTransfer.effectAllowed='move';row.classList.add('is-dragging');};row.ondragend=()=>{dragged='';draggingSeriesWorkId='';document.querySelectorAll('#seriesBookChoices .series-choice').forEach(item=>item.classList.remove('is-dragging','is-drop-target'));};row.ondragover=e=>{if(!dragged||dragged===row.dataset.workId)return;e.preventDefault();e.dataTransfer.dropEffect='move';row.classList.add('is-drop-target');};row.ondragleave=()=>row.classList.remove('is-drop-target');row.ondrop=e=>{e.preventDefault();const source=dragged||e.dataTransfer.getData('text/ahako-series-work'),target=row.dataset.workId,from=editingSeriesWorkIds.indexOf(source),to=editingSeriesWorkIds.indexOf(target);if(from<0||to<0||from===to)return;editingSeriesWorkIds.splice(to,0,editingSeriesWorkIds.splice(from,1)[0]);dragged='';draggingSeriesWorkId='';renderSeriesBookChoices();};});
 }
-function openSeriesBoxEditor(seriesId='',shelf=currentShelfTab){editingSeriesShelf=shelf==='owned'?'owned':'created';if(editingSeriesShelf==='created'&&!authorToken){openBookshelfAuthor();return;}const source=editingSeriesShelf==='owned'?ownedSeriesBoxes:authorSeries,series=source.find(item=>item.seriesId===seriesId);editingSeriesId=series?.seriesId||'';editingSeriesWorkIds=series?seriesBookIds(series,editingSeriesShelf):[];$('#seriesBoxDialogTitle').textContent=series?'シリーズBOXを編集':'シリーズBOXを作る';$('#seriesBoxTitle').value=series?.title||'';$('#seriesBoxHelp').textContent=editingSeriesShelf==='owned'?'もっている本を選び、カード全体を長押しして順番を入れ替えます。':'公開済みの本を選び、カード全体を長押しして順番を入れ替えます。';$('#deleteSeriesBox').hidden=!series;$('#seriesBoxStatus').textContent='';$('#seriesBoxStatus').classList.remove('is-error');renderSeriesBookChoices();$('#seriesBoxDialog').showModal();syncShelfScrollLock();}
-async function saveSeriesBox(){const title=$('#seriesBoxTitle').value.trim(),status=$('#seriesBoxStatus');if(!title){status.textContent='BOX名を入力してください。';return;}status.textContent='保存しています…';status.classList.remove('is-error');try{let id=editingSeriesId,isNew=!id;if(editingSeriesShelf==='owned'){if(!id)id=newOwnedSeriesId();const next=ownedSeriesBoxes.filter(box=>box.seriesId!==id);next.push({seriesId:id,title,copyIds:[...editingSeriesWorkIds]});if(!writeOwnedSeriesBoxes(next))throw new Error('この端末にBOXを保存できませんでした。');if(isNew)writeIdList(OWNED_SERIES_BOX_ORDER_KEY,[id,...readIdList(OWNED_SERIES_BOX_ORDER_KEY).filter(value=>value!==id)]);$('#seriesBoxDialog').close();await refreshSeriesShelfFromCache();toast('シリーズBOXを保存しました。');return;}if(!id){const created=await authorRequest('/author/series',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});id=created.series.seriesId;}else await authorRequest(`/author/series/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});await authorRequest(`/author/series/${id}/books`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds:editingSeriesWorkIds})});if(isNew)writeIdList(SERIES_BOX_ORDER_KEY,[id,...readIdList(SERIES_BOX_ORDER_KEY).filter(value=>value!==id)]);await loadAuthorShelfData({recoverMasters:false,masterWorkIds:[...new Set([...editingSeriesWorkIds,...authorSeries.flatMap(box=>(box.episodes||[]).filter(ep=>box.seriesId===editingSeriesId||editingSeriesWorkIds.includes(ep.workId)).map(ep=>ep.workId))])],throwOnError:true});$('#seriesBoxDialog').close();toast('シリーズBOXを保存しました。');}catch(error){status.textContent=error.message||'保存できませんでした。';status.classList.add('is-error');}}
+function openSeriesBoxEditor(seriesId='',shelf=currentShelfTab){editingSeriesShelf=shelf==='owned'?'owned':'created';if(editingSeriesShelf==='created'&&!authorToken){openBookshelfAuthor();return;}const source=editingSeriesShelf==='owned'?ownedSeriesBoxes:authorSeries,series=source.find(item=>item.seriesId===seriesId);editingSeriesId=series?.seriesId||'';editingSeriesWorkIds=series?seriesBookIds(series,editingSeriesShelf):[];$('#seriesBoxDialogTitle').textContent=series?'シリーズBOXを編集':'シリーズBOXを作る';$('#seriesBoxTitle').value=series?.title||'';$('#seriesBoxHelp').textContent=editingSeriesShelf==='owned'?'もっている本を選び、つまみで順番を入れ替えます。':'公開済みの本を選び、つまみで順番を入れ替えます。';$('#deleteSeriesBox').hidden=!series;$('#seriesBoxStatus').textContent='';$('#seriesBoxStatus').classList.remove('is-error');renderSeriesBookChoices();$('#seriesBoxDialog').showModal();syncShelfScrollLock();}
+async function saveSeriesBox(){const title=$('#seriesBoxTitle').value.trim(),status=$('#seriesBoxStatus');if(!title){status.textContent='BOX名を入力してください。';return;}status.textContent='保存しています…';status.classList.remove('is-error');try{let id=editingSeriesId,isNew=!id;if(editingSeriesShelf==='owned'){if(!id)id=newOwnedSeriesId();const next=ownedSeriesBoxes.filter(box=>box.seriesId!==id);next.push({seriesId:id,title,copyIds:[...editingSeriesWorkIds]});if(!writeOwnedSeriesBoxes(next))throw new Error('この端末にBOXを保存できませんでした。');if(isNew)writeIdList(OWNED_SERIES_BOX_ORDER_KEY,[id,...readIdList(OWNED_SERIES_BOX_ORDER_KEY).filter(value=>value!==id)]);$('#seriesBoxDialog').close();await render();toast('シリーズBOXを保存しました。');return;}if(!id){const created=await authorRequest('/author/series',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});id=created.series.seriesId;}else await authorRequest(`/author/series/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});await authorRequest(`/author/series/${id}/books`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds:editingSeriesWorkIds})});if(isNew)writeIdList(SERIES_BOX_ORDER_KEY,[id,...readIdList(SERIES_BOX_ORDER_KEY).filter(value=>value!==id)]);await loadAuthorShelfData();$('#seriesBoxDialog').close();toast('シリーズBOXを保存しました。');}catch(error){status.textContent=error.message||'保存できませんでした。';status.classList.add('is-error');}}
 async function deleteSeriesBox(){if(!editingSeriesId||!await AhakoDialog.confirm('BOXを削除しますか？ 本そのものは削除されません。'))return;try{if(editingSeriesShelf==='owned'){writeOwnedSeriesBoxes(ownedSeriesBoxes.filter(box=>box.seriesId!==editingSeriesId));writeIdList(OWNED_SERIES_BOX_ORDER_KEY,readIdList(OWNED_SERIES_BOX_ORDER_KEY).filter(id=>id!==editingSeriesId));$('#seriesBoxDialog').close();await render();toast('シリーズBOXを削除しました。');return;}await authorRequest(`/author/series/${editingSeriesId}`,{method:'DELETE'});writeIdList(SERIES_BOX_ORDER_KEY,readIdList(SERIES_BOX_ORDER_KEY).filter(id=>id!==editingSeriesId));await loadAuthorShelfData();$('#seriesBoxDialog').close();toast('シリーズBOXを削除しました。');}catch(error){$('#seriesBoxStatus').textContent=error.message;}}
 function openStudioFromBookshelf(){closeBookshelfMenu();location.href='../studio/?from=bookshelf';}
 $('#createStudioIconButton').onclick=$('#emptyCreateButton').onclick=openStudioFromBookshelf;

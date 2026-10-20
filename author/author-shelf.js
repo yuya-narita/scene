@@ -8,9 +8,9 @@ let toastTimer=0;
 let requestedWorkOpened=false;
 
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));}
-function authorReferenceFromUrl(){const params=new URLSearchParams(location.search),slug=String(params.get('u')||'').trim().toLowerCase();if(/^[a-z0-9][a-z0-9_-]{2,29}$/.test(slug))return`by-slug/${encodeURIComponent(slug)}`;const authorId=String(params.get('id')||params.get('author')||'').trim().toLowerCase();return validAuthorId(authorId)?encodeURIComponent(authorId):'';}
+function authorReferenceFromUrl(){const params=new URLSearchParams(location.search),authorId=String(params.get('id')||params.get('author')||'').trim().toLowerCase();if(validAuthorId(authorId))return encodeURIComponent(authorId);const slug=String(params.get('u')||'').trim().toLowerCase();if(/^[a-z0-9][a-z0-9_-]{2,29}$/.test(slug))return`by-slug/${encodeURIComponent(slug)}`;return'';}
 function validAuthorId(value){return /^author_[a-f0-9]{32}$/.test(value);}
-function publicShelfShareUrl(){const author=shelfData?.author||{},reference=author.slug||author.authorId;return reference?`${API_BASE}/s/${encodeURIComponent(reference)}`:location.href;}
+function publicShelfShareUrl(){const author=shelfData?.author||{},reference=author.authorId||author.slug;return reference?`${API_BASE}/s/${encodeURIComponent(reference)}`:location.href;}
 function showToast(message){const toast=$('#toast');toast.textContent=message;toast.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast.hidden=true;},2400);}
 function coverHtml(work,className='book-cover'){return `<span class="${className}">${work?.coverUrl?`<img src="${escapeHtml(work.coverUrl)}" alt="" loading="lazy">`:'<span class="book-cover-fallback">□</span>'}</span>`;}
 function ownCopyBadgeHtml(work){return work?.ownCopyAvailable===true?'<span class="own-copy-available" title="読了後に自分の一冊を受け取れます"><b aria-hidden="true">□＋</b><em>一冊</em></span>':'';}
