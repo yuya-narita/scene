@@ -43,6 +43,9 @@ const OWNED_SERIES_BOXES_KEY='ahako:bookshelf:owned-series-boxes:v1';
 const OWNED_SERIES_BOX_ORDER_KEY='ahako:bookshelf:owned-series-box-order:v1';
 const SHELF_SCROLL_KEYS={owned:'ahako:bookshelf:scroll:owned',created:'ahako:bookshelf:scroll:created',official:'ahako:bookshelf:scroll:official'};
 let currentShelfTab=null;
+// V4: keep the entrance/loading veil up until local + signed-in author data
+// have both settled. This prevents the incomplete local shelf from flashing first.
+let initialShelfBooting=true;
 let shelfCounts={owned:0,created:0};
 let coverUrls=[];
 let currentJourneyData=null;
@@ -1339,7 +1342,7 @@ async function presentShelfFromCache({refreshOfficial=false}={}){
   installShelfPinch();
   if(!official)bindBookInteractions();
   const viewport=$('#shelfBodyViewport');
-  if(viewport.classList.contains('is-shelf-pending')){
+  if(viewport.classList.contains('is-shelf-pending')&&!initialShelfBooting){
     // Keep the entrance visible while the first row decodes.
     await waitForEntranceCovers();
     // Real shelf layout exists behind the entrance; restore before revealing.
@@ -2584,6 +2587,8 @@ syncBookshelfAuthorUI();
       catch(e){console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
       await render();
       await restoreBookshelfAuthorSession();
+      initialShelfBooting=false;
+      await presentShelfFromCache({refreshOfficial:false});
       if(claimed)toast('自分の一冊を本棚に受け取りました。');
     },{once:true});
     return;
@@ -2593,8 +2598,14 @@ syncBookshelfAuthorUI();
   catch(e){console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
   await render();
   await restoreBookshelfAuthorSession();
+  // V4: render() intentionally built the local shelf behind the entrance.
+  // restoreBookshelfAuthorSession() may then merge /author/works + series data.
+  // Reveal only once that final state is ready, so Series BOX and public covers
+  // never appear as a second paint after reload.
+  initialShelfBooting=false;
+  await presentShelfFromCache({refreshOfficial:false});
   if(claimed)toast('自分の一冊を本棚に受け取りました。');
-})().catch(e=>{console.error(e);
+})().catch(e=>{initialShelfBooting=false;console.error(e);
   $('#shelfLoadingState').hidden=false;
   $('#shelfLoadingState').textContent='本棚を開けませんでした。再読み込みしてお試しください。';
   $('#shelfBodyViewport').classList.add('is-shelf-pending');
