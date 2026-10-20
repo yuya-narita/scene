@@ -2285,11 +2285,141 @@ function setBookshelfAuthStatus(message='',error=false){const el=$('#bookshelfAu
 function openBookshelfAuthor(){syncBookshelfAuthorUI();setBookshelfAuthStatus('');$('#bookshelfAuthorDialog').showModal();syncShelfScrollLock();}
 async function requestBookshelfAuthorCode(){const email=$('#bookshelfAuthorEmail').value.trim(),displayName=$('#bookshelfAuthorDisplayName').value.trim();setBookshelfAuthStatus('送信しています…');try{await authorRequest('/author-auth/request-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});$('#bookshelfAuthorEmailForm').hidden=true;$('#bookshelfAuthorCodeForm').hidden=false;$('#bookshelfAuthorCode').focus();setBookshelfAuthStatus('メールに届いた6桁のコードを入力してください。');sessionStorage.setItem('ahako:author-login-email',email);sessionStorage.setItem('ahako:author-login-name',displayName);}catch(error){setBookshelfAuthStatus(error.message,true);}}
 async function verifyBookshelfAuthorCode(){const email=sessionStorage.getItem('ahako:author-login-email')||$('#bookshelfAuthorEmail').value.trim(),displayName=sessionStorage.getItem('ahako:author-login-name')||$('#bookshelfAuthorDisplayName').value.trim(),code=$('#bookshelfAuthorCode').value.trim();setBookshelfAuthStatus('確認しています…');try{const payload=await authorRequest('/author-auth/verify-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,displayName,code})});saveAuthorSession(payload.token,payload.author);await loadAuthorShelfData();$('#bookshelfAuthorDialog').close();toast('作者アカウントでログインしました。');}catch(error){setBookshelfAuthStatus(error.message,true);}}
-function renderSeriesBookChoices(){const owned=editingSeriesShelf==='owned',published=new Set(authorWorks.map(work=>work.workId)),seriesSource=owned?ownedSeriesBoxes:authorSeries,occupiedByOther=new Set(seriesSource.filter(series=>series.seriesId!==editingSeriesId).flatMap(series=>seriesBookIds(series,editingSeriesShelf))),archived=new Set(readIdList(SHELF_ARCHIVE_KEYS[editingSeriesShelf])),local=(shelfDataCache[editingSeriesShelf]||[]).filter(book=>!archived.has(shelfIdOf(book))&&(owned||published.has(book.workId))&&(!occupiedByOther.has(shelfIdOf(book))||editingSeriesWorkIds.includes(shelfIdOf(book)))),byId=new Map(local.map(book=>[shelfIdOf(book),book])),selected=editingSeriesWorkIds.map(id=>byId.get(id)).filter(Boolean),available=local.filter(book=>!editingSeriesWorkIds.includes(shelfIdOf(book))&&!occupiedByOther.has(shelfIdOf(book))),ordered=[...selected,...available];$('#seriesBookChoices').innerHTML=ordered.length?ordered.map(book=>{const id=shelfIdOf(book),inBox=editingSeriesWorkIds.includes(id),position=editingSeriesWorkIds.indexOf(id);return`<div class="series-choice ${inBox?'is-selected':''}" draggable="${inBox}" data-work-id="${escapeHtml(id)}"><span class="series-choice-handle">${inBox?'☰':'○'}</span><span><strong>${escapeHtml(book.title)}</strong><small>${inBox?`${position+1}冊目・ドラッグで並び替え`:'このBOXへ追加できます'}</small></span>${inBox?'<span class="series-choice-actions"><button type="button" data-action="detail">詳細</button><button type="button" data-action="up" aria-label="上へ">↑</button><button type="button" data-action="down" aria-label="下へ">↓</button><button type="button" data-action="remove">外す</button></span>':'<button type="button" data-action="add">追加</button>'}</div>`;}).join(''):`<p class="series-choice-empty">${owned?'追加できる本はありません。':'追加できる公開作品はありません。'}</p>`;
-  document.querySelectorAll('#seriesBookChoices .series-choice button').forEach(button=>button.onclick=()=>{const id=button.closest('.series-choice').dataset.workId,index=editingSeriesWorkIds.indexOf(id),action=button.dataset.action;if(action==='detail'){const selectedBook=byId.get(id);openDetail(owned?'distribution':(selectedBook?.role==='server-published'?'server-published':'master'),id);return;}if(action==='add'&&index<0)editingSeriesWorkIds.push(id);if(action==='remove'&&index>=0)editingSeriesWorkIds.splice(index,1);if(action==='up'&&index>0)[editingSeriesWorkIds[index-1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index-1]];if(action==='down'&&index>=0&&index<editingSeriesWorkIds.length-1)[editingSeriesWorkIds[index+1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index+1]];renderSeriesBookChoices();});
-  let dragged='';document.querySelectorAll('#seriesBookChoices .series-choice.is-selected').forEach(row=>{row.ondragstart=e=>{dragged=row.dataset.workId;draggingSeriesWorkId=dragged;e.dataTransfer.setData('text/ahako-series-work',dragged);e.dataTransfer.effectAllowed='move';row.classList.add('is-dragging');};row.ondragend=()=>{dragged='';draggingSeriesWorkId='';document.querySelectorAll('#seriesBookChoices .series-choice').forEach(item=>item.classList.remove('is-dragging','is-drop-target'));};row.ondragover=e=>{if(!dragged||dragged===row.dataset.workId)return;e.preventDefault();e.dataTransfer.dropEffect='move';row.classList.add('is-drop-target');};row.ondragleave=()=>row.classList.remove('is-drop-target');row.ondrop=e=>{e.preventDefault();const source=dragged||e.dataTransfer.getData('text/ahako-series-work'),target=row.dataset.workId,from=editingSeriesWorkIds.indexOf(source),to=editingSeriesWorkIds.indexOf(target);if(from<0||to<0||from===to)return;editingSeriesWorkIds.splice(to,0,editingSeriesWorkIds.splice(from,1)[0]);dragged='';draggingSeriesWorkId='';renderSeriesBookChoices();};});
+const seriesChoiceCoverUrls=new Map();
+function releaseSeriesChoiceCovers(){for(const item of seriesChoiceCoverUrls.values())URL.revokeObjectURL(item.url);seriesChoiceCoverUrls.clear();}
+function seriesChoiceCoverHtml(book){
+  const key=shelfIdOf(book),source=book.coverBytes||book.coverBlob;
+  let url=String(book.coverUrl||authorWorks.find(work=>work.workId===book.workId)?.coverUrl||'');
+  if(source){
+    let cached=seriesChoiceCoverUrls.get(key);
+    if(cached?.source!==source){
+      if(cached)URL.revokeObjectURL(cached.url);
+      cached=null;
+      const blob=storedCoverBlob(book);
+      if(blob){cached={source,url:URL.createObjectURL(blob)};seriesChoiceCoverUrls.set(key,cached);}
+    }
+    if(cached)url=cached.url;
+  }
+  return `<span class="series-choice-cover">${url?`<img src="${escapeHtml(url)}" alt="" loading="lazy" decoding="async" draggable="false">`:'<span aria-hidden="true">□</span>'}</span>`;
 }
-function openSeriesBoxEditor(seriesId='',shelf=currentShelfTab){editingSeriesShelf=shelf==='owned'?'owned':'created';if(editingSeriesShelf==='created'&&!authorToken){openBookshelfAuthor();return;}const source=editingSeriesShelf==='owned'?ownedSeriesBoxes:authorSeries,series=source.find(item=>item.seriesId===seriesId);editingSeriesId=series?.seriesId||'';editingSeriesWorkIds=series?seriesBookIds(series,editingSeriesShelf):[];$('#seriesBoxDialogTitle').textContent=series?'シリーズBOXを編集':'シリーズBOXを作る';$('#seriesBoxTitle').value=series?.title||'';$('#seriesBoxHelp').textContent=editingSeriesShelf==='owned'?'もっている本を選び、つまみで順番を入れ替えます。':'公開済みの本を選び、つまみで順番を入れ替えます。';$('#deleteSeriesBox').hidden=!series;$('#seriesBoxStatus').textContent='';$('#seriesBoxStatus').classList.remove('is-error');renderSeriesBookChoices();$('#seriesBoxDialog').showModal();syncShelfScrollLock();}
+$('#seriesBoxDialog')?.addEventListener('close',releaseSeriesChoiceCovers);
+function seriesChoiceTitleHtml(book){
+  const published=authorWorks.find(work=>work.workId===book.workId);
+  const title=String(book.title||published?.title||'Untitled').trim();
+  const episodeTitle=String(book.episodeTitle||published?.episodeTitle||'').trim();
+  const episode=String(book.episode||published?.episodeLabel||published?.episode||'').trim();
+  const secondary=[episode,episodeTitle&&episodeTitle!==title?title:''].filter(Boolean).join(' ／ ');
+  return `<strong>${escapeHtml(episodeTitle||title)}</strong>${secondary?`<span class="series-choice-work-title">${escapeHtml(secondary)}</span>`:''}`;
+}
+// Keep the original card as a moving gap. Neighbours animate into their new
+// positions; a floating copy follows the finger without rebuilding the list.
+let cancelSeriesCardReorder=()=>{};
+function moveSeriesCard(row,to){
+  const list=row.parentElement,rows=[...list.querySelectorAll('.series-choice.is-selected')];
+  const from=rows.indexOf(row);if(from<0||to<0||to>=rows.length||from===to)return;
+  const before=new Map(rows.map(item=>[item,item.getBoundingClientRect().top]));
+  const target=rows[to];
+  if(to>from)target.after(row);else target.before(row);
+  const ids=[...list.querySelectorAll('.series-choice.is-selected')].map(item=>item.dataset.workId);
+  editingSeriesWorkIds=ids;
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    for(const item of rows){
+      if(item===row)continue;
+      const dy=before.get(item)-item.getBoundingClientRect().top;
+      if(dy&&item.animate){item.getAnimations?.().forEach(animation=>animation.cancel());item.animate([{transform:`translateY(${dy}px)`},{transform:'translateY(0)'}],{duration:160,easing:'ease-out'});}
+    }
+  }
+}
+function installSeriesCardReorder(){
+  cancelSeriesCardReorder();
+  const list=$('#seriesBookChoices'),dialog=$('#seriesBoxDialog');
+  if(!list||!dialog)return;
+  const controller=new AbortController(),options={signal:controller.signal};
+  let pending=null,active=null,frame=0,suppressClick=false;
+  function clearPending(){if(pending)clearTimeout(pending.timer);pending=null;}
+  function finish(cancel=false,redraw=true){
+    clearPending();cancelAnimationFrame(frame);frame=0;
+    if(active){
+      if(cancel)editingSeriesWorkIds=active.original;
+      active.row.classList.remove('is-sort-gap');active.ghost.remove();active=null;
+      list.classList.remove('is-sorting');
+      if(redraw)renderSeriesBookChoices();
+    }
+  }
+  cancelSeriesCardReorder=()=>{finish(true,false);controller.abort();};
+  function tick(){
+    if(!active)return;
+    const bounds=list.getBoundingClientRect(),y=active.y;
+    const edge=Math.min(48,bounds.height/4);
+    const delta=y<bounds.top+edge?-Math.min(10,(bounds.top+edge-y)/4):y>bounds.bottom-edge?Math.min(10,(y-bounds.bottom+edge)/4):0;
+    if(delta)list.scrollTop+=delta;
+    active.ghost.style.top=`${y-active.offset}px`;
+    const rows=[...list.querySelectorAll('.series-choice.is-selected')];
+    let to=rows.indexOf(active.row);
+    for(let i=0;i<rows.length;i++){
+      if(rows[i]===active.row)continue;
+      const top=bounds.top+list.clientTop+rows[i].offsetTop-list.scrollTop;
+      const middle=top+rows[i].offsetHeight/2;
+      if(i<to&&y<middle){to=i;break;}
+      if(i>to&&y>middle)to=i;
+    }
+    moveSeriesCard(active.row,to);
+    frame=requestAnimationFrame(tick);
+  }
+  list.addEventListener('touchstart',event=>{
+    if(event.touches.length!==1){finish(true);return;}
+    const row=event.target.closest('.series-choice.is-selected');
+    if(!row||event.target.closest('button,a,input'))return;
+    const touch=event.touches[0],original=[...editingSeriesWorkIds];
+    pending={x:touch.clientX,y:touch.clientY,id:touch.identifier,timer:setTimeout(()=>{
+      if(!pending)return;
+      const rect=row.getBoundingClientRect(),ghost=row.cloneNode(true);
+      ghost.classList.add('series-sort-ghost');ghost.removeAttribute('draggable');ghost.setAttribute('aria-hidden','true');
+      Object.assign(ghost.style,{left:`${rect.left}px`,top:`${rect.top}px`,width:`${rect.width}px`,height:`${rect.height}px`});
+      dialog.append(ghost);
+      active={row,ghost,y:pending.y,offset:pending.y-rect.top,id:pending.id,original};
+      clearPending();row.classList.add('is-sort-gap');list.classList.add('is-sorting');
+      suppressClick=true;frame=requestAnimationFrame(tick);
+    },350)};
+  },{...options,passive:true});
+  list.addEventListener('touchmove',event=>{
+    if(active){
+      if(event.cancelable)event.preventDefault();
+      const touch=[...event.touches].find(item=>item.identifier===active.id);
+      if(touch)active.y=touch.clientY;else finish(true);
+    }else if(pending){
+      const touch=event.touches[0];
+      if(!touch||Math.hypot(touch.clientX-pending.x,touch.clientY-pending.y)>8)clearPending();
+    }
+  },{...options,passive:false});
+  // Listen outside the list as the finger may leave its bounds while sorting.
+  window.addEventListener('touchend',()=>finish(false),options);
+  window.addEventListener('touchcancel',()=>finish(true),options);
+  window.addEventListener('blur',()=>finish(true),options);
+  dialog.addEventListener('close',()=>{finish(true,false);controller.abort();},options);
+  list.addEventListener('contextmenu',event=>{if(active||pending)event.preventDefault();},options);
+  list.addEventListener('click',event=>{if(suppressClick){event.preventDefault();event.stopImmediatePropagation();suppressClick=false;}},{...options,capture:true});
+  let dragged=null;
+  list.querySelectorAll('.series-choice.is-selected').forEach(row=>{
+    row.ondragstart=event=>{
+      if(active||pending){event.preventDefault();return;}
+      dragged=row;draggingSeriesWorkId=row.dataset.workId;
+      event.dataTransfer.setData('text/ahako-series-work',draggingSeriesWorkId);event.dataTransfer.effectAllowed='move';row.classList.add('is-dragging');
+    };
+    row.ondragover=event=>{
+      if(!dragged)return;event.preventDefault();event.dataTransfer.dropEffect='move';
+      moveSeriesCard(dragged,[...list.querySelectorAll('.series-choice.is-selected')].indexOf(row));
+    };
+    row.ondrop=event=>{if(dragged)event.preventDefault();};
+    row.ondragend=()=>{dragged=null;draggingSeriesWorkId='';renderSeriesBookChoices();};
+  });
+}
+
+function renderSeriesBookChoices(){const owned=editingSeriesShelf==='owned',published=new Set(authorWorks.map(work=>work.workId)),seriesSource=owned?ownedSeriesBoxes:authorSeries,occupiedByOther=new Set(seriesSource.filter(series=>series.seriesId!==editingSeriesId).flatMap(series=>seriesBookIds(series,editingSeriesShelf))),archived=new Set(readIdList(SHELF_ARCHIVE_KEYS[editingSeriesShelf])),local=(shelfDataCache[editingSeriesShelf]||[]).filter(book=>!archived.has(shelfIdOf(book))&&(owned||published.has(book.workId))&&(!occupiedByOther.has(shelfIdOf(book))||editingSeriesWorkIds.includes(shelfIdOf(book)))),byId=new Map(local.map(book=>[shelfIdOf(book),book])),selected=editingSeriesWorkIds.map(id=>byId.get(id)).filter(Boolean),available=local.filter(book=>!editingSeriesWorkIds.includes(shelfIdOf(book))&&!occupiedByOther.has(shelfIdOf(book))),ordered=[...selected,...available];$('#seriesBookChoices').innerHTML=ordered.length?ordered.map(book=>{const id=shelfIdOf(book),inBox=editingSeriesWorkIds.includes(id),position=editingSeriesWorkIds.indexOf(id);return`<div class="series-choice ${inBox?'is-selected':''}" draggable="${inBox}" data-work-id="${escapeHtml(id)}"><span class="series-choice-handle"><span class="series-choice-grip">${inBox?'☰':'○'}</span>${seriesChoiceCoverHtml(book)}</span><span>${seriesChoiceTitleHtml(book)}<small>${inBox?`${position+1}冊目・長押しで並び替え`:'このBOXへ追加できます'}</small></span>${inBox?'<span class="series-choice-actions"><button type="button" data-action="detail">詳細</button><button type="button" data-action="up" aria-label="上へ">↑</button><button type="button" data-action="down" aria-label="下へ">↓</button><button type="button" data-action="remove">外す</button></span>':'<button type="button" data-action="add">追加</button>'}</div>`;}).join(''):`<p class="series-choice-empty">${owned?'追加できる本はありません。':'追加できる公開作品はありません。'}</p>`;
+  document.querySelectorAll('#seriesBookChoices .series-choice button').forEach(button=>button.onclick=()=>{const id=button.closest('.series-choice').dataset.workId,index=editingSeriesWorkIds.indexOf(id),action=button.dataset.action;if(action==='detail'){const selectedBook=byId.get(id);openDetail(owned?'distribution':(selectedBook?.role==='server-published'?'server-published':'master'),id);return;}if(action==='add'&&index<0)editingSeriesWorkIds.push(id);if(action==='remove'&&index>=0)editingSeriesWorkIds.splice(index,1);if(action==='up'&&index>0)[editingSeriesWorkIds[index-1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index-1]];if(action==='down'&&index>=0&&index<editingSeriesWorkIds.length-1)[editingSeriesWorkIds[index+1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index+1]];renderSeriesBookChoices();});
+  installSeriesCardReorder();
+}
+function openSeriesBoxEditor(seriesId='',shelf=currentShelfTab){editingSeriesShelf=shelf==='owned'?'owned':'created';if(editingSeriesShelf==='created'&&!authorToken){openBookshelfAuthor();return;}const source=editingSeriesShelf==='owned'?ownedSeriesBoxes:authorSeries,series=source.find(item=>item.seriesId===seriesId);editingSeriesId=series?.seriesId||'';editingSeriesWorkIds=series?seriesBookIds(series,editingSeriesShelf):[];$('#seriesBoxDialogTitle').textContent=series?'シリーズBOXを編集':'シリーズBOXを作る';$('#seriesBoxTitle').value=series?.title||'';$('#seriesBoxHelp').textContent=editingSeriesShelf==='owned'?'もっている本を選び、カード全体を長押しして順番を入れ替えます。':'公開済みの本を選び、カード全体を長押しして順番を入れ替えます。';$('#deleteSeriesBox').hidden=!series;$('#seriesBoxStatus').textContent='';$('#seriesBoxStatus').classList.remove('is-error');renderSeriesBookChoices();$('#seriesBoxDialog').showModal();syncShelfScrollLock();}
 async function saveSeriesBox(){const title=$('#seriesBoxTitle').value.trim(),status=$('#seriesBoxStatus');if(!title){status.textContent='BOX名を入力してください。';return;}status.textContent='保存しています…';status.classList.remove('is-error');try{let id=editingSeriesId,isNew=!id;if(editingSeriesShelf==='owned'){if(!id)id=newOwnedSeriesId();const next=ownedSeriesBoxes.filter(box=>box.seriesId!==id);next.push({seriesId:id,title,copyIds:[...editingSeriesWorkIds]});if(!writeOwnedSeriesBoxes(next))throw new Error('この端末にBOXを保存できませんでした。');if(isNew)writeIdList(OWNED_SERIES_BOX_ORDER_KEY,[id,...readIdList(OWNED_SERIES_BOX_ORDER_KEY).filter(value=>value!==id)]);$('#seriesBoxDialog').close();await render();toast('シリーズBOXを保存しました。');return;}if(!id){const created=await authorRequest('/author/series',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});id=created.series.seriesId;}else await authorRequest(`/author/series/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});await authorRequest(`/author/series/${id}/books`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({workIds:editingSeriesWorkIds})});if(isNew)writeIdList(SERIES_BOX_ORDER_KEY,[id,...readIdList(SERIES_BOX_ORDER_KEY).filter(value=>value!==id)]);await loadAuthorShelfData();$('#seriesBoxDialog').close();toast('シリーズBOXを保存しました。');}catch(error){status.textContent=error.message||'保存できませんでした。';status.classList.add('is-error');}}
 async function deleteSeriesBox(){if(!editingSeriesId||!await AhakoDialog.confirm('BOXを削除しますか？ 本そのものは削除されません。'))return;try{if(editingSeriesShelf==='owned'){writeOwnedSeriesBoxes(ownedSeriesBoxes.filter(box=>box.seriesId!==editingSeriesId));writeIdList(OWNED_SERIES_BOX_ORDER_KEY,readIdList(OWNED_SERIES_BOX_ORDER_KEY).filter(id=>id!==editingSeriesId));$('#seriesBoxDialog').close();await render();toast('シリーズBOXを削除しました。');return;}await authorRequest(`/author/series/${editingSeriesId}`,{method:'DELETE'});writeIdList(SERIES_BOX_ORDER_KEY,readIdList(SERIES_BOX_ORDER_KEY).filter(id=>id!==editingSeriesId));await loadAuthorShelfData();$('#seriesBoxDialog').close();toast('シリーズBOXを削除しました。');}catch(error){$('#seriesBoxStatus').textContent=error.message;}}
 function openStudioFromBookshelf(){closeBookshelfMenu();location.href='../studio/?from=bookshelf';}
