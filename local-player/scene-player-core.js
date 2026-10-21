@@ -542,6 +542,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }, true);
 
       this._on(this.els.stage, 'click', (e) => {
+        // Studio direct-layout mode owns the whole gesture. A resize/rotate release
+        // can synthesize a click after pointer capture; it must never mean Next Scene.
+        if (this.host.classList.contains('sp-direct-layout-editing')) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
         if (e.target.closest('button')) return;
 
         // V133 — even when a large image physically overlaps this area, tapping
@@ -3459,8 +3466,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _framePosition(scene) {
       const common=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
-      const viewportWidth=Math.max(1,Number(this.host?.clientWidth)||Number(global.innerWidth)||1);
-      const source=viewportWidth>=1100&&common?.pc&&typeof common.pc==='object'?common.pc:common;
+      // V7: one normalized text coordinate system across phone/tablet/PC.
+      const source=common;
       const preset=String(source.preset||'auto');
       const presets={
         'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],

@@ -493,6 +493,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       else this._on(this.els.stage, 'mousedown', rememberLiveEditTextGesture, true);
 
       this._on(this.els.stage, 'click', (e) => {
+        // Studio direct-layout mode owns the whole gesture. A resize/rotate release
+        // can synthesize a click after pointer capture; it must never mean Next Scene.
+        if (this.host.classList.contains('sp-direct-layout-editing')) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
         if (e.target.closest('button')) return;
         if (liveEditTextPointerGesture) {
           liveEditTextPointerGesture = false;
@@ -3443,7 +3450,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _framePosition(scene) {
       const common=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
-      const source=this._viewportWidth()>=1100&&common?.pc&&typeof common.pc==='object'?common.pc:common;
+      // V7: direct text placement is one normalized coordinate system for every preview size.
+      // Never resurrect the legacy PC-only branch when switching device previews.
+      const source=common;
       const preset=String(source.preset||'auto');
       const presets={'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],left:[.18,.5],center:[.5,.5],right:[.82,.5],'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]};
       if(preset==='custom'){

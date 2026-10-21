@@ -11901,8 +11901,16 @@ function startInlineTextEdit(field='text',targetEl=null){
         if(!Number.isFinite(Number(angle))||Math.abs(Number(angle))<.5)delete liveScene.presentation.text.angle;else liveScene.presentation.text.angle=Number(angle);
       };
       const stageRect=stage.getBoundingClientRect(),scenesRect=scenes.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
-      setAdjustedPosition({preset:'custom',x:Math.max(0,Math.min(1,(targetRect.left+targetRect.width/2-stageRect.left)/Math.max(1,stageRect.width))),y:Math.max(0,Math.min(1,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))});
+      // V7: reopening the editor must not re-measure and rewrite an already-authored
+      // normalized position. Re-measuring a rotated/scaled glyph box caused cumulative drift.
+      const existingPosition=p.text.position||p.frame?.position||null;
+      if(existingPosition?.preset!=='custom'||!Number.isFinite(Number(existingPosition.x))||!Number.isFinite(Number(existingPosition.y))){
+        setAdjustedPosition({preset:'custom',x:Math.max(-.35,Math.min(1.35,(targetRect.left+targetRect.width/2-stageRect.left)/Math.max(1,stageRect.width))),y:Math.max(-.35,Math.min(1.35,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))});
+      }else{
+        setAdjustedPosition({preset:'custom',x:Number(existingPosition.x),y:Number(existingPosition.y)});
+      }
       syncLivePosition(p.text.position);
+      playerHost?.classList.add('sp-direct-layout-editing');
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
       const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('ドラッグで移動 ／ ●サイズ ／ ↻回転','Drag to move / ● size / ↻ rotate');
       const sizeHandle=document.createElement('div');sizeHandle.className='frame-position-size-handle';sizeHandle.setAttribute('aria-label',u('文字サイズをドラッグ調整','Drag to resize text'));
@@ -11999,7 +12007,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       rotateHandle.addEventListener('pointerup',finishRotating);rotateHandle.addEventListener('pointercancel',finishRotating);
       [toolbar,auto,cancel,save,sizeHandle,rotateHandle].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false}={})=>{
-        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);shield.remove();hint.remove();sizeHandle.remove();sizeBadge.remove();rotateHandle.remove();angleBadge.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
+        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();sizeHandle.remove();sizeBadge.remove();rotateHandle.remove();angleBadge.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)clearAdjustedPosition();
         else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(beforeAngle==null)delete p.text.angle;else p.text.angle=beforeAngle;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
         syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);syncLiveAngle(p.text.angle);
