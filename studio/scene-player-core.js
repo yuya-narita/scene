@@ -593,17 +593,40 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       if (this.options.swipe) {
         this._on(this.els.stage, 'touchstart', (e) => {
+          // Studio direct-layout editor owns every touch gesture. Do not arm
+          // Player swipe navigation while text is being moved or a slider is dragged.
+          if (this.host.classList.contains('sp-direct-layout-editing')) {
+            this.touchStartY = null;
+            this.touchStartX = null;
+            if (e.cancelable) e.preventDefault();
+            return;
+          }
           const t = e.changedTouches[0];
           this.touchStartY = t.clientY;
           this.touchStartX = t.clientX;
         }, { passive: true });
 
         this._on(this.els.stage, 'touchmove', (e) => {
+          if (this.host.classList.contains('sp-direct-layout-editing')) {
+            this.touchStartY = null;
+            this.touchStartX = null;
+            if (e.cancelable) e.preventDefault();
+            return;
+          }
           // Keep the page itself fixed. History has its own native momentum scroller.
           if (e.cancelable) e.preventDefault();
         }, { passive: false });
 
         this._on(this.els.stage, 'touchend', (e) => {
+          // iPhone emits touchend independently of the pointer-captured editor control.
+          // Never reinterpret that release as a Scene swipe while direct layout is open.
+          if (this.host.classList.contains('sp-direct-layout-editing')) {
+            this.touchStartY = null;
+            this.touchStartX = null;
+            this.suppressNextClick = true;
+            if (e.cancelable) e.preventDefault();
+            return;
+          }
           if (this.touchStartY == null || this.touchStartX == null) return;
           const t = e.changedTouches[0];
           const dy = t.clientY - this.touchStartY;

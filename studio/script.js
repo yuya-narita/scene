@@ -11831,14 +11831,21 @@ function startInlineTextEdit(field='text',targetEl=null){
     const style=document.createElement('style');style.id='framePositionEditorStyle';style.textContent=`
       .frame-position-drag-shield{position:absolute;inset:0;z-index:90;touch-action:none;cursor:move;background:rgba(20,22,26,.035)}
       .frame-position-drag-shield::after{content:"";position:absolute;inset:12px;border:1px dashed rgba(80,84,92,.35);border-radius:16px;pointer-events:none}
-      .frame-position-drag-toolbar{position:absolute;z-index:92;left:50%;bottom:max(92px,calc(env(safe-area-inset-bottom) + 76px));transform:translateX(-50%);display:flex;gap:7px;align-items:center;padding:8px;border-radius:999px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);white-space:nowrap}
-      .frame-position-drag-toolbar button{appearance:none;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:transparent;color:#fff;font:600 12px/1 sans-serif;padding:9px 12px}
+      .frame-position-drag-toolbar{position:absolute;z-index:92;left:50%;bottom:max(76px,calc(env(safe-area-inset-bottom) + 62px));transform:translateX(-50%);display:flex;gap:5px;align-items:center;padding:5px;border-radius:999px;background:rgba(25,26,29,.82);box-shadow:0 6px 22px rgba(0,0,0,.18);white-space:nowrap}
+      .frame-position-drag-toolbar button{appearance:none;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:transparent;color:#fff;font:600 11px/1 sans-serif;padding:7px 10px}
       .frame-position-drag-toolbar button[data-save]{background:#fff;color:#17181b}
-      .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}
-      .frame-position-fixed-controls{position:absolute;z-index:94;left:50%;bottom:max(148px,calc(env(safe-area-inset-bottom) + 132px));transform:translateX(-50%);width:min(420px,calc(100% - 34px));display:grid;gap:8px;padding:10px 12px;border-radius:14px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);color:#fff;font:600 11px/1.2 sans-serif}
-      .frame-position-control-row{display:grid;grid-template-columns:58px minmax(0,1fr) 58px;gap:8px;align-items:center}
-      .frame-position-control-row input[type="range"]{width:100%;margin:0;accent-color:#fff;touch-action:pan-y;-webkit-user-select:none;user-select:none}
-      .frame-position-control-row input[type="number"]{width:58px;box-sizing:border-box;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:rgba(255,255,255,.1);color:#fff;padding:6px 4px;text-align:center;font:700 11px/1 sans-serif}
+      .frame-position-drag-hint{position:absolute;z-index:91;top:14px;left:50%;transform:translateX(-50%);padding:6px 10px;border-radius:999px;background:rgba(25,26,29,.72);color:#fff;font:600 11px/1.25 sans-serif;white-space:nowrap;pointer-events:none}
+      .frame-position-fixed-controls{position:absolute;z-index:94;left:50%;bottom:max(124px,calc(env(safe-area-inset-bottom) + 108px));transform:translateX(-50%);width:min(300px,calc(100% - 58px));display:grid;gap:6px;padding:8px 9px;border-radius:12px;background:rgba(25,26,29,.82);box-shadow:0 6px 22px rgba(0,0,0,.18);color:#fff;font:600 10px/1.15 sans-serif}
+      .frame-position-control-row{display:grid;grid-template-columns:48px minmax(0,1fr) 46px;gap:6px;align-items:center}
+      .frame-position-control-row input[type="range"]{width:100%;margin:0;accent-color:#fff;touch-action:none;-webkit-user-select:none;user-select:none}
+      .frame-position-control-row input[type="number"]{width:46px;box-sizing:border-box;border:1px solid rgba(255,255,255,.22);border-radius:7px;background:rgba(255,255,255,.09);color:#fff;padding:5px 3px;text-align:center;font:700 10px/1 sans-serif}
+      @media (min-width:900px){
+        .frame-position-fixed-controls{width:270px;bottom:112px;padding:7px 8px;gap:5px}
+        .frame-position-control-row{grid-template-columns:44px minmax(0,1fr) 42px;gap:5px}
+        .frame-position-control-row input[type="number"]{width:42px;padding:4px 2px}
+        .frame-position-drag-toolbar{bottom:68px;padding:4px;gap:4px}
+        .frame-position-drag-toolbar button{font-size:10px;padding:6px 9px}
+      }
       .frame-position-control-row input[type="number"]::-webkit-inner-spin-button{opacity:.65}
       .sp-scene.is-frame-position-dragging{transition:none!important;z-index:80!important;visibility:visible!important;opacity:1!important}
       .frame-position-adjust-button{width:100%;margin-top:10px;padding:11px 14px;border:1px solid rgba(100,105,115,.3);border-radius:10px;background:transparent;font:inherit}
@@ -11988,6 +11995,15 @@ function startInlineTextEdit(field='text',targetEl=null){
       };
       stage.addEventListener('click',blockEditorNavigation,true);
       stage.addEventListener('dblclick',blockEditorNavigation,true);
+      // iOS can dispatch touchend after pointer capture to the Player's swipe handler.
+      // Capture the release at the host while this editor is active so no editor
+      // gesture (text move or slider drag) can become Next Scene.
+      const blockEditorTouchRelease=event=>{
+        if(!playerHost?.classList.contains('sp-direct-layout-editing'))return;
+        if(event.cancelable)event.preventDefault();
+        event.stopImmediatePropagation();event.stopPropagation();
+      };
+      playerHost?.addEventListener('touchend',blockEditorTouchRelease,true);
       let dragging=false;
       const applyPoint=(clientX,clientY)=>{
         const sr=stage.getBoundingClientRect(),cr=scenes.getBoundingClientRect(),geometry=player._measureSceneGeometry(article,sr);
@@ -12013,7 +12029,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       shield.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
       [toolbar,controls].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false}={})=>{
-        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
+        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.removeEventListener('touchend',blockEditorTouchRelease,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)clearAdjustedPosition();
         else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(beforeAngle==null)delete p.text.angle;else p.text.angle=beforeAngle;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
         syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);syncLiveAngle(p.text.angle);
