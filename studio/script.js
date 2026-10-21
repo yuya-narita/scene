@@ -11834,7 +11834,12 @@ function startInlineTextEdit(field='text',targetEl=null){
       .frame-position-drag-toolbar{position:absolute;z-index:92;left:50%;bottom:max(92px,calc(env(safe-area-inset-bottom) + 76px));transform:translateX(-50%);display:flex;gap:7px;align-items:center;padding:8px;border-radius:999px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);white-space:nowrap}
       .frame-position-drag-toolbar button{appearance:none;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:transparent;color:#fff;font:600 12px/1 sans-serif;padding:9px 12px}
       .frame-position-drag-toolbar button[data-save]{background:#fff;color:#17181b}
-      .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}\n      .frame-position-size-handle,.frame-position-rotate-handle{position:absolute;z-index:94;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid #fff;border-radius:50%;background:#17181b;box-shadow:0 3px 14px rgba(0,0,0,.32);touch-action:none}\n      .frame-position-size-handle{cursor:nwse-resize}\n      .frame-position-rotate-handle{cursor:grab;display:grid;place-items:center;color:#fff;font:800 18px/1 sans-serif}\n      .frame-position-size-badge,.frame-position-angle-badge{position:absolute;z-index:95;transform:translate(-50%,-46px);padding:6px 9px;border-radius:999px;background:rgba(25,26,29,.86);color:#fff;font:700 11px/1 sans-serif;white-space:nowrap;pointer-events:none}
+      .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}
+      .frame-position-fixed-controls{position:absolute;z-index:94;left:50%;bottom:max(148px,calc(env(safe-area-inset-bottom) + 132px));transform:translateX(-50%);width:min(420px,calc(100% - 34px));display:grid;gap:8px;padding:10px 12px;border-radius:14px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);color:#fff;font:600 11px/1.2 sans-serif}
+      .frame-position-control-row{display:grid;grid-template-columns:58px minmax(0,1fr) 58px;gap:8px;align-items:center}
+      .frame-position-control-row input[type="range"]{width:100%;margin:0;accent-color:#fff;touch-action:none}
+      .frame-position-control-row input[type="number"]{width:58px;box-sizing:border-box;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:rgba(255,255,255,.1);color:#fff;padding:6px 4px;text-align:center;font:700 11px/1 sans-serif}
+      .frame-position-control-row input[type="number"]::-webkit-inner-spin-button{opacity:.65}
       .sp-scene.is-frame-position-dragging{transition:none!important;z-index:80!important;visibility:visible!important;opacity:1!important}
       .frame-position-adjust-button{width:100%;margin-top:10px;padding:11px 14px;border:1px solid rgba(100,105,115,.3);border-radius:10px;background:transparent;font:inherit}
     `;document.head.appendChild(style);
@@ -11912,40 +11917,44 @@ function startInlineTextEdit(field='text',targetEl=null){
       syncLivePosition(p.text.position);
       playerHost?.classList.add('sp-direct-layout-editing');
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
-      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('ドラッグで移動 ／ ●サイズ ／ ↻回転','Drag to move / ● size / ↻ rotate');
-      const sizeHandle=document.createElement('div');sizeHandle.className='frame-position-size-handle';sizeHandle.setAttribute('aria-label',u('文字サイズをドラッグ調整','Drag to resize text'));
-      const sizeBadge=document.createElement('div');sizeBadge.className='frame-position-size-badge';
-      const rotateHandle=document.createElement('div');rotateHandle.className='frame-position-rotate-handle';rotateHandle.textContent='↻';rotateHandle.setAttribute('aria-label',u('文字をドラッグ回転','Drag to rotate text'));
-      const angleBadge=document.createElement('div');angleBadge.className='frame-position-angle-badge';
+      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('文字をドラッグで移動 ／ 下のバーでサイズ・回転','Drag text to move / use sliders for size & rotation');
+      const controls=document.createElement('div');controls.className='frame-position-fixed-controls';
+      const makeSliderRow=(label,min,max,step,value)=>{
+        const row=document.createElement('label');row.className='frame-position-control-row';
+        const name=document.createElement('span');name.textContent=label;
+        const range=document.createElement('input');range.type='range';range.min=String(min);range.max=String(max);range.step=String(step);range.value=String(value);
+        const number=document.createElement('input');number.type='number';number.min=String(min);number.max=String(max);number.step=String(step);number.value=String(value);
+        row.append(name,range,number);controls.append(row);return {range,number};
+      };
       const toolbar=document.createElement('div');toolbar.className='frame-position-drag-toolbar';
       const auto=document.createElement('button');auto.type='button';auto.textContent=u('自動','Auto');
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('取消','Cancel');
       const save=document.createElement('button');save.type='button';save.dataset.save='';save.textContent=u('決定','Done');
-      toolbar.append(auto,cancel,save);stage.append(shield,hint,sizeHandle,sizeBadge,rotateHandle,angleBadge,toolbar);article.classList.add('is-frame-position-dragging');
+      toolbar.append(auto,cancel,save);stage.append(shield,hint,controls,toolbar);article.classList.add('is-frame-position-dragging');
       const textNode=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text')||target;
-      const layoutScale=()=>Math.max(.05,Number(player?._layoutScale?.())||1);
-      const updateSizeHandle=()=>{
-        const sr=stage.getBoundingClientRect(),tr=target.getBoundingClientRect(),scale=layoutScale();
-        const sw=Math.max(1,stage.clientWidth||sr.width/scale),sh=Math.max(1,stage.clientHeight||sr.height/scale);
-        const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
-        // Keep controls close to the visible text edge and always inside even the iPhone preview.
-        const rawRight=(tr.right-sr.left)/scale+14,rawBottom=(tr.bottom-sr.top)/scale+14;
-        const rawLeft=(tr.left-sr.left)/scale-14,rawTop=(tr.top-sr.top)/scale-14;
-        const sizeLeft=clamp(rawRight,22,sw-22),sizeTop=clamp(rawBottom,22,sh-22);
-        const rotateLeft=clamp(rawRight,22,sw-22),rotateTop=clamp(rawTop,22,sh-22);
-        sizeHandle.style.left=`${sizeLeft}px`;sizeHandle.style.top=`${sizeTop}px`;
-        sizeBadge.style.left=`${sizeLeft}px`;sizeBadge.style.top=`${sizeTop}px`;
-        rotateHandle.style.left=`${rotateLeft}px`;rotateHandle.style.top=`${rotateTop}px`;
-        angleBadge.style.left=`${rotateLeft}px`;angleBadge.style.top=`${rotateTop}px`;
-        sizeBadge.textContent=`${Math.round(parseFloat(getComputedStyle(textNode).fontSize)||16)}px`;
-        angleBadge.textContent=`${Math.round(Number(p.text.angle)||0)}°`;
+      const initialPx=Math.max(8,Math.min(420,Math.round(parseFloat(getComputedStyle(textNode).fontSize)||16)));
+      const initialAngle=Math.max(-180,Math.min(180,Math.round(Number(p.text.angle)||0)));
+      const sizeControl=makeSliderRow(u('文字サイズ','Size'),8,420,1,initialPx);
+      const angleControl=makeSliderRow(u('回転','Rotate'),-180,180,1,initialAngle);
+      const setSizeValue=raw=>{
+        const next=Math.max(8,Math.min(420,Math.round(Number(raw)||8)));
+        p.text.size=next;syncLiveSize(next);textNode.style.setProperty('font-size',`${next}px`,'important');
+        sizeControl.range.value=sizeControl.number.value=String(next);
       };
-      requestAnimationFrame(updateSizeHandle);
+      const setAngleValue=raw=>{
+        const next=Math.max(-180,Math.min(180,Math.round(Number(raw)||0)));
+        if(Math.abs(next)<1)delete p.text.angle;else p.text.angle=next;syncLiveAngle(p.text.angle);
+        textNode.style.rotate=`${next}deg`;angleControl.range.value=angleControl.number.value=String(next);
+      };
+      sizeControl.range.addEventListener('input',event=>setSizeValue(event.target.value));
+      sizeControl.number.addEventListener('input',event=>setSizeValue(event.target.value));
+      angleControl.range.addEventListener('input',event=>setAngleValue(event.target.value));
+      angleControl.number.addEventListener('input',event=>setAngleValue(event.target.value));
       // The Player normally advances on a stage click. Editing gestures can synthesize
       // that click on release, so swallow all navigation clicks while this editor is open.
       const blockEditorNavigation=event=>{
         // Capture runs before the editor buttons. Never swallow their click.
-        if(event.target?.closest?.('.frame-position-drag-toolbar,.frame-position-size-handle,.frame-position-rotate-handle'))return;
+        if(event.target?.closest?.('.frame-position-drag-toolbar,.frame-position-fixed-controls'))return;
         event.preventDefault();event.stopImmediatePropagation();event.stopPropagation();
       };
       stage.addEventListener('click',blockEditorNavigation,true);
@@ -11966,48 +11975,16 @@ function startInlineTextEdit(field='text',targetEl=null){
         setAdjustedPosition({preset:'custom',x:centerX/stageWidth,y:centerY/stageHeight});
         syncLivePosition(p.text.position);
         article.style.transform=`translate3d(${Math.round(centerX-contentLeft-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
-        requestAnimationFrame(updateSizeHandle);
+
       };
       shield.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();dragging=true;shield.setPointerCapture?.(event.pointerId);applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointermove',event=>{if(!dragging)return;event.preventDefault();applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointerup',event=>{event.preventDefault();event.stopPropagation();dragging=false;shield.releasePointerCapture?.(event.pointerId);});
       shield.addEventListener('pointercancel',event=>{event.preventDefault();event.stopPropagation();dragging=false;});
       shield.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
-      let sizing=false,sizeStartDistance=1,sizeStartPx=16;
-      const targetCenter=()=>{const r=target.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};};
-      sizeHandle.addEventListener('pointerdown',event=>{
-        event.preventDefault();event.stopPropagation();sizing=true;sizeHandle.setPointerCapture?.(event.pointerId);
-        const c=targetCenter();sizeStartDistance=Math.max(12,Math.hypot(event.clientX-c.x,event.clientY-c.y));
-        sizeStartPx=Math.max(8,parseFloat(getComputedStyle(textNode).fontSize)||16);
-      });
-      sizeHandle.addEventListener('pointermove',event=>{
-        if(!sizing)return;event.preventDefault();event.stopPropagation();
-        const c=targetCenter(),distance=Math.max(8,Math.hypot(event.clientX-c.x,event.clientY-c.y));
-        const next=Math.max(8,Math.min(420,Math.round(sizeStartPx*(distance/sizeStartDistance))));
-        p.text.size=next;syncLiveSize(next);textNode.style.setProperty('font-size',`${next}px`,'important');
-        sizeBadge.textContent=`${next}px`;requestAnimationFrame(updateSizeHandle);
-      });
-      const finishSizing=event=>{if(!sizing)return;sizing=false;event?.preventDefault?.();event?.stopPropagation?.();try{sizeHandle.releasePointerCapture?.(event.pointerId);}catch(_){}};
-      sizeHandle.addEventListener('pointerup',finishSizing);sizeHandle.addEventListener('pointercancel',finishSizing);
-      let rotating=false,rotatePointerStart=0,rotateValueStart=0;
-      rotateHandle.addEventListener('pointerdown',event=>{
-        event.preventDefault();event.stopPropagation();rotating=true;rotateHandle.setPointerCapture?.(event.pointerId);
-        const c=targetCenter();rotatePointerStart=Math.atan2(event.clientY-c.y,event.clientX-c.x)*180/Math.PI;
-        rotateValueStart=Number(p.text.angle)||0;
-      });
-      rotateHandle.addEventListener('pointermove',event=>{
-        if(!rotating)return;event.preventDefault();event.stopPropagation();
-        const c=targetCenter(),now=Math.atan2(event.clientY-c.y,event.clientX-c.x)*180/Math.PI;
-        let delta=now-rotatePointerStart;if(delta>180)delta-=360;if(delta<-180)delta+=360;
-        const next=Math.max(-180,Math.min(180,Math.round(rotateValueStart+delta)));
-        if(Math.abs(next)<1)delete p.text.angle;else p.text.angle=next;syncLiveAngle(p.text.angle);
-        textNode.style.rotate=`${next}deg`;angleBadge.textContent=`${next}°`;requestAnimationFrame(updateSizeHandle);
-      });
-      const finishRotating=event=>{if(!rotating)return;rotating=false;event?.preventDefault?.();event?.stopPropagation?.();try{rotateHandle.releasePointerCapture?.(event.pointerId);}catch(_){}};
-      rotateHandle.addEventListener('pointerup',finishRotating);rotateHandle.addEventListener('pointercancel',finishRotating);
-      [toolbar,auto,cancel,save,sizeHandle,rotateHandle].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
+      [toolbar,controls].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false}={})=>{
-        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();sizeHandle.remove();sizeBadge.remove();rotateHandle.remove();angleBadge.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
+        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)clearAdjustedPosition();
         else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(beforeAngle==null)delete p.text.angle;else p.text.angle=beforeAngle;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
         syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);syncLiveAngle(p.text.angle);
