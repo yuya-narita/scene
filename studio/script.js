@@ -11873,26 +11873,14 @@ function startInlineTextEdit(field='text',targetEl=null){
         queueMicrotask(()=>showUndo('テキスト位置の変更を元に戻せます'));
       };
       const initialPosition=p.text.position||p.frame?.position||{};
+      // Direct manipulation is viewport-relative, not device-specific.
+      // One normalized x/y must land at the same relative point on iPhone, tablet and PC.
       const setAdjustedPosition=(adjusted)=>{
-        if(pcMode){
-          const common=p.text.position&&typeof p.text.position==='object'?clone(p.text.position):clone(initialPosition);
-          p.text.position={preset:common.preset||'auto',...(Number.isFinite(Number(common.x))?{x:Number(common.x)}:{}),...(Number.isFinite(Number(common.y))?{y:Number(common.y)}:{}),pc:clone(adjusted)};
-        }else{
-          const pc=p.text.position?.pc&&typeof p.text.position.pc==='object'?clone(p.text.position.pc):(initialPosition?.pc?clone(initialPosition.pc):null);
-          p.text.position={...clone(adjusted),...(pc?{pc}:{})};
-        }
+        p.text.position=clone(adjusted);
         if(p.frame)delete p.frame.position;
       };
       const clearAdjustedPosition=()=>{
-        if(pcMode){
-          const common=p.text.position&&typeof p.text.position==='object'?clone(p.text.position):clone(initialPosition);
-          delete common.pc;
-          if((common.preset||'auto')==='auto'&&!Number.isFinite(Number(common.x))&&!Number.isFinite(Number(common.y)))delete p.text.position;
-          else p.text.position=common;
-        }else{
-          const pc=p.text.position?.pc&&typeof p.text.position.pc==='object'?clone(p.text.position.pc):null;
-          if(pc)p.text.position={preset:'auto',pc};else delete p.text.position;
-        }
+        delete p.text.position;
         if(p.frame)delete p.frame.position;
       };
       const liveScene=player?.document?.scenes?.find(item=>item?.id===scene.id);
@@ -11922,7 +11910,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       const rotateHandle=document.createElement('div');rotateHandle.className='frame-position-rotate-handle';rotateHandle.textContent='↻';rotateHandle.setAttribute('aria-label',u('文字をドラッグ回転','Drag to rotate text'));
       const angleBadge=document.createElement('div');angleBadge.className='frame-position-angle-badge';
       const toolbar=document.createElement('div');toolbar.className='frame-position-drag-toolbar';
-      const auto=document.createElement('button');auto.type='button';auto.textContent=pcMode?u('共通位置','Use common'):u('自動','Auto');
+      const auto=document.createElement('button');auto.type='button';auto.textContent=u('自動','Auto');
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('取消','Cancel');
       const save=document.createElement('button');save.type='button';save.dataset.save='';save.textContent=u('決定','Done');
       toolbar.append(auto,cancel,save);stage.append(shield,hint,sizeHandle,sizeBadge,rotateHandle,angleBadge,toolbar);article.classList.add('is-frame-position-dragging');
@@ -11947,7 +11935,11 @@ function startInlineTextEdit(field='text',targetEl=null){
       requestAnimationFrame(updateSizeHandle);
       // The Player normally advances on a stage click. Editing gestures can synthesize
       // that click on release, so swallow all navigation clicks while this editor is open.
-      const blockEditorNavigation=event=>{event.preventDefault();event.stopImmediatePropagation();event.stopPropagation();};
+      const blockEditorNavigation=event=>{
+        // Capture runs before the editor buttons. Never swallow their click.
+        if(event.target?.closest?.('.frame-position-drag-toolbar,.frame-position-size-handle,.frame-position-rotate-handle'))return;
+        event.preventDefault();event.stopImmediatePropagation();event.stopPropagation();
+      };
       stage.addEventListener('click',blockEditorNavigation,true);
       stage.addEventListener('dblclick',blockEditorNavigation,true);
       let dragging=false;
@@ -12021,8 +12013,7 @@ function startInlineTextEdit(field='text',targetEl=null){
   function makeFramePositionDragButton(scene){
     const button=document.createElement('button');button.type='button';button.className='frame-position-adjust-button';
     const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
-    const hasPc=Boolean(scene?.presentation?.text?.position?.pc);
-    button.textContent=pcMode?(hasPc?u('PC専用位置・サイズ・角度を再調整','Readjust PC-only position / size / angle'):u('PC専用位置・サイズ・角度を調整','Adjust PC-only position / size / angle')):u('プレビュー上で位置・サイズ・角度調整','Adjust position / size / angle on preview');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
+    button.textContent=u('プレビュー上で位置・サイズ・角度調整','Adjust position / size / angle on preview');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
     button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openFramePositionDragEditor(scene);});return button;
   }
 
