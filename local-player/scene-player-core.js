@@ -2364,7 +2364,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const families = {
         serif: 'var(--sp-font-serif)',
         sans: 'var(--sp-font-sans)',
-        mono: 'var(--sp-font-mono)'
+        mono: 'var(--sp-font-mono)',
+        impact: 'Impact, Haettenschweiler, "Arial Narrow Bold", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif',
+        pop: '"Hiragino Maru Gothic ProN", "Yu Gothic", system-ui, sans-serif'
       };
       const coverFamily = families[doc.cover?.fontFamily] || families.serif;
       this.els.cover.dataset.startTrigger='tap';
@@ -5804,6 +5806,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._attachFlowComments(article,presentation,active);
       article.dataset.sceneFlow=presentation.flow==='horizontal'?'horizontal':'vertical';
       article.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
+      const textSE=presentation.textSE||{};
+      if(textSE.preset && /^[a-zA-Z0-9_-]+$/.test(textSE.preset))article.dataset.textSe=textSE.preset;
+      if(textSE.scale && /^[a-zA-Z0-9_-]+$/.test(textSE.scale))article.dataset.textSeScale=textSE.scale;
       const requestedEffect = presentation.effect || 'auto';
       const effect = this._resolveSceneEffect(scene, requestedEffect);
       if (effect && /^[a-zA-Z0-9_-]+$/.test(effect)) article.dataset.effect = effect;

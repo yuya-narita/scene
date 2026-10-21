@@ -506,7 +506,9 @@
             "inherit",
             "serif",
             "sans",
-            "mono"
+            "mono",
+            "impact",
+            "pop"
           ]
         },
         "shadow": {
@@ -1586,6 +1588,33 @@
               "maximum": 90
             }
           }
+        },
+        "textSE": {
+          "type": "object",
+          "properties": {
+            "preset": {
+              "enum": [
+                "impact",
+                "scream",
+                "stretch",
+                "ominous",
+                "flash",
+                "glitch",
+                "tremble",
+                "break",
+                "bounce"
+              ]
+            },
+            "scale": {
+              "enum": [
+                "normal",
+                "large",
+                "fullscreen",
+                "overflow"
+              ]
+            }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true
