@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>あ箱 運営 — Sandbox TEST</title>
+  <link rel="stylesheet" href="./admin.css?v=70.5">
+  <link rel="stylesheet" href="./ios-input-guard.css?v=70.4">
+</head>
+<body>
+  <main class="admin-shell">
+    <header class="admin-header">
+      <div><small>AHACO ADMIN · SANDBOX TEST</small><h1>運営（テスト用）</h1></div>
+      <button id="refreshButton" type="button" disabled>更新</button>
+    </header>
+
+    <p role="note" style="padding:12px;border:2px solid #9a6700;border-radius:8px;background:#fff3cd;color:#332600;overflow-wrap:anywhere">Sandbox TEST 専用<br>接続先：scene-studio-api-sandbox.a-hako.workers.dev<br>テスト用R2のデータを表示します。過去のSandboxデータは自動では移りません。</p>
+    <section id="loginPanel" class="panel login-panel">
+      <h2>Sandboxの管理者として接続</h2>
+      <p>scene-studio-api-sandbox に設定した ADMIN_TOKEN を入力します。本番用とは別に、このタブ内だけで保持します。</p>
+      <div class="row">
+        <input id="tokenInput" type="password" autocomplete="off" placeholder="ADMIN_TOKEN">
+        <button id="connectButton" class="primary" type="button">接続</button>
+      </div>
+      <p id="loginStatus" class="status"></p>
+    </section>
+
+    <div id="adminContent" hidden>
+      <nav class="admin-tabs" aria-label="管理画面">
+        <button class="admin-tab is-active" type="button" data-admin-tab="status">状況</button>
+        <button class="admin-tab" type="button" data-admin-tab="selection">作品選定</button>
+        <button class="admin-tab" type="button" data-admin-tab="reports">報告 <span id="reportTabBadge" class="tab-badge" hidden>0</span></button>
+        <button class="admin-tab" type="button" data-admin-tab="contacts">お問い合わせ <span id="contactTabBadge" class="tab-badge" hidden>0</span></button>
+        <button class="admin-tab" type="button" data-admin-tab="authors">作者</button>
+        <button class="admin-tab" type="button" data-admin-tab="audit">決済監査 <span id="auditTabBadge" class="tab-badge" hidden>0</span></button>
+        <button class="admin-tab" type="button" data-admin-tab="maintenance">保守</button>
+      </nav>
+
+      <div class="admin-tab-panel is-active" data-admin-panel="status">
+      <section class="summary ops-summary">
+        <div><small>作品</small><strong id="workCount">–</strong></div>
+        <div><small>公開中</small><strong id="publishedCount">–</strong></div>
+        <div><small>停止中</small><strong id="suspendedCount">–</strong></div>
+        <div><small>R2使用量</small><strong id="r2Usage">–</strong></div>
+        <div><small>素材</small><strong id="assetCount">–</strong></div>
+        <div><small>未対応報告</small><strong id="openCount">0</strong></div>
+        <div><small>未対応お問い合わせ</small><strong id="openContactCount">0</strong></div>
+      </section>
+
+      <section class="panel analytics-panel">
+        <div class="section-head"><div><small>AHACO NOW</small><h2>読まれている</h2></div><small class="muted-note">匿名集計・JST</small></div>
+        <div class="analytics-summary">
+          <div><small>今日の閲覧</small><strong id="todayViews">–</strong></div>
+          <div><small>今日の読了</small><strong id="todayCompletions">–</strong></div>
+          <div><small>今日進んだScene</small><strong id="todaySceneAdvances">–</strong></div>
+          <div><small>今日の読了率</small><strong id="todayCompletionRate">–</strong></div>
+        </div>
+        <div class="section-head analytics-ranking-head"><div><small>LAST 7 DAYS</small><h2>人気作品</h2></div><small class="muted-note">閲覧順 TOP10</small></div>
+        <div id="popularWorks" class="popular-work-list"><div class="empty">読み込み中…</div></div>
+      </section>
+
+      <section class="panel analytics-panel distribution-observation-panel">
+        <div class="section-head"><div><small>DISTRIBUTION NOW</small><h2>配布版の観測</h2></div><small class="muted-note">匿名集計・copyId単位 / 同一人物の複数端末等を含む可能性があります</small></div>
+        <div class="analytics-summary distribution-observation-summary">
+          <div><small>今日の観測読者+</small><strong id="distTodayReaders">–</strong></div>
+          <div><small>今日の読了</small><strong id="distTodayCompletions">–</strong></div>
+          <div><small>7日間の観測読者+</small><strong id="distPeriodReaders">–</strong></div>
+          <div><small>観測された一冊</small><strong id="distObservedCopies">–</strong></div>
+          <div><small>観測された作品</small><strong id="distObservedWorks">–</strong></div>
+          <div><small>7日間の起動</small><strong id="distPeriodOpens">–</strong></div>
+        </div>
+        <div class="reader-analytics-columns">
+          <div>
+            <div class="section-head analytics-ranking-head"><div><small>LAST 7 DAYS</small><h2>旅している一冊</h2></div><small class="muted-note">観測読者+ 順</small></div>
+            <div id="distTopCopies" class="distribution-copy-list"><div class="empty">読み込み中…</div></div>
+          </div>
+          <div>
+            <div class="section-head analytics-ranking-head"><div><small>LAST 7 DAYS</small><h2>作品別</h2></div><small class="muted-note">観測読者+ 順</small></div>
+            <div id="distWorks" class="distribution-copy-list"><div class="empty">読み込み中…</div></div>
+          </div>
+        </div>
+      </section>
+
+
+      <section class="panel analytics-panel relay-panel">
+        <div class="section-head"><div><small>RELAY NOW</small><h2>一冊の旅</h2></div><small class="muted-note">公式RELAYのみ / 送信者・受取人は記録しません</small></div>
+        <div class="analytics-summary relay-summary">
+          <div><small>7日間のRELAY</small><strong id="relayPeriodCount">–</strong></div>
+          <div><small>旅した一冊</small><strong id="relayCopies">–</strong></div>
+          <div><small>旅した作品</small><strong id="relayWorks">–</strong></div>
+          <div><small>最長RELAY</small><strong id="relayMaxHop">–</strong></div>
+        </div>
+        <div class="reader-analytics-columns">
+          <div>
+            <div class="section-head analytics-ranking-head"><div><small>LAST 7 DAYS</small><h2>旅が長い一冊</h2></div><small class="muted-note">hop順</small></div>
+            <div id="relayTopCopies" class="distribution-copy-list"><div class="empty">読み込み中…</div></div>
+          </div>
+          <div>
+            <div class="section-head analytics-ranking-head"><div><small>LAST 7 DAYS</small><h2>RELAY作品</h2></div><small class="muted-note">RELAY数順</small></div>
+            <div id="relayWorksList" class="distribution-copy-list"><div class="empty">読み込み中…</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel analytics-panel reader-analytics-panel">
+        <div class="section-head"><div><small>READER NOW</small><h2>Readerの使われ方</h2></div><small class="muted-note">匿名集計・記事URL/本文は保存しません</small></div>
+        <div class="analytics-summary reader-analytics-summary">
+          <div><small>今日の起動</small><strong id="readerTodayViews">–</strong></div>
+          <div><small>今日の読了</small><strong id="readerTodayCompletions">–</strong></div>
+          <div><small>今日進んだScene</small><strong id="readerTodaySceneAdvances">–</strong></div>
+          <div><small>今日の読了率</small><strong id="readerTodayCompletionRate">–</strong></div>
+          <div><small>Studioへ</small><strong id="readerTodayStudio">–</strong></div>
+          <div><small>作者版へ</small><strong id="readerTodayOfficial">–</strong></div>
+        </div>
+        <div class="reader-analytics-columns">
+          <div>
+            <div class="section-head analytics-ranking-head"><div><small>LAST 7 DAYS</small><h2>サイト別</h2></div><small class="muted-note">起動順</small></div>
+            <div id="readerSites" class="reader-stat-list"><div class="empty">読み込み中…</div></div>
+          </div>
+          <div>
+            <div class="section-head analytics-ranking-head"><div><small>LAST 7 DAYS</small><h2>読み込み方法</h2></div><small class="muted-note">全文 / 選択範囲</small></div>
+            <div id="readerModes" class="reader-stat-list"><div class="empty">読み込み中…</div></div>
+          </div>
+        </div>
+      </section>
+
+      </div>
+
+      <div class="admin-tab-panel" data-admin-panel="selection">
+        <section class="panel selection-panel">
+          <div class="section-head"><div><small>FROM ADMIN</small><h2>運営から追加</h2></div><small class="muted-note">現在公開中のMasterを、その場で凍結Editionにして発行</small></div>
+          <p class="selection-lead">最初の「あ箱の本」はここから作れます。作品を読んで確認し、種本または開花として追加します。</p>
+          <div class="selection-toolbar">
+            <button id="reloadSelectionButton" type="button">作品を更新</button>
+            <span id="publishedWorksStatus" class="status"></span>
+          </div>
+          <div id="publishedWorks" class="edition-candidate-list"><div class="empty">読み込み中…</div></div>
+        </section>
+
+        <section class="panel selection-panel">
+          <div class="section-head"><div><small>AUTO CANDIDATES</small><h2>自動候補</h2></div><small class="muted-note">既に発行済みのEditionから候補を拾います</small></div>
+          <p class="selection-lead">ここが0作品でも正常です。利用が増えたら、旅や読了の動きから半自動で候補を上げていきます。</p>
+          <div class="selection-toolbar"><span id="selectionStatus" class="status"></span></div>
+          <div id="editionCandidates" class="edition-candidate-list"><div class="empty">読み込み中…</div></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head"><div><small>ON SHELF</small><h2>現在の「あ箱の本」</h2></div><small class="muted-note">停止・再開・棚から削除</small></div>
+          <div id="officialShelfItems" class="official-shelf-list"><div class="empty">読み込み中…</div></div>
+        </section>
+      </div>
+
+      <div class="admin-tab-panel" data-admin-panel="authors">
+      <section class="panel">
+        <div class="section-head"><div><small>AUTHORS</small><h2>作者アカウント</h2></div><small id="authorCount" class="muted-note">–</small></div>
+        <p class="selection-lead">公開者を内部で確認するための一覧です。メールアドレスは管理画面だけに表示されます。</p>
+        <div id="authorList" class="contact-list"><div class="empty">読み込み中…</div></div>
+      </section>
+      </div>
+
+      <div class="admin-tab-panel" data-admin-panel="audit">
+      <section class="panel payment-audit-panel">
+        <div class="section-head"><div><small>PAYMENT AUDIT</small><h2>決済監査</h2></div><small class="muted-note">Stripe実績とOrderを再照合・金銭系は自動修復しません</small></div>
+        <p class="selection-lead">最近の確定済み注文を自動でStripeと照合します。普段は件数だけ確認し、異常がある注文だけ開いて調査します。監査によって決済や権利が変更されることはありません。</p>
+        <div class="daily-reconciliation">
+          <div class="audit-orders-head"><div><strong>日次決済照合 V1</strong><small>JST・Order全体とStripe実績を1日単位で照合</small></div><div class="daily-recon-controls"><input id="dailyReconDay" type="date"><button id="dailyReconButton" type="button">日次照合</button></div></div>
+          <p id="dailyReconStatus" class="status"></p>
+          <div id="dailyReconResult" class="daily-recon-result"><div class="empty">日付を選んで日次照合を実行できます。</div></div>
+        </div>
+        <div class="audit-orders-head"><strong>自動監査</strong><button id="auditOrdersReloadButton" type="button">再監査</button></div>
+        <div class="audit-dashboard" aria-live="polite">
+          <div class="is-ok"><small>正常</small><strong id="auditOkCount">–</strong></div>
+          <div class="is-alert"><small>要確認</small><strong id="auditAlertCount">–</strong></div>
+          <div><small>未監査</small><strong id="auditPendingCount">–</strong></div>
+        </div>
+        <p id="auditOrdersStatus" class="status"></p>
+        <div id="auditOrdersList" class="audit-orders-list"><div class="empty">監査を開始しています…</div></div>
+        <details class="audit-manual"><summary>Order IDを直接入力</summary>
+        <div class="payment-audit-form">
+          <input id="auditOrderIdInput" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="order_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+          <button id="auditOrderButton" class="primary" type="button">監査する</button>
+        </div>
+        </details>
+        <p id="auditOrderStatus" class="status"></p>
+        <div id="auditOrderResult" class="payment-audit-result"></div>
+      </section>
+      </div>
+
+      <div class="admin-tab-panel" data-admin-panel="maintenance">
+      <section class="panel">
+        <div class="section-head"><div><small>STORAGE</small><h2>R2ストレージ</h2></div><small class="muted-note">24時間未満の未参照素材は保護</small></div>
+        <div class="orphan-cleaner">
+          <div class="orphan-copy"><small>未参照素材</small><strong id="orphanSummary">確認中…</strong><span id="orphanNote">現存作品から参照されていない素材を検出します。</span></div>
+          <button id="cleanupOrphansButton" type="button" disabled>お掃除</button>
+        </div>
+        <div class="section-head work-ranking-head"><div><small>WORKS</small><h2>容量の大きい作品</h2></div><small class="muted-note">概算・共有素材は各作品に計上</small></div>
+        <div id="heavyWorks" class="work-size-list"><div class="empty">読み込み中…</div></div>
+      </section>
+
+      <section class="panel">
+        <small>DIRECT CONTROL</small><h2>workIdから直接操作</h2>
+        <div class="row"><input id="workIdInput" type="text" placeholder="workId"><button id="inspectButton" type="button">確認</button></div>
+        <div id="directResult" class="direct-result"></div>
+      </section>
+      </div>
+
+      <div class="admin-tab-panel" data-admin-panel="reports">
+      <section class="panel">
+        <div class="section-head"><div><small>REPORTS</small><h2>報告受信箱</h2></div><div class="report-tools"><span>表示 <strong id="shownCount">0</strong></span><select id="reportFilter"><option value="open">未対応</option><option value="resolved">対応済み</option><option value="deleted">作品削除済み</option><option value="all">すべて</option></select></div></div>
+        <div id="reportList" class="report-list"></div>
+      </section>
+      </div>
+
+      <div class="admin-tab-panel" data-admin-panel="contacts">
+      <section class="panel">
+        <div class="section-head"><div><small>CONTACTS</small><h2>お問い合わせ受信箱</h2></div><div class="report-tools"><span>表示 <strong id="shownContactCount">0</strong></span><select id="contactFilter"><option value="open">未対応</option><option value="resolved">対応済み</option><option value="all">すべて</option></select></div></div>
+        <div id="contactList" class="contact-list"></div>
+      </section>
+      </div>
+    </div>
+  </main>
+  <script src="./ahako-dialog.js?v=70.3"></script>
+  <script src="./admin-sandbox.js?v=20261021-sandbox-admin-v1"></script>
+</body>
+</html>
