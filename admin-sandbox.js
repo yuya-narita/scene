@@ -1285,4 +1285,76 @@ function installSandboxBalanceLockPanel(){
 }
 installSandboxBalanceLockPanel();
 
+function installSandboxPurchaseTestPanel(){
+  if(!els.auditOrdersList)return;
+  const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
+  panel.innerHTML='<summary>残高購入テスト（Sandbox専用）</summary><p>①設定確認 → ②テストデータ準備 → ③残高不足 → ④同時購入の順に進めます。準備では資金を動かしません。購入ボタンを押すとSandboxの売上残高から引き落としを試します。購入テストは1注文¥100です。カード決済への切替や自動再試行は行いません。</p><label>購入者の作者ID <input data-sp-buyer value="author_94acc908ea5e49dbb56d4e441b1608e2" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><br><label>販売先Sandbox Connected Account ID <input data-sp-seller value="acct_1UJ7Ld1XnlUPtCE2" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><p><button data-sp-check type="button">① 設定・残高を確認</button> <button data-sp-prepare type="button" disabled>② テストデータを準備</button></p><p data-sp-ready aria-live="polite"></p><label style="display:flex;gap:8px;align-items:flex-start"><input data-sp-consent type="checkbox" style="min-width:22px;min-height:22px"><span>Sandboxの検証として、この作者の売上残高をAccount Debitで支払うテストと販売条件（単発購入・決済後のMY COPY受け取り）に同意します。</span></label><p><button data-sp-insufficient type="button" disabled>③ 残高不足をテスト</button> <button data-sp-concurrent type="button" disabled>④ 同時購入をテスト（¥100）</button></p><p><button data-sp-verify type="button" disabled>取引・MY COPYを再照合</button> <button data-sp-receive type="button" disabled>購入済みMY COPYを受け取る</button> <button data-sp-download type="button" disabled>結果JSONを保存</button> <button data-sp-copy type="button" disabled>受け取った.sceneを保存</button> <button data-sp-end type="button" disabled>テスト認証を終了</button></p><p data-sp-status aria-live="polite"></p><pre data-sp-result style="white-space:pre-wrap;overflow-wrap:anywhere"></pre><p>本番のログイン情報・本棚には保存しません。MY COPYはこの欄で本文を確認して.sceneとして保存できます。認証は30分で期限切れになります。通信断の場合は購入を繰り返さず、再照合してください。認証終了は取引の取消・返金ではありません。</p>';
+  els.auditOrdersList.parentNode.appendChild(panel);
+  const el=k=>panel.querySelector('[data-sp-'+k+']'),buyer=el('buyer'),seller=el('seller'),status=el('status'),readyText=el('ready'),result=el('result');
+  const labels={TEST_HARNESS_DISABLED:'Sandbox Workerに AHAKO_SANDBOX_PURCHASE_TESTS_ENABLED=true の設定が必要です。',SANDBOX_WEBHOOK_SECRET_REQUIRED:'Sandbox Workerに正しいSandbox用 STRIPE_WEBHOOK_SECRET の設定が必要です。',BUYER_TEST_ACCOUNT_UNVERIFIED:'購入者の作者・Stripe連携のSandboxデータを確認できません。',SELF_PURCHASE_BLOCKED:'購入者と販売先のStripe口座が同じです。',STRIPE_TEST_IDENTITY_UNVERIFIED:'Stripe口座とTEST環境を照合できません。',SELLER_TRANSFERS_NOT_READY:'販売先の送金受け取り設定が未完了です。',INSUFFICIENT_PRICE_OUTSIDE_SUPPORTED_RANGE:'残高不足用の価格が設定範囲を超えています。',TEST_BALANCE_UNDER_100:'同時購入テストに必要なSandbox残高¥100がありません。',RISK_HOLD_PRESENT:'リスク保留があります。先に状態を確認してください。',STRIPE_READ_UNVERIFIED:'Stripeの読取権限または接続を確認できません。'};
+  let busy=false,readiness=null,run=null,sessionToken='',report=null,copyScene=null,apiSummary=[],attempted={},orderTokens={};
+  const endpoint='/admin/commerce/sandbox-purchase-test';
+  function controls(){
+    buyer.disabled=seller.disabled=busy||Boolean(run);el('check').disabled=busy;el('prepare').disabled=busy||Boolean(run)||!readiness?.ready;
+    for(const kind of ['insufficient','concurrent'])el(kind).disabled=busy||!run||!el('consent').checked||readiness?.paused!==false||!readiness?.enabled||Boolean(attempted[kind])||Date.now()>=Number(run.expiresAt);
+    el('verify').disabled=busy||!run;el('end').disabled=busy||!run||!sessionToken;el('receive').disabled=busy||!run||!report?.cases.some(x=>x.status==='paid'&&orderTokens[x.orderId]);el('download').disabled=busy||!report;el('copy').disabled=busy||!copyScene;el('consent').disabled=busy;
+  }
+  function ids(){const b=buyer.value.trim().toLowerCase(),s=seller.value.trim();if(!/^author_[a-f0-9]{32}$/.test(b)||!/^acct_[A-Za-z0-9_]{1,180}$/.test(s))throw new Error('購入者の作者IDと販売先のStripe口座を確認してください。');return {buyerAuthorId:b,sellerAccountId:s,expectedEnvironment:'test'};}
+  function showReady(r,subject){if(!r||r.environment!=='test'||r.buyerAuthorId!==subject.buyerAuthorId||r.sellerAccountId!==subject.sellerAccountId||r.financialWrites!==false||!Array.isArray(r.issues))throw new Error('準備結果の対応を確認できません。');readiness=r;readyText.textContent=(Number.isSafeInteger(r.availableJPY)?'Stripe確認残高 ¥'+r.availableJPY.toLocaleString('ja-JP')+'。':'')+(r.ready?(r.paused?'テスト準備ができます。新規購入は停止中です。':'テスト購入が有効です。'):'\n'+r.issues.map(x=>(labels[x]||x)+(x==='STRIPE_READ_UNVERIFIED'&&r.stripeCode?'（'+r.stripeCode+'）':'')).join('\n'));readyText.style.whiteSpace='pre-wrap';}
+  async function testRequest(path,{method='GET',body=null,orderToken=''}={}){
+    if(API!=='https://scene-studio-api-sandbox.a-hako.workers.dev'||!/^\/(commerce|stripe|bookshelf-claim)(\/|$)/.test(path))throw new Error('Sandbox接続先を確認できません。');
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);
+    try{const response=await fetch(API+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+sessionToken,...(orderToken?{'X-Order-Token':orderToken}:{})},cache:'no-store',signal:controller.signal,...(body?{body:JSON.stringify(body)}:{})});return {httpStatus:response.status,body:await response.json()};}finally{clearTimeout(timer);}
+  }
+  function requireOK(r){if(r.httpStatus<200||r.httpStatus>=300||r.body?.ok!==true)throw new Error('API確認に失敗：'+String(r.body?.code||r.httpStatus));return r.body;}
+  async function activeRuntime(){const r=await apiWithTimeout('/commerce/status',{},15000);if(r.environment!=='test'||!r.paymentsEnabled||!r.balancePurchaseEnabled||r.paused)throw new Error('Sandboxの新規購入は停止中です。設定確認後、Sandbox Workerだけを有効にしてから実行してください。');}
+  function showReport(r){if(!r||r.environment!=='test'||r.runId!==run.runId||r.financialWrites!==false||!Array.isArray(r.cases))throw new Error('照合結果の対応を確認できません。');report=r;const lines=r.cases.map(c=>{
+    const issued=c.copyActive?'MY COPY確認済み':'MY COPY未確認';
+    const pass=c.financialEvidenceComplete&&(c.kind==='insufficient'?c.status==='pending_payment'&&c.debitCount===0&&c.transferCount===0&&!c.entitlementId:c.status==='paid'&&c.debitCount===1&&c.transferCount===1&&c.debitAmountJPY===100&&c.transferAmountJPY===50&&c.copyActive&&c.auditStatus==='ok');
+    return (c.kind==='insufficient'?'残高不足':'同時購入')+'：'+(pass?'照合一致':'未実施または要確認')+'\n'+c.orderId+'\n注文 '+c.status+' / Debit '+c.debitCount+'件 / 作者Transfer '+c.transferCount+'件 / '+issued+' / 監査 '+(c.auditStatus||'未実施');
+  });result.textContent='照合時点 '+String(r.checkedAt||'未確認')+'\nStripe残高 ¥'+r.availableJPY+' / ロック '+r.lockState+'\n\n'+lines.join('\n\n')+(copyScene?'\n\n受け取った本文：\n'+copyScene.scenes.map(x=>String(x.text||'')).join('\n'):'');}
+  async function reconcile(){const data=await apiWithTimeout(endpoint+'?'+new URLSearchParams({runId:run.runId,expectedEnvironment:'test'}),{},60000);showReport(data.report);}
+  el('check').onclick=async()=>{if(busy)return;busy=true;controls();try{const subject=ids();showReady((await apiWithTimeout(endpoint+'?'+new URLSearchParams(subject),{},45000)).ready,subject);status.textContent=run?'設定を再確認しました。':'設定確認が完了しました。';}catch(e){readiness=null;readyText.textContent='';status.textContent=e.message;}finally{busy=false;controls();}};
+  el('prepare').onclick=async()=>{if(busy||run)return;busy=true;controls();try{const subject=ids(),data=await apiWithTimeout(endpoint,{method:'POST',body:JSON.stringify({...subject,action:'prepare'})},45000);showReady(data.ready,subject);if(!data.run)return;
+    const r=data.run;if(r.environment!=='test'||r.buyerAuthorId!==subject.buyerAuthorId||r.sellerAccountId!==subject.sellerAccountId||r.buyerAccountId!==data.ready.buyerAccountId||!/^stest_[a-f0-9]{32}$/.test(r.runId)||!Number.isFinite(r.expiresAt)||r.expiresAt<=Date.now()||!Array.isArray(r.cases)||r.cases.length!==2||r.cases.some(x=>!/^scene_[a-f0-9]{32}$/.test(x.workId||'')||!/^sptest_[a-f0-9]{32}$/.test(x.publicationId||'')||!/^reader_[a-f0-9]{32}$/.test(x.readerId||'')||!/^order_[a-f0-9]{32}$/.test(x.orderId||''))||!r.cases.some(x=>x.kind==='concurrent'&&x.amount===100)||!r.cases.some(x=>x.kind==='insufficient'&&Number.isSafeInteger(x.amount)&&x.amount>data.ready.availableJPY)||!/^[a-f0-9]{64}$/.test(data.sessionToken||''))throw new Error('テスト対象を確認できません。');
+    run=r;sessionToken=data.sessionToken;attempted={};apiSummary=[];orderTokens={};copyScene=null;report=null;el('insufficient').textContent='③ 残高不足をテスト（¥'+r.cases.find(x=>x.kind==='insufficient').amount+'）';status.textContent='テストデータを準備しました。引き落としは実行していません。';
+  }catch(e){status.textContent=e.message;}finally{busy=false;controls();}};
+  async function purchase(kind){
+    if(busy||!run||attempted[kind]||!el('consent').checked)return;busy=true;report=null;result.textContent='';controls();
+    try{
+      await activeRuntime();const c=run.cases.find(x=>x.kind===kind);if(Date.now()>=run.expiresAt)throw new Error('テスト認証の期限が切れました。');
+      const b=requireOK(await testRequest('/stripe/connect/balance'));if(b.environment!=='test'||!b.connected||!Number.isSafeInteger(b.available))throw new Error('Sandbox残高を確認できません。');
+      if(kind==='insufficient'&&b.available>=c.amount)throw new Error('残高が増え、残高不足の条件ではなくなりました。購入は開始していません。');
+      if(kind==='concurrent'&&b.available<c.amount)throw new Error('同時購入テストの残高¥100が不足しています。');
+      const consent=requireOK(await testRequest('/stripe/connect/account-debit-consent',{method:'POST',body:{accepted:true,version:'account-debit-v1'}}));if(consent.accepted!==true||consent.connectedAccountId!==run.buyerAccountId)throw new Error('Account Debit同意の対象を確認できません。');
+      attempted[kind]=true;status.textContent='注文を作成して検証中…';
+      const created=requireOK(await testRequest('/commerce/order',{method:'POST',body:{publicationId:c.publicationId,readerId:c.readerId}}));
+      if(created.paymentEnvironment!=='test'||created.order?.orderId!==c.orderId||created.order.amount!==c.amount||created.order.status!=='pending_payment'||!/^[a-f0-9]{48}$/.test(created.accessToken||''))throw new Error('注文の対応を確認できません。再照合してください。');
+      orderTokens[c.orderId]=created.accessToken;
+      const init={method:'POST',orderToken:created.accessToken,body:{paymentMethod:'author_balance',useAuthorBalance:true,salesConsent:{accepted:true,version:'ahako-sales-20261013-v1',amount:c.amount,currency:'JPY'}}},path='/commerce/order/'+c.orderId+'/checkout';
+      const results=await Promise.allSettled(Array.from({length:kind==='concurrent'?2:1},()=>testRequest(path,init)));
+      let paid=false;const summary=results.map(x=>{if(x.status==='rejected')return {result:'connection_unknown'};const b=x.value.body;paid||=b?.ok===true&&b.paid===true&&b.paymentRail==='connected_balance';return {httpStatus:x.value.httpStatus,code:String(b?.code||''),paid:b?.paid===true,paymentRail:String(b?.paymentRail||'')};});apiSummary.push({kind,orderId:c.orderId,results:summary});
+      const expected=kind==='insufficient'?summary.length===1&&summary[0].code==='BALANCE_PURCHASE_INSUFFICIENT':summary.filter(x=>x.paid&&x.paymentRail==='connected_balance').length===1&&summary.some(x=>['BALANCE_PURCHASE_BUSY','ORDER_ALREADY_PAID','ORDER_NOT_PAYABLE'].includes(x.code));
+      if(paid)await receiveCase(c,created.accessToken);
+      await reconcile();status.textContent=(expected?'API応答は想定どおりです。':'API応答に未確認・想定外の結果があります。')+' Stripe件数・監査・MY COPYを照合欄で確認してください。';
+    }catch(e){status.textContent='検証は未完了です：'+e.message+'。引き落としの有無は決めつけず、再照合してください。';}
+    finally{busy=false;controls();}
+  }
+  async function receiveCase(c,orderToken){
+        const ownPath='/commerce/order/'+c.orderId+'/own-copy',a=requireOK(await testRequest(ownPath,{method:'POST',orderToken:orderToken,body:{}})),again=requireOK(await testRequest(ownPath,{method:'POST',orderToken:orderToken,body:{}}));
+        if(!/^copy_[a-f0-9]{32}$/.test(a.distribution?.copyId||'')||a.distribution.copyId!==again.distribution?.copyId||a.distribution.workId!==c.workId||!a.bookshelfClaim?.token)throw new Error('MY COPYの同一性を確認できません。');
+        const claim=requireOK(await testRequest('/bookshelf-claim',{method:'POST',body:{token:a.bookshelfClaim.token}}));
+        if(claim.distribution?.copyId!==a.distribution.copyId||claim.scene?.workId!==c.workId||!Array.isArray(claim.scene.scenes)||!claim.scene.scenes.some(x=>typeof x.text==='string'&&x.text.length>0))throw new Error('受け取り本文を確認できません。');copyScene=claim.scene;
+  }
+  el('insufficient').onclick=()=>purchase('insufficient');el('concurrent').onclick=()=>purchase('concurrent');el('consent').onchange=controls;
+  el('verify').onclick=async()=>{if(busy||!run)return;busy=true;controls();try{await reconcile();status.textContent='現在のStripe取引・注文・MY COPYを照合しました。';}catch(e){report=null;result.textContent='';status.textContent='再照合は未完了です：'+e.message;}finally{busy=false;controls();}};
+  el('receive').onclick=async()=>{if(busy||!run||!report)return;const targets=report.cases.filter(x=>x.status==='paid'&&orderTokens[x.orderId]);if(!targets.length)return;busy=true;controls();try{for(const row of targets){const c=run.cases.find(x=>x.orderId===row.orderId);if(!c)throw new Error('注文の対応を確認できません。');await receiveCase(c,orderTokens[c.orderId]);}await reconcile();status.textContent='購入済みMY COPYの本文を受け取りました。追加の引き落としは行っていません。';}catch(e){status.textContent='受け取りは未完了です：'+e.message+'。購入を繰り返さず再照合してください。';}finally{busy=false;controls();}};
+  function save(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+  el('download').onclick=()=>{if(report)save({report,apiResults:apiSummary},'ahako-sandbox-purchase-'+run.runId+'.json');};
+  el('copy').onclick=()=>{if(copyScene)save(copyScene,'ahako-sandbox-purchase.scene');};
+  el('end').onclick=async()=>{if(busy||!run)return;busy=true;controls();try{await apiWithTimeout(endpoint,{method:'POST',body:JSON.stringify({action:'end',runId:run.runId,expectedEnvironment:'test'})},15000);sessionToken='';attempted={insufficient:true,concurrent:true};status.textContent='テスト認証を終了しました。取引・権利・復旧履歴は保持しています。';}catch(e){status.textContent=e.message;}finally{busy=false;controls();}};
+  const changed=()=>{if(!run){readiness=null;report=null;readyText.textContent='';result.textContent='';controls();}};buyer.oninput=changed;seller.oninput=changed;controls();
+}
+installSandboxPurchaseTestPanel();
+
 })();
