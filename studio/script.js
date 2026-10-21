@@ -11837,7 +11837,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}
       .frame-position-fixed-controls{position:absolute;z-index:94;left:50%;bottom:max(148px,calc(env(safe-area-inset-bottom) + 132px));transform:translateX(-50%);width:min(420px,calc(100% - 34px));display:grid;gap:8px;padding:10px 12px;border-radius:14px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);color:#fff;font:600 11px/1.2 sans-serif}
       .frame-position-control-row{display:grid;grid-template-columns:58px minmax(0,1fr) 58px;gap:8px;align-items:center}
-      .frame-position-control-row input[type="range"]{width:100%;margin:0;accent-color:#fff;touch-action:none}
+      .frame-position-control-row input[type="range"]{width:100%;margin:0;accent-color:#fff;touch-action:pan-y;-webkit-user-select:none;user-select:none}
       .frame-position-control-row input[type="number"]{width:58px;box-sizing:border-box;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:rgba(255,255,255,.1);color:#fff;padding:6px 4px;text-align:center;font:700 11px/1 sans-serif}
       .frame-position-control-row input[type="number"]::-webkit-inner-spin-button{opacity:.65}
       .sp-scene.is-frame-position-dragging{transition:none!important;z-index:80!important;visibility:visible!important;opacity:1!important}
@@ -11946,10 +11946,39 @@ function startInlineTextEdit(field='text',targetEl=null){
         if(Math.abs(next)<1)delete p.text.angle;else p.text.angle=next;syncLiveAngle(p.text.angle);
         textNode.style.rotate=`${next}deg`;angleControl.range.value=angleControl.number.value=String(next);
       };
-      sizeControl.range.addEventListener('input',event=>setSizeValue(event.target.value));
-      sizeControl.number.addEventListener('input',event=>setSizeValue(event.target.value));
-      angleControl.range.addEventListener('input',event=>setAngleValue(event.target.value));
-      angleControl.number.addEventListener('input',event=>setAngleValue(event.target.value));
+      // iOS Safari can fail to drag a native range thumb inside the scaled preview.
+      // Drive the value from pointer X ourselves so tap + drag behave identically.
+      const bindPreviewRange=(input,min,max,step,apply)=>{
+        let active=false;
+        const update=event=>{
+          const rect=input.getBoundingClientRect();
+          if(!rect.width)return;
+          const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+          const raw=min+ratio*(max-min);
+          const snapped=Math.round(raw/step)*step;
+          input.value=String(Math.max(min,Math.min(max,snapped)));apply(input.value);
+        };
+        input.addEventListener('pointerdown',event=>{active=true;event.preventDefault();event.stopPropagation();input.setPointerCapture?.(event.pointerId);update(event);});
+        input.addEventListener('pointermove',event=>{if(!active)return;event.preventDefault();event.stopPropagation();update(event);});
+        const end=event=>{if(!active)return;event.preventDefault();event.stopPropagation();update(event);active=false;try{input.releasePointerCapture?.(event.pointerId);}catch{}};
+        input.addEventListener('pointerup',end);input.addEventListener('pointercancel',()=>{active=false;});
+        input.addEventListener('input',event=>{if(!active)apply(event.target.value);});
+      };
+      const bindEditableNumber=(input,min,max,apply)=>{
+        // Do not clamp on every keystroke: on iPhone the field must be allowed to
+        // become temporarily empty so an existing value such as 89 can be replaced.
+        const commit=()=>{
+          if(input.value.trim()===''){input.value=String(min);apply(min);return;}
+          const n=Number(input.value);apply(Number.isFinite(n)?Math.max(min,Math.min(max,n)):min);
+        };
+        input.addEventListener('focus',()=>{requestAnimationFrame(()=>{try{input.select();}catch{}});});
+        input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();commit();input.blur();}});
+        input.addEventListener('change',commit);input.addEventListener('blur',commit);
+      };
+      bindPreviewRange(sizeControl.range,8,420,1,setSizeValue);
+      bindEditableNumber(sizeControl.number,8,420,setSizeValue);
+      bindPreviewRange(angleControl.range,-180,180,1,setAngleValue);
+      bindEditableNumber(angleControl.number,-180,180,setAngleValue);
       // The Player normally advances on a stage click. Editing gestures can synthesize
       // that click on release, so swallow all navigation clicks while this editor is open.
       const blockEditorNavigation=event=>{
