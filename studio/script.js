@@ -7612,9 +7612,6 @@ return flowCommentCard;}
     const sceneFont=$('#sceneFontSelect').value;
     if(sceneFont && sceneFont!=='inherit') p.text.fontFamily=sceneFont;
     else delete p.text.fontFamily;
-    const textSEPreset=$('#sceneTextSESelect')?.value||'none';
-    const textSEScale=$('#sceneTextSEScaleSelect')?.value||'normal';
-    if(textSEPreset!=='none') p.textSE={preset:textSEPreset,scale:textSEScale}; else delete p.textSE;
     const languageChoice=$('#sceneLanguageSelect')?.value || 'auto';
     if(languageChoice==='auto'){
       if(workingDocument?.language==='mul' && scene.text?.trim()) scene.language=SceneTextSplitter.detectLanguage(scene.text);
@@ -7644,8 +7641,6 @@ return flowCommentCard;}
     $('#sceneColorCustomField').hidden=$('#sceneColorSelect').value!=='custom';
     $('#sceneShadowSelect').value=scene.presentation?.text?.shadow || 'auto';
     $('#sceneFontSelect').value=scene.presentation?.text?.fontFamily || 'inherit';
-    if($('#sceneTextSESelect'))$('#sceneTextSESelect').value=scene.presentation?.textSE?.preset||'none';
-    if($('#sceneTextSEScaleSelect'))$('#sceneTextSEScaleSelect').value=scene.presentation?.textSE?.scale||'normal';
     const sceneLang=scene.language || '';
     const commonSceneLang=['ja','en'];
     $('#sceneLanguageSelect').value=!sceneLang?'auto':(commonSceneLang.includes(sceneLang)?sceneLang:'custom');
@@ -7699,7 +7694,7 @@ return flowCommentCard;}
     const txt=p.text||{};
 
     const textBits=[];
-    const fontMap={serif:u('明朝','Serif'),sans:u('ゴシック','Sans'),mono:u('等幅','Monospace'),impact:u('インパクト','Impact'),pop:u('ポップ','Pop')};
+    const fontMap={serif:u('明朝','Serif'),sans:u('ゴシック','Sans'),mono:u('等幅','Monospace')};
     textBits.push(txt.fontFamily ? (fontMap[txt.fontFamily]||txt.fontFamily) : u('作品設定','Work setting'));
     textBits.push(txt.size && txt.size!=='auto' ? txt.size : u('おまかせ','Automatic'));
     $('#toolboxTextSummary') && ($('#toolboxTextSummary').textContent=textBits.join(' / '));
@@ -13456,6 +13451,17 @@ function openDesktopTextDetail(){
       desktopDetailSelect(u('折り返し','Wrapping'),[['auto',u('自動（推奨）','Automatic (recommended)')],['nowrap',u('折り返さない','No wrap')]],p.text.wrap||'auto',v=>{if(v==='auto')delete p.text.wrap;else p.text.wrap=v;apply();})
     );
 
+    // TEXT SE V1: visual sound-effect presets for the current Scene text.
+    const textSE=section(u('テキストSE','Text SE'));
+    const textSEGrid=two(textSE);
+    textSEGrid.append(
+      desktopDetailSelect(u('演出','Effect'),[
+        ['none',u('なし','None')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['unease',u('ざわつく','Unease')],['flash',u('閃光','Flash')],['glitch',u('グリッチ','Glitch')],['shake',u('震える','Shake')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')]
+      ],p.text.textSE?.preset||'none',v=>{if(v==='none')delete p.text.textSE;else p.text.textSE={...(p.text.textSE||{}),preset:v,scale:p.text.textSE?.scale||'normal'};apply();}),
+      desktopDetailSelect(u('大きさ','Scale'),[['normal',u('通常','Normal')],['large',u('大','Large')],['fullscreen',u('全画面','Fullscreen')],['breakout',u('画面突破','Breakout')]],p.text.textSE?.scale||'normal',v=>{if(!p.text.textSE)p.text.textSE={preset:'impact'};p.text.textSE.scale=v;apply();})
+    );
+    const textSEHelp=document.createElement('p');textSEHelp.className='desktop-text-detail-note';textSEHelp.textContent=u('入力した文字そのものを視覚的なSEとして演出します。「全画面」「画面突破」はSceneを覆う大きさまで拡大します。','Turns the entered text itself into a visual sound effect. Fullscreen and Breakout can fill or exceed the Scene.');textSE.appendChild(textSEHelp);
+
     const note=section(u('プレビュー','Preview'));
     const noteP=document.createElement('p');noteP.className='desktop-text-detail-note';noteP.textContent=u('変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。','Changes appear in the Live Preview immediately and are autosaved. These settings stay with this Scene when you move away and return.');note.appendChild(noteP);
 
@@ -14219,10 +14225,8 @@ function openDesktopTextDetail(){
     textColorControl.append(textColorMode,textColorPicker.root);textColorField.append(textColorLabel,textColorControl);syncTextColorPickerVisibility();
     textGrid.append(
       desktopMakeSelect(u('種類','Type'),[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],scene.type||'text',v=>{scene.type=v;refresh();}),
-      desktopMakeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')],['impact',u('インパクト','Impact')],['pop',u('ポップ','Pop')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
+      desktopMakeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
       desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
-      desktopMakeSelect(u('テキストSE','Text SE'),[['none',u('なし','None')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['ominous',u('ざわつく','Ominous')],['flash',u('閃光','Flash')],['glitch',u('グリッチ','Glitch')],['tremble',u('震える','Tremble')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')]],p.textSE?.preset||'none',v=>{if(v==='none')delete p.textSE;else p.textSE={preset:v,scale:p.textSE?.scale||'normal'};refresh();}),
-      desktopMakeSelect(u('SEサイズ','SE size'),[['normal',u('通常','Normal')],['large',u('大','Large')],['fullscreen',u('全画面','Fullscreen')],['overflow',u('画面突破','Break viewport')]],p.textSE?.scale||'normal',v=>{if(p.textSE)p.textSE.scale=v;refresh();}),
       desktopMakeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;refresh();}),
       desktopMakeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;refresh();}),
       v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>renderDesktopLivePanel()}),
@@ -15597,10 +15601,8 @@ function openDesktopTextDetail(){
     const grid=document.createElement('div');grid.className='mobile-text-grid';
     grid.append(
       selectControl({label:u('種類','Type'),icon:'type',values:[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],current:scene.type||'text',onchange:v=>{scene.type=v;rerender();}}),
-      selectControl({label:u('書体','Typeface'),icon:'text',values:[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')],['impact',u('インパクト','Impact')],['pop',u('ポップ','Pop')]],current:p.text.fontFamily||'inherit',onchange:v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}}),
+      selectControl({label:u('書体','Typeface'),icon:'text',values:[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],current:p.text.fontFamily||'inherit',onchange:v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}}),
       selectControl({label:u('サイズ','Size'),icon:'size',values:[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],current:p.text.size||'auto',onchange:v=>{p.text.size=v;rerender();}}),
-      selectControl({label:u('テキストSE','Text SE'),icon:'text',values:[['none',u('なし','None')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['ominous',u('ざわつく','Ominous')],['flash',u('閃光','Flash')],['glitch',u('グリッチ','Glitch')],['tremble',u('震える','Tremble')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')]],current:p.textSE?.preset||'none',onchange:v=>{if(v==='none')delete p.textSE;else p.textSE={preset:v,scale:p.textSE?.scale||'normal'};rerender();renderLiveEditSheet('text');}}),
-      selectControl({label:u('SEサイズ','SE size'),icon:'size',values:[['normal',u('通常','Normal')],['large',u('大','Large')],['fullscreen',u('全画面','Fullscreen')],['overflow',u('画面突破','Break viewport')]],current:p.textSE?.scale||'normal',onchange:v=>{if(p.textSE)p.textSE.scale=v;rerender();}}),
       selectControl({label:u('書字方向','Writing direction'),icon:'writing',values:[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],current:p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',onchange:v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;rerender();renderLiveEditSheet('text');}}),
       selectControl({label:u('文字の太さ','Font weight'),icon:'text',values:[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],current:String(p.text?.fontWeight||0),onchange:v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;rerender();}}),
       selectControl({label:u('テキスト位置','Text position'),icon:'position',values:FRAME_POSITION_OPTIONS,current:framePositionPreset(scene),onchange:v=>{captureUndo(u('テキスト位置の変更を元に戻せます','Undo text position change'));v66SetSceneTextPosition(scene,v);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(u('テキスト位置の変更を元に戻せます','Undo text position change')));}})

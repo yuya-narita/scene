@@ -2365,9 +2365,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const families = {
         serif: 'var(--sp-font-serif)',
         sans: 'var(--sp-font-sans)',
-        mono: 'var(--sp-font-mono)',
-        impact: 'Impact, Haettenschweiler, "Arial Narrow Bold", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif',
-        pop: '"Hiragino Maru Gothic ProN", "Yu Gothic", system-ui, sans-serif'
+        mono: 'var(--sp-font-mono)'
       };
       const coverFamily = families[doc.cover?.fontFamily] || families.serif;
       this.els.cover.dataset.startTrigger='tap';
@@ -5843,9 +5841,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._attachFlowComments(article,presentation,active);
       article.dataset.sceneFlow=presentation.flow==='horizontal'?'horizontal':'vertical';
       article.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
-      const textSE=presentation.textSE||{};
-      if(textSE.preset && /^[a-zA-Z0-9_-]+$/.test(textSE.preset))article.dataset.textSe=textSE.preset;
-      if(textSE.scale && /^[a-zA-Z0-9_-]+$/.test(textSE.scale))article.dataset.textSeScale=textSE.scale;
       const requestedEffect = presentation.effect || 'auto';
       const effect = this._resolveSceneEffect(scene, requestedEffect);
       if (effect && /^[a-zA-Z0-9_-]+$/.test(effect)) article.dataset.effect = effect;
@@ -6165,6 +6160,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (Number.isFinite(Number(style.lineHeight))) node.style.lineHeight = String(Math.max(1, Math.min(3, Number(style.lineHeight))));
       if (Number.isFinite(Number(style.letterSpacing))) node.style.letterSpacing = `${Math.max(-0.2, Math.min(0.5, Number(style.letterSpacing)))}em`;
       if (Number.isFinite(Number(style.opacity))) node.style.opacity = String(Math.max(0.1, Math.min(1, Number(style.opacity))));
+      // TEXT SE V1: visual sound effect for arbitrary author text.
+      const textSE = style.textSE && typeof style.textSE === 'object' ? style.textSE : null;
+      if (textSE && textSE.preset && textSE.preset !== 'none') {
+        node.classList.add('sp-text-se', `sp-text-se--${String(textSE.preset).replace(/[^a-z0-9_-]/gi,'')}`);
+        node.dataset.textSeScale = ['normal','large','fullscreen','breakout'].includes(textSE.scale) ? textSE.scale : 'normal';
+      }
+
       if (style.writingMode === 'vertical-rl') {
         const lines=String(node.textContent||'').split('\n');
         const longest=Math.max(1,...lines.map(line=>Array.from(line).length));

@@ -506,9 +506,7 @@
             "inherit",
             "serif",
             "sans",
-            "mono",
-            "impact",
-            "pop"
+            "mono"
           ]
         },
         "shadow": {
@@ -537,6 +535,14 @@
           "type": "number",
           "minimum": 0.1,
           "maximum": 1
+        },
+        "textSE": {
+          "type": "object",
+          "properties": {
+            "preset": {"enum": ["impact", "scream", "stretch", "unease", "flash", "glitch", "shake", "break", "bounce"]},
+            "scale": {"enum": ["normal", "large", "fullscreen", "breakout"]}
+          },
+          "additionalProperties": false
         },
         "align": {
           "enum": [
@@ -1588,33 +1594,6 @@
               "maximum": 90
             }
           }
-        },
-        "textSE": {
-          "type": "object",
-          "properties": {
-            "preset": {
-              "enum": [
-                "impact",
-                "scream",
-                "stretch",
-                "ominous",
-                "flash",
-                "glitch",
-                "tremble",
-                "break",
-                "bounce"
-              ]
-            },
-            "scale": {
-              "enum": [
-                "normal",
-                "large",
-                "fullscreen",
-                "overflow"
-              ]
-            }
-          },
-          "additionalProperties": true
         }
       },
       "additionalProperties": true
