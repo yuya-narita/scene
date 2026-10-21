@@ -5970,8 +5970,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (style.color) node.style.color = String(style.color);
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       if (style.fontStyle === 'italic') node.style.fontStyle = 'italic';
-      if (Number.isFinite(Number(style.angle)) && Math.abs(Number(style.angle)) > 0.01) node.style.rotate = `${Math.max(-45,Math.min(45,Number(style.angle)))}deg`;
-      else node.style.rotate = '';
+      if (Number.isFinite(Number(style.angle)) && Math.abs(Number(style.angle)) > 0.01) {
+        node.style.rotate = `${Math.max(-45,Math.min(45,Number(style.angle)))}deg`;
+        // Keep the rotation pivot stable while entrance effects are running.
+        // Some effects used to change transform-origin (e.g. scream/stretch),
+        // which made angled text visibly jump when the animation finished.
+        node.style.transformOrigin = '50% 50%';
+      } else {
+        node.style.rotate = '';
+        node.style.transformOrigin = '';
+      }
       // Reflection is independent from entrance-effect transforms and text angle.
       // Use the individual scale property so effect animations can keep owning transform.
       if (style.flip === 'horizontal') node.style.scale = '-1 1';

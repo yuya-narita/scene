@@ -350,7 +350,7 @@
   60%{transform:translate(-.5%,.2%) scale(1.02);filter:contrast(1.1)}
   100%{transform:scale(1.001);filter:none}
 }
-@keyframes sp-texture-glitch{0%,100%{transform:none}50%{transform:translateX(1.5%) skewX(-2deg)}}
+@keyframes sp-texture-glitch{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translateX(1.5%) skewX(-2deg)}}
 @keyframes sp-grain-shift{0%{transform:translate(0,0)}25%{transform:translate(2%,-1%)}50%{transform:translate(-1%,2%)}75%{transform:translate(1%,1%)}100%{transform:translate(-2%,-1%)}}
 @keyframes sp-bg-slowzoom{from{transform:scale(var(--sp-bg-scale-from,1))}to{transform:scale(var(--sp-bg-scale-to,1.08))}}
 @keyframes sp-bg-breath{from{transform:scale(var(--sp-bg-scale-from,1))}to{transform:scale(var(--sp-bg-scale-to,1.035))}}
@@ -368,7 +368,7 @@
   .sp-bg-layer,.sp-bg-textures::after{animation:none!important;transform:none!important}
 }
 .sp-bg-textures.has-texture-glitch::before{animation:sp-texture-glitch-loop 2.4s steps(1,end) infinite}
-@keyframes sp-texture-glitch-loop{0%,86%,100%{transform:none}88%{transform:translateX(calc(var(--sp-texture-glitch) * 2%))}90%{transform:translateX(calc(var(--sp-texture-glitch) * -1.4%))}92%{transform:none}}
+@keyframes sp-texture-glitch-loop{0%,86%,100%{transform:translate3d(0,0,0) scale(1)}88%{transform:translateX(calc(var(--sp-texture-glitch) * 2%))}90%{transform:translateX(calc(var(--sp-texture-glitch) * -1.4%))}92%{transform:none}}
 
 /* Mobile gesture containment v1.3
    Prevent iOS page rubber-band from stealing Scene Player swipes. */
@@ -2318,7 +2318,7 @@ html.sp-scene-image-open body{
   0%{opacity:0;transform:translateY(-42px) scale(1.55);filter:blur(2px)}
   58%{opacity:1;transform:translateY(5px) scale(.96);filter:blur(0)}
   76%{transform:translateY(-2px) scale(1.025)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 @keyframes spFxBurst{
   0%{opacity:0;transform:scale(.12);filter:blur(8px)}
@@ -2333,13 +2333,13 @@ html.sp-scene-image-open body{
   36%{transform:translate(-7px,2px) skewX(-5deg)}
   54%{transform:translate(5px,-1px) skewX(3deg)}
   72%{transform:translate(-2px,0) skewX(-1deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 @keyframes spFxRush{
   0%{opacity:0;transform:translateX(-32cqw) skewX(-12deg);filter:blur(5px)}
   62%{opacity:1;transform:translateX(12px) skewX(2deg);filter:blur(0)}
   80%{transform:translateX(-4px) skewX(-1deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 .sp-scene.sp-fx-play[data-effect="slam"] .sp-text{animation:spFxSlam var(--sp-effect-duration,.52s) cubic-bezier(.12,.82,.18,1) 1}
 .sp-scene.sp-fx-play[data-effect="burst"] .sp-text{animation:spFxBurst var(--sp-effect-duration,.62s) cubic-bezier(.12,.84,.16,1) 1}
@@ -2373,7 +2373,7 @@ html.sp-scene-image-open body{
   52%{opacity:1;transform:perspective(700px) translate3d(0,16px,0) rotateX(0) scale(1.08,.72);filter:blur(0)}
   62%{transform:perspective(700px) translate3d(0,-8px,0) scale(.96,1.10)}
   76%{transform:translate3d(0,3px,0) scale(1.025,.97)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 @keyframes spFxBurstV2{
   0%{opacity:0;transform:scale(.04) rotate(-7deg);filter:blur(14px)}
@@ -2391,13 +2391,13 @@ html.sp-scene-image-open body{
   66%{transform:translateX(14cqw) scale(1.18) skewX(12deg)}
   80%{transform:translateX(-6cqw) scale(1.08) skewX(-5deg)}
   90%{transform:translateX(6cqw) scale(1.04) skewX(5deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 @keyframes spFxRushV2{
   0%{opacity:0;transform:perspective(700px) translate3d(-110cqw,0,340px) scale(3.2) skewX(-24deg);filter:blur(10px)}
   58%{opacity:1;transform:translate3d(26px,0,0) scale(1.12) skewX(5deg);filter:blur(0)}
   76%{transform:translate3d(-9px,0,0) scale(.98) skewX(-2deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 .sp-scene.sp-fx-play[data-effect="slam"] .sp-text{transform-origin:50% 100%;animation-name:spFxSlamV2!important;animation-timing-function:cubic-bezier(.08,.78,.13,1)!important}
 .sp-scene.sp-fx-play[data-effect="burst"] .sp-text{animation-name:spFxBurstV2!important;animation-timing-function:cubic-bezier(.1,.8,.14,1)!important}
@@ -2412,7 +2412,7 @@ html.sp-scene-image-open body{
   66%{transform:translateX(-14cqw) scale(1.18) skewX(-12deg)}
   80%{transform:translateX(6cqw) scale(1.08) skewX(5deg)}
   90%{transform:translateX(-6cqw) scale(1.04) skewX(-5deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 .sp-scene.sp-fx-play[data-effect="glitchHitRight"] .sp-text{animation:spFxGlitchHitRightV2 var(--sp-effect-duration,.46s) steps(8,end) 1!important}
 
@@ -3248,15 +3248,26 @@ html.sp-scene-image-open body{
 @keyframes spFxStretchAhako{0%{opacity:0;transform:scaleX(.12);letter-spacing:-.08em}55%{opacity:1;transform:scaleX(1.18);letter-spacing:.16em}100%{transform:scaleX(1);letter-spacing:inherit}}
 @keyframes spFxMurmurAhako{0%{opacity:0;transform:translate(-2px,1px)}20%{opacity:.45;transform:translate(2px,-1px)}40%{opacity:.7;transform:translate(-1px,-1px)}60%{opacity:.82;transform:translate(1px,2px)}80%{opacity:.92;transform:translate(-1px,0)}100%{opacity:1;transform:none}}
 @keyframes spFxFlashAhako{0%{opacity:0;filter:brightness(4) blur(5px);transform:scale(1.22)}22%{opacity:1;filter:brightness(2.5) blur(0)}45%{opacity:.35;filter:brightness(1.2)}68%{opacity:1}100%{opacity:1;filter:none;transform:scale(1)}}
-@keyframes spFxBreakAhako{0%{opacity:0;transform:scale(1.8) skewX(-10deg);filter:blur(2px)}36%{opacity:1;transform:scale(.88) skewX(7deg)}52%{transform:translate(-5px,2px) skewX(-4deg)}65%{transform:translate(5px,-2px) skewX(3deg)}78%{transform:translate(-2px,1px)}100%{transform:none}}
-@keyframes spFxBounceAhako{0%{opacity:0;transform:translateY(-1.3em) scale(.75)}45%{opacity:1;transform:translateY(.16em) scale(1.08,.88)}62%{transform:translateY(-.3em) scale(.96,1.04)}78%{transform:translateY(.05em) scale(1.02,.98)}100%{transform:none}}
+@keyframes spFxBreakAhako{0%{opacity:0;transform:scale(1.8) skewX(-10deg);filter:blur(2px)}36%{opacity:1;transform:scale(.88) skewX(7deg)}52%{transform:translate(-5px,2px) skewX(-4deg)}65%{transform:translate(5px,-2px) skewX(3deg)}78%{transform:translate(-2px,1px)}100%{transform:translate3d(0,0,0) scale(1)}}
+@keyframes spFxBounceAhako{0%{opacity:0;transform:translateY(-1.3em) scale(.75)}45%{opacity:1;transform:translateY(.16em) scale(1.08,.88)}62%{transform:translateY(-.3em) scale(.96,1.04)}78%{transform:translateY(.05em) scale(1.02,.98)}100%{transform:translate3d(0,0,0) scale(1)}}
 .sp-scene.sp-fx-play[data-effect="impact"] .sp-text{animation:spFxImpactAhako var(--sp-effect-duration,.58s) cubic-bezier(.08,.82,.16,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%}
-.sp-scene.sp-fx-play[data-effect="scream"] .sp-text{animation:spFxScreamAhako var(--sp-effect-duration,.72s) cubic-bezier(.1,.78,.18,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 70%}
-.sp-scene.sp-fx-play[data-effect="stretch"] .sp-text{animation:spFxStretchAhako var(--sp-effect-duration,.78s) cubic-bezier(.12,.72,.16,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:0 50%}
+.sp-scene.sp-fx-play[data-effect="scream"] .sp-text{animation:spFxScreamAhako var(--sp-effect-duration,.72s) cubic-bezier(.1,.78,.18,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%}
+.sp-scene.sp-fx-play[data-effect="stretch"] .sp-text{animation:spFxStretchAhako var(--sp-effect-duration,.78s) cubic-bezier(.12,.72,.16,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%}
 .sp-scene.sp-fx-play[data-effect="murmur"] .sp-text{animation:spFxMurmurAhako var(--sp-effect-duration,1.05s) ease-out 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
 .sp-scene.sp-fx-play[data-effect="flash"] .sp-text{animation:spFxFlashAhako var(--sp-effect-duration,.7s) ease-out 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
 .sp-scene.sp-fx-play[data-effect="break"] .sp-text{animation:spFxBreakAhako var(--sp-effect-duration,.7s) cubic-bezier(.1,.75,.2,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
 .sp-scene.sp-fx-play[data-effect="bounce"] .sp-text{animation:spFxBounceAhako var(--sp-effect-duration,.82s) cubic-bezier(.16,.8,.18,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
 @media (prefers-reduced-motion:reduce){
  .sp-scene.sp-fx-play[data-effect="impact"] .sp-text,.sp-scene.sp-fx-play[data-effect="scream"] .sp-text,.sp-scene.sp-fx-play[data-effect="stretch"] .sp-text,.sp-scene.sp-fx-play[data-effect="murmur"] .sp-text,.sp-scene.sp-fx-play[data-effect="flash"] .sp-text,.sp-scene.sp-fx-play[data-effect="break"] .sp-text,.sp-scene.sp-fx-play[data-effect="bounce"] .sp-text{animation:none!important;opacity:1!important;transform:none!important;filter:none!important}
+}
+
+/* V3 landing stabilization: entrance effects must finish on the exact static text geometry. */
+.sp-scene.sp-fx-play[data-effect="impact"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="scream"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="stretch"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="murmur"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="flash"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="break"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="bounce"] .sp-text{
+  animation-fill-mode:both!important;
 }
