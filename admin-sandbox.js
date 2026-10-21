@@ -1308,7 +1308,7 @@ function installSandboxPurchaseTestPanel(){
   }
   function requireOK(r){if(r.httpStatus<200||r.httpStatus>=300||r.body?.ok!==true)throw new Error('API確認に失敗：'+String(r.body?.code||r.httpStatus));return r.body;}
   async function activeRuntime(){const r=await apiWithTimeout('/commerce/status',{},15000);if(r.environment!=='test'||!r.paymentsEnabled||!r.balancePurchaseEnabled||r.paused)throw new Error('Sandboxの新規購入は停止中です。設定確認後、Sandbox Workerだけを有効にしてから実行してください。');}
-  function showReport(r){if(!r||r.environment!=='test'||r.runId!==run.runId||r.financialWrites!==false||!Array.isArray(r.cases))throw new Error('照合結果の対応を確認できません。');report=r;const lines=r.cases.map(c=>{
+  function showReport(r){if(!r||r.environment!=='test'||r.runId!==run.runId||r.financialWrites!==false||!Array.isArray(r.cases))throw new Error('照合結果の対応を確認できません。');report=r;readyText.textContent='最新のStripe確認残高 ¥'+r.availableJPY.toLocaleString('ja-JP')+'（'+r.checkedAt+'）';const lines=r.cases.map(c=>{
     const issued=c.copyActive?'MY COPY確認済み':'MY COPY未確認';
     const pass=c.financialEvidenceComplete&&(c.kind==='insufficient'?c.status==='pending_payment'&&c.debitCount===0&&c.transferCount===0&&!c.entitlementId:c.status==='paid'&&c.debitCount===1&&c.transferCount===1&&c.debitAmountJPY===100&&c.transferAmountJPY===50&&c.copyActive&&c.auditStatus==='ok');
     return (c.kind==='insufficient'?'残高不足':'同時購入')+'：'+(pass?'照合一致':'未実施または要確認')+'\n'+c.orderId+'\n注文 '+c.status+' / Debit '+c.debitCount+'件 / 作者Transfer '+c.transferCount+'件 / '+issued+' / 監査 '+(c.auditStatus||'未実施');
@@ -1356,5 +1356,27 @@ function installSandboxPurchaseTestPanel(){
   const changed=()=>{if(!run){readiness=null;report=null;readyText.textContent='';result.textContent='';controls();}};buyer.oninput=changed;seller.oninput=changed;controls();
 }
 installSandboxPurchaseTestPanel();
+
+
+// The run ID is intentionally independent of the short-lived buyer credential.
+// A page reload must never require another purchase to repair a paid order.
+(function installSandboxSettlementRepair(){
+  if(!els.auditOrdersList)return;
+  const p=document.createElement('details');p.className='audit-normal';p.style.marginTop='24px';
+  p.innerHTML='<summary>作者への未送金を復旧（Sandbox専用）</summary><p>購入済みテスト注文の作者分¥50だけを照合・送金します。購入者からの再引き落とし・返金・MY COPY再発行は行いません。送金前にSandboxの新規購入を停止してください。通信断後は「送金状態を確認」で照合します。</p><label>テストID <input data-ss-run placeholder="stest_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:500px;box-sizing:border-box"></label><p><button data-ss-check type="button">送金状態を確認</button> <button data-ss-apply type="button" disabled>確認した作者分だけを復旧</button></p><p data-ss-status aria-live="polite"></p><pre data-ss-result style="white-space:pre-wrap;overflow-wrap:anywhere"></pre><p>復旧後も安全ロックは維持します。「残高購入の停止状態」で再照合し、安全を確認できた場合だけ解除してください。</p>';
+  els.auditOrdersList.parentNode.appendChild(p);
+  const q=k=>p.querySelector('[data-ss-'+k+']'),input=q('run'),check=q('check'),apply=q('apply'),status=q('status'),result=q('result');let busy=false,view=null;
+  const endpoint='/admin/commerce/sandbox-settlement-repair';
+  const messages={READY_TO_TRANSFER:'作者分¥50の送金を実行できます。',EXISTING_TRANSFER_CAN_SYNC:'Stripeの既存送金を確認しました。再送金せずOrderへ反映します。',ALREADY_SETTLED:'作者への送金は反映済みです。再送金しません。',REPAIR_ATTEMPT_REQUIRES_RECONCILIATION:'復旧の実行記録があります。再送金せず、Stripeの結果確認が必要です。',PAUSE_SANDBOX_PURCHASES_FIRST:'先にSandbox Workerの AHAKO_COMMERCE_PAUSED=true を保存・デプロイし、もう一度確認してください。',PLATFORM_BALANCE_INSUFFICIENT:'運営側の利用可能残高が不足しています。'};
+  function controls(){input.disabled=check.disabled=busy;apply.disabled=busy||!view?.canApply;}
+  function subject(){const runId=input.value.trim();if(!/^stest_[a-f0-9]{32}$/.test(runId))throw new Error('テストID（stest_…）を入力してください。');return runId;}
+  function show(r){if(r?.environment!=='test'||r.runId!==subject()||r.financialWrites!==false||r.amountJPY!==50||typeof r.revision!=='string')throw new Error('照合対象を確認できません。');view=r;result.textContent=(messages[r.reason]||r.reason)+'\n注文：'+r.orderId+'\n作者分：¥50\n送金先：'+r.destination+'\n運営側の利用可能残高：¥'+r.platformAvailableJPY+'\nStripe送金：'+(r.transferId||'未確認')+'\n照合日時：'+r.checkedAt;}
+  input.oninput=()=>{view=null;result.textContent='';controls();};
+  check.onclick=async()=>{if(busy)return;busy=true;view=null;result.textContent='';status.textContent='Stripeと注文を照合中…';controls();try{const data=await apiWithTimeout(endpoint+'?'+new URLSearchParams({runId:subject(),expectedEnvironment:'test'}),{},60000);show(data.report);status.textContent='照合完了。確認では資金を動かしていません。';}catch(e){status.textContent=e.message;}finally{busy=false;controls();}};
+  apply.onclick=async()=>{if(busy||!view?.canApply)return;const viewed=view;
+    if(!confirm(viewed.reason==='EXISTING_TRANSFER_CAN_SYNC'?'既存の作者送金をOrderへ反映します。新しい送金・引き落としは行いません。続けますか？':'Sandboxで、この注文の作者分¥50を表示した送金先へ送ります。購入者の再引き落としは行いません。続けますか？'))return;
+    busy=true;view=null;controls();status.textContent='復旧を確認中…';try{const data=await apiWithTimeout(endpoint,{method:'POST',body:JSON.stringify({runId:subject(),expectedEnvironment:'test',action:'apply',expectedRevision:viewed.revision})},60000);show(data.report);status.textContent='送金とOrderへの反映を確認しました。次は個別監査・停止状態を再照合してください。';}catch(e){result.textContent='';status.textContent=e.message+' 購入・送金を繰り返さず、「送金状態を確認」を押してください。';}finally{busy=false;controls();}};
+  controls();
+})();
 
 })();
