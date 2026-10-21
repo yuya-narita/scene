@@ -6122,6 +6122,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!style || typeof style !== 'object') style = {};
       if (style.color) node.style.color = String(style.color);
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
+      node.style.fontStyle = style.fontStyle === 'italic' ? 'italic' : '';
+      const textAngle = Number(style.angle);
+      node.style.rotate = Number.isFinite(textAngle) && Math.abs(textAngle) > 0.01 ? `${Math.max(-45, Math.min(45, textAngle))}deg` : '';
       const shadows={
         none:'none',
         soft:'0 1px 4px rgba(0,0,0,.48)',

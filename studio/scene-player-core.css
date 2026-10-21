@@ -3244,15 +3244,15 @@ html.sp-scene-image-open body{
 .sp-text.sp-text-se[data-text-se-scale="fullscreen"]{font-size:clamp(58px,17cqw,150px)!important;line-height:.94!important;font-weight:900!important;max-width:96cqw!important;width:96cqw!important;text-align:center!important;margin-inline:auto!important}
 .sp-text.sp-text-se[data-text-se-scale="giant"]{font-size:clamp(88px,28cqw,260px)!important;line-height:.84!important;max-width:none!important;width:112cqw!important;margin-left:-6cqw!important;text-align:center!important;white-space:normal!important}
 .sp-text.sp-text-se[data-text-se-scale="breakout"]{font-size:clamp(118px,38cqw,360px)!important;line-height:.76!important;max-width:none!important;width:150cqw!important;margin-left:-25cqw!important;text-align:center!important;white-space:normal!important}
-.sp-text-se--impact{-webkit-text-stroke:.025em currentColor;animation:spTextSeImpact .48s cubic-bezier(.15,.9,.2,1.25) both}
-.sp-text-se--scream{animation:spTextSeScream .68s ease-out both}
-.sp-text-se--stretch{white-space:nowrap!important;animation:spTextSeStretch 1.15s cubic-bezier(.2,.7,.2,1) both}
-.sp-text-se--unease{animation:spTextSeUnease 1.4s steps(2,end) infinite;text-shadow:.06em .04em 0 rgba(0,0,0,.18)}
-.sp-text-se--flash{animation:spTextSeFlash .7s ease-out both}
-.sp-text-se--glitch{animation:spTextSeGlitch .55s steps(2,end) both;text-shadow:.05em 0 currentColor,-.05em 0 rgba(127,127,127,.7)}
-.sp-text-se--shake{animation:spTextSeShake .12s linear 0s 8 alternate}
-.sp-text-se--break{animation:spTextSeBreak .72s cubic-bezier(.15,.75,.2,1.15) both;filter:contrast(1.25)}
-.sp-text-se--bounce{animation:spTextSeBounce .72s cubic-bezier(.2,.9,.25,1.25) both}
+.sp-text-se--impact{-webkit-text-stroke:.025em currentColor;animation:spTextSeImpact .48s cubic-bezier(.15,.9,.2,1.25) both!important}
+.sp-text-se--scream{animation:spTextSeScream .68s ease-out both!important}
+.sp-text-se--stretch{white-space:nowrap!important;animation:spTextSeStretch 1.15s cubic-bezier(.2,.7,.2,1) both!important}
+.sp-text-se--unease{animation:spTextSeUnease 1.4s steps(2,end) infinite!important;text-shadow:.06em .04em 0 rgba(0,0,0,.18)}
+.sp-text-se--flash{animation:spTextSeFlash .7s ease-out both!important}
+.sp-text-se--glitch{animation:spTextSeGlitch .55s steps(2,end) both!important;text-shadow:.05em 0 currentColor,-.05em 0 rgba(127,127,127,.7)}
+.sp-text-se--shake{animation:spTextSeShake .12s linear 0s 8 alternate!important}
+.sp-text-se--break{animation:spTextSeBreak .72s cubic-bezier(.15,.75,.2,1.15) both!important;filter:contrast(1.25)}
+.sp-text-se--bounce{animation:spTextSeBounce .72s cubic-bezier(.2,.9,.25,1.25) both!important}
 @keyframes spTextSeImpact{0%{opacity:0;transform:scale(2.2) rotate(-5deg);filter:blur(3px)}58%{opacity:1;transform:scale(.9) rotate(1deg);filter:none}78%{transform:scale(1.08) rotate(-.5deg)}100%{transform:none}}
 @keyframes spTextSeScream{0%{opacity:0;transform:scale(.35,.12) translateY(30%)}45%{opacity:1;transform:scale(1.08,1.5) translateY(-4%)}65%{transform:scale(.98,1.18)}100%{transform:scale(1,1.28)}}
 @keyframes spTextSeStretch{0%{opacity:.15;transform:scaleX(.28);letter-spacing:-.08em}60%{opacity:1;transform:scaleX(1.12);letter-spacing:.16em}100%{transform:scaleX(1);letter-spacing:.1em}}

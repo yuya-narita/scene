@@ -540,7 +540,7 @@
           "type": "object",
           "properties": {
             "preset": {"enum": ["impact", "scream", "stretch", "unease", "flash", "glitch", "shake", "break", "bounce"]},
-            "scale": {"enum": ["normal", "large", "fullscreen", "breakout"]}
+            "scale": {"enum": ["normal", "large", "fullscreen", "giant", "breakout"]}
           },
           "additionalProperties": false
         },
@@ -562,6 +562,14 @@
           "type": "number",
           "minimum": 100,
           "maximum": 900
+        },
+        "fontStyle": {
+          "enum": ["normal", "italic"]
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -45,
+          "maximum": 45
         },
         "position": {
           "type": "object",
