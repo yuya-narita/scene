@@ -6123,11 +6123,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (Number.isFinite(Number(style.lineHeight))) node.style.lineHeight = String(Math.max(1, Math.min(3, Number(style.lineHeight))));
       if (Number.isFinite(Number(style.letterSpacing))) node.style.letterSpacing = `${Math.max(-0.2, Math.min(0.5, Number(style.letterSpacing)))}em`;
       if (Number.isFinite(Number(style.opacity))) node.style.opacity = String(Math.max(0.1, Math.min(1, Number(style.opacity))));
-      // TEXT SE V1: visual sound effect for arbitrary author text.
+      // TEXT SE V3: visual sound effect for arbitrary author text.
+      // Reset first so Live Preview replays the entrance animation on every edit.
+      [...node.classList].filter(c=>c==='sp-text-se'||c.startsWith('sp-text-se--')).forEach(c=>node.classList.remove(c));
+      delete node.dataset.textSeScale;
       const textSE = style.textSE && typeof style.textSE === 'object' ? style.textSE : null;
       if (textSE && textSE.preset && textSE.preset !== 'none') {
+        void node.offsetWidth;
         node.classList.add('sp-text-se', `sp-text-se--${String(textSE.preset).replace(/[^a-z0-9_-]/gi,'')}`);
-        node.dataset.textSeScale = ['normal','large','fullscreen','breakout'].includes(textSE.scale) ? textSE.scale : 'normal';
+        node.dataset.textSeScale = ['normal','large','fullscreen','giant','breakout'].includes(textSE.scale) ? textSE.scale : 'normal';
       }
 
       if (style.writingMode === 'vertical-rl') {

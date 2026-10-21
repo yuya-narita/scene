@@ -13458,9 +13458,9 @@ function openDesktopTextDetail(){
       desktopDetailSelect(u('演出','Effect'),[
         ['none',u('なし','None')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['unease',u('ざわつく','Unease')],['flash',u('閃光','Flash')],['glitch',u('グリッチ','Glitch')],['shake',u('震える','Shake')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')]
       ],p.text.textSE?.preset||'none',v=>{if(v==='none')delete p.text.textSE;else p.text.textSE={...(p.text.textSE||{}),preset:v,scale:p.text.textSE?.scale||'normal'};apply();}),
-      desktopDetailSelect(u('大きさ','Scale'),[['normal',u('通常','Normal')],['large',u('大','Large')],['fullscreen',u('全画面','Fullscreen')],['breakout',u('画面突破','Breakout')]],p.text.textSE?.scale||'normal',v=>{if(!p.text.textSE)p.text.textSE={preset:'impact'};p.text.textSE.scale=v;apply();})
+      desktopDetailSelect(u('大きさ','Scale'),[['normal',u('通常','Normal')],['large',u('大','Large')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],p.text.textSE?.scale||'normal',v=>{if(!p.text.textSE)p.text.textSE={preset:'impact'};p.text.textSE.scale=v;apply();})
     );
-    const textSEHelp=document.createElement('p');textSEHelp.className='desktop-text-detail-note';textSEHelp.textContent=u('入力した文字そのものを視覚的なSEとして演出します。「全画面」「画面突破」はSceneを覆う大きさまで拡大します。','Turns the entered text itself into a visual sound effect. Fullscreen and Breakout can fill or exceed the Scene.');textSE.appendChild(textSEHelp);
+    const textSEHelp=document.createElement('p');textSEHelp.className='desktop-text-detail-note';textSEHelp.textContent=u('入力した文字そのものを視覚的なSEとして演出します。書体・太さ・字間などの文字設定は自由に組み合わせられます。「超巨大」「画面突破」はSceneを覆う／はみ出す大きさまで拡大します。','Turns the entered text itself into a visual sound effect. Fullscreen and Breakout can fill or exceed the Scene.');textSE.appendChild(textSEHelp);
 
     const note=section(u('プレビュー','Preview'));
     const noteP=document.createElement('p');noteP.className='desktop-text-detail-note';noteP.textContent=u('変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。','Changes appear in the Live Preview immediately and are autosaved. These settings stay with this Scene when you move away and return.');note.appendChild(noteP);
