@@ -486,7 +486,11 @@
                 "small",
                 "normal",
                 "large",
-                "xl"
+                "xl",
+                "xxl",
+                "fullscreen",
+                "giant",
+                "breakout"
               ]
             },
             {
@@ -555,6 +559,8 @@
           "minimum": 100,
           "maximum": 900
         },
+        "fontStyle": {"enum": ["normal", "italic"]},
+        "angle": {"type": "number", "minimum": -45, "maximum": 45},
         "position": {
           "type": "object",
           "properties": {
@@ -672,6 +678,13 @@
             "glitchHit",
             "glitchHitRight",
             "rush",
+            "impact",
+            "scream",
+            "stretch",
+            "murmur",
+            "flash",
+            "break",
+            "bounce",
             "auto",
             "fadeRise",
             "softRise",

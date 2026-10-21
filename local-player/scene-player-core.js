@@ -6085,9 +6085,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!style || typeof style !== 'object') style = {};
       if (style.color) node.style.color = String(style.color);
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
-      node.style.fontStyle = style.fontStyle === 'italic' ? 'italic' : '';
-      const textAngle = Number(style.angle);
-      node.style.rotate = Number.isFinite(textAngle) && Math.abs(textAngle) > 0.01 ? `${Math.max(-45, Math.min(45, textAngle))}deg` : '';
+      if (style.fontStyle === 'italic') node.style.fontStyle = 'italic';
+      if (Number.isFinite(Number(style.angle)) && Math.abs(Number(style.angle)) > 0.01) node.style.rotate = `${Math.max(-45,Math.min(45,Number(style.angle)))}deg`;
       const shadows={
         none:'none',
         soft:'0 1px 4px rgba(0,0,0,.48)',
@@ -6109,13 +6108,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       node.dataset.spSizeMode = size == null || size === '' || size === 'auto' || size === 'normal' ? 'auto' : 'fixed';
       const landscapeSizes = isSubText
         ? { small: 9, normal: 11, large: 13, xl: 15 }
-        : { small: 16, normal: 19, large: 24, xl: 30 };
+        : { small:16, normal:19, large:24, xl:30, xxl:40, fullscreen:54, giant:72, breakout:96 };
       const landscapeSize = typeof size === 'number' && Number.isFinite(size) && size > 0
         ? size * .75 : (landscapeSizes[size] || (isSubText ? 11 : 19));
       node.style.setProperty('--sp-landscape-font', `${landscapeSize}px`);
       const tokenSizes = isSubText
         ? { small: '11px', normal: '14px', large: '17px', xl: '20px' }
-        : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)' };
+        : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)', xxl:'clamp(42px,10cqw,72px)', fullscreen:'clamp(58px,15cqw,108px)', giant:'clamp(78px,21cqw,150px)', breakout:'clamp(105px,29cqw,210px)' };
       if (typeof size === 'number' && Number.isFinite(size) && size > 0) node.style.fontSize = `${size}px`;
       else if (typeof size === 'string' && size !== 'auto' && tokenSizes[size]) node.style.fontSize = tokenSizes[size];
 
@@ -6126,17 +6125,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (Number.isFinite(Number(style.lineHeight))) node.style.lineHeight = String(Math.max(1, Math.min(3, Number(style.lineHeight))));
       if (Number.isFinite(Number(style.letterSpacing))) node.style.letterSpacing = `${Math.max(-0.2, Math.min(0.5, Number(style.letterSpacing)))}em`;
       if (Number.isFinite(Number(style.opacity))) node.style.opacity = String(Math.max(0.1, Math.min(1, Number(style.opacity))));
-      // TEXT SE V3: visual sound effect for arbitrary author text.
-      // Reset first so Live Preview replays the entrance animation on every edit.
-      [...node.classList].filter(c=>c==='sp-text-se'||c.startsWith('sp-text-se--')).forEach(c=>node.classList.remove(c));
-      delete node.dataset.textSeScale;
-      const textSE = style.textSE && typeof style.textSE === 'object' ? style.textSE : null;
-      if (textSE && textSE.preset && textSE.preset !== 'none') {
-        void node.offsetWidth;
-        node.classList.add('sp-text-se', `sp-text-se--${String(textSE.preset).replace(/[^a-z0-9_-]/gi,'')}`);
-        node.dataset.textSeScale = ['normal','large','fullscreen','giant','breakout'].includes(textSE.scale) ? textSE.scale : 'normal';
-      }
-
       if (style.writingMode === 'vertical-rl') {
         const lines=String(node.textContent||'').split('\n');
         const longest=Math.max(1,...lines.map(line=>Array.from(line).length));

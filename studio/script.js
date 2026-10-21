@@ -11495,7 +11495,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     const cap=document.createElement('span');cap.textContent=label||u('サイズ','Size');
     const row=document.createElement('div');row.className='v58-bulk-row';
     const value=document.createElement('select');
-    [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
+    [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
     value.value=ensurePresentation(scene).text?.size||'auto';
 
     const scope=document.createElement('select');scope.className='v58-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('適用範囲','Apply scope'));
@@ -12130,7 +12130,7 @@ function openDesktopEffectDetail(){
     const basicGrid=two(basic);
     const currentEffect=p.typing?.enabled?'typewriter':(p.effect||'auto');
     const effectSelect=desktopDetailSelect(u('出かた','Entrance'),[
-      ['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]
+      ['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['murmur',u('ざわつく','Murmur')],['flash',u('閃光','Flash')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]
     ],currentEffect,v=>{
       ensureDesktopEffectVisibleDefaults(scene,{save:false});
       if(v==='typewriter'){
@@ -13422,7 +13422,7 @@ function openDesktopTextDetail(){
       v58MakeTextSizeBulkControl(scene,{label:u('サイズ','Size'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
       v64MakeWritingModeBulkControl(scene,{label:u('書字方向','Writing direction'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
       desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;apply();}),
-      desktopDetailSelect(u('斜体','Italic'),[['normal',u('通常','Normal')],['italic',u('斜体','Italic')]],p.text.fontStyle||'normal',v=>{if(v==='italic')p.text.fontStyle='italic';else delete p.text.fontStyle;apply();}),
+      desktopDetailSelect(u('斜体','Italic'),[['normal',u('通常','Normal')],['italic',u('斜体','Italic')]],p.text?.fontStyle||'normal',v=>{if(v==='italic')p.text.fontStyle='italic';else delete p.text.fontStyle;apply();}),
       v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
       desktopDetailSelect(u('文字影','Text shadow'),[['auto',t('effect.auto')],['none',t('shadow.none')],['soft',t('shadow.soft')],['strong',t('shadow.strong')]],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
     );
@@ -13445,24 +13445,13 @@ function openDesktopTextDetail(){
       desktopDetailRange(u('字間','Letter spacing'),{min:-.05,max:.20,step:.005,value:Number(p.text.letterSpacing)||.035,unit:' em',format:v=>v.toFixed(3),oninput:v=>{p.text.letterSpacing=v;apply();}}),
       desktopDetailRange(u('左右の余白','Side margins'),{min:0,max:28,step:1,value:Number(p.text.sideMargin)||0,unit:' %',format:v=>Math.round(v),oninput:v=>{if(v<=0)delete p.text.sideMargin;else p.text.sideMargin=v;apply();}}),
       desktopDetailRange(u('透明度','Opacity'),{min:.35,max:1,step:.05,value:Number(p.text.opacity)||1,unit:' %',format:v=>Math.round(v*100),oninput:v=>{if(v>=.999)delete p.text.opacity;else p.text.opacity=v;apply();}}),
-      desktopDetailRange(u('文字の角度','Text angle'),{min:-30,max:30,step:1,value:Number(p.text.angle)||0,unit:'°',format:v=>Math.round(v),oninput:v=>{if(Math.abs(v)<.5)delete p.text.angle;else p.text.angle=v;apply();}})
+      desktopDetailRange(u('文字の角度','Text angle'),{min:-45,max:45,step:1,value:Number(p.text.angle)||0,unit:' °',format:v=>Math.round(v),oninput:v=>{if(Math.abs(v)<.5)delete p.text.angle;else p.text.angle=v;apply();}})
     );
     const layoutSelects=two(layout);
     layoutSelects.append(
       desktopDetailSelect(p.text.writingMode==='vertical-rl'?u('横位置','Horizontal position'):u('文字配置','Alignment'),p.text.writingMode==='vertical-rl'?[['auto',u('中央（おまかせ）','Center (automatic)')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]]:[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;apply();}),
       desktopDetailSelect(u('折り返し','Wrapping'),[['auto',u('自動（推奨）','Automatic (recommended)')],['nowrap',u('折り返さない','No wrap')]],p.text.wrap||'auto',v=>{if(v==='auto')delete p.text.wrap;else p.text.wrap=v;apply();})
     );
-
-    // TEXT SE V1: visual sound-effect presets for the current Scene text.
-    const textSE=section(u('テキストSE','Text SE'));
-    const textSEGrid=two(textSE);
-    textSEGrid.append(
-      desktopDetailSelect(u('演出','Effect'),[
-        ['none',u('なし','None')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['unease',u('ざわつく','Unease')],['flash',u('閃光','Flash')],['glitch',u('グリッチ','Glitch')],['shake',u('震える','Shake')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')]
-      ],p.text.textSE?.preset||'none',v=>{if(v==='none')delete p.text.textSE;else p.text.textSE={...(p.text.textSE||{}),preset:v,scale:p.text.textSE?.scale||'normal'};apply();}),
-      desktopDetailSelect(u('大きさ','Scale'),[['normal',u('通常','Normal')],['large',u('大','Large')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],p.text.textSE?.scale||'normal',v=>{if(!p.text.textSE)p.text.textSE={preset:'impact'};p.text.textSE.scale=v;apply();})
-    );
-    const textSEHelp=document.createElement('p');textSEHelp.className='desktop-text-detail-note';textSEHelp.textContent=u('入力した文字そのものを視覚的なSEとして演出します。書体・太さ・字間などの文字設定は自由に組み合わせられます。「超巨大」「画面突破」はSceneを覆う／はみ出す大きさまで拡大します。','Turns the entered text itself into a visual sound effect. Fullscreen and Breakout can fill or exceed the Scene.');textSE.appendChild(textSEHelp);
 
     const note=section(u('プレビュー','Preview'));
     const noteP=document.createElement('p');noteP.className='desktop-text-detail-note';noteP.textContent=u('変更は左のLive Previewへ即時反映され、自動保存されます。Sceneを移動して戻っても、このSceneの設定値を保持します。','Changes appear in the Live Preview immediately and are autosaved. These settings stay with this Scene when you move away and return.');note.appendChild(noteP);
@@ -13650,7 +13639,7 @@ function openDesktopTextDetail(){
       ),
       desktopMakeSelect(
         u('サイズ','Size'),
-        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],
         initial.size||'auto',
         v=>{
           const st=store();
@@ -14228,7 +14217,7 @@ function openDesktopTextDetail(){
     textGrid.append(
       desktopMakeSelect(u('種類','Type'),[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],scene.type||'text',v=>{scene.type=v;refresh();}),
       desktopMakeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
-      desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
+      desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
       desktopMakeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;refresh();}),
       desktopMakeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;refresh();}),
       v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>renderDesktopLivePanel()}),
@@ -14724,7 +14713,7 @@ function openDesktopTextDetail(){
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
-      desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+      desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['murmur',u('ざわつく','Murmur')],['flash',u('閃光','Flash')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
         ensureDesktopEffectVisibleDefaults(scene,{save:false});
         if(v==='typewriter'){
           p.effect='none';
@@ -14983,7 +14972,7 @@ function openDesktopTextDetail(){
       textAlign:{group:u('文字','Text'),label:u('文字配置','Text alignment'),render:()=>desktopDetailSelect(u('文字配置','Text alignment'),[['auto',u('おまかせ','Auto')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;quickApply();})},
       fontWeight:{group:u('文字','Text'),label:u('文字の太さ','Font weight'),render:()=>desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;quickApply();})},
       textFrame:{group:u('演出','Effects'),label:u('文字の枠','Text frame'),render:()=>desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;quickApply();})},
-      entrance:{group:u('演出','Effects'),label:u('出かた','Entrance'),render:()=>{const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');return desktopDetailSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{ensureDesktopEffectVisibleDefaults(scene,{save:false});if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}scheduleDraftSave(40);replayCurrentDesktopEffect();renderDesktopLivePanel();});}},
+      entrance:{group:u('演出','Effects'),label:u('出かた','Entrance'),render:()=>{const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');return desktopDetailSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['murmur',u('ざわつく','Murmur')],['flash',u('閃光','Flash')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{ensureDesktopEffectVisibleDefaults(scene,{save:false});if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}scheduleDraftSave(40);replayCurrentDesktopEffect();renderDesktopLivePanel();});}},
       display:{group:u('演出','Effects'),label:u('表示','Display'),render:()=>v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderDesktopLivePanel()})},
       flow:{group:u('演出','Effects'),label:u('Sceneの流れ','Scene flow'),render:()=>v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()})},
       entryMotion:{group:u('演出','Effects'),label:u('位置の動き','Position motion'),render:()=>desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;quickApply();})},
@@ -15422,7 +15411,7 @@ function openDesktopTextDetail(){
         v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;apply();}
       ),
       desktopDetailSelect(u('サイズ','Size'),
-        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],
         st.size||'auto',
         v=>{st.size=v;apply();}
       ),
@@ -15541,7 +15530,7 @@ function openDesktopTextDetail(){
         v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;rerender();}
       ),
       makeSelect(u('サイズ','Size'),
-        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],
         st.size||'auto',
         v=>{st.size=v;rerender();}
       ),
@@ -15604,7 +15593,7 @@ function openDesktopTextDetail(){
     grid.append(
       selectControl({label:u('種類','Type'),icon:'type',values:[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],current:scene.type||'text',onchange:v=>{scene.type=v;rerender();}}),
       selectControl({label:u('書体','Typeface'),icon:'text',values:[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],current:p.text.fontFamily||'inherit',onchange:v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}}),
-      selectControl({label:u('サイズ','Size'),icon:'size',values:[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],current:p.text.size||'auto',onchange:v=>{p.text.size=v;rerender();}}),
+      selectControl({label:u('サイズ','Size'),icon:'size',values:[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],current:p.text.size||'auto',onchange:v=>{p.text.size=v;rerender();}}),
       selectControl({label:u('書字方向','Writing direction'),icon:'writing',values:[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],current:p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',onchange:v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;rerender();renderLiveEditSheet('text');}}),
       selectControl({label:u('文字の太さ','Font weight'),icon:'text',values:[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],current:String(p.text?.fontWeight||0),onchange:v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;rerender();}}),
       selectControl({label:u('テキスト位置','Text position'),icon:'position',values:FRAME_POSITION_OPTIONS,current:framePositionPreset(scene),onchange:v=>{captureUndo(u('テキスト位置の変更を元に戻せます','Undo text position change'));v66SetSceneTextPosition(scene,v);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(u('テキスト位置の変更を元に戻せます','Undo text position change')));}})
@@ -15712,7 +15701,7 @@ function openDesktopTextDetail(){
       grid.append(
         makeSelect(u('種類','Type'),[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],scene.type||'text',v=>{scene.type=v;rerender();}),
         makeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
-        makeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
+        makeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
         makeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;rerender();}),
         makeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;rerender();}),
         v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>renderLiveEditSheet('text')}),
@@ -15766,7 +15755,7 @@ function openDesktopTextDetail(){
         const grid=document.createElement('div');grid.className='live-edit-grid';
         const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
         grid.append(
-          makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+          makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['murmur',u('ざわつく','Murmur')],['flash',u('閃光','Flash')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
             if(v==='typewriter'){
               p.effect='none';
               p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
@@ -16974,7 +16963,7 @@ function openDesktopTextDetail(){
       sel.value=value;wrap.append(span,sel);return {wrap,sel};
     };
     const font=mkSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],st.fontFamily||'inherit');
-    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof st.size==='string'?st.size:'auto');
+    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],typeof st.size==='string'?st.size:'auto');
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');colorTitle.textContent=u('文字色','Text color');Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
@@ -17336,7 +17325,7 @@ function openDesktopTextDetail(){
       sel.value=value;wrap.append(span,sel);return {wrap,sel};
     };
     const font=mkSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],style.fontFamily||'inherit');
-    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof style.size==='string'?style.size:'auto');
+    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],typeof style.size==='string'?style.size:'auto');
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');
