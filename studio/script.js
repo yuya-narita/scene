@@ -13444,7 +13444,6 @@ function openDesktopTextDetail(){
       desktopDetailRange(u('行間','Line height'),{min:1.2,max:2.5,step:.05,value:Number(p.text.lineHeight)||1.85,format:v=>v.toFixed(2),oninput:v=>{p.text.lineHeight=v;apply();}}),
       desktopDetailRange(u('字間','Letter spacing'),{min:-.05,max:.20,step:.005,value:Number(p.text.letterSpacing)||.035,unit:' em',format:v=>v.toFixed(3),oninput:v=>{p.text.letterSpacing=v;apply();}}),
       desktopDetailRange(u('左右の余白','Side margins'),{min:0,max:28,step:1,value:Number(p.text.sideMargin)||0,unit:' %',format:v=>Math.round(v),oninput:v=>{if(v<=0)delete p.text.sideMargin;else p.text.sideMargin=v;apply();}}),
-      desktopDetailRange(u('透明度','Opacity'),{min:.35,max:1,step:.05,value:Number(p.text.opacity)||1,unit:' %',format:v=>Math.round(v*100),oninput:v=>{if(v>=.999)delete p.text.opacity;else p.text.opacity=v;apply();}}),
       desktopDetailRange(u('文字の角度','Text angle'),{min:-45,max:45,step:1,value:Number(p.text.angle)||0,unit:' °',format:v=>Math.round(v),oninput:v=>{if(Math.abs(v)<.5)delete p.text.angle;else p.text.angle=v;apply();}})
     );
     const layoutSelects=two(layout);

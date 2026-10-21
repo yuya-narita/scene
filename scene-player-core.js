@@ -6124,6 +6124,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       if (style.fontStyle === 'italic') node.style.fontStyle = 'italic';
       if (Number.isFinite(Number(style.angle)) && Math.abs(Number(style.angle)) > 0.01) node.style.rotate = `${Math.max(-45,Math.min(45,Number(style.angle)))}deg`;
+      else node.style.rotate = '';
+      // Reflection is independent from entrance-effect transforms and text angle.
+      // Use the individual scale property so effect animations can keep owning transform.
+      if (style.flip === 'horizontal') node.style.scale = '-1 1';
+      else if (style.flip === 'vertical') node.style.scale = '1 -1';
+      else if (style.flip === 'both') node.style.scale = '-1 -1';
+      else node.style.scale = '';
       const shadows={
         none:'none',
         soft:'0 1px 4px rgba(0,0,0,.48)',
@@ -6145,15 +6152,32 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       node.dataset.spSizeMode = size == null || size === '' || size === 'auto' || size === 'normal' ? 'auto' : 'fixed';
       const landscapeSizes = isSubText
         ? { small: 9, normal: 11, large: 13, xl: 15 }
-        : { small:16, normal:19, large:24, xl:30, xxl:40, fullscreen:54, giant:72, breakout:96 };
+        : { small:16, normal:19, large:24, xl:30, xxl:40, fullscreen:54, giant:72, breakout:132 };
       const landscapeSize = typeof size === 'number' && Number.isFinite(size) && size > 0
         ? size * .75 : (landscapeSizes[size] || (isSubText ? 11 : 19));
       node.style.setProperty('--sp-landscape-font', `${landscapeSize}px`);
       const tokenSizes = isSubText
         ? { small: '11px', normal: '14px', large: '17px', xl: '20px' }
-        : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)', xxl:'clamp(42px,10cqw,72px)', fullscreen:'clamp(58px,15cqw,108px)', giant:'clamp(78px,21cqw,150px)', breakout:'clamp(105px,29cqw,210px)' };
+        : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)', xxl:'clamp(42px,10cqw,72px)', fullscreen:'clamp(58px,15cqw,108px)', giant:'clamp(78px,21cqw,150px)', breakout:'clamp(150px,42cqw,320px)' };
       if (typeof size === 'number' && Number.isFinite(size) && size > 0) node.style.fontSize = `${size}px`;
       else if (typeof size === 'string' && size !== 'auto' && tokenSizes[size]) node.style.fontSize = tokenSizes[size];
+
+      // Breakout deliberately ignores the normal readable-text box. It may exceed the viewport.
+      if (!isSubText && size === 'breakout') {
+        node.dataset.textBreakout = 'true';
+        node.style.width = 'max-content';
+        node.style.maxWidth = 'none';
+        node.style.whiteSpace = 'nowrap';
+        node.style.overflow = 'visible';
+        node.style.overflowWrap = 'normal';
+      } else {
+        delete node.dataset.textBreakout;
+        node.style.width = '';
+        node.style.maxWidth = '';
+        node.style.whiteSpace = style.wrap === 'nowrap' ? 'nowrap' : '';
+        node.style.overflow = '';
+        node.style.overflowWrap = style.wrap === 'nowrap' ? 'normal' : '';
+      }
 
       if (style.wrap === 'nowrap') {
         node.style.whiteSpace = 'nowrap';
@@ -6185,7 +6209,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.style.marginLeft='';
         node.style.marginRight='';
       }
-      if (style.writingMode !== 'vertical-rl' && Number.isFinite(Number(style.sideMargin)) && Number(style.sideMargin) > 0) {
+      if (size !== 'breakout' && style.writingMode !== 'vertical-rl' && Number.isFinite(Number(style.sideMargin)) && Number(style.sideMargin) > 0) {
         const margin=Math.max(0,Math.min(40,Number(style.sideMargin)));
         node.style.width=`calc(100% - ${margin*2}%)`;
         node.style.maxWidth=`calc(100% - ${margin*2}%)`;

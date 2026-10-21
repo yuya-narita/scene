@@ -561,6 +561,7 @@
         },
         "fontStyle": {"enum": ["normal", "italic"]},
         "angle": {"type": "number", "minimum": -45, "maximum": 45},
+        "flip": {"enum": ["none", "horizontal", "vertical", "both"]},
         "position": {
           "type": "object",
           "properties": {
