@@ -1257,4 +1257,32 @@ function installSandboxDebitInspection(){
 }
 installSandboxDebitInspection();
 
+function installSandboxBalanceLockPanel(){
+  if(!els.auditOrdersList)return;
+  const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
+  panel.innerHTML='<summary>残高購入の停止状態（Sandbox）</summary><p>作者の残高購入が処理中・確認待ちになっているか確認します。解除時は再照合し、安全を確認できた停止だけ解除します。引き落とし・送金・返金は実行しません。</p><label>作者ID <input data-lock-author placeholder="author_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><p><button data-lock-check type="button">停止状態を確認</button> <button data-lock-release type="button" disabled>照合済みの停止を解除</button></p><p data-lock-status aria-live="polite"></p><div data-lock-result style="overflow-wrap:anywhere"></div>';
+  els.auditOrdersList.parentNode.appendChild(panel);
+  const input=panel.querySelector('[data-lock-author]'),check=panel.querySelector('[data-lock-check]'),release=panel.querySelector('[data-lock-release]'),status=panel.querySelector('[data-lock-status]'),result=panel.querySelector('[data-lock-result]');
+  const reasons={NO_LOCK:'停止はありません。',ALREADY_IDLE:'残高購入のロックは空いています。',PREPARING_PURCHASE:'購入準備中です。まだ解除できません。',EXPIRED_BEFORE_DEBIT:'引き落とし開始前に準備が期限切れになりました。安全に解除できます。',STRIPE_RESULT_UNVERIFIED:'決済結果または作者への送金を確認できません。停止を維持します。',LEGACY_OR_INVALID_LOCK_REQUIRES_INVESTIGATION:'旧形式または未確認のロックです。個別調査が必要です。',ENTITLEMENT_REPAIR_REQUIRED:'購入権の修復が必要です。返金せず、既存の権利修復経路を先に確認してください。',ORDER_AUDIT_REQUIRES_REVIEW:'注文の監査に確認事項があります。停止を維持します。',PAID_SETTLEMENT_VERIFIED:'Stripeの購入・作者への送金と購入権を照合しました。停止を解除できます。',REFUND_AND_REVERSAL_VERIFIED:'Stripeの返金・送金取消と注文を照合しました。停止を解除できます。',RELEASED_AFTER_VERIFICATION:'照合のうえ停止を解除しました。資金は動かしていません。'};
+  let report=null,busy=false;
+  function clear(){report=null;release.disabled=true;status.textContent='';result.textContent='';}
+  function validate(r,id){if(!r||r.environment!=='test'||r.authorId!==id||!/^acct_[A-Za-z0-9_]+$/.test(r.accountId||'')||r.financialWrites!==false||typeof r.canRelease!=='boolean'||r.canRelease&&(!r.revision||typeof r.revision!=='string'))throw new Error('結果の対応を確認できません。');return r;}
+  function show(r){result.textContent=(reasons[r.reason]||'状態を確定できません。')+(r.orderId?'\n対象注文：'+r.orderId:'');result.style.whiteSpace='pre-wrap';}
+  async function run(doRelease){
+    if(busy)return;
+    const id=input.value.trim().toLowerCase(),prior=report;
+    if(!/^author_[a-f0-9]{32}$/.test(id)){clear();status.textContent='作者IDを確認してください。';return;}
+    if(doRelease&&(!prior?.canRelease||prior.authorId!==id))return;
+    busy=true;input.disabled=true;check.disabled=true;release.disabled=true;report=null;result.textContent='';status.textContent=doRelease?'状態を再照合して解除中…':'停止状態を確認中…';
+    try{
+      const path='/admin/commerce/sandbox-balance-purchase-lock';
+      const data=doRelease?await apiWithTimeout(path,{method:'POST',body:JSON.stringify({action:'release_verified',authorId:id,expectedEnvironment:'test',expectedAccountId:prior.accountId,expectedRevision:prior.revision})},45000):await apiWithTimeout(path+'?'+new URLSearchParams({authorId:id,expectedEnvironment:'test'}),{},45000);
+      report=validate(data.report,id);show(report);status.textContent=doRelease?'停止を解除しました。':'確認が完了しました。';
+    }catch(e){status.textContent='完了を確認できません：'+e.message+'。「停止状態を確認」で現在状態を再取得してください。';}
+    finally{busy=false;input.disabled=false;check.disabled=false;release.disabled=!report?.canRelease;}
+  }
+  input.oninput=clear;check.onclick=()=>run(false);release.onclick=()=>run(true);
+}
+installSandboxBalanceLockPanel();
+
 })();
