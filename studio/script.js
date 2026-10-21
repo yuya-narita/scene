@@ -11834,7 +11834,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       .frame-position-drag-toolbar{position:absolute;z-index:92;left:50%;bottom:max(92px,calc(env(safe-area-inset-bottom) + 76px));transform:translateX(-50%);display:flex;gap:7px;align-items:center;padding:8px;border-radius:999px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);white-space:nowrap}
       .frame-position-drag-toolbar button{appearance:none;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:transparent;color:#fff;font:600 12px/1 sans-serif;padding:9px 12px}
       .frame-position-drag-toolbar button[data-save]{background:#fff;color:#17181b}
-      .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}
+      .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}\n      .frame-position-size-handle{position:absolute;z-index:94;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid #fff;border-radius:50%;background:#17181b;box-shadow:0 3px 14px rgba(0,0,0,.32);touch-action:none;cursor:nwse-resize}\n      .frame-position-size-badge{position:absolute;z-index:95;transform:translate(-50%,-46px);padding:6px 9px;border-radius:999px;background:rgba(25,26,29,.86);color:#fff;font:700 11px/1 sans-serif;white-space:nowrap;pointer-events:none}
       .sp-scene.is-frame-position-dragging{transition:none!important;z-index:80!important;visibility:visible!important;opacity:1!important}
       .frame-position-adjust-button{width:100%;margin-top:10px;padding:11px 14px;border:1px solid rgba(100,105,115,.3);border-radius:10px;background:transparent;font:inherit}
     `;document.head.appendChild(style);
@@ -11858,6 +11858,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       if(!stage||!scenes||!article||!target){appAlert(u('配置できるテキストがありません','There is no text to position.'));return;}
       const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
       const beforeText=p.text.position?clone(p.text.position):null;
+      const beforeSize=p.text.size;
       const beforeFrame=p.frame?.position?clone(p.frame.position):null;
       // V45: drag positioning mutates continuously outside the generic
       // select/input history watcher. Keep the true pre-drag document snapshot
@@ -11900,16 +11901,33 @@ function startInlineTextEdit(field='text',targetEl=null){
         if(position)liveScene.presentation.text.position=clone(position);else delete liveScene.presentation.text.position;
         if(liveScene.presentation.frame)delete liveScene.presentation.frame.position;
       };
+      const syncLiveSize=(size)=>{
+        if(!liveScene)return;
+        liveScene.presentation||={};liveScene.presentation.text||={};
+        if(size==null||size==='')delete liveScene.presentation.text.size;else liveScene.presentation.text.size=size;
+      };
       const stageRect=stage.getBoundingClientRect(),scenesRect=scenes.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
       setAdjustedPosition({preset:'custom',x:Math.max(0,Math.min(1,(targetRect.left+targetRect.width/2-stageRect.left)/Math.max(1,stageRect.width))),y:Math.max(0,Math.min(1,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))});
       syncLivePosition(p.text.position);
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
-      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=pcMode?u('PC専用位置をタップ／ドラッグで調整','Adjust the PC-only position'):u('画面をタップ／ドラッグして配置','Tap or drag to position the text');
+      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('ドラッグで移動 ／ ●で文字サイズ','Drag to move / ● to resize text');
+      const sizeHandle=document.createElement('div');sizeHandle.className='frame-position-size-handle';sizeHandle.setAttribute('aria-label',u('文字サイズをドラッグ調整','Drag to resize text'));
+      const sizeBadge=document.createElement('div');sizeBadge.className='frame-position-size-badge';
       const toolbar=document.createElement('div');toolbar.className='frame-position-drag-toolbar';
       const auto=document.createElement('button');auto.type='button';auto.textContent=pcMode?u('共通位置','Use common'):u('自動','Auto');
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('取消','Cancel');
       const save=document.createElement('button');save.type='button';save.dataset.save='';save.textContent=u('決定','Done');
-      toolbar.append(auto,cancel,save);stage.append(shield,hint,toolbar);article.classList.add('is-frame-position-dragging');
+      toolbar.append(auto,cancel,save);stage.append(shield,hint,sizeHandle,sizeBadge,toolbar);article.classList.add('is-frame-position-dragging');
+      const textNode=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text')||target;
+      const layoutScale=()=>Math.max(.05,Number(player?._layoutScale?.())||1);
+      const updateSizeHandle=()=>{
+        const sr=stage.getBoundingClientRect(),tr=target.getBoundingClientRect(),scale=layoutScale();
+        const left=(tr.right-sr.left)/scale+10,top=(tr.bottom-sr.top)/scale+10;
+        sizeHandle.style.left=`${left}px`;sizeHandle.style.top=`${top}px`;
+        sizeBadge.style.left=`${left}px`;sizeBadge.style.top=`${top}px`;
+        sizeBadge.textContent=`${Math.round(parseFloat(getComputedStyle(textNode).fontSize)||16)}px`;
+      };
+      requestAnimationFrame(updateSizeHandle);
       let dragging=false;
       const applyPoint=(clientX,clientY)=>{
         const sr=stage.getBoundingClientRect(),cr=scenes.getBoundingClientRect(),geometry=player._measureSceneGeometry(article,sr);
@@ -11917,28 +11935,44 @@ function startInlineTextEdit(field='text',targetEl=null){
         // pane. Convert rendered pointer pixels back to that logical space
         // before clamping, saving and assigning the Scene transform.
         const scale=Math.max(.05,Number(player?._layoutScale?.())||1);
-        const width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop;
-        const margin=(stage.clientWidth||sr.width/scale)<=600?10:16;
         const stageWidth=Math.max(1,stage.clientWidth||sr.width/scale),stageHeight=Math.max(1,stage.clientHeight||sr.height/scale);
         const contentLeft=(cr.left-sr.left)/scale;
         let centerX=(clientX-sr.left)/scale,centerY=(clientY-sr.top)/scale;
-        centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,centerX));
-        centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,centerY));
+        // Free placement. Partial off-screen placement is intentional for effect text.
+        centerX=Math.max(-stageWidth*.35,Math.min(stageWidth*1.35,centerX));
+        centerY=Math.max(-stageHeight*.35,Math.min(stageHeight*1.35,centerY));
         setAdjustedPosition({preset:'custom',x:centerX/stageWidth,y:centerY/stageHeight});
         syncLivePosition(p.text.position);
         article.style.transform=`translate3d(${Math.round(centerX-contentLeft-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
+        requestAnimationFrame(updateSizeHandle);
       };
       shield.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();dragging=true;shield.setPointerCapture?.(event.pointerId);applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointermove',event=>{if(!dragging)return;event.preventDefault();applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointerup',event=>{event.preventDefault();event.stopPropagation();dragging=false;shield.releasePointerCapture?.(event.pointerId);});
       shield.addEventListener('pointercancel',event=>{event.preventDefault();event.stopPropagation();dragging=false;});
       shield.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
-      [toolbar,auto,cancel,save].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
+      let sizing=false,sizeStartDistance=1,sizeStartPx=16;
+      const targetCenter=()=>{const r=target.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};};
+      sizeHandle.addEventListener('pointerdown',event=>{
+        event.preventDefault();event.stopPropagation();sizing=true;sizeHandle.setPointerCapture?.(event.pointerId);
+        const c=targetCenter();sizeStartDistance=Math.max(12,Math.hypot(event.clientX-c.x,event.clientY-c.y));
+        sizeStartPx=Math.max(8,parseFloat(getComputedStyle(textNode).fontSize)||16);
+      });
+      sizeHandle.addEventListener('pointermove',event=>{
+        if(!sizing)return;event.preventDefault();event.stopPropagation();
+        const c=targetCenter(),distance=Math.max(8,Math.hypot(event.clientX-c.x,event.clientY-c.y));
+        const next=Math.max(8,Math.min(420,Math.round(sizeStartPx*(distance/sizeStartDistance))));
+        p.text.size=next;syncLiveSize(next);textNode.style.setProperty('font-size',`${next}px`,'important');
+        sizeBadge.textContent=`${next}px`;requestAnimationFrame(updateSizeHandle);
+      });
+      const finishSizing=event=>{if(!sizing)return;sizing=false;event?.preventDefault?.();event?.stopPropagation?.();try{sizeHandle.releasePointerCapture?.(event.pointerId);}catch(_){}};
+      sizeHandle.addEventListener('pointerup',finishSizing);sizeHandle.addEventListener('pointercancel',finishSizing);
+      [toolbar,auto,cancel,save,sizeHandle].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false}={})=>{
-        shield.remove();hint.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
+        shield.remove();hint.remove();sizeHandle.remove();sizeBadge.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)clearAdjustedPosition();
-        else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
-        syncLivePosition(p.text.position||p.frame?.position||null);
+        else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
+        syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);
         scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel?.();
       };
       auto.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();commitPositionHistory();finishFramePositionDrag({save:true,reset:true});});
@@ -11950,7 +11984,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     const button=document.createElement('button');button.type='button';button.className='frame-position-adjust-button';
     const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
     const hasPc=Boolean(scene?.presentation?.text?.position?.pc);
-    button.textContent=pcMode?(hasPc?u('PC専用位置を再調整','Readjust PC-only position'):u('PC専用位置をドラッグ調整','Adjust PC-only position')):u('プレビュー上でドラッグ調整','Drag on preview to position');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
+    button.textContent=pcMode?(hasPc?u('PC専用位置・サイズを再調整','Readjust PC-only position / size'):u('PC専用位置・サイズを調整','Adjust PC-only position / size')):u('プレビュー上で位置・サイズ調整','Adjust position / size on preview');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
     button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openFramePositionDragEditor(scene);});return button;
   }
 

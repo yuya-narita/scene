@@ -3446,7 +3446,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const source=this._viewportWidth()>=1100&&common?.pc&&typeof common.pc==='object'?common.pc:common;
       const preset=String(source.preset||'auto');
       const presets={'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],left:[.18,.5],center:[.5,.5],right:[.82,.5],'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]};
-      if(preset==='custom'){const x=Number(source.x),y=Number(source.y);return {preset,x:Number.isFinite(x)?Math.max(0,Math.min(1,x)):.5,y:Number.isFinite(y)?Math.max(0,Math.min(1,y)):.5};}
+      if(preset==='custom'){
+        const x=Number(source.x),y=Number(source.y);
+        // Free custom placement for oversized / rotated effect text.
+        return {preset,x:Number.isFinite(x)?Math.max(-.35,Math.min(1.35,x)):.5,y:Number.isFinite(y)?Math.max(-.35,Math.min(1.35,y)):.5};
+      }
       if(presets[preset])return {preset,x:presets[preset][0],y:presets[preset][1]};
       return {preset:'auto'};
     }
@@ -3455,8 +3459,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const contentWidth=Math.max(1,item.node.clientWidth);
       const contentLeft=Math.max(0,(stageWidth-contentWidth)/2);
       const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
-      const centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,stageWidth*position.x));
-      const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
+      // Custom means custom: do not force the glyph box back inside the viewport.
+      // A broad safety bound still keeps a lost element recoverable in Studio.
+      const centerX=Math.max(-stageWidth*.35,Math.min(stageWidth*1.35,stageWidth*position.x));
+      const centerY=Math.max(-stageHeight*.35,Math.min(stageHeight*1.35,stageHeight*position.y));
       return {x:centerX-contentLeft-item.inkCenterX,y:centerY-item.inkCenterY};
     }
 
