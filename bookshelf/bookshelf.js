@@ -1803,7 +1803,7 @@ function installShelfSwipe(){
   let gesture=null;
   let settling=false;
   const mobile=()=>matchMedia('(max-width:680px) and (pointer:coarse)').matches;
-  const blockedTarget=target=>!!target?.closest?.('dialog[open],button:not(.book),input,select,textarea,a,summary,[contenteditable="true"],.official-seed-carousel');
+  const blockedTarget=target=>!!target?.closest?.('dialog[open],button:not(.book):not(.public-discovery-cover),input,select,textarea,a,summary,[contenteditable="true"],.official-seed-carousel');
   const cleanup=()=>{if(gesture?.view)removeShelfSwipeStage(gesture.view);gesture=null;};
   window.addEventListener('touchstart',e=>{
     if(!mobile()||settling||e.touches.length!==1||pinchGesture)return;
