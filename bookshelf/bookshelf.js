@@ -46,6 +46,9 @@ let currentShelfTab=null;
 // V4: keep the entrance/loading veil up until local + signed-in author data
 // have both settled. This prevents the incomplete local shelf from flashing first.
 let initialShelfBooting=true;
+// V5: the previously opened shelf is the critical path. Other shelf sources
+// are deferred until that shelf is visible, then warmed in the background.
+let initialAuthorShelfPromise=null;
 let shelfCounts={owned:0,created:0};
 let coverUrls=[];
 let currentJourneyData=null;
@@ -1445,12 +1448,17 @@ async function render({deferCoverRevoke=false,refreshOfficial=true}={}){
   if(!deferCoverRevoke)revokeUnusedCoverUrls(staleCoverUrls);
   // Prepare the official shelf once in the background. Navigation reuses it
   // and never forces a network refresh merely because the user changed tabs.
-  if(currentShelfTab!=='official'&&!officialShelfLoaded)renderOfficialShelf({force:false}).catch(()=>{});
+  if(!initialShelfBooting&&currentShelfTab!=='official'&&!officialShelfLoaded)renderOfficialShelf({force:false}).catch(()=>{});
   return staleCoverUrls;
 }
 
 async function switchShelf(tab,{refreshOfficial=false,concealRestore=false}={}){
   if(!visibleShelfTabs().includes(tab)||tab===currentShelfTab)return [];
+  // V5: if the author shelf is still warming in the background, a user who
+  // explicitly opens "つくった本" promotes that request to the foreground.
+  if(tab==='created'&&initialAuthorShelfPromise){
+    try{await initialAuthorShelfPromise;}catch(_){}
+  }
   const from=currentShelfTab;
   if(from)saveShelfScroll(from);
   // Show the one-line entrance during a first official visit, instead of
@@ -2586,9 +2594,17 @@ syncBookshelfAuthorUI();
       try{claimed=await importBookshelfClaimFromLocation();}
       catch(e){console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
       await render();
-      await restoreBookshelfAuthorSession();
+      if(currentShelfTab==='created'&&authorToken){
+        initialAuthorShelfPromise=restoreBookshelfAuthorSession();
+        try{await initialAuthorShelfPromise;}finally{initialAuthorShelfPromise=null;}
+      }
       initialShelfBooting=false;
       await presentShelfFromCache({refreshOfficial:false});
+      if(currentShelfTab!=='created'&&authorToken){
+        initialAuthorShelfPromise=restoreBookshelfAuthorSession();
+        initialAuthorShelfPromise.finally(()=>{initialAuthorShelfPromise=null;}).catch(()=>{});
+      }
+      if(currentShelfTab!=='official'&&!officialShelfLoaded)renderOfficialShelf({force:false}).catch(()=>{});
       if(claimed)toast('自分の一冊を本棚に受け取りました。');
     },{once:true});
     return;
@@ -2597,13 +2613,25 @@ syncBookshelfAuthorUI();
   try{claimed=await importBookshelfClaimFromLocation();}
   catch(e){console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
   await render();
-  await restoreBookshelfAuthorSession();
-  // V4: render() intentionally built the local shelf behind the entrance.
-  // restoreBookshelfAuthorSession() may then merge /author/works + series data.
-  // Reveal only once that final state is ready, so Series BOX and public covers
-  // never appear as a second paint after reload.
+  // V5: prioritize the shelf the reader last had open. Only "つくった本"
+  // needs author/series data before its first paint. "もっている本" can be
+  // shown from IndexedDB immediately, while "あ箱の本" is already fetched
+  // by renderOfficialShelf when it is the active tab.
+  if(currentShelfTab==='created'&&authorToken){
+    initialAuthorShelfPromise=restoreBookshelfAuthorSession();
+    try{await initialAuthorShelfPromise;}finally{initialAuthorShelfPromise=null;}
+  }
   initialShelfBooting=false;
   await presentShelfFromCache({refreshOfficial:false});
+
+  // Warm the two non-active sources only after the visible shelf is complete.
+  if(currentShelfTab!=='created'&&authorToken){
+    initialAuthorShelfPromise=restoreBookshelfAuthorSession();
+    initialAuthorShelfPromise.finally(()=>{initialAuthorShelfPromise=null;}).catch(()=>{});
+  }
+  if(currentShelfTab!=='official'&&!officialShelfLoaded){
+    renderOfficialShelf({force:false}).catch(()=>{});
+  }
   if(claimed)toast('自分の一冊を本棚に受け取りました。');
 })().catch(e=>{initialShelfBooting=false;console.error(e);
   $('#shelfLoadingState').hidden=false;
