@@ -11834,7 +11834,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       .frame-position-drag-toolbar{position:absolute;z-index:92;left:50%;bottom:max(92px,calc(env(safe-area-inset-bottom) + 76px));transform:translateX(-50%);display:flex;gap:7px;align-items:center;padding:8px;border-radius:999px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);white-space:nowrap}
       .frame-position-drag-toolbar button{appearance:none;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:transparent;color:#fff;font:600 12px/1 sans-serif;padding:9px 12px}
       .frame-position-drag-toolbar button[data-save]{background:#fff;color:#17181b}
-      .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}\n      .frame-position-size-handle{position:absolute;z-index:94;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid #fff;border-radius:50%;background:#17181b;box-shadow:0 3px 14px rgba(0,0,0,.32);touch-action:none;cursor:nwse-resize}\n      .frame-position-size-badge{position:absolute;z-index:95;transform:translate(-50%,-46px);padding:6px 9px;border-radius:999px;background:rgba(25,26,29,.86);color:#fff;font:700 11px/1 sans-serif;white-space:nowrap;pointer-events:none}
+      .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}\n      .frame-position-size-handle,.frame-position-rotate-handle{position:absolute;z-index:94;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid #fff;border-radius:50%;background:#17181b;box-shadow:0 3px 14px rgba(0,0,0,.32);touch-action:none}\n      .frame-position-size-handle{cursor:nwse-resize}\n      .frame-position-rotate-handle{cursor:grab;display:grid;place-items:center;color:#fff;font:800 18px/1 sans-serif}\n      .frame-position-size-badge,.frame-position-angle-badge{position:absolute;z-index:95;transform:translate(-50%,-46px);padding:6px 9px;border-radius:999px;background:rgba(25,26,29,.86);color:#fff;font:700 11px/1 sans-serif;white-space:nowrap;pointer-events:none}
       .sp-scene.is-frame-position-dragging{transition:none!important;z-index:80!important;visibility:visible!important;opacity:1!important}
       .frame-position-adjust-button{width:100%;margin-top:10px;padding:11px 14px;border:1px solid rgba(100,105,115,.3);border-radius:10px;background:transparent;font:inherit}
     `;document.head.appendChild(style);
@@ -11859,6 +11859,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
       const beforeText=p.text.position?clone(p.text.position):null;
       const beforeSize=p.text.size;
+      const beforeAngle=p.text.angle;
       const beforeFrame=p.frame?.position?clone(p.frame.position):null;
       // V45: drag positioning mutates continuously outside the generic
       // select/input history watcher. Keep the true pre-drag document snapshot
@@ -11906,28 +11907,49 @@ function startInlineTextEdit(field='text',targetEl=null){
         liveScene.presentation||={};liveScene.presentation.text||={};
         if(size==null||size==='')delete liveScene.presentation.text.size;else liveScene.presentation.text.size=size;
       };
+      const syncLiveAngle=(angle)=>{
+        if(!liveScene)return;
+        liveScene.presentation||={};liveScene.presentation.text||={};
+        if(!Number.isFinite(Number(angle))||Math.abs(Number(angle))<.5)delete liveScene.presentation.text.angle;else liveScene.presentation.text.angle=Number(angle);
+      };
       const stageRect=stage.getBoundingClientRect(),scenesRect=scenes.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
       setAdjustedPosition({preset:'custom',x:Math.max(0,Math.min(1,(targetRect.left+targetRect.width/2-stageRect.left)/Math.max(1,stageRect.width))),y:Math.max(0,Math.min(1,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))});
       syncLivePosition(p.text.position);
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
-      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('ドラッグで移動 ／ ●で文字サイズ','Drag to move / ● to resize text');
+      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('ドラッグで移動 ／ ●サイズ ／ ↻回転','Drag to move / ● size / ↻ rotate');
       const sizeHandle=document.createElement('div');sizeHandle.className='frame-position-size-handle';sizeHandle.setAttribute('aria-label',u('文字サイズをドラッグ調整','Drag to resize text'));
       const sizeBadge=document.createElement('div');sizeBadge.className='frame-position-size-badge';
+      const rotateHandle=document.createElement('div');rotateHandle.className='frame-position-rotate-handle';rotateHandle.textContent='↻';rotateHandle.setAttribute('aria-label',u('文字をドラッグ回転','Drag to rotate text'));
+      const angleBadge=document.createElement('div');angleBadge.className='frame-position-angle-badge';
       const toolbar=document.createElement('div');toolbar.className='frame-position-drag-toolbar';
       const auto=document.createElement('button');auto.type='button';auto.textContent=pcMode?u('共通位置','Use common'):u('自動','Auto');
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('取消','Cancel');
       const save=document.createElement('button');save.type='button';save.dataset.save='';save.textContent=u('決定','Done');
-      toolbar.append(auto,cancel,save);stage.append(shield,hint,sizeHandle,sizeBadge,toolbar);article.classList.add('is-frame-position-dragging');
+      toolbar.append(auto,cancel,save);stage.append(shield,hint,sizeHandle,sizeBadge,rotateHandle,angleBadge,toolbar);article.classList.add('is-frame-position-dragging');
       const textNode=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text')||target;
       const layoutScale=()=>Math.max(.05,Number(player?._layoutScale?.())||1);
       const updateSizeHandle=()=>{
         const sr=stage.getBoundingClientRect(),tr=target.getBoundingClientRect(),scale=layoutScale();
-        const left=(tr.right-sr.left)/scale+10,top=(tr.bottom-sr.top)/scale+10;
-        sizeHandle.style.left=`${left}px`;sizeHandle.style.top=`${top}px`;
-        sizeBadge.style.left=`${left}px`;sizeBadge.style.top=`${top}px`;
+        const sw=Math.max(1,stage.clientWidth||sr.width/scale),sh=Math.max(1,stage.clientHeight||sr.height/scale);
+        const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+        // Keep controls close to the visible text edge and always inside even the iPhone preview.
+        const rawRight=(tr.right-sr.left)/scale+14,rawBottom=(tr.bottom-sr.top)/scale+14;
+        const rawLeft=(tr.left-sr.left)/scale-14,rawTop=(tr.top-sr.top)/scale-14;
+        const sizeLeft=clamp(rawRight,22,sw-22),sizeTop=clamp(rawBottom,22,sh-22);
+        const rotateLeft=clamp(rawRight,22,sw-22),rotateTop=clamp(rawTop,22,sh-22);
+        sizeHandle.style.left=`${sizeLeft}px`;sizeHandle.style.top=`${sizeTop}px`;
+        sizeBadge.style.left=`${sizeLeft}px`;sizeBadge.style.top=`${sizeTop}px`;
+        rotateHandle.style.left=`${rotateLeft}px`;rotateHandle.style.top=`${rotateTop}px`;
+        angleBadge.style.left=`${rotateLeft}px`;angleBadge.style.top=`${rotateTop}px`;
         sizeBadge.textContent=`${Math.round(parseFloat(getComputedStyle(textNode).fontSize)||16)}px`;
+        angleBadge.textContent=`${Math.round(Number(p.text.angle)||0)}°`;
       };
       requestAnimationFrame(updateSizeHandle);
+      // The Player normally advances on a stage click. Editing gestures can synthesize
+      // that click on release, so swallow all navigation clicks while this editor is open.
+      const blockEditorNavigation=event=>{event.preventDefault();event.stopImmediatePropagation();event.stopPropagation();};
+      stage.addEventListener('click',blockEditorNavigation,true);
+      stage.addEventListener('dblclick',blockEditorNavigation,true);
       let dragging=false;
       const applyPoint=(clientX,clientY)=>{
         const sr=stage.getBoundingClientRect(),cr=scenes.getBoundingClientRect(),geometry=player._measureSceneGeometry(article,sr);
@@ -11967,12 +11989,28 @@ function startInlineTextEdit(field='text',targetEl=null){
       });
       const finishSizing=event=>{if(!sizing)return;sizing=false;event?.preventDefault?.();event?.stopPropagation?.();try{sizeHandle.releasePointerCapture?.(event.pointerId);}catch(_){}};
       sizeHandle.addEventListener('pointerup',finishSizing);sizeHandle.addEventListener('pointercancel',finishSizing);
-      [toolbar,auto,cancel,save,sizeHandle].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
+      let rotating=false,rotatePointerStart=0,rotateValueStart=0;
+      rotateHandle.addEventListener('pointerdown',event=>{
+        event.preventDefault();event.stopPropagation();rotating=true;rotateHandle.setPointerCapture?.(event.pointerId);
+        const c=targetCenter();rotatePointerStart=Math.atan2(event.clientY-c.y,event.clientX-c.x)*180/Math.PI;
+        rotateValueStart=Number(p.text.angle)||0;
+      });
+      rotateHandle.addEventListener('pointermove',event=>{
+        if(!rotating)return;event.preventDefault();event.stopPropagation();
+        const c=targetCenter(),now=Math.atan2(event.clientY-c.y,event.clientX-c.x)*180/Math.PI;
+        let delta=now-rotatePointerStart;if(delta>180)delta-=360;if(delta<-180)delta+=360;
+        const next=Math.max(-180,Math.min(180,Math.round(rotateValueStart+delta)));
+        if(Math.abs(next)<1)delete p.text.angle;else p.text.angle=next;syncLiveAngle(p.text.angle);
+        textNode.style.rotate=`${next}deg`;angleBadge.textContent=`${next}°`;requestAnimationFrame(updateSizeHandle);
+      });
+      const finishRotating=event=>{if(!rotating)return;rotating=false;event?.preventDefault?.();event?.stopPropagation?.();try{rotateHandle.releasePointerCapture?.(event.pointerId);}catch(_){}};
+      rotateHandle.addEventListener('pointerup',finishRotating);rotateHandle.addEventListener('pointercancel',finishRotating);
+      [toolbar,auto,cancel,save,sizeHandle,rotateHandle].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false}={})=>{
-        shield.remove();hint.remove();sizeHandle.remove();sizeBadge.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
+        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);shield.remove();hint.remove();sizeHandle.remove();sizeBadge.remove();rotateHandle.remove();angleBadge.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)clearAdjustedPosition();
-        else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
-        syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);
+        else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(beforeAngle==null)delete p.text.angle;else p.text.angle=beforeAngle;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
+        syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);syncLiveAngle(p.text.angle);
         scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel?.();
       };
       auto.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();commitPositionHistory();finishFramePositionDrag({save:true,reset:true});});
@@ -11984,7 +12022,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     const button=document.createElement('button');button.type='button';button.className='frame-position-adjust-button';
     const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
     const hasPc=Boolean(scene?.presentation?.text?.position?.pc);
-    button.textContent=pcMode?(hasPc?u('PC専用位置・サイズを再調整','Readjust PC-only position / size'):u('PC専用位置・サイズを調整','Adjust PC-only position / size')):u('プレビュー上で位置・サイズ調整','Adjust position / size on preview');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
+    button.textContent=pcMode?(hasPc?u('PC専用位置・サイズ・角度を再調整','Readjust PC-only position / size / angle'):u('PC専用位置・サイズ・角度を調整','Adjust PC-only position / size / angle')):u('プレビュー上で位置・サイズ・角度調整','Adjust position / size / angle on preview');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
     button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openFramePositionDragEditor(scene);});return button;
   }
 
@@ -13478,7 +13516,7 @@ function openDesktopTextDetail(){
       desktopDetailRange(u('行間','Line height'),{min:1.2,max:2.5,step:.05,value:Number(p.text.lineHeight)||1.85,format:v=>v.toFixed(2),oninput:v=>{p.text.lineHeight=v;apply();}}),
       desktopDetailRange(u('字間','Letter spacing'),{min:-.05,max:.20,step:.005,value:Number(p.text.letterSpacing)||.035,unit:' em',format:v=>v.toFixed(3),oninput:v=>{p.text.letterSpacing=v;apply();}}),
       desktopDetailRange(u('左右の余白','Side margins'),{min:0,max:28,step:1,value:Number(p.text.sideMargin)||0,unit:' %',format:v=>Math.round(v),oninput:v=>{if(v<=0)delete p.text.sideMargin;else p.text.sideMargin=v;apply();}}),
-      desktopDetailRange(u('文字の角度','Text angle'),{min:-45,max:45,step:1,value:Number(p.text.angle)||0,unit:' °',format:v=>Math.round(v),oninput:v=>{if(Math.abs(v)<.5)delete p.text.angle;else p.text.angle=v;apply();}})
+      desktopDetailRange(u('文字の角度','Text angle'),{min:-180,max:180,step:1,value:Number(p.text.angle)||0,unit:' °',format:v=>Math.round(v),oninput:v=>{if(Math.abs(v)<.5)delete p.text.angle;else p.text.angle=v;apply();}})
     );
     const layoutSelects=two(layout);
     layoutSelects.append(

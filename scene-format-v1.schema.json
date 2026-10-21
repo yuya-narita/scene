@@ -560,7 +560,7 @@
           "maximum": 900
         },
         "fontStyle": {"enum": ["normal", "italic"]},
-        "angle": {"type": "number", "minimum": -45, "maximum": 45},
+        "angle": {"type": "number", "minimum": -180, "maximum": 180},
         "flip": {"enum": ["none", "horizontal", "vertical", "both"]},
         "position": {
           "type": "object",

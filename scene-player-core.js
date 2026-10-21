@@ -6127,7 +6127,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       if (style.fontStyle === 'italic') node.style.fontStyle = 'italic';
       if (Number.isFinite(Number(style.angle)) && Math.abs(Number(style.angle)) > 0.01) {
-        node.style.rotate = `${Math.max(-45,Math.min(45,Number(style.angle)))}deg`;
+        node.style.rotate = `${Math.max(-180,Math.min(180,Number(style.angle)))}deg`;
         // Keep the rotation pivot stable while entrance effects are running.
         // Some effects used to change transform-origin (e.g. scream/stretch),
         // which made angled text visibly jump when the animation finished.
