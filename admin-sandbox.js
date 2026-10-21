@@ -1229,4 +1229,32 @@ function installFundAllocationPanel(){
 }
 installFundAllocationPanel();
 
+function installSandboxDebitInspection(){
+  if(!els.auditOrdersList)return;
+  const panel=document.createElement('details');panel.className='audit-normal';panel.style.marginTop='24px';
+  panel.innerHTML='<summary>売上残高の引落し詳細（Sandbox・読取専用）</summary><p>Stripeの引落し・関連取引を確認します。残高・購入権・監査結果は変更しません。</p><label>作者ID <input data-debit-author placeholder="author_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><br><label>入出金ID <input data-debit-transaction placeholder="txn_…" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;max-width:480px;box-sizing:border-box"></label><p><button data-debit-run type="button">引落し詳細を取得</button> <button data-debit-download type="button" disabled>結果JSONを保存</button></p><p data-debit-status aria-live="polite"></p><pre data-debit-result style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>';
+  els.auditOrdersList.parentNode.appendChild(panel);
+  const author=panel.querySelector('[data-debit-author]'),transaction=panel.querySelector('[data-debit-transaction]'),run=panel.querySelector('[data-debit-run]'),download=panel.querySelector('[data-debit-download]'),status=panel.querySelector('[data-debit-status]'),result=panel.querySelector('[data-debit-result]');
+  let report=null,busy=false;
+  const clear=()=>{report=null;download.disabled=true;result.textContent='';status.textContent='';};
+  author.oninput=clear;transaction.oninput=clear;
+  run.onclick=async()=>{
+    if(busy)return;clear();const id=author.value.trim().toLowerCase(),txn=transaction.value.trim();
+    if(!/^author_[a-f0-9]{32}$/.test(id)||!/^txn_[A-Za-z0-9_]{1,180}$/.test(txn)){status.textContent='作者IDと入出金IDを確認してください。';return;}
+    busy=true;run.disabled=true;author.disabled=true;transaction.disabled=true;status.textContent='Stripeの記録を取得中…';
+    try{
+      const data=await apiWithTimeout('/admin/commerce/sandbox-debit-inspection?'+new URLSearchParams({authorId:id,transactionId:txn,expectedEnvironment:'test'}),{},45000),r=data.inspection;
+      if(!r||r.environment!=='test'||r.mode!=='read_only'||r.authorId!==id||r.transactionId!==txn||r.enforcementApplied!==false||r.payoutableJPY!==null||r.spendableJPY!==null)throw new Error('結果の対応を確認できません。');
+      report=r;result.textContent=JSON.stringify(r,null,2);download.disabled=false;
+      status.textContent=r.complete?'取得完了。関連するStripe取引を確認しました。使途や原資の確定ではありません。':'取得に未確認事項があります。結果JSONに取得できた記録とエラーを含めています。';
+    }catch(e){status.textContent='取得できませんでした：'+e.message;}
+    finally{busy=false;run.disabled=false;author.disabled=false;transaction.disabled=false;}
+  };
+  download.onclick=()=>{
+    if(!report)return;const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'})),a=document.createElement('a');
+    a.href=url;a.download='ahako-sandbox-debit-'+report.transactionId+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  };
+}
+installSandboxDebitInspection();
+
 })();
