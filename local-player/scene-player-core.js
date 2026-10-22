@@ -5442,41 +5442,54 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const graphemes=(()=>{try{const sg=new Intl.Segmenter(undefined,{granularity:'grapheme'});return [...sg.segment(segmentText)].map(x=>x.segment);}catch(_){return Array.from(segmentText);}})();
             const glyphs=graphemes.length;
             span.textContent='';
-            span.style.position='relative';
+            // Keep the V14 native TCY span as the only layout participant.
+            // Safari gives positioned inline boxes an unstable containing block
+            // in vertical writing, so V16's absolute child could jump across
+            // the page. Instead, paint into a 1em canvas that remains a single
+            // native TCY glyph. The canvas itself is centered by the browser;
+            // its bitmap may safely overflow left/right.
             span.style.textCombineUpright='all';
             span.style.webkitTextCombine='horizontal';
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
             span.style.whiteSpace='nowrap';
-            const anchor=document.createElement('span');
-            anchor.textContent='0';
-            anchor.style.opacity='0';
-            const paint=document.createElement('span');
-            paint.textContent=segmentText;
-            paint.style.position='absolute';
-            paint.style.left='50%';
-            paint.style.top='50%';
-            paint.style.transform='translate(-50%,-50%)';
-            paint.style.transformOrigin='center center';
-            paint.style.writingMode='horizontal-tb';
-            paint.style.webkitWritingMode='horizontal-tb';
-            paint.style.textOrientation='mixed';
-            paint.style.webkitTextOrientation='mixed';
-            paint.style.whiteSpace='nowrap';
-            paint.style.lineHeight='1';
-            // Preserve readable size. Up to four graphemes may simply overflow
-            // the one-character vertical cell instead of being crushed into it.
-            if(glyphs===3) paint.style.letterSpacing='-0.04em';
-            else if(glyphs>=4) paint.style.letterSpacing='-0.08em';
-            span.append(anchor,paint);
+            const canvas=document.createElement('canvas');
+            canvas.setAttribute('aria-label',segmentText);
+            const em=Math.max(12,parseFloat(getComputedStyle(node).fontSize)||16);
+            const dpr=Math.max(1,window.devicePixelRatio||1);
+            const cssW=Math.max(em, em*(glyphs<=2?1.35:glyphs===3?2.25:3.15));
+            const cssH=em*1.22;
+            canvas.width=Math.ceil(cssW*dpr);
+            canvas.height=Math.ceil(cssH*dpr);
+            canvas.style.width=`${cssW}px`;
+            canvas.style.height=`${cssH}px`;
+            canvas.style.marginLeft=`${-(cssW-em)/2}px`;
+            canvas.style.marginRight=`${-(cssW-em)/2}px`;
+            canvas.style.verticalAlign='middle';
+            const ctx=canvas.getContext('2d');
+            if(ctx){
+              ctx.scale(dpr,dpr);
+              const cs=getComputedStyle(node);
+              const family=cs.fontFamily||'serif';
+              const weight=cs.fontWeight||'400';
+              const style=cs.fontStyle||'normal';
+              ctx.font=`${style} ${weight} ${em}px ${family}`;
+              ctx.textAlign='center';
+              ctx.textBaseline='middle';
+              ctx.fillStyle=getComputedStyle(span).color||cs.color||'#fff';
+              ctx.fillText(segmentText,cssW/2,cssH/2,cssW*0.98);
+            }
+            span.appendChild(canvas);
           }
           // Emoji outside explicit TCY: keep the whole grapheme intact and use
           // native upright placement. This includes emoji-presentation sequences.
           if(!visualTcy && /\p{Extended_Pictographic}/u.test(segmentText)){
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
+            // Preserve the grapheme exactly. Do not force text-combine here:
+            // on iOS that can downgrade emoji-presentation sequences such as
+            // U+203C U+FE0F (‼️) to their monochrome text presentation.
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
+            span.style.fontVariantEmoji='emoji';
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
