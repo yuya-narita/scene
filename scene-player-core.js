@@ -976,8 +976,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const now = ctx.currentTime;
         const from = Number.isFinite(gain.gain.value) ? gain.gain.value : 0;
         try {
-          gain.gain.cancelScheduledValues(now);
-          gain.gain.setValueAtTime(from, now);
+          // When STOP interrupts an existing fade on iPhone, preserve the
+          // instantaneous gain instead of jumping back to the last scheduled
+          // value before starting the fade-out.
+          if (typeof gain.gain.cancelAndHoldAtTime === 'function') gain.gain.cancelAndHoldAtTime(now);
+          else {
+            gain.gain.cancelScheduledValues(now);
+            gain.gain.setValueAtTime(from, now);
+          }
           if (ms > 0) gain.gain.linearRampToValueAtTime(to, now + ms / 1000);
           else gain.gain.setValueAtTime(to, now);
         } catch (_) { gain.gain.value = to; }
@@ -1507,8 +1513,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (gain && ctx) {
         try {
           const now = ctx.currentTime;
-          gain.gain.cancelScheduledValues(now);
-          gain.gain.setValueAtTime(from, now);
+          if (typeof gain.gain.cancelAndHoldAtTime === 'function') gain.gain.cancelAndHoldAtTime(now);
+          else {
+            gain.gain.cancelScheduledValues(now);
+            gain.gain.setValueAtTime(from, now);
+          }
           if (!duration) {
             gain.gain.setValueAtTime(target, now);
             if (done) done();
@@ -5382,7 +5391,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'){
-              if(r.orientation==='tcy')span.style.textCombineUpright='all';
+              if(r.orientation==='tcy'){
+                // WebKit/iPhone: color emoji can ignore text-combine-upright unless
+                // upright orientation and the legacy WebKit combine property are
+                // supplied together. Keep all three so mixed Japanese + emoji
+                // selections render consistently in vertical writing.
+                span.style.textCombineUpright='all';
+                span.style.webkitTextCombine='horizontal';
+                span.style.textOrientation='upright';
+              }
               else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
             }
           });
