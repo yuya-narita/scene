@@ -5466,6 +5466,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               span.style.blockSize='1em';
               span.style.width='1em';
               span.style.height='1em';
+              // V29: make the one-cell TCY anchor a true horizontal atomic box.
+              // Without this, the public Player can inherit vertical writing-mode and
+              // squeeze/rotate the absolutely-positioned child differently from Studio.
+              span.style.writingMode='horizontal-tb';
+              span.style.webkitWritingMode='horizontal-tb';
               span.style.textCombineUpright='none';
               span.style.webkitTextCombine='none';
               span.style.textOrientation='upright';
@@ -5496,13 +5501,31 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // VS16 explicitly requests emoji presentation; on Apple/WebKit force
           // the color-emoji font so sequences such as ‼️ do not fall back to ‼︎.
           if(/\p{Extended_Pictographic}/u.test(segmentText)){
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
             if(segmentText.includes('\uFE0F')){
+              // V29: iOS Safari can discard emoji presentation when VS16 text is
+              // combined directly inside vertical writing. Treat the grapheme as
+              // one horizontal atomic cell instead; the exact FE0F stays intact.
+              span.style.display='inline-block';
+              span.style.position='relative';
+              span.style.width='1em';
+              span.style.height='1em';
+              span.style.inlineSize='1em';
+              span.style.blockSize='1em';
+              span.style.writingMode='horizontal-tb';
+              span.style.webkitWritingMode='horizontal-tb';
+              span.style.textCombineUpright='none';
+              span.style.webkitTextCombine='none';
+              span.style.textOrientation='mixed';
+              span.style.webkitTextOrientation='mixed';
               span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
               span.style.fontVariantEmoji='emoji';
+              span.style.lineHeight='1';
+              span.style.verticalAlign='middle';
+            }else{
+              span.style.textCombineUpright='all';
+              span.style.webkitTextCombine='horizontal';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
             }
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
