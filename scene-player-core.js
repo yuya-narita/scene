@@ -5460,8 +5460,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             span.style.lineHeight='1';
             span.style.verticalAlign='middle';
             span.style.transformOrigin='center center';
-            if(glyphs===3) span.style.transform='scaleX(.86)';
-            else if(glyphs>=4) span.style.transform='scaleX(.68)';
+            // Center the actual horizontal run on the vertical column's 1em center.
+            // translateX(-50% + .5em) uses the rendered run width, so the
+            // correction remains centered across font sizes/devices.
+            const sx=glyphs===3?.86:(glyphs>=4?.68:1);
+            span.style.transform=`translateX(calc(-50% + .5em)) scaleX(${sx})`;
           }
           // iPhone Safari rotates some color emoji despite vertical text rules.
           // Grapheme splitting above guarantees this box contains only emoji.
@@ -5473,6 +5476,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             span.style.webkitTextOrientation='upright';
             span.style.lineHeight='1';
             span.style.verticalAlign='middle';
+            span.style.transformOrigin='center center';
+            // Automatic emoji uses the same measured-width centering rule as TCY.
+            // Do not overwrite an explicit TCY transform (which may also scaleX).
+            if(!visualTcy) span.style.transform='translateX(calc(-50% + .5em))';
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
