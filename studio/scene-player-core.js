@@ -5355,7 +5355,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               wide.style.position='absolute';
               wide.style.left='50%';
               wide.style.top='50%';
-              wide.style.width='1.8em';
+              wide.style.width='1.55em';
               wide.style.height='1em';
               wide.style.writingMode='horizontal-tb';
               wide.style.webkitWritingMode='horizontal-tb';
