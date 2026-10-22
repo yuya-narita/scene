@@ -5493,7 +5493,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               paint.style.fontStyle='inherit';
               paint.style.transformOrigin='50% 50%';
               const sx=glyphs>=4?Math.min(1,1.8/glyphs):Math.min(1,1.65/glyphs);
-              paint.style.transform=`translate(-50%,-50%) scaleX(${sx})`;
+              paint.style.transform=`translate(-50%,-50%) rotate(180deg) scaleX(${sx})`; // V28 public Player: cancel parent vertical-flow 180deg inversion
               graphemes.forEach(g=>{
                 const ch=document.createElement('span');
                 ch.textContent=g;
