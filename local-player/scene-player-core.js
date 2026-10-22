@@ -972,15 +972,34 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const gain = entry.gainNode;
       const ctx = this.audioContext;
       if (gain && ctx) {
+        const param = gain.gain;
         const now = ctx.currentTime;
-        const from = Number.isFinite(gain.gain.value) ? gain.gain.value : 0;
+        const from = clamp(Number.isFinite(param.value) ? param.value : 0, 0, 1);
+        entry.__spGainFadeToken = (entry.__spGainFadeToken || 0) + 1;
+        const token = entry.__spGainFadeToken;
         try {
-          gain.gain.cancelScheduledValues(now);
-          gain.gain.setValueAtTime(from, now);
-          if (ms > 0) gain.gain.linearRampToValueAtTime(to, now + ms / 1000);
-          else gain.gain.setValueAtTime(to, now);
-        } catch (_) { gain.gain.value = to; }
-        if (done) { if (ms > 0) this._audioTimeout(done, ms); else done(); }
+          // iPhone Safari can expose AudioParam automation APIs yet still
+          // collapse a STOP ramp to zero immediately. Cancel WebAudio
+          // automation first, then drive the already-authorized GainNode from
+          // requestAnimationFrame. This keeps Scene-authored fadeOut audible.
+          param.cancelScheduledValues(now);
+          param.setValueAtTime(from, now);
+        } catch (_) { try { param.value = from; } catch (_) {} }
+        if (!ms) {
+          try { param.setValueAtTime(to, ctx.currentTime); } catch (_) { try { param.value = to; } catch (_) {} }
+          if (done) done();
+          return;
+        }
+        const started = performance.now();
+        const stepGain = (stamp) => {
+          if (entry.__spGainFadeToken !== token) return;
+          const t = clamp((stamp - started) / ms, 0, 1);
+          const value = from + (to - from) * t;
+          try { param.setValueAtTime(value, ctx.currentTime); } catch (_) { try { param.value = value; } catch (_) {} }
+          if (t < 1) requestAnimationFrame(stepGain);
+          else if (done) done();
+        };
+        requestAnimationFrame(stepGain);
         return;
       }
 
@@ -1506,8 +1525,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (gain && ctx) {
         try {
           const now = ctx.currentTime;
-          gain.gain.cancelScheduledValues(now);
-          gain.gain.setValueAtTime(from, now);
+          if (typeof gain.gain.cancelAndHoldAtTime === 'function') gain.gain.cancelAndHoldAtTime(now);
+          else {
+            gain.gain.cancelScheduledValues(now);
+            gain.gain.setValueAtTime(from, now);
+          }
           if (!duration) {
             gain.gain.setValueAtTime(target, now);
             if (done) done();
@@ -5345,7 +5367,22 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'){
-              if(r.orientation==='tcy')span.style.textCombineUpright='all';
+              if(r.orientation==='tcy'){
+                // WebKit/iPhone: color emoji can ignore text-combine-upright unless
+                // upright orientation and the legacy WebKit combine property are
+                // supplied together. Keep all three so mixed Japanese + emoji
+                // selections render consistently in vertical writing.
+                span.style.textCombineUpright='all';
+                span.style.webkitTextCombine='horizontal';
+                span.style.textOrientation='upright';
+                // iPhone color emoji need an explicit horizontal inline box;
+                // otherwise some emoji sequences ignore TCY in vertical text.
+                span.style.display='inline-block';
+                span.style.writingMode='horizontal-tb';
+                span.style.webkitWritingMode='horizontal-tb';
+                span.style.lineHeight='1';
+                span.style.verticalAlign='middle';
+              }
               else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
             }
           });
