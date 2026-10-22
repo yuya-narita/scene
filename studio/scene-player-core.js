@@ -5376,7 +5376,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               paint.style.transformOrigin='50% 50%';
               // 4 graphemes: natural ~4em -> 1.8em. 3 graphemes -> ~1.65em.
               const sx=glyphs>=4?Math.min(1,1.8/glyphs):Math.min(1,1.65/glyphs);
-              paint.style.transform=`translate(-50%,-50%) scaleX(${sx})`;
+              // The horizontal run itself is being painted upside-down inside the
+              // vertical writing context. Keep the fixed 1em cell and width
+              // compression, and rotate only the painted child 180deg.
+              paint.style.transform=`translate(-50%,-50%) rotate(180deg) scaleX(${sx})`;
               span.appendChild(paint);
             }else{
               span.style.textCombineUpright='all';
