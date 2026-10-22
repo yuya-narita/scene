@@ -973,34 +973,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const gain = entry.gainNode;
       const ctx = this.audioContext;
       if (gain && ctx) {
-        const param = gain.gain;
         const now = ctx.currentTime;
-        const from = clamp(Number.isFinite(param.value) ? param.value : 0, 0, 1);
-        entry.__spGainFadeToken = (entry.__spGainFadeToken || 0) + 1;
-        const token = entry.__spGainFadeToken;
+        const from = Number.isFinite(gain.gain.value) ? gain.gain.value : 0;
         try {
-          // iPhone Safari can expose AudioParam automation APIs yet still
-          // collapse a STOP ramp to zero immediately. Cancel WebAudio
-          // automation first, then drive the already-authorized GainNode from
-          // requestAnimationFrame. This keeps Scene-authored fadeOut audible.
-          param.cancelScheduledValues(now);
-          param.setValueAtTime(from, now);
-        } catch (_) { try { param.value = from; } catch (_) {} }
-        if (!ms) {
-          try { param.setValueAtTime(to, ctx.currentTime); } catch (_) { try { param.value = to; } catch (_) {} }
-          if (done) done();
-          return;
-        }
-        const started = performance.now();
-        const stepGain = (stamp) => {
-          if (entry.__spGainFadeToken !== token) return;
-          const t = clamp((stamp - started) / ms, 0, 1);
-          const value = from + (to - from) * t;
-          try { param.setValueAtTime(value, ctx.currentTime); } catch (_) { try { param.value = value; } catch (_) {} }
-          if (t < 1) requestAnimationFrame(stepGain);
-          else if (done) done();
-        };
-        requestAnimationFrame(stepGain);
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(from, now);
+          if (ms > 0) gain.gain.linearRampToValueAtTime(to, now + ms / 1000);
+          else gain.gain.setValueAtTime(to, now);
+        } catch (_) { gain.gain.value = to; }
+        if (done) { if (ms > 0) this._audioTimeout(done, ms); else done(); }
         return;
       }
 
@@ -1526,11 +1507,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (gain && ctx) {
         try {
           const now = ctx.currentTime;
-          if (typeof gain.gain.cancelAndHoldAtTime === 'function') gain.gain.cancelAndHoldAtTime(now);
-          else {
-            gain.gain.cancelScheduledValues(now);
-            gain.gain.setValueAtTime(from, now);
-          }
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(from, now);
           if (!duration) {
             gain.gain.setValueAtTime(target, now);
             if (done) done();
@@ -1773,14 +1751,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const entry = this._iosPersistentEntry?.[channel];
         if (entry) {
           const finish = () => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
-          if (fadeOut > 0) {
-            // Do not trust entry.active alone here. On iPhone the stable media
-            // element can still be audibly playing while bookkeeping has already
-            // flipped during a Scene transition. Ensure a programmable GainNode
-            // exists, then always honor the authored STOP fade before silencing.
-            if (!entry.gainNode) this._ensureIOSBankGain(entry);
-            this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
-          } else finish();
+          if (fadeOut > 0 && entry.active) this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
+          else finish();
         } else this.audioState[channel] = null;
         return;
       }
@@ -3193,10 +3165,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // gesture and keep the elements silently playing. Scene changes merely
       // seek/unmute those already-authorized elements.
       if (this._iosStableMediaBank) this._primeIOSMediaBank();
-      // Keep the opaque Cover in front while Scene 1 is fully rendered.
-      // iPhone Safari otherwise exposes the raw background for one frame before
-      // blur/dim/vignette and the authored transition are installed.
-      const coverToReveal = this.els.cover;
+      this.els.cover.hidden=true;
+      this.host.classList.remove('sp-cover-open');
       // Treat the first render after the cover as a fresh load so Scene 1
       // one-shot SE is queued/played from the same trusted start gesture.
       // `restore` only reconstructs persistent BGM/Ambient and intentionally
@@ -3204,10 +3174,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
       this._render();
-      // Commit the fully styled Scene 1 before removing the opaque Cover.
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{
-        if(coverToReveal){ coverToReveal.hidden=true; this.host.classList.remove('sp-cover-open'); }
-      }));
       // A work may start directly in its comic viewer. Open the first Scene's
       // image from the same trusted cover gesture so iOS Safari keeps the action
       // attached to the user's tap. Works without a usable image fall back to Scene.
@@ -5389,63 +5355,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       blockRanges.sort((a,b)=>a.start-b.start);
       const normal = ranges.filter(r => r?.kind !== 'table' && r?.kind !== 'linkCard').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
       const rubies=normal.filter(r=>r.kind==='ruby'&&String(r.reading||'').trim()&&!source.slice(r.start,r.end).includes('\n')).sort((a,b)=>a.start-b.start);
-      // AHAKO TCY: adjacent TCY ranges are one visual short-horizontal run.
-      // This keeps things such as ꉂ🤣𐤔 together even when Studio stored the
-      // emoji/surrogate pieces as neighbouring ranges.
-      const mergedTcy=normal.filter(r=>r.kind==='orientation'&&r.orientation==='tcy').sort((a,b)=>a.start-b.start).reduce((out,r)=>{
-        const last=out[out.length-1];
-        if(last&&r.start<=last.end){last.end=Math.max(last.end,r.end);}
-        else out.push({start:r.start,end:r.end});
-        return out;
-      },[]);
       node.classList.toggle('sp-has-ruby',rubies.length>0);
       const appendTextRange=(from,to)=>{
         const rubyNodes=new Map();
         if(to<=from)return;
         const cuts=new Set([from,to]);
-        normal.forEach(r=>{
-          if(r.end>from&&r.start<to&&!(r.kind==='orientation'&&r.orientation==='tcy')){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));}
-        });
-        mergedTcy.forEach(r=>{if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));}});
-        // Split color emoji at grapheme boundaries (UTF-16 offsets) only when
-        // they are not inside an explicit TCY run. Emoji outside TCY still get
-        // automatic upright rendering on iPhone.
-        // emoji glyph gets the iPhone vertical-orientation workaround.
-        try {
-          const slice=source.slice(from,to);
-          const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
-          if(seg){ for(const part of seg.segment(slice)){
-            if(/\p{Extended_Pictographic}/u.test(part.segment)){
-              const ga=from+part.index, gb=ga+part.segment.length;
-              const inTcy=mergedTcy.some(r=>r.start<=ga&&r.end>=gb);
-              if(!inTcy){cuts.add(ga);cuts.add(gb);}
-            }
-          } }
-        } catch (_) {}
-        // V16: never split a Unicode grapheme (VS16, ZWJ sequences, skin tones, etc.).
-        // Rich-text ranges use UTF-16 offsets, so a range boundary can otherwise land
-        // inside emoji such as ‼️ and turn it into a text presentation on iPhone.
-        try {
-          const slice=source.slice(from,to);
-          const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
-          if(seg){
-            const bounds=[from];
-            for(const part of seg.segment(slice)) bounds.push(from+part.index+part.segment.length);
-            const snap=(n)=>{
-              if(n<=from||n>=to)return n;
-              let best=bounds[0],dist=Math.abs(n-best);
-              for(const x of bounds){const d=Math.abs(n-x);if(d<dist){best=x;dist=d;}}
-              return best;
-            };
-            const safe=new Set(); for(const n of cuts)safe.add(snap(n)); cuts.clear(); for(const n of safe)cuts.add(n);
-          }
-        } catch (_) {}
+        normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
           const span=document.createElement('span');
           const active=normal.filter(r=>r.start<=a&&r.end>=b);
-          const visualTcy=mergedTcy.find(r=>r.start<=a&&r.end>=b);
           const segmentText=source.slice(a,b);
           // Rich Text Player v0.18: list markers live in canonical Scene text.
           // Never synthesize a bullet from semantic ranges; that can decorate an
@@ -5461,60 +5381,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.color)span.style.color=String(r.style.color);
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
-            if(r.kind==='orientation'&&(r.orientation==='sideways'||r.orientation==='upright'))span.style.textOrientation=r.orientation;
+            if(r.kind==='orientation'){
+              if(r.orientation==='tcy')span.style.textCombineUpright='all';
+              else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
+            }
           });
-          // AHAKO short-horizontal TCY: preserve readable glyph size and allow
-          // a little horizontal overflow instead of crushing 3-4 characters
-          // into one vertical-cell width. 1-2 chars stay natural; 3-4 chars
-          // are gently condensed, never miniaturised.
-          // AHAKO V14: keep TCY inside the native vertical inline flow.
-          // Do NOT switch the span itself to horizontal writing-mode: doing so
-          // gives the run its own block-axis box and visibly shifts it left.
-          // text-combine-upright keeps the glyph run centered on the same
-          // vertical column as ordinary Japanese glyphs.
-          if(visualTcy){
-            // V16: use native TCY only as a correctly-centred 1em anchor, then
-            // paint the readable horizontal run over that anchor. The overlay is
-            // out of flow, so it may extend left/right without moving the column.
-            const graphemes=(()=>{try{const sg=new Intl.Segmenter(undefined,{granularity:'grapheme'});return [...sg.segment(segmentText)].map(x=>x.segment);}catch(_){return Array.from(segmentText);}})();
-            const glyphs=graphemes.length;
-            span.textContent='';
-            span.style.position='relative';
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
-            span.style.whiteSpace='nowrap';
-            const anchor=document.createElement('span');
-            anchor.textContent='0';
-            anchor.style.opacity='0';
-            const paint=document.createElement('span');
-            paint.textContent=segmentText;
-            paint.style.position='absolute';
-            paint.style.left='50%';
-            paint.style.top='50%';
-            paint.style.transform='translate(-50%,-50%)';
-            paint.style.transformOrigin='center center';
-            paint.style.writingMode='horizontal-tb';
-            paint.style.webkitWritingMode='horizontal-tb';
-            paint.style.textOrientation='mixed';
-            paint.style.webkitTextOrientation='mixed';
-            paint.style.whiteSpace='nowrap';
-            paint.style.lineHeight='1';
-            // Preserve readable size. Up to four graphemes may simply overflow
-            // the one-character vertical cell instead of being crushed into it.
-            if(glyphs===3) paint.style.letterSpacing='-0.04em';
-            else if(glyphs>=4) paint.style.letterSpacing='-0.08em';
-            span.append(anchor,paint);
-          }
-          // Emoji outside explicit TCY: keep the whole grapheme intact and use
-          // native upright placement. This includes emoji-presentation sequences.
-          if(!visualTcy && /\p{Extended_Pictographic}/u.test(segmentText)){
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
-          }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
           const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
