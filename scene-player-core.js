@@ -5455,19 +5455,61 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // text-combine-upright keeps the glyph run centered on the same
           // vertical column as ordinary Japanese glyphs.
           if(visualTcy){
+            // V19: keep the V14 one-em native column anchor, but render 3-4+
+            // grapheme TCY with an inline SVG whose viewport remains 1em and
+            // whose painted text may overflow symmetrically. This avoids both
+            // native TCY crushing and positioned-element coordinate jumps.
             const graphemes=(()=>{try{return (typeof Intl!=='undefined'&&Intl.Segmenter)?[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(segmentText)].map(x=>x.segment):Array.from(segmentText);}catch(_){return Array.from(segmentText);}})();
             const glyphs=graphemes.length;
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
-            span.style.whiteSpace='nowrap';
-            span.style.transformOrigin='center center';
-            // Match the Studio preview's proven rendering path.
-            // Keep 3-4 graphemes readable without introducing a second
-            // horizontal coordinate system inside vertical writing.
-            if(glyphs===3) span.style.transform='scaleX(.86)';
-            else if(glyphs>=4) span.style.transform='scaleX(.68)';
+            if(glyphs>=3){
+              // V22: the vertical flow always sees exactly one 1em x 1em cell.
+              // Only the painted child is horizontal and may overflow sideways.
+              // This prevents 2020/NASA from changing line height or moving the
+              // column while still allowing about 1.8em of visible width.
+              span.textContent='';
+              span.style.display='inline-block';
+              span.style.inlineSize='1em';
+              span.style.blockSize='1em';
+              span.style.position='relative';
+              span.style.overflow='visible';
+              span.style.verticalAlign='middle';
+              span.style.textCombineUpright='none';
+              span.style.webkitTextCombine='none';
+
+              const paint=document.createElement('span');
+              paint.textContent=segmentText;
+              paint.style.position='absolute';
+              paint.style.left='50%';
+              paint.style.top='50%';
+              paint.style.display='inline-block';
+              paint.style.writingMode='horizontal-tb';
+              paint.style.webkitWritingMode='horizontal-tb';
+              paint.style.textOrientation='mixed';
+              // Detach the painted run from the vertical parent's bidi/order.
+              // Without this, 2020/NASA are laid out in reverse order.
+              paint.style.direction='ltr';
+              paint.style.unicodeBidi='isolate';
+              paint.setAttribute('dir','ltr');
+              paint.style.whiteSpace='nowrap';
+              paint.style.lineHeight='1';
+              paint.style.fontFamily='inherit';
+              paint.style.fontWeight='inherit';
+              paint.style.fontStyle='inherit';
+              paint.style.transformOrigin='50% 50%';
+              // 4 graphemes: natural ~4em -> 1.8em. 3 graphemes -> ~1.65em.
+              const sx=glyphs>=4?Math.min(1,1.8/glyphs):Math.min(1,1.65/glyphs);
+              // The horizontal run itself is being painted upside-down inside the
+              // vertical writing context. Keep the fixed 1em cell and width
+              // compression, and rotate only the painted child 180deg.
+              paint.style.transform=`translate(-50%,-50%) rotate(180deg) scaleX(${sx})`;
+              span.appendChild(paint);
+            }else{
+              span.style.textCombineUpright='all';
+              span.style.webkitTextCombine='horizontal';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+              span.style.whiteSpace='nowrap';
+            }
           }
           if(/\p{Extended_Pictographic}/u.test(segmentText)){
             span.style.textCombineUpright='all';
