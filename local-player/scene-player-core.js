@@ -3192,8 +3192,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // gesture and keep the elements silently playing. Scene changes merely
       // seek/unmute those already-authorized elements.
       if (this._iosStableMediaBank) this._primeIOSMediaBank();
-      this.els.cover.hidden=true;
-      this.host.classList.remove('sp-cover-open');
+      // Keep the opaque Cover in front while Scene 1 is fully rendered.
+      // iPhone Safari otherwise exposes the raw background for one frame before
+      // blur/dim/vignette and the authored transition are installed.
+      const coverToReveal = this.els.cover;
       // Treat the first render after the cover as a fresh load so Scene 1
       // one-shot SE is queued/played from the same trusted start gesture.
       // `restore` only reconstructs persistent BGM/Ambient and intentionally
@@ -3201,6 +3203,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
       this._render();
+      // Commit the fully styled Scene 1 before removing the opaque Cover.
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(coverToReveal){ coverToReveal.hidden=true; this.host.classList.remove('sp-cover-open'); }
+      }));
       // A work may start directly in its comic viewer. Open the first Scene's
       // image from the same trusted cover gesture so iOS Safari keeps the action
       // attached to the user's tap. Works without a usable image fall back to Scene.
@@ -5352,6 +5358,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(to<=from)return;
         const cuts=new Set([from,to]);
         normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
+        // Split color emoji at grapheme boundaries (UTF-16 offsets) so only the
+        // emoji glyph gets the iPhone vertical-orientation workaround.
+        try {
+          const slice=source.slice(from,to);
+          const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
+          if(seg){ for(const part of seg.segment(slice)){ if(/\p{Extended_Pictographic}/u.test(part.segment)){ cuts.add(from+part.index); cuts.add(from+part.index+part.segment.length); } } }
+        } catch (_) {}
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
@@ -5378,21 +5391,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
                 // horizontal inline box here changes vertical line metrics on iOS.
                 span.style.textCombineUpright='all';
                 span.style.webkitTextCombine='horizontal';
-                // WebKit color emoji are inconsistent with text-combine-upright.
-                // Isolate only emoji-containing segments; ordinary TCY remains
-                // native so 2020 / AI / NASA keep their previous layout.
-                if(/\p{Extended_Pictographic}/u.test(segmentText)){
-                  span.style.display='inline-block';
-                  span.style.writingMode='horizontal-tb';
-                  span.style.webkitWritingMode='horizontal-tb';
-                  span.style.textOrientation='mixed';
-                  span.style.lineHeight='1';
-                  span.style.verticalAlign='middle';
-                }
               }
               else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
             }
           });
+          // iPhone Safari rotates some color emoji despite vertical text rules.
+          // Grapheme splitting above guarantees this box contains only emoji.
+          if(/\p{Extended_Pictographic}/u.test(segmentText)){
+            span.style.display='inline-block';
+            span.style.writingMode='horizontal-tb';
+            span.style.webkitWritingMode='horizontal-tb';
+            span.style.textOrientation='upright';
+            span.style.webkitTextOrientation='upright';
+            span.style.lineHeight='1';
+            span.style.verticalAlign='middle';
+          }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
           const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
