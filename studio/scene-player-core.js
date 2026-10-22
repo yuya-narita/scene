@@ -5333,17 +5333,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // text-combine-upright keeps the glyph run centered on the same
           // vertical column as ordinary Japanese glyphs.
           if(visualTcy){
-            // V19: keep the V14 one-em native column anchor, but render 3-4+
-            // grapheme TCY with an inline SVG whose viewport remains 1em and
-            // whose painted text may overflow symmetrically. This avoids both
-            // native TCY crushing and positioned-element coordinate jumps.
             const graphemes=(()=>{try{return (typeof Intl!=='undefined'&&Intl.Segmenter)?[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(segmentText)].map(x=>x.segment):Array.from(segmentText);}catch(_){return Array.from(segmentText);}})();
             const glyphs=graphemes.length;
             if(glyphs>=3){
-              // V22: the vertical flow always sees exactly one 1em x 1em cell.
-              // Only the painted child is horizontal and may overflow sideways.
-              // This prevents 2020/NASA from changing line height or moving the
-              // column while still allowing about 1.8em of visible width.
+              // V27: keep one native vertical cell as the anchor, but paint the
+              // TCY run with an explicit horizontal flex row. Each grapheme is
+              // its own horizontal child, so the vertical parent can no longer
+              // reverse/rotate 2020 or NASA. The painted row may overflow to
+              // about 1.8em while its layout footprint remains exactly 1em.
               span.textContent='';
               span.style.display='inline-block';
               span.style.inlineSize='1em';
@@ -5355,16 +5352,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               span.style.webkitTextCombine='none';
 
               const paint=document.createElement('span');
-              paint.textContent=segmentText;
               paint.style.position='absolute';
               paint.style.left='50%';
               paint.style.top='50%';
-              paint.style.display='inline-block';
+              paint.style.display='inline-flex';
+              paint.style.flexDirection='row';
+              paint.style.alignItems='center';
+              paint.style.justifyContent='center';
               paint.style.writingMode='horizontal-tb';
               paint.style.webkitWritingMode='horizontal-tb';
-              paint.style.textOrientation='mixed';
-              // Detach the painted run from the vertical parent's bidi/order.
-              // Without this, 2020/NASA are laid out in reverse order.
               paint.style.direction='ltr';
               paint.style.unicodeBidi='isolate';
               paint.setAttribute('dir','ltr');
@@ -5374,12 +5370,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               paint.style.fontWeight='inherit';
               paint.style.fontStyle='inherit';
               paint.style.transformOrigin='50% 50%';
-              // 4 graphemes: natural ~4em -> 1.8em. 3 graphemes -> ~1.65em.
               const sx=glyphs>=4?Math.min(1,1.8/glyphs):Math.min(1,1.65/glyphs);
-              // The horizontal run itself is being painted upside-down inside the
-              // vertical writing context. Keep the fixed 1em cell and width
-              // compression, and rotate only the painted child 180deg.
-              paint.style.transform=`translate(-50%,-50%) rotate(180deg) scaleX(${sx})`;
+              paint.style.transform=`translate(-50%,-50%) scaleX(${sx})`;
+              graphemes.forEach(g=>{
+                const ch=document.createElement('span');
+                ch.textContent=g;
+                ch.style.display='inline-block';
+                ch.style.writingMode='horizontal-tb';
+                ch.style.webkitWritingMode='horizontal-tb';
+                ch.style.textOrientation='mixed';
+                ch.style.direction='ltr';
+                ch.style.unicodeBidi='isolate';
+                ch.style.flex='0 0 auto';
+                paint.appendChild(ch);
+              });
               span.appendChild(paint);
             }else{
               span.style.textCombineUpright='all';
