@@ -5300,6 +5300,23 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             }
           } }
         } catch (_) {}
+        // V16 emoji fix only: never split a Unicode grapheme (VS16, ZWJ sequences, skin tones, etc.).
+        // Rich-text ranges use UTF-16 offsets, so a boundary must not land inside e.g. ‼️.
+        try {
+          const slice=source.slice(from,to);
+          const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
+          if(seg){
+            const bounds=[from];
+            for(const part of seg.segment(slice)) bounds.push(from+part.index+part.segment.length);
+            const snap=(n)=>{
+              if(n<=from||n>=to)return n;
+              let best=bounds[0],dist=Math.abs(n-best);
+              for(const x of bounds){const d=Math.abs(n-x);if(d<dist){best=x;dist=d;}}
+              return best;
+            };
+            const safe=new Set(); for(const n of cuts)safe.add(snap(n)); cuts.clear(); for(const n of safe)cuts.add(n);
+          }
+        } catch (_) {}
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
