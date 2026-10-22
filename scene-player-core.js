@@ -5460,8 +5460,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             span.style.lineHeight='1';
             span.style.verticalAlign='middle';
             span.style.transformOrigin='center center';
-            if(glyphs===3) span.style.transform='scaleX(.86)';
-            else if(glyphs>=4) span.style.transform='scaleX(.68)';
           }
           // iPhone Safari rotates some color emoji despite vertical text rules.
           // Grapheme splitting above guarantees this box contains only emoji.
@@ -5474,9 +5472,40 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             span.style.lineHeight='1';
             span.style.verticalAlign='middle';
           }
-          // Keep undecorated text in text nodes. Fragmented inline spans plus
-          // ruby and pretty wrapping can produce short lines on WebKit.
-          const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
+          // AHAKO V12: structural TCY cell. The outer cell remains a normal
+          // one-character item in the vertical flow. Only its child switches to
+          // horizontal writing. CSS Grid centers that child inside the cell, so
+          // Safari never uses the horizontal run itself to place the vertical column.
+          let content;
+          const needsCenterCell=!!visualTcy || /\p{Extended_Pictographic}/u.test(segmentText);
+          if(needsCenterCell){
+            const cell=document.createElement('span');
+            cell.className='sp-rich-tcy-cell';
+            cell.style.display='inline-grid';
+            cell.style.inlineSize='1em';
+            cell.style.blockSize='1em';
+            cell.style.gridTemplateColumns='1em';
+            cell.style.gridTemplateRows='1em';
+            cell.style.placeItems='center';
+            cell.style.verticalAlign='middle';
+            cell.style.overflow='visible';
+            cell.style.writingMode='vertical-rl';
+            cell.style.webkitWritingMode='vertical-rl';
+            span.style.gridArea='1 / 1';
+            span.style.position='static';
+            span.style.margin='0';
+            span.style.padding='0';
+            span.style.inlineSize='max-content';
+            span.style.width='max-content';
+            span.style.maxWidth='none';
+            const sx=visualTcy?(Array.from(segmentText).length===3?.86:(Array.from(segmentText).length>=4?.68:1)):1;
+            span.style.transform=`scaleX(${sx})`;
+            span.style.transformOrigin='center center';
+            cell.appendChild(span);
+            content=cell;
+          }else{
+            content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
+          }
           const annotation=rubies.find(r=>r.start<=a&&r.end>=b&&r.start>=from&&r.end<=to);
           if(annotation){
             let group=rubyNodes.get(annotation);
