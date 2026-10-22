@@ -5385,6 +5385,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             }
           } }
         } catch (_) {}
+        // V16: never split a Unicode grapheme (VS16, ZWJ sequences, skin tones, etc.).
+        // Rich-text ranges use UTF-16 offsets, so a range boundary can otherwise land
+        // inside emoji such as ‼️ and turn it into a text presentation on iPhone.
+        try {
+          const slice=source.slice(from,to);
+          const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
+          if(seg){
+            const bounds=[from];
+            for(const part of seg.segment(slice)) bounds.push(from+part.index+part.segment.length);
+            const snap=(n)=>{
+              if(n<=from||n>=to)return n;
+              let best=bounds[0],dist=Math.abs(n-best);
+              for(const x of bounds){const d=Math.abs(n-x);if(d<dist){best=x;dist=d;}}
+              return best;
+            };
+            const safe=new Set(); for(const n of cuts)safe.add(snap(n)); cuts.clear(); for(const n of safe)cuts.add(n);
+          }
+        } catch (_) {}
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
@@ -5418,20 +5436,43 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // text-combine-upright keeps the glyph run centered on the same
           // vertical column as ordinary Japanese glyphs.
           if(visualTcy){
-            const glyphs=Array.from(segmentText).length;
+            // V16: use native TCY only as a correctly-centred 1em anchor, then
+            // paint the readable horizontal run over that anchor. The overlay is
+            // out of flow, so it may extend left/right without moving the column.
+            const graphemes=(()=>{try{const sg=new Intl.Segmenter(undefined,{granularity:'grapheme'});return [...sg.segment(segmentText)].map(x=>x.segment);}catch(_){return Array.from(segmentText);}})();
+            const glyphs=graphemes.length;
+            span.textContent='';
+            span.style.position='relative';
             span.style.textCombineUpright='all';
             span.style.webkitTextCombine='horizontal';
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
             span.style.whiteSpace='nowrap';
-            span.style.transformOrigin='center center';
-            if(glyphs===3) span.style.transform='scaleX(.86)';
-            else if(glyphs>=4) span.style.transform='scaleX(.68)';
+            const anchor=document.createElement('span');
+            anchor.textContent='0';
+            anchor.style.opacity='0';
+            const paint=document.createElement('span');
+            paint.textContent=segmentText;
+            paint.style.position='absolute';
+            paint.style.left='50%';
+            paint.style.top='50%';
+            paint.style.transform='translate(-50%,-50%)';
+            paint.style.transformOrigin='center center';
+            paint.style.writingMode='horizontal-tb';
+            paint.style.webkitWritingMode='horizontal-tb';
+            paint.style.textOrientation='mixed';
+            paint.style.webkitTextOrientation='mixed';
+            paint.style.whiteSpace='nowrap';
+            paint.style.lineHeight='1';
+            // Preserve readable size. Up to four graphemes may simply overflow
+            // the one-character vertical cell instead of being crushed into it.
+            if(glyphs===3) paint.style.letterSpacing='-0.04em';
+            else if(glyphs>=4) paint.style.letterSpacing='-0.08em';
+            span.append(anchor,paint);
           }
-          // Emoji outside an explicit TCY range also stay in the native
-          // vertical inline flow; combining the single grapheme makes its
-          // center identical to the surrounding Japanese column.
-          if(/\p{Extended_Pictographic}/u.test(segmentText)){
+          // Emoji outside explicit TCY: keep the whole grapheme intact and use
+          // native upright placement. This includes emoji-presentation sequences.
+          if(!visualTcy && /\p{Extended_Pictographic}/u.test(segmentText)){
             span.style.textCombineUpright='all';
             span.style.webkitTextCombine='horizontal';
             span.style.textOrientation='upright';
