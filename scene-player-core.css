@@ -2778,3 +2778,27 @@ html.sp-scene-image-open body{
 .sp-scene.sp-fx-play[data-effect="bounce"] .sp-text{
   animation-fill-mode:both!important;
 }
+
+/* Trial: canonical vertical emoji cell.
+   Emoji stay platform-native in appearance, but their layout/orientation is
+   removed from vertical-writing heuristics so Studio/Player can agree. */
+.sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright{
+  display:inline-block;
+  box-sizing:border-box;
+  inline-size:1em;
+  block-size:1em;
+  width:1em;
+  height:1em;
+  writing-mode:horizontal-tb!important;
+  -webkit-writing-mode:horizontal-tb!important;
+  text-orientation:mixed!important;
+  -webkit-text-orientation:mixed!important;
+  text-combine-upright:none!important;
+  -webkit-text-combine:none!important;
+  white-space:nowrap!important;
+  line-height:1em;
+  letter-spacing:0;
+  overflow:visible;
+  vertical-align:middle;
+  font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
+}
