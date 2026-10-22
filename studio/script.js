@@ -7046,11 +7046,18 @@ return flowCommentCard;}
     if(deviceButton){
       const next=deviceButton.dataset.previewDevice;
       if(next===studioPreviewDevice)return;
+      // If direct text layout editing is open, its current article/geometry belongs
+      // to the old logical viewport. Keep the authored normalized values, tear down
+      // only the editor chrome, then rebuild the Scene + editor for the new viewport.
+      const reopenDirectTextEditor=!!framePositionDragCleanup;
+      const reopenScene=reopenDirectTextEditor ? getSelectedScene?.() : null;
+      if(reopenDirectTextEditor)finishFramePositionDrag({save:true});
       studioPreviewDevice=next;
       localStorage.setItem(STUDIO_PREVIEW_DEVICE_KEY,studioPreviewDevice);
-      // Device switching is a viewport-only operation. Re-rendering the current
-      // Scene here restarted presentation layers and could leave the Player dimmed.
-      syncStudioPreviewDevice({rerender:false});
+      syncStudioPreviewDevice({rerender:reopenDirectTextEditor});
+      if(reopenDirectTextEditor && reopenScene){
+        requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>openFramePositionDragEditor(reopenScene))));
+      }
       updateCoverPreview();
       // Cover crop is device-specific, so update the real Player cover directly.
       if(player?.els?.coverBg && coverImageUrl){
@@ -11836,12 +11843,13 @@ function startInlineTextEdit(field='text',targetEl=null){
       .frame-position-drag-toolbar button[data-save]{background:#fff;color:#17181b}
       .frame-position-drag-hint{position:absolute;z-index:91;top:14px;left:50%;transform:translateX(-50%);padding:6px 10px;border-radius:999px;background:rgba(25,26,29,.72);color:#fff;font:600 11px/1.25 sans-serif;white-space:nowrap;pointer-events:none}
       .frame-position-fixed-controls{position:absolute;z-index:94;left:50%;bottom:max(124px,calc(env(safe-area-inset-bottom) + 108px));transform:translateX(-50%);width:min(300px,calc(100% - 58px));display:grid;gap:6px;padding:8px 9px;border-radius:12px;background:rgba(25,26,29,.82);box-shadow:0 6px 22px rgba(0,0,0,.18);color:#fff;font:600 10px/1.15 sans-serif}
-      .frame-position-control-row{display:grid;grid-template-columns:48px minmax(0,1fr) 46px;gap:6px;align-items:center}
+      .frame-position-control-row{display:grid;grid-template-columns:54px minmax(0,1fr) 46px;gap:6px;align-items:center}
+      .frame-position-control-row > span{white-space:nowrap;word-break:keep-all}
       .frame-position-control-row input[type="range"]{width:100%;margin:0;accent-color:#fff;touch-action:none;-webkit-user-select:none;user-select:none}
       .frame-position-control-row input[type="number"]{width:46px;box-sizing:border-box;border:1px solid rgba(255,255,255,.22);border-radius:7px;background:rgba(255,255,255,.09);color:#fff;padding:5px 3px;text-align:center;font:700 10px/1 sans-serif}
       @media (min-width:900px){
         .frame-position-fixed-controls{width:270px;bottom:112px;padding:7px 8px;gap:5px}
-        .frame-position-control-row{grid-template-columns:44px minmax(0,1fr) 42px;gap:5px}
+        .frame-position-control-row{grid-template-columns:50px minmax(0,1fr) 42px;gap:5px}
         .frame-position-control-row input[type="number"]{width:42px;padding:4px 2px}
         .frame-position-drag-toolbar{bottom:68px;padding:4px;gap:4px}
         .frame-position-drag-toolbar button{font-size:10px;padding:6px 9px}
@@ -12000,6 +12008,12 @@ function startInlineTextEdit(field='text',targetEl=null){
       // gesture (text move or slider drag) can become Next Scene.
       const blockEditorTouchRelease=event=>{
         if(!playerHost?.classList.contains('sp-direct-layout-editing'))return;
+        // Keep authoring controls tappable on iPhone. Preventing touchend on
+        // Done/Cancel/Auto suppresses Safari's synthetic click entirely.
+        if(event.target?.closest?.('.frame-position-drag-toolbar,.frame-position-fixed-controls')){
+          event.stopPropagation();
+          return;
+        }
         if(event.cancelable)event.preventDefault();
         event.stopImmediatePropagation();event.stopPropagation();
       };
