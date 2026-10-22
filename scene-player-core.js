@@ -5415,7 +5415,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const slice=source.slice(from,to);
           const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
           if(seg){ for(const part of seg.segment(slice)){
-            if(/\p{Extended_Pictographic}/u.test(part.segment)||part.segment.includes('\uFE0F')){
+            if(/\p{Extended_Pictographic}/u.test(part.segment)){
               const ga=from+part.index, gb=ga+part.segment.length;
               const inTcy=mergedTcy.some(r=>r.start<=ga&&r.end>=gb);
               if(!inTcy){cuts.add(ga);cuts.add(gb);}
@@ -5468,15 +5468,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // Emoji outside an explicit TCY range also stay in the native
           // vertical inline flow; combining the single grapheme makes its
           // center identical to the surrounding Japanese column.
-          if(/\p{Extended_Pictographic}/u.test(segmentText)||segmentText.includes('\uFE0F')){
+          if(/\p{Extended_Pictographic}/u.test(segmentText)){
             span.style.textCombineUpright='all';
             span.style.webkitTextCombine='horizontal';
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
-            if(segmentText.includes('\uFE0F')){
-              span.style.fontVariantEmoji='emoji';
-              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji",sans-serif';
-            }
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
