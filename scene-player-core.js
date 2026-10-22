@@ -5474,6 +5474,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               svg.setAttribute('viewBox','0 0 100 100');
               svg.setAttribute('width','1em'); svg.setAttribute('height','1em');
               svg.style.overflow='visible'; svg.style.display='block';
+              // In vertical writing the SVG viewport's x-axis is mapped along
+              // the line's vertical direction. Counter-rotate only the painted
+              // viewport so 3-4 grapheme TCY stays horizontal on screen while
+              // the outer 1em span keeps V14's correct column center.
+              svg.style.transform='rotate(90deg)';
+              svg.style.transformOrigin='50% 50%';
               const txt=document.createElementNS('http://www.w3.org/2000/svg','text');
               txt.textContent=segmentText;
               txt.setAttribute('x','50'); txt.setAttribute('y','52');
