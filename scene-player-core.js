@@ -5455,15 +5455,32 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // text-combine-upright keeps the glyph run centered on the same
           // vertical column as ordinary Japanese glyphs.
           if(visualTcy){
-            const glyphs=Array.from(segmentText).length;
+            // V14 baseline + minimal readable-width fix.
+            // Keep TCY in native vertical flow so following characters never move.
+            // Count grapheme clusters (not UTF-16/code points) so VS16/ZWJ emoji
+            // stay one visual glyph. Only the painted TCY run is widened.
+            let glyphs=Array.from(segmentText).length;
+            try{
+              if(typeof Intl!=='undefined'&&Intl.Segmenter){
+                glyphs=Array.from(new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(segmentText)).length;
+              }
+            }catch(_){}
             span.style.textCombineUpright='all';
             span.style.webkitTextCombine='horizontal';
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
             span.style.whiteSpace='nowrap';
             span.style.transformOrigin='center center';
-            if(glyphs===3) span.style.transform='scaleX(.86)';
-            else if(glyphs>=4) span.style.transform='scaleX(.68)';
+            // 1-2 glyphs: native TCY. 3 glyphs: only a small readability boost.
+            // 4+ glyphs (2020/NASA etc.): visually use about 1.8 character widths
+            // while still occupying exactly one vertical cell in layout.
+            if(glyphs===3) span.style.transform='scaleX(1.28)';
+            else if(glyphs>=4) span.style.transform='scaleX(1.8)';
+            // Preserve emoji presentation selectors inside TCY on Apple/WebKit.
+            if(segmentText.includes('\uFE0F')){
+              span.style.fontVariantEmoji='emoji';
+              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji",sans-serif';
+            }
           }
           // Emoji outside an explicit TCY range also stay in the native
           // vertical inline flow; combining the single grapheme makes its
