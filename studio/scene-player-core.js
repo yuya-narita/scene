@@ -5333,10 +5333,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // text-combine-upright keeps the glyph run centered on the same
           // vertical column as ordinary Japanese glyphs.
           if(visualTcy){
-            // V14 baseline + minimal readable-width fix.
-            // Keep TCY in native vertical flow so following characters never move.
-            // Count grapheme clusters (not UTF-16/code points) so VS16/ZWJ emoji
-            // stay one visual glyph. Only the painted TCY run is widened.
             let glyphs=Array.from(segmentText).length;
             try{
               if(typeof Intl!=='undefined'&&Intl.Segmenter){
@@ -5348,16 +5344,39 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
             span.style.whiteSpace='nowrap';
-            span.style.transformOrigin='center center';
-            // 1-2 glyphs: native TCY. 3 glyphs: only a small readability boost.
-            // 4+ glyphs (2020/NASA etc.): visually use about 1.8 character widths
-            // while still occupying exactly one vertical cell in layout.
-            if(glyphs===3) span.style.transform='scaleX(1.28)';
-            else if(glyphs>=4) span.style.transform='scaleX(1.8)';
-            // Preserve emoji presentation selectors inside TCY on Apple/WebKit.
-            if(segmentText.includes('\uFE0F')){
-              span.style.fontVariantEmoji='emoji';
-              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji",sans-serif';
+            // V16: native TCY remains the invisible one-cell layout anchor.
+            // 3+ glyph runs get a separate horizontal paint layer, so widening
+            // 2020/NASA never changes the vertical flow or following glyphs.
+            if(glyphs>=3){
+              let paintColor=span.style.color;
+              if(!paintColor){try{paintColor=getComputedStyle(node).color;}catch(_){paintColor='';}}
+              const paint=document.createElement('span');
+              paint.className='sp-tcy-paint';
+              paint.textContent=segmentText;
+              paint.setAttribute('aria-hidden','true');
+              paint.style.position='absolute';
+              paint.style.left='50%';
+              paint.style.top='50%';
+              paint.style.display='inline-block';
+              paint.style.writingMode='horizontal-tb';
+              paint.style.webkitWritingMode='horizontal-tb';
+              paint.style.textCombineUpright='none';
+              paint.style.webkitTextCombine='none';
+              paint.style.textOrientation='mixed';
+              paint.style.whiteSpace='nowrap';
+              paint.style.lineHeight='1';
+              paint.style.color=paintColor||'white';
+              paint.style.fontFamily='inherit';
+              paint.style.fontSize='inherit';
+              paint.style.fontStyle='inherit';
+              paint.style.fontWeight='inherit';
+              paint.style.letterSpacing='0';
+              const target=glyphs===3?1.55:1.8;
+              paint.style.transform=`translate(-50%,-50%) scaleX(${target/glyphs})`;
+              paint.style.transformOrigin='center center';
+              span.style.position='relative';
+              span.style.color='transparent';
+              span.appendChild(paint);
             }
           }
           // Emoji outside an explicit TCY range also stay in the native
@@ -5368,6 +5387,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             span.style.webkitTextCombine='horizontal';
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
+            // Keep VS16 emoji presentation on Apple/WebKit (e.g. ‼️).
+            if(segmentText.includes('\uFE0F')){
+              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji",sans-serif';
+              span.style.fontVariantEmoji='emoji';
+            }
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
