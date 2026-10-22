@@ -5425,8 +5425,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             span.style.webkitTextOrientation='upright';
             span.style.whiteSpace='nowrap';
             span.style.transformOrigin='center center';
-            if(glyphs===3) span.style.transform='scaleX(.86)';
-            else if(glyphs>=4) span.style.transform='scaleX(.68)';
+            // V15: V14's native TCY gives the correct column center.
+            // Native text-combine-upright compresses 3–4+ glyph runs into 1em,
+            // so expand only the painted glyphs around that already-correct center.
+            // This does not change the inline advance width / column position.
+            if(glyphs===2) span.style.transform='scaleX(1.18)';
+            else if(glyphs===3) span.style.transform='scaleX(1.55)';
+            else if(glyphs>=4) span.style.transform='scaleX(2.05)';
           }
           // Emoji outside an explicit TCY range also stay in the native
           // vertical inline flow; combining the single grapheme makes its
