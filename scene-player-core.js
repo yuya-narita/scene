@@ -5449,89 +5449,99 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // a little horizontal overflow instead of crushing 3-4 characters
           // into one vertical-cell width. 1-2 chars stay natural; 3-4 chars
           // are gently condensed, never miniaturised.
-          // AHAKO V14: keep TCY inside the native vertical inline flow.
-          // Do NOT switch the span itself to horizontal writing-mode: doing so
-          // gives the run its own block-axis box and visibly shifts it left.
-          // text-combine-upright keeps the glyph run centered on the same
-          // vertical column as ordinary Japanese glyphs.
           if(visualTcy){
-            const graphemes=(()=>{try{return (typeof Intl!=='undefined'&&Intl.Segmenter)?[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(segmentText)].map(x=>x.segment):Array.from(segmentText);}catch(_){return Array.from(segmentText);}})();
+            // TCY rebuild: keep the vertical layout footprint at exactly one
+            // character, and render the selected run in a separate horizontal
+            // child. No rotate() compensation is used anywhere.
+            const graphemes=(()=>{
+              try{
+                return (typeof Intl!=='undefined'&&Intl.Segmenter)
+                  ? [...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(segmentText)].map(x=>x.segment)
+                  : Array.from(segmentText);
+              }catch(_){ return Array.from(segmentText); }
+            })();
             const glyphs=graphemes.length;
-            if(glyphs>=3){
-              // V27: keep one native vertical cell as the anchor, but paint the
-              // TCY run with an explicit horizontal flex row. Each grapheme is
-              // its own horizontal child, so the vertical parent can no longer
-              // reverse/rotate 2020 or NASA. The painted row may overflow to
-              // about 1.8em while its layout footprint remains exactly 1em.
-              span.textContent='';
-              span.style.display='inline-block';
-              span.style.inlineSize='1em';
-              span.style.blockSize='1em';
-              span.style.position='relative';
-              span.style.overflow='visible';
-              span.style.verticalAlign='middle';
-              span.style.textCombineUpright='none';
-              span.style.webkitTextCombine='none';
-
-              const paint=document.createElement('span');
-              paint.style.position='absolute';
-              paint.style.left='50%';
-              paint.style.top='50%';
-              paint.style.display='inline-flex';
-              paint.style.flexDirection='row';
-              paint.style.alignItems='center';
-              paint.style.justifyContent='center';
-              paint.style.writingMode='horizontal-tb';
-              paint.style.webkitWritingMode='horizontal-tb';
-              paint.style.direction='ltr';
-              paint.style.unicodeBidi='isolate';
-              paint.setAttribute('dir','ltr');
-              paint.style.whiteSpace='nowrap';
-              paint.style.lineHeight='1';
-              paint.style.fontFamily='inherit';
-              paint.style.fontWeight='inherit';
-              paint.style.fontStyle='inherit';
-              paint.style.transformOrigin='50% 50%';
-              const sx=glyphs>=4?Math.min(1,1.8/glyphs):Math.min(1,1.65/glyphs);
-              paint.style.transform=`translate(-50%,-50%) rotate(180deg) scaleX(${sx})`; // V28 public Player: cancel parent vertical-flow 180deg inversion
-              graphemes.forEach(g=>{
-                const ch=document.createElement('span');
-                ch.textContent=g;
-                ch.style.display='inline-block';
-                ch.style.writingMode='horizontal-tb';
-                ch.style.webkitWritingMode='horizontal-tb';
-                ch.style.textOrientation='mixed';
-                ch.style.direction='ltr';
-                ch.style.unicodeBidi='isolate';
-                ch.style.flex='0 0 auto';
-                paint.appendChild(ch);
-              });
-              span.appendChild(paint);
-            }else{
-              span.style.textCombineUpright='all';
-              span.style.webkitTextCombine='horizontal';
-              span.style.textOrientation='upright';
-              span.style.webkitTextOrientation='upright';
-              span.style.whiteSpace='nowrap';
-            }
+            span.textContent='';
+            span.style.display='inline-flex';
+            span.style.flexDirection='row';
+            span.style.alignItems='center';
+            span.style.justifyContent='center';
+            span.style.writingMode='horizontal-tb';
+            span.style.webkitWritingMode='horizontal-tb';
+            span.style.textOrientation='mixed';
+            span.style.webkitTextOrientation='mixed';
+            span.style.direction='ltr';
+            span.style.unicodeBidi='isolate';
+            span.setAttribute('dir','ltr');
+            span.style.whiteSpace='nowrap';
+            span.style.lineHeight='1';
+            span.style.verticalAlign='middle';
+            span.style.width='max-content';
+            span.style.maxWidth='none';
+            span.style.transformOrigin='center center';
+            // 3 chars may occupy ~1.65em; 4+ chars ~1.8em. The font size
+            // stays unchanged; only horizontal advance is gently compressed.
+            const target=glyphs>=4?1.8:(glyphs===3?1.65:glyphs);
+            const sx=glyphs>2?Math.min(1,target/glyphs):1;
+            span.style.transform=`scaleX(${sx})`;
+            graphemes.forEach(g=>{
+              const ch=document.createElement('span');
+              ch.textContent=g;
+              ch.style.display='inline-block';
+              ch.style.writingMode='horizontal-tb';
+              ch.style.webkitWritingMode='horizontal-tb';
+              ch.style.textOrientation='mixed';
+              ch.style.direction='ltr';
+              ch.style.unicodeBidi='isolate';
+              ch.style.flex='0 0 auto';
+              span.appendChild(ch);
+            });
           }
+          // iPhone Safari rotates some color emoji despite vertical text rules.
+          // Grapheme splitting above guarantees this box contains only emoji.
           if(/\p{Extended_Pictographic}/u.test(segmentText)){
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
+            span.style.display='inline-block';
+            span.style.writingMode='horizontal-tb';
+            span.style.webkitWritingMode='horizontal-tb';
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
-            // Preserve explicit emoji presentation on Apple platforms. The
-            // Scene source still contains U+FE0F; use the color-emoji font for
-            // those sequences instead of allowing the vertical serif font to
-            // resolve U+203C as a text glyph.
-            if(segmentText.includes('\uFE0F')){
-              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-              span.style.fontVariantEmoji='emoji';
-            }
+            span.style.lineHeight='1';
+            span.style.verticalAlign='middle';
           }
-          // Keep undecorated text in text nodes. Fragmented inline spans plus
-          // ruby and pretty wrapping can produce short lines on WebKit.
-          const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
+          // AHAKO V12: structural TCY cell. The outer cell remains a normal
+          // one-character item in the vertical flow. Only its child switches to
+          // horizontal writing. CSS Grid centers that child inside the cell, so
+          // Safari never uses the horizontal run itself to place the vertical column.
+          let content;
+          const needsCenterCell=!!visualTcy || /\p{Extended_Pictographic}/u.test(segmentText);
+          if(needsCenterCell){
+            const cell=document.createElement('span');
+            cell.className='sp-rich-tcy-cell';
+            cell.style.display='inline-grid';
+            cell.style.inlineSize='1em';
+            cell.style.blockSize='1em';
+            cell.style.gridTemplateColumns='1em';
+            cell.style.gridTemplateRows='1em';
+            cell.style.placeItems='center';
+            cell.style.verticalAlign='middle';
+            cell.style.overflow='visible';
+            cell.style.writingMode='vertical-rl';
+            cell.style.webkitWritingMode='vertical-rl';
+            span.style.gridArea='1 / 1';
+            span.style.position='static';
+            span.style.margin='0';
+            span.style.padding='0';
+            span.style.inlineSize='max-content';
+            span.style.width='max-content';
+            span.style.maxWidth='none';
+            // TCY child already owns its horizontal compression.
+            if(!visualTcy) span.style.transform='none';
+            span.style.transformOrigin='center center';
+            cell.appendChild(span);
+            content=cell;
+          }else{
+            content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
+          }
           const annotation=rubies.find(r=>r.start<=a&&r.end>=b&&r.start>=from&&r.end<=to);
           if(annotation){
             let group=rubyNodes.get(annotation);
