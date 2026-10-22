@@ -5385,24 +5385,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             }
           } }
         } catch (_) {}
-        // V16: never split a Unicode grapheme (VS16, ZWJ sequences, skin tones, etc.).
-        // Rich-text ranges use UTF-16 offsets, so a range boundary can otherwise land
-        // inside emoji such as ‼️ and turn it into a text presentation on iPhone.
-        try {
-          const slice=source.slice(from,to);
-          const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
-          if(seg){
-            const bounds=[from];
-            for(const part of seg.segment(slice)) bounds.push(from+part.index+part.segment.length);
-            const snap=(n)=>{
-              if(n<=from||n>=to)return n;
-              let best=bounds[0],dist=Math.abs(n-best);
-              for(const x of bounds){const d=Math.abs(n-x);if(d<dist){best=x;dist=d;}}
-              return best;
-            };
-            const safe=new Set(); for(const n of cuts)safe.add(snap(n)); cuts.clear(); for(const n of safe)cuts.add(n);
-          }
-        } catch (_) {}
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
@@ -5436,45 +5418,57 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // text-combine-upright keeps the glyph run centered on the same
           // vertical column as ordinary Japanese glyphs.
           if(visualTcy){
-            // V16: use native TCY only as a correctly-centred 1em anchor, then
-            // paint the readable horizontal run over that anchor. The overlay is
-            // out of flow, so it may extend left/right without moving the column.
-            const graphemes=(()=>{try{const sg=new Intl.Segmenter(undefined,{granularity:'grapheme'});return [...sg.segment(segmentText)].map(x=>x.segment);}catch(_){return Array.from(segmentText);}})();
+            // V19: keep the V14 one-em native column anchor, but render 3-4+
+            // grapheme TCY with an inline SVG whose viewport remains 1em and
+            // whose painted text may overflow symmetrically. This avoids both
+            // native TCY crushing and positioned-element coordinate jumps.
+            const graphemes=(()=>{try{return (typeof Intl!=='undefined'&&Intl.Segmenter)?[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(segmentText)].map(x=>x.segment):Array.from(segmentText);}catch(_){return Array.from(segmentText);}})();
             const glyphs=graphemes.length;
-            span.textContent='';
-            // V18: no absolute positioning. Keep a real 1em inline box in the
-            // vertical flow and center the horizontal run inside that box.
-            span.style.display='inline-block';
-            span.style.inlineSize='1em';
-            span.style.blockSize='1em';
-            span.style.overflow='visible';
-            span.style.textCombineUpright='none';
-            span.style.webkitTextCombine='none';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
-            span.style.whiteSpace='nowrap';
-            const paint=document.createElement('span');
-            paint.textContent=segmentText;
-            paint.style.display='inline-block';
-            paint.style.writingMode='horizontal-tb';
-            paint.style.webkitWritingMode='horizontal-tb';
-            paint.style.whiteSpace='nowrap';
-            paint.style.lineHeight='1';
-            paint.style.transformOrigin='center center';
-            // Center the horizontal run over the 1em vertical cell without
-            // position:absolute. Four-or-more graphemes are mildly condensed.
-            paint.style.marginInlineStart='50%';
-            paint.style.transform='translateX(-50%)';
-            if(glyphs>=4) paint.style.scale='0.9 1';
-            span.appendChild(paint);
+            if(glyphs>=3){
+              span.textContent='';
+              span.style.display='inline-block';
+              span.style.inlineSize='1em';
+              span.style.blockSize='1em';
+              span.style.overflow='visible';
+              span.style.verticalAlign='middle';
+              span.style.textCombineUpright='none';
+              span.style.webkitTextCombine='none';
+              const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+              svg.setAttribute('viewBox','0 0 100 100');
+              svg.setAttribute('width','1em'); svg.setAttribute('height','1em');
+              svg.style.overflow='visible'; svg.style.display='block';
+              const txt=document.createElementNS('http://www.w3.org/2000/svg','text');
+              txt.textContent=segmentText;
+              txt.setAttribute('x','50'); txt.setAttribute('y','52');
+              txt.setAttribute('text-anchor','middle'); txt.setAttribute('dominant-baseline','middle');
+              // User target: 4+ characters ≈1.8em. 3 characters slightly narrower.
+              txt.setAttribute('font-size',glyphs>=4?'46':'52');
+              txt.setAttribute('textLength',glyphs>=4?'180':'155');
+              txt.setAttribute('lengthAdjust','spacingAndGlyphs');
+              txt.setAttribute('fill','currentColor');
+              txt.style.fontFamily='inherit'; txt.style.fontWeight='inherit'; txt.style.fontStyle='inherit';
+              svg.appendChild(txt); span.appendChild(svg);
+            }else{
+              span.style.textCombineUpright='all';
+              span.style.webkitTextCombine='horizontal';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+              span.style.whiteSpace='nowrap';
+            }
           }
-          // Emoji outside explicit TCY: keep the whole grapheme intact and use
-          // native upright placement. This includes emoji-presentation sequences.
-          if(!visualTcy && /\p{Extended_Pictographic}/u.test(segmentText)){
+          if(/\p{Extended_Pictographic}/u.test(segmentText)){
             span.style.textCombineUpright='all';
             span.style.webkitTextCombine='horizontal';
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
+            // Preserve explicit emoji presentation on Apple platforms. The
+            // Scene source still contains U+FE0F; use the color-emoji font for
+            // those sequences instead of allowing the vertical serif font to
+            // resolve U+203C as a text glyph.
+            if(segmentText.includes('\uFE0F')){
+              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+              span.style.fontVariantEmoji='emoji';
+            }
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
