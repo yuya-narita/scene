@@ -5445,73 +5445,63 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'&&(r.orientation==='sideways'||r.orientation==='upright'))span.style.textOrientation=r.orientation;
           });
-          // AHAKO short-horizontal TCY: preserve readable glyph size and allow
-          // a little horizontal overflow instead of crushing 3-4 characters
-          // into one vertical-cell width. 1-2 chars stay natural; 3-4 chars
-          // are gently condensed, never miniaturised.
-          // AHAKO V14: keep TCY inside the native vertical inline flow.
-          // Do NOT switch the span itself to horizontal writing-mode: doing so
-          // gives the run its own block-axis box and visibly shifts it left.
-          // text-combine-upright keeps the glyph run centered on the same
-          // vertical column as ordinary Japanese glyphs.
+          // AHAKO V27: TCY has two paths.
+          // 1-2 glyphs use the browser's native tate-chu-yoko (stable for AI etc.).
+          // 3+ glyphs use a one-cell anchor with a centered horizontal child.
+          // This keeps the vertical line position/height unchanged while letting
+          // 2020 / NASA occupy about 1.8 glyph widths instead of being crushed.
           if(visualTcy){
-            let glyphs=Array.from(segmentText).length;
-            try{
-              if(typeof Intl!=='undefined'&&Intl.Segmenter){
-                glyphs=Array.from(new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(segmentText)).length;
-              }
-            }catch(_){}
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
+            const glyphs=Array.from(segmentText).length;
             span.style.whiteSpace='nowrap';
-            // V16: native TCY remains the invisible one-cell layout anchor.
-            // 3+ glyph runs get a separate horizontal paint layer, so widening
-            // 2020/NASA never changes the vertical flow or following glyphs.
-            if(glyphs>=3){
-              let paintColor=span.style.color;
-              if(!paintColor){try{paintColor=getComputedStyle(node).color;}catch(_){paintColor='';}}
-              const paint=document.createElement('span');
-              paint.className='sp-tcy-paint';
-              paint.textContent=segmentText;
-              paint.setAttribute('aria-hidden','true');
-              paint.style.position='absolute';
-              paint.style.left='50%';
-              paint.style.top='50%';
-              paint.style.display='inline-block';
-              paint.style.writingMode='horizontal-tb';
-              paint.style.webkitWritingMode='horizontal-tb';
-              paint.style.textCombineUpright='none';
-              paint.style.webkitTextCombine='none';
-              paint.style.textOrientation='mixed';
-              paint.style.whiteSpace='nowrap';
-              paint.style.lineHeight='1';
-              paint.style.color=paintColor||'white';
-              paint.style.fontFamily='inherit';
-              paint.style.fontSize='inherit';
-              paint.style.fontStyle='inherit';
-              paint.style.fontWeight='inherit';
-              paint.style.letterSpacing='0';
-              const target=glyphs===3?1.55:1.8;
-              paint.style.transform=`translate(-50%,-50%) scaleX(${target/glyphs})`;
-              paint.style.transformOrigin='center center';
+            if(glyphs<=2){
+              span.style.textCombineUpright='all';
+              span.style.webkitTextCombine='horizontal';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+            }else{
+              span.classList.add('sp-rich-tcy-wide');
+              span.style.display='inline-block';
               span.style.position='relative';
-              span.style.color='transparent';
-              span.appendChild(paint);
+              span.style.inlineSize='1em';
+              span.style.blockSize='1em';
+              span.style.width='1em';
+              span.style.height='1em';
+              span.style.textCombineUpright='none';
+              span.style.webkitTextCombine='none';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+              span.textContent='';
+              const wide=document.createElement('span');
+              wide.className='sp-rich-tcy-wide-inner';
+              wide.textContent=segmentText;
+              wide.style.position='absolute';
+              wide.style.left='50%';
+              wide.style.top='50%';
+              wide.style.width='1.8em';
+              wide.style.height='1em';
+              wide.style.writingMode='horizontal-tb';
+              wide.style.webkitWritingMode='horizontal-tb';
+              wide.style.textOrientation='mixed';
+              wide.style.webkitTextOrientation='mixed';
+              wide.style.whiteSpace='nowrap';
+              wide.style.textAlign='center';
+              wide.style.lineHeight='1em';
+              wide.style.letterSpacing=glyphs>=4?'-.08em':'-.03em';
+              wide.style.transform='translate(-50%,-50%)';
+              wide.style.transformOrigin='center center';
+              span.appendChild(wide);
             }
           }
-          // Emoji outside an explicit TCY range also stay in the native
-          // vertical inline flow; combining the single grapheme makes its
-          // center identical to the surrounding Japanese column.
+          // Emoji graphemes outside explicit TCY remain one visual unit.
+          // VS16 explicitly requests emoji presentation; on Apple/WebKit force
+          // the color-emoji font so sequences such as ‼️ do not fall back to ‼︎.
           if(/\p{Extended_Pictographic}/u.test(segmentText)){
             span.style.textCombineUpright='all';
             span.style.webkitTextCombine='horizontal';
             span.style.textOrientation='upright';
             span.style.webkitTextOrientation='upright';
-            // Keep VS16 emoji presentation on Apple/WebKit (e.g. ‼️).
             if(segmentText.includes('\uFE0F')){
-              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji",sans-serif';
+              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
               span.style.fontVariantEmoji='emoji';
             }
           }
