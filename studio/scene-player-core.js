@@ -5340,35 +5340,39 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const graphemes=(()=>{try{return (typeof Intl!=='undefined'&&Intl.Segmenter)?[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(segmentText)].map(x=>x.segment):Array.from(segmentText);}catch(_){return Array.from(segmentText);}})();
             const glyphs=graphemes.length;
             if(glyphs>=3){
+              // V22: the vertical flow always sees exactly one 1em x 1em cell.
+              // Only the painted child is horizontal and may overflow sideways.
+              // This prevents 2020/NASA from changing line height or moving the
+              // column while still allowing about 1.8em of visible width.
               span.textContent='';
               span.style.display='inline-block';
               span.style.inlineSize='1em';
               span.style.blockSize='1em';
+              span.style.position='relative';
               span.style.overflow='visible';
               span.style.verticalAlign='middle';
               span.style.textCombineUpright='none';
               span.style.webkitTextCombine='none';
-              const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-              svg.setAttribute('viewBox','0 0 100 100');
-              svg.setAttribute('width','1em'); svg.setAttribute('height','1em');
-              svg.style.overflow='visible'; svg.style.display='block';
-              // In vertical writing the SVG viewport's x-axis is mapped along
-              // the line's vertical direction. Counter-rotate only the painted
-              // viewport so 3-4 grapheme TCY stays horizontal on screen while
-              // the outer 1em span keeps V14's correct column center.
-              svg.style.transform='rotate(-90deg)';
-              svg.style.transformOrigin='50% 50%';
-              const txt=document.createElementNS('http://www.w3.org/2000/svg','text');
-              txt.textContent=segmentText;
-              txt.setAttribute('x','50'); txt.setAttribute('y','52');
-              txt.setAttribute('text-anchor','middle'); txt.setAttribute('dominant-baseline','middle');
-              // User target: 4+ characters ≈1.8em. 3 characters slightly narrower.
-              txt.setAttribute('font-size',glyphs>=4?'46':'52');
-              txt.setAttribute('textLength',glyphs>=4?'180':'155');
-              txt.setAttribute('lengthAdjust','spacingAndGlyphs');
-              txt.setAttribute('fill','currentColor');
-              txt.style.fontFamily='inherit'; txt.style.fontWeight='inherit'; txt.style.fontStyle='inherit';
-              svg.appendChild(txt); span.appendChild(svg);
+
+              const paint=document.createElement('span');
+              paint.textContent=segmentText;
+              paint.style.position='absolute';
+              paint.style.left='50%';
+              paint.style.top='50%';
+              paint.style.display='inline-block';
+              paint.style.writingMode='horizontal-tb';
+              paint.style.webkitWritingMode='horizontal-tb';
+              paint.style.textOrientation='mixed';
+              paint.style.whiteSpace='nowrap';
+              paint.style.lineHeight='1';
+              paint.style.fontFamily='inherit';
+              paint.style.fontWeight='inherit';
+              paint.style.fontStyle='inherit';
+              paint.style.transformOrigin='50% 50%';
+              // 4 graphemes: natural ~4em -> 1.8em. 3 graphemes -> ~1.65em.
+              const sx=glyphs>=4?Math.min(1,1.8/glyphs):Math.min(1,1.65/glyphs);
+              paint.style.transform=`translate(-50%,-50%) scaleX(${sx})`;
+              span.appendChild(paint);
             }else{
               span.style.textCombineUpright='all';
               span.style.webkitTextCombine='horizontal';
