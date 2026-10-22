@@ -5485,6 +5485,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               paint.style.writingMode='horizontal-tb';
               paint.style.webkitWritingMode='horizontal-tb';
               paint.style.textOrientation='mixed';
+              // Detach the painted run from the vertical parent's bidi/order.
+              // Without this, 2020/NASA are laid out in reverse order.
+              paint.style.direction='ltr';
+              paint.style.unicodeBidi='isolate';
+              paint.setAttribute('dir','ltr');
               paint.style.whiteSpace='nowrap';
               paint.style.lineHeight='1';
               paint.style.fontFamily='inherit';
