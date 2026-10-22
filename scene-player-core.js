@@ -5478,7 +5478,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               // the line's vertical direction. Counter-rotate only the painted
               // viewport so 3-4 grapheme TCY stays horizontal on screen while
               // the outer 1em span keeps V14's correct column center.
-              svg.style.transform='rotate(90deg)';
+              svg.style.transform='rotate(-90deg)';
               svg.style.transformOrigin='50% 50%';
               const txt=document.createElementNS('http://www.w3.org/2000/svg','text');
               txt.textContent=segmentText;
