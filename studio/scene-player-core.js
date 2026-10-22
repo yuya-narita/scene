@@ -1754,8 +1754,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const entry = this._iosPersistentEntry?.[channel];
         if (entry) {
           const finish = () => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
-          if (fadeOut > 0 && entry.active) this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
-          else finish();
+          if (fadeOut > 0) {
+            // Do not trust entry.active alone here. On iPhone the stable media
+            // element can still be audibly playing while bookkeeping has already
+            // flipped during a Scene transition. Ensure a programmable GainNode
+            // exists, then always honor the authored STOP fade before silencing.
+            if (!entry.gainNode) this._ensureIOSBankGain(entry);
+            this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
+          } else finish();
         } else this.audioState[channel] = null;
         return;
       }
@@ -3168,8 +3174,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // gesture and keep the elements silently playing. Scene changes merely
       // seek/unmute those already-authorized elements.
       if (this._iosStableMediaBank) this._primeIOSMediaBank();
-      this.els.cover.hidden=true;
-      this.host.classList.remove('sp-cover-open');
+      // Keep the opaque Cover in front while Scene 1 is fully rendered.
+      // iPhone Safari otherwise exposes the raw background for one frame before
+      // blur/dim/vignette and the authored transition are installed.
+      const coverToReveal = this.els.cover;
       // Treat the first render after the cover as a fresh load so Scene 1
       // one-shot SE is queued/played from the same trusted start gesture.
       // `restore` only reconstructs persistent BGM/Ambient and intentionally
@@ -3177,6 +3185,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
       this._render();
+      // Commit the fully styled Scene 1 before removing the opaque Cover.
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(coverToReveal){ coverToReveal.hidden=true; this.host.classList.remove('sp-cover-open'); }
+      }));
       // A work may start directly in its comic viewer. Open the first Scene's
       // image from the same trusted cover gesture so iOS Safari keeps the action
       // attached to the user's tap. Works without a usable image fall back to Scene.
@@ -5255,17 +5267,45 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       blockRanges.sort((a,b)=>a.start-b.start);
       const normal = ranges.filter(r => r?.kind !== 'table' && r?.kind !== 'linkCard').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
       const rubies=normal.filter(r=>r.kind==='ruby'&&String(r.reading||'').trim()&&!source.slice(r.start,r.end).includes('\n')).sort((a,b)=>a.start-b.start);
+      // AHAKO TCY: adjacent TCY ranges are one visual short-horizontal run.
+      // This keeps things such as ꉂ🤣𐤔 together even when Studio stored the
+      // emoji/surrogate pieces as neighbouring ranges.
+      const mergedTcy=normal.filter(r=>r.kind==='orientation'&&r.orientation==='tcy').sort((a,b)=>a.start-b.start).reduce((out,r)=>{
+        const last=out[out.length-1];
+        if(last&&r.start<=last.end){last.end=Math.max(last.end,r.end);}
+        else out.push({start:r.start,end:r.end});
+        return out;
+      },[]);
       node.classList.toggle('sp-has-ruby',rubies.length>0);
       const appendTextRange=(from,to)=>{
         const rubyNodes=new Map();
         if(to<=from)return;
         const cuts=new Set([from,to]);
-        normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
+        normal.forEach(r=>{
+          if(r.end>from&&r.start<to&&!(r.kind==='orientation'&&r.orientation==='tcy')){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));}
+        });
+        mergedTcy.forEach(r=>{if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));}});
+        // Split color emoji at grapheme boundaries (UTF-16 offsets) only when
+        // they are not inside an explicit TCY run. Emoji outside TCY still get
+        // automatic upright rendering on iPhone.
+        // emoji glyph gets the iPhone vertical-orientation workaround.
+        try {
+          const slice=source.slice(from,to);
+          const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
+          if(seg){ for(const part of seg.segment(slice)){
+            if(/\p{Extended_Pictographic}/u.test(part.segment)){
+              const ga=from+part.index, gb=ga+part.segment.length;
+              const inTcy=mergedTcy.some(r=>r.start<=ga&&r.end>=gb);
+              if(!inTcy){cuts.add(ga);cuts.add(gb);}
+            }
+          } }
+        } catch (_) {}
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
           const span=document.createElement('span');
           const active=normal.filter(r=>r.start<=a&&r.end>=b);
+          const visualTcy=mergedTcy.find(r=>r.start<=a&&r.end>=b);
           const segmentText=source.slice(a,b);
           // Rich Text Player v0.18: list markers live in canonical Scene text.
           // Never synthesize a bullet from semantic ranges; that can decorate an
@@ -5281,28 +5321,37 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.color)span.style.color=String(r.style.color);
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
-            if(r.kind==='orientation'){
-              if(r.orientation==='tcy'){
-                // WebKit/iPhone: color emoji can ignore text-combine-upright unless
-                // upright orientation and the legacy WebKit combine property are
-                // supplied together. Keep all three so mixed Japanese + emoji
-                // selections render consistently in vertical writing.
-                span.style.textCombineUpright='all';
-                span.style.webkitTextCombine='horizontal';
-                span.style.textOrientation='upright';
-                // Color emoji on iPhone are rendered by a separate glyph
-                // pipeline and some sequences ignore text-combine-upright. A
-                // horizontal inline formatting context makes TCY deterministic
-                // without changing the canonical Scene text/range.
-                span.style.display='inline-block';
-                span.style.writingMode='horizontal-tb';
-                span.style.webkitWritingMode='horizontal-tb';
-                span.style.lineHeight='1';
-                span.style.verticalAlign='middle';
-              }
-              else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
-            }
+            if(r.kind==='orientation'&&(r.orientation==='sideways'||r.orientation==='upright'))span.style.textOrientation=r.orientation;
           });
+          // AHAKO short-horizontal TCY: preserve readable glyph size and allow
+          // a little horizontal overflow instead of crushing 3-4 characters
+          // into one vertical-cell width. 1-2 chars stay natural; 3-4 chars
+          // are gently condensed, never miniaturised.
+          if(visualTcy){
+            const glyphs=Array.from(segmentText).length;
+            span.style.display='inline-block';
+            span.style.writingMode='horizontal-tb';
+            span.style.webkitWritingMode='horizontal-tb';
+            span.style.textOrientation='upright';
+            span.style.webkitTextOrientation='upright';
+            span.style.whiteSpace='nowrap';
+            span.style.lineHeight='1';
+            span.style.verticalAlign='middle';
+            span.style.transformOrigin='center center';
+            if(glyphs===3) span.style.transform='scaleX(.86)';
+            else if(glyphs>=4) span.style.transform='scaleX(.68)';
+          }
+          // iPhone Safari rotates some color emoji despite vertical text rules.
+          // Grapheme splitting above guarantees this box contains only emoji.
+          if(/\p{Extended_Pictographic}/u.test(segmentText)){
+            span.style.display='inline-block';
+            span.style.writingMode='horizontal-tb';
+            span.style.webkitWritingMode='horizontal-tb';
+            span.style.textOrientation='upright';
+            span.style.webkitTextOrientation='upright';
+            span.style.lineHeight='1';
+            span.style.verticalAlign='middle';
+          }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
           const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
