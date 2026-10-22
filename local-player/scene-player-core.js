@@ -1772,8 +1772,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const entry = this._iosPersistentEntry?.[channel];
         if (entry) {
           const finish = () => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
-          if (fadeOut > 0 && entry.active) this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
-          else finish();
+          if (fadeOut > 0) {
+            // Do not trust entry.active alone here. On iPhone the stable media
+            // element can still be audibly playing while bookkeeping has already
+            // flipped during a Scene transition. Ensure a programmable GainNode
+            // exists, then always honor the authored STOP fade before silencing.
+            if (!entry.gainNode) this._ensureIOSBankGain(entry);
+            this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
+          } else finish();
         } else this.audioState[channel] = null;
         return;
       }
@@ -5368,20 +5374,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'){
               if(r.orientation==='tcy'){
-                // WebKit/iPhone: color emoji can ignore text-combine-upright unless
-                // upright orientation and the legacy WebKit combine property are
-                // supplied together. Keep all three so mixed Japanese + emoji
-                // selections render consistently in vertical writing.
+                // Keep normal TCY behavior for numbers / Latin text. Forcing a
+                // horizontal inline box here changes vertical line metrics on iOS.
                 span.style.textCombineUpright='all';
                 span.style.webkitTextCombine='horizontal';
-                span.style.textOrientation='upright';
-                // iPhone color emoji need an explicit horizontal inline box;
-                // otherwise some emoji sequences ignore TCY in vertical text.
-                span.style.display='inline-block';
-                span.style.writingMode='horizontal-tb';
-                span.style.webkitWritingMode='horizontal-tb';
-                span.style.lineHeight='1';
-                span.style.verticalAlign='middle';
+                // WebKit color emoji are inconsistent with text-combine-upright.
+                // Isolate only emoji-containing segments; ordinary TCY remains
+                // native so 2020 / AI / NASA keep their previous layout.
+                if(/\p{Extended_Pictographic}/u.test(segmentText)){
+                  span.style.display='inline-block';
+                  span.style.writingMode='horizontal-tb';
+                  span.style.webkitWritingMode='horizontal-tb';
+                  span.style.textOrientation='mixed';
+                  span.style.lineHeight='1';
+                  span.style.verticalAlign='middle';
+                }
               }
               else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
             }
