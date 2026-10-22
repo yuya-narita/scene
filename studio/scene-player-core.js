@@ -5350,31 +5350,37 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             span.style.lineHeight='1';
             span.style.verticalAlign='middle';
           }
-          // AHAKO V10: keep the vertical column itself exactly one em wide.
-          // The readable short-horizontal run lives in an absolutely-centered
-          // child, so its visual overflow can never move the column centre.
+          // AHAKO V12: structural TCY cell. The outer cell remains a normal
+          // one-character item in the vertical flow. Only its child switches to
+          // horizontal writing. CSS Grid centers that child inside the cell, so
+          // Safari never uses the horizontal run itself to place the vertical column.
           let content;
-          const needsCenterSlot=!!visualTcy || /\p{Extended_Pictographic}/u.test(segmentText);
-          if(needsCenterSlot){
-            const slot=document.createElement('span');
-            slot.className='sp-rich-center-slot';
-            slot.style.display='inline-block';
-            slot.style.position='relative';
-            slot.style.inlineSize='1em';
-            slot.style.blockSize='1em';
-            slot.style.width='1em';
-            slot.style.height='1em';
-            slot.style.verticalAlign='middle';
-            span.style.position='absolute';
-            span.style.left='50%';
-            span.style.top='50%';
+          const needsCenterCell=!!visualTcy || /\p{Extended_Pictographic}/u.test(segmentText);
+          if(needsCenterCell){
+            const cell=document.createElement('span');
+            cell.className='sp-rich-tcy-cell';
+            cell.style.display='inline-grid';
+            cell.style.inlineSize='1em';
+            cell.style.blockSize='1em';
+            cell.style.gridTemplateColumns='1em';
+            cell.style.gridTemplateRows='1em';
+            cell.style.placeItems='center';
+            cell.style.verticalAlign='middle';
+            cell.style.overflow='visible';
+            cell.style.writingMode='vertical-rl';
+            cell.style.webkitWritingMode='vertical-rl';
+            span.style.gridArea='1 / 1';
+            span.style.position='static';
             span.style.margin='0';
             span.style.padding='0';
+            span.style.inlineSize='max-content';
+            span.style.width='max-content';
+            span.style.maxWidth='none';
             const sx=visualTcy?(Array.from(segmentText).length===3?.86:(Array.from(segmentText).length>=4?.68:1)):1;
-            span.style.transform=`translate(-50%,-50%) scaleX(${sx})`;
+            span.style.transform=`scaleX(${sx})`;
             span.style.transformOrigin='center center';
-            slot.appendChild(span);
-            content=slot;
+            cell.appendChild(span);
+            content=cell;
           }else{
             content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
           }
