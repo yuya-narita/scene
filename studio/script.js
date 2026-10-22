@@ -7054,7 +7054,11 @@ return flowCommentCard;}
       if(reopenDirectTextEditor)finishFramePositionDrag({save:true});
       studioPreviewDevice=next;
       localStorage.setItem(STUDIO_PREVIEW_DEVICE_KEY,studioPreviewDevice);
-      syncStudioPreviewDevice({rerender:reopenDirectTextEditor});
+      // A preview-device change always changes the logical viewport. Re-render
+      // the current Scene even when the direct text editor is already closed.
+      // Otherwise the current Scene keeps geometry calculated for the previous
+      // device until history/navigation happens to render it again.
+      syncStudioPreviewDevice({rerender:true});
       if(reopenDirectTextEditor && reopenScene){
         requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>openFramePositionDragEditor(reopenScene))));
       }
