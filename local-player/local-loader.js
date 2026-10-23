@@ -267,8 +267,18 @@
     try{
       if(!db.objectStoreNames.contains('works'))throw new Error('作者本棚がまだありません。');
       const rec=await idbRequest(db.transaction('works','readonly').objectStore('works').get(workId));
-      if(!rec?.blob)throw new Error('このMasterは本棚に見つかりませんでした。');
-      return rec;
+      if(!rec)throw new Error('このMasterは本棚に見つかりませんでした。');
+      let bytes=rec.sceneBytes instanceof ArrayBuffer?rec.sceneBytes:
+        (ArrayBuffer.isView(rec.sceneBytes)?rec.sceneBytes.buffer.slice(rec.sceneBytes.byteOffset,rec.sceneBytes.byteOffset+rec.sceneBytes.byteLength):null);
+      if(!bytes&&rec.blob instanceof Blob){
+        try{bytes=await rec.blob.arrayBuffer();}
+        catch(readError){throw new Error(String(readError?.message||'このMasterのデータを本棚から読み出せませんでした。'));}
+      }
+      if(!bytes)throw new Error('このMasterのデータが本棚に見つかりませんでした。');
+      if(!rec.sceneBytes&&rec.blob instanceof Blob){
+        try{await idbRequest(db.transaction(WORKS,'readwrite').objectStore(WORKS).put({...rec,sceneBytes:bytes,blob:null}));}catch(error){console.warn('Master byte migration skipped',error);}
+      }
+      return {...rec,sceneBytes:bytes,blob:null};
     }finally{db.close();}
   }
   async function openBookshelfMaster(workId){
@@ -308,7 +318,7 @@
       }catch(error){console.warn('Published Master read fallback to local package',error);}
       const rec=await masterBookFromBookshelf(workId);
       try{sessionStorage.removeItem('ahako:bookshelf:open-master');}catch(_){}
-      const file=new File([rec.blob],rec.fileName||`${rec.title||'book'}.scene`,{type:'application/octet-stream'});
+      const file=new File([rec.sceneBytes],rec.fileName||`${rec.title||'book'}.scene`,{type:'application/octet-stream'});
       await openScene(file,{sourceMode:'bookshelf-master',sourceKey:`bookshelf-master:${workId}`});
       return true;
     }catch(error){

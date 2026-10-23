@@ -17998,7 +17998,17 @@ function openDesktopTextDetail(){
       if(!handoff?.workId)return null;
       await bookshelfRequest(store.delete('studio'));
       const work=await bookshelfRequest(db.transaction(BOOKSHELF_WORKS_STORE,'readonly').objectStore(BOOKSHELF_WORKS_STORE).get(handoff.workId));
-      return work||null;
+      if(!work)return null;
+      let bytes=work.sceneBytes instanceof ArrayBuffer?work.sceneBytes:
+        (ArrayBuffer.isView(work.sceneBytes)?work.sceneBytes.buffer.slice(work.sceneBytes.byteOffset,work.sceneBytes.byteOffset+work.sceneBytes.byteLength):null);
+      if(!bytes&&work.blob instanceof Blob){
+        try{bytes=await work.blob.arrayBuffer();}catch(error){console.warn('Bookshelf Master Blob migration failed',error);}
+      }
+      if(!bytes)return work;
+      if(!work.sceneBytes&&work.blob instanceof Blob){
+        try{await bookshelfRequest(db.transaction(BOOKSHELF_WORKS_STORE,'readwrite').objectStore(BOOKSHELF_WORKS_STORE).put({...work,sceneBytes:bytes,blob:null}));}catch(error){console.warn('Bookshelf Master byte migration skipped',error);}
+      }
+      return {...work,sceneBytes:bytes,blob:null};
     } finally { db.close(); }
   }
 
@@ -18006,8 +18016,9 @@ function openDesktopTextDetail(){
     if(!openedFromBookshelf)return;
     try{
       const work=await takeBookshelfHandoff();
-      if(!work?.blob)return;
-      const file=new File([work.blob],work.fileName||`${work.title||'master'}.scene`,{type:'application/octet-stream'});
+      const bytes=work?.sceneBytes instanceof ArrayBuffer?work.sceneBytes:(ArrayBuffer.isView(work?.sceneBytes)?work.sceneBytes.buffer.slice(work.sceneBytes.byteOffset,work.sceneBytes.byteOffset+work.sceneBytes.byteLength):null);
+      if(!bytes)return;
+      const file=new File([bytes],work.fileName||`${work.title||'master'}.scene`,{type:'application/octet-stream'});
       await importScenePackage(file);
       setProjectIoStatus(uiLanguage==='ja' ? '本棚のMasterを開きました。編集後は「本棚へ保存して戻る」で更新できます。' : 'Opened the Master from Local Bookshelf.');
     }catch(error){
@@ -18045,8 +18056,8 @@ function openDesktopTextDetail(){
       if(!workId)throw new Error('bookshelf-workid-missing');
       const entries=await readZipEntries(result.blob);
       const coverPath=String(result?.doc?.cover?.src||result?.manifest?.cover?.image||'').replace(/^\.\//,'');
-      let coverBlob=null;
-      if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:guessMime(coverPath)});
+      let coverBytes=null,coverMime='';
+      if(coverPath&&entries.has(coverPath)){coverBytes=entries.get(coverPath).slice().buffer;coverMime=guessMime(coverPath);}
       const db=await openBookshelfDb();
       try{
         const store=db.transaction(BOOKSHELF_WORKS_STORE,'readwrite').objectStore(BOOKSHELF_WORKS_STORE);
@@ -18060,8 +18071,12 @@ function openDesktopTextDetail(){
           sceneCount:Array.isArray(result.doc?.scenes)?result.doc.scenes.length:0,
           revision:Number(result.doc?.studio?.identity?.revision||0)||0,
           masterCreatedAt:String(result.doc?.studio?.identity?.createdAt||''),
-          coverBlob,
-          blob:result.blob,
+          coverBlob:null,
+          coverBytes,
+          coverMime,
+          shelfMetaVersion:7,
+          sceneBytes:await result.blob.arrayBuffer(),
+          blob:null,
           fileName:old?.fileName||`${safeFileStem(title)}.scene`,
           addedAt:old?.addedAt||now,
           updatedAt:now
