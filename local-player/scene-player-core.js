@@ -5301,10 +5301,32 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const source = String(displayText ?? scene?.text ?? '');
       const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
       const content = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table' || x?.type === 'linkCard') : [];
+      // Trial vertical typesetter: keep emoji graphemes as atomic upright cells.
+      // This is intentionally independent from TCY/ruby/manual orientation.
+      const emojiGraphemes=[];
+      if(source){
+        try{
+          const seg=new Intl.Segmenter(undefined,{granularity:'grapheme'});
+          for(const part of seg.segment(source)){
+            const text=part.segment;
+            const isEmoji=/\p{Extended_Pictographic}/u.test(text)||/\p{Regional_Indicator}/u.test(text)||text.includes('\uFE0F')||text.includes('\u20E3');
+            if(isEmoji)emojiGraphemes.push({start:part.index,end:part.index+text.length,text});
+          }
+        }catch(_){/* Old engines keep native rendering. */}
+      }
+      const appendEmojiAwareText=(parent,text,offset=0)=>{
+        if(!emojiGraphemes.length){parent.appendChild(document.createTextNode(text));return;}
+        const end=offset+text.length;let cursor=offset;
+        emojiGraphemes.filter(g=>g.end>offset&&g.start<end).forEach(g=>{
+          if(g.start>cursor)parent.appendChild(document.createTextNode(source.slice(cursor,g.start)));
+          const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=source.slice(g.start,g.end);parent.appendChild(e);cursor=g.end;
+        });
+        if(cursor<end)parent.appendChild(document.createTextNode(source.slice(cursor,end)));
+      };
       const tables = content.filter(x => x?.type === 'table');
       const linkCards = content.filter(x => x?.type === 'linkCard');
       node.classList.remove('sp-has-ruby');
-      if (!ranges.length && !content.length) { node.textContent = source; return false; }
+      if (!ranges.length && !content.length) { node.textContent=''; appendEmojiAwareText(node,source,0); return false; }
       node.textContent = '';
       const tableById = new Map(tables.map(t => [String(t.id||''), t]));
       const cardById = new Map(linkCards.map(card => [String(card.id||''), card]));
@@ -5324,6 +5346,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(to<=from)return;
         const cuts=new Set([from,to]);
         normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
+        emojiGraphemes.forEach(g=>{if(g.end>from&&g.start<to){cuts.add(Math.max(from,g.start));cuts.add(Math.min(to,g.end));}});
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
@@ -5334,6 +5357,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // Never synthesize a bullet from semantic ranges; that can decorate an
           // unrelated repeated word when offsets were re-anchored fuzzily.
           span.textContent=segmentText;
+          const emojiCell=emojiGraphemes.some(g=>g.start===a&&g.end===b);
+          if(emojiCell)span.classList.add('sp-emoji-upright');
           active.forEach(r=>{
             if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}
             if(r.kind==='quote')span.classList.add('sp-rich-quote');
