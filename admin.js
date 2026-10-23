@@ -21,7 +21,7 @@ function liveRefundPayload(orderId){
   if(currentRefundAudit?.orderId!==orderId)throw new Error('返金対象の詳細を再取得してください');
   return {confirmEnvironment:'live',confirmOrderId:orderId,confirmAmount:Number(currentRefundAudit.amount)};
 }
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),authorCount:$('#authorCount'),authorList:$('#authorList'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),expiredPreviewSummary:$('#expiredPreviewSummary'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems'),auditOrderId:$('#auditOrderIdInput'),auditOrderButton:$('#auditOrderButton'),auditOrderStatus:$('#auditOrderStatus'),auditOrderResult:$('#auditOrderResult'),auditOrdersList:$('#auditOrdersList'),auditOrdersStatus:$('#auditOrdersStatus'),auditOrdersReload:$('#auditOrdersReloadButton'),auditOkCount:$('#auditOkCount'),auditAlertCount:$('#auditAlertCount'),auditPendingCount:$('#auditPendingCount'),auditTabBadge:$('#auditTabBadge'),dailyReconDay:$('#dailyReconDay'),dailyReconButton:$('#dailyReconButton'),dailyReconStatus:$('#dailyReconStatus'),dailyReconResult:$('#dailyReconResult')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),authorCount:$('#authorCount'),authorList:$('#authorList'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),expiredPreviewSummary:$('#expiredPreviewSummary'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems'),auditOrderId:$('#auditOrderIdInput'),auditOrderButton:$('#auditOrderButton'),auditOrderStatus:$('#auditOrderStatus'),auditOrderResult:$('#auditOrderResult'),auditOrdersList:$('#auditOrdersList'),auditOrdersStatus:$('#auditOrdersStatus'),auditOrdersReload:$('#auditOrdersReloadButton'),auditOkCount:$('#auditOkCount'),auditAlertCount:$('#auditAlertCount'),auditPendingCount:$('#auditPendingCount'),auditTabBadge:$('#auditTabBadge'),dailyReconDay:$('#dailyReconDay'),dailyReconButton:$('#dailyReconButton'),dailyReconStatus:$('#dailyReconStatus'),dailyReconResult:$('#dailyReconResult'),previewList:$('#previewList'),previewListCount:$('#previewListCount')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){
@@ -667,7 +667,38 @@ async function loadAuthors(){
     els.authorList.innerHTML=`<div class="empty">作者を読み込めませんでした: ${escapeHtml(error.message)}</div>`;
   }
 }
-async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadContacts(),loadAuthors(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation(),loadRelayAnalytics()]);}
+function formatPreviewDate(value){
+  const d=new Date(value);if(Number.isNaN(d.getTime()))return '日時不明';
+  return new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(d);
+}
+async function copyPreviewUrl(url){
+  try{await navigator.clipboard.writeText(url);toast('Preview URLをコピーしました');}
+  catch(_){window.prompt('Preview URLをコピーしてください',url);}
+}
+async function loadPreviews(){
+  if(!els.previewList)return;
+  els.previewList.innerHTML='<div class="empty">読み込み中…</div>';
+  if(els.previewListCount)els.previewListCount.textContent='確認中…';
+  try{
+    const d=await api('/admin/previews');
+    const rows=Array.isArray(d.previews)?d.previews:[];
+    if(els.previewListCount)els.previewListCount.textContent=`${rows.length.toLocaleString('ja-JP')}作品`;
+    if(!rows.length){els.previewList.innerHTML='<div class="empty">Previewはまだありません。</div>';return;}
+    els.previewList.innerHTML=rows.map(row=>{
+      const expired=row.expired===true;
+      const url=String(row.url||'');
+      return `<div class="preview-row${expired?' is-expired':''}">
+        <div class="preview-main"><strong>${escapeHtml(row.fileName||'preview.scene')}</strong><small>発行 ${escapeHtml(formatPreviewDate(row.createdAt))}</small></div>
+        <div class="preview-state"><span class="state${expired?' expired':''}">${expired?'期限切れ':'有効'}</span><time>期限 ${escapeHtml(formatPreviewDate(row.expiresAt))}</time></div>
+        <div class="preview-actions"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">開く</a><button type="button" data-preview-copy="${escapeHtml(url)}">URLコピー</button></div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    if(els.previewListCount)els.previewListCount.textContent='';
+    els.previewList.innerHTML=`<div class="empty">Preview一覧を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
+  }
+}
+async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadContacts(),loadAuthors(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation(),loadRelayAnalytics(),loadPreviews()]);}
 
 async function loadReports(){const status=els.filter.value;els.list.innerHTML='<div class="empty">読み込み中…</div>';try{const [shown,open]=await Promise.all([api(`/admin/reports?status=${encodeURIComponent(status)}`),api('/admin/reports?status=open')]);els.openCount.textContent=open.count;els.shownCount.textContent=shown.count;renderReports(shown.reports);}catch(e){els.list.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -779,6 +810,7 @@ if(els.authorList)els.authorList.addEventListener('click',async e=>{
 });
 async function inspect(){const id=els.workId.value.trim();if(!id)return;els.direct.textContent='確認中…';try{const d=await api(`/admin/work/${encodeURIComponent(id)}`);els.direct.innerHTML=`<div class="report-card"><div class="meta"><span>workId</span><code>${escapeHtml(d.id)}</code><span>状態</span><strong>${escapeHtml(d.state)}</strong><span>素材</span><span>${Number(d.assets?.length||0)}件</span></div><div class="actions"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">作品を見る</a><button data-direct="suspend" class="stop">一時停止</button><button data-direct="republish">再公開</button><button data-direct="delete" class="delete">完全削除</button></div></div>`;}catch(e){els.direct.textContent=`確認できません: ${e.message}`;}}
 els.direct.addEventListener('click',async e=>{const b=e.target.closest('button[data-direct]');if(!b)return;const id=els.workId.value.trim();b.disabled=true;try{await moderate(id,b.dataset.direct);await inspect();await loadDashboard();}catch(err){AhakoDialog.alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}});
+if(els.previewList)els.previewList.addEventListener('click',e=>{const b=e.target.closest('[data-preview-copy]');if(b)copyPreviewUrl(b.dataset.previewCopy||'');});
 if(els.cleanupOrphans)els.cleanupOrphans.addEventListener('click',cleanupOrphans);
 async function openSelectionReview({workId,editionId=''}){
   if(!workId)return;
