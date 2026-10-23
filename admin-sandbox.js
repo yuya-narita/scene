@@ -686,11 +686,13 @@ async function loadPreviews(){
     if(!rows.length){els.previewList.innerHTML='<div class="empty">Previewはまだありません。</div>';return;}
     els.previewList.innerHTML=rows.map(row=>{
       const expired=row.expired===true;
+      const stopped=row.stopped===true;
       const url=String(row.url||'');
-      return `<div class="preview-row${expired?' is-expired':''}">
+      const stateLabel=stopped?'停止中':expired?'期限切れ':'有効';
+      return `<div class="preview-row${expired||stopped?' is-expired':''}">
         <div class="preview-main"><strong>${escapeHtml(row.fileName||'preview.scene')}</strong><small>発行 ${escapeHtml(formatPreviewDate(row.createdAt))}</small></div>
-        <div class="preview-state"><span class="state${expired?' expired':''}">${expired?'期限切れ':'有効'}</span><time>期限 ${escapeHtml(formatPreviewDate(row.expiresAt))}</time></div>
-        <div class="preview-actions"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">開く</a><button type="button" data-preview-copy="${escapeHtml(url)}">URLコピー</button><button type="button" data-preview-claim="${escapeHtml(row.token||'')}">${row.claimActive?'受取URL再発行':'受取URL発行'}</button></div>
+        <div class="preview-state"><span class="state${expired||stopped?' expired':''}">${stateLabel}</span><time>期限 ${escapeHtml(formatPreviewDate(row.expiresAt))}</time></div>
+        <div class="preview-actions"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">開く</a><button type="button" data-preview-copy="${escapeHtml(url)}">URLコピー</button><button type="button" data-preview-claim="${escapeHtml(row.token||'')}" ${stopped?'disabled':''}>${row.claimActive?'受取URL再発行':'受取URL発行'}</button><button type="button" data-preview-toggle="${escapeHtml(row.token||'')}" data-preview-stopped="${stopped?'1':'0'}">${stopped?'再開':'停止'}</button></div>
       </div>`;
     }).join('');
   }catch(e){
@@ -812,6 +814,15 @@ async function inspect(){const id=els.workId.value.trim();if(!id)return;els.dire
 els.direct.addEventListener('click',async e=>{const b=e.target.closest('button[data-direct]');if(!b)return;const id=els.workId.value.trim();b.disabled=true;try{await moderate(id,b.dataset.direct);await inspect();await loadDashboard();}catch(err){AhakoDialog.alert(`操作できませんでした: ${err.message}`);}finally{b.disabled=false;}});
 if(els.previewList)els.previewList.addEventListener('click',async e=>{
   const copy=e.target.closest('[data-preview-copy]');if(copy){copyPreviewUrl(copy.dataset.previewCopy||'');return;}
+  const toggle=e.target.closest('[data-preview-toggle]');
+  if(toggle){
+    const previewToken=toggle.dataset.previewToggle||'',stopped=toggle.dataset.previewStopped==='1';if(!previewToken)return;
+    if(!stopped&&!await AhakoDialog.confirm('このPreviewを停止しますか？\nPreview URLの閲覧と、発行済み受取URLを停止します。\n.scene本体は削除しません。',{title:'Previewを停止',danger:true,confirmLabel:'停止する'}))return;
+    toggle.disabled=true;
+    try{await api(`/admin/previews/${encodeURIComponent(previewToken)}/${stopped?'resume':'stop'}`,{method:'POST'});toast(stopped?'Previewを再開しました':'Previewを停止しました');await loadPreviews();}
+    catch(error){toast(error.message||(stopped?'再開できませんでした':'停止できませんでした'));toggle.disabled=false;}
+    return;
+  }
   const claim=e.target.closest('[data-preview-claim]');if(!claim)return;
   const previewToken=claim.dataset.previewClaim||'';if(!previewToken)return;
   const original=claim.textContent;claim.disabled=true;claim.textContent='発行中…';
