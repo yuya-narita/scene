@@ -5309,7 +5309,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const seg=new Intl.Segmenter(undefined,{granularity:'grapheme'});
           for(const part of seg.segment(source)){
             const text=part.segment;
-            const isEmoji=/\p{Extended_Pictographic}/u.test(text)||/\p{Regional_Indicator}/u.test(text)||text.includes('\uFE0F')||text.includes('\u20E3');
+            // Preserve explicit Unicode presentation selectors.
+            // VS15 (FE0E) = text presentation: never force Apple Color Emoji.
+            // VS16 (FE0F) = emoji presentation: keep as one upright emoji cell.
+            // Characters such as ❤ / ☀ / ✈ / ‼ stay native unless their
+            // grapheme explicitly requests emoji presentation.
+            const hasVS15=text.includes('\uFE0E');
+            const hasVS16=text.includes('\uFE0F');
+            const isFlag=/\p{Regional_Indicator}/u.test(text);
+            const isKeycap=text.includes('\u20E3');
+            const isDefaultEmoji=/\p{Emoji_Presentation}/u.test(text);
+            const isZWJEmoji=text.includes('\u200D')&&/\p{Extended_Pictographic}/u.test(text);
+            const isEmoji=!hasVS15&&(hasVS16||isFlag||isKeycap||isDefaultEmoji||isZWJEmoji);
             if(isEmoji)emojiGraphemes.push({start:part.index,end:part.index+text.length,text});
           }
         }catch(_){/* Old engines keep native rendering. */}
