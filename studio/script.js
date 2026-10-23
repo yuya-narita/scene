@@ -11875,7 +11875,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       .frame-position-control-row input[type="number"]::-webkit-inner-spin-button{opacity:.65}
       .sp-scene.is-frame-position-dragging{transition:none!important;z-index:80!important;visibility:visible!important;opacity:1!important}
       .frame-position-adjust-button{width:100%;margin-top:10px;padding:11px 14px;border:1px solid rgba(100,105,115,.3);border-radius:10px;background:transparent;font:inherit}
-      .sp-text.sp-direct-text-nowrap{white-space:nowrap!important;overflow-wrap:normal!important;word-break:keep-all!important}
+      
     `;document.head.appendChild(style);
   }
   function finishFramePositionDrag({save=false,reset=false}={}){
@@ -11968,7 +11968,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       toolbar.append(auto,cancel,save);stage.append(shield,hint,controls,toolbar);article.classList.add('is-frame-position-dragging');
       const textNode=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text')||target;
       // Preview-only: resizing should not change line breaks while this direct editor is open.
-      textNode.classList.add('sp-direct-text-nowrap');
+      
       const initialPx=Math.max(8,Math.min(420,Math.round(parseFloat(getComputedStyle(textNode).fontSize)||16)));
       const initialAngle=Math.max(-180,Math.min(180,Math.round(Number(p.text.angle)||0)));
       const sizeControl=makeSliderRow(u('文字サイズ','Size'),8,420,1,initialPx);
@@ -12065,7 +12065,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       shield.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
       [toolbar,controls].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false,skipRefresh=false,keepEditorState=false}={})=>{
-        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.removeEventListener('touchend',blockEditorTouchRelease,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');textNode.classList.remove('sp-direct-text-nowrap');
+        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.removeEventListener('touchend',blockEditorTouchRelease,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)clearAdjustedPosition();
         else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(beforeAngle==null)delete p.text.angle;else p.text.angle=beforeAngle;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
         syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);syncLiveAngle(p.text.angle);
