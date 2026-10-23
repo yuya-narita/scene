@@ -2802,9 +2802,5 @@ html.sp-scene-image-open body{
   letter-spacing:0;
   overflow:visible;
   vertical-align:middle;
-  /* V6: visual-only micro centering for iPhone Safari.
-     Keep the V5 upright mechanism untouched; do not alter line metrics. */
-  position:relative;
-  left:.04em;
   font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
 }
