@@ -2903,7 +2903,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         } else {
           const text = document.createElement('span');
           text.className = 'sp-history-text';
-          text.textContent = scene.text || '';
+          this._appendIOSPresentationSafeText(text, scene.text || '');
           // History is still a navigator, but typography should identify the
           // actual Scene the author is reviewing.
           this._applyTextStyle(text, scene.presentation?.text || {}, false);
@@ -2912,7 +2912,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if (scene.subText) {
             const sub = document.createElement('span');
             sub.className = 'sp-history-subtext';
-            sub.textContent = scene.subText;
+            this._appendIOSPresentationSafeText(sub, scene.subText);
             this._applyTextStyle(sub, scene.presentation?.subText || {}, true);
             body.appendChild(sub);
           }
@@ -5246,6 +5246,37 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
+    _isIOSPresentationGuard() {
+      try {
+        return /AppleWebKit/i.test(navigator.userAgent||'') &&
+          navigator.platform==='MacIntel' && (navigator.maxTouchPoints||0)>1;
+      } catch (_) { return false; }
+    }
+
+    _isTextDefaultEmojiCapable(text) {
+      if(!text || text.includes('\uFE0F') || text.includes('\uFE0E')) return false;
+      try { return /\p{Emoji}/u.test(text) && !/\p{Emoji_Presentation}/u.test(text); }
+      catch (_) { return false; }
+    }
+
+    _appendIOSPresentationSafeText(parent,value) {
+      const source=String(value??'');
+      if(!this._isIOSPresentationGuard()){ parent.textContent=source; return; }
+      try{
+        const seg=new Intl.Segmenter(undefined,{granularity:'grapheme'});
+        for(const part of seg.segment(source)){
+          const g=part.segment;
+          if(this._isTextDefaultEmojiCapable(g)){
+            const span=document.createElement('span');
+            span.className='sp-ios-text-default';
+            if(g==='\u2708') span.classList.add('sp-ios-text-default-airplane');
+            span.textContent=g;
+            parent.appendChild(span);
+          }else parent.appendChild(document.createTextNode(g));
+        }
+      }catch(_){ parent.textContent=source; }
+    }
+
     _renderRichText(node, scene, displayText = null) {
       const source = String(displayText ?? scene?.text ?? '');
       const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
@@ -5296,9 +5327,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const _g=part.segment;
             const _vs15=_g.includes('\uFE0E');
             const _vs16=_g.includes('\uFE0F');
+            const _iosTextDefault=this._isIOSPresentationGuard()&&this._isTextDefaultEmojiCapable(_g);
             const _emojiPresentation=!_vs15&&(_vs16||/\p{Emoji_Presentation}/u.test(_g)||/\p{Regional_Indicator}/u.test(_g)||_g.includes('\u20E3'));
             const _airplaneText=(_g==='\u2708\uFE0E'||_g==='\u2708');
-            if(_emojiPresentation||_airplaneText){
+            if(_emojiPresentation||_airplaneText||_iosTextDefault){
               const ga=from+part.index, gb=ga+part.segment.length;
               const inTcy=mergedTcy.some(r=>r.start<=ga&&r.end>=gb);
               if(!inTcy){cuts.add(ga);cuts.add(gb);}
@@ -5312,6 +5344,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const active=normal.filter(r=>r.start<=a&&r.end>=b);
           const visualTcy=mergedTcy.find(r=>r.start<=a&&r.end>=b);
           const segmentText=source.slice(a,b);
+          const _iosTextDefaultSegment=this._isIOSPresentationGuard()&&this._isTextDefaultEmojiCapable(segmentText);
+          if(_iosTextDefaultSegment){span.classList.add('sp-ios-text-default');if(segmentText==='\u2708')span.classList.add('sp-ios-text-default-airplane');}
           // Rich Text Player v0.18: list markers live in canonical Scene text.
           // Never synthesize a bullet from semantic ranges; that can decorate an
           // unrelated repeated word when offsets were re-anchored fuzzily.
@@ -5383,7 +5417,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const _vs16=segmentText.includes('\uFE0F');
             const _emojiPresentation=!_vs15&&(_vs16||/\p{Emoji_Presentation}/u.test(segmentText)||/\p{Regional_Indicator}/u.test(segmentText)||segmentText.includes('\u20E3'));
             const _airplaneText=(segmentText==='\u2708\uFE0E'||segmentText==='\u2708');
-            if(_emojiPresentation){
+            if(_emojiPresentation&&!_iosTextDefaultSegment){
               span.style.textCombineUpright='all';
               span.style.webkitTextCombine='horizontal';
               span.style.textOrientation='upright';
@@ -6078,7 +6112,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (typeof scene.subText === 'string' && scene.subText.length) {
           const sub = document.createElement('div');
           sub.className = 'sp-subtext';
-          sub.textContent = scene.subText;
+          this._appendIOSPresentationSafeText(sub, scene.subText);
           this._applyTextStyle(sub, presentation.subText || {}, true);
           article.appendChild(sub);
         }

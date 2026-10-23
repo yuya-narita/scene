@@ -2791,3 +2791,19 @@ html.sp-scene-image-open body{
   transform:rotate(-90deg)!important;
   transform-origin:50% 50%!important;
 }
+
+/* AHAKO V18 — iOS Safari vertical presentation guard.
+   V17 stays the common rule. On iOS only, VS-none characters whose Unicode
+   default is text are explicitly kept as text instead of being promoted to
+   Apple Color Emoji by vertical layout. */
+.sp-ios-text-default{
+  font-family:inherit!important;
+  font-variant-emoji:text!important;
+  text-combine-upright:none!important;
+  -webkit-text-combine:none!important;
+}
+.sp-ios-text-default-airplane{
+  display:inline-block!important;
+  transform:rotate(-90deg)!important;
+  transform-origin:50% 50%!important;
+}
