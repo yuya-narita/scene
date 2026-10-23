@@ -2813,13 +2813,14 @@ html.sp-scene-image-open body{
 .sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright{
 }
 
-/* AHAKO V13 — U+2708 FE0E: preserve text presentation, correct orientation only */
-.sp-text[style*="writing-mode: vertical-rl"] .sp-airplane-text-orientation,
-.sp-text.sp-vertical .sp-airplane-text-orientation,
-.sp-vertical .sp-airplane-text-orientation{
+/* AHAKO V14 — U+2708 FE0E: V12 presentation + physical orientation correction */
+.sp-airplane-text-rotate{
   font-family:inherit!important;
-  text-orientation:upright!important;
-  -webkit-text-orientation:upright!important;
+  display:inline-block!important;
+  text-orientation:mixed!important;
+  -webkit-text-orientation:mixed!important;
   text-combine-upright:none!important;
   -webkit-text-combine:none!important;
+  transform:rotate(90deg)!important;
+  transform-origin:50% 50%!important;
 }
