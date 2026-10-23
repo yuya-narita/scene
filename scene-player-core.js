@@ -5334,6 +5334,31 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
+    _applyEmojiUprightCell(node) {
+      if(!node)return;
+      // Public Player parity trial: self-contained emoji cell; no dependency on page CSS order/cache.
+      const st=node.style;
+      st.setProperty('display','inline-block','important');
+      st.setProperty('box-sizing','border-box','important');
+      st.setProperty('inline-size','1em','important');
+      st.setProperty('block-size','1em','important');
+      st.setProperty('width','1em','important');
+      st.setProperty('height','1em','important');
+      st.setProperty('writing-mode','horizontal-tb','important');
+      st.setProperty('-webkit-writing-mode','horizontal-tb','important');
+      st.setProperty('text-orientation','mixed','important');
+      st.setProperty('-webkit-text-orientation','mixed','important');
+      st.setProperty('text-combine-upright','none','important');
+      st.setProperty('-webkit-text-combine','none','important');
+      st.setProperty('white-space','nowrap','important');
+      st.setProperty('line-height','1em','important');
+      st.setProperty('letter-spacing','0','important');
+      st.setProperty('overflow','visible','important');
+      st.setProperty('vertical-align','middle','important');
+      st.setProperty('font-family','"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif','important');
+      node.dataset.spEmojiUpright='1';
+    }
+
     _renderRichText(node, scene, displayText = null) {
       const source = String(displayText ?? scene?.text ?? '');
       const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
@@ -5356,7 +5381,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const end=offset+text.length;let cursor=offset;
         emojiGraphemes.filter(g=>g.end>offset&&g.start<end).forEach(g=>{
           if(g.start>cursor)parent.appendChild(document.createTextNode(source.slice(cursor,g.start)));
-          const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=source.slice(g.start,g.end);parent.appendChild(e);cursor=g.end;
+          const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=source.slice(g.start,g.end);this._applyEmojiUprightCell(e);parent.appendChild(e);cursor=g.end;
         });
         if(cursor<end)parent.appendChild(document.createTextNode(source.slice(cursor,end)));
       };
@@ -5395,7 +5420,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // unrelated repeated word when offsets were re-anchored fuzzily.
           span.textContent=segmentText;
           const emojiCell=emojiGraphemes.some(g=>g.start===a&&g.end===b);
-          if(emojiCell)span.classList.add('sp-emoji-upright');
+          if(emojiCell){span.classList.add('sp-emoji-upright');this._applyEmojiUprightCell(span);}
           active.forEach(r=>{
             if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}
             if(r.kind==='quote')span.classList.add('sp-rich-quote');
