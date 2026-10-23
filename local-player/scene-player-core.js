@@ -5319,7 +5319,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const end=offset+text.length;let cursor=offset;
         emojiGraphemes.filter(g=>g.end>offset&&g.start<end).forEach(g=>{
           if(g.start>cursor)parent.appendChild(document.createTextNode(source.slice(cursor,g.start)));
-          const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=source.slice(g.start,g.end);parent.appendChild(e);cursor=g.end;
+          const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=source.slice(g.start,g.end);if(e.textContent.includes('\uFE0E'))e.classList.add('sp-emoji-text-presentation');parent.appendChild(e);cursor=g.end;
         });
         if(cursor<end)parent.appendChild(document.createTextNode(source.slice(cursor,end)));
       };
@@ -5358,7 +5358,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // unrelated repeated word when offsets were re-anchored fuzzily.
           span.textContent=segmentText;
           const emojiCell=emojiGraphemes.some(g=>g.start===a&&g.end===b);
-          if(emojiCell)span.classList.add('sp-emoji-upright');
+          if(emojiCell){span.classList.add('sp-emoji-upright');if(segmentText.includes('\uFE0E'))span.classList.add('sp-emoji-text-presentation');}
           active.forEach(r=>{
             if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}
             if(r.kind==='quote')span.classList.add('sp-rich-quote');
@@ -6411,55 +6411,3 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
   global.ScenePlayerCore = ScenePlayerCore;
 })(typeof window !== 'undefined' ? window : globalThis);
-
-/* AHAKO iOS vertical emoji diagnostic v1 — diagnostics only, no rendering changes. */
-(()=>{
-  const isIOS=()=>/iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-  if(!isIOS())return;
-  const cp=s=>Array.from(String(s||'')).map(ch=>'U+'+ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')).join(' ');
-  const val=(cs,k)=>cs.getPropertyValue(k)||'';
-  const inspect=()=>{
-    const cells=[...document.querySelectorAll('.sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright')];
-    const lines=[];
-    lines.push('AHAKO iOS EMOJI DIAG V1');
-    lines.push('UA: '+navigator.userAgent);
-    lines.push('platform: '+navigator.platform+' touch:'+navigator.maxTouchPoints);
-    lines.push('cells: '+cells.length);
-    cells.slice(0,24).forEach((el,i)=>{
-      const cs=getComputedStyle(el),p=el.parentElement?getComputedStyle(el.parentElement):null,r=el.getBoundingClientRect();
-      lines.push('');
-      lines.push(`#${i+1} ${JSON.stringify(el.textContent)} ${cp(el.textContent)}`);
-      lines.push(`class=${el.className}`);
-      lines.push(`writing-mode=${val(cs,'writing-mode')} / -webkit=${val(cs,'-webkit-writing-mode')}`);
-      lines.push(`text-orientation=${val(cs,'text-orientation')} / -webkit=${val(cs,'-webkit-text-orientation')}`);
-      lines.push(`text-combine-upright=${val(cs,'text-combine-upright')} / -webkit-combine=${val(cs,'-webkit-text-combine')}`);
-      lines.push(`font-family=${val(cs,'font-family')}`);
-      lines.push(`font-size=${val(cs,'font-size')} line-height=${val(cs,'line-height')}`);
-      lines.push(`display=${val(cs,'display')} transform=${val(cs,'transform')}`);
-      lines.push(`rect=${r.width.toFixed(2)}x${r.height.toFixed(2)} @ ${r.left.toFixed(1)},${r.top.toFixed(1)}`);
-      if(p) lines.push(`parent: writing=${val(p,'writing-mode')} orient=${val(p,'text-orientation')} font=${val(p,'font-family')}`);
-    });
-    return lines.join('\n');
-  };
-  const mount=()=>{
-    if(document.getElementById('ahakoEmojiDiagButton'))return;
-    const b=document.createElement('button');
-    b.id='ahakoEmojiDiagButton';b.type='button';b.textContent='EMOJI診断';
-    Object.assign(b.style,{position:'fixed',left:'8px',bottom:'8px',zIndex:'2147483647',padding:'7px 10px',border:'1px solid #777',borderRadius:'8px',background:'rgba(0,0,0,.82)',color:'#fff',font:'12px system-ui',letterSpacing:'0',writingMode:'horizontal-tb'});
-    b.addEventListener('click',()=>{
-      let box=document.getElementById('ahakoEmojiDiagPanel');
-      if(box){box.remove();return;}
-      box=document.createElement('div');box.id='ahakoEmojiDiagPanel';
-      Object.assign(box.style,{position:'fixed',inset:'8px',zIndex:'2147483647',background:'rgba(0,0,0,.96)',color:'#fff',padding:'12px',overflow:'auto',font:'11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace',whiteSpace:'pre-wrap',wordBreak:'break-word',writingMode:'horizontal-tb',textOrientation:'mixed'});
-      const close=document.createElement('button');close.type='button';close.textContent='× 閉じる';
-      Object.assign(close.style,{position:'sticky',top:'0',float:'right',padding:'6px 10px',zIndex:'2'});close.onclick=()=>box.remove();
-      const copy=document.createElement('button');copy.type='button';copy.textContent='診断をコピー';
-      Object.assign(copy.style,{position:'sticky',top:'0',padding:'6px 10px',zIndex:'2'});
-      const pre=document.createElement('pre');pre.style.cssText='margin:12px 0 0;white-space:pre-wrap;font:inherit;';pre.textContent=inspect();
-      copy.onclick=async()=>{const t=inspect();pre.textContent=t;try{await navigator.clipboard.writeText(t);copy.textContent='コピー済み';}catch(_){copy.textContent='コピー不可';}};
-      box.append(close,copy,pre);document.body.appendChild(box);
-    });
-    document.body.appendChild(b);
-  };
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
-})();

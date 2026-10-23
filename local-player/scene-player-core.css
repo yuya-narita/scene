@@ -2803,4 +2803,12 @@ html.sp-scene-image-open body{
   overflow:visible;
   vertical-align:middle;
   font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
+
+  /* FE0E / VS15 must keep text presentation while retaining the same upright cell geometry. */
+}
+.sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright.sp-emoji-text-presentation{
+  font-family:inherit!important;
+}
+/* reopen the canonical rule only to preserve its original closing structure */
+.sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright{
 }
