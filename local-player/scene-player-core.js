@@ -6411,3 +6411,105 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
   global.ScenePlayerCore = ScenePlayerCore;
 })(typeof window !== 'undefined' ? window : globalThis);
+
+
+/* AHAKO AIRPLANE iOS DIAG V9 — diagnostic only; no rendering changes */
+(() => {
+  const DIAG_ID = 'ahakoAirplaneDiagV9';
+  const BTN_ID = 'ahakoAirplaneDiagButtonV9';
+
+  function cps(s){
+    return Array.from(s || '').map(ch => 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')).join(' ');
+  }
+  function val(cs, prop, webkitProp){
+    return `${cs.getPropertyValue(prop) || '(empty)'}${webkitProp ? ' / -webkit=' + (cs.getPropertyValue(webkitProp) || '(empty)') : ''}`;
+  }
+  function collect(){
+    const nodes = [...document.querySelectorAll('.sp-emoji-upright')].filter(el => {
+      const t = el.textContent || '';
+      return t.includes('\u2708');
+    });
+    const lines = [
+      'AHAKO AIRPLANE iOS DIAG V9',
+      'UA: ' + navigator.userAgent,
+      'platform: ' + navigator.platform + ' touch:' + (navigator.maxTouchPoints || 0),
+      'airplane cells: ' + nodes.length,
+      ''
+    ];
+    nodes.forEach((el, i) => {
+      const cs = getComputedStyle(el);
+      const p = el.parentElement;
+      const pcs = p ? getComputedStyle(p) : null;
+      const r = el.getBoundingClientRect();
+      lines.push(
+        `#${i+1} ${JSON.stringify(el.textContent)} ${cps(el.textContent)}`,
+        `class=${el.className}`,
+        `inline-style=${el.getAttribute('style') || '(none)'}`,
+        `writing-mode=${val(cs,'writing-mode','-webkit-writing-mode')}`,
+        `text-orientation=${val(cs,'text-orientation','-webkit-text-orientation')}`,
+        `text-combine-upright=${val(cs,'text-combine-upright','-webkit-text-combine')}`,
+        `font-family=${cs.fontFamily}`,
+        `font=${cs.font}`,
+        `font-variant=${cs.fontVariant}`,
+        `font-feature-settings=${cs.fontFeatureSettings}`,
+        `font-size=${cs.fontSize} line-height=${cs.lineHeight}`,
+        `display=${cs.display} transform=${cs.transform}`,
+        `rect=${r.width.toFixed(2)}x${r.height.toFixed(2)} @ ${r.x.toFixed(1)},${r.y.toFixed(1)}`,
+        pcs ? `parent-font=${pcs.fontFamily}` : 'parent-font=(none)',
+        pcs ? `parent-writing=${pcs.writingMode} parent-orient=${pcs.textOrientation}` : '',
+        ''
+      );
+    });
+    return lines.join('\n');
+  }
+
+  function show(){
+    let box = document.getElementById(DIAG_ID);
+    if (!box) {
+      box = document.createElement('div');
+      box.id = DIAG_ID;
+      Object.assign(box.style,{
+        position:'fixed', inset:'8px', zIndex:'2147483647', background:'#050505',
+        color:'#fff', padding:'12px', overflow:'auto', font:'12px/1.5 monospace',
+        whiteSpace:'pre-wrap', WebkitOverflowScrolling:'touch'
+      });
+      const close = document.createElement('button');
+      close.textContent = '閉じる';
+      Object.assign(close.style,{position:'sticky',top:'0',float:'right',fontSize:'16px',padding:'8px 12px',zIndex:'2'});
+      close.onclick = () => box.remove();
+      const copy = document.createElement('button');
+      copy.textContent = '診断をコピー';
+      Object.assign(copy.style,{position:'sticky',top:'0',float:'left',fontSize:'16px',padding:'8px 12px',zIndex:'2'});
+      const pre = document.createElement('pre');
+      pre.style.cssText='clear:both;white-space:pre-wrap;word-break:break-word;margin-top:12px';
+      const report = collect();
+      pre.textContent = report;
+      copy.onclick = async () => {
+        try { await navigator.clipboard.writeText(report); copy.textContent='コピー済み'; }
+        catch (_) {
+          const ta=document.createElement('textarea'); ta.value=report; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy'); ta.remove(); copy.textContent='コピー済み';
+        }
+      };
+      box.append(close, copy, pre);
+      document.body.appendChild(box);
+    }
+  }
+
+  function install(){
+    if (document.getElementById(BTN_ID)) return;
+    const b=document.createElement('button');
+    b.id=BTN_ID; b.type='button'; b.textContent='✈ 診断';
+    Object.assign(b.style,{
+      position:'fixed',left:'10px',bottom:'86px',zIndex:'2147483646',
+      padding:'8px 10px',border:'1px solid rgba(255,255,255,.45)',
+      borderRadius:'999px',background:'rgba(0,0,0,.75)',color:'#fff',
+      font:'12px sans-serif'
+    });
+    b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); show(); });
+    document.body.appendChild(b);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  else install();
+})();
+
