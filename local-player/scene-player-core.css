@@ -2788,12 +2788,15 @@ html.sp-scene-image-open body{
   block-size:1em;
   width:1em;
   height:1em;
-  writing-mode:horizontal-tb!important;
-  -webkit-writing-mode:horizontal-tb!important;
-  text-orientation:mixed!important;
-  -webkit-text-orientation:mixed!important;
-  text-combine-upright:none!important;
-  -webkit-text-combine:none!important;
+  /* Safari/iPhone: keep the emoji inside the vertical line and combine the
+     single grapheme upright. Do not create a nested horizontal writing mode. */
+  writing-mode:inherit!important;
+  -webkit-writing-mode:inherit!important;
+  text-orientation:upright!important;
+  -webkit-text-orientation:upright!important;
+  text-combine-upright:all!important;
+  -webkit-text-combine:horizontal!important;
+  -webkit-text-combine-upright:all!important;
   white-space:nowrap!important;
   line-height:1em;
   letter-spacing:0;
