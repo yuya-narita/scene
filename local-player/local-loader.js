@@ -174,6 +174,32 @@
   function officialShelfIdFromLocation(){
     try{const value=String(new URL(location.href).searchParams.get('officialShelf')||'').trim();return /^shelf_[a-f0-9]{24}$/i.test(value)?value:'';}catch(_){return '';}
   }
+  function previewTokenFromLocation(){
+    try{const value=String(new URL(location.href).searchParams.get('preview')||'').trim();return /^[a-f0-9]{48}$/i.test(value)?value.toLowerCase():'';}catch(_){return '';}
+  }
+  async function openPreviewFromUrl(token){
+    if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return false;
+    currentSourceMode='preview';
+    if(ownCopyButton)ownCopyButton.hidden=true;
+    if(relayButton)relayButton.hidden=true;
+    if(journey)journey.hidden=true;
+    if(endingOwnWrap)endingOwnWrap.hidden=true;
+    setStatus('確認用作品を読み込み中…');
+    try{
+      const response=await fetch(`${API_BASE}/preview/${encodeURIComponent(token)}/file`,{cache:'no-store'});
+      if(!response.ok)throw new Error(response.status===410?'この確認用リンクは期限切れ、または無効です。':'確認用作品を読み込めませんでした。');
+      const blob=await response.blob();
+      const disposition=String(response.headers.get('Content-Disposition')||'');
+      let name='preview.scene';const match=disposition.match(/filename\*=UTF-8''([^;]+)/i);if(match){try{name=decodeURIComponent(match[1]);}catch(_){}}
+      const file=new File([blob],name,{type:blob.type||'application/octet-stream',lastModified:Date.now()});
+      await openScene(file,{sourceMode:'preview',sourceKey:`preview:${token}`});
+      if(backButton)backButton.hidden=true;
+      if(relayButton)relayButton.hidden=true;
+      if(journey)journey.hidden=true;
+      if(endingOwnWrap)endingOwnWrap.hidden=true;
+      return true;
+    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
+  }
   function officialReaderId(){
     let id='';try{id=String(localStorage.getItem(OFFICIAL_READER_ID_KEY)||'');}catch(_){}
     if(!/^reader_[a-f0-9]{32}$/i.test(id)){
@@ -1210,7 +1236,7 @@
       if(history.length>1){try{history.back();}catch(_){}}
       return;
     }
-    if(currentSourceMode==='relay-url'||currentSourceMode==='official-shelf'){try{history.back();}catch(_){}return;}
+    if(currentSourceMode==='relay-url'||currentSourceMode==='official-shelf'||currentSourceMode==='preview'){try{history.back();}catch(_){}return;}
     if(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master'){
       try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
       revokeAssets();
@@ -1255,9 +1281,10 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.16-reader-copy-arraybuffer',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.16-reader-copy-arraybuffer',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openPreviewFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
+  const initialPreviewToken=previewTokenFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
   const initialBookshelfMasterId=bookshelfMasterIdFromLocation();
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
@@ -1266,6 +1293,8 @@
   const initialRelayPublicId=relayPublicIdFromLocation();
   if(initialReviewUrl){
     openAdminReview(initialReviewUrl);
+  }else if(initialPreviewToken){
+    openPreviewFromUrl(initialPreviewToken);
   }else if(initialOfficialShelfId){
     openOfficialShelfRead(initialOfficialShelfId);
   }else if(validWorkId(initialBookshelfMasterId)){
