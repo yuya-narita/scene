@@ -5320,7 +5320,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         emojiGraphemes.filter(g=>g.end>offset&&g.start<end).forEach(g=>{
           if(g.start>cursor)parent.appendChild(document.createTextNode(source.slice(cursor,g.start)));
           const graphemeText=source.slice(g.start,g.end);
-          if(graphemeText==='\u2708\uFE0E'){parent.appendChild(document.createTextNode(graphemeText));}
+          if(graphemeText==='\u2708\uFE0E'){const a=document.createElement('span');a.className='sp-airplane-text-orientation';a.textContent=graphemeText;parent.appendChild(a);}
           else{const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=graphemeText;if(e.textContent.includes('\uFE0E'))e.classList.add('sp-emoji-text-presentation');parent.appendChild(e);}
           cursor=g.end;
         });
@@ -5362,6 +5362,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           span.textContent=segmentText;
           const emojiCell=emojiGraphemes.some(g=>g.start===a&&g.end===b);
           const airplaneTextPresentation=(segmentText==='\u2708\uFE0E');
+          if(airplaneTextPresentation)span.classList.add('sp-airplane-text-orientation');
           if(emojiCell&&!airplaneTextPresentation){span.classList.add('sp-emoji-upright');if(segmentText.includes('\uFE0E'))span.classList.add('sp-emoji-text-presentation');}
           active.forEach(r=>{
             if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}

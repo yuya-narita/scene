@@ -2812,3 +2812,14 @@ html.sp-scene-image-open body{
 /* reopen the canonical rule only to preserve its original closing structure */
 .sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright{
 }
+
+/* AHAKO V13 — U+2708 FE0E: preserve text presentation, correct orientation only */
+.sp-text[style*="writing-mode: vertical-rl"] .sp-airplane-text-orientation,
+.sp-text.sp-vertical .sp-airplane-text-orientation,
+.sp-vertical .sp-airplane-text-orientation{
+  font-family:inherit!important;
+  text-orientation:upright!important;
+  -webkit-text-orientation:upright!important;
+  text-combine-upright:none!important;
+  -webkit-text-combine:none!important;
+}
