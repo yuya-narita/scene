@@ -973,15 +973,34 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const gain = entry.gainNode;
       const ctx = this.audioContext;
       if (gain && ctx) {
+        const param = gain.gain;
         const now = ctx.currentTime;
-        const from = Number.isFinite(gain.gain.value) ? gain.gain.value : 0;
+        const from = clamp(Number.isFinite(param.value) ? param.value : 0, 0, 1);
+        entry.__spGainFadeToken = (entry.__spGainFadeToken || 0) + 1;
+        const token = entry.__spGainFadeToken;
         try {
-          gain.gain.cancelScheduledValues(now);
-          gain.gain.setValueAtTime(from, now);
-          if (ms > 0) gain.gain.linearRampToValueAtTime(to, now + ms / 1000);
-          else gain.gain.setValueAtTime(to, now);
-        } catch (_) { gain.gain.value = to; }
-        if (done) { if (ms > 0) this._audioTimeout(done, ms); else done(); }
+          // iPhone Safari can expose AudioParam automation APIs yet still
+          // collapse a STOP ramp to zero immediately. Cancel WebAudio
+          // automation first, then drive the already-authorized GainNode from
+          // requestAnimationFrame. This keeps Scene-authored fadeOut audible.
+          param.cancelScheduledValues(now);
+          param.setValueAtTime(from, now);
+        } catch (_) { try { param.value = from; } catch (_) {} }
+        if (!ms) {
+          try { param.setValueAtTime(to, ctx.currentTime); } catch (_) { try { param.value = to; } catch (_) {} }
+          if (done) done();
+          return;
+        }
+        const started = performance.now();
+        const stepGain = (stamp) => {
+          if (entry.__spGainFadeToken !== token) return;
+          const t = clamp((stamp - started) / ms, 0, 1);
+          const value = from + (to - from) * t;
+          try { param.setValueAtTime(value, ctx.currentTime); } catch (_) { try { param.value = value; } catch (_) {} }
+          if (t < 1) requestAnimationFrame(stepGain);
+          else if (done) done();
+        };
+        requestAnimationFrame(stepGain);
         return;
       }
 
@@ -1507,8 +1526,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (gain && ctx) {
         try {
           const now = ctx.currentTime;
-          gain.gain.cancelScheduledValues(now);
-          gain.gain.setValueAtTime(from, now);
+          if (typeof gain.gain.cancelAndHoldAtTime === 'function') gain.gain.cancelAndHoldAtTime(now);
+          else {
+            gain.gain.cancelScheduledValues(now);
+            gain.gain.setValueAtTime(from, now);
+          }
           if (!duration) {
             gain.gain.setValueAtTime(target, now);
             if (done) done();
@@ -1751,8 +1773,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const entry = this._iosPersistentEntry?.[channel];
         if (entry) {
           const finish = () => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
-          if (fadeOut > 0 && entry.active) this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
-          else finish();
+          if (fadeOut > 0) {
+            // Do not trust entry.active alone here. On iPhone the stable media
+            // element can still be audibly playing while bookkeeping has already
+            // flipped during a Scene transition. Ensure a programmable GainNode
+            // exists, then always honor the authored STOP fade before silencing.
+            if (!entry.gainNode) this._ensureIOSBankGain(entry);
+            this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
+          } else finish();
         } else this.audioState[channel] = null;
         return;
       }
@@ -3165,8 +3193,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // gesture and keep the elements silently playing. Scene changes merely
       // seek/unmute those already-authorized elements.
       if (this._iosStableMediaBank) this._primeIOSMediaBank();
-      this.els.cover.hidden=true;
-      this.host.classList.remove('sp-cover-open');
+      // Keep the opaque Cover in front while Scene 1 is fully rendered.
+      // iPhone Safari otherwise exposes the raw background for one frame before
+      // blur/dim/vignette and the authored transition are installed.
+      const coverToReveal = this.els.cover;
       // Treat the first render after the cover as a fresh load so Scene 1
       // one-shot SE is queued/played from the same trusted start gesture.
       // `restore` only reconstructs persistent BGM/Ambient and intentionally
@@ -3174,6 +3204,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
       this._render();
+      // Commit the fully styled Scene 1 before removing the opaque Cover.
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(coverToReveal){ coverToReveal.hidden=true; this.host.classList.remove('sp-cover-open'); }
+      }));
       // A work may start directly in its comic viewer. Open the first Scene's
       // image from the same trusted cover gesture so iOS Safari keeps the action
       // attached to the user's tap. Works without a usable image fall back to Scene.
@@ -5334,61 +5368,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
-    _applyEmojiUprightCell(node) {
-      if(!node)return;
-      // Public Player parity trial: self-contained emoji cell; no dependency on page CSS order/cache.
-      const st=node.style;
-      st.setProperty('display','inline-block','important');
-      st.setProperty('box-sizing','border-box','important');
-      st.setProperty('inline-size','1em','important');
-      st.setProperty('block-size','1em','important');
-      st.setProperty('width','1em','important');
-      st.setProperty('height','1em','important');
-      st.setProperty('writing-mode','horizontal-tb','important');
-      st.setProperty('-webkit-writing-mode','horizontal-tb','important');
-      st.setProperty('text-orientation','mixed','important');
-      st.setProperty('-webkit-text-orientation','mixed','important');
-      st.setProperty('text-combine-upright','none','important');
-      st.setProperty('-webkit-text-combine','none','important');
-      st.setProperty('white-space','nowrap','important');
-      st.setProperty('line-height','1em','important');
-      st.setProperty('letter-spacing','0','important');
-      st.setProperty('overflow','visible','important');
-      st.setProperty('vertical-align','middle','important');
-      st.setProperty('font-family','"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif','important');
-      node.dataset.spEmojiUpright='1';
-    }
-
     _renderRichText(node, scene, displayText = null) {
       const source = String(displayText ?? scene?.text ?? '');
       const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
       const content = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table' || x?.type === 'linkCard') : [];
-      // Trial vertical typesetter: keep emoji graphemes as atomic upright cells.
-      // This is intentionally independent from TCY/ruby/manual orientation.
-      const emojiGraphemes=[];
-      if(source){
-        try{
-          const seg=new Intl.Segmenter(undefined,{granularity:'grapheme'});
-          for(const part of seg.segment(source)){
-            const text=part.segment;
-            const isEmoji=/\p{Extended_Pictographic}/u.test(text)||/\p{Regional_Indicator}/u.test(text)||text.includes('\uFE0F')||text.includes('\u20E3');
-            if(isEmoji)emojiGraphemes.push({start:part.index,end:part.index+text.length,text});
-          }
-        }catch(_){/* Old engines keep native rendering. */}
-      }
-      const appendEmojiAwareText=(parent,text,offset=0)=>{
-        if(!emojiGraphemes.length){parent.appendChild(document.createTextNode(text));return;}
-        const end=offset+text.length;let cursor=offset;
-        emojiGraphemes.filter(g=>g.end>offset&&g.start<end).forEach(g=>{
-          if(g.start>cursor)parent.appendChild(document.createTextNode(source.slice(cursor,g.start)));
-          const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=source.slice(g.start,g.end);this._applyEmojiUprightCell(e);parent.appendChild(e);cursor=g.end;
-        });
-        if(cursor<end)parent.appendChild(document.createTextNode(source.slice(cursor,end)));
-      };
       const tables = content.filter(x => x?.type === 'table');
       const linkCards = content.filter(x => x?.type === 'linkCard');
       node.classList.remove('sp-has-ruby');
-      if (!ranges.length && !content.length) { node.textContent=''; appendEmojiAwareText(node,source,0); return false; }
+      if (!ranges.length && !content.length) { node.textContent = source; return false; }
       node.textContent = '';
       const tableById = new Map(tables.map(t => [String(t.id||''), t]));
       const cardById = new Map(linkCards.map(card => [String(card.id||''), card]));
@@ -5402,25 +5389,55 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       blockRanges.sort((a,b)=>a.start-b.start);
       const normal = ranges.filter(r => r?.kind !== 'table' && r?.kind !== 'linkCard').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
       const rubies=normal.filter(r=>r.kind==='ruby'&&String(r.reading||'').trim()&&!source.slice(r.start,r.end).includes('\n')).sort((a,b)=>a.start-b.start);
+      // AHAKO TCY: adjacent TCY ranges are one visual short-horizontal run.
+      // This keeps things such as ꉂ🤣𐤔 together even when Studio stored the
+      // emoji/surrogate pieces as neighbouring ranges.
+      const mergedTcy=normal.filter(r=>r.kind==='orientation'&&r.orientation==='tcy').sort((a,b)=>a.start-b.start).reduce((out,r)=>{
+        const last=out[out.length-1];
+        if(last&&r.start<=last.end){last.end=Math.max(last.end,r.end);}
+        else out.push({start:r.start,end:r.end});
+        return out;
+      },[]);
       node.classList.toggle('sp-has-ruby',rubies.length>0);
       const appendTextRange=(from,to)=>{
         const rubyNodes=new Map();
         if(to<=from)return;
         const cuts=new Set([from,to]);
-        normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
-        emojiGraphemes.forEach(g=>{if(g.end>from&&g.start<to){cuts.add(Math.max(from,g.start));cuts.add(Math.min(to,g.end));}});
+        normal.forEach(r=>{
+          if(r.end>from&&r.start<to&&!(r.kind==='orientation'&&r.orientation==='tcy')){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));}
+        });
+        mergedTcy.forEach(r=>{if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));}});
+        // Split color emoji at grapheme boundaries (UTF-16 offsets) only when
+        // they are not inside an explicit TCY run. Emoji outside TCY still get
+        // automatic upright rendering on iPhone.
+        // emoji glyph gets the iPhone vertical-orientation workaround.
+        try {
+          const slice=source.slice(from,to);
+          const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
+          if(seg){ for(const part of seg.segment(slice)){
+            const _g=part.segment;
+            const _vs15=_g.includes('\uFE0E');
+            const _vs16=_g.includes('\uFE0F');
+            const _emojiPresentation=!_vs15&&(_vs16||/\p{Emoji_Presentation}/u.test(_g)||/\p{Regional_Indicator}/u.test(_g)||_g.includes('\u20E3'));
+            const _airplaneText=(_g==='\u2708\uFE0E'||_g==='\u2708');
+            if(_emojiPresentation||_airplaneText){
+              const ga=from+part.index, gb=ga+part.segment.length;
+              const inTcy=mergedTcy.some(r=>r.start<=ga&&r.end>=gb);
+              if(!inTcy){cuts.add(ga);cuts.add(gb);}
+            }
+          } }
+        } catch (_) {}
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
           const span=document.createElement('span');
           const active=normal.filter(r=>r.start<=a&&r.end>=b);
+          const visualTcy=mergedTcy.find(r=>r.start<=a&&r.end>=b);
           const segmentText=source.slice(a,b);
           // Rich Text Player v0.18: list markers live in canonical Scene text.
           // Never synthesize a bullet from semantic ranges; that can decorate an
           // unrelated repeated word when offsets were re-anchored fuzzily.
           span.textContent=segmentText;
-          const emojiCell=emojiGraphemes.some(g=>g.start===a&&g.end===b);
-          if(emojiCell){span.classList.add('sp-emoji-upright');this._applyEmojiUprightCell(span);}
           active.forEach(r=>{
             if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}
             if(r.kind==='quote')span.classList.add('sp-rich-quote');
@@ -5431,11 +5448,74 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.color)span.style.color=String(r.style.color);
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
-            if(r.kind==='orientation'){
-              if(r.orientation==='tcy')span.style.textCombineUpright='all';
-              else if(r.orientation==='sideways'||r.orientation==='upright')span.style.textOrientation=r.orientation;
-            }
+            if(r.kind==='orientation'&&(r.orientation==='sideways'||r.orientation==='upright'))span.style.textOrientation=r.orientation;
           });
+          // AHAKO V27: TCY has two paths.
+          // 1-2 glyphs use the browser's native tate-chu-yoko (stable for AI etc.).
+          // 3+ glyphs use a one-cell anchor with a centered horizontal child.
+          // This keeps the vertical line position/height unchanged while letting
+          // 2020 / NASA occupy about 1.8 glyph widths instead of being crushed.
+          if(visualTcy){
+            const glyphs=Array.from(segmentText).length;
+            span.style.whiteSpace='nowrap';
+            if(glyphs<=2){
+              span.style.textCombineUpright='all';
+              span.style.webkitTextCombine='horizontal';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+            }else{
+              span.classList.add('sp-rich-tcy-wide');
+              span.style.display='inline-block';
+              span.style.position='relative';
+              span.style.inlineSize='1em';
+              span.style.blockSize='1em';
+              span.style.width='1em';
+              span.style.height='1em';
+              span.style.textCombineUpright='none';
+              span.style.webkitTextCombine='none';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+              span.textContent='';
+              const wide=document.createElement('span');
+              wide.className='sp-rich-tcy-wide-inner';
+              wide.textContent=segmentText;
+              wide.style.position='absolute';
+              wide.style.left='50%';
+              wide.style.top='50%';
+              wide.style.width='1.55em';
+              wide.style.height='1em';
+              wide.style.writingMode='horizontal-tb';
+              wide.style.webkitWritingMode='horizontal-tb';
+              wide.style.textOrientation='mixed';
+              wide.style.webkitTextOrientation='mixed';
+              wide.style.whiteSpace='nowrap';
+              wide.style.textAlign='center';
+              wide.style.lineHeight='1em';
+              wide.style.letterSpacing=glyphs>=4?'-.08em':'-.03em';
+              wide.style.transform='translate(-50%,-50%)';
+              wide.style.transformOrigin='center center';
+              span.appendChild(wide);
+            }
+          }
+          // Emoji graphemes outside explicit TCY remain one visual unit.
+          // VS16 explicitly requests emoji presentation; on Apple/WebKit force
+          // the color-emoji font so sequences such as ‼️ do not fall back to ‼︎.
+          {
+            const _vs15=segmentText.includes('\uFE0E');
+            const _vs16=segmentText.includes('\uFE0F');
+            const _emojiPresentation=!_vs15&&(_vs16||/\p{Emoji_Presentation}/u.test(segmentText)||/\p{Regional_Indicator}/u.test(segmentText)||segmentText.includes('\u20E3'));
+            const _airplaneText=(segmentText==='\u2708\uFE0E'||segmentText==='\u2708');
+            if(_emojiPresentation){
+              span.style.textCombineUpright='all';
+              span.style.webkitTextCombine='horizontal';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+              span.style.fontVariantEmoji='emoji';
+            }else if(_airplaneText){
+              span.classList.add('sp-airplane-text-native');
+            }
+          }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
           const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);

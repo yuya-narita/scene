@@ -2779,54 +2779,15 @@ html.sp-scene-image-open body{
   animation-fill-mode:both!important;
 }
 
-
-/* Trial: canonical vertical emoji cell. */
-:is(.sp-text[data-writing-mode="vertical-rl"],.sp-history-text[style*="writing-mode: vertical-rl"],.sp-history-subtext[style*="writing-mode: vertical-rl"]) .sp-emoji-upright{
-  display:inline-block;
-  box-sizing:border-box;
-  inline-size:1em;
-  block-size:1em;
-  width:1em;
-  height:1em;
-  /* Safari/iPhone: keep the emoji inside the vertical line and combine the
-     single grapheme upright. Do not create a nested horizontal writing mode. */
-  writing-mode:inherit!important;
-  -webkit-writing-mode:inherit!important;
-  text-orientation:upright!important;
-  -webkit-text-orientation:upright!important;
-  text-combine-upright:all!important;
-  -webkit-text-combine:horizontal!important;
-  -webkit-text-combine-upright:all!important;
-  white-space:nowrap!important;
-  line-height:1em;
-  letter-spacing:0;
-  overflow:visible;
-  vertical-align:middle;
-  font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
-
-  /* FE0E / VS15 must keep text presentation while retaining the same upright cell geometry. */
-}
-:is(.sp-text[data-writing-mode="vertical-rl"],.sp-history-text[style*="writing-mode: vertical-rl"],.sp-history-subtext[style*="writing-mode: vertical-rl"]) .sp-emoji-upright.sp-emoji-text-presentation{
-  font-family:inherit!important;
-}
-/* reopen the canonical rule only to preserve its original closing structure */
-:is(.sp-text[data-writing-mode="vertical-rl"],.sp-history-text[style*="writing-mode: vertical-rl"],.sp-history-subtext[style*="writing-mode: vertical-rl"]) .sp-emoji-upright{
-}
-
-/* AHAKO V14 — U+2708 FE0E: V12 presentation + physical orientation correction */
-.sp-airplane-text-rotate{
+/* AHAKO V17 — one presentation rule everywhere.
+   Preserve source Unicode presentation. Only orientation is corrected.
+   Text-default airplane remains the inherited text glyph and is physically
+   corrected for vertical writing without forcing an emoji font. */
+.sp-airplane-text-native{
   font-family:inherit!important;
   display:inline-block!important;
-  text-orientation:mixed!important;
-  -webkit-text-orientation:mixed!important;
   text-combine-upright:none!important;
   -webkit-text-combine:none!important;
   transform:rotate(-90deg)!important;
   transform-origin:50% 50%!important;
 }
-
-/* AHAKO V16 — presentation and orientation are separate:
-   VS16/default Emoji_Presentation => emoji upright cell.
-   VS15/text-default symbols => native text presentation.
-   Airplane text glyph (VS15 or VS-none) keeps native presentation and receives orientation correction only.
-   The same wrappers are used by normal Scene and PAST. */
