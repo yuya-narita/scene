@@ -177,6 +177,21 @@
   function previewTokenFromLocation(){
     try{const value=String(new URL(location.href).searchParams.get('preview')||'').trim();return /^[a-f0-9]{48}$/i.test(value)?value.toLowerCase():'';}catch(_){return '';}
   }
+  function showPreviewExpiry(expiresAt){
+    let badge=document.getElementById('ahakoPreviewExpiryBadge');
+    if(!badge){
+      badge=document.createElement('div');
+      badge.id='ahakoPreviewExpiryBadge';
+      badge.setAttribute('role','status');
+      badge.style.cssText='position:fixed;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);z-index:2147483000;max-width:calc(100vw - 28px);box-sizing:border-box;padding:6px 10px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(16,16,16,.78);color:#fff;font:600 11px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.02em;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)';
+      document.body.appendChild(badge);
+    }
+    const t=Date.parse(String(expiresAt||''));
+    if(!Number.isFinite(t)){badge.textContent='作者確認用プレビュー';return;}
+    const d=new Date(t),parts=new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d),v={};
+    for(const part of parts)if(part.type!=='literal')v[part.type]=part.value;
+    badge.textContent=`作者確認用プレビュー ｜ 閲覧期限 ${v.year}/${v.month}/${v.day} ${v.hour}:${v.minute}まで`;
+  }
   async function openPreviewFromUrl(token){
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return false;
     currentSourceMode='preview';
@@ -188,6 +203,8 @@
     try{
       const response=await fetch(`${API_BASE}/preview/${encodeURIComponent(token)}/file`,{cache:'no-store'});
       if(!response.ok)throw new Error(response.status===410?'この確認用リンクは期限切れ、または無効です。':'確認用作品を読み込めませんでした。');
+      const expiresAt=String(response.headers.get('X-Ahako-Preview-Expires-At')||'');
+      showPreviewExpiry(expiresAt);
       const blob=await response.blob();
       const disposition=String(response.headers.get('Content-Disposition')||'');
       let name='preview.scene';const match=disposition.match(/filename\*=UTF-8''([^;]+)/i);if(match){try{name=decodeURIComponent(match[1]);}catch(_){}}
