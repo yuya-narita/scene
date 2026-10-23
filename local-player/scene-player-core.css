@@ -2821,6 +2821,6 @@ html.sp-scene-image-open body{
   -webkit-text-orientation:mixed!important;
   text-combine-upright:none!important;
   -webkit-text-combine:none!important;
-  transform:rotate(90deg)!important;
+  transform:rotate(-90deg)!important;
   transform-origin:50% 50%!important;
 }
