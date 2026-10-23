@@ -10065,6 +10065,7 @@ return flowCommentCard;}
     const bar=document.createElement('div');bar.className='rich-selection-toolbar';bar.hidden=true;bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','選択した文字の書式');
     const button=(label,action,title,extra='')=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.richAction=action;b.title=title||label;b.setAttribute('aria-label',title||label);if(extra)b.classList.add(extra);bar.appendChild(b);return b;};
     button('B 太字','bold','太字','rich-bold-button');
+    button('I 斜体','italic','斜体','rich-italic-button');
     button('ルビ','ruby','ふりがなを追加・編集');
     const dropdown=(label,action,items,title)=>{
       const wrap=document.createElement('div');wrap.className='rich-dropdown';wrap.dataset.richDropdown=action;
@@ -10090,27 +10091,16 @@ return flowCommentCard;}
     if(matchMedia?.('(hover:hover) and (pointer:fine)')?.matches){
       bar.querySelectorAll('.rich-dropdown').forEach(w=>{w.addEventListener('pointerenter',()=>{richToolbarInteracting=true;openMenu(w);});});
     }
-    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('touchstart',()=>{richToolbarInteracting=true;},{passive:true});bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{if(!bar.matches(':hover'))richToolbarInteracting=false;},340);});
-    // Keep the immutable Preview selection while authoring controls are touched.
-    // iOS Safari can collapse the native Selection before pointerdown/click reaches
-    // this floating toolbar, so touchstart gets an explicit first-class path.
-    let lastRichTouchAt=0;
-    const activateRichToolbar=(target,e)=>{
-      const trigger=target.closest?.('.rich-dropdown-trigger');
-      if(trigger){e?.preventDefault?.();e?.stopPropagation?.();richToolbarInteracting=true;const wrap=trigger.closest('.rich-dropdown'),menu=wrap.querySelector('.rich-dropdown-menu'),opening=menu.hidden;closeMenus(wrap);menu.hidden=!opening;trigger.setAttribute('aria-expanded',String(opening));return true;}
-      const item=target.closest?.('.rich-dropdown-item');
-      if(item){e?.preventDefault?.();e?.stopPropagation?.();richToolbarInteracting=true;const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);richToolbarInteracting=false;return true;}
-      const t=target.closest?.('button[data-rich-action]');
-      if(t){e?.preventDefault?.();e?.stopPropagation?.();richToolbarInteracting=true;closeMenus();if(t.dataset.richAction==='ruby')editRichRuby();else applyRichSelectionAction(t.dataset.richAction);richToolbarInteracting=false;return true;}
-      return false;
-    };
-    bar.addEventListener('touchstart',e=>{
-      if(e.target.closest?.('input[type="color"]')){richToolbarInteracting=true;return;}
-      if(activateRichToolbar(e.target,e))lastRichTouchAt=Date.now();
-    },{passive:false});
+    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{if(!bar.matches(':hover'))richToolbarInteracting=false;},340);});
+    // V78: act on pointerdown so the first press is the action. Native <select>
+    // controls were stealing focus/selection and causing the old two-press cushion.
     bar.addEventListener('pointerdown',e=>{
-      if(Date.now()-lastRichTouchAt<700)return;
-      activateRichToolbar(e.target,e);
+      const trigger=e.target.closest?.('.rich-dropdown-trigger');
+      if(trigger){e.preventDefault();e.stopPropagation();const wrap=trigger.closest('.rich-dropdown'),menu=wrap.querySelector('.rich-dropdown-menu'),opening=menu.hidden;closeMenus(wrap);menu.hidden=!opening;trigger.setAttribute('aria-expanded',String(opening));return;}
+      const item=e.target.closest?.('.rich-dropdown-item');
+      if(item){e.preventDefault();e.stopPropagation();const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);return;}
+      const t=e.target.closest?.('button[data-rich-action]');
+      if(t){e.preventDefault();e.stopPropagation();closeMenus();if(t.dataset.richAction==='ruby'){editRichRuby();return;}applyRichSelectionAction(t.dataset.richAction);}
     });
     color.addEventListener('input',()=>{});color.addEventListener('change',()=>applyRichSelectionAction('color',color.value));
     return bar;
@@ -10260,6 +10250,7 @@ return flowCommentCard;}
     const overlap=r=>Number(r?.end)>start&&Number(r?.start)<end;
     const spanWith=pred=>ranges.find(r=>r?.kind==='span'&&covers(r)&&pred(r.style||{}));
     const bold=!!spanWith(st=>st.bold===true);
+    const italic=!!spanWith(st=>st.italic===true);
     const heading=ranges.find(r=>r?.kind==='heading'&&overlap(r));
     const list=ranges.find(r=>r?.kind==='listItem'&&overlap(r));
     const quote=ranges.find(r=>r?.kind==='quote'&&overlap(r));
@@ -10268,7 +10259,7 @@ return flowCommentCard;}
     const scale=spanWith(st=>Number(st.fontScale)>0)?.style?.fontScale;
     const color=spanWith(st=>st.color)?.style?.color||'';
     const setActive=(sel,on)=>{const el=bar.querySelector(sel);if(el){el.classList.toggle('is-active',!!on);el.setAttribute('aria-pressed',String(!!on));}};
-    setActive('[data-rich-action="bold"]',bold);setActive('[data-rich-action="quote"]',!!quote);
+    setActive('[data-rich-action="bold"]',bold);setActive('[data-rich-action="italic"]',italic);setActive('[data-rich-action="quote"]',!!quote);
     const labels={font:{serif:'明朝',sans:'ゴシック',mono:'等幅'},size:{'0.85':'小','1':'標準','1.2':'大','1.45':'特大'}};
     bar.querySelectorAll('.rich-dropdown').forEach(w=>{const action=w.dataset.richDropdown,tr=w.querySelector('.rich-dropdown-trigger');let value='';
       if(action==='font')value=String(font||''); else if(action==='size'&&scale)value=String(Number(scale)); else if(action==='heading'&&heading)value=String(heading.level||''); else if(action==='list'&&list)value=list.ordered?'number':'bullet'; else if(action==='orientation'&&orientation)value=String(orientation.orientation||'');
@@ -10329,6 +10320,7 @@ return flowCommentCard;}
       if(value)ranges.push({start,end,kind:'ruby',reading:String(value)});
     }
     else if(action==='bold'){const cur=spanCover(st=>st.bold===true);if(cur)ranges=ranges.filter(r=>r!==cur);else ranges.push({start,end,kind:'span',style:{bold:true}});}
+    else if(action==='italic'){const cur=spanCover(st=>st.italic===true);if(cur)ranges=ranges.filter(r=>r!==cur);else ranges.push({start,end,kind:'span',style:{italic:true}});}
     else if(action==='font'&&value){const cur=spanCover(st=>String(st.fontFamily||'')===String(value));ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&r?.style?.fontFamily));if(!cur)ranges.push({start,end,kind:'span',style:{fontFamily:String(value)}});}
     else if(action==='size'&&value){const num=Number(value)||1,cur=spanCover(st=>Number(st.fontScale)===num);ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&Number(r?.style?.fontScale)>0));if(!cur)ranges.push({start,end,kind:'span',style:{fontScale:num}});}
     else if(action==='color'&&value)ranges.push({start,end,kind:'span',style:{color:String(value)}});
@@ -11876,14 +11868,6 @@ function startInlineTextEdit(field='text',targetEl=null){
       .frame-position-control-row > span{white-space:nowrap;word-break:keep-all}
       .frame-position-control-row input[type="range"]{width:100%;margin:0;accent-color:#fff;touch-action:none;-webkit-user-select:none;user-select:none}
       .frame-position-control-row input[type="number"]{width:46px;box-sizing:border-box;border:1px solid rgba(255,255,255,.22);border-radius:7px;background:rgba(255,255,255,.09);color:#fff;padding:5px 3px;text-align:center;font:700 10px/1 sans-serif}
-      @media (max-width:600px){
-        .frame-position-drag-hint{top:10px;max-width:calc(100% - 28px);overflow:hidden;text-overflow:ellipsis;font-size:10px;padding:5px 8px}
-        .frame-position-fixed-controls{width:min(238px,calc(100% - 32px));bottom:max(72px,calc(env(safe-area-inset-bottom) + 54px));gap:4px;padding:6px 7px;border-radius:10px}
-        .frame-position-control-row{grid-template-columns:46px minmax(0,1fr) 38px;gap:5px}
-        .frame-position-control-row input[type="number"]{width:38px;padding:4px 1px;font-size:10px}
-        .frame-position-drag-toolbar{bottom:max(24px,calc(env(safe-area-inset-bottom) + 8px));padding:4px;gap:4px}
-        .frame-position-drag-toolbar button{font-size:10px;padding:6px 9px}
-      }
       @media (min-width:900px){
         .frame-position-fixed-controls{width:270px;bottom:112px;padding:7px 8px;gap:5px}
         .frame-position-control-row{grid-template-columns:50px minmax(0,1fr) 42px;gap:5px}
@@ -11970,19 +11954,8 @@ function startInlineTextEdit(field='text',targetEl=null){
       }
       syncLivePosition(p.text.position);
       playerHost?.classList.add('sp-direct-layout-editing');
-      // iPhone: temporarily clear Player transport/AUTO REC chrome so the text
-      // placement canvas is not pushed upward or covered while authoring.
-      const directHiddenUi=[];
-      const hideDirectUi=el=>{if(!el||directHiddenUi.some(x=>x.el===el))return;directHiddenUi.push({el,display:el.style.display,hidden:el.hidden});el.style.display='none';};
-      if(matchMedia?.('(max-width:600px)')?.matches){
-        hideDirectUi(document.querySelector('#autoRecPanel'));
-        const progress=playerHost?.querySelector('.sp-progress-track');
-        if(progress){let rail=progress;while(rail.parentElement&&rail.parentElement!==playerHost&&rail.parentElement!==stage){const parent=rail.parentElement;if(parent.contains(stage))break;if(parent.querySelectorAll('.sp-progress-track').length===1)rail=parent;else break;}hideDirectUi(rail);}
-        playerHost?.querySelectorAll('button,[role="button"]').forEach(el=>{if(/^AUTO$/i.test(String(el.textContent||'').trim()))hideDirectUi(el);});
-      }
-      const restoreDirectUi=()=>{directHiddenUi.forEach(({el,display,hidden})=>{if(!el)return;el.style.display=display;el.hidden=hidden;});directHiddenUi.length=0;};
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
-      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('置きたい位置をタップ ／ ドラッグで微調整','Tap to place / drag to fine-tune');
+      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('文字をドラッグで移動 ／ 下のバーでサイズ・回転','Drag text to move / use sliders for size & rotation');
       const controls=document.createElement('div');controls.className='frame-position-fixed-controls';
       const makeSliderRow=(label,min,max,step,value)=>{
         const row=document.createElement('label');row.className='frame-position-control-row';
@@ -12095,7 +12068,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       shield.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
       [toolbar,controls].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false,skipRefresh=false,keepEditorState=false}={})=>{
-        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.removeEventListener('touchend',blockEditorTouchRelease,true);playerHost?.classList.remove('sp-direct-layout-editing');restoreDirectUi();shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
+        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.removeEventListener('touchend',blockEditorTouchRelease,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)clearAdjustedPosition();
         else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(beforeAngle==null)delete p.text.angle;else p.text.angle=beforeAngle;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
         syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);syncLiveAngle(p.text.angle);
