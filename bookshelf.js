@@ -597,6 +597,27 @@ async function distributionFileFromClaimScene(scene){
   ]);
   return new File([blob],`${safeClaimFileBase(scene?.title||'book')}_distribution.scene`,{type:'application/octet-stream'});
 }
+function previewClaimTokenFromLocation(){try{return String(new URL(location.href).searchParams.get('previewClaim')||'').trim();}catch(_){return'';}}
+async function receivePreviewClaimFromLocation(){
+  const token=previewClaimTokenFromLocation();
+  if(!token)return false;
+  if(!validBookshelfClaimToken(token))throw new Error('作者用の受取リンクを確認できませんでした。');
+  if(!authorToken||!signedInAuthor?.authorId){openBookshelfAuthor();setBookshelfAuthStatus('作者アカウントでログインすると、この作品を「つくった本」に受け取れます。');return false;}
+  const response=await fetch(`${API_BASE}/claim/${encodeURIComponent(token)}/package`,{headers:authorHeaders({Accept:'application/octet-stream'}),cache:'no-store'});
+  if(!response.ok){const payload=await response.json().catch(()=>null);throw new Error(payload?.error||'作品を受け取れませんでした。');}
+  const encodedName=String(response.headers.get('X-Ahako-Preview-File-Name')||'');let fileName='preview.scene';try{fileName=decodeURIComponent(encodedName)||fileName;}catch(_){}
+  const blob=await response.blob();
+  const file=new File([blob],fileName,{type:'application/octet-stream'});
+  try{await addMaster(file,{silent:true});}
+  catch(error){if(/配布版/.test(String(error?.message||'')))throw new Error('このPreviewは配付用.sceneです。「つくった本」へ渡すにはMaster.sceneでPreviewを作成してください。');throw error;}
+  const complete=await fetch(`${API_BASE}/claim/${encodeURIComponent(token)}/complete`,{method:'POST',headers:authorHeaders({'Content-Type':'application/json'}),cache:'no-store'});
+  const completed=await complete.json().catch(()=>null);
+  if(!complete.ok||!completed?.ok)throw new Error(completed?.error||'受取完了を記録できませんでした。');
+  const u=new URL(location.href);u.searchParams.delete('previewClaim');history.replaceState(null,'',u.pathname+(u.search||'')+(u.hash||''));
+  applyShelfTab('created');await render();toast('作品を「つくった本」に受け取りました。');
+  return true;
+}
+
 async function importBookshelfClaimFromLocation(){
   let u;try{u=new URL(location.href);}catch(_){return false;}
   const token=String(u.searchParams.get('claim')||'').trim();
@@ -2279,7 +2300,7 @@ function closeBookshelfMenu(){const menu=$('#bookshelfMenu');if(menu)menu.open=f
 function setBookshelfAuthStatus(message='',error=false){const el=$('#bookshelfAuthorStatus');el.textContent=message;el.classList.toggle('is-error',error);}
 function openBookshelfAuthor(){syncBookshelfAuthorUI();setBookshelfAuthStatus('');$('#bookshelfAuthorDialog').showModal();syncShelfScrollLock();}
 async function requestBookshelfAuthorCode(){const email=$('#bookshelfAuthorEmail').value.trim(),displayName=$('#bookshelfAuthorDisplayName').value.trim();setBookshelfAuthStatus('送信しています…');try{await authorRequest('/author-auth/request-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});$('#bookshelfAuthorEmailForm').hidden=true;$('#bookshelfAuthorCodeForm').hidden=false;$('#bookshelfAuthorCode').focus();setBookshelfAuthStatus('メールに届いた6桁のコードを入力してください。');sessionStorage.setItem('ahako:author-login-email',email);sessionStorage.setItem('ahako:author-login-name',displayName);}catch(error){setBookshelfAuthStatus(error.message,true);}}
-async function verifyBookshelfAuthorCode(){const email=sessionStorage.getItem('ahako:author-login-email')||$('#bookshelfAuthorEmail').value.trim(),displayName=sessionStorage.getItem('ahako:author-login-name')||$('#bookshelfAuthorDisplayName').value.trim(),code=$('#bookshelfAuthorCode').value.trim();setBookshelfAuthStatus('確認しています…');try{const payload=await authorRequest('/author-auth/verify-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,displayName,code})});saveAuthorSession(payload.token,payload.author);await loadAuthorShelfData();$('#bookshelfAuthorDialog').close();toast('作者アカウントでログインしました。');}catch(error){setBookshelfAuthStatus(error.message,true);}}
+async function verifyBookshelfAuthorCode(){const email=sessionStorage.getItem('ahako:author-login-email')||$('#bookshelfAuthorEmail').value.trim(),displayName=sessionStorage.getItem('ahako:author-login-name')||$('#bookshelfAuthorDisplayName').value.trim(),code=$('#bookshelfAuthorCode').value.trim();setBookshelfAuthStatus('確認しています…');try{const payload=await authorRequest('/author-auth/verify-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,displayName,code})});saveAuthorSession(payload.token,payload.author);await loadAuthorShelfData();$('#bookshelfAuthorDialog').close();if(previewClaimTokenFromLocation()){await receivePreviewClaimFromLocation();return;}toast('作者アカウントでログインしました。');}catch(error){setBookshelfAuthStatus(error.message,true);}}
 function renderSeriesBookChoices(){const owned=editingSeriesShelf==='owned',published=new Set(authorWorks.map(work=>work.workId)),seriesSource=owned?ownedSeriesBoxes:authorSeries,occupiedByOther=new Set(seriesSource.filter(series=>series.seriesId!==editingSeriesId).flatMap(series=>seriesBookIds(series,editingSeriesShelf))),archived=new Set(readIdList(SHELF_ARCHIVE_KEYS[editingSeriesShelf])),local=(shelfDataCache[editingSeriesShelf]||[]).filter(book=>!archived.has(shelfIdOf(book))&&(owned||published.has(book.workId))&&(!occupiedByOther.has(shelfIdOf(book))||editingSeriesWorkIds.includes(shelfIdOf(book)))),byId=new Map(local.map(book=>[shelfIdOf(book),book])),selected=editingSeriesWorkIds.map(id=>byId.get(id)).filter(Boolean),available=local.filter(book=>!editingSeriesWorkIds.includes(shelfIdOf(book))&&!occupiedByOther.has(shelfIdOf(book))),ordered=[...selected,...available];$('#seriesBookChoices').innerHTML=ordered.length?ordered.map(book=>{const id=shelfIdOf(book),inBox=editingSeriesWorkIds.includes(id),position=editingSeriesWorkIds.indexOf(id);return`<div class="series-choice ${inBox?'is-selected':''}" draggable="${inBox}" data-work-id="${escapeHtml(id)}"><span class="series-choice-handle">${inBox?'☰':'○'}</span><span><strong>${escapeHtml(book.title)}</strong><small>${inBox?`${position+1}冊目・ドラッグで並び替え`:'このBOXへ追加できます'}</small></span>${inBox?'<span class="series-choice-actions"><button type="button" data-action="detail">詳細</button><button type="button" data-action="up" aria-label="上へ">↑</button><button type="button" data-action="down" aria-label="下へ">↓</button><button type="button" data-action="remove">外す</button></span>':'<button type="button" data-action="add">追加</button>'}</div>`;}).join(''):`<p class="series-choice-empty">${owned?'追加できる本はありません。':'追加できる公開作品はありません。'}</p>`;
   document.querySelectorAll('#seriesBookChoices .series-choice button').forEach(button=>button.onclick=()=>{const id=button.closest('.series-choice').dataset.workId,index=editingSeriesWorkIds.indexOf(id),action=button.dataset.action;if(action==='detail'){const selectedBook=byId.get(id);openDetail(owned?'distribution':(selectedBook?.role==='server-published'?'server-published':'master'),id);return;}if(action==='add'&&index<0)editingSeriesWorkIds.push(id);if(action==='remove'&&index>=0)editingSeriesWorkIds.splice(index,1);if(action==='up'&&index>0)[editingSeriesWorkIds[index-1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index-1]];if(action==='down'&&index>=0&&index<editingSeriesWorkIds.length-1)[editingSeriesWorkIds[index+1],editingSeriesWorkIds[index]]=[editingSeriesWorkIds[index],editingSeriesWorkIds[index+1]];renderSeriesBookChoices();});
   let dragged='';document.querySelectorAll('#seriesBookChoices .series-choice.is-selected').forEach(row=>{row.ondragstart=e=>{dragged=row.dataset.workId;draggingSeriesWorkId=dragged;e.dataTransfer.setData('text/ahako-series-work',dragged);e.dataTransfer.effectAllowed='move';row.classList.add('is-dragging');};row.ondragend=()=>{dragged='';draggingSeriesWorkId='';document.querySelectorAll('#seriesBookChoices .series-choice').forEach(item=>item.classList.remove('is-dragging','is-drop-target'));};row.ondragover=e=>{if(!dragged||dragged===row.dataset.workId)return;e.preventDefault();e.dataTransfer.dropEffect='move';row.classList.add('is-drop-target');};row.ondragleave=()=>row.classList.remove('is-drop-target');row.ondrop=e=>{e.preventDefault();const source=dragged||e.dataTransfer.getData('text/ahako-series-work'),target=row.dataset.workId,from=editingSeriesWorkIds.indexOf(source),to=editingSeriesWorkIds.indexOf(target);if(from<0||to<0||from===to)return;editingSeriesWorkIds.splice(to,0,editingSeriesWorkIds.splice(from,1)[0]);dragged='';draggingSeriesWorkId='';renderSeriesBookChoices();};});
@@ -2406,6 +2427,10 @@ installDesktopShelfArrowKeys();
 installShelfSwipe();
 readAuthorSession();
 syncBookshelfAuthorUI();
+if(previewClaimTokenFromLocation()){
+  if(authorToken)receivePreviewClaimFromLocation().catch(error=>{console.error(error);AhakoDialog.alert(error?.message||'作品を受け取れませんでした。');});
+  else setTimeout(()=>{openBookshelfAuthor();setBookshelfAuthStatus('作者アカウントでログインすると、この作品を「つくった本」に受け取れます。');},0);
+}
 (async()=>{
   // V63.33 — context handoff guard. The source page stores a nonce in
   // sessionStorage and carries the same nonce in the claim URL. If the claim
