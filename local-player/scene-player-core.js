@@ -6413,103 +6413,93 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 })(typeof window !== 'undefined' ? window : globalThis);
 
 
-/* AHAKO AIRPLANE iOS DIAG V9 — diagnostic only; no rendering changes */
+/* AHAKO EMOJI SCENE/PAST COMPARE DIAG V10 — diagnostic only */
 (() => {
-  const DIAG_ID = 'ahakoAirplaneDiagV9';
-  const BTN_ID = 'ahakoAirplaneDiagButtonV9';
-
-  function cps(s){
-    return Array.from(s || '').map(ch => 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')).join(' ');
+  const BTN='ahakoEmojiCompareDiagV10Button', BOX='ahakoEmojiCompareDiagV10Box';
+  const TARGET_RE = /[\u203C\u2049\u2665\u2764\u2600\u2708]/u;
+  function cps(s){return Array.from(s||'').map(c=>'U+'+c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')).join(' ')}
+  function css(el){
+    const c=getComputedStyle(el), r=el.getBoundingClientRect(), p=el.parentElement, pc=p?getComputedStyle(p):null;
+    return {
+      cls:el.className||'(none)', style:el.getAttribute('style')||'(none)',
+      writing:c.writingMode, orient:c.textOrientation, combine:c.textCombineUpright,
+      webkitCombine:c.getPropertyValue('-webkit-text-combine'),
+      font:c.fontFamily, fontFull:c.font, display:c.display, transform:c.transform,
+      size:c.fontSize, line:c.lineHeight, rect:`${r.width.toFixed(2)}x${r.height.toFixed(2)} @ ${r.x.toFixed(1)},${r.y.toFixed(1)}`,
+      parent:pc?`writing=${pc.writingMode} orient=${pc.textOrientation} combine=${pc.textCombineUpright} font=${pc.fontFamily}`:'(none)'
+    };
   }
-  function val(cs, prop, webkitProp){
-    return `${cs.getPropertyValue(prop) || '(empty)'}${webkitProp ? ' / -webkit=' + (cs.getPropertyValue(webkitProp) || '(empty)') : ''}`;
+  function context(el){
+    if(el.closest('.sp-history')) return 'PAST';
+    if(el.closest('.sp-scenes,.sp-stage')) return 'SCENE';
+    return 'OTHER';
   }
   function collect(){
-    const nodes = [...document.querySelectorAll('.sp-emoji-upright')].filter(el => {
-      const t = el.textContent || '';
-      return t.includes('\u2708');
-    });
-    const lines = [
-      'AHAKO AIRPLANE iOS DIAG V9',
-      'UA: ' + navigator.userAgent,
-      'platform: ' + navigator.platform + ' touch:' + (navigator.maxTouchPoints || 0),
-      'airplane cells: ' + nodes.length,
-      ''
+    const all=[...document.querySelectorAll('.sp-emoji-upright,.sp-emoji-text-presentation,.sp-history-text,.sp-history-subtext,.sp-text')];
+    const rows=[];
+    const seen=new Set();
+    for(const root of all){
+      // direct emoji wrappers
+      const candidates = root.matches('.sp-emoji-upright,.sp-emoji-text-presentation') ? [root] :
+        [...root.querySelectorAll('.sp-emoji-upright,.sp-emoji-text-presentation')];
+      for(const el of candidates){
+        const t=el.textContent||'';
+        if(!TARGET_RE.test(t)) continue;
+        const key=context(el)+'|'+t+'|'+el.getBoundingClientRect().x+'|'+el.getBoundingClientRect().y;
+        if(seen.has(key)) continue; seen.add(key);
+        rows.push({ctx:context(el), text:t, el});
+      }
+    }
+    // PAST may not wrap emoji individually: segment text and report container computed style.
+    for(const el of document.querySelectorAll('.sp-history-text,.sp-history-subtext')){
+      const t=el.textContent||'';
+      if(!TARGET_RE.test(t)) continue;
+      const key='PAST-CONTAINER|'+t;
+      if(seen.has(key)) continue; seen.add(key);
+      rows.push({ctx:'PAST-CONTAINER',text:t,el});
+    }
+
+    const lines=[
+      'AHAKO EMOJI SCENE/PAST COMPARE DIAG V10',
+      'UA: '+navigator.userAgent,
+      'platform: '+navigator.platform+' touch:'+(navigator.maxTouchPoints||0),
+      'rows: '+rows.length,''
     ];
-    nodes.forEach((el, i) => {
-      const cs = getComputedStyle(el);
-      const p = el.parentElement;
-      const pcs = p ? getComputedStyle(p) : null;
-      const r = el.getBoundingClientRect();
+    rows.forEach((row,i)=>{
+      const d=css(row.el);
       lines.push(
-        `#${i+1} ${JSON.stringify(el.textContent)} ${cps(el.textContent)}`,
-        `class=${el.className}`,
-        `inline-style=${el.getAttribute('style') || '(none)'}`,
-        `writing-mode=${val(cs,'writing-mode','-webkit-writing-mode')}`,
-        `text-orientation=${val(cs,'text-orientation','-webkit-text-orientation')}`,
-        `text-combine-upright=${val(cs,'text-combine-upright','-webkit-text-combine')}`,
-        `font-family=${cs.fontFamily}`,
-        `font=${cs.font}`,
-        `font-variant=${cs.fontVariant}`,
-        `font-feature-settings=${cs.fontFeatureSettings}`,
-        `font-size=${cs.fontSize} line-height=${cs.lineHeight}`,
-        `display=${cs.display} transform=${cs.transform}`,
-        `rect=${r.width.toFixed(2)}x${r.height.toFixed(2)} @ ${r.x.toFixed(1)},${r.y.toFixed(1)}`,
-        pcs ? `parent-font=${pcs.fontFamily}` : 'parent-font=(none)',
-        pcs ? `parent-writing=${pcs.writingMode} parent-orient=${pcs.textOrientation}` : '',
-        ''
+        `#${i+1} [${row.ctx}] ${JSON.stringify(row.text)} ${cps(row.text)}`,
+        `class=${d.cls}`,
+        `inline-style=${d.style}`,
+        `writing=${d.writing} orient=${d.orient} combine=${d.combine} / -webkit=${d.webkitCombine||'(empty)'}`,
+        `font-family=${d.font}`,
+        `font=${d.fontFull}`,
+        `font-size=${d.size} line-height=${d.line}`,
+        `display=${d.display} transform=${d.transform}`,
+        `rect=${d.rect}`,
+        `parent: ${d.parent}`,''
       );
     });
     return lines.join('\n');
   }
-
   function show(){
-    let box = document.getElementById(DIAG_ID);
-    if (!box) {
-      box = document.createElement('div');
-      box.id = DIAG_ID;
-      Object.assign(box.style,{
-        position:'fixed', inset:'8px', zIndex:'2147483647', background:'#050505',
-        color:'#fff', padding:'12px', overflow:'auto', font:'12px/1.5 monospace',
-        whiteSpace:'pre-wrap', WebkitOverflowScrolling:'touch'
-      });
-      const close = document.createElement('button');
-      close.textContent = '閉じる';
-      Object.assign(close.style,{position:'sticky',top:'0',float:'right',fontSize:'16px',padding:'8px 12px',zIndex:'2'});
-      close.onclick = () => box.remove();
-      const copy = document.createElement('button');
-      copy.textContent = '診断をコピー';
-      Object.assign(copy.style,{position:'sticky',top:'0',float:'left',fontSize:'16px',padding:'8px 12px',zIndex:'2'});
-      const pre = document.createElement('pre');
-      pre.style.cssText='clear:both;white-space:pre-wrap;word-break:break-word;margin-top:12px';
-      const report = collect();
-      pre.textContent = report;
-      copy.onclick = async () => {
-        try { await navigator.clipboard.writeText(report); copy.textContent='コピー済み'; }
-        catch (_) {
-          const ta=document.createElement('textarea'); ta.value=report; document.body.appendChild(ta);
-          ta.select(); document.execCommand('copy'); ta.remove(); copy.textContent='コピー済み';
-        }
-      };
-      box.append(close, copy, pre);
-      document.body.appendChild(box);
-    }
+    document.getElementById(BOX)?.remove();
+    const report=collect(), box=document.createElement('div'); box.id=BOX;
+    Object.assign(box.style,{position:'fixed',inset:'8px',zIndex:'2147483647',background:'#050505',color:'#fff',padding:'12px',overflow:'auto',font:'12px/1.5 monospace',whiteSpace:'pre-wrap',WebkitOverflowScrolling:'touch'});
+    const copy=document.createElement('button'); copy.textContent='診断をコピー';
+    const close=document.createElement('button'); close.textContent='閉じる';
+    [copy,close].forEach(b=>Object.assign(b.style,{fontSize:'16px',padding:'8px 12px',marginRight:'8px'}));
+    copy.onclick=async()=>{try{await navigator.clipboard.writeText(report);copy.textContent='コピー済み'}catch(_){const ta=document.createElement('textarea');ta.value=report;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();copy.textContent='コピー済み'}};
+    close.onclick=()=>box.remove();
+    const pre=document.createElement('pre'); pre.textContent=report; pre.style.cssText='white-space:pre-wrap;word-break:break-word;margin-top:12px';
+    box.append(copy,close,pre); document.body.appendChild(box);
   }
-
   function install(){
-    if (document.getElementById(BTN_ID)) return;
-    const b=document.createElement('button');
-    b.id=BTN_ID; b.type='button'; b.textContent='✈ 診断';
-    Object.assign(b.style,{
-      position:'fixed',left:'10px',bottom:'86px',zIndex:'2147483646',
-      padding:'8px 10px',border:'1px solid rgba(255,255,255,.45)',
-      borderRadius:'999px',background:'rgba(0,0,0,.75)',color:'#fff',
-      font:'12px sans-serif'
-    });
-    b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); show(); });
-    document.body.appendChild(b);
+    if(document.getElementById(BTN)) return;
+    const b=document.createElement('button'); b.id=BTN;b.type='button';b.textContent='比較診断';
+    Object.assign(b.style,{position:'fixed',left:'10px',bottom:'86px',zIndex:'2147483646',padding:'8px 10px',border:'1px solid rgba(255,255,255,.45)',borderRadius:'999px',background:'rgba(0,0,0,.78)',color:'#fff',font:'12px sans-serif'});
+    b.onclick=e=>{e.preventDefault();e.stopPropagation();show()}; document.body.appendChild(b);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
-  else install();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
 })();
 
