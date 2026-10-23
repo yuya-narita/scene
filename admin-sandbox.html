@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 運営 — Sandbox TEST</title>
-  <link rel="stylesheet" href="./admin.css?v=70.5">
+  <link rel="stylesheet" href="./admin.css?v=20261023-preview-list-v1">
   <link rel="stylesheet" href="./ios-input-guard.css?v=70.4">
 </head>
 <body>
@@ -193,6 +193,8 @@
           <div class="orphan-copy"><small>未参照素材</small><strong id="orphanSummary">確認中…</strong><span id="orphanNote">現存作品から参照されていない素材を検出します。</span><span id="expiredPreviewSummary">期限切れPreview：確認中…</span></div>
           <button id="cleanupOrphansButton" type="button" disabled>お掃除</button>
         </div>
+        <div class="section-head preview-list-head"><div><small>PREVIEW</small><h2>作者確認用プレビュー</h2></div><small id="previewListCount" class="muted-note">確認中…</small></div>
+        <div id="previewList" class="preview-list"><div class="empty">読み込み中…</div></div>
         <div class="section-head work-ranking-head"><div><small>WORKS</small><h2>容量の大きい作品</h2></div><small class="muted-note">概算・共有素材は各作品に計上</small></div>
         <div id="heavyWorks" class="work-size-list"><div class="empty">読み込み中…</div></div>
       </section>
