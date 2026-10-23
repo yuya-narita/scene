@@ -2781,7 +2781,7 @@ html.sp-scene-image-open body{
 
 
 /* Trial: canonical vertical emoji cell. */
-.sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright{
+:is(.sp-text[data-writing-mode="vertical-rl"],.sp-history-text[style*="writing-mode: vertical-rl"],.sp-history-subtext[style*="writing-mode: vertical-rl"]) .sp-emoji-upright{
   display:inline-block;
   box-sizing:border-box;
   inline-size:1em;
@@ -2806,11 +2806,11 @@ html.sp-scene-image-open body{
 
   /* FE0E / VS15 must keep text presentation while retaining the same upright cell geometry. */
 }
-.sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright.sp-emoji-text-presentation{
+:is(.sp-text[data-writing-mode="vertical-rl"],.sp-history-text[style*="writing-mode: vertical-rl"],.sp-history-subtext[style*="writing-mode: vertical-rl"]) .sp-emoji-upright.sp-emoji-text-presentation{
   font-family:inherit!important;
 }
 /* reopen the canonical rule only to preserve its original closing structure */
-.sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright{
+:is(.sp-text[data-writing-mode="vertical-rl"],.sp-history-text[style*="writing-mode: vertical-rl"],.sp-history-subtext[style*="writing-mode: vertical-rl"]) .sp-emoji-upright{
 }
 
 /* AHAKO V14 — U+2708 FE0E: V12 presentation + physical orientation correction */
@@ -2824,3 +2824,9 @@ html.sp-scene-image-open body{
   transform:rotate(-90deg)!important;
   transform-origin:50% 50%!important;
 }
+
+/* AHAKO V16 — presentation and orientation are separate:
+   VS16/default Emoji_Presentation => emoji upright cell.
+   VS15/text-default symbols => native text presentation.
+   Airplane text glyph (VS15 or VS-none) keeps native presentation and receives orientation correction only.
+   The same wrappers are used by normal Scene and PAST. */

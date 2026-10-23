@@ -2893,7 +2893,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         } else {
           const text = document.createElement('span');
           text.className = 'sp-history-text';
-          text.textContent = scene.text || '';
+          this._appendPresentationAwarePlainText(text, scene.text || '');
           // History is still a navigator, but typography should identify the
           // actual Scene the author is reviewing.
           this._applyTextStyle(text, scene.presentation?.text || {}, false);
@@ -2902,7 +2902,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if (scene.subText) {
             const sub = document.createElement('span');
             sub.className = 'sp-history-subtext';
-            sub.textContent = scene.subText;
+            this._appendPresentationAwarePlainText(sub, scene.subText);
             this._applyTextStyle(sub, scene.presentation?.subText || {}, true);
             body.appendChild(sub);
           }
@@ -5297,6 +5297,37 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
+    _appendPresentationAwarePlainText(parent, value) {
+      const source=String(value??'');
+      if(!source){return;}
+      try{
+        const seg=new Intl.Segmenter(undefined,{granularity:'grapheme'});
+        for(const part of seg.segment(source)){
+          const text=part.segment;
+          const hasVS15=text.includes('\uFE0E');
+          const hasVS16=text.includes('\uFE0F');
+          const isEmojiPresentation=!hasVS15&&(hasVS16||/\p{Emoji_Presentation}/u.test(text)||/\p{Regional_Indicator}/u.test(text)||text.includes('\u20E3'));
+          const isAirplaneText=(text==='\u2708\uFE0E'||text==='\u2708');
+          if(isAirplaneText){
+            const a=document.createElement('span');
+            a.className='sp-airplane-text-rotate';
+            a.textContent=text;
+            parent.appendChild(a);
+          }else if(isEmojiPresentation){
+            const e=document.createElement('span');
+            e.className='sp-emoji-upright';
+            e.textContent=text;
+            parent.appendChild(e);
+          }else{
+            parent.appendChild(document.createTextNode(text));
+          }
+        }
+      }catch(_){
+        parent.appendChild(document.createTextNode(source));
+      }
+    }
+
+
     _renderRichText(node, scene, displayText = null) {
       const source = String(displayText ?? scene?.text ?? '');
       const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
@@ -5309,8 +5340,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const seg=new Intl.Segmenter(undefined,{granularity:'grapheme'});
           for(const part of seg.segment(source)){
             const text=part.segment;
-            const isEmoji=/\p{Extended_Pictographic}/u.test(text)||/\p{Regional_Indicator}/u.test(text)||text.includes('\uFE0F')||text.includes('\u20E3');
-            if(isEmoji)emojiGraphemes.push({start:part.index,end:part.index+text.length,text});
+            const hasVS15=text.includes('\uFE0E');
+            const hasVS16=text.includes('\uFE0F');
+            const isEmojiPresentation=!hasVS15&&(hasVS16||/\p{Emoji_Presentation}/u.test(text)||/\p{Regional_Indicator}/u.test(text)||text.includes('\u20E3'));
+            const isAirplaneText=(text==='\u2708\uFE0E'||text==='\u2708');
+            if(isEmojiPresentation||isAirplaneText)emojiGraphemes.push({start:part.index,end:part.index+text.length,text,isEmojiPresentation,isAirplaneText});
           }
         }catch(_){/* Old engines keep native rendering. */}
       }
@@ -5320,8 +5354,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         emojiGraphemes.filter(g=>g.end>offset&&g.start<end).forEach(g=>{
           if(g.start>cursor)parent.appendChild(document.createTextNode(source.slice(cursor,g.start)));
           const graphemeText=source.slice(g.start,g.end);
-          if(graphemeText==='\u2708\uFE0E'){const a=document.createElement('span');a.className='sp-airplane-text-rotate';a.textContent=graphemeText;parent.appendChild(a);}
-          else{const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=graphemeText;if(e.textContent.includes('\uFE0E'))e.classList.add('sp-emoji-text-presentation');parent.appendChild(e);}
+          if(graphemeText==='\u2708\uFE0E'||graphemeText==='\u2708'){const a=document.createElement('span');a.className='sp-airplane-text-rotate';a.textContent=graphemeText;parent.appendChild(a);}
+          else{const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=graphemeText;parent.appendChild(e);}
           cursor=g.end;
         });
         if(cursor<end)parent.appendChild(document.createTextNode(source.slice(cursor,end)));
@@ -5361,9 +5395,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // unrelated repeated word when offsets were re-anchored fuzzily.
           span.textContent=segmentText;
           const emojiCell=emojiGraphemes.some(g=>g.start===a&&g.end===b);
-          const airplaneTextPresentation=(segmentText==='\u2708\uFE0E');
+          const airplaneTextPresentation=(segmentText==='\u2708\uFE0E'||segmentText==='\u2708');
           if(airplaneTextPresentation)span.classList.add('sp-airplane-text-rotate');
-          if(emojiCell&&!airplaneTextPresentation){span.classList.add('sp-emoji-upright');if(segmentText.includes('\uFE0E'))span.classList.add('sp-emoji-text-presentation');}
+          if(emojiCell&&!airplaneTextPresentation){span.classList.add('sp-emoji-upright');}
           active.forEach(r=>{
             if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}
             if(r.kind==='quote')span.classList.add('sp-rich-quote');
