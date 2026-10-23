@@ -2812,9 +2812,3 @@ html.sp-scene-image-open body{
 /* reopen the canonical rule only to preserve its original closing structure */
 .sp-text[data-writing-mode="vertical-rl"] .sp-emoji-upright{
 }
-
-/* AHAKO V11 — FE0E text presentation: keep upright wrapper, disable TCY combine only */
-.sp-emoji-upright.sp-emoji-text-presentation{
-  text-combine-upright:none!important;
-  -webkit-text-combine:none!important;
-}

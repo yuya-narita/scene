@@ -5319,7 +5319,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const end=offset+text.length;let cursor=offset;
         emojiGraphemes.filter(g=>g.end>offset&&g.start<end).forEach(g=>{
           if(g.start>cursor)parent.appendChild(document.createTextNode(source.slice(cursor,g.start)));
-          const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=source.slice(g.start,g.end);if(e.textContent.includes('\uFE0E'))e.classList.add('sp-emoji-text-presentation');parent.appendChild(e);cursor=g.end;
+          const graphemeText=source.slice(g.start,g.end);
+          if(graphemeText==='\u2708\uFE0E'){parent.appendChild(document.createTextNode(graphemeText));}
+          else{const e=document.createElement('span');e.className='sp-emoji-upright';e.textContent=graphemeText;if(e.textContent.includes('\uFE0E'))e.classList.add('sp-emoji-text-presentation');parent.appendChild(e);}
+          cursor=g.end;
         });
         if(cursor<end)parent.appendChild(document.createTextNode(source.slice(cursor,end)));
       };
@@ -5358,7 +5361,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // unrelated repeated word when offsets were re-anchored fuzzily.
           span.textContent=segmentText;
           const emojiCell=emojiGraphemes.some(g=>g.start===a&&g.end===b);
-          if(emojiCell){span.classList.add('sp-emoji-upright');if(segmentText.includes('\uFE0E'))span.classList.add('sp-emoji-text-presentation');}
+          const airplaneTextPresentation=(segmentText==='\u2708\uFE0E');
+          if(emojiCell&&!airplaneTextPresentation){span.classList.add('sp-emoji-upright');if(segmentText.includes('\uFE0E'))span.classList.add('sp-emoji-text-presentation');}
           active.forEach(r=>{
             if(r.kind==='heading'){span.classList.add('sp-rich-heading',`sp-rich-h${Math.max(1,Math.min(6,Number(r.level)||2))}`);}
             if(r.kind==='quote')span.classList.add('sp-rich-quote');
