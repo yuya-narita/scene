@@ -13807,10 +13807,16 @@ function openDesktopTextDetail(){
         const numeric=Number(initial.size);const hasNumeric=Number.isFinite(numeric)&&numeric>0;
         select.value=hasNumeric?'px':(typeof initial.size==='string'?initial.size:'auto');
         px.value=String(Math.round(hasNumeric?numeric:24));px.hidden=select.value!=='px';
+        // Keep Custom px inside the Size field. The old vertical append made the
+        // Size cell taller and pushed Typeface/Color out of the shared grid.
+        const row=document.createElement('div');row.className='desktop-shell-size-row';
+        Object.assign(row.style,{display:'grid',gridTemplateColumns:select.value==='px'?'minmax(0,1fr) 86px':'minmax(0,1fr)',gap:'8px',alignItems:'center'});
+        select.style.minWidth='0';px.style.width='100%';px.style.minWidth='0';px.style.boxSizing='border-box';
+        const paintRow=()=>{row.style.gridTemplateColumns=select.value==='px'?'minmax(0,1fr) 86px':'minmax(0,1fr)';px.hidden=select.value!=='px';};
         const commitPx=()=>{const value=Math.max(8,Math.min(420,Math.round(Number(px.value)||24)));px.value=String(value);const st=store();st.size=value;onApply(st);};
-        select.addEventListener('change',()=>{px.hidden=select.value!=='px';if(select.value==='px'){commitPx();px.focus();px.select();}else{const st=store();st.size=select.value;onApply(st);}});
+        select.addEventListener('change',()=>{paintRow();if(select.value==='px'){commitPx();px.focus();px.select();}else{const st=store();st.size=select.value;onApply(st);}});
         px.addEventListener('input',commitPx);
-        field.append(cap,select,px);return field;
+        row.append(select,px);field.append(cap,row);paintRow();return field;
       })()
     );
 
