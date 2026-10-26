@@ -1775,24 +1775,70 @@
   }
 
   let issueTargetRow=null;
-  function openIssueDialog(row){
-    if(!row?.publication?.id){appAlert('先に作品を公開してください。');return;}
-    issueTargetRow=row;
+  function issueHistoryHtml(items=[]){
+    if(!items.length)return '<small style="opacity:.6">この作品の発行履歴はまだありません。</small>';
+    return items.map(item=>{
+      const active=item.status==='active'&&Number(item.remaining)>0;
+      return `<div data-issue-row="${escapeHtml(String(item.issueId||''))}" style="padding:10px;border:1px solid #d8dce1;border-radius:10px;display:grid;gap:7px">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${Number(item.issueLimit||0)}部中 ${Number(item.issuedCount||0)}部受取</strong><small>残り ${Number(item.remaining||0)}部</small></div>
+        <input type="text" readonly value="${escapeHtml(String(item.url||''))}" style="box-sizing:border-box;width:100%;min-height:36px;padding:0 8px;border:1px solid #d8dce1;border-radius:7px;font-size:11px">
+        <div style="display:flex;gap:7px"><button type="button" data-issue-copy style="flex:1">URLをコピー</button>${active?'<button type="button" data-issue-stop style="flex:1">発行を停止</button>':'<button type="button" disabled style="flex:1">発行終了</button>'}</div>
+      </div>`;
+    }).join('');
+  }
+  async function loadIssueHistory(workId){
+    const box=$('#issueHistory');if(!box||!workId)return;
+    box.innerHTML='<small style="opacity:.6">発行状況を確認しています…</small>';
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues?workId=${encodeURIComponent(workId)}`,{headers:authorAuthHeaders(),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error(payload?.error||'発行状況を取得できませんでした。');
+      box.innerHTML=issueHistoryHtml(payload.issues||[]);
+      box.querySelectorAll('[data-issue-row]').forEach(row=>{
+        const issueId=row.dataset.issueRow,input=row.querySelector('input');
+        row.querySelector('[data-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);$('#issueStatus').textContent='配付URLをコピーしました。';}catch(_){input.select();document.execCommand('copy');}});
+        row.querySelector('[data-issue-stop]')?.addEventListener('click',async e=>{
+          if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
+          e.currentTarget.disabled=true;
+          try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues/${encodeURIComponent(issueId)}`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'stop'})});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'停止できませんでした。');await loadIssueHistory(workId);}catch(error){appAlert(String(error?.message||error));e.currentTarget.disabled=false;}
+        });
+      });
+    }catch(error){box.innerHTML=`<small>${escapeHtml(String(error?.message||error))}</small>`;}
+  }
+  async function openIssueDialog(row){
+    if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
+    const fresh=await getDraftRecord(row?.id).catch(()=>null);
+    issueTargetRow=fresh||row;
+    const workId=draftMasterWorkId(issueTargetRow)||String(issueTargetRow?.workId||'');
+    if(!workId){appAlert('作品のMaster情報を確認できません。');return;}
     const input=$('#issueLimitInput'),result=$('#issueResult'),status=$('#issueStatus');
     if(input)input.value='100';if(result)result.hidden=true;if(status)status.textContent='';
     $('#issueDialog')?.showModal();
+    loadIssueHistory(workId);
   }
   async function createIssueFromDialog(){
-    const publicationId=String(issueTargetRow?.publication?.id||'');
+    const row=issueTargetRow;if(!row)return;
+    const workId=draftMasterWorkId(row)||String(row?.workId||'');
+    const publicationId=String(row?.publication?.id||'');
     const limit=Math.max(1,Math.min(100000,Math.floor(Number($('#issueLimitInput')?.value||0))));
-    const button=$('#issueCreate'),status=$('#issueStatus');if(!publicationId)return;
+    const button=$('#issueCreate'),status=$('#issueStatus');
     if(button)button.disabled=true;if(status)status.textContent='発行しています…';
     try{
-      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:{...authorAuthHeaders(),'Content-Type':'application/json'},body:JSON.stringify({publicationId,issueLimit:limit})});
+      let body={workId,issueLimit:limit};
+      if(publicationId && draftPublicationUrl(row)){
+        body.publicationId=publicationId;
+      }else{
+        const source=clone(row?.document||workingDocument);
+        if(!source?.scenes?.length)throw new Error('発行する作品本文を確認できません。');
+        ensureMasterIdentity(source);
+        body.workId=String(source.studio?.identity?.workId||workId);
+        body.scene=await prepareDocumentForPublish(source);
+      }
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:{...authorAuthHeaders(),'Content-Type':'application/json'},body:JSON.stringify(body)});
       const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok||!payload?.issue)throw new Error(payload?.error||`発行できませんでした (${response.status})`);
       const issue=payload.issue,url=String(issue.url||'');
       const result=$('#issueResult'),urlInput=$('#issueResultUrl'),count=$('#issueResultCount');if(result)result.hidden=false;if(urlInput)urlInput.value=url;if(count)count.textContent=`${issue.issueLimit}部発行しました · 残り ${issue.remaining}部`;
-      if(status)status.textContent='このURLを一度共有すれば配付できます。';
+      if(status)status.textContent='このURLを一度共有すれば配付できます。公開作品一覧には載りません。';
+      await loadIssueHistory(body.workId);
     }catch(error){console.error(error);if(status)status.textContent=String(error?.message||error);}
     finally{if(button)button.disabled=false;}
   }
@@ -1872,7 +1918,7 @@
           <button data-publish ${(!isPublished && !isStopped) || status==='dirty'?'':'hidden'}>${status==='dirty'?t('publish.update'):t('publish.action')}</button>
           <button data-share ${isPublished?'':'hidden'}>${t('publish.share')}</button>
           <button data-copy ${isPublished?'':'hidden'}>${t('draft.link')}</button>
-          <button data-issue ${isPublished?'':'hidden'}>発行</button>
+          <button data-issue>発行</button>
           <button data-stop ${isPublished?'':'hidden'}>${t('draft.unpublish')}</button>
           <button data-republish ${isStopped?'':'hidden'}>${t('draft.republish')}</button>
           <button data-delete>${t('draft.delete')}</button>
@@ -1903,9 +1949,9 @@
         const publishRow={...row,publication:{...(row.publication||{}),url:publicationUrl}};
         el.querySelector('[data-share]').onclick=()=>shareDraftPublication(publishRow);
         el.querySelector('[data-copy]').onclick=e=>copyAnyPublishedUrl(publicationUrl,e.currentTarget);
-        el.querySelector('[data-issue]').onclick=()=>openIssueDialog(row);
         el.querySelector('[data-stop]').onclick=()=>stopDraftPublication(row);
       }
+      el.querySelector('[data-issue]').onclick=()=>openIssueDialog(row);
       if(isStopped)el.querySelector('[data-republish]').onclick=()=>republishDraftPublication(row);
       const publishButton=el.querySelector('[data-publish]');
       if(publishButton && !publishButton.hidden){
