@@ -1785,7 +1785,7 @@
       return `<div data-issue-row="${issueEscapeHtml(String(item.issueId||''))}" style="padding:10px;border:1px solid #d8dce1;border-radius:10px;display:grid;gap:7px">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${Number(item.issueLimit||0)}部中 ${Number(item.issuedCount||0)}部受取</strong><small>残り ${Number(item.remaining||0)}部</small></div>
         <input type="text" readonly value="${issueEscapeHtml(String(item.url||''))}" style="box-sizing:border-box;width:100%;min-height:36px;padding:0 8px;border:1px solid #d8dce1;border-radius:7px;font-size:11px">
-        <div style="display:flex;gap:7px"><button type="button" data-issue-copy style="flex:1">URLをコピー</button>${active?'<button type="button" data-issue-stop style="flex:1">発行を停止</button>':'<button type="button" disabled style="flex:1">発行終了</button>'}</div>
+        <div style="display:flex;gap:7px">${active?'<button type="button" data-issue-copy style="flex:1">URLをコピー</button><button type="button" data-issue-stop style="flex:1">発行を停止</button>':'<button type="button" disabled style="flex:1">URL停止中</button><button type="button" disabled style="flex:1">発行停止済み</button>'}</div>
       </div>`;
     }).join('');
   }
@@ -1802,7 +1802,14 @@
         row.querySelector('[data-issue-stop]')?.addEventListener('click',async e=>{
           if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
           e.currentTarget.disabled=true;
-          try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues/${encodeURIComponent(issueId)}`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'stop'})});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'停止できませんでした。');await loadIssueHistory(workId);}catch(error){appAlert(String(error?.message||error));e.currentTarget.disabled=false;}
+          try{
+            $('#issueStatus').textContent='発行を停止しています…';
+            const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'stop',issueId})});
+            const j=await r.json().catch(()=>null);
+            if(!r.ok||!j?.ok)throw new Error(j?.error||'停止できませんでした。');
+            $('#issueStatus').textContent='発行を停止しました。すでに受け取られた一冊はそのまま読めます。';
+            await loadIssueHistory(workId);
+          }catch(error){await appAlert(String(error?.message||error));e.currentTarget.disabled=false;}
         });
       });
     }catch(error){box.innerHTML=`<small>${issueEscapeHtml(String(error?.message||error))}</small>`;}
