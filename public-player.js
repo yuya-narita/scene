@@ -437,6 +437,22 @@
   function buildEnding(doc) {
     const families={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
     endingLabel.style.fontFamily=families[doc?.ending?.fontFamily]||families.serif;
+    // Public shell owns the visible cover/ending DOM around Player Core, so it
+    // must apply the same authored ending style as Studio/Player Core.
+    const endingStyle=doc?.ending?.style||{};
+    endingLabel.style.removeProperty('font-size');
+    endingLabel.style.removeProperty('color');
+    if(endingStyle.fontFamily&&endingStyle.fontFamily!=='inherit'&&families[endingStyle.fontFamily]){
+      endingLabel.style.setProperty('font-family',families[endingStyle.fontFamily],'important');
+    }
+    if(endingStyle.color)endingLabel.style.setProperty('color',String(endingStyle.color),'important');
+    if(endingStyle.size&&endingStyle.size!=='auto'){
+      const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)',xxl:'clamp(38px,10vw,72px)',fullscreen:'clamp(48px,13vw,96px)',giant:'clamp(60px,16vw,120px)',breakout:'clamp(72px,20vw,160px)'};
+      const raw=endingStyle.size;
+      const numeric=typeof raw==='number'?Number(raw):(/^\d+(?:\.\d+)?(?:px)?$/i.test(String(raw).trim())?parseFloat(String(raw)):NaN);
+      const resolved=Number.isFinite(numeric)?`${numeric}px`:sizeMap[String(raw)];
+      if(resolved)endingLabel.style.setProperty('font-size',resolved,'important');
+    }
     const label=String(doc.ending?.label ?? doc.ending?.title ?? '').trim(); endingLabel.textContent=label; endingLabel.hidden=!label;
     const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
     const hasPositions=links.some(x=>x?.position==='left'||x?.position==='right'); const left=hasPositions?(links.find(x=>x?.position==='left')||null):(links[0]||null); const right=hasPositions?(links.find(x=>x?.position==='right')||null):(links.length>1?links[1]:null);
@@ -521,9 +537,11 @@
       if(st.color)el.style.setProperty('color',String(st.color),'important');
 
       if(st.size && st.size!=='auto'){
-        const resolved=typeof st.size==='number'
-          ? Number(st.size)
-          : baseSize*(sizeScale[String(st.size)]||1);
+        const raw=st.size;
+        const numeric=typeof raw==='number'?Number(raw):(/^\d+(?:\.\d+)?(?:px)?$/i.test(String(raw).trim())?parseFloat(String(raw)):NaN);
+        const resolved=Number.isFinite(numeric)
+          ? numeric
+          : baseSize*(sizeScale[String(raw)]||1);
         if(Number.isFinite(resolved))el.style.setProperty('font-size',`${resolved}px`,'important');
       }
     }
