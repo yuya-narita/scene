@@ -5,23 +5,6 @@
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
 
-  // TEMP DEBUG MARKER: proves which Studio script is actually executing.
-  const ISSUE_DEBUG_BUILD='ISSUE DEBUG V2.6-MARKER';
-  const mountIssueDebugBuildMarker=()=>{
-    if(document.getElementById('issueDebugBuildMarker'))return;
-    const badge=document.createElement('button');
-    badge.id='issueDebugBuildMarker';
-    badge.type='button';
-    badge.textContent=ISSUE_DEBUG_BUILD;
-    badge.setAttribute('aria-label','Studio script build marker');
-    Object.assign(badge.style,{position:'fixed',right:'10px',bottom:'10px',zIndex:'2147483647',padding:'8px 10px',border:'2px solid #111',borderRadius:'8px',background:'#ffef5a',color:'#111',font:'700 12px/1.2 system-ui,sans-serif',boxShadow:'0 2px 10px rgba(0,0,0,.25)',cursor:'pointer'});
-    badge.addEventListener('click',()=>appAlert(`${ISSUE_DEBUG_BUILD}\n\nscript: ${document.currentScript?.src||'loaded'}\n\nこの表示が見えていれば、識別子入りのscript.jsが実行されています。`));
-    document.body.appendChild(badge);
-  };
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mountIssueDebugBuildMarker,{once:true});
-  else mountIssueDebugBuildMarker();
-  console.info(ISSUE_DEBUG_BUILD);
-
   // All Studio notices, confirmations and text requests stay inside the
   // product UI. The backdrop and Escape key intentionally do not dismiss
   // these dialogs, so switching away to check mail/files cannot lose state.
@@ -1817,8 +1800,9 @@
         const issueId=row.dataset.issueRow,input=row.querySelector('input');
         row.querySelector('[data-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);$('#issueStatus').textContent='配付URLをコピーしました。';}catch(_){input.select();document.execCommand('copy');}});
         row.querySelector('[data-issue-stop]')?.addEventListener('click',async e=>{
+          const stopButton=e.currentTarget;
           if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
-          e.currentTarget.disabled=true;
+          if(stopButton)stopButton.disabled=true;
           try{
             $('#issueStatus').textContent='発行を停止しています…';
             const debugUrl=`${SCENE_STUDIO_API_BASE}/author/issues`;
@@ -1837,7 +1821,7 @@
             if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');
             $('#issueStatus').textContent='発行を停止しました。すでに受け取られた一冊はそのまま読めます。';
             await loadIssueHistory(workId);
-          }catch(error){await appAlert(String(error?.message||error));e.currentTarget.disabled=false;}
+          }catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}
         });
       });
     }catch(error){box.innerHTML=`<small>${issueEscapeHtml(String(error?.message||error))}</small>`;}
@@ -1910,8 +1894,9 @@
         const issueId=row.dataset.globalIssueRow,input=row.querySelector('input');
         row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);}catch(_){input.select();document.execCommand('copy');}});
         row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{
+          const stopButton=e.currentTarget;
           if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
-          e.currentTarget.disabled=true;
+          if(stopButton)stopButton.disabled=true;
           try{
             const debugUrl=`${SCENE_STUDIO_API_BASE}/author/issues`;
             const debugBody={action:'stop',issueId};
@@ -1928,7 +1913,7 @@
             if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);
             if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');
             await loadAllIssueHistory();
-          }catch(error){await appAlert(String(error?.message||error));e.currentTarget.disabled=false;}
+          }catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}
         });
       });
     }catch(error){box.innerHTML=`<small>${issueEscapeHtml(String(error?.message||error))}</small>`;}
