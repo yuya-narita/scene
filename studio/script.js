@@ -816,7 +816,7 @@
     // Japanese literals. Exact-match only: never touches author text in inputs/textareas.
     if(uiLanguage==='en'){
       const legacyEn=new Map([
-        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['制作中一覧','Works'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
+        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['最近使った作品','Recent .scene'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
         ['タイトルと本文をサンプルに置き換えました','Title and text replaced with the sample.'],['「表紙に戻る」は固定です','“Back to cover” is fixed.'],
         ['表紙に表示する情報','Show on cover'],['作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。','Keep the work info; choose only what appears on the cover. Turn all off for an image-only cover.'],
         ['作品タイトル','Work title'],['サブタイトル','Subtitle'],['作者名','Author'],['話数','Episode label'],['今回のタイトル','Episode title'],['選択中の文字（Aa）','Selected text (Aa)'],['選択中の文字 (Aa)','Selected text (Aa)'],['対象','Target'],['書体','Typeface'],['サイズ','Size'],['色','Color'],['おまかせ','Automatic'],['任意色','Custom color'],
@@ -847,7 +847,7 @@
     // Japanese literals. Exact-match only: never touches author text in inputs/textareas.
     if(uiLanguage==='en'){
       const legacyEn=new Map([
-        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['制作中一覧','Works'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
+        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['最近使った作品','Recent .scene'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
         ['タイトルと本文をサンプルに置き換えました','Title and text replaced with the sample.'],['「表紙に戻る」は固定です','“Back to cover” is fixed.'],
         ['表紙に表示する情報','Show on cover'],['作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。','Keep the work info; choose only what appears on the cover. Turn all off for an image-only cover.'],
         ['作品タイトル','Work title'],['サブタイトル','Subtitle'],['作者名','Author'],['話数','Episode label'],['今回のタイトル','Episode title'],['選択中の文字（Aa）','Selected text (Aa)'],['選択中の文字 (Aa)','Selected text (Aa)'],['対象','Target'],['書体','Typeface'],['サイズ','Size'],['色','Color'],['おまかせ','Automatic'],['任意色','Custom color'],
@@ -1141,11 +1141,14 @@
   let protectedResplitPending = false;
 
   const DRAFT_DB_NAME='scene-studio-drafts';
-  const DRAFT_DB_VERSION=3;
+  const DRAFT_DB_VERSION=4;
   const DRAFT_STORE='drafts';
   const DRAFT_META_STORE='draftMeta';
   const DRAFT_RECOVERY_STORE='draftRecovery';
   const DRAFT_VERSION_STORE='draftVersions';
+  const RECENT_SCENE_STORE='recentScenes';
+  const RECENT_SCENE_LIMIT=10;
+  let pendingRecentSceneId='';
   const DRAFT_VERSION_LIMIT=10;
   const DRAFT_LAST_KEY='sceneStudio.lastDraftId';
   let currentDraftId=localStorage.getItem(DRAFT_LAST_KEY)||'';
@@ -1172,11 +1175,61 @@
         const meta=db.objectStoreNames.contains(DRAFT_META_STORE)?req.transaction.objectStore(DRAFT_META_STORE):db.createObjectStore(DRAFT_META_STORE,{keyPath:'id'});
         if(!db.objectStoreNames.contains(DRAFT_RECOVERY_STORE))db.createObjectStore(DRAFT_RECOVERY_STORE,{keyPath:'recoveryId'});
         if(!db.objectStoreNames.contains(DRAFT_VERSION_STORE)){const versions=db.createObjectStore(DRAFT_VERSION_STORE,{keyPath:'snapshotId'});versions.createIndex('draftId','draftId',{unique:false});}
+        if(!db.objectStoreNames.contains(RECENT_SCENE_STORE))db.createObjectStore(RECENT_SCENE_STORE,{keyPath:'id'});
         drafts.openCursor().onsuccess=event=>{const cursor=event.target.result;if(!cursor)return;meta.put(draftMetaFromRow(cursor.value));cursor.continue();};
       };
       req.onsuccess=()=>resolve(req.result);
       req.onerror=()=>reject(req.error);
     });
+  }
+  async function recentSceneStore(mode='readonly'){
+    const db=await openDraftDB();
+    return {db,store:db.transaction(RECENT_SCENE_STORE,mode).objectStore(RECENT_SCENE_STORE)};
+  }
+  async function listRecentScenes(){
+    const {db,store}=await recentSceneStore();
+    const rows=await new Promise((resolve,reject)=>{const r=store.getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});
+    db.close();return rows.sort((a,b)=>(b.lastOpenedAt||0)-(a.lastOpenedAt||0)).slice(0,RECENT_SCENE_LIMIT);
+  }
+  async function removeRecentScene(id){
+    const {db,store}=await recentSceneStore('readwrite');store.delete(id);await new Promise(resolve=>{store.transaction.oncomplete=resolve;store.transaction.onerror=resolve;});db.close();
+  }
+  function recentSceneIdentity(file,doc){
+    const workId=String(doc?.studio?.identity?.workId||'').trim();
+    return `file:${String(file?.name||'scene').toLowerCase()}:${workId||'no-work-id'}`;
+  }
+  async function recentCoverThumbnail(src){
+    if(!src)return '';
+    try{
+      const image=new Image();image.decoding='async';image.src=src;
+      await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;});
+      const maxW=144,maxH=192,scale=Math.min(maxW/image.naturalWidth,maxH/image.naturalHeight,1);
+      const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+      canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+      return canvas.toDataURL('image/jpeg',.72);
+    }catch(_){return '';}
+  }
+  async function rememberRecentScene(file,handle,doc,{replaceId=''}={}){
+    if(!file||!doc)return;
+    const id=recentSceneIdentity(file,doc);
+    const coverThumb=await recentCoverThumbnail(doc?.cover?.src||coverImageUrl||'');
+    const row={id,fileName:String(file.name||''),title:String(doc.title||'Untitled'),seriesTitle:String(doc.metadata?.seriesTitle||''),episode:String(doc.metadata?.episode||''),episodeTitle:String(doc.metadata?.episodeTitle||''),lastOpenedAt:Date.now(),coverThumb,handle:handle||null};
+    const db=await openDraftDB();const tx=db.transaction(RECENT_SCENE_STORE,'readwrite'),store=tx.objectStore(RECENT_SCENE_STORE);
+    if(replaceId&&replaceId!==id)store.delete(replaceId);
+    store.put(row);
+    await new Promise(resolve=>{tx.oncomplete=resolve;tx.onerror=resolve;tx.onabort=resolve;});db.close();
+    const rows=await listRecentScenes();
+    if(rows.length>=RECENT_SCENE_LIMIT){
+      const db2=await openDraftDB(),tx2=db2.transaction(RECENT_SCENE_STORE,'readwrite'),st=tx2.objectStore(RECENT_SCENE_STORE);
+      const all=await new Promise(resolve=>{const r=st.getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>resolve([]);});
+      all.sort((a,b)=>(b.lastOpenedAt||0)-(a.lastOpenedAt||0)).slice(RECENT_SCENE_LIMIT).forEach(item=>st.delete(item.id));
+      await new Promise(resolve=>{tx2.oncomplete=resolve;tx2.onerror=resolve;});db2.close();
+    }
+  }
+  async function clearWorkingDraftCache(){
+    const db=await openDraftDB();const tx=db.transaction([DRAFT_STORE,DRAFT_META_STORE,DRAFT_VERSION_STORE],'readwrite');
+    tx.objectStore(DRAFT_STORE).clear();tx.objectStore(DRAFT_META_STORE).clear();tx.objectStore(DRAFT_VERSION_STORE).clear();
+    await new Promise(resolve=>{tx.oncomplete=resolve;tx.onerror=resolve;tx.onabort=resolve;});db.close();
   }
   async function draftStore(mode='readonly'){
     const db=await openDraftDB();
@@ -1932,138 +1985,33 @@
   $('#issueManagerClose')?.addEventListener('click',()=>$('#issueManagerDialog')?.close());
 
   async function refreshDraftUI(showResume=true){
-    // Buttons need summaries, not every work's full document and Blob array.
-    // Fetch the full row only when it is opened/published.
-    const rows=(await verifyLegacyDraftPublications(await listDraftRecords())).map(row=>({
-      ...draftMetaFromRow(row),
-      recCompletedCount:Number(row.recProgress?.completedCount||row.recCompletedCount||0),
-      publishStatus:draftPublishStatus(row)
-    }));
-    latestDraftSummary=rows[0]||null;
-
-    const label=$('#draftCountLabel');
-    if(label)label.textContent=`${rows.length}作品`;
-    const toolbarCount=$('#draftToolbarCount');
-    if(toolbarCount)toolbarCount.textContent=`${rows.length}件`;
-    const foot=$('.draft-manager-foot > small');
-    if(foot)foot.textContent=uiLanguage==='ja'
-      ? '作品数の上限はありません。制作途中はこの端末へ自動保存されます。'
-      : 'Create as many works as you like. Drafts are autosaved on this device.';
-
-    const list=$('#draftList');
-    if(!list)return;
-
-    const publishedRows=rows.filter(draftIsPublished);
-    const draftRows=rows.filter(row=>!draftIsPublished(row));
-    const allCount=$('#allCountLabel');
-    const draftOnlyCount=$('#draftOnlyCountLabel');
-    const publishedCount=$('#publishedCountLabel');
-    if(allCount)allCount.textContent=String(rows.length);
-    if(draftOnlyCount)draftOnlyCount.textContent=String(draftRows.length);
-    if(publishedCount)publishedCount.textContent=String(publishedRows.length);
-
-    const activeFilter=document.querySelector('.draft-manager-tab.is-active')?.dataset.draftFilter||'all';
-    const visibleRows=activeFilter==='published'
-      ? publishedRows
-      : activeFilter==='draft'
-        ? draftRows
-        : rows;
-
+    const rows=await listRecentScenes();
+    const label=$('#draftCountLabel');if(label)label.textContent=`${rows.length}件`;
+    const toolbarCount=$('#draftToolbarCount');if(toolbarCount)toolbarCount.textContent=`${rows.length}件`;
+    const menuCount=$('#menuDraftCount');if(menuCount)menuCount.textContent=`${rows.length}件`;
+    const list=$('#draftList');if(!list)return;
     list.innerHTML='';
-    if(!visibleRows.length){
-      const labels={all:t('draft.empty.all'),draft:t('draft.empty.draft'),published:t('draft.empty.published')};
-      list.innerHTML=`<p class="draft-empty">${labels[activeFilter]||labels.all}</p>`;
-      return;
-    }
-
-    visibleRows.forEach(row=>{
-      const total=row.sceneCount||row.document?.scenes?.length||0;
-      const rec=Math.min(total,Number(row.recProgress?.completedCount||row.recCompletedCount||0));
-      const publicationUrl=draftPublicationUrl(row);
-      const isPublished=Boolean(publicationUrl);
-      const isStopped=!isPublished && draftPublicationBelongsToWork(row) && Boolean(row.publication?.id);
-      const status=isPublished?row.publishStatus:(isStopped?'stopped':'draft');
-      const el=document.createElement('article');
-      el.className=`draft-row unified-work-row ${isPublished?'is-published':''} ${isStopped?'is-stopped':''} ${status==='dirty'?'is-dirty':''}`;
-
-      el.innerHTML=`
-        <div class="unified-work-copy">
-          <div class="unified-work-title-line">
-            <strong></strong>
-            <span class="unified-work-badges"></span>
-          </div>
-          <div class="unified-work-identity" hidden></div>
-          <small class="unified-work-meta"></small>
-          <small class="published-url" ${isPublished?'':'hidden'}></small>
-        </div>
-        <div class="draft-row-actions unified-work-actions">
-          <button data-open>${t('draft.continue')}</button>
-          <button data-publish ${(!isPublished && !isStopped) || status==='dirty'?'':'hidden'}>${status==='dirty'?t('publish.update'):t('publish.action')}</button>
-          <button data-share ${isPublished?'':'hidden'}>${t('publish.share')}</button>
-          <button data-copy ${isPublished?'':'hidden'}>${t('draft.link')}</button>
-          <button data-issue>発行</button>
-          <button data-stop ${isPublished?'':'hidden'}>${t('draft.unpublish')}</button>
-          <button data-republish ${isStopped?'':'hidden'}>${t('draft.republish')}</button>
-          <button data-delete>${t('draft.delete')}</button>
-        </div>`;
-
-      const identity=draftListIdentity(row);
-      el.querySelector('strong').textContent=identity.title;
-      const identityLine=el.querySelector('.unified-work-identity');
-      identityLine.textContent=identity.detail;identityLine.hidden=!identity.detail;
-
-      const badges=el.querySelector('.unified-work-badges');
-      if(isPublished || isStopped){
-        const badge=document.createElement('span');
-        badge.className=`published-status ${status==='dirty'?'is-dirty':''} ${isStopped?'is-stopped':''}`;
-        badge.textContent=isStopped?t('draft.status.stopped'):(status==='dirty'?t('draft.status.dirty'):t('draft.status.published'));
-        badges.appendChild(badge);
-      }
-
-      const meta=[
-        `${total} Scenes`,
-        total?`REC ${rec}/${total}`:'',
-        formatDraftTime(row.updatedAt)
-      ].filter(Boolean).join(' · ');
-      el.querySelector('.unified-work-meta').textContent=meta;
-
-      if(isPublished){
-        el.querySelector('.published-url').textContent=publicationUrl;
-        const publishRow={...row,publication:{...(row.publication||{}),url:publicationUrl}};
-        el.querySelector('[data-share]').onclick=()=>shareDraftPublication(publishRow);
-        el.querySelector('[data-copy]').onclick=e=>copyAnyPublishedUrl(publicationUrl,e.currentTarget);
-        el.querySelector('[data-stop]').onclick=()=>stopDraftPublication(row);
-      }
-      el.querySelector('[data-issue]').onclick=()=>openIssueDialog(row);
-      if(isStopped)el.querySelector('[data-republish]').onclick=()=>republishDraftPublication(row);
-      const publishButton=el.querySelector('[data-publish]');
-      if(publishButton && !publishButton.hidden){
-        publishButton.onclick=async()=>{
-          const fresh=await getDraftRecord(row.id); if(!fresh)return;
-          await restoreDraftRecord(fresh);
-          $('#draftManagerDialog')?.close();
-          requestAnimationFrame(()=>openPublishDialogFromEasy());
-        };
-      }
-
-      el.querySelector('[data-open]').onclick=async()=>{
-        await restoreDraftRecord(await getDraftRecord(row.id));
-        $('#draftManagerDialog').close();
+    if(!rows.length){list.innerHTML='<p class="draft-empty">最近使った.sceneはまだありません。</p>';return;}
+    rows.forEach(row=>{
+      const el=document.createElement('article');el.className='recent-scene-row';
+      const detail=[row.seriesTitle,row.episode,row.episodeTitle].filter(Boolean).join('　');
+      const cover=row.coverThumb?`<img class="recent-scene-cover" alt="" src="${issueEscapeHtml(row.coverThumb)}">`:'<div class="recent-scene-cover recent-scene-cover-empty" aria-hidden="true">あ</div>';
+      el.innerHTML=`${cover}<div class="recent-scene-copy"><strong></strong><small></small><time></time></div><div class="recent-scene-actions"><button type="button" data-recent-open>開く</button><button type="button" data-recent-remove aria-label="履歴から削除">×</button></div>`;
+      el.querySelector('strong').textContent=row.title||row.fileName||'Untitled';
+      const small=el.querySelector('small');small.textContent=detail||row.fileName||'.scene';
+      el.querySelector('time').textContent=formatDraftTime(row.lastOpenedAt);
+      el.querySelector('[data-recent-open]').onclick=async()=>{
+        const handle=row.handle;
+        if(handle&&typeof handle.getFile==='function'){
+          try{
+            let permission=typeof handle.queryPermission==='function'?await handle.queryPermission({mode:'read'}):'granted';
+            if(permission!=='granted'&&typeof handle.requestPermission==='function')permission=await handle.requestPermission({mode:'read'});
+            if(permission==='granted'){const file=await handle.getFile();$('#draftManagerDialog')?.close();await importScenePackage(file,{fileHandle:handle,recentId:row.id});return;}
+          }catch(error){console.warn('Recent .scene reopen failed',error);}
+        }
+        pendingRecentSceneId=row.id;$('#draftManagerDialog')?.close();$('#importPackageInput')?.click();
       };
-      el.querySelector('[data-delete]').onclick=async()=>{
-        const hasHosted=Boolean(row.publication?.id);
-        if(!await appConfirm(hasHosted?t('draft.deleteHostedConfirm',{title:row.title||'Untitled'}):t('draft.deleteLocalConfirm',{title:row.title||'Untitled'}),{danger:true,confirmLabel:uiLanguage==='ja'?'削除する':'Delete'}))return;
-        try{
-          if(hasHosted)await deleteHostedPublication(row.publication.id);
-          await removeDraftRecord(row.id);
-          if(currentDraftId===row.id){
-            currentDraftId=''; latestPublishedId=''; latestPublishedUrl=''; latestPublishedFingerprint='';
-            latestPublishedAt=0; latestPublicationStoppedAt=0; localStorage.removeItem(DRAFT_LAST_KEY);
-          }
-          await refreshDraftUI(true);
-        }catch(error){console.warn('Delete failed',error);appAlert(t('draft.deleteFailed'));}
-      };
-
+      el.querySelector('[data-recent-remove]').onclick=async()=>{await removeRecentScene(row.id);await refreshDraftUI(false);};
       list.appendChild(el);
     });
   }
@@ -2072,6 +2020,7 @@
     requestPersistentDraftStorage();
     if(!await prepareWorkReplacement())return false;
     workingDocument=null;coverStartMode='scene';coverStartTrigger='tap';relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceModeLocked)commerceModeLocked.checked=false;if(commerceSupportEnabled)commerceSupportEnabled.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    await clearWorkingDraftCache();
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     latestPublishedId='';
     latestPublishedUrl='';
@@ -5292,7 +5241,7 @@ return flowCommentCard;}
     }finally{sceneExportBusy=false;}
   }
 
-  async function importScenePackage(file){
+  async function importScenePackage(file,{fileHandle=null,recentId=""}={}){
     try{
       const entries=await readZipEntries(file);
       const sceneBytes=entries.get('scene.json') || [...entries.entries()].find(([name])=>/\.scene\.json$/i.test(name))?.[1];
@@ -5361,6 +5310,7 @@ return flowCommentCard;}
       workingDocument=doc;
       ensureMasterIdentity(workingDocument);
       latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
+      await clearWorkingDraftCache();
       currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
       restoreStudioStateFromPackage(studioState,doc);
       easySourceDirty=false;
@@ -5386,6 +5336,8 @@ return flowCommentCard;}
       entries.clear();assetsByPath.clear();refs.length=0;
       await hydrateMasterPublicationState(workingDocument,{warnStale:true});
       await saveDraftNow();
+      await rememberRecentScene(file,fileHandle,workingDocument,{replaceId:recentId||pendingRecentSceneId});pendingRecentSceneId='';
+      await refreshDraftUI(false);
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
       // A loaded Master is already Scene-based. Open it directly in Live
       // Studio instead of sending the author through the legacy Toolbox.
@@ -9493,8 +9445,8 @@ return flowCommentCard;}
   $('#draftManagerDialog')?.addEventListener('close',unlockDraftManagerBackground);
   $('#draftManagerDialog')?.addEventListener('cancel',()=>{requestAnimationFrame(unlockDraftManagerBackground);});
 
-  $$('.draft-manager-tab').forEach(tab=>tab.addEventListener('click',async()=>{
-    $$('.draft-manager-tab').forEach(item=>{
+  $$('.draft-manager-tab[data-draft-filter]').forEach(tab=>tab.addEventListener('click',async()=>{
+    $$('.draft-manager-tab[data-draft-filter]').forEach(item=>{
       const active=item===tab;
       item.classList.toggle('is-active',active);
       item.setAttribute('aria-selected',active?'true':'false');
@@ -9626,6 +9578,14 @@ return flowCommentCard;}
     if(scenePackageFilenameManual)return;
     $('#exportWorkFileName').value=suggestedScenePackageFileName($('#exportWorkTitle').value,$('#exportWorkEpisode').value);
   }));
+  document.querySelectorAll('label[for="importPackageInput"]').forEach(label=>label.addEventListener('click',async event=>{
+    if(typeof window.showOpenFilePicker!=='function')return;
+    event.preventDefault();
+    try{
+      const [handle]=await window.showOpenFilePicker({multiple:false,types:[{description:'Scene',accept:{'application/octet-stream':['.scene','.zip'], 'application/zip':['.zip']}}]});
+      if(!handle)return;const file=await handle.getFile();closeEasyMenu();await importScenePackage(file,{fileHandle:handle,recentId:pendingRecentSceneId});pendingRecentSceneId='';
+    }catch(error){if(error?.name!=='AbortError')console.warn('Open .scene failed',error);}
+  }));
   $('#importSceneInput').addEventListener('change',async(event)=>{
     const file=event.target.files?.[0];
     if(file) await importSceneDocument(file);
@@ -9633,7 +9593,7 @@ return flowCommentCard;}
   });
   $('#importPackageInput').addEventListener('change',async(event)=>{
     const file=event.target.files?.[0];
-    if(file){closeEasyMenu();await importScenePackage(file);}
+    if(file){closeEasyMenu();await importScenePackage(file,{recentId:pendingRecentSceneId});pendingRecentSceneId='';}
     updateAutoRecStartLabel();
     refreshDraftUI(true).catch(err=>console.warn('Draft UI refresh failed',err));
     updateEasyFileActions();

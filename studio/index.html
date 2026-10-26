@@ -343,7 +343,7 @@
           <span>配布版を書き出す</span><small>Distribution .scene</small>
         </button>
         <button id="menuDraftManageButton" class="easy-menu-item" type="button">
-          <span>制作中一覧</span><small id="menuDraftCount">0件</small>
+          <span>最近使った作品</span><small id="menuDraftCount">0件</small>
         </button>
         <button id="menuIssueManageButton" class="easy-menu-item" type="button">
           <span>発行一覧</span><small>配付中の一冊</small>
@@ -358,7 +358,7 @@
   <section id="editorScreen" class="screen editor-screen">
     <section class="draft-toolbar" aria-label="制作中の作品">
       <button id="draftManageButton" class="draft-toolbar-button draft-toolbar-list" type="button">
-        <span>制作中一覧</span><small id="draftToolbarCount">0件</small>
+        <span>最近使った作品</span><small id="draftToolbarCount">0件</small>
       </button>
       <button id="newDraftQuickButton" class="draft-toolbar-button draft-toolbar-new" type="button">
         <span>＋ 新しく作る</span><small>新しい下書き</small>
@@ -1167,22 +1167,16 @@
     </div>
   </dialog>
 
-  <dialog id="draftManagerDialog" class="draft-manager-dialog">
+  <dialog id="draftManagerDialog" class="draft-manager-dialog recent-scene-dialog">
     <div class="draft-manager-card">
       <div class="draft-manager-head">
-        <div><span>LOCAL DRAFTS</span><h2>制作途中の作品</h2><small id="draftCountLabel">0作品</small></div>
+        <div><span>RECENT .SCENE</span><h2>最近使った作品</h2><small id="draftCountLabel">0件</small></div>
         <button id="draftManagerClose" type="button" aria-label="閉じる">×</button>
       </div>
-      <nav class="draft-manager-tabs" aria-label="作品の表示切替">
-        <button type="button" class="draft-manager-tab is-active" data-draft-filter="all" aria-selected="true">全て <span id="allCountLabel">0</span></button>
-        <button type="button" class="draft-manager-tab" data-draft-filter="draft" aria-selected="false">途中 <span id="draftOnlyCountLabel">0</span></button>
-        <button type="button" class="draft-manager-tab" data-draft-filter="published" aria-selected="false">公開 <span id="publishedCountLabel">0</span></button>
-      </nav>
-      <div id="draftList" class="draft-list draft-manager-unified-list"></div>
-
+      <div id="draftList" class="draft-list recent-scene-list"></div>
       <div class="draft-manager-foot">
-        <button id="newDraftButton" type="button">＋ 新しく作る</button>
-        <small>制作途中は端末内に自動保存されます。公開中の作品はここから共有・公開停止できます。</small>
+        <label class="recent-scene-open-file" for="importPackageInput">PCから.sceneを開く</label>
+        <small>.scene本体はStudioに保管しません。最近使った作品への参照だけを最大10件まで記録します。</small>
       </div>
     </div>
   </dialog>
