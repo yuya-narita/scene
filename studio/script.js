@@ -1774,6 +1774,34 @@
     return {title:main,detail:[...new Set(parts.filter(value=>value&&value!==main))].join(' ／ ')};
   }
 
+  let issueTargetRow=null;
+  function openIssueDialog(row){
+    if(!row?.publication?.id){appAlert('先に作品を公開してください。');return;}
+    issueTargetRow=row;
+    const input=$('#issueLimitInput'),result=$('#issueResult'),status=$('#issueStatus');
+    if(input)input.value='100';if(result)result.hidden=true;if(status)status.textContent='';
+    $('#issueDialog')?.showModal();
+  }
+  async function createIssueFromDialog(){
+    const publicationId=String(issueTargetRow?.publication?.id||'');
+    const limit=Math.max(1,Math.min(100000,Math.floor(Number($('#issueLimitInput')?.value||0))));
+    const button=$('#issueCreate'),status=$('#issueStatus');if(!publicationId)return;
+    if(button)button.disabled=true;if(status)status.textContent='発行しています…';
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:{...authorAuthHeaders(),'Content-Type':'application/json'},body:JSON.stringify({publicationId,issueLimit:limit})});
+      const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok||!payload?.issue)throw new Error(payload?.error||`発行できませんでした (${response.status})`);
+      const issue=payload.issue,url=String(issue.url||'');
+      const result=$('#issueResult'),urlInput=$('#issueResultUrl'),count=$('#issueResultCount');if(result)result.hidden=false;if(urlInput)urlInput.value=url;if(count)count.textContent=`${issue.issueLimit}部発行しました · 残り ${issue.remaining}部`;
+      if(status)status.textContent='このURLを一度共有すれば配付できます。';
+    }catch(error){console.error(error);if(status)status.textContent=String(error?.message||error);}
+    finally{if(button)button.disabled=false;}
+  }
+  $('#issueCreate')?.addEventListener('click',createIssueFromDialog);
+  $('#issueCopyUrl')?.addEventListener('click',async()=>{
+    const value=String($('#issueResultUrl')?.value||'');if(!value)return;
+    try{await navigator.clipboard.writeText(value);$('#issueStatus').textContent='配付URLをコピーしました。';}catch(_){const input=$('#issueResultUrl');input?.select();document.execCommand('copy');$('#issueStatus').textContent='配付URLをコピーしました。';}
+  });
+
   async function refreshDraftUI(showResume=true){
     // Buttons need summaries, not every work's full document and Blob array.
     // Fetch the full row only when it is opened/published.
@@ -1844,6 +1872,7 @@
           <button data-publish ${(!isPublished && !isStopped) || status==='dirty'?'':'hidden'}>${status==='dirty'?t('publish.update'):t('publish.action')}</button>
           <button data-share ${isPublished?'':'hidden'}>${t('publish.share')}</button>
           <button data-copy ${isPublished?'':'hidden'}>${t('draft.link')}</button>
+          <button data-issue ${isPublished?'':'hidden'}>発行</button>
           <button data-stop ${isPublished?'':'hidden'}>${t('draft.unpublish')}</button>
           <button data-republish ${isStopped?'':'hidden'}>${t('draft.republish')}</button>
           <button data-delete>${t('draft.delete')}</button>
@@ -1874,6 +1903,7 @@
         const publishRow={...row,publication:{...(row.publication||{}),url:publicationUrl}};
         el.querySelector('[data-share]').onclick=()=>shareDraftPublication(publishRow);
         el.querySelector('[data-copy]').onclick=e=>copyAnyPublishedUrl(publicationUrl,e.currentTarget);
+        el.querySelector('[data-issue]').onclick=()=>openIssueDialog(row);
         el.querySelector('[data-stop]').onclick=()=>stopDraftPublication(row);
       }
       if(isStopped)el.querySelector('[data-republish]').onclick=()=>republishDraftPublication(row);

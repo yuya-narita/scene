@@ -32,6 +32,7 @@
   const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
   const PUBLIC_READER_ID_KEY='ahako:public-own-copy-reader-id';
   let currentOfficialShelfId='';
+  let currentIssueId='';
   function bookshelfHomeUrl(){return new URL('../bookshelf/',LOCAL_PLAYER_BASE).href;}
   function hideShelfReturn(){if(shelfReturnLink)shelfReturnLink.hidden=true;}
   function showShelfReturnForSource(){
@@ -173,6 +174,9 @@
   }
   function officialShelfIdFromLocation(){
     try{const value=String(new URL(location.href).searchParams.get('officialShelf')||'').trim();return /^shelf_[a-f0-9]{24}$/i.test(value)?value:'';}catch(_){return '';}
+  }
+  function issueIdFromLocation(){
+    try{const value=String(new URL(location.href).searchParams.get('issue')||'').trim().toLowerCase();return /^issue_[a-f0-9]{24}$/.test(value)?value:'';}catch(_){return '';}
   }
   function previewTokenFromLocation(){
     try{const value=String(new URL(location.href).searchParams.get('preview')||'').trim();return /^[a-f0-9]{48}$/i.test(value)?value.toLowerCase():'';}catch(_){return '';}
@@ -706,6 +710,40 @@
       if(button){button.disabled=false;button.textContent='本棚を開く';button.onclick=()=>{location.href='../bookshelf/';};}
       return true;
     }catch(error){console.error(error);if(statusNode)statusNode.textContent=String(error?.message||error);if(button)button.disabled=false;return false;}
+  }
+
+  async function claimIssuedCopy({button=endingOwnButton,statusNode=endingOwnStatus}={}){
+    const issueId=currentIssueId;if(!/^issue_[a-f0-9]{24}$/.test(issueId))return false;
+    if(button)button.disabled=true;if(statusNode)statusNode.textContent='自分の一冊を用意しています…';
+    try{
+      const response=await fetch(`${API_BASE}/issue/claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({issueId,readerId:publicReaderId()})});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.scene){
+        const code=String(payload?.code||'');
+        if(code==='ISSUE_ALREADY_CLAIMED')throw new Error('この端末ではすでに受け取っています。');
+        if(code==='ISSUE_SOLD_OUT')throw new Error('この一冊はすべて受け取られました。');
+        throw new Error(String(payload?.error||'一冊を受け取れませんでした。'));
+      }
+      await putOwnedSceneInBookshelf(payload.scene);sendBookshelfEvent('own_copy_saved',payload.scene);
+      if(statusNode)statusNode.textContent=`本棚に入りました。残り ${Math.max(0,Number(payload.remaining)||0)}部`;
+      if(button){button.disabled=false;button.textContent='本棚を開く';button.onclick=()=>{location.href='../bookshelf/';};}
+      return true;
+    }catch(error){console.error(error);if(statusNode)statusNode.textContent=String(error?.message||error);if(button)button.disabled=false;return false;}
+  }
+
+  async function openIssuedRead(issueId){
+    currentSourceMode='issue';currentIssueId=issueId;currentOfficialShelfId='';currentBookshelfCopyId='';currentRelayReceiverArrivalId='';setRelayEntryMode(false);
+    if(launcher)launcher.hidden=false;setStatus('発行された一冊を読み込んでいます…');if(openButton)openButton.disabled=true;
+    try{
+      const response=await fetch(`${API_BASE}/issue/read?issueId=${encodeURIComponent(issueId)}`,{method:'GET',cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.scene)throw new Error(String(payload?.error||'発行された一冊を読み込めませんでした。'));
+      const raw=JSON.parse(JSON.stringify(payload.scene));currentPackage={files:new Map(),manifest:{package:'author-issue-read',packageVersion:'1.0'},raw};
+      if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;if(endingOwnWrap)endingOwnWrap.hidden=true;
+      await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`issue:${issueId}`,suppressObservation:true});
+      launcher.hidden=true;if(backButton)backButton.hidden=false;setStatus('');finishAutoOpen();return true;
+    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
+    finally{if(openButton)openButton.disabled=false;}
   }
 
   async function openOfficialShelfRead(shelfId){
@@ -1263,7 +1301,7 @@
       if(history.length>1){try{history.back();}catch(_){}}
       return;
     }
-    if(currentSourceMode==='relay-url'||currentSourceMode==='official-shelf'||currentSourceMode==='preview'){try{history.back();}catch(_){}return;}
+    if(currentSourceMode==='relay-url'||currentSourceMode==='official-shelf'||currentSourceMode==='issue'||currentSourceMode==='preview'){try{history.back();}catch(_){}return;}
     if(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master'){
       try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
       revokeAssets();
@@ -1288,7 +1326,8 @@
   sceneHost?.addEventListener('sceneplayer:end',()=>{
     const relayOwn=currentSourceMode==='relay-url'&&!!relayInfo(currentPackage?.raw);
     const officialOwn=currentSourceMode==='official-shelf'&&/^shelf_[a-f0-9]{24}$/i.test(currentOfficialShelfId);
-    const canOwn=relayOwn||officialOwn;
+    const issueOwn=currentSourceMode==='issue'&&/^issue_[a-f0-9]{24}$/.test(currentIssueId);
+    const canOwn=relayOwn||officialOwn||issueOwn;
     if(!endingOwnWrap)return;
     endingOwnWrap.hidden=!canOwn;
     if(!canOwn)return;
@@ -1296,7 +1335,7 @@
     if(endingOwnButton){
       endingOwnButton.disabled=false;
       endingOwnButton.textContent='自分の一冊を受け取る';
-      endingOwnButton.onclick=officialOwn?()=>claimOfficialShelfCopy({button:endingOwnButton,statusNode:endingOwnStatus}):()=>receiveOwnCopy({button:endingOwnButton,statusNode:endingOwnStatus});
+      endingOwnButton.onclick=issueOwn?()=>claimIssuedCopy({button:endingOwnButton,statusNode:endingOwnStatus}):(officialOwn?()=>claimOfficialShelfCopy({button:endingOwnButton,statusNode:endingOwnStatus}):()=>receiveOwnCopy({button:endingOwnButton,statusNode:endingOwnStatus}));
     }
   });
 
@@ -1312,6 +1351,7 @@
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialPreviewToken=previewTokenFromLocation();
+  const initialIssueId=issueIdFromLocation();
   const initialOfficialShelfId=officialShelfIdFromLocation();
   const initialBookshelfMasterId=bookshelfMasterIdFromLocation();
   const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
@@ -1322,6 +1362,8 @@
     openAdminReview(initialReviewUrl);
   }else if(initialPreviewToken){
     openPreviewFromUrl(initialPreviewToken);
+  }else if(initialIssueId){
+    openIssuedRead(initialIssueId);
   }else if(initialOfficialShelfId){
     openOfficialShelfRead(initialOfficialShelfId);
   }else if(validWorkId(initialBookshelfMasterId)){

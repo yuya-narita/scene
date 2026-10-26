@@ -1160,6 +1160,27 @@
     </div>
   </dialog>
 
+  <dialog id="issueDialog" class="scene-delete-dialog issue-dialog">
+    <form method="dialog" class="scene-delete-dialog-card issue-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">ISSUE</span>
+        <h2>この一冊を発行する</h2>
+        <p>URLは1本だけです。設定した部数まで、それぞれの読者が自分の一冊として受け取れます。</p>
+        <label style="display:grid;gap:7px;margin-top:14px;text-align:left"><span style="font-size:12px;font-weight:800">発行部数</span><input id="issueLimitInput" type="number" inputmode="numeric" min="1" max="100000" step="1" value="100" style="min-height:44px;padding:0 12px;border:1px solid #cfd3d8;border-radius:10px;font-size:16px"></label>
+        <div id="issueResult" hidden style="margin-top:14px;padding:12px;border:1px solid #d8dce1;border-radius:12px;text-align:left">
+          <strong id="issueResultCount" style="display:block;margin-bottom:6px"></strong>
+          <input id="issueResultUrl" type="text" readonly style="box-sizing:border-box;width:100%;min-height:40px;padding:0 9px;border:1px solid #d8dce1;border-radius:8px;font-size:12px">
+          <button id="issueCopyUrl" type="button" style="width:100%;margin-top:8px">配付URLをコピー</button>
+        </div>
+        <small id="issueStatus" style="display:block;min-height:1.4em;margin-top:9px"></small>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button id="issueCancel" value="cancel" type="submit">閉じる</button>
+        <button id="issueCreate" value="create" type="button">発行する</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="sampleReplaceDialog" class="scene-delete-dialog">
     <form method="dialog" class="scene-delete-dialog-card">
       <div class="scene-delete-dialog-copy">
