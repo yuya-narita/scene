@@ -1148,7 +1148,7 @@
   </dialog>
 
   <style>
-#issueDialog .issue-dialog-card{width:min(92vw,430px);max-width:430px}.issue-count-field{display:grid;gap:7px;margin-top:16px;text-align:left}.issue-count-field>span{font-size:12px;font-weight:800}.issue-count-input-wrap{display:flex;align-items:center;min-height:48px;border:1px solid #cfd3d8;border-radius:11px;padding:0 12px;box-shadow:0 0 0 4px rgba(93,115,255,.08)}.issue-count-input-wrap input{width:100%;min-width:0;border:0;outline:0;background:transparent;font-size:17px;padding:0}.issue-count-input-wrap>span{font-size:13px;font-weight:800;opacity:.55;margin-left:8px}.issue-price-card{margin-top:16px;padding:14px 15px;border:1px solid #d8dce1;border-radius:12px;text-align:left;background:#fafafa}.issue-price-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px}.issue-price-row strong{font-size:13px}.issue-price-divider{height:1px;background:#e1e3e6;margin:12px 0}.issue-price-calc{color:#666}.issue-price-total{text-align:right;font-size:27px;line-height:1.15;font-weight:850;margin-top:4px;letter-spacing:-.02em}.issue-notes{display:grid;gap:3px;margin-top:12px;text-align:left;color:#6b6f76}.issue-notes small{font-size:10px;line-height:1.5}#issueCreate:disabled{opacity:.62;cursor:not-allowed}
+#issueDialog .issue-dialog-card{width:min(92vw,430px);max-width:430px}.issue-count-field{display:grid;gap:7px;margin-top:16px;text-align:left}.issue-count-field>span{font-size:12px;font-weight:800}.issue-count-input-wrap{display:flex;align-items:center;min-height:48px;border:1px solid #cfd3d8;border-radius:11px;padding:0 12px;box-shadow:0 0 0 4px rgba(93,115,255,.08)}.issue-count-input-wrap input{width:100%;min-width:0;border:0;outline:0;background:transparent;font-size:17px;padding:0}.issue-count-input-wrap>span{font-size:13px;font-weight:800;opacity:.55;margin-left:8px}.issue-count-presets{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:8px}.issue-count-preset{min-width:0;height:34px;border:1px solid #d8dce1;border-radius:9px;background:#fff;font-size:11px;font-weight:800;color:#333;cursor:pointer}.issue-count-preset:hover{background:#f5f5f5}.issue-count-preset.is-active{border-color:#222;background:#222;color:#fff}@media(max-width:390px){.issue-count-presets{gap:5px}.issue-count-preset{font-size:10px}}.issue-price-card{margin-top:16px;padding:14px 15px;border:1px solid #d8dce1;border-radius:12px;text-align:left;background:#fafafa}.issue-price-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px}.issue-price-row strong{font-size:13px}.issue-price-divider{height:1px;background:#e1e3e6;margin:12px 0}.issue-price-calc{color:#666}.issue-price-total{text-align:right;font-size:27px;line-height:1.15;font-weight:850;margin-top:4px;letter-spacing:-.02em}.issue-notes{display:grid;gap:3px;margin-top:12px;text-align:left;color:#6b6f76}.issue-notes small{font-size:10px;line-height:1.5}#issueCreate:disabled{opacity:.62;cursor:not-allowed}
 #issueManagerDialog{width:min(92vw,760px);max-width:calc(100vw - 28px);}
 #issueManagerDialog .draft-manager-card{width:100%;max-width:100%;box-sizing:border-box;}
 #issueManagerDialog #issueManagerList{padding:4px 18px 14px!important;}
@@ -1209,6 +1209,13 @@
         <h2>この一冊を発行する</h2>
         <p>読者が無料で受け取り、自分の本棚に保存できる一冊を発行します。</p>
         <label class="issue-count-field"><span>発行部数</span><div class="issue-count-input-wrap"><input id="issueLimitInput" type="number" inputmode="numeric" min="1" max="100000" step="1" value="100"><span>部</span></div></label>
+        <div class="issue-count-presets" aria-label="発行部数プリセット">
+          <button type="button" class="issue-count-preset" data-issue-limit="10">10部</button>
+          <button type="button" class="issue-count-preset" data-issue-limit="50">50部</button>
+          <button type="button" class="issue-count-preset is-active" data-issue-limit="100">100部</button>
+          <button type="button" class="issue-count-preset" data-issue-limit="500">500部</button>
+          <button type="button" class="issue-count-preset" data-issue-limit="1000">1000部</button>
+        </div>
         <div class="issue-price-card" aria-live="polite">
           <div class="issue-price-row"><span>発行料金</span><strong>1部 ¥100</strong></div>
           <div class="issue-price-divider"></div>

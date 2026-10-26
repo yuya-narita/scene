@@ -1850,6 +1850,9 @@
     if(calc)calc.textContent=`${limit.toLocaleString('ja-JP')}部 × ${issueFormatYen(ISSUE_UNIT_PRICE)}`;
     if(totalEl)totalEl.textContent=issueFormatYen(total);
     if(button)button.textContent=`${issueFormatYen(total)}で発行する`;
+    document.querySelectorAll('.issue-count-preset').forEach(preset=>{
+      preset.classList.toggle('is-active',Number(preset.dataset.issueLimit)===limit);
+    });
   }
   async function openIssueDialog(row){
     if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
@@ -1866,6 +1869,11 @@
   }
   $('#issueLimitInput')?.addEventListener('input',updateIssuePricePreview);
   $('#issueLimitInput')?.addEventListener('change',()=>{const input=$('#issueLimitInput');if(input)input.value=String(issueCurrentLimit());updateIssuePricePreview();});
+  document.querySelectorAll('.issue-count-preset').forEach(preset=>preset.addEventListener('click',()=>{
+    const input=$('#issueLimitInput');if(!input)return;
+    input.value=String(Math.max(1,Math.min(100000,Number(preset.dataset.issueLimit)||1)));
+    updateIssuePricePreview();
+  }));
   $('#menuIssueCurrentButton')?.addEventListener('click',async()=>{
     closeEasyMenu?.();
     if(!workingDocument?.scenes?.length){appAlert('発行する作品を開いてください。');return;}
