@@ -1148,6 +1148,7 @@
   </dialog>
 
   <style>
+#issueDialog .issue-dialog-card{width:min(92vw,430px);max-width:430px}.issue-count-field{display:grid;gap:7px;margin-top:16px;text-align:left}.issue-count-field>span{font-size:12px;font-weight:800}.issue-count-input-wrap{display:flex;align-items:center;min-height:48px;border:1px solid #cfd3d8;border-radius:11px;padding:0 12px;box-shadow:0 0 0 4px rgba(93,115,255,.08)}.issue-count-input-wrap input{width:100%;min-width:0;border:0;outline:0;background:transparent;font-size:17px;padding:0}.issue-count-input-wrap>span{font-size:13px;font-weight:800;opacity:.55;margin-left:8px}.issue-price-card{margin-top:16px;padding:14px 15px;border:1px solid #d8dce1;border-radius:12px;text-align:left;background:#fafafa}.issue-price-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px}.issue-price-row strong{font-size:13px}.issue-price-divider{height:1px;background:#e1e3e6;margin:12px 0}.issue-price-calc{color:#666}.issue-price-total{text-align:right;font-size:27px;line-height:1.15;font-weight:850;margin-top:4px;letter-spacing:-.02em}.issue-notes{display:grid;gap:3px;margin-top:12px;text-align:left;color:#6b6f76}.issue-notes small{font-size:10px;line-height:1.5}#issueCreate:disabled{opacity:.62;cursor:not-allowed}
 #issueManagerDialog{width:min(92vw,760px);max-width:calc(100vw - 28px);}
 #issueManagerDialog .draft-manager-card{width:100%;max-width:100%;box-sizing:border-box;}
 #issueManagerDialog #issueManagerList{padding:4px 18px 14px!important;}
@@ -1206,19 +1207,23 @@
       <div class="scene-delete-dialog-copy">
         <span class="scene-delete-kicker">ISSUE</span>
         <h2>この一冊を発行する</h2>
-        <p>URLは1本だけです。設定した部数まで、それぞれの読者が自分の一冊として受け取れます。</p>
-        <label style="display:grid;gap:7px;margin-top:14px;text-align:left"><span style="font-size:12px;font-weight:800">発行部数</span><input id="issueLimitInput" type="number" inputmode="numeric" min="1" max="100000" step="1" value="100" style="min-height:44px;padding:0 12px;border:1px solid #cfd3d8;border-radius:10px;font-size:16px"></label>
-        <div id="issueResult" hidden style="margin-top:14px;padding:12px;border:1px solid #d8dce1;border-radius:12px;text-align:left">
-          <strong id="issueResultCount" style="display:block;margin-bottom:6px"></strong>
-          <input id="issueResultUrl" type="text" readonly style="box-sizing:border-box;width:100%;min-height:40px;padding:0 9px;border:1px solid #d8dce1;border-radius:8px;font-size:12px">
-          <button id="issueCopyUrl" type="button" style="width:100%;margin-top:8px">配付URLをコピー</button>
+        <p>読者が無料で受け取り、自分の本棚に保存できる一冊を発行します。</p>
+        <label class="issue-count-field"><span>発行部数</span><div class="issue-count-input-wrap"><input id="issueLimitInput" type="number" inputmode="numeric" min="1" max="100000" step="1" value="100"><span>部</span></div></label>
+        <div class="issue-price-card" aria-live="polite">
+          <div class="issue-price-row"><span>発行料金</span><strong>1部 ¥100</strong></div>
+          <div class="issue-price-divider"></div>
+          <div class="issue-price-row issue-price-calc"><span id="issuePriceCalc">100部 × ¥100</span><span>合計</span></div>
+          <div class="issue-price-total" id="issuePriceTotal">¥10,000</div>
+        </div>
+        <div class="issue-notes">
+          <small>発行後の部数追加はできません。</small>
+          <small>未受取分は「発行一覧」から停止できます。</small>
         </div>
         <small id="issueStatus" style="display:block;min-height:1.4em;margin-top:9px"></small>
-        <div id="issueHistory" style="display:grid;gap:8px;margin-top:14px;text-align:left"></div>
       </div>
       <div class="scene-delete-dialog-actions">
-        <button id="issueCancel" value="cancel" type="submit">閉じる</button>
-        <button id="issueCreate" value="create" type="button">発行する</button>
+        <button id="issueCancel" value="cancel" type="submit">キャンセル</button>
+        <button id="issueCreate" value="create" type="button" disabled>¥10,000で発行する</button>
       </div>
     </form>
   </dialog>
