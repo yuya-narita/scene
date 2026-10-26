@@ -3,128 +3,1373 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0b1016">
-  <title>Scene Player｜あ箱</title>
-  <meta name="description" content="あ箱のScene Player。文章・音・背景が重なり合う、一冊ごとの読書体験を楽しめます。">
-  <link rel="canonical" href="https://yuya-narita.github.io/scene/">
+  <meta name="theme-color" content="#f7f8fb">
+  <title>scene studio「あ箱」β</title>
+  <meta name="description" content="文章の「次」を、まだ見せない。文章をSceneに分け、読者のタイミングで進む読書体験をつくるWebアプリ。">
+  <link rel="canonical" href="https://yuya-narita.github.io/scene/studio/">
+
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="あ箱">
-  <meta property="og:title" content="Scene Player｜あ箱">
-  <meta property="og:description" content="文章・音・背景が重なり合う、一冊ごとの読書体験を楽しめます。">
-  <meta property="og:url" content="https://yuya-narita.github.io/scene/">
+  <meta property="og:site_name" content="scene studio「あ箱」β">
+  <meta property="og:title" content="scene studio「あ箱」β">
+  <meta property="og:description" content="文章の「次」を、まだ見せない。文章をSceneに分け、読者のタイミングで進む読書体験をつくるWebアプリ。">
+  <meta property="og:url" content="https://yuya-narita.github.io/scene/studio/">
   <meta property="og:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
+  <meta property="og:image:width" content="1664">
+  <meta property="og:image:height" content="936">
+  <meta property="og:image:alt" content="scene studio「あ箱」β — 「間」まで、書きたい。">
+
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Scene Player｜あ箱">
-  <meta name="twitter:description" content="文章・音・背景が重なり合う、一冊ごとの読書体験を楽しめます。">
+  <meta name="twitter:title" content="scene studio「あ箱」β">
+  <meta name="twitter:description" content="文章の「次」を、まだ見せない。文章をSceneに分け、読者のタイミングで進む読書体験をつくるWebアプリ。">
   <meta name="twitter:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20261023-emoji-upright-trial-v2">
-  <link rel="stylesheet" href="./public-player.css?v=20261015-ending-v17">
-  <link rel="stylesheet" href="./ios-input-guard.css?v=70.4">
+
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="./favicon.png">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20261023-ios-text-default-v18">
+  <link rel="stylesheet" href="./style.css?v=70.90-ogp-refresh-v1">
+  <link rel="stylesheet" href="./cage.css?v=14">
+  <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
+  <style id="studioPreviewDeviceStyles">
+    /* Studio-only authoring viewport. These rules never enter the published Player. */
+    #studioPreviewViewport{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;container-type:size;container-name:studio-preview}
+    #studioPreviewViewport>#scenePlayer{width:100%;height:100%}
+    .studio-preview-device-toolbar{display:none}
+    @media (min-width:1100px){
+      body.desktop-live-edit #playerScreen{--studio-preview-ratio:1;overflow:hidden}
+      body.desktop-live-edit #studioPreviewViewport{position:absolute;z-index:1;left:50%;top:50%;transform:translate(-50%,-50%);overflow:hidden;background:#181d21;transition:border-radius .2s ease,box-shadow .2s ease}
+      body.desktop-live-edit #studioPreviewViewport #scenePlayer{position:relative!important;inset:auto!important;left:auto!important;top:auto!important;transform:none!important;width:100%!important;height:100%!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;overflow:hidden!important}
+      body.desktop-live-edit #playerScreen.preview-device-phone #studioPreviewViewport{border-radius:18px;box-shadow:0 0 0 2px rgba(255,255,255,.68),0 16px 46px rgba(0,0,0,.32)}
+      body.desktop-live-edit #playerScreen.preview-device-tablet #studioPreviewViewport{border-radius:12px;box-shadow:0 0 0 2px rgba(255,255,255,.45),0 14px 42px rgba(0,0,0,.26)}
+      body.desktop-live-edit #playerScreen.preview-device-pc #studioPreviewViewport{border-radius:8px;box-shadow:0 0 0 2px rgba(255,255,255,.45),0 14px 40px rgba(0,0,0,.24)}
+      body.desktop-live-edit .studio-preview-device-toolbar{position:absolute;z-index:210;top:70px;left:10px;display:flex;align-items:center;gap:3px;padding:4px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(20,22,26,.74);box-shadow:0 6px 20px rgba(0,0,0,.2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+      .studio-preview-device-toolbar button{appearance:none;min-width:0;height:28px;padding:0 9px;border:0;border-radius:999px;background:transparent;color:#fff;font:700 10px/1 system-ui,sans-serif;white-space:nowrap;cursor:pointer}
+      .studio-preview-device-toolbar button.is-active{background:#fff;color:#17181b}
+      .studio-preview-device-toolbar .preview-guide-toggle{border-left:1px solid rgba(255,255,255,.2);border-radius:0 999px 999px 0;margin-left:2px}
+      .studio-safe-guide{--studio-guide-inline:7%;--studio-guide-top:7%;--studio-guide-bottom:9%;position:absolute;inset:0;z-index:72;pointer-events:none;color:rgba(255,255,255,.42);mix-blend-mode:difference}
+      #playerScreen.preview-device-tablet .studio-safe-guide{--studio-guide-inline:8%;--studio-guide-top:8%;--studio-guide-bottom:10%}
+      #playerScreen.preview-device-pc .studio-safe-guide{--studio-guide-inline:max(8%,calc((100% - 960px)/2));--studio-guide-top:10%;--studio-guide-bottom:12%}
+      .studio-safe-guide-grid{position:absolute;inset:var(--studio-guide-top) var(--studio-guide-inline) var(--studio-guide-bottom);border:1px dashed currentColor;border-radius:10px}
+      .studio-safe-guide-line{position:absolute;display:block;background:currentColor;opacity:.66}
+      .studio-safe-guide-line.is-v1,.studio-safe-guide-line.is-v2{top:0;bottom:0;width:1px}
+      .studio-safe-guide-line.is-h1,.studio-safe-guide-line.is-h2{left:0;right:0;height:1px}
+      .studio-safe-guide-line.is-v1{left:33.333%}.studio-safe-guide-line.is-v2{left:66.666%}
+      .studio-safe-guide-line.is-h1{top:33.333%}.studio-safe-guide-line.is-h2{top:66.666%}
+      /* The compact Text card grew as position/writing controls were added. Let it size and scroll naturally. */
+      body.desktop-live-edit .desktop-live-panel{display:flex!important;flex-direction:column!important;height:100dvh!important;max-height:100dvh!important;overflow:hidden!important}
+      .desktop-live-panel-body{flex:1 1 auto!important;min-height:0!important;height:auto!important;padding-bottom:72px!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable}
+      .desktop-text-detail-overlay,.desktop-text-detail-modal,.desktop-text-detail-body{overscroll-behavior:contain!important}
+      .desktop-text-detail-body{touch-action:pan-y}
+      .desktop-live-three{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:auto auto!important;grid-auto-rows:auto!important;align-items:start!important;overflow:visible!important}
+      .desktop-live-three>.desktop-live-card{height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important}
+      .desktop-live-three>.desktop-live-card .desktop-live-grid{height:auto!important;max-height:none!important;overflow:visible!important}
+      .desktop-text-primary-detail{width:100%!important;margin:2px 0 0!important}
+      .desktop-live-text-color{display:grid;gap:5px;min-width:0}
+      .desktop-live-text-color>span{font-size:10px;font-weight:700;color:var(--muted,#666)}
+      .desktop-live-text-color-control{display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:7px;align-items:center}
+      .desktop-live-text-color-control>select{width:100%;min-width:0}
+      .desktop-live-text-color-control .studio-color-picker{position:relative;display:flex;justify-content:flex-end}
+      .desktop-live-text-color-control .studio-color-trigger{width:38px;height:34px;border-radius:9px}
+      .desktop-live-text-color-control .studio-color-popover{z-index:900}
+      .desktop-live-position-field{display:grid;gap:5px;min-width:0}
+      .desktop-live-position-field>span{font-size:10px;font-weight:700;color:var(--muted,#666)}
+      .desktop-live-position-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+      .desktop-live-position-control>select{width:100%;min-width:0}
+      body.desktop-live-edit .desktop-live-card select{height:34px!important;min-height:34px!important;padding-top:0!important;padding-bottom:0!important;font-family:system-ui,-apple-system,"Segoe UI",sans-serif!important;font-size:12px!important;font-weight:600!important;line-height:1.2!important}
+      .desktop-live-position-adjust{height:34px;padding:0 10px;border:1px solid #d7d9de;border-radius:9px;background:#fff;color:#17181b;font:700 11px/1 system-ui;white-space:nowrap;cursor:pointer}
+      .desktop-live-position-adjust:disabled{opacity:.38;cursor:default}
+      .desktop-live-bg-top{display:grid!important;grid-template-columns:76px minmax(0,1fr)!important;gap:9px!important;align-items:stretch!important}
+      .desktop-live-bg-preview{width:76px;min-height:126px;overflow:hidden;border:1px solid #d7d9de;border-radius:9px;background:#f2f2f0}
+      .desktop-live-bg-preview>img,.desktop-live-bg-preview>.desktop-live-bg-placeholder{display:block;width:100%!important;height:100%!important;min-height:126px;object-fit:cover;border:0!important;border-radius:0!important}
+      .desktop-live-bg-preview>.desktop-live-bg-placeholder{display:grid;place-items:center;color:#8b8e94;font-size:10px}
+      .desktop-live-bg-controls{display:grid;grid-template-rows:30px 30px 30px 22px;gap:5px;min-width:0}
+      .desktop-live-bg-source-row{display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:5px;min-width:0}
+      .desktop-live-bg-position-row,.desktop-live-bg-tone-row{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:5px!important;width:100%;min-width:0}
+      .desktop-live-bg-controls .desktop-live-action{width:100%;min-width:0;height:30px!important;margin:0!important;padding:0 6px!important;font-size:10px!important;line-height:1.1!important;white-space:normal}
+      .desktop-live-bg-controls .desktop-live-bg-detail{height:22px!important;border:0!important;background:transparent!important;color:#0877df!important;font-size:10px!important;text-decoration:none}
+      .sp-core[data-theme="light"] .studio-safe-guide,
+      .sp-core[data-theme="cinema"][data-cinema-tone="light"] .studio-safe-guide{color:rgba(22,27,32,.42);mix-blend-mode:multiply}
+      .sp-core[data-theme="dark"] .studio-safe-guide,
+      .sp-core[data-theme="cinema"]:not([data-cinema-tone="light"]) .studio-safe-guide{color:rgba(255,255,255,.45);mix-blend-mode:screen}
+      #playerScreen.preview-device-pc .sp-core[data-theme="light"] .studio-safe-guide,
+      #playerScreen.preview-device-pc .sp-core[data-theme="cinema"][data-cinema-tone="light"] .studio-safe-guide{color:rgba(20,25,30,.72);mix-blend-mode:multiply}
+      #playerScreen.preview-device-pc .studio-safe-guide-grid{border-width:2px}
+      #playerScreen.preview-device-pc .studio-safe-guide-line.is-v1,
+      #playerScreen.preview-device-pc .studio-safe-guide-line.is-v2{width:2px;transform:translateX(-1px)}
+      #playerScreen.preview-device-pc .studio-safe-guide-line.is-h1,
+      #playerScreen.preview-device-pc .studio-safe-guide-line.is-h2{height:2px;transform:translateY(-1px)}
+      #playerScreen.preview-device-pc .studio-safe-guide-line{opacity:.9}
+      .cover-position-dialog.is-device-pc .cover-position-card{width:min(1120px,calc(100vw - 48px));max-width:none}
+      .cover-position-dialog.is-device-tablet .cover-position-card{width:min(820px,calc(100vw - 48px));max-width:none}
+    }
+    .cover-position-device-tabs{display:flex;align-items:center;justify-content:center;gap:4px;width:max-content;max-width:100%;margin:0 auto 12px;padding:4px;border-radius:999px;background:rgba(20,22,26,.08)}
+    .cover-position-device-tabs button{min-width:76px;height:34px;padding:0 14px;border:0;border-radius:999px;background:transparent;color:#4d5158;font:700 12px/1 system-ui;cursor:pointer}
+    .cover-position-device-tabs button.is-active{background:#17191d;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.16)}
+    .cover-position-dialog.is-background-mode .cover-position-device-tabs{display:none}
+    /* Keep the Ending SE checkbox a normal native-sized control, even when generic inputs are full width. */
+    .ending-quick-se .check-row{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;min-height:32px!important;padding:0!important;border:0!important;background:transparent!important}
+    .ending-quick-se .check-row input[type="checkbox"]{appearance:auto!important;-webkit-appearance:checkbox!important;display:inline-block!important;flex:0 0 auto!important;width:18px!important;height:18px!important;min-width:18px!important;min-height:18px!important;margin:0!important;padding:0!important;border:initial!important;border-radius:3px!important;box-shadow:none!important}
+    .ending-quick-se .check-row span{display:inline!important;width:auto!important;margin:0!important;font-size:12px!important;line-height:1.4!important}
+    /*
+      iPhone Live Edit sheets must own the available viewport between the
+      top safe area and the bottom tool bar. The old content-sized sheet
+      clipped the last compact controls because its body could not scroll.
+    */
+    @media (max-width:1099px){
+      body.live-edit-sheet-open{overflow:hidden!important}
+      body.live-edit-sheet-open #autoRecPanel{
+        z-index:1!important;
+        opacity:0!important;
+        visibility:hidden!important;
+        pointer-events:none!important;
+        user-select:none!important;
+        -webkit-user-select:none!important;
+      }
+      body.live-edit-sheet-open .live-edit-sheet:not([hidden]){
+        position:fixed!important;
+        z-index:760!important;
+        top:max(84px,calc(env(safe-area-inset-top,0px) + 58px))!important;
+        right:12px!important;
+        bottom:calc(78px + env(safe-area-inset-bottom,0px))!important;
+        left:12px!important;
+        display:flex!important;
+        width:auto!important;
+        height:auto!important;
+        max-height:none!important;
+        min-height:0!important;
+        flex-direction:column!important;
+        overflow:hidden!important;
+      }
+      body.live-edit-sheet-open .live-edit-sheet-head{
+        position:relative!important;
+        z-index:2;
+        flex:0 0 auto!important;
+      }
+      body.live-edit-sheet-open .live-edit-sheet-body{
+        flex:1 1 auto!important;
+        min-height:0!important;
+        max-height:none!important;
+        overflow-x:hidden!important;
+        overflow-y:auto!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch;
+        touch-action:pan-y;
+        scrollbar-gutter:stable;
+        padding-bottom:max(24px,env(safe-area-inset-bottom,0px))!important;
+      }
+      body.live-edit-sheet-open .live-edit-sheet-body>.live-edit-detail:last-child{
+        margin-bottom:4px!important;
+      }
+      body.mobile-live-detail-open .live-edit-sheet-body{
+        position:relative!important;
+        display:block!important;
+        flex:1 1 auto!important;
+        min-height:0!important;
+        height:auto!important;
+        overflow:hidden!important;
+        padding:0!important;
+      }
+      .mobile-live-detail-sheet .desktop-text-detail-modal[data-mobile-live-detail="true"]{
+        position:absolute!important;
+        inset:0!important;
+        display:grid!important;
+        grid-template-rows:auto minmax(0,1fr) auto!important;
+        min-width:0!important;
+        min-height:0!important;
+        width:100%!important;
+        height:100%!important;
+        max-height:100%!important;
+        overflow:hidden!important;
+      }
+      .mobile-live-detail-sheet .desktop-text-detail-head,
+      .mobile-live-detail-sheet .desktop-text-detail-foot{
+        position:relative!important;
+        inset:auto!important;
+        min-height:0!important;
+      }
+      .mobile-live-detail-sheet .desktop-text-detail-body{
+        position:relative!important;
+        inset:auto!important;
+        display:block!important;
+        min-height:0!important;
+        height:auto!important;
+        width:100%!important;
+        max-height:none!important;
+        overflow-x:hidden!important;
+        overflow-y:auto!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch;
+        touch-action:pan-y;
+      }
+    }
+  
+    /* Distribution export policy: shown only when a Distribution .scene is issued. */
+    .distribution-export-dialog{border:0;padding:0;background:transparent;max-width:none;max-height:none}
+    .distribution-export-dialog::backdrop{background:rgba(13,16,20,.46);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+    .distribution-export-card{box-sizing:border-box;width:min(520px,calc(100vw - 28px));margin:auto;padding:24px;border:0;border-radius:24px;background:#fff;color:#191b20;box-shadow:0 22px 64px rgba(0,0,0,.28);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .distribution-export-kicker{display:block;margin:0 0 7px;color:#8a8f98;font-size:10px;font-weight:800;letter-spacing:.14em}
+    .distribution-export-card h2{margin:0;font-size:20px;line-height:1.35}
+    .distribution-export-lead{margin:8px 0 18px;color:#666c76;font-size:13px;line-height:1.6}
+    .distribution-export-options{display:grid;gap:10px}
+    .distribution-export-option{display:grid;grid-template-columns:20px 1fr;gap:11px;align-items:start;padding:14px;border:1px solid #dfe2e7;border-radius:16px;background:#fff;cursor:pointer}
+    .distribution-export-option:has(input:checked){border-color:#1d2025;box-shadow:0 0 0 1px #1d2025 inset;background:#f8f9fa}
+    .distribution-export-option input{width:18px;height:18px;margin:2px 0 0;accent-color:#191b20}
+    .distribution-export-option strong{display:block;font-size:14px;line-height:1.4}
+    .distribution-export-option small{display:block;margin-top:3px;color:#737985;font-size:12px;line-height:1.5}
+    .distribution-own-copy-gate{display:grid;gap:4px;margin-top:14px;padding:12px 14px;border:1px dashed #d8dce2;border-radius:14px;background:#fafafa}
+.distribution-own-copy-gate small{font-size:9px;font-weight:800;letter-spacing:.16em;color:#969ba4}
+.distribution-own-copy-gate strong{font-size:13px}
+.distribution-own-copy-gate span{font-size:11px;line-height:1.5;color:#777d87}
+.distribution-export-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}
+    .distribution-export-actions button{min-height:42px;padding:0 17px;border:1px solid #d8dce2;border-radius:999px;background:#fff;color:#23262b;font:700 13px/1 system-ui;cursor:pointer}
+    .distribution-export-actions .primary{border-color:#191b20;background:#191b20;color:#fff}
+    @media(max-width:600px){.distribution-export-card{width:calc(100vw - 24px);padding:22px 18px 18px;border-radius:22px}.distribution-export-actions{display:grid;grid-template-columns:1fr 1fr}.distribution-export-actions button{width:100%}}
+    .studio-shared-header .easy-menu-corner{width:46px!important;height:46px!important}
+    .studio-shared-header .easy-menu-button{position:absolute!important;top:0!important;right:0!important;margin:0!important}
+
+    .author-stripe-card{margin:18px 0 0;padding:15px;border:1px solid #e0e3e8;border-radius:16px;background:#fafbfc;text-align:left}
+    .author-stripe-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .author-stripe-head strong{font-size:13px}.author-stripe-badge{flex:0 0 auto;padding:5px 8px;border-radius:999px;background:#eceff3;color:#6d737d;font-size:9px;font-weight:800;letter-spacing:.06em}
+    .author-stripe-badge.is-ready{background:#e9f5ec;color:#347347}.author-stripe-badge.is-progress{background:#fff3d8;color:#88651b}
+    .author-stripe-card p{margin:8px 0 12px;color:#737985;font-size:11px;line-height:1.55}
+    .author-stripe-card button{width:100%}
+    .author-stripe-status{display:block;min-height:1.4em;margin-top:8px;color:#737985;font-size:10px;line-height:1.4}
+    .author-stripe-status.is-error{color:#b24343}
+    .studio-author-status{position:absolute;top:6px;right:54px;max-width:190px;height:34px;padding:0 12px;border:1px solid rgba(120,120,120,.28);border-radius:999px;background:rgba(255,255,255,.86);color:#25272b;font:700 11px/1 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+    .studio-author-status.is-signed-in::before{content:'●';margin-right:6px;color:#4e9a62;font-size:8px}
+    @media(max-width:600px){.studio-author-status{top:7px;right:50px;max-width:118px;height:31px;padding:0 9px;font-size:9px}.author-auth-dialog input{font-size:16px!important}}
+    .easy-illustration{border:1px solid #dedbd5;border-radius:13px;background:#fbfaf7;color:#292b30}
+    .easy-illustration>summary{display:flex;align-items:center;gap:9px;min-height:48px;padding:7px 12px;list-style:none;cursor:pointer;font:700 12px/1.4 system-ui,sans-serif}
+    .easy-illustration>summary::-webkit-details-marker{display:none}
+    .easy-illustration>summary img{width:32px;height:32px;border-radius:8px;object-fit:cover}
+    .easy-illustration>summary .easy-illustration-count{margin-left:auto;color:#75747a;font-size:11px;font-weight:500;white-space:nowrap}
+    .easy-illustration>summary:after{content:"⌄";font-size:16px;color:#76757a}
+    .easy-illustration[open]>summary:after{transform:rotate(180deg)}
+    .easy-illustration-content{display:grid;gap:11px;padding:0 13px 13px}
+    .easy-illustration>div:first-child{display:grid;gap:4px}.easy-illustration strong{font-size:14px}.easy-illustration small{font-size:11px;color:#74747a}
+    .easy-illustration button{min-height:39px;padding:8px 14px;border:1px solid #bfc0c2;border-radius:11px;background:#fff;color:#292b30;font:700 12px/1.4 system-ui,sans-serif;cursor:pointer}
+    .easy-illustration button:disabled{opacity:.55;cursor:default}#easyIllustrationGenerate{justify-self:start;background:#292b30;color:#fff;border-color:#292b30}
+    .easy-illustration p{margin:0;color:#63656a;font-size:11px;line-height:1.5}.easy-illustration p:empty{display:none}
+    #easyIllustrationResult{width:min(92vw,620px);max-height:calc(100dvh - 32px);padding:18px;border:1px solid #dcd6cc;border-radius:16px;background:#fbfaf7;box-shadow:0 25px 80px #17191d77;color:#292b30;overflow:auto}
+    #easyIllustrationResult:not([open]){display:none}
+    #easyIllustrationResult::backdrop{background:#11141bb8}
+    .easy-illustration-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;font:700 13px/1.5 system-ui,sans-serif}
+    #easyIllustrationClose{min-width:42px;min-height:42px;border:1px solid #c9c4be;border-radius:50%;background:#fff;color:#292b30;font-size:22px;cursor:pointer}
+    .easy-illustration-modal-body{display:grid;gap:14px;justify-items:center}
+    #easyIllustrationResult .easy-illustration-paper{width:min(100%,520px)}
+    #easyIllustrationResult #easyIllustrationPreview{max-height:60dvh}
+    #easyIllustrationResult .easy-illustration-actions{justify-content:center}
+    #easyIllustrationResult .easy-illustration-actions button{min-height:42px;padding:8px 12px;border:1px solid #bfc0c2;border-radius:10px;background:#fff;color:#292b30;font:700 12px/1.4 system-ui,sans-serif;cursor:pointer}
+    #easyIllustrationDiscard{border-color:#e2a9a4!important;background:#fff4f2!important;color:#a53330!important}
+    #easyIllustrationPreview{display:block;width:min(100%,300px);max-height:350px;object-fit:contain;border-radius:10px;background:#e9e6e1}
+    .easy-illustration-actions{display:flex;flex-wrap:wrap;gap:7px}
+    .easy-illustration-gallery{display:flex;gap:8px;overflow-x:auto;padding:3px 2px 8px}.easy-illustration-gallery:empty{display:none}
+    .easy-illustration .easy-illustration-gallery button{flex:none;width:70px;height:82px;padding:3px;border-radius:8px}.easy-illustration-gallery button[aria-pressed="true"]{border-color:#292b30;box-shadow:0 0 0 1px #292b30 inset}
+    .easy-illustration-gallery img{display:block;width:100%;height:55px;object-fit:cover;border-radius:5px}.easy-illustration-gallery span{display:block;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .easy-illustration .easy-illustration-readers{display:flex;flex-wrap:wrap;gap:8px}
+    .easy-illustration .easy-illustration-reader{display:flex;align-items:center;gap:8px;min-height:56px;padding:5px 10px 5px 5px;border-color:#dedad4;background:#fffdf9;text-align:left}
+    .easy-illustration-reader img{display:block;width:43px;height:43px;object-fit:cover;border-radius:9px}
+    .easy-illustration-reader span{display:grid;gap:2px}.easy-illustration-reader strong{font-size:11px}.easy-illustration-reader small{font-size:10px}
+    .easy-illustration .easy-illustration-reader.is-selected{border-color:#444249;box-shadow:0 0 0 1px #444249 inset}
+    @media(max-width:600px){
+      .easy-illustration .easy-illustration-readers{gap:6px;flex-wrap:nowrap}
+      .easy-illustration .easy-illustration-reader{flex:1 1 0;min-width:0;min-height:52px;padding:4px;gap:4px}
+      .easy-illustration-reader img{width:38px;height:38px;flex:none}
+      .easy-illustration-reader span{min-width:0}
+      .easy-illustration-reader strong,.easy-illustration-reader small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      #easyIllustrationResult{width:calc(100vw - 28px);padding:12px}
+      #easyIllustrationResult .easy-illustration-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;width:100%}
+      #easyIllustrationResult .easy-illustration-actions button{min-width:0;padding:6px 2px;font-size:10px;white-space:nowrap}
+    }
+    .easy-illustration-paper{position:relative;display:grid;gap:9px;width:min(100%,320px);padding:12px 12px 10px;border:1px solid #e6ddcc;border-radius:4px;background:radial-gradient(circle at 22% 16%,rgba(180,155,120,.1),transparent 48%),#f4efe4;box-shadow:0 13px 25px rgba(68,53,31,.13);overflow:hidden}
+    .easy-illustration-paper[data-illustrator="coral"]{border-color:#f4cdbb;background:linear-gradient(160deg,#fff0df,#fce4e4 65%,#f7d9cf)}
+    .easy-illustration-paper[data-illustrator="blue"]{border-color:#202c38;background:#18232e;box-shadow:0 14px 30px rgba(8,20,32,.27)}
+    .easy-illustration-paper[data-illustrator="blue"]>span{color:#c8d6e3}
+    .easy-illustration-figure{position:relative;overflow:hidden;background:#ede8de}
+    #easyIllustrationPreview{width:100%;max-height:340px;object-fit:contain;border-radius:0;background:transparent}
+    .easy-illustration-paper>span{font:12px/1.5 serif;color:#65615c;text-align:right}
+    .easy-illustration-paper.is-revealing .easy-illustration-figure{animation:easy-image-wash 2.3s ease-out both}
+    .easy-illustration-paper.is-revealing:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 25% 45%,rgba(250,247,238,.94),transparent 60%),radial-gradient(circle at 75% 30%,rgba(250,247,238,.88),transparent 65%),#f4efe4;animation:easy-paper-fade 2.6s ease-out forwards}
+    .easy-illustration-paper[data-illustrator="coral"].is-revealing:after{background:radial-gradient(circle at 60% 25%,#fff2d8,transparent 70%),#fce4e4}
+    .easy-illustration-paper[data-illustrator="blue"].is-revealing:after{background:radial-gradient(circle at 50% 45%,#40596b,transparent 70%),#18232e}
+    @keyframes easy-image-wash{0%{opacity:0;filter:blur(22px);transform:scale(1.035)}50%{opacity:.7;filter:blur(7px)}100%{opacity:1;filter:blur(0);transform:scale(1)}}
+    @keyframes easy-paper-fade{0%{opacity:1}55%{opacity:.55}100%{opacity:0}}
+    @media(prefers-reduced-motion:reduce){.easy-illustration-paper.is-revealing .easy-illustration-figure,.easy-illustration-paper.is-revealing:after{animation:none}.easy-illustration-paper.is-revealing:after{display:none}}
+</style>
 </head>
 <body>
-  <a id="publicShelfReturn" class="public-shelf-return" href="./author/" hidden>← 作者の本棚へ</a>
-  <section id="publicIntro" class="public-intro" hidden>
-    <div id="publicIntroCover" class="public-intro-cover"></div>
-    <div id="publicIntroCoverDim" class="public-intro-cover-dim"></div>
-    <div class="public-intro-frame">
-      <div class="public-intro-copy">
-        <div class="public-work-block">
-          <img id="publicIntroLogo" class="public-logo" alt="" hidden>
-          <h1 id="publicIntroTitle" class="public-title">Scene</h1>
-          <p id="publicIntroDescription" class="public-description"></p>
-          <p id="publicIntroAuthor" class="public-author"></p>
+<main id="app">
+  <aside id="cageHome" class="cage-home" aria-label="CAGE 最初の読者" hidden>
+    <div id="cageAside" class="cage-aside" hidden role="status" aria-live="polite" title="タップで記録を開く"></div>
+    <button id="cageToggle" class="cage-toggle" type="button" aria-label="CAGEを開く" aria-expanded="false"><span class="cage-bars" aria-hidden="true"><img src="./cage-icons/cage.png" alt=""></span><span class="cage-name">CAGE</span></button>
+    <section id="cagePanel" class="cage-panel" hidden aria-label="CAGEの読書記録">
+      <header><strong>CAGE <small>最初の読者</small></strong><button id="cageClose" type="button" aria-label="閉じる">×</button></header>
+      <div class="cage-readers" aria-label="読者たち"><span class="cage-reader is-active"><img src="./cage-icons/cage.png" alt=""><span>CAGE</span></span><span class="cage-reader is-pending"><img src="./cage-icons/coral.png" alt=""><span>準備中</span></span><span class="cage-reader is-pending"><img src="./cage-icons/blue.png" alt=""><span>準備中</span></span></div>
+      <p id="cageStatus" class="cage-status" role="status">まだ読んでいない。</p>
+      <div id="cageReaction" class="cage-reaction" hidden></div>
+      <small id="cageQuestionLabel" class="cage-question-label" hidden>CAGEが残した問い</small>
+      <div id="cageQuestion" class="cage-question" hidden></div>
+      <label id="cageFollowRow" class="cage-follow" hidden><input id="cageFollow" type="checkbox"> プレビューを一緒に読む <small>通過したSceneを順に読み、気になった時に話します</small></label>
+      <button id="cageRead" type="button">このSceneについて聞く</button>
+      <p class="cage-caption">自動読書をオフにした時は、ボタンで今のSceneを読ませられます。</p>
+      <details id="cageHistory"><summary>話したことを振り返る</summary><div id="cageTrail"></div></details>
+      <details id="cageQuestionHistory"><summary>問いを振り返る</summary><div id="cageQuestionTrail"></div></details>
+      <details id="cageWave"><summary>反応の記録を見る</summary><button id="cageWaveButton" type="button" aria-label="CAGEの反応の波。押すと近いSceneへ移動"><svg id="cageWavePlot" viewBox="0 0 280 82" preserveAspectRatio="none" aria-hidden="true"></svg></button><div id="cageWaveLabel" class="cage-wave-label">読むとここに波が残る。</div><small class="cage-wave-note">発言・問い・引っかかりの記録。盛り上がりの評価ではありません。○は手動、空白は未記録。</small></details>
+    </section>
+  </aside>
+  <header id="studioSharedHeader" class="studio-shared-header">
+    <div class="studio-shared-center">
+      <strong class="ahako-brand" aria-label="あ箱"><span class="ahako-a">あ</span><span class="ahako-box" aria-hidden="true">□</span></strong>
+      <small id="studioModeLabel">Easy Studio</small>
+    </div>
+    <div class="easy-menu-corner">
+      <button id="studioAuthorStatusButton" class="studio-author-status" type="button">作者ログイン</button>
+      <button id="easyMenuButton" class="easy-menu-button" type="button" aria-label="メニュー" aria-expanded="false">≡</button>
+      <div id="easyMenuBackdrop" class="easy-menu-backdrop" hidden></div>
+      <div id="easyMenuPanel" class="easy-menu-panel" hidden>
+        <div class="easy-menu-grabber" aria-hidden="true"></div>
+        <button id="menuDraftManageButton" class="easy-menu-item" type="button">
+          <span>最近使った作品</span><small id="menuDraftCount">0件</small>
+        </button>
+        <label class="easy-menu-item" for="importPackageInput">
+          <span>作品を開く</span><small>.scene</small>
+        </label>
+        <button id="menuExportPackageButton" class="easy-menu-item" type="button" disabled>
+          <span>作品を書き出す</span><small>Master .scene</small>
+        </button>
+        <button id="menuSaveBookshelfButton" class="easy-menu-item" type="button">
+          <span>本棚へ保存して移動</span><small>Local 本棚</small>
+        </button>
+        <button id="menuOpenBookshelfButton" class="easy-menu-item" type="button">
+          <span>本棚を開く</span><small>保存せず移動</small>
+        </button>
+        <button id="menuPublishedManageButton" class="easy-menu-item" type="button">
+          <span>公開一覧</span><small id="menuPublishedCount">公開作品</small>
+        </button>
+        <button id="menuIssueCurrentButton" class="easy-menu-item" type="button">
+          <span>この一冊を発行する</span><small>Issue</small>
+        </button>
+        <button id="menuIssueManageButton" class="easy-menu-item" type="button">
+          <span>発行一覧</span><small>配付中の一冊</small>
+        </button>
+        <button id="menuNewDraftButton" class="easy-menu-item" type="button">
+          <span>＋ 新しく作る</span><small>新しい下書き</small>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <section id="editorScreen" class="screen editor-screen">
+    <section class="draft-toolbar" aria-label="制作中の作品">
+      <button id="draftManageButton" class="draft-toolbar-button draft-toolbar-list" type="button">
+        <span>最近使った作品</span><small id="draftToolbarCount">0件</small>
+      </button>
+      <button id="newDraftQuickButton" class="draft-toolbar-button draft-toolbar-new" type="button">
+        <span>＋ 新しく作る</span><small>新しい下書き</small>
+      </button>
+    </section>
+
+    <div id="draftSaveIndicator" class="draft-save-indicator" hidden>自動保存済み</div>
+
+    <section class="intro">
+      <h2>「間」まで、書きたい。</h2>
+      <p>次の文章を、まだ見せない体験にします。</p>
+    </section>
+
+    <div class="form-stack">
+      <div class="field body-field">
+        <div class="body-field-heading"><label class="field-label" for="bodyInput">本文</label></div>
+        <textarea id="bodyInput" placeholder="ここに文章を貼り付けてください。"></textarea>
+        <div id="easyOgpCardList" class="easy-ogp-card-list" hidden aria-label="URLカード一覧"></div>
+        <div class="body-meta">
+          <span id="charCount">0文字</span>
+          <button id="sampleButton" class="text-button" type="button">サンプルを入れる</button>
         </div>
-        <div class="public-episode-block">
-          <p id="publicIntroEpisode" class="public-episode" hidden></p>
-          <p id="publicIntroEpisodeTitle" class="public-episode-title" hidden></p>
+      </div>
+
+      <details class="easy-illustration" id="easyIllustrationPanel">
+        <summary><img src="./cage-icons/cage.png" alt=""><span>この子に一枚描いてもらう</span><span id="easyIllustrationCount" class="easy-illustration-count"></span></summary>
+        <div class="easy-illustration-content">
+        <p>本文の冒頭・中盤・末尾から抜粋をCloudflareのAIへ送ります。</p>
+        <div class="easy-illustration-readers" role="group" aria-label="絵を思い浮かべる子">
+          <button class="easy-illustration-reader is-selected" type="button" data-illustrator="cage" aria-label="CAGE、墨絵" aria-pressed="true"><img src="./cage-icons/cage.png" alt=""><span><strong>CAGE</strong><small>墨絵</small></span></button>
+          <button class="easy-illustration-reader" type="button" data-illustrator="coral" aria-label="珊瑚色の子、アニメ" aria-pressed="false"><img src="./cage-icons/coral.png" alt=""><span><strong>珊瑚</strong><small>アニメ</small></span></button>
+          <button class="easy-illustration-reader" type="button" data-illustrator="blue" aria-label="青い子、実写" aria-pressed="false"><img src="./cage-icons/blue.png" alt=""><span><strong>青</strong><small>実写</small></span></button>
+        </div>
+        <button id="easyIllustrationGenerate" type="button">この子に思い浮かべてもらう</button>
+        <p id="easyIllustrationStatus" role="status" aria-live="polite"></p>
+        <div id="easyIllustrationGallery" class="easy-illustration-gallery" aria-label="生成した画像の履歴"></div>
+        </div>
+      </details>
+      <dialog id="easyIllustrationResult" aria-label="生成画像の確認">
+        <div class="easy-illustration-modal-head"><span id="easyIllustrationResultLabel">描いた一枚</span><button id="easyIllustrationClose" type="button" aria-label="閉じる">×</button></div>
+        <div class="easy-illustration-modal-body">
+          <div id="easyIllustrationPaper" class="easy-illustration-paper" data-illustrator="cage"><div class="easy-illustration-figure"><img id="easyIllustrationPreview" alt="生成した作品のイメージ"></div><span id="easyIllustrationByline">CAGEが思い浮かべた景色</span></div>
+          <div class="easy-illustration-actions">
+            <button id="easyIllustrationCover" type="button">表紙に使う</button>
+            <button id="easyIllustrationBackground" type="button">背景に使う</button>
+            <button id="easyIllustrationDownload" type="button">画像を保存</button>
+            <button id="easyIllustrationDiscard" type="button">履歴から削除</button>
+          </div>
+        </div>
+      </dialog>
+
+      <section class="theme-section">
+        <div class="section-heading"><span>雰囲気</span><small>あとから変えられます</small></div>
+        <div class="theme-grid">
+          <button class="theme-card is-selected" data-theme="light" type="button"><span class="theme-preview theme-preview-light">あ</span><strong>LIGHT</strong><small>文章・エッセイ</small></button>
+          <button class="theme-card" data-theme="dark" type="button"><span class="theme-preview theme-preview-dark">あ</span><strong>DARK</strong><small>SF・ホラー</small></button>
+          <button class="theme-card" data-theme="cinema" type="button"><span class="theme-preview theme-preview-cinema">あ</span><strong>CINEMA</strong><small>余白・映画的</small></button>
+        </div>
+      </section>
+
+      <div id="cinemaBackgroundPanel" class="cinema-background-panel" hidden>
+        <div class="cinema-background-copy"><strong>背景画像</strong><span>Scene Formatの背景としてPlayerへ渡します。</span></div>
+        <div class="cinema-tone" role="radiogroup" aria-label="CINEMAの明るさ">
+          <button class="cinema-tone-button is-selected" type="button" data-tone="dark" aria-pressed="true">暗く</button>
+          <button class="cinema-tone-button" type="button" data-tone="light" aria-pressed="false">明るく</button>
+        </div>
+        <label class="cinema-background-button" for="cinemaBackgroundInput">画像を選ぶ</label>
+        <input id="cinemaBackgroundInput" type="file" accept="image/*" hidden>
+        <button id="cinemaBackgroundClear" class="cinema-background-clear" type="button" hidden>画像を外す</button>
+        <div id="cinemaBackgroundPreview" class="cinema-background-preview" hidden></div>
+      </div>
+
+      <section class="work-font-section">
+        <div class="section-heading"><span>作品の書体</span><small>全Sceneの基本になります</small></div>
+        <div class="work-font-grid" role="radiogroup" aria-label="作品の書体">
+          <button class="work-font-card is-selected" type="button" data-font="serif" aria-pressed="true"><strong>明朝</strong><small>物語・文章向け</small></button>
+          <button class="work-font-card" type="button" data-font="sans" aria-pressed="false"><strong>ゴシック</strong><small>説明・現代的</small></button>
+          <button class="work-font-card" type="button" data-font="mono" aria-pressed="false"><strong>等幅</strong><small>端末・ログ向け</small></button>
+        </div>
+      </section>
+
+      <!-- Splitter remains active internally.
+           Easy Studio intentionally uses the tested NORMAL density only. -->
+      <select id="densitySelect" hidden aria-hidden="true" tabindex="-1">
+        <option value="normal" selected>標準</option>
+      </select>
+
+
+      <div class="easy-primary-actions">
+        <button id="makeButton" class="primary-button" type="button"><span>箱詰め</span><small>文章をSceneに分け、ひとつずつ表示します</small></button>
+      </div>
+
+      <details class="work-meta-section">
+        <summary>作品の入口と出口</summary>
+        <div class="work-meta-panel easy-direct-preview-panel">
+          <div class="easy-preview-pair">
+            <section class="easy-preview-card">
+              <div class="easy-preview-card-head"><strong>表紙</strong><small>タップして編集</small></div>
+              <div id="coverPreview" class="cover-preview cover-preview-editable player-like-cover-preview" role="button" tabindex="0" aria-label="表紙を直接編集">
+                <div class="cover-preview-bg" aria-hidden="true"></div>
+                <div class="cover-preview-dim" aria-hidden="true"></div>
+                <div class="cover-preview-empty"><span>COVER</span><small>画像なしでもOK</small></div>
+                <div class="cover-preview-player-copy" aria-label="表紙テキスト。タップして編集">
+                  <div class="cover-preview-work-block">
+                    <img id="coverPreviewLogo" class="cover-preview-logo" alt="" hidden>
+                    <strong id="coverPreviewTitle">Untitled</strong>
+                    <span id="coverPreviewSubtitle"></span>
+                    <small id="coverPreviewAuthor"></small>
+                  </div>
+                  <div class="cover-preview-episode-block">
+                    <span id="coverPreviewEpisode" class="cover-preview-episode"></span>
+                    <strong id="coverPreviewEpisodeTitle" class="cover-preview-episode-title"></strong>
+                  </div>
+                </div>
+                <div class="cover-preview-start">はじめる</div>
+              </div>
+            </section>
+            <section class="easy-preview-card">
+              <div class="easy-preview-card-head"><strong>読了ページ</strong><small>タップして編集</small></div>
+              <div id="endingPreview" class="ending-preview ending-preview-editable" aria-label="読了ページ プレビュー">
+              <button id="endingPreviewCenterEdit" class="ending-preview-center ending-preview-center-button" type="button"><strong id="endingPreviewLabel">読了</strong></button>
+              <div class="ending-preview-tabs ending-preview-three">
+                <button type="button" data-preview-link="0" hidden><small></small><strong></strong></button>
+                <button type="button" data-preview-cover><small>COVER</small><strong>表紙に戻る</strong></button>
+                <button type="button" data-preview-link="1" hidden><small></small><strong></strong></button>
+              </div>
+            </div>
+            </section>
+          </div>
+        </div>
+      </details>
+      <section class="commerce-price-card commerce-price-card-simple" aria-labelledby="commercePriceTitle">
+        <details id="commerceSettingsDetails">
+          <summary class="commerce-price-head commerce-price-summary">
+            <span class="commerce-summary-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M20.6 13.2 12.2 21.6a2 2 0 0 1-2.8 0L2.4 14.6a2 2 0 0 1 0-2.8V4a2 2 0 0 1 2-2h7.8a2 2 0 0 1 1.4.6l7 7a2 2 0 0 1 0 2.8Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.5" cy="7.5" r="1.4" fill="currentColor"/></svg>
+            </span>
+            <span class="commerce-summary-title">
+              <strong id="commercePriceTitle">販売設定</strong>
+              <small>読者が作品を受け取る方法</small>
+            </span>
+            <span id="commercePriceBadge" class="commerce-summary-value commerce-badge-free"><svg class="commerce-book-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5c2.8-.9 5.6-.4 8.5 1.5v12c-2.9-1.9-5.7-2.4-8.5-1.5v-12Zm17 0c-2.8-.9-5.6-.4-8.5 1.5v12c2.9-1.9 5.7-2.4 8.5-1.5v-12Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span class="commerce-badge-text">無料・MY COPY ¥100</span></span>
+          </summary>
+          <div class="commerce-settings-body">
+            <div class="commerce-price-options commerce-price-options-2x2" role="radiogroup" aria-label="販売方法">
+              <label><input id="commerceModeFree" type="radio" name="commerceMode" value="free" checked><span><strong>無料</strong><small>最後まで無料。読了後、100円でMY COPY</small></span></label>
+              <label><input id="commerceSupportEnabled" type="radio" name="commerceMode" value="reader_price"><span><strong>読者価格</strong><small>最後まで無料。MY COPYの価格を読者が決めます</small></span></label>
+              <label><input id="commerceModePurchase" type="radio" name="commerceMode" value="purchase"><span><strong>作者価格</strong><small>最後まで無料。MY COPYの価格をあなたが決めます</small></span></label>
+              <label><input id="commerceModeLocked" type="radio" name="commerceMode" value="locked"><span><strong>有料ロック</strong><small>指定Sceneから先は購入後に読めます</small></span></label>
+            </div>
+            <input id="ownCopyEnabled" type="checkbox" checked hidden aria-hidden="true">
+            <label id="commerceAmountField" class="commerce-amount-field" hidden>
+              <span>販売価格</span>
+              <div class="commerce-amount-input"><span>¥</span><input id="commerceAmountInput" type="number" inputmode="numeric" min="100" max="100000" step="100" value="100" aria-label="販売価格（円）"><small>円</small></div>
+            </label>
+            <label id="commerceLockField" class="commerce-amount-field" hidden>
+              <span>有料開始位置</span>
+              <div class="commerce-amount-input"><span>Scene</span><input id="commerceLockSceneInput" type="number" inputmode="numeric" min="2" step="1" value="2" aria-label="有料開始Scene"><small>から ¥<span id="commerceLockPriceEcho">100</span></small></div>
+              <span id="commerceLockSceneEcho" hidden>Scene 2</span>
+              <small id="commerceLockHint" class="commerce-lock-hint">Scene 1 まで無料で読めます。</small>
+              <small class="commerce-lock-guide">数字で直接指定するか、Live Editorでプレビューを見ながら指定できます。</small>
+            </label>
+            <div id="commerceRevenueSummary" class="commerce-revenue-summary" aria-live="polite"></div>
+            <details class="commerce-revenue-details">
+              <summary>売上の分配について</summary>
+              <div class="commerce-revenue-table" role="table" aria-label="販売価格ごとの作者とあ箱の分配">
+                <div class="commerce-revenue-row commerce-revenue-head" role="row"><span>販売価格</span><span>作者</span><span>あ箱</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥100</span><strong>¥50（50%）</strong><span>¥50</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥200</span><strong>¥110（55%）</strong><span>¥90</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥300</span><strong>¥180（60%）</strong><span>¥120</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥400</span><strong>¥260（65%）</strong><span>¥140</span></div>
+                <div class="commerce-revenue-row" role="row"><span>¥500〜</span><strong>70%</strong><span>30%</span></div>
+              </div>
+              <p>決済・運営にかかる費用は、原則として「あ箱」の取り分から負担します。</p>
+            </details>
+            <p id="commercePriceStatus" class="commerce-price-status" aria-live="polite"></p>
+          </div>
+        </details>
+      </section>
+      <button id="easyPublishButton" class="primary-button easy-publish-action easy-publish-bottom" type="button" disabled><span>公開する</span></button>
+
+      <section class="project-io-section project-io-clean developer-hidden-io" aria-labelledby="projectIoTitle" hidden>
+        <div class="section-heading"><span id="projectIoTitle">作品ファイル</span><small>Scene Format v1</small></div>
+        <input id="importPackageInput" type="file" accept=".scene,.scene.zip,.zip,application/zip,application/octet-stream" hidden>
+        <details class="developer-io">
+          <summary>開発者向け</summary>
+          <div class="project-io-grid developer-io-grid">
+            <button id="exportSceneButton" class="project-io-button" type="button"><strong>設計図を書き出す</strong><small>.scene.json</small></button>
+            <label class="project-io-button project-io-import" for="importSceneInput"><strong>設計図を読み込む</strong><small>.scene.json / .json</small></label>
+            <input id="importSceneInput" type="file" accept=".scene.json,.json,application/json" hidden>
+          </div>
+        </details>
+        <p id="projectIoStatus" class="project-io-status" aria-live="polite"></p>
+      </section>
+
+      <p class="footer-note">あなたの文章を、あ箱へ。</p>
+    </div>
+  </section>
+
+
+  <section id="advancedScreen" class="screen advanced-screen" hidden>
+    <section class="toolbox-title" aria-label="道具箱">
+      <button id="toolboxEasyReturnButton" class="toolbox-easy-return" type="button">← Easyへ戻る</button>
+      <small>SCENE COCKPIT</small>
+      <h1>道具箱</h1>
+      <p>Scene全体を見渡し、画像・音・設定の入り方を確認できます。</p>
+    </section>
+
+
+    <section class="advanced-policy">
+      <div><strong>読者が過去Sceneへ戻れる</strong><small>戻るボタン・スワイプ・キーボードをまとめて制御します。</small></div>
+      <label class="switch"><input id="allowPreviousInput" type="checkbox" checked><span></span></label>
+    </section>
+
+    <details id="advancedEndingEditor" class="adv-section advanced-work-ending" data-close-label="閉じる">
+      <summary>作品・読了ページ</summary>
+      <div class="adv-section-body">
+        <p class="advanced-hint">Easyではプレビューを直接タップ。ここでは読了ページをフォームで細かく編集できます。</p>
+            <details id="endingLegacyEditor" class="ending-legacy-editor">
+              <summary>フォームで細かく編集</summary>
+            <label class="field" for="endingLabelInput">
+              <span class="field-label">中央の文 <small>任意</small></span>
+              <textarea id="endingLabelInput" rows="2" placeholder="例：つづく"></textarea>
+            </label>
+            <div class="ending-link-editor ending-three-editor">
+              <div class="ending-link-head"><strong>読了後の3ボックス</strong><small>中央は固定・左右は任意</small></div>
+              <div class="ending-slot-editor">
+                <div class="ending-slot-title"><span>左ボタン</span><small>任意</small></div>
+                <div class="ending-link-row ending-link-row-stacked">
+                  <input id="endingLink1Kicker" type="text" placeholder="例：PREVIOUS">
+                  <input id="endingLink1Label" type="text" placeholder="例：前の話">
+                  <input id="endingLink1Url" type="url" placeholder="https://...">
+                </div>
+              </div>
+              <div class="ending-slot-editor is-fixed">
+                <div class="ending-slot-title"><span>中央ボタン</span><small>デフォルト固定</small></div>
+                <div class="ending-fixed-card"><span>COVER</span><strong>表紙に戻る</strong></div>
+              </div>
+              <div class="ending-slot-editor">
+                <div class="ending-slot-title"><span>右ボタン</span><small>任意</small></div>
+                <div class="ending-link-row ending-link-row-stacked">
+                  <input id="endingLink2Kicker" type="text" placeholder="例：NEXT">
+                  <input id="endingLink2Label" type="text" placeholder="例：続き">
+                  <input id="endingLink2Url" type="url" placeholder="https://...">
+                </div>
+              </div>
+            </div>
+            </details>
+      </div>
+    </details>
+
+    <details class="adv-section advanced-work-meta" data-close-label="閉じる">
+      <summary>作品情報・表紙</summary>
+      <div class="adv-section-body">
+        <p class="advanced-hint">Easyでは表紙プレビューをタップして編集できます。ここでは作品情報をフォームで細かく調整します。</p>
+        <div class="work-meta-grid">
+            <label class="field" for="titleInput">
+              <span class="field-label">作品タイトル</span>
+              <textarea id="titleInput" rows="2" placeholder="例：声のそろう通り"></textarea>
+            </label>
+            <label class="field">
+              <span class="field-label">サブタイトル <small>任意</small></span>
+              <input id="subtitleInput" type="text" placeholder="例：冷やせれば勝ちやろ">
+            </label>
+            <label class="field" for="authorInput">
+              <span class="field-label">作者名 <small>任意</small></span>
+              <input id="authorInput" type="text" list="authorHistoryList" placeholder="例：ペンネーム">
+              <datalist id="authorHistoryList"></datalist>
+              <small class="field-help author-history-help">この端末で以前使った作者名を候補に表示します。</small>
+            </label>
+            <label class="field">
+              <span class="field-label">言語</span>
+              <select id="languageInput">
+                <option value="auto" selected>自動判定</option>
+                <option value="ja">日本語</option>
+                <option value="en">English</option>
+                <option value="mul">複数言語</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">話数表記 <small>任意・自由入力</small></span>
+              <input id="episodeInput" type="text" placeholder="例：第1話 / EPISODE 01 / PROLOGUE">
+            </label>
+            <label class="field">
+              <span class="field-label">今回のタイトル <small>任意</small></span>
+              <input id="episodeTitleInput" type="text" placeholder="例：窯の前で">
+            </label>
+            <label class="field" for="descriptionInput">
+              <span class="field-label">ひとこと <small>任意</small></span>
+              <textarea id="descriptionInput" class="work-description-input" rows="2" maxlength="80" placeholder="例：声が重なる街で、ひとりだけ違う声を聞いた。"></textarea>
+              <small class="field-help work-description-help">リンクカードなどで作品を短く紹介するための文章です。</small>
+            </label>
+          </div>
+        <div class="advanced-cover-assets">
+          <input id="coverLogoInput" type="file" accept="image/png" hidden>
+          <button id="coverLogoChoose" class="cinema-background-clear" type="button">作品ロゴ（透過PNG）を選ぶ / 変更</button>
+          <button id="coverLogoClear" class="cinema-background-clear" type="button" hidden>作品ロゴを外す</button>
+          <input id="coverImageInput" type="file" accept="image/*" hidden>
+          <button id="coverImageClear" class="cinema-background-clear" type="button" hidden>表紙画像を外す</button>
         </div>
       </div>
-      <div class="public-intro-actions">
-        <button id="publicStart" class="public-primary" type="button">はじめる</button>
-        <button id="publicGuideReceive" class="public-secondary" type="button" hidden>説明書を本棚に入れる</button>
-        <p id="publicGuideStatus" class="public-own-copy-status" aria-live="polite" hidden></p>
-        <button id="publicContinue" class="public-secondary" type="button" hidden>途中から</button>
+    </details>
+
+    <div class="advanced-layout">
+      <aside class="scene-rail">
+        <div class="scene-rail-head"><strong id="sceneCountLabel">0 Scenes</strong><button id="addSceneButton" type="button">＋</button></div>
+        <div id="sceneList" class="scene-list"></div>
+      </aside>
+
+      <section class="scene-inspector">
+        <div class="scene-inspector-head">
+          <div><span id="selectedSceneNumber" class="scene-number">Scene 1</span><code id="selectedSceneId">s001</code></div>
+          <div class="scene-move-actions"><button id="moveUpButton" type="button">↑</button><button id="moveDownButton" type="button">↓</button></div>
+        </div>
+        <section id="liveCommerceLockSection" class="live-commerce-lock-section" hidden>
+          <div><strong>有料開始位置</strong><small id="liveCommerceLockState">未指定</small></div>
+          <button id="liveCommerceLockButton" type="button" class="live-commerce-lock">🔒 このSceneから有料にする</button>
+        </section>
+
+        <div class="adv-field"><div class="scene-body-field-heading"><label for="sceneTextInput">本文</label><button id="sceneOgpCardButton" class="text-button ogp-insert-button" type="button">＋ URLカード</button></div><textarea id="sceneTextInput" rows="7"></textarea></div>
+        <label class="adv-field subtext-field"><span>サブテキスト <small>任意</small></span><textarea id="sceneSubTextInput" rows="2" placeholder="補足が必要なSceneだけ"></textarea></label>
+
+        <section class="auto-timing-editor">
+          <div class="auto-timing-head">
+            <div>
+              <strong>AUTOタイミング</strong>
+              <small id="sceneAutoTimingState">未記録</small>
+            </div>
+            <button id="sceneAutoTimingReset" type="button">標準に戻す</button>
+          </div>
+          <div class="auto-timing-controls">
+            <button type="button" data-auto-nudge="-0.5">−0.5</button>
+            <button type="button" data-auto-nudge="-0.1">−0.1</button>
+            <label>
+              <input id="sceneAutoTimingInput" type="number" min="0.15" max="60" step="0.05" value="2.60">
+              <span>秒</span>
+            </label>
+            <button type="button" data-auto-nudge="0.1">＋0.1</button>
+            <button type="button" data-auto-nudge="0.5">＋0.5</button>
+          </div>
+          <p>REC後にミスしたSceneだけ微調整できます。AUTOはこの秒数だけ表示して次へ進みます。</p>
+        </section>
+
+        <div class="adv-grid">
+          <label class="adv-field"><span>種類</span><select id="sceneTypeSelect"><option value="text">テキスト</option><option value="dialogue">セリフ</option><option value="sound">音だけ</option></select></label>
+          <label class="adv-field"><span>表示</span><select id="sceneDisplaySelect"><option value="stack">前の文章を残す</option><option value="solo">この文章だけ</option><option value="overlay">前Sceneに重ねる</option></select></label>
+          <label class="adv-field"><span>Sceneの流れ</span><select id="sceneFlowSelect"><option value="vertical">縦方向（上へ送る）</option><option value="horizontal">横方向（ページ送り）</option></select></label>
+          <label class="adv-field"><span>表示モード</span><select id="sceneViewSelect"><option value="world">通常</option><option value="console">コンソール</option><option value="system">システム</option><option value="warning">警告</option><option value="void">虚無</option><option value="chat">チャット</option></select></label>
+          <label class="adv-field"><span>出かた</span><select id="sceneEffectSelect"><option value="auto">おまかせ</option><option value="fade">フェード</option><option value="pop">ポンと出る</option><option value="blur">ぼやけて現れる</option><option value="whisper">そっと現れる</option><option value="loud">強く出る</option><option value="pulse">脈打つ</option><option value="shake">揺れる</option><option value="tilt">傾く</option><option value="slow">ゆっくり</option><option value="slam">叩きつける</option><option value="burst">弾ける</option><option value="glitchHit">グリッチヒット（左）</option><option value="glitchHitRight">グリッチヒット（右）</option><option value="rush">突っ込む</option><option value="impact">衝撃（ドン）</option><option value="scream">絶叫</option><option value="stretch">伸びる</option><option value="murmur">ざわつく</option><option value="flash">閃光</option><option value="break">破壊</option><option value="bounce">跳ねる</option><option value="none">演出なし</option></select></label>
+          <label class="adv-field"><span>位置の動き</span><select id="sceneEntryMotionSelect"><option value="flow">流れて着地</option><option value="still">その場</option></select></label>
+          <label class="adv-field"><span>文字サイズ</span><select id="sceneSizeSelect"><option value="auto">おまかせ</option><option value="small">小</option><option value="normal">標準</option><option value="large">大</option><option value="xl">特大</option><option value="xxl">超特大</option><option value="fullscreen">全画面</option><option value="giant">超巨大</option><option value="breakout">画面突破</option></select></label><label class="adv-field"><span>書字方向</span><select id="sceneWritingModeSelect"><option value="horizontal-tb">横書き</option><option value="vertical-rl">縦書き（右から左）</option></select></label><label class="adv-field"><span>文字の枠</span><select id="sceneFrameSelect"><option value="none">なし</option><option value="handdrawn-voice">手書き吹き出し</option></select></label><label class="adv-field"><span>テキスト位置</span><select id="sceneFramePositionSelect"><option value="auto">おまかせ</option><option value="top-left">左上</option><option value="top">上</option><option value="top-right">右上</option><option value="left">左</option><option value="center">中央</option><option value="right">右</option><option value="bottom-left">左下</option><option value="bottom">下</option><option value="bottom-right">右下</option><option value="custom" hidden>調整済み</option></select></label><button type="button" id="sceneFramePositionAdjust">プレビュー上でドラッグ調整</button><label class="adv-field"><span>文字の太さ</span><select id="sceneWeightSelect"><option value="0">おまかせ</option><option value="300">細い</option><option value="400">標準</option><option value="500">やや太い</option><option value="700">太い</option><option value="900">極太</option></select></label><label class="adv-field"><span>文字色</span><select id="sceneColorSelect"><option value="auto">おまかせ</option><option value="white">白</option><option value="black">黒</option><option value="custom">任意色</option></select></label>
+          <label id="sceneColorCustomField" class="adv-field" hidden><span>任意色</span><input id="sceneColorCustomInput" type="color" value="#ffffff"></label>
+          <label class="adv-field"><span>文字影</span><select id="sceneShadowSelect"><option value="auto">おまかせ</option><option value="none">なし</option><option value="soft">弱</option><option value="strong">強</option></select></label>
+          <label class="adv-field"><span>このSceneの書体</span><select id="sceneFontSelect"><option value="inherit">作品設定を使う</option><option value="serif">明朝</option><option value="sans">ゴシック</option><option value="mono">等幅</option></select></label>
+          <label class="adv-field"><span>このSceneの言語</span><select id="sceneLanguageSelect"><option value="auto">自動判定</option><option value="ja">日本語</option><option value="en">English</option><option value="custom">その他</option></select></label>
+          <label id="sceneLanguageCustomField" class="adv-field scene-language-custom" hidden><span>言語タグ</span><input id="sceneLanguageCustomInput" type="text" inputmode="text" autocomplete="off" placeholder="例: ko / zh-Hans / ar"></label>
+        </div>
+
+        
+        <section id="toolboxDetailCards" class="toolbox-detail-grid" aria-label="Scene詳細設定">
+          <button type="button" class="toolbox-detail-card" data-toolbox-detail="text">
+            <span class="toolbox-card-icon">Aa</span>
+            <span class="toolbox-card-copy">
+              <strong>文字の詳細設定</strong>
+              <small id="toolboxTextSummary">作品設定 / おまかせ</small>
+            </span>
+            <span class="toolbox-card-open">開く</span>
+          </button>
+          <button type="button" class="toolbox-detail-card" data-toolbox-detail="effect">
+            <span class="toolbox-card-icon">✦</span>
+            <span class="toolbox-card-copy">
+              <strong>演出の詳細設定</strong>
+              <small id="toolboxEffectSummary">おまかせ / 前の文章を残す</small>
+            </span>
+            <span class="toolbox-card-open">開く</span>
+          </button>
+          <button type="button" class="toolbox-detail-card" data-toolbox-detail="background">
+            <span class="toolbox-card-icon">▣</span>
+            <span class="toolbox-card-copy">
+              <strong>背景の詳細設定</strong>
+              <small id="toolboxBackgroundSummary">前Sceneを継続</small>
+            </span>
+            <span class="toolbox-card-open">開く</span>
+          </button>
+          <button type="button" class="toolbox-detail-card" data-toolbox-detail="audio">
+            <span class="toolbox-card-icon">♪</span>
+            <span class="toolbox-card-copy">
+              <strong>音の詳細設定</strong>
+              <small id="toolboxAudioSummary">BGM / Ambient 継続・SEなし</small>
+            </span>
+            <span class="toolbox-card-open">開く</span>
+          </button>
+        </section>
+
+        <details class="toolbox-scene-actions">
+          <summary>Scene操作</summary>
+
+        <div class="scene-edit-actions">
+          <button id="mergePreviousButton" type="button">前と結合</button>
+          <button id="splitSceneButton" type="button">カーソル位置で分割</button>
+          <button id="deleteSceneButton" class="danger" type="button">削除</button>
+        </div>
+        </details>
+
+        <details class="adv-section legacy-advanced-detail" data-close-label="閉じる" hidden aria-hidden="true">
+          <summary>旧・背景設定</summary>
+          <div class="adv-section-body">
+            <label class="adv-field"><span>このSceneの背景</span>
+              <select id="sceneBackgroundMode">
+                <option value="inherit">前Sceneから継続</option>
+                <option value="image">このSceneで画像を変更</option>
+                <option value="clear">このSceneで背景を解除</option>
+              </select>
+            </label>
+            <div id="sceneBackgroundControls" hidden>
+              <div class="asset-row">
+                <label class="asset-button" for="sceneBackgroundInput">画像を選ぶ</label>
+                <input id="sceneBackgroundInput" type="file" accept="image/*" hidden>
+                <button id="sceneBackgroundRemoveFile" type="button" class="asset-clear">選択解除</button>
+              </div>
+              <div class="asset-url-row">
+                <input id="sceneBackgroundUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/background.jpg">
+                <button id="sceneBackgroundUrlApply" type="button">URLを反映</button>
+              </div>
+              <div id="sceneBackgroundPreview" class="adv-asset-preview" data-overlay-label="このSceneから背景変更" hidden></div>
+              <div class="adv-grid">
+                <label class="adv-field"><span>切替</span><select id="sceneBackgroundTransition"><option value="fade">fade</option><option value="cut">cut</option><option value="flash">flash</option><option value="glitch">glitch</option></select></label>
+                <label class="adv-field"><span>背景の消え方</span><select id="sceneBackgroundExit"><option value="auto">切替演出に任せる</option><option value="fade">ゆっくり薄くなる</option><option value="dark">暗闇へ溶ける</option><option value="light">白へ溶ける</option><option value="blur">ぼやけながら消える</option><option value="zoomOut">縮みながら消える</option><option value="zoomIn">拡大しながら消える</option><option value="afterimage">残像を残して消える</option></select></label>
+                <label class="adv-field"><span>表示</span><select id="sceneBackgroundFit"><option value="cover">cover</option><option value="contain">contain</option></select></label>
+                <label class="adv-field"><span>動き</span><select id="sceneBackgroundMotion"><option value="none">なし／このSceneで停止</option><option value="slowZoom">超低速ズームイン</option><option value="zoomOut">超低速ズームアウト</option><option value="breath">わずかに呼吸</option><option value="parallax">わずかに漂う</option><option value="panLeft">左へ移動</option><option value="panRight">右へ移動</option><option value="panUp">上へ移動</option><option value="panDown">下へ移動</option><option value="panUpLeft">左上へ移動</option><option value="panUpRight">右上へ移動</option><option value="panDownLeft">左下へ移動</option><option value="panDownRight">右下へ移動</option></select></label>
+                <label class="adv-field range-field"><span>暗さ <output id="sceneBackgroundDimOutput">34%</output></span><input id="sceneBackgroundDim" type="range" min="0" max="85" step="1" value="34"></label><div class="adv-field scene-motion-preview-field">
+                  <span>背景プレビュー <small>切替・表示・動き・暗さ</small></span>
+                  <div id="sceneMotionPreview" class="scene-motion-preview">
+                    <div id="sceneMotionPreviewImage" class="scene-motion-preview-image"></div>
+                    <div id="sceneMotionPreviewVeil" class="scene-motion-preview-veil"></div>
+                    <span id="sceneMotionPreviewLabel">CUT / COVER / なし / 34%</span>
+                  </div>
+                </div>
+                <label class="adv-field range-field"><span>切替の速さ <output id="sceneBackgroundTransitionDurationOutput">700ms</output></span><input id="sceneBackgroundTransitionDuration" type="range" min="0" max="10000" step="50" value="700"></label>
+                <label class="adv-field range-field"><span>動きの速さ <output id="sceneBackgroundMotionDurationOutput">12000ms</output></span><input id="sceneBackgroundMotionDuration" type="range" min="1500" max="60000" step="250" value="12000"></label>
+                <label class="adv-field range-field"><span>動きの強さ <output id="sceneBackgroundMotionAmountOutput">2%</output></span><input id="sceneBackgroundMotionAmount" type="range" min="1" max="20" step="1" value="2"></label>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="adv-section legacy-advanced-detail" data-close-label="閉じる" hidden aria-hidden="true">
+          <summary>旧・音設定</summary>
+          <div class="adv-section-body audio-editor-grid">
+            <section class="audio-card">
+              <div class="audio-card-title"><strong>BGM</strong><small>続いていた時間</small></div>
+              <label class="adv-field"><span>操作</span><select id="sceneBgmAction"><option value="inherit">継続（指定なし）</option><option value="start">このSceneで開始</option><option value="volume">音量を変更</option><option value="stop">このSceneで停止</option></select></label>
+              <div id="sceneBgmStartFields" class="audio-action-fields" hidden>
+                <div class="asset-row"><label class="asset-button" for="sceneBgmInput">BGMを選ぶ</label><input id="sceneBgmInput" type="file" hidden><span id="sceneBgmFileLabel" class="asset-name">未選択</span></div>
+                <div class="asset-url-row"><input id="sceneBgmUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/bgm.mp3"><button id="sceneBgmUrlApply" type="button">URLを反映</button></div>
+                <label class="check-row"><input id="sceneBgmLoop" type="checkbox" checked><span>ループ</span></label>
+                <div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneBgmVolumeOutput">50%</output></span><input id="sceneBgmVolume" type="range" min="0" max="100" value="50"></label><label class="adv-field"><span>fadeIn (ms)</span><input id="sceneBgmFadeIn" type="number" min="0" step="100" value="800"></label><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneBgmFadeOut" type="number" min="0" step="100" value="800"></label></div>
+              </div>
+              <div id="sceneBgmVolumeFields" class="audio-action-fields" hidden><div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneBgmVolumeChangeOutput">30%</output></span><input id="sceneBgmVolumeChange" type="range" min="0" max="100" value="30"></label><label class="adv-field"><span>fade (ms)</span><input id="sceneBgmVolumeFade" type="number" min="0" step="100" value="500"></label></div></div>
+              <div id="sceneBgmStopFields" class="audio-action-fields" hidden><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneBgmStopFade" type="number" min="0" step="100" value="800"></label></div>
+            </section>
+
+            <section class="audio-card">
+              <div class="audio-card-title"><strong>Ambient</strong><small>その時そこにあった音</small></div>
+              <label class="adv-field"><span>操作</span><select id="sceneAmbientAction"><option value="inherit">継続（指定なし）</option><option value="start">このSceneで開始</option><option value="volume">音量を変更</option><option value="stop">このSceneで停止</option></select></label>
+              <div id="sceneAmbientStartFields" class="audio-action-fields" hidden>
+                <div class="asset-row"><label class="asset-button" for="sceneAmbientInput">持続音を選ぶ</label><input id="sceneAmbientInput" type="file" hidden><span id="sceneAmbientFileLabel" class="asset-name">未選択</span></div>
+                <div class="asset-url-row"><input id="sceneAmbientUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/ambient.mp3"><button id="sceneAmbientUrlApply" type="button">URLを反映</button></div>
+                <label class="check-row"><input id="sceneAmbientLoop" type="checkbox" checked><span>ループ</span></label>
+                <div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneAmbientVolumeOutput">35%</output></span><input id="sceneAmbientVolume" type="range" min="0" max="100" value="35"></label><label class="adv-field"><span>fadeIn (ms)</span><input id="sceneAmbientFadeIn" type="number" min="0" step="100" value="600"></label><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneAmbientFadeOut" type="number" min="0" step="100" value="600"></label></div>
+              </div>
+              <div id="sceneAmbientVolumeFields" class="audio-action-fields" hidden><div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneAmbientVolumeChangeOutput">25%</output></span><input id="sceneAmbientVolumeChange" type="range" min="0" max="100" value="25"></label><label class="adv-field"><span>fade (ms)</span><input id="sceneAmbientVolumeFade" type="number" min="0" step="100" value="500"></label></div></div>
+              <div id="sceneAmbientStopFields" class="audio-action-fields" hidden><label class="adv-field"><span>fadeOut (ms)</span><input id="sceneAmbientStopFade" type="number" min="0" step="100" value="600"></label></div>
+            </section>
+
+            <section class="audio-card audio-card-se">
+              <div class="audio-card-title"><strong>SE</strong><small>その時起きた音</small></div>
+              <label class="check-row"><input id="sceneSeEnabled" type="checkbox"><span>このSceneでSEを鳴らす</span></label>
+              <div id="sceneSeFields" class="audio-action-fields" hidden>
+                <div class="asset-row"><label class="asset-button" for="sceneSeInput">SEを選ぶ</label><input id="sceneSeInput" type="file" hidden><span id="sceneSeFileLabel" class="asset-name">未選択</span></div>
+                <div class="asset-url-row"><input id="sceneSeUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/se.mp3"><button id="sceneSeUrlApply" type="button">URLを反映</button></div>
+                <div class="adv-grid"><label class="adv-field range-field"><span>音量 <output id="sceneSeVolumeOutput">80%</output></span><input id="sceneSeVolume" type="range" min="0" max="100" value="80"></label><label class="adv-field"><span>fadeIn (ms)</span><input id="sceneSeFadeIn" type="number" min="0" step="50" value="0"></label></div>
+              </div>
+            </section>
+          </div>
+        </details>
+
+        <p class="advanced-hint">BGMは「続いていた時間」、Ambientは「その時そこにあった音」、SEは「その時起きた音」として扱います。何も指定しなければ前Sceneの状態を継続します。</p>
+      </section>
+    </div>
+  </section>
+
+  <section id="playerScreen" class="easy-core-screen" hidden>
+    <div id="studioPreviewViewport"><div id="scenePlayer"></div></div>
+
+    <nav id="studioPreviewDeviceToolbar" class="studio-preview-device-toolbar" aria-label="プレビュー端末">
+      <button type="button" data-preview-device="phone">iPhone</button>
+      <button type="button" data-preview-device="tablet">タブレット</button>
+      <button type="button" data-preview-device="pc">PC</button>
+      <button type="button" class="preview-guide-toggle" data-preview-guide aria-pressed="false">安全ガイド</button>
+    </nav>
+
+    <button id="editReturnButton" class="easy-edit-return" type="button">編集に戻る</button>
+    <div id="activeSceneFileName" class="active-scene-file-name" title="未保存">FILE　未保存</div>
+
+
+    <button id="publishFromPreviewButton" class="publish-preview-button" type="button" hidden>公開する</button>
+
+    <nav id="liveEditToolbar" class="live-edit-toolbar" aria-label="Live Edit" hidden>
+      <button type="button" data-live-edit="add"><span>＋</span><small>追加</small></button>
+      <button type="button" data-live-edit="text"><span>Aa</span><small>文字</small></button>
+      <button type="button" data-live-edit="effect"><span>✦</span><small>演出</small></button>
+      <button type="button" data-live-edit="background"><span>▣</span><small>背景</small></button>
+      <button type="button" data-live-edit="audio"><span>♪</span><small>音</small></button>
+      <button type="button" data-live-edit="timing"><span>⌛</span><small>時間</small></button>
+      <button type="button" data-live-edit="scene"><span>•••</span><small>Scene</small></button>
+    </nav>
+    <nav id="liveInlineToolbar" class="live-inline-toolbar" aria-label="本文編集中の操作" hidden>
+      <button type="button" class="live-inline-trigger" data-live-inline="tools-toggle" aria-label="カーソル補助を開く">↵|</button>
+      <div class="live-inline-compact" aria-label="カーソル補助">
+        <button type="button" data-live-inline="caret-prev" aria-label="カーソルを1文字戻す">‹</button>
+        <button type="button" data-live-inline="caret-next" aria-label="カーソルを1文字進める">›</button>
+        <button type="button" data-live-inline="punct-prev" aria-label="前の句読点へ">‹。</button>
+        <button type="button" data-live-inline="punct-next" aria-label="次の句読点へ">。›</button>
+        <button type="button" data-live-inline="split" aria-label="カーソル位置で分割">↵|</button>
+      </div>
+    </nav>
+
+    <section id="liveEditSheet" class="live-edit-sheet" hidden aria-label="Live Edit panel">
+      <div class="live-edit-sheet-head">
+        <div><small id="liveEditSceneNumber">Scene 1</small><strong id="liveEditSheetTitle">文字</strong></div>
+        <button id="liveEditSheetClose" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="liveEditSheetBody" class="live-edit-sheet-body"></div>
+    </section>
+
+    <nav id="desktopV2Chrome" class="desktop-v2-chrome" hidden aria-label="Studio v2 writing controls">
+      <button id="desktopV2Prev" type="button" aria-label="前のScene" title="前のScene">‹</button>
+      <strong id="desktopV2SceneLabel">Scene 1 / 1</strong>
+      <button id="desktopV2Add" type="button" class="desktop-v2-add" aria-label="次に空Sceneを追加" title="次に空Sceneを追加">＋</button>
+      <button id="desktopV2Next" type="button" aria-label="次のScene" title="次のScene">›</button>
+      <span class="desktop-v2-separator" aria-hidden="true"></span>
+      <button id="liveUndoButton" type="button" class="desktop-v2-history" aria-label="元に戻す" title="元に戻す (Ctrl/⌘+Z)" disabled>↶</button>
+      <button id="liveRedoButton" type="button" class="desktop-v2-history" aria-label="やり直す" title="やり直す (Ctrl/⌘+Shift+Z / Ctrl+Y)" disabled>↷</button>
+      <span class="desktop-v2-separator" aria-hidden="true"></span>
+      <button id="desktopV2Settings" type="button" class="desktop-v2-settings" aria-label="右Editorを開く / 閉じる" title="右Editorを開く / 閉じる" aria-expanded="false">•••</button>
+      <button id="liveMenuButton" type="button" class="desktop-v2-menu" aria-label="作品メニュー" title="作品メニュー" aria-expanded="false">≡</button>
+    </nav>
+
+    <aside id="desktopLivePanel" class="desktop-live-panel" hidden aria-label="Desktop Live Edit">
+      <div class="desktop-live-panel-head">
+        <button id="desktopPrevScene" type="button">‹ 前のScene</button>
+        <div class="desktop-live-panel-center">
+          <strong id="desktopSceneLabel">Scene 1 / 1</strong>
+          <button id="desktopShortcutButton" class="desktop-shortcut-button" type="button" aria-label="執筆ショートカット">⌨</button>
+          <button id="desktopTimingButton" class="desktop-timing-button" type="button" aria-label="時間を調整">⌛ 時間</button>
+        </div>
+        <button id="desktopNextScene" type="button">次のScene ›</button>
+      </div>
+      <div id="desktopLivePanelBody" class="desktop-live-panel-body"></div>
+    </aside>
+
+    <aside id="desktopShortcutHint" class="desktop-shortcut-hint" hidden aria-label="執筆ショートカット">
+      <button id="desktopShortcutRailButton" class="desktop-shortcut-rail-button" type="button" aria-expanded="false" aria-controls="desktopShortcutHintBody" aria-label="キーボード操作のヒント">⌨</button>
+      <section id="desktopShortcutHintBody" class="desktop-shortcut-hint-body" hidden>
+        <div class="desktop-shortcut-hint-head"><div><small>PC LIVE EDITOR</small><strong>キーボードだけでも書けます</strong></div><button id="desktopShortcutHintClose" type="button" aria-label="閉じる">×</button></div>
+        <div class="desktop-shortcut-hint-list">
+          <div><kbd>Enter</kbd><span>改行</span></div>
+          <div><span><kbd>Shift</kbd> ＋ <kbd>Enter</kbd></span><span>カーソル位置で分割</span></div>
+          <div><span><kbd>Ctrl / ⌘</kbd> ＋ <kbd>Enter</kbd></span><span>次に空Scene</span></div>
+          <div><span><kbd>Ctrl / ⌘</kbd> ＋ <kbd>Z</kbd></span><span>元に戻す</span></div>
+          <div><span><kbd>Ctrl / ⌘</kbd> ＋ <kbd>Shift</kbd> ＋ <kbd>Z</kbd></span><span>やり直す</span></div>
+          <div><kbd>↑</kbd><span>先頭行から前Sceneを編集</span></div>
+          <div><kbd>↓</kbd><span>最終行から次Sceneを編集</span></div>
+        </div>
+        <p>分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。</p>
+      </section>
+    </aside>
+
+    <div id="autoRecPanel" class="auto-rec-panel">
+      <button id="autoRecStart" class="auto-rec-start" type="button">● AUTO REC</button>
+      <div id="autoRecLive" class="auto-rec-live" hidden>
+        <span class="auto-rec-dot"></span>
+        <strong>REC</strong>
+        <span id="autoRecClock">00:00.0</span>
+        <span id="autoRecCount">1 / 1</span>
+        <button id="autoRecCancel" type="button">中止</button>
+      </div>
+      <div id="autoRecDone" class="auto-rec-done" hidden>
+        <strong>REC保存完了</strong>
+        <span id="autoRecSummary"></span>
+        <button id="autoRecRetry" type="button">やり直す</button>
       </div>
     </div>
   </section>
 
-  <div id="publicOpening" class="public-opening" hidden>
-    <div id="publicOpeningImage" class="public-opening-image"></div>
-    <div id="publicOpeningDim" class="public-opening-dim"></div>
-  </div>
 
-  <div id="scenePlayer" class="public-player" hidden></div>
+  <dialog id="publishDialog" class="publish-dialog">
+    <div class="publish-dialog-card">
+      <button id="publishDialogClose" class="publish-dialog-close" type="button" aria-label="閉じる">×</button>
 
-  <section id="publicEnding" class="public-ending" hidden>
-    <div class="public-ending-inner">
-      <p id="publicEndingLabel" class="public-ending-label" hidden></p>
-
-      <div id="publicEndingActions" class="public-ending-actions public-ending-three">
-        <a id="publicEndingLeft" class="public-ending-box" hidden><small></small><strong></strong></a>
-        <button id="publicEndingCover" class="public-ending-box public-ending-cover" type="button"><small>COVER</small><strong>表紙に戻る</strong></button>
-        <a id="publicEndingRight" class="public-ending-box" hidden><small></small><strong></strong></a>
+      <div id="publishStateReady" class="publish-state">
+        <span class="publish-kicker">PUBLISH</span>
+        <h2 id="publishReadyTitle">この作品を公開しますか？</h2>
+        <p id="publishReadyText">公開すると、読者へ渡せるURLを発行します。</p>
+        <div id="publishAuthorGate" class="publish-author-gate">
+          <div id="publishAuthorSignedOut">
+            <small>AUTHOR</small>
+            <strong>公開には作者確認が必要です</strong>
+            <button id="publishAuthorLoginButton" class="publish-secondary" type="button">作者登録・ログイン</button>
+          </div>
+          <div id="publishAuthorSignedIn" hidden>
+            <small>AUTHOR</small>
+            <strong id="publishAuthorName"></strong>
+            <span id="publishAuthorId"></span>
+            <button id="publishAuthorLogoutButton" class="publish-author-text-button" type="button">ログアウト</button>
+          </div>
+        </div>
+        <label class="publish-rights-check">
+          <input id="publishRightsConfirm" type="checkbox">
+          <span>この作品を公開するために必要な権利を有している、または権利者から必要な許可を得ています。</span>
+        </label>
+        <button id="publishConfirmButton" class="publish-primary" type="button" disabled>公開する</button>
       </div>
-      <div id="publicOwnCopyWrap" class="public-own-copy-wrap" hidden>
-        <button id="publicOwnCopy" class="public-own-copy" type="button">自分の一冊を受け取る</button>
-        <p id="publicOwnCopyStatus" class="public-own-copy-status" aria-live="polite"></p>
+
+      <div id="publishStateWorking" class="publish-state" hidden>
+        <span class="publish-spinner" aria-hidden="true"></span>
+        <h2>公開しています…</h2>
+        <p>作品を公開できる状態にしています。</p>
+      </div>
+
+      <div id="publishStateSuccess" class="publish-state" hidden>
+        <span class="publish-success-mark" aria-hidden="true">✓</span>
+        <h2>公開しました</h2>
+        <div class="publish-url-box">
+          <span id="publishUrlText"></span>
+        </div>
+        <div class="publish-success-actions">
+          <button id="publishShareButton" class="publish-primary" type="button">シェア</button>
+          <button id="publishCopyButton" class="publish-secondary" type="button">リンクをコピー</button>
+        </div>
+        <small class="publish-mock-note">Hosting接続済みです。現在のURLは公開データ確認用で、読者用Playerは次の接続段階です。</small>
+      </div>
+
+      <div id="publishStateError" class="publish-state" hidden>
+        <span class="publish-error-mark" aria-hidden="true">!</span>
+        <h2>公開できませんでした</h2>
+        <p>時間をおいて、もう一度試してください。</p>
+        <button id="publishRetryButton" class="publish-primary" type="button">もう一度試す</button>
       </div>
     </div>
-  </section>
+  </dialog>
 
-  <section id="publicError" class="public-error" hidden>
-    <div class="public-error-card">
-      <strong id="publicErrorTitle">Sceneを開けませんでした</strong>
-      <p id="publicErrorMessage"></p>
-      <button id="publicRetry" type="button">もう一度読み込む</button>
+  <dialog id="authorAuthDialog" class="publish-dialog author-auth-dialog">
+    <div class="publish-dialog-card author-auth-card">
+      <button id="authorAuthClose" class="publish-dialog-close" type="button" aria-label="閉じる">×</button>
+      <span class="publish-kicker">AUTHOR</span>
+      <h2>作者登録・ログイン</h2>
+      <p>公開した作品を作者アカウントに紐づけます。表示されるのは作者名だけです。</p>
+      <form id="authorAuthEmailForm" class="author-auth-form">
+        <label><span>メールアドレス</span><input id="authorAuthEmail" type="email" inputmode="email" autocomplete="email" required placeholder="name@example.com"></label>
+        <button class="publish-primary" type="submit">認証コードを送る</button>
+      </form>
+      <form id="authorAuthCodeForm" class="author-auth-form" hidden>
+        <label><span>作者名 <small>初回登録のみ</small></span><input id="authorAuthDisplayName" type="text" autocomplete="nickname" maxlength="80" placeholder="例：ペンネーム"></label>
+        <label><span>6桁の認証コード</span><input id="authorAuthCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required placeholder="000000"></label>
+        <p class="author-auth-agreement"><a href="../terms/" target="_blank" rel="noopener">利用規約</a>と<a href="../privacy/" target="_blank" rel="noopener">プライバシーポリシー</a>を確認し、同意して続けます。</p>
+        <button class="publish-primary" type="submit">同意して確認する</button>
+        <button id="authorAuthResend" class="publish-author-text-button" type="button">コードを送り直す</button>
+      </form>
+      <p id="authorAuthStatus" class="author-auth-status" aria-live="polite"></p>
     </div>
-  </section>
+  </dialog>
 
+  <dialog id="authorAccountDialog" class="publish-dialog author-account-dialog">
+    <div class="publish-dialog-card author-account-card">
+      <button id="authorAccountClose" class="publish-dialog-close" type="button" aria-label="閉じる">×</button>
+      <span class="publish-kicker">AUTHOR ACCOUNT</span>
+      <h2 id="authorAccountName">作者アカウント</h2>
+      <p class="author-account-state"><span aria-hidden="true"></span>作者としてログイン中です</p>
+      <section id="authorStripeCard" class="author-stripe-card" aria-label="売上受取設定">
+        <div class="author-stripe-head">
+          <strong>売上の受け取り</strong>
+          <span id="authorStripeBadge" class="author-stripe-badge">確認中</span>
+        </div>
+        <p id="authorStripeDescription">作品の売上を受け取るためのStripe設定です。口座情報や本人確認はStripe上で行います。</p>
+        <button id="authorStripeConnectButton" class="publish-secondary" type="button">Stripeを設定する</button>
+        <small id="authorStripeStatus" class="author-stripe-status" aria-live="polite"></small>
+      </section>
+      <div class="author-account-actions">
+        <button id="authorAccountBookshelf" class="publish-primary" type="button">自分の本棚を開く</button>
+        <button id="authorAccountLogout" class="publish-secondary" type="button">ログアウト</button>
+      </div>
+    </div>
+  </dialog>
 
-  <button id="publicReportButton" class="public-report-trigger" type="button">この作品について報告</button>
+  <dialog id="appDialog" class="app-dialog" aria-labelledby="appDialogTitle" aria-describedby="appDialogMessage">
+    <div class="app-dialog-card">
+      <span id="appDialogKicker" class="app-dialog-kicker">NOTICE</span>
+      <h2 id="appDialogTitle">お知らせ</h2>
+      <p id="appDialogMessage"></p>
+      <label id="appDialogInputWrap" class="app-dialog-input-wrap" hidden>
+        <span id="appDialogInputLabel">入力</span>
+        <input id="appDialogInput" type="text" autocomplete="off">
+      </label>
+      <div class="app-dialog-actions">
+        <button id="appDialogCancel" class="app-dialog-cancel" type="button">キャンセル</button>
+        <button id="appDialogConfirm" class="app-dialog-confirm" type="button">OK</button>
+      </div>
+    </div>
+  </dialog>
 
-  <dialog id="publicReportDialog" class="public-report-dialog">
-    <form method="dialog" class="public-report-card">
-      <button id="publicReportClose" class="public-report-close" type="button" aria-label="閉じる">×</button>
-      <small>REPORT</small>
-      <h2>この作品について報告</h2>
-      <fieldset class="public-report-section">
-        <legend>報告理由</legend>
-        <label><input type="radio" name="reportReason" value="unauthorized" checked> 自分の作品が無断で使用されている</label>
-        <label><input type="radio" name="reportReason" value="copyright"> 第三者の著作物・権利侵害と思われる</label>
-        <label><input type="radio" name="reportReason" value="other"> その他</label>
-      </fieldset>
-      <label class="public-report-field">
-        <span>問題のある箇所 <b>必須</b></span>
-        <select id="publicReportSubject">
-          <option value="text">本文・文章</option>
-          <option value="cover">表紙</option>
-          <option value="image">背景・画像</option>
-          <option value="audio">BGM・SE・音声</option>
-          <option value="other">その他</option>
-        </select>
-      </label>
-      <label class="public-report-field" id="publicReportEvidenceWrap">
-        <span>元作品・権利を確認できるURL <b id="publicReportEvidenceRequired">必須</b></span>
-        <input id="publicReportEvidenceUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://note.com/...">
-        <small>元作品の掲載ページなど、運営が比較できるURLを入力してください。</small>
-      </label>
-      <label class="public-report-field">
-        <span>詳しい内容 <b>必須</b></span>
-        <textarea id="publicReportDetails" rows="4" maxlength="1200" placeholder="例：上記URLで公開している本文が、そのまま使用されています。"></textarea>
-      </label>
-      <label class="public-report-field">
-        <span>連絡先メール <b id="publicReportContactRequired">必須</b></span>
-        <input id="publicReportContact" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com">
-        <small id="publicReportContactHint">確認が必要な場合に運営から連絡するために使用します。</small>
-      </label>
-      <label class="public-report-confirm"><input id="publicReportConfirm" type="checkbox"> <span>この報告内容が正確であることを確認します。</span></label>
-      <div class="public-report-meta"><span>workId</span><code id="publicReportWorkId">-</code><span>対象URL</span><code id="publicReportUrl">-</code></div>
-      <p id="publicReportStatus" class="public-report-status">根拠を確認できる情報と一緒に運営へ送信します。</p>
-      <button id="publicReportCopy" type="button" class="public-report-copy">運営に申立てを送る</button>
+  <dialog id="distributionExportDialog" class="distribution-export-dialog">
+    <form method="dialog" class="distribution-export-card">
+      <span class="distribution-export-kicker">DISTRIBUTION</span>
+      <h2 id="distributionExportTitle">配布版を書き出す</h2>
+      <p id="distributionExportLead" class="distribution-export-lead">この一冊を回し読みできるようにしますか？</p>
+      <div class="distribution-export-options" role="radiogroup" aria-labelledby="distributionExportLead">
+        <label class="distribution-export-option">
+          <input id="distributionRelayOn" type="radio" name="distributionRelayPolicy" value="on">
+          <span><strong>回し読みできる</strong><small>読了した人が、次の一人へ渡せます。</small></span>
+        </label>
+        <label class="distribution-export-option">
+          <input id="distributionRelayOff" type="radio" name="distributionRelayPolicy" value="off">
+          <span><strong>回し読みできない</strong><small>この一冊を次の人へ渡す機能はありません。</small></span>
+        </label>
+      </div>
+      <div class="distribution-export-actions">
+        <button value="cancel" type="submit">キャンセル</button>
+        <button value="export" type="submit" class="primary">書き出す</button>
+      </div>
     </form>
   </dialog>
 
-  <script src="./scene-player-core.js?v=20261023-emoji-upright-trial-v2"></script>
-  <script src="./public-player.js?v=20261020-start-cover-tap-v27"></script>
+  <dialog id="scenePackageExportDialog" class="scene-package-export-dialog" aria-labelledby="scenePackageExportTitle">
+    <form id="scenePackageExportForm" class="scene-package-export-card">
+      <span class="distribution-export-kicker">MASTER .SCENE</span>
+      <h2 id="scenePackageExportTitle">作品を書き出す</h2>
+      <p>作品ファイルに入れる情報を確認できます。ここでの変更は書き出すファイルだけに反映されます。</p>
+      <div class="scene-package-export-fields">
+        <label><span>作品タイトル</span><input id="exportWorkTitle" type="text" maxlength="120" required></label>
+        <label><span>作者名</span><input id="exportWorkAuthor" type="text" maxlength="80"></label>
+        <label><span>話数</span><input id="exportWorkEpisode" type="text" maxlength="80" placeholder="第1話 / EPISODE 01"></label>
+        <label><span>今回のタイトル</span><input id="exportWorkEpisodeTitle" type="text" maxlength="120"></label>
+        <label><span>保存ファイル名</span><input id="exportWorkFileName" type="text" maxlength="140" required></label>
+      </div>
+      <p class="scene-package-export-save-note">ファイル名は「作品タイトル_話数.scene」で自動入力されます。保存先を選ぶ画面でも変更できます。</p>
+      <div class="distribution-export-actions">
+        <button value="cancel" type="button" id="scenePackageExportCancel">キャンセル</button>
+        <button value="export" type="submit" class="primary">保存先を選んで書き出す</button>
+      </div>
+    </form>
+  </dialog>
+
+
+
+  <dialog id="deleteSceneDialog" class="scene-delete-dialog">
+    <form method="dialog" class="scene-delete-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">DELETE SCENE</span>
+        <h2>このSceneを削除しますか？</h2>
+        <p id="deleteSceneDialogText">削除後も「元に戻す」で1回だけ戻せます。</p>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button id="deleteSceneCancel" value="cancel" type="submit">キャンセル</button>
+        <button id="deleteSceneConfirm" value="delete" type="submit" class="danger">このSceneを削除</button>
+      </div>
+    </form>
+  </dialog>
+
+
+  <dialog id="unpublishDialog" class="scene-delete-dialog unpublish-dialog">
+    <form method="dialog" class="scene-delete-dialog-card unpublish-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">UNPUBLISH</span>
+        <h2>この作品の公開を停止しますか？</h2>
+        <p id="unpublishDialogText">公開URLは使えなくなる想定です。制作中のデータはそのまま残ります。</p>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button id="unpublishCancel" value="cancel" type="submit">キャンセル</button>
+        <button id="unpublishConfirm" value="unpublish" type="submit" class="danger">公開を停止</button>
+      </div>
+    </form>
+  </dialog>
+
+  <style>
+#issueDialog .issue-dialog-card{width:min(92vw,430px);max-width:430px}.issue-count-field{display:grid;gap:7px;margin-top:16px;text-align:left}.issue-count-field>span{font-size:12px;font-weight:800}.issue-count-input-wrap{display:flex;align-items:center;min-height:48px;border:1px solid #cfd3d8;border-radius:11px;padding:0 12px;box-shadow:0 0 0 4px rgba(93,115,255,.08)}.issue-count-input-wrap input{width:100%;min-width:0;border:0;outline:0;background:transparent;font-size:17px;padding:0}.issue-count-input-wrap>span{font-size:13px;font-weight:800;opacity:.55;margin-left:8px}.issue-count-presets{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:8px}.issue-count-preset{min-width:0;height:34px;border:1px solid #d8dce1;border-radius:9px;background:#fff;font-size:11px;font-weight:800;color:#333;cursor:pointer}.issue-count-preset:hover{background:#f5f5f5}.issue-count-preset.is-active{border-color:#222;background:#222;color:#fff}@media(max-width:390px){.issue-count-presets{gap:5px}.issue-count-preset{font-size:10px}}.issue-price-card{margin-top:16px;padding:14px 15px;border:1px solid #d8dce1;border-radius:12px;text-align:left;background:#fafafa}.issue-price-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px}.issue-price-row strong{font-size:13px}.issue-price-divider{height:1px;background:#e1e3e6;margin:12px 0}.issue-price-calc{color:#666}.issue-price-total{text-align:right;font-size:27px;line-height:1.15;font-weight:850;margin-top:4px;letter-spacing:-.02em}.issue-notes{display:grid;gap:3px;margin-top:12px;text-align:left;color:#6b6f76}.issue-notes small{font-size:10px;line-height:1.5}#issueCreate:disabled{opacity:.62;cursor:not-allowed}
+#issueManagerDialog{width:min(92vw,760px);max-width:calc(100vw - 28px);}
+#issueManagerDialog .draft-manager-card{width:100%;max-width:100%;box-sizing:border-box;}
+#issueManagerDialog #issueManagerList{padding:4px 18px 14px!important;}
+.issue-manager-item{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 2px;border-bottom:1px solid #e5e7eb}.issue-manager-item:last-child{border-bottom:0}.issue-manager-cover{width:72px;height:96px;object-fit:cover;border-radius:7px;background:#f2f1ed;box-shadow:0 1px 5px rgba(0,0,0,.08)}.issue-manager-cover-empty{display:grid;place-items:center;font-family:serif;font-size:24px;color:#777}.issue-manager-info{min-width:0}.issue-manager-series{font-size:10px;letter-spacing:.06em;opacity:.5;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.issue-manager-title{display:block;font-size:15px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.issue-manager-episode{font-size:12px;margin-top:4px;opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.issue-manager-stats{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:9px;font-size:11px;font-weight:700}.issue-manager-date{font-size:10px;opacity:.48;margin-top:4px}.issue-manager-side{align-self:stretch;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:12px;min-width:86px}.issue-manager-stopped,.issue-manager-remaining{font-size:11px;white-space:nowrap}.issue-manager-stopped{border:1px solid #d6d9dd;border-radius:999px;padding:3px 8px;font-weight:700}.issue-manager-actions{display:flex;gap:6px}.issue-manager-actions button{width:auto!important;min-width:0!important;padding:7px 10px!important;border-radius:999px!important;font-size:11px!important;line-height:1!important;background:#fff!important}.issue-manager-copy{border:1px solid #202124!important;color:#202124!important}.issue-manager-stop{border:1px solid #d9dcdf!important;color:#7a3030!important}
+@media(max-width:620px){#issueManagerDialog #issueManagerList{padding:4px 12px 12px!important}.issue-manager-item{grid-template-columns:58px minmax(0,1fr);gap:10px;padding:12px 0}.issue-manager-cover{width:58px;height:78px}.issue-manager-side{grid-column:2;align-self:auto;flex-direction:row;align-items:center;justify-content:space-between;min-width:0}.issue-manager-actions{margin-left:auto}.issue-manager-title{font-size:14px}}
+</style>
+
+<dialog id="publishedManagerDialog" class="draft-manager-dialog published-manager-dialog">
+    <div class="draft-manager-card">
+      <div class="draft-manager-head">
+        <div><span>PUBLISHED</span><h2>公開一覧</h2><small>サーバーにある公開作品を管理します。</small></div>
+        <button id="publishedManagerClose" type="button" aria-label="閉じる">×</button>
+      </div>
+      <nav class="draft-manager-tabs" aria-label="公開作品の表示切替">
+        <button type="button" class="draft-manager-tab is-active" data-published-filter="all" aria-selected="true">すべて <span id="publishedAllCount">0</span></button>
+        <button type="button" class="draft-manager-tab" data-published-filter="public" aria-selected="false">公開中 <span id="publishedPublicCount">0</span></button>
+        <button type="button" class="draft-manager-tab" data-published-filter="stopped" aria-selected="false">停止中 <span id="publishedStoppedCount">0</span></button>
+      </nav>
+      <div id="publishedManagerList" class="published-manager-list"></div>
+      <div class="draft-manager-foot"><small>公開作品はStudioの最近使った.sceneとは別に、サーバー側で管理されます。</small></div>
+    </div>
+  </dialog>
+
+<dialog id="issueManagerDialog" class="draft-manager-dialog">
+    <div class="draft-manager-card">
+      <div class="draft-manager-head">
+        <div><span>ISSUES</span><h2>発行一覧</h2><small>端末の制作途中が消えても、発行済みロットはここから管理できます。</small></div>
+        <button id="issueManagerClose" type="button" aria-label="閉じる">×</button>
+      </div>
+      <nav class="draft-manager-tabs" aria-label="発行の表示切替">
+        <button type="button" class="draft-manager-tab is-active" data-issue-filter="all" aria-selected="true">すべて <span id="issueAllCount">0</span></button>
+        <button type="button" class="draft-manager-tab" data-issue-filter="active" aria-selected="false">発行中 <span id="issueActiveCount">0</span></button>
+        <button type="button" class="draft-manager-tab" data-issue-filter="stopped" aria-selected="false">停止済み <span id="issueStoppedCount">0</span></button>
+      </nav>
+      <div id="issueManagerList" class="draft-list draft-manager-unified-list" style="padding:12px 0"></div>
+      <div class="draft-manager-foot"><small>発行済みのFrozen Editionはサーバー側に保持されます。</small></div>
+    </div>
+  </dialog>
+
+  <dialog id="draftManagerDialog" class="draft-manager-dialog recent-scene-dialog">
+    <div class="draft-manager-card">
+      <div class="draft-manager-head">
+        <div><span>RECENT .SCENE</span><h2>最近使った作品</h2><small id="draftCountLabel">0件</small></div>
+        <button id="draftManagerClose" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="draftList" class="draft-list recent-scene-list"></div>
+      <div class="draft-manager-foot">
+        <label class="recent-scene-open-file" for="importPackageInput">PCから.sceneを開く</label>
+        <small>.scene本体はStudioに保管しません。最近使った作品への参照だけを最大10件まで記録します。</small>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="issueDialog" class="scene-delete-dialog issue-dialog">
+    <form method="dialog" class="scene-delete-dialog-card issue-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">ISSUE</span>
+        <h2>この一冊を発行する</h2>
+        <p>読者が無料で受け取り、自分の本棚に保存できる一冊を発行します。</p>
+        <label class="issue-count-field"><span>発行部数</span><div class="issue-count-input-wrap"><input id="issueLimitInput" type="number" inputmode="numeric" min="1" max="100000" step="1" value="100"><span>部</span></div></label>
+        <div class="issue-count-presets" aria-label="発行部数プリセット">
+          <button type="button" class="issue-count-preset" data-issue-limit="10">10部</button>
+          <button type="button" class="issue-count-preset" data-issue-limit="50">50部</button>
+          <button type="button" class="issue-count-preset is-active" data-issue-limit="100">100部</button>
+          <button type="button" class="issue-count-preset" data-issue-limit="500">500部</button>
+          <button type="button" class="issue-count-preset" data-issue-limit="1000">1000部</button>
+        </div>
+        <div class="issue-price-card" aria-live="polite">
+          <div class="issue-price-row"><span>発行料金</span><strong>1部 ¥100</strong></div>
+          <div class="issue-price-divider"></div>
+          <div class="issue-price-row issue-price-calc"><span id="issuePriceCalc">100部 × ¥100</span><span>合計</span></div>
+          <div class="issue-price-total" id="issuePriceTotal">¥10,000</div>
+        </div>
+        <div class="issue-notes">
+          <small>発行後の部数追加はできません。</small>
+          <small>未受取分は「発行一覧」から停止できます。</small>
+        </div>
+        <small id="issueStatus" style="display:block;min-height:1.4em;margin-top:9px"></small>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button id="issueCancel" value="cancel" type="submit">キャンセル</button>
+        <button id="issueCreate" value="create" type="button" disabled>¥10,000で発行する</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="sampleReplaceDialog" class="scene-delete-dialog">
+    <form method="dialog" class="scene-delete-dialog-card">
+      <div class="scene-delete-dialog-copy">
+        <span class="scene-delete-kicker">SAMPLE</span>
+        <h2>入力中の文章を置き換えますか？</h2>
+        <p>現在のタイトルと本文をサンプルに置き換えます。置き換え後も「元に戻す」で1回だけ戻せます。</p>
+      </div>
+      <div class="scene-delete-dialog-actions">
+        <button value="cancel" type="submit">キャンセル</button>
+        <button value="replace" type="submit" class="danger">サンプルに置き換える</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="fixedActionNotice" class="fixed-action-notice" hidden role="status" aria-live="polite">
+    <span id="fixedActionNoticeText">「表紙に戻る」は固定です</span>
+  </div>
+  <div id="undoBar" class="studio-undo-bar" hidden>
+    <span id="undoMessage">変更しました</span>
+    <button id="undoButton" type="button">↶ 元に戻す</button>
+    <button id="redoButton" type="button" disabled>↷ やり直す</button>
+  </div>
+  <button id="floatingAdvancedButton" class="studio-floating-advanced" type="button" aria-label="道具箱を開く" title="道具箱" disabled hidden><span aria-hidden="true">▦</span></button>
+  <button id="floatingPreviewButton" class="studio-floating-preview" type="button" aria-label="作品をプレビュー" title="作品をプレビュー"><span aria-hidden="true">▶</span></button>
+  <button id="undoCompactButton" class="studio-undo-compact" type="button" aria-label="元に戻す" disabled><span aria-hidden="true">↶</span></button>
+
+</main>
+
+  <div id="coverQuickDialog" class="ending-quick-dialog cover-quick-dialog" hidden>
+    <div class="ending-quick-card cover-quick-card" role="dialog" aria-modal="true" aria-labelledby="coverQuickTitle">
+      <div class="ending-quick-head">
+        <div><small>COVER QUICK EDIT</small><strong id="coverQuickTitle">表紙を編集</strong></div>
+        <button id="coverQuickClose" class="ending-quick-close" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div class="ending-quick-fields cover-quick-fields">
+        <label><span>作品タイトル</span><textarea id="coverQuickWorkTitle" rows="2" placeholder="Untitled"></textarea></label>
+        <label><span>サブタイトル</span><input id="coverQuickSubtitle" type="text" placeholder="サブタイトル"></label>
+        <label><span>作者名</span><input id="coverQuickAuthor" type="text" placeholder="作者名"></label>
+        <div class="cover-quick-divider" aria-hidden="true"></div>
+        <label><span>話数</span><input id="coverQuickEpisode" type="text" placeholder="例：第1話"></label>
+        <label><span>今回のタイトル</span><input id="coverQuickEpisodeTitle" type="text" placeholder="例：窯の前で"></label>
+        <label><span>ひとこと <small>任意</small></span><textarea id="coverQuickDescription" rows="2" maxlength="80" placeholder="例：声が重なる街で、ひとりだけ違う声を聞いた。"></textarea></label>
+        <label><span>「はじめる」後の動作</span><select id="coverQuickStartMode"><option value="scene">Sceneから読む</option><option value="comic">漫画ビューアで1ページ目を開く</option></select></label>
+        <label><span>表紙の書体</span><select id="coverQuickFont"><option value="serif">明朝</option><option value="sans">ゴシック</option><option value="mono">等幅</option></select></label>
+      </div>
+      <div class="cover-quick-image-actions">
+        <button id="coverQuickLogo" class="ending-quick-clear" type="button">作品ロゴ（透過PNG）を選ぶ / 変更</button>
+        <button id="coverQuickLogoClear" class="ending-quick-clear" type="button">作品ロゴを外す</button>
+        <button id="coverQuickImage" class="ending-quick-clear" type="button">表紙画像を選ぶ / 変更</button>
+        <button id="coverQuickPosition" class="ending-quick-clear" type="button">表示位置を調整</button>
+        <button id="coverQuickImageClear" class="ending-quick-clear" type="button">表紙画像を外す</button>
+      </div>
+      <small class="cover-quick-note">入力は表紙プレビューへ即時反映されます。</small>
+  <div id="coverPositionDialog" class="cover-position-dialog" hidden>
+    <div class="cover-position-card" role="dialog" aria-modal="true" aria-labelledby="coverPositionTitle">
+      <div class="cover-position-head">
+        <button id="coverPositionCancel" type="button">キャンセル</button>
+        <strong id="coverPositionTitle">表示位置</strong>
+        <button id="coverPositionSave" type="button">保存</button>
+      </div>
+      <div class="cover-position-help">画像をドラッグして、見せたい位置を合わせます</div>
+      <div id="coverPositionDeviceTabs" class="cover-position-device-tabs" role="group" aria-label="調整する端末">
+        <button type="button" data-cover-device="phone">iPhone</button>
+        <button type="button" data-cover-device="tablet">タブレット</button>
+        <button type="button" data-cover-device="pc">PC</button>
+      </div>
+      <div id="coverPositionStage" class="cover-position-stage" aria-label="表紙画像の表示位置を調整"></div>
+      <button id="coverPositionReset" class="cover-position-reset" type="button">中央に戻す</button>
+    </div>
+  </div>
+
+      <button id="coverQuickDone" class="ending-quick-done" type="button">完了</button>
+    </div>
+  </div>
+
+  <div id="endingQuickDialog" class="ending-quick-dialog" hidden>
+    <div class="ending-quick-card" role="dialog" aria-modal="true">
+      <div class="ending-quick-head">
+        <div><small>ENDING QUICK EDIT</small><strong id="endingQuickTitle">読了ページ</strong></div>
+        <button id="endingQuickClose" class="ending-quick-close" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="endingQuickCenterFields" class="ending-quick-fields" hidden>
+        <label><span>中央の文</span><textarea id="endingQuickCenterText" rows="2" placeholder="例：つづく"></textarea></label>
+        <label><span>書体</span><select id="endingQuickFont"><option value="serif">明朝</option><option value="sans">ゴシック</option><option value="mono">等幅</option></select></label>
+        <div class="ending-quick-se">
+          <label class="check-row"><input id="endingSeEnabled" type="checkbox"><span>読了時にSEを鳴らす</span></label>
+          <div id="endingSeFields" class="audio-action-fields" hidden>
+            <div class="asset-row"><label class="asset-button" for="endingSeInput">SEを選ぶ</label><input id="endingSeInput" type="file" hidden><span id="endingSeFileLabel" class="asset-name">未選択</span></div>
+            <label class="adv-field range-field"><span>音量 <output id="endingSeVolumeOutput">80%</output></span><input id="endingSeVolume" type="range" min="0" max="100" value="80"></label>
+          </div>
+        </div>
+      </div>
+      <div id="endingQuickSlotFields" class="ending-quick-fields" hidden>
+        <label><span>小さい文字</span><input id="endingQuickKicker" type="text" placeholder="例：NEXT"></label>
+        <label><span>ボタン名</span><input id="endingQuickLabel" type="text" placeholder="例：続き"></label>
+        <label><span>リンク</span><input id="endingQuickUrl" type="url" placeholder="https://..."></label>
+        <button id="endingQuickClear" class="ending-quick-clear" type="button">このボタンを空にする</button>
+      </div>
+      <div class="ending-quick-recent">
+        <div class="ending-quick-recent-head"><strong>最近使ったもの</strong><small>この端末に保存</small></div>
+        <div id="endingQuickRecentList" class="ending-quick-recent-list"></div>
+      </div>
+      <button id="endingQuickDone" class="ending-quick-done" type="button">完了</button>
+    </div>
+  </div>
+
+  <div id="easyToast" class="easy-toast" hidden role="status" aria-live="polite"></div>
+
+  <dialog id="ogpCardDialog" class="ogp-card-dialog" aria-labelledby="ogpCardDialogTitle">
+    <form method="dialog" class="ogp-card-dialog-card" id="ogpCardForm">
+      <div class="ogp-card-dialog-head"><div><small>LINK CARD</small><strong id="ogpCardDialogTitle">URLカード</strong></div><button id="ogpCardClose" type="button" aria-label="閉じる">×</button></div>
+      <label class="ogp-card-field"><span>リンク先URL</span><div class="ogp-card-url-row"><input id="ogpCardUrl" type="url" inputmode="url" placeholder="https://example.com/..." required><button id="ogpFetchButton" type="button">OGP取得</button></div></label>
+      <p id="ogpCardStatus" class="ogp-card-status" role="status" aria-live="polite">URLを入力してOGP取得を押してください。取得できない場合も手入力できます。</p>
+      <div class="ogp-card-preview" id="ogpCardPreview"><div class="ogp-card-preview-copy"><strong id="ogpCardPreviewTitle">タイトル</strong><p id="ogpCardPreviewDescription">説明文</p><small id="ogpCardPreviewDomain">example.com</small></div><img id="ogpCardPreviewImage" alt="カード画像のプレビュー" hidden></div>
+      <label class="ogp-card-field"><span>タイトル</span><input id="ogpCardTitle" type="text" maxlength="240"></label>
+      <label class="ogp-card-field"><span>説明文</span><textarea id="ogpCardDescription" rows="3" maxlength="1000"></textarea></label>
+      <label class="ogp-card-field"><span>カード画像URL</span><input id="ogpCardImage" type="url" inputmode="url" placeholder="画像URL（空欄でも可）"></label>
+      <div class="ogp-card-dialog-actions"><button id="ogpCardCancel" type="button">キャンセル</button><button id="ogpCardSave" type="button" class="is-primary">カードを追加</button></div>
+    </form>
+  </dialog>
+
+<script src="./scene-studio-i18n.js?v=142"></script>
+<script src="./scene-player-core.js?v=20261026-shell-px-parity-v2"></script>
+<script src="./japanese-splitter.js"></script>
+<script src="./english-splitter.js"></script>
+<script src="./scene-text-splitter.js"></script>
+<script src="./scene-edit-core.js?v=70.27"></script>
+<link rel="stylesheet" href="./auto-ruby-ui.css?v=1">
+<script src="./auto-ruby-ui.js?v=2" defer></script>
+<script src="../ahako-file-save.js?v=20261015-v20"></script>
+<script src="./script.js?v=20261026-issue-v2-1"></script>
+<script src="./cage.js?v=25"></script>
+<script src="./easy-illustration.js?v=11"></script>
+
+
+
 </body>
 </html>

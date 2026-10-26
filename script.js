@@ -9,7 +9,7 @@
   // product UI. The backdrop and Escape key intentionally do not dismiss
   // these dialogs, so switching away to check mail/files cannot lose state.
   let appDialogQueue=Promise.resolve();
-  function openAppDialog({kind='alert',message='',title='',kicker='',confirmLabel='',cancelLabel='',initialValue='',inputLabel='',danger=false}={}){
+  function openAppDialog({kind='alert',message='',title='',kicker='',confirmLabel='',cancelLabel='',initialValue='',inputLabel='',danger=false,checkboxLabel='',onCheckbox=null}={}){
     const dialog=$('#appDialog');
     if(!dialog || typeof dialog.showModal!=='function')return Promise.resolve(kind==='alert'?true:kind==='prompt'?null:false);
     const english=document.documentElement.lang?.toLowerCase().startsWith('en');
@@ -27,6 +27,12 @@
     inputWrap.hidden=kind!=='prompt';
     $('#appDialogInputLabel').textContent=inputLabel||(english?'Name':'入力');
     input.value=String(initialValue||'');
+    dialog.querySelector('.app-dialog-option')?.remove();
+    let option=null;
+    if(kind==='prompt'&&checkboxLabel){
+      const label=document.createElement('label');label.className='app-dialog-option';label.style.cssText='display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px';
+      option=document.createElement('input');option.type='checkbox';option.style.width='auto';const text=document.createElement('span');text.textContent=checkboxLabel;label.append(option,text);inputWrap.append(label);
+    }
     const cancel=$('#appDialogCancel'),confirmButton=$('#appDialogConfirm');
     cancel.textContent=cancelLabel||(english?'Cancel':'キャンセル');
     confirmButton.textContent=confirmLabel||copy.confirm;
@@ -42,7 +48,7 @@
         if(dialog.open)dialog.close();
         resolve(value);
       };
-      const onConfirm=()=>finish(kind==='prompt'?input.value:true);
+      const onConfirm=()=>{onCheckbox?.(!!option?.checked);finish(kind==='prompt'?input.value:true);};
       const onCancel=()=>finish(kind==='prompt'?null:false);
       const onNativeCancel=event=>event.preventDefault();
       const onBackdrop=event=>{if(event.target===dialog)event.preventDefault();};
@@ -133,6 +139,7 @@
   const coverQuickEpisode=$('#coverQuickEpisode');
   const coverQuickEpisodeTitle=$('#coverQuickEpisodeTitle');
   const coverQuickDescription=$('#coverQuickDescription');
+  const coverQuickStartMode=$('#coverQuickStartMode');
   const coverQuickFont=$('#coverQuickFont');
   const coverQuickLogo=$('#coverQuickLogo');
   const coverQuickLogoClear=$('#coverQuickLogoClear');
@@ -222,15 +229,18 @@
   let coverLogoUrl = '';
   let coverLogoFileName = '';
   let coverFontFamily = 'serif';
+  let coverStartMode = 'scene';
+  let coverStartTrigger = 'tap';
+  const normalizeCoverStartTrigger=()=> 'tap';
   let endingFontFamily = 'serif';
   // Rich Paste v0.1 — keep semantic clipboard structure beside the existing plain-text source.
   // The existing Splitter still receives plain text; semantic ranges are mapped back after splitting.
-  let easyRichSource = { version: 1, marks: [], tables: [] };
+  let easyRichSource = { version: 1, marks: [], tables: [], cards: [] };
   let applyingRichPaste = false;
   let easyRichTextSnapshot = '';
 
   function normalizeIncomingRichFragment(fragment){
-    const f={text:String(fragment?.text||''),marks:(fragment?.marks||[]).map(x=>clone(x)),tables:(fragment?.tables||[]).map(x=>clone(x))};
+    const f={text:String(fragment?.text||''),marks:(fragment?.marks||[]).map(x=>clone(x)),tables:(fragment?.tables||[]).map(x=>clone(x)),cards:(fragment?.cards||[]).map(x=>clone(x))};
     if(!f.tables.length)return f;
     let nextNo=(easyRichSource.tables||[]).length+1;
     f.tables.sort((a,b)=>(a.start||0)-(b.start||0)).forEach(table=>{
@@ -272,15 +282,38 @@
     };
     easyRichSource.marks=(easyRichSource.marks||[]).map(adjust).filter(Boolean);
     easyRichSource.tables=(easyRichSource.tables||[]).map(adjust).filter(Boolean);
+    easyRichSource.cards=(easyRichSource.cards||[]).map(adjust).filter(Boolean);
   }
 
   function cloneRichSource(src=easyRichSource){
-    return {version:1,marks:(src?.marks||[]).map(x=>clone(x)),tables:(src?.tables||[]).map(x=>clone(x))};
+    return {version:1,marks:(src?.marks||[]).map(x=>clone(x)),tables:(src?.tables||[]).map(x=>clone(x)),cards:(src?.cards||[]).map(x=>clone(x))};
   }
-  function resetEasyRichSource(){ easyRichSource={version:1,marks:[],tables:[]}; }
+  function resetEasyRichSource(){ easyRichSource={version:1,marks:[],tables:[],cards:[]}; }
+  function richSourceFromSceneDocument(doc,body){
+    const source={version:1,marks:[],tables:[],cards:[]};let offset=0;const scenes=Array.isArray(doc?.scenes)?doc.scenes:[];
+    scenes.forEach((scene,index)=>{
+      const text=String(scene?.text||'');if(!text)return;
+      if(source.marks.length||source.tables.length||source.cards.length||offset)offset+=2;
+      const ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
+      const contents=Array.isArray(scene?.content)?scene.content:[];
+      ranges.forEach(range=>{
+        const start=offset+Math.max(0,Number(range.start)||0),end=offset+Math.max(0,Number(range.end)||0);if(end<=start)return;
+        source.marks.push({...clone(range),start,end});
+        if(range.kind==='linkCard'&&range.cardId){
+          const card=contents.find(item=>item?.type==='linkCard'&&String(item.id)===String(range.cardId));if(!card)return;
+          source.cards.push({...clone(card),start,end,label:String(body||'').slice(start,end)});
+        }
+        if(range.kind==='table'&&range.tableId){
+          const table=contents.find(item=>item?.type==='table'&&String(item.id)===String(range.tableId));if(table)source.tables.push({...clone(table),start,end,label:String(body||'').slice(start,end)});
+        }
+      });
+      offset+=text.length;
+    });
+    return source;
+  }
   function richTextFromClipboardHtml(html){
     const doc=new DOMParser().parseFromString(String(html||''),'text/html');
-    const out=[]; const marks=[]; const tables=[];
+    const out=[]; const marks=[]; const tables=[]; const cards=[];
     const push=(text)=>{ if(!text)return; out.push(text); };
     const length=()=>out.join('').length;
     const blockBreak=()=>{ const cur=out.join(''); if(cur && !cur.endsWith('\n\n')) push(cur.endsWith('\n')?'\n':'\n\n'); };
@@ -304,6 +337,36 @@
       if(el.nodeType!==Node.ELEMENT_NODE)return;
       const tag=el.tagName.toLowerCase();
       const role=(el.getAttribute?.('role')||'').toLowerCase();
+      const semanticHint=['data-contents-type','data-type','data-block-type','data-node-type','aria-level','class','role'].map(name=>el.getAttribute?.(name)||'').join(' ').toLowerCase();
+      const headingHint=semanticHint,embedHint=semanticHint;
+      const styledHeading=()=>{
+        if(el.querySelector?.('h1,h2,h3,h4,h5,h6,p,blockquote,ul,ol,table'))return false;
+        return [el,...Array.from(el.querySelectorAll?.('[style],[role="heading"]')||[])].some(node=>{
+        const style=String(node.getAttribute?.('style')||''),size=style.match(/font-size\s*:\s*([\d.]+)(px|rem|em)/i);
+        const px=size?Number(size[1])*(size[2]==='rem'||size[2]==='em'?16:1):0;
+        return (node.getAttribute?.('role')||'').toLowerCase()==='heading'||px>=21||(/font-weight\s*:\s*(?:bold|[7-9]00)/i.test(style)&&el.children.length===0);
+        });
+      };
+      const levelAttr=Number(el.getAttribute?.('aria-level')||el.getAttribute?.('data-level')||0);
+      const headingLevel=/^h[1-6]$/.test(tag)?Number(tag[1]):(/heading|title/.test(headingHint)||role==='heading'||styledHeading()?Math.max(1,Math.min(6,levelAttr||2)):0);
+      const standaloneAnchor=()=>{
+        if(!['p','div','section','article','blockquote','figure'].includes(tag))return null;
+        const links=Array.from(el.querySelectorAll('a[href]'));
+        const cardLike=/(?:embed|link.?card|url.?card|ogp|external.?link)/i.test(embedHint)||!!el.querySelector('img,iframe,[data-embed-url],[data-url]');
+        if(!links.length||links.length>1&&!cardLike)return null;
+        const link=links.find(a=>safeWebUrl(a.getAttribute('href')||''))||links[0],outside=el.cloneNode(true);outside.querySelectorAll('a').forEach(a=>a.remove());
+        if(!cardLike&&link.querySelector('img,iframe'))return null;
+        if(String(outside.textContent||'').trim()&&!cardLike)return null;
+        const url=safeWebUrl(link.getAttribute('href')||el.getAttribute('data-embed-url')||el.getAttribute('data-url')||'');if(!url)return null;
+        return {url,title:String(link.querySelector('img')?.getAttribute('alt')||link.getAttribute('aria-label')||link.textContent||'').replace(/\s+/g,' ').trim(),image:link.querySelector('img')?.getAttribute('src')||el.querySelector('img')?.getAttribute('src')||''};
+      };
+      const emitLinkCard=(candidate)=>{
+        const item=typeof candidate==='string'?{url:candidate}:candidate;
+        blockBreak();const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+        const label='\u2060',start=length();push(label);const end=length();
+        cards.push({id,url:item.url,title:item.title||'',description:'',image:item.image||'',siteName:'',start,end,label});
+        marks.push({start,end,kind:'linkCard',cardId:id});blockBreak();
+      };
       if(tag==='table'||role==='table'||role==='grid'){
         blockBreak(); const index=tables.length+1; const label=`［表 ${index}］`; const start=length(); push(label); const end=length();
         const rowEls=Array.from(el.querySelectorAll('tr,[role="row"]'));
@@ -318,8 +381,14 @@
         // fall through and preserve its text instead of creating an empty table.
         out.pop();
       }
-      if(/^h[1-6]$/.test(tag)){
-        blockBreak();const start=length();inline(el);const end=length();marks.push({start,end,kind:'heading',level:Number(tag[1])});blockBreak();return;
+      if(headingLevel){
+        blockBreak();const start=length();inline(el);const end=length();marks.push({start,end,kind:'heading',level:headingLevel});blockBreak();return;
+      }
+      const embedUrl=/(?:embed|link.?card|url.?card|ogp|external.?link)/i.test(embedHint)?standaloneAnchor():null;
+      if(embedUrl){emitLinkCard(embedUrl);return;}
+      if(tag==='figure'){
+        const cardUrl=standaloneAnchor();if(cardUrl){emitLinkCard(cardUrl);return;}
+        blockBreak();Array.from(el.childNodes).forEach(n=>walkBlock(n));blockBreak();return;
       }
       if(tag==='blockquote'){
         blockBreak();const start=length();Array.from(el.childNodes).forEach(n=>inline(n));const end=length();marks.push({start,end,kind:'quote'});blockBreak();return;
@@ -342,9 +411,11 @@
         blockBreak(); const start=length();push('・');Array.from(el.childNodes).forEach(n=>inline(n));const end=length();marks.push({start,end,kind:'listItem',ordered:false});push('\n');blockBreak();return;
       }
       if(tag==='p'){
+        const cardUrl=standaloneAnchor();if(cardUrl){emitLinkCard(cardUrl);return;}
         blockBreak();const start=length();Array.from(el.childNodes).forEach(n=>inline(n));const end=length();if(end>start)marks.push({start,end,kind:'paragraph'});blockBreak();return;
       }
       if(['div','section','article'].includes(tag)){
+        const cardUrl=standaloneAnchor();if(cardUrl){emitLinkCard(cardUrl);return;}
         // Rich Text Player v0.17: container elements are not paragraphs.
         // ChatGPT/Chrome clipboard can wrap a real <ul>/<ol>/<li> inside a DIV.
         // Treating the whole DIV as inline text flattened that nested list before
@@ -363,16 +434,20 @@
       Array.from(el.childNodes).forEach(n=>walkBlock(n));
     };
     Array.from(doc.body.childNodes).forEach(walkBlock);
-    let text=out.join('').replace(/\n{3,}/g,'\n\n').trim();
+    // Keep newlines unchanged here: ranges above use JavaScript string offsets.
+    // Collapsing repeated newlines only in `text` shifts later mark ranges while
+    // their start/end remain tied to the pre-collapsed string. This can detach
+    // heading marks from their first characters after rich clipboard paste.
+    let text=out.join('').trim();
     // Trim offsets by the same leading whitespace removed above.
     const raw=out.join(''); const lead=raw.length-raw.trimStart().length;
     const max=text.length;
     const adjust=x=>({...x,start:Math.max(0,x.start-lead),end:Math.min(max,x.end-lead)});
-    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start)};
+    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start),cards:cards.map(adjust).filter(x=>x.end>x.start)};
   }
   // Rich Paste v0.2 — Markdown/plain fallback for clipboard tables.
   function richTextFromClipboardPlain(plain){
-    const src=String(plain||'').replace(/\r\n?/g,'\n'),lines=src.split('\n'),out=[],marks=[],tables=[];
+    const src=String(plain||'').replace(/\r\n?/g,'\n'),lines=src.split('\n'),out=[],marks=[],tables=[],cards=[];
     const push=t=>{if(t)out.push(t)},length=()=>out.join('').length;
     const blockBreak=()=>{const cur=out.join('');if(cur&&!cur.endsWith('\n\n'))push(cur.endsWith('\n')?'\n':'\n\n')};
     const addInline=raw=>{let pos=0,m,re=/\*\*([^*\n]+)\*\*/g;while((m=re.exec(raw))){push(raw.slice(pos,m.index));const start=length();push(m[1]);const end=length();if(end>start)marks.push({start,end,kind:'span',style:{bold:true}});pos=m.index+m[0].length;}push(raw.slice(pos));};
@@ -382,6 +457,8 @@
     const isTsvRow=line=>String(line||'').split('\t').length>=2;
     let i=0;
     while(i<lines.length){const line=lines[i],trimmed=line.trim();let m;
+      const standaloneUrl=pastedWebUrl(trimmed);
+      if(standaloneUrl){blockBreak();const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`,label='\u2060',start=length();push(label);const end=length();cards.push({id,url:standaloneUrl,title:'',description:'',image:'',siteName:'',start,end,label});marks.push({start,end,kind:'linkCard',cardId:id});blockBreak();i++;continue;}
       if(isPipeRow(line)&&i+1<lines.length&&isDivider(lines[i+1])){blockBreak();const rows=[splitPipe(line)];i+=2;while(i<lines.length&&isPipeRow(lines[i])&&lines[i].trim()){rows.push(splitPipe(lines[i++]));}const n=tables.length+1,label=`［表 ${n}］`,start=length();push(label);const end=length(),id=`table-${n}`;tables.push({id,start,end,label,headerRows:1,rows});marks.push({start,end,kind:'table',tableId:id});blockBreak();continue;}
       if(isTsvRow(line)&&i+1<lines.length&&isTsvRow(lines[i+1])){blockBreak();const rows=[];while(i<lines.length&&isTsvRow(lines[i])&&lines[i].trim())rows.push(lines[i++].split('\t').map(v=>v.trim()));const n=tables.length+1,label=`［表 ${n}］`,start=length();push(label);const end=length(),id=`table-${n}`;tables.push({id,start,end,label,headerRows:1,rows});marks.push({start,end,kind:'table',tableId:id});blockBreak();continue;}
       if(!trimmed){blockBreak();i++;continue;}
@@ -392,19 +469,40 @@
       blockBreak();const start=length();addInline(trimmed);const end=length();if(end>start)marks.push({start,end,kind:'paragraph'});blockBreak();i++;
     }
     const raw=out.join(''),lead=raw.length-raw.trimStart().length,text=raw.trim(),max=text.length,adjust=x=>({...x,start:Math.max(0,x.start-lead),end:Math.min(max,x.end-lead)});
-    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start)};
+    return {text,marks:marks.map(adjust).filter(x=>x.end>x.start),tables:tables.map(adjust).filter(x=>x.end>x.start),cards:cards.map(adjust).filter(x=>x.end>x.start)};
   }
 
   function insertRichFragment(fragment,start,end){
     fragment=normalizeIncomingRichFragment(fragment);
+    // Some clipboard sources (including embedded link previews) include a
+    // literal placeholder alongside the real URL. Once that URL has become a
+    // card, the placeholder must not remain visible as ordinary prose.
+    if(fragment.cards?.length){
+      const source=String(fragment.text||'');
+      const placeholder=/(?:\*\*)?\s*(?:\[|［)\s*(?:\*\*)?\s*(?:リンクカード|URLカード)\s*(?:\*\*)?\s*(?:\]|］)\s*(?:\*\*)?/gi;
+      const matches=[...source.matchAll(placeholder)];
+      if(matches.length){
+        const removedBefore=position=>matches.reduce((sum,m)=>sum+(m.index+m[0].length<=position?m[0].length:0),0);
+        const rebase=item=>({...item,start:Math.max(0,(Number(item.start)||0)-removedBefore(Number(item.start)||0)),end:Math.max(0,(Number(item.end)||0)-removedBefore(Number(item.end)||0))});
+        let text='',cursor=0;
+        matches.forEach(match=>{text+=source.slice(cursor,match.index);cursor=match.index+match[0].length;});
+        text+=source.slice(cursor);
+        fragment.text=text;
+        fragment.marks=(fragment.marks||[]).map(rebase).filter(item=>item.end>item.start);
+        fragment.tables=(fragment.tables||[]).map(rebase).filter(item=>item.end>item.start);
+        fragment.cards=(fragment.cards||[]).map(rebase).filter(item=>item.end>item.start);
+      }
+    }
     const old=bodyInput.value; const before=old.slice(0,start), after=old.slice(end);
     const delta=fragment.text.length-(end-start);
     const keepMark=m=>m.end<=start||m.start>=end;
     const shift=m=>m.start>=end?{...m,start:m.start+delta,end:m.end+delta}:m;
     easyRichSource.marks=(easyRichSource.marks||[]).filter(keepMark).map(shift);
     easyRichSource.tables=(easyRichSource.tables||[]).filter(keepMark).map(shift);
+    easyRichSource.cards=(easyRichSource.cards||[]).filter(keepMark).map(shift);
     easyRichSource.marks.push(...fragment.marks.map(m=>({...m,start:m.start+start,end:m.end+start})));
     easyRichSource.tables.push(...fragment.tables.map(m=>({...m,start:m.start+start,end:m.end+start})));
+    easyRichSource.cards.push(...fragment.cards.map(c=>({...c,start:c.start+start,end:c.end+start})));
     applyingRichPaste=true; bodyInput.value=before+fragment.text+after; applyingRichPaste=false;
     const caret=start+fragment.text.length; bodyInput.setSelectionRange(caret,caret);
     easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();
@@ -415,14 +513,14 @@
     let start=source.indexOf(chunkText,searchFrom);
     if(start<0){ const compact=String(chunkText||'').trim(); start=source.indexOf(compact,searchFrom); chunkText=compact; }
     const chunk=String(chunkText||'');
-    const ranges=[]; const tableIds=new Set();
+    const ranges=[]; const tableIds=new Set(); const cardIds=new Set();
 
     // Fast path: exact Splitter slice.
     if(start>=0){
       const end=start+chunk.length;
       (easyRichSource.marks||[]).filter(m=>m.end>start&&m.start<end).forEach(m=>{
         const r={...m,start:Math.max(0,m.start-start),end:Math.min(end,m.end)-start};
-        if(r.end>r.start){ranges.push(r);if(r.kind==='table')tableIds.add(r.tableId);}
+        if(r.end>r.start){ranges.push(r);if(r.kind==='table')tableIds.add(r.tableId);if(r.kind==='linkCard')cardIds.add(r.cardId);}
       });
     }
 
@@ -438,12 +536,16 @@
       // they are accepted only from the exact source slice or rebuilt from a Splitter
       // list-block whose canonical text already contains a real list marker.
       if(m?.kind==='listItem')return;
-      if(ranges.some(r=>r.kind===m.kind&&r.tableId===m.tableId&&r.start===Math.max(0,(m.start-(start>=0?start:0)))))return;
+      if(ranges.some(r=>r.kind===m.kind&&r.tableId===m.tableId&&r.cardId===m.cardId&&r.start===Math.max(0,(m.start-(start>=0?start:0)))))return;
       let marked=source.slice(Math.max(0,m.start),Math.max(0,m.end));
       let needle=marked.trim();
       if(m.kind==='table' && m.tableId){
         const t=(easyRichSource.tables||[]).find(x=>x.id===m.tableId);
         needle=String(t?.label||needle).trim();
+      }
+      if(m.kind==='linkCard' && m.cardId){
+        const c=(easyRichSource.cards||[]).find(x=>x.id===m.cardId);
+        needle=String(c?.label||needle).trim();
       }
       if(!needle)return;
       let local=chunk.indexOf(needle);
@@ -459,12 +561,14 @@
       if(local>=0&&localEnd>local){
         ranges.push({...m,start:local,end:localEnd});
         if(m.kind==='table'&&m.tableId)tableIds.add(m.tableId);
+        if(m.kind==='linkCard'&&m.cardId)cardIds.add(m.cardId);
       }
     });
     // Rich Text Player v0.18: listItem has no word-based fallback.
     ranges.sort((a,b)=>(a.start-b.start)||(a.end-b.end));
     const tables=(easyRichSource.tables||[]).filter(t=>tableIds.has(t.id)).map(t=>({type:'table',id:t.id,headerRows:t.headerRows||0,rows:clone(t.rows||[]),display:{mode:'compact',expand:'fullscreen'}}));
-    return {next:start>=0?start+chunk.length:searchFrom,ranges,tables};
+    const cards=(easyRichSource.cards||[]).filter(c=>cardIds.has(c.id)).map(c=>({type:'linkCard',id:c.id,url:c.url,title:c.title,description:c.description,image:c.image,siteName:c.siteName||''}));
+    return {next:start>=0?start+chunk.length:searchFrom,ranges,tables,cards};
   }
   const bodyInput = $('#bodyInput');
   const charCount = $('#charCount');
@@ -523,7 +627,11 @@
   const I18N = window.SceneStudioI18n;
   const t = (key, vars={}) => I18N?.t(key, vars) ?? key;
   const u = (ja,en) => uiLanguage==='en' ? en : ja;
-  let uiLanguage = I18N?.getLocale?.() || 'ja';
+  // English UI is temporarily hidden; ignore a previously saved EN preference.
+  // Keep the dictionaries and language switching implementation for later use.
+  let uiLanguage = 'ja';
+  try{ I18N?.setLocale?.('ja'); }catch(_){ /* storage can be unavailable */ }
+  document.documentElement.lang = 'ja';
 
   const UI_BINDINGS = [
     ['.intro h2','intro.title'],['.intro p','intro.body'],
@@ -543,7 +651,7 @@
     ['#makeButton span','make'],['#makeButton small','make.note'],['#easyAdvancedReturnButton span','advanced.open'],['#projectIoTitle','io.heading'],['#exportSceneButton strong','io.export'],['label[for="importSceneInput"] strong','io.import'],['.footer-note','footer.note'],
     ['.advanced-topbar h1','advanced.title'],
     ['.advanced-policy strong','nav.previous.policy'],['.advanced-policy small','nav.previous.note'],
-    ['#sceneTextInput','scene.text','aria-label'],['.scene-inspector > .adv-field:nth-of-type(1) > span','scene.text'],
+    ['#sceneTextInput','scene.text','aria-label'],['.scene-inspector .scene-body-field-heading > label','scene.text'],
     ['.subtext-field > span','scene.subtext'],['#sceneSubTextInput','scene.subtext.ph','placeholder'],
     ['#sceneTypeSelect','scene.type','aria-label'],['#sceneTypeSelect option[value="text"]','scene.type.text'],['#sceneTypeSelect option[value="dialogue"]','scene.type.dialogue'],['#sceneTypeSelect option[value="sound"]','scene.type.sound'],
     ['#sceneDisplaySelect option[value="stack"]','scene.display.stack'],['#sceneDisplaySelect option[value="solo"]','scene.display.solo'],
@@ -654,7 +762,7 @@
     document.querySelectorAll('.toolbox-detail-card .toolbox-card-open').forEach(el=>el.textContent=t('toolbox.open'));
     const quickCoverLabels=[
       ['#coverQuickWorkTitle','field.title'],['#coverQuickSubtitle','work.subtitle'],['#coverQuickAuthor','field.author'],
-      ['#coverQuickEpisode','work.episode'],['#coverQuickEpisodeTitle','Episode title'],['#coverQuickDescription','work.description'],['#coverQuickFont','cover.font']
+      ['#coverQuickEpisode','work.episode'],['#coverQuickEpisodeTitle','Episode title'],['#coverQuickDescription','work.description'],['#coverQuickStartMode','cover.startMode'],['#coverQuickFont','cover.font']
     ];
     quickCoverLabels.forEach(([sel,key])=>{const input=$(sel);const cap=input?.closest('label')?.querySelector(':scope > span');if(cap){cap.textContent=key==='Episode title'?u('今回のタイトル','Episode title'):t(key);}});
     const quickEndLabels=[
@@ -663,6 +771,7 @@
     quickEndLabels.forEach(([sel,key])=>{const input=$(sel);const cap=input?.closest('label')?.querySelector(':scope > span');if(cap)cap.textContent=t(key);});
     if(coverQuickEpisodeTitle)coverQuickEpisodeTitle.placeholder=u('例：窯の前で','e.g. Before the Kiln');
     if(coverQuickWorkTitle)coverQuickWorkTitle.placeholder=u('作品タイトル','Untitled');
+    const coverStartModeSelect=$('#coverQuickStartMode'); if(coverStartModeSelect){const cap=coverStartModeSelect.closest('label')?.querySelector(':scope > span');if(cap)cap.textContent=u('「はじめる」後の動作','After tapping START');const labels={scene:u('Sceneから読む','Start with Scene'),comic:u('漫画ビューアで1ページ目を開く','Open page 1 in comic viewer')};[...coverStartModeSelect.options].forEach(o=>{if(labels[o.value])o.textContent=labels[o.value];});}
     const coverFont=$('#coverQuickFont'); if(coverFont){const map={serif:'font.serif',sans:'font.sans',mono:'font.mono'};[...coverFont.options].forEach(o=>{if(map[o.value])o.textContent=t(map[o.value]);});}
     const endingFont=$('#endingQuickFont'); if(endingFont){const map={serif:'font.serif',sans:'font.sans',mono:'font.mono'};[...endingFont.options].forEach(o=>{if(map[o.value])o.textContent=t(map[o.value]);});}
 
@@ -707,11 +816,11 @@
     // Japanese literals. Exact-match only: never touches author text in inputs/textareas.
     if(uiLanguage==='en'){
       const legacyEn=new Map([
-        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['制作中一覧','Works'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
+        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['最近使った作品','Recent .scene'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
         ['タイトルと本文をサンプルに置き換えました','Title and text replaced with the sample.'],['「表紙に戻る」は固定です','“Back to cover” is fixed.'],
         ['表紙に表示する情報','Show on cover'],['作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。','Keep the work info; choose only what appears on the cover. Turn all off for an image-only cover.'],
         ['作品タイトル','Work title'],['サブタイトル','Subtitle'],['作者名','Author'],['話数','Episode label'],['今回のタイトル','Episode title'],['選択中の文字（Aa）','Selected text (Aa)'],['選択中の文字 (Aa)','Selected text (Aa)'],['対象','Target'],['書体','Typeface'],['サイズ','Size'],['色','Color'],['おまかせ','Automatic'],['任意色','Custom color'],
-        ['キーボードだけでも書けます','Write with the keyboard'],['改行','New line'],['カーソル位置で分割','Split at cursor'],['次に空Scene','Add empty Scene'],['先頭行から前Sceneを編集','From first line: edit previous Scene'],['最終行から次Sceneを編集','From last line: edit next Scene'],['分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。','To undo a split, use “Merge with previous” below the text field.'],
+        ['キーボードだけでも書けます','Write with the keyboard'],['改行','New line'],['カーソル位置で分割','Split at cursor'],['次に空Scene','Add empty Scene'],['元に戻す','Undo'],['やり直す','Redo'],['先頭行から前Sceneを編集','From first line: edit previous Scene'],['最終行から次Sceneを編集','From last line: edit next Scene'],['分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。','To undo a split, use “Merge with previous” below the text field.'],
         ['← 前のScene','← Previous Scene'],['前のScene','Previous Scene'],['次のScene →','Next Scene →'],['次のScene','Next Scene'],['⌛ 時間','⌛ Time'],
         ['本文','Text'],['サブテキスト','Subtext'],['前Sceneと結合','Merge with previous'],['前のSceneと結合','Merge with previous'],['Scene操作','Scene actions'],['道具箱','Toolbox'],['← Easyへ戻る','← Back to Easy'],['Scene全体を見渡し、画像・音・設定の入り方を確認できます。','Review all Scenes and check images, audio, and settings.'],['作品全体・その他','Work-wide & other'],
         ['中央の文','Center text'],['下部ボタン','Bottom buttons'],['左ボタンを編集','Edit left button'],['右ボタンを編集','Edit right button'],
@@ -738,11 +847,11 @@
     // Japanese literals. Exact-match only: never touches author text in inputs/textareas.
     if(uiLanguage==='en'){
       const legacyEn=new Map([
-        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['制作中一覧','Works'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
+        ['作品を開く','Open Work'],['作品を書き出す','Export Work'],['最近使った作品','Recent .scene'],['＋ 新しく作る','+ New Work'],['+ 新しく作る','+ New Work'],['新しい下書き','New draft'],['言語','Language'],
         ['タイトルと本文をサンプルに置き換えました','Title and text replaced with the sample.'],['「表紙に戻る」は固定です','“Back to cover” is fixed.'],
         ['表紙に表示する情報','Show on cover'],['作品情報は残したまま、表紙に出す項目だけ選べます。画像だけの表紙ならすべてOFF。','Keep the work info; choose only what appears on the cover. Turn all off for an image-only cover.'],
         ['作品タイトル','Work title'],['サブタイトル','Subtitle'],['作者名','Author'],['話数','Episode label'],['今回のタイトル','Episode title'],['選択中の文字（Aa）','Selected text (Aa)'],['選択中の文字 (Aa)','Selected text (Aa)'],['対象','Target'],['書体','Typeface'],['サイズ','Size'],['色','Color'],['おまかせ','Automatic'],['任意色','Custom color'],
-        ['キーボードだけでも書けます','Write with the keyboard'],['改行','New line'],['カーソル位置で分割','Split at cursor'],['次に空Scene','Add empty Scene'],['先頭行から前Sceneを編集','From first line: edit previous Scene'],['最終行から次Sceneを編集','From last line: edit next Scene'],['分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。','To undo a split, use “Merge with previous” below the text field.'],
+        ['キーボードだけでも書けます','Write with the keyboard'],['改行','New line'],['カーソル位置で分割','Split at cursor'],['次に空Scene','Add empty Scene'],['元に戻す','Undo'],['やり直す','Redo'],['先頭行から前Sceneを編集','From first line: edit previous Scene'],['最終行から次Sceneを編集','From last line: edit next Scene'],['分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。','To undo a split, use “Merge with previous” below the text field.'],
         ['← 前のScene','← Previous Scene'],['前のScene','Previous Scene'],['次のScene →','Next Scene →'],['次のScene','Next Scene'],['⌛ 時間','⌛ Time'],
         ['本文','Text'],['サブテキスト','Subtext'],['前Sceneと結合','Merge with previous'],['前のSceneと結合','Merge with previous'],['Scene操作','Scene actions'],['道具箱','Toolbox'],['← Easyへ戻る','← Back to Easy'],['Scene全体を見渡し、画像・音・設定の入り方を確認できます。','Review all Scenes and check images, audio, and settings.'],['作品全体・その他','Work-wide & other'],
         ['中央の文','Center text'],['下部ボタン','Bottom buttons'],['左ボタンを編集','Edit left button'],['右ボタンを編集','Edit right button'],
@@ -1032,15 +1141,29 @@
   let protectedResplitPending = false;
 
   const DRAFT_DB_NAME='scene-studio-drafts';
-  const DRAFT_DB_VERSION=3;
+  const DRAFT_DB_VERSION=4;
   const DRAFT_STORE='drafts';
   const DRAFT_META_STORE='draftMeta';
   const DRAFT_RECOVERY_STORE='draftRecovery';
   const DRAFT_VERSION_STORE='draftVersions';
+  const RECENT_SCENE_STORE='recentScenes';
+  const RECENT_SCENE_LIMIT=10;
+  let pendingRecentSceneId='';
+  let activeSceneFileName='';
+  function setActiveSceneFileName(name=''){
+    activeSceneFileName=String(name||'').trim();
+    const el=$('#activeSceneFileName');
+    if(!el)return;
+    const shown=activeSceneFileName||'未保存';
+    el.textContent=`FILE　${shown}`;
+    el.title=shown;
+  }
   const DRAFT_VERSION_LIMIT=10;
   const DRAFT_LAST_KEY='sceneStudio.lastDraftId';
   let currentDraftId=localStorage.getItem(DRAFT_LAST_KEY)||'';
   let draftSaveTimer=null;
+  let desktopDetailRangeInteracting=false;
+  let desktopDetailRangeFlushActive=null;
   let latestDraftSummary=null;
   let autoRecProgress={nextIndex:0,recordedCount:0};
   let draftStorageLowNoticeShown=false;
@@ -1049,7 +1172,7 @@
 
   function draftMetaFromRow(row){
     const doc=row?.document||{},easy=row?.easy||{};
-    return {id:String(row?.id||''),draftId:String(row?.id||''),workId:String(doc?.studio?.identity?.workId||row?.publication?.id||''),title:String(row?.title||doc?.title||'Untitled'),author:String(easy.author||doc?.author||''),subtitle:String(easy.subtitle||doc?.metadata?.subtitle||''),description:String(easy.description||doc?.metadata?.description||''),seriesId:String(easy.seriesId||doc?.metadata?.seriesId||''),seriesTitle:String(easy.series||doc?.metadata?.seriesTitle||''),episode:String(easy.episode||doc?.metadata?.episode||''),episodeNumber:Number(easy.episodeNumber||doc?.metadata?.episodeNumber||0)||0,episodeTitle:String(easy.episodeTitle||doc?.metadata?.episodeTitle||''),sceneCount:Number(row?.sceneCount||doc?.scenes?.length||0),updatedAt:Number(row?.updatedAt)||Date.now(),publication:{...(row?.publication||{})},coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}}};
+    return {id:String(row?.id||''),draftId:String(row?.id||''),workId:String(doc?.studio?.identity?.workId||row?.workId||row?.publication?.id||''),title:String(row?.title||doc?.title||'Untitled'),author:String(easy.author||doc?.author||row?.author||''),subtitle:String(easy.subtitle||doc?.metadata?.subtitle||row?.subtitle||''),description:String(easy.description||doc?.metadata?.description||row?.description||''),seriesId:String(easy.seriesId||doc?.metadata?.seriesId||row?.seriesId||''),seriesTitle:String(easy.series||doc?.metadata?.seriesTitle||row?.seriesTitle||''),episode:String(easy.episode||doc?.metadata?.episode||row?.episode||''),episodeNumber:Number(easy.episodeNumber||doc?.metadata?.episodeNumber||row?.episodeNumber||0)||0,episodeTitle:String(easy.episodeTitle||doc?.metadata?.episodeTitle||row?.episodeTitle||''),sceneCount:Number(row?.sceneCount||doc?.scenes?.length||0),updatedAt:Number(row?.updatedAt)||Date.now(),publication:{...(row?.publication||{})},coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}}};
   }
 
   function openDraftDB(){
@@ -1061,11 +1184,61 @@
         const meta=db.objectStoreNames.contains(DRAFT_META_STORE)?req.transaction.objectStore(DRAFT_META_STORE):db.createObjectStore(DRAFT_META_STORE,{keyPath:'id'});
         if(!db.objectStoreNames.contains(DRAFT_RECOVERY_STORE))db.createObjectStore(DRAFT_RECOVERY_STORE,{keyPath:'recoveryId'});
         if(!db.objectStoreNames.contains(DRAFT_VERSION_STORE)){const versions=db.createObjectStore(DRAFT_VERSION_STORE,{keyPath:'snapshotId'});versions.createIndex('draftId','draftId',{unique:false});}
+        if(!db.objectStoreNames.contains(RECENT_SCENE_STORE))db.createObjectStore(RECENT_SCENE_STORE,{keyPath:'id'});
         drafts.openCursor().onsuccess=event=>{const cursor=event.target.result;if(!cursor)return;meta.put(draftMetaFromRow(cursor.value));cursor.continue();};
       };
       req.onsuccess=()=>resolve(req.result);
       req.onerror=()=>reject(req.error);
     });
+  }
+  async function recentSceneStore(mode='readonly'){
+    const db=await openDraftDB();
+    return {db,store:db.transaction(RECENT_SCENE_STORE,mode).objectStore(RECENT_SCENE_STORE)};
+  }
+  async function listRecentScenes(){
+    const {db,store}=await recentSceneStore();
+    const rows=await new Promise((resolve,reject)=>{const r=store.getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});
+    db.close();return rows.sort((a,b)=>(b.lastOpenedAt||0)-(a.lastOpenedAt||0)).slice(0,RECENT_SCENE_LIMIT);
+  }
+  async function removeRecentScene(id){
+    const {db,store}=await recentSceneStore('readwrite');store.delete(id);await new Promise(resolve=>{store.transaction.oncomplete=resolve;store.transaction.onerror=resolve;});db.close();
+  }
+  function recentSceneIdentity(file,doc){
+    const workId=String(doc?.studio?.identity?.workId||'').trim();
+    return `file:${String(file?.name||'scene').toLowerCase()}:${workId||'no-work-id'}`;
+  }
+  async function recentCoverThumbnail(src){
+    if(!src)return '';
+    try{
+      const image=new Image();image.decoding='async';image.src=src;
+      await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;});
+      const maxW=144,maxH=192,scale=Math.min(maxW/image.naturalWidth,maxH/image.naturalHeight,1);
+      const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+      canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+      return canvas.toDataURL('image/jpeg',.72);
+    }catch(_){return '';}
+  }
+  async function rememberRecentScene(file,handle,doc,{replaceId=''}={}){
+    if(!file||!doc)return;
+    const id=recentSceneIdentity(file,doc);
+    const coverThumb=await recentCoverThumbnail(doc?.cover?.src||coverImageUrl||'');
+    const row={id,fileName:String(file.name||''),title:String(doc.title||'Untitled'),seriesTitle:String(doc.metadata?.seriesTitle||''),episode:String(doc.metadata?.episode||''),episodeTitle:String(doc.metadata?.episodeTitle||''),lastOpenedAt:Date.now(),coverThumb,handle:handle||null};
+    const db=await openDraftDB();const tx=db.transaction(RECENT_SCENE_STORE,'readwrite'),store=tx.objectStore(RECENT_SCENE_STORE);
+    if(replaceId&&replaceId!==id)store.delete(replaceId);
+    store.put(row);
+    await new Promise(resolve=>{tx.oncomplete=resolve;tx.onerror=resolve;tx.onabort=resolve;});db.close();
+    const rows=await listRecentScenes();
+    if(rows.length>=RECENT_SCENE_LIMIT){
+      const db2=await openDraftDB(),tx2=db2.transaction(RECENT_SCENE_STORE,'readwrite'),st=tx2.objectStore(RECENT_SCENE_STORE);
+      const all=await new Promise(resolve=>{const r=st.getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>resolve([]);});
+      all.sort((a,b)=>(b.lastOpenedAt||0)-(a.lastOpenedAt||0)).slice(RECENT_SCENE_LIMIT).forEach(item=>st.delete(item.id));
+      await new Promise(resolve=>{tx2.oncomplete=resolve;tx2.onerror=resolve;});db2.close();
+    }
+  }
+  async function clearWorkingDraftCache(){
+    const db=await openDraftDB();const tx=db.transaction([DRAFT_STORE,DRAFT_META_STORE,DRAFT_VERSION_STORE],'readwrite');
+    tx.objectStore(DRAFT_STORE).clear();tx.objectStore(DRAFT_META_STORE).clear();tx.objectStore(DRAFT_VERSION_STORE).clear();
+    await new Promise(resolve=>{tx.oncomplete=resolve;tx.onerror=resolve;tx.onabort=resolve;});db.close();
   }
   async function draftStore(mode='readonly'){
     const db=await openDraftDB();
@@ -1086,6 +1259,9 @@
   function mergeDraftPublication(existingPublication,incomingPublication){
     const previous=existingPublication||{};
     const next=incomingPublication||{};
+    // A verified absent publication is authoritative, unlike a delayed blank autosave.
+    if(next.verified===true && next.workId && !next.id)return {...next,url:'',fingerprint:'',publishedAt:0,stoppedAt:0};
+    if(previous.workId && next.workId && previous.workId!==next.workId)return {...next};
 
     // Publication identity is durable metadata. A delayed autosave that was
     // created before publish must never be able to erase a workId/public URL
@@ -1142,7 +1318,8 @@
       get.onerror=()=>reject(get.error);
       get.onsuccess=()=>{
         const existing=get.result||null;
-        const safeRow=existing
+        const sameWork=!existing?.document?.studio?.identity?.workId || !row?.document?.studio?.identity?.workId || existing.document.studio.identity.workId===row.document.studio.identity.workId;
+        const safeRow=existing && sameWork
           ? {...row,publication:mergeDraftPublication(existing.publication,row.publication)}
           : row;
         const put=store.put(safeRow);
@@ -1262,6 +1439,11 @@
       console.warn('Master publication lookup failed',error);
       return null;
     }
+    // A lookup may finish after the author opens a different work.
+    if(doc!==workingDocument || ident.workId!==workingDocument?.studio?.identity?.workId)return status;
+    latestPublicationWorkId=ident.workId;
+    latestPublicationVerified=true;
+    legacyPublicationChecks.delete(ident.workId);
     if(!status?.exists){
       latestPublishedId='';
       latestPublishedUrl='';
@@ -1361,8 +1543,10 @@
       easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',seriesId:activeSeriesId(),episode:episodeInput?.value||'',episodeNumber:episodeNumberInput?.value||'',episodeTitle:episodeTitleInput?.value||'',description:descriptionInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
       document:workingDocument?clone(workingDocument):null,
       publication:{
-        id:latestPublishedId||'',
-        url:latestPublishedUrl||'',
+        workId:workingDocument?.studio?.identity?.workId||'',
+        verified:latestPublicationVerified && latestPublicationWorkId===workingDocument?.studio?.identity?.workId,
+        id:latestPublicationWorkId===workingDocument?.studio?.identity?.workId?latestPublishedId||'':'',
+        url:latestPublicationWorkId===workingDocument?.studio?.identity?.workId?latestPublishedUrl||'':'',
         fingerprint:latestPublishedFingerprint||'',
         publishedAt:latestPublishedAt||0,
         stoppedAt:latestPublicationStoppedAt||0
@@ -1370,7 +1554,7 @@
       recProgress:clone(autoRecProgress),
       theme:selectedTheme,
       cinemaBackground:cinemaBackgroundUrl||'',
-      cover:{url:coverImageUrl||'',name:coverImageFileName||'',position:coverPositionCss('phone'),positions:coverPositionsForDocument(),logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||''},
+      cover:{url:coverImageUrl||'',name:coverImageFileName||'',position:coverPositionCss('phone'),positions:coverPositionsForDocument(),logoUrl:coverLogoUrl||'',logoName:coverLogoFileName||'',startMode:coverStartMode,startTrigger:coverStartTrigger},
       assets:serializeDraftAssets()
     };
   }
@@ -1380,7 +1564,7 @@
       const row=await buildDraftRecord();
       if(!row)return true;
       await putDraftRecord(row);
-      latestDraftSummary=row;
+      latestDraftSummary=draftMetaFromRow(row);
       const ind=$('#draftSaveIndicator');
       if(ind){ind.textContent=t('draft.saved');ind.hidden=false;clearTimeout(ind._hideTimer);ind._hideTimer=setTimeout(()=>ind.hidden=true,1800);}
       await refreshDraftUI(false);
@@ -1404,31 +1588,35 @@
   }
   function scheduleDraftSave(delay=700){
     clearTimeout(draftSaveTimer);
-    draftSaveTimer=setTimeout(saveDraftNow,delay);
+    const saveDelay=desktopDetailRangeInteracting?Math.max(1000,Number(delay)||0):delay;
+    draftSaveTimer=setTimeout(saveDraftNow,saveDelay);
   }
   async function restoreDraftRecord(row){
     if(!row)return;
     const rowHadMasterIdentity=Boolean(row?.document?.studio?.identity?.workId && row?.document?.studio?.identity?.ownerKey);
-    assetRegistry.forEach((_,url)=>{if(/^blob:/i.test(url)){try{URL.revokeObjectURL(url);}catch(_){}}});
-    assetRegistry.clear();
+    if(!await prepareWorkReplacement())return;
     const map=new Map();
     for(const item of (row.assets||[])){
       if(!item?.blob)continue;
       const url=URL.createObjectURL(item.blob);map.set(item.url,url);registerAsset(url,item.blob,item.name||'asset');
     }
     workingDocument=row.document?replaceAssetRefs(clone(row.document),map):null;
+    coverStartMode=workingDocument?.cover?.startMode==='comic'?'comic':'scene';
+    coverStartTrigger=normalizeCoverStartTrigger(workingDocument?.cover?.startTrigger);
     if(workingDocument)ensureMasterIdentity(workingDocument);
     currentDraftId=row.id;localStorage.setItem(DRAFT_LAST_KEY,row.id);
     selectedSceneIndex=Math.max(0,Number(row.selectedSceneIndex)||0);
     easySourceDirty=Boolean(row.easySourceDirty);
     protectedResplitPending=false;
     autoRecProgress=row.recProgress||{nextIndex:0,recordedCount:0};
+    latestPublicationWorkId=String(row.publication?.workId||'');
+    latestPublicationVerified=row.publication?.verified===true;
     latestPublishedId=row.publication?.id||'';
     latestPublishedUrl=row.publication?.url||'';
     latestPublishedFingerprint=row.publication?.fingerprint||'';
     latestPublishedAt=Number(row.publication?.publishedAt)||0;
     latestPublicationStoppedAt=Number(row.publication?.stoppedAt)||0;
-    titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';easyRichSource=row.richSource?cloneRichSource(row.richSource):{version:1,marks:[],tables:[]};easyRichTextSnapshot=bodyInput.value;renderEasyRichComposition();
+    titleInput.value=row.title||'Untitled';authorInput.value=row.easy?.author||'';bodyInput.value=row.body||'';easyRichSource=row.richSource?cloneRichSource(row.richSource):{version:1,marks:[],tables:[],cards:[]};normalizeEasyLinkCardPlaceholders();easyRichTextSnapshot=bodyInput.value;renderEasyRichComposition();renderEasyOgpCardList();
     if(subtitleInput)subtitleInput.value=row.easy?.subtitle||'';
     if(seriesTitleInput)seriesTitleInput.value=row.easy?.series||'';
     if(episodeNumberInput)episodeNumberInput.value=String(row.easy?.episodeNumber||row.document?.metadata?.episodeNumber||'');
@@ -1513,8 +1701,27 @@
     return 0;
   }
 
+  function draftPublicationBelongsToWork(row){
+    const workId=String(row?.document?.studio?.identity?.workId||row?.workId||'');
+    return !workId || row?.publication?.workId===workId;
+  }
+  async function verifyLegacyDraftPublications(rows){
+    return Promise.all(rows.map(async row=>{
+      const workId=String(row?.document?.studio?.identity?.workId||row?.workId||'');
+      if(!workId || !row.publication?.id || draftPublicationBelongsToWork(row))return row;
+      if(!legacyPublicationChecks.has(workId)){
+        legacyPublicationChecks.set(workId,fetchWithTimeout(masterPublicationEndpoint(workId),{headers:{Accept:'application/json'}},10000)
+          .then(async res=>{const status=await res.json();if(!res.ok||!status?.ok)throw new Error('Publication lookup failed');return status;})
+          .catch(()=>{legacyPublicationChecks.delete(workId);return null;}));
+      }
+      const status=await legacyPublicationChecks.get(workId);
+      if(!status)return {...row,publication:{}};
+      return {...row,publication:status.exists?{...row.publication,workId,verified:true,id:status.id,url:status.url||'',stoppedAt:['stopped','suspended'].includes(status.state)?Date.now():0}:{workId,verified:true,id:'',url:''}};
+    }));
+  }
   function draftPublicationUrl(row){
     const pub=row?.publication||{};
+    if(!draftPublicationBelongsToWork(row))return '';
     if(pub.url)return String(pub.url);
     if(pub.id && !Number(pub.stoppedAt)){
       return `${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(pub.id)}`;
@@ -1587,7 +1794,7 @@
     try{
       await setHostedPublicationState(row.publication.id,'unpublish');
       const fresh=await getDraftRecord(row.id); if(!fresh)return;
-      fresh.publication={...(fresh.publication||{}),id:row.publication.id,url:'',stoppedAt:Date.now()};
+      fresh.publication={...(fresh.publication||{}),workId:draftMasterWorkId(fresh)||row.workId||'',verified:true,id:row.publication.id,url:'',stoppedAt:Date.now()};
       fresh.updatedAt=Date.now(); await putDraftRecord(fresh);
       if(currentDraftId===row.id){
         latestPublishedId=row.publication.id; latestPublishedUrl='';
@@ -1602,7 +1809,7 @@
     try{
       await setHostedPublicationState(workId,'republish');
       const fresh=await getDraftRecord(row.id); if(!fresh)return;
-      fresh.publication={...(fresh.publication||{}),id:workId,url:`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}`,stoppedAt:0};
+      fresh.publication={...(fresh.publication||{}),workId:draftMasterWorkId(fresh)||row.workId||'',verified:true,id:workId,url:`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(workId)}`,stoppedAt:0};
       fresh.updatedAt=Date.now(); await putDraftRecord(fresh);
       if(currentDraftId===row.id){
         latestPublishedId=workId; latestPublishedUrl=fresh.publication.url;
@@ -1619,149 +1826,189 @@
     if(!response.ok || !payload?.ok)throw new Error(payload?.error||`Delete failed (${response.status})`);
   }
 
-  async function refreshDraftUI(showResume=true){
-    const rows=await listDraftRecords();
-    latestDraftSummary=rows[0]||null;
+  function draftListIdentity(row){
+    const title=String(row?.title||'Untitled').trim()||'Untitled';
+    const episodeTitle=String(row?.episodeTitle||'').trim();
+    const number=Number(row?.episodeNumber)||0;
+    const episode=String(row?.episode||'').trim()||(number>0?(uiLanguage==='ja'?`第${number}話`:`Episode ${number}`):'');
+    const main=episodeTitle||title;
+    const parts=[episode,episodeTitle&&episodeTitle!==title?title:'',String(row?.seriesTitle||'').trim(),!episodeTitle?String(row?.subtitle||'').trim():''];
+    return {title:main,detail:[...new Set(parts.filter(value=>value&&value!==main))].join(' ／ ')};
+  }
 
-    const label=$('#draftCountLabel');
-    if(label)label.textContent=`${rows.length}作品`;
-    const toolbarCount=$('#draftToolbarCount');
-    if(toolbarCount)toolbarCount.textContent=`${rows.length}件`;
-    const foot=$('.draft-manager-foot > small');
-    if(foot)foot.textContent=uiLanguage==='ja'
-      ? '作品数の上限はありません。制作途中はこの端末へ自動保存されます。'
-      : 'Create as many works as you like. Drafts are autosaved on this device.';
-
-    const list=$('#draftList');
-    if(!list)return;
-
-    const publishedRows=rows.filter(draftIsPublished);
-    const draftRows=rows.filter(row=>!draftIsPublished(row));
-    const allCount=$('#allCountLabel');
-    const draftOnlyCount=$('#draftOnlyCountLabel');
-    const publishedCount=$('#publishedCountLabel');
-    if(allCount)allCount.textContent=String(rows.length);
-    if(draftOnlyCount)draftOnlyCount.textContent=String(draftRows.length);
-    if(publishedCount)publishedCount.textContent=String(publishedRows.length);
-
-    const activeFilter=document.querySelector('.draft-manager-tab.is-active')?.dataset.draftFilter||'all';
-    const visibleRows=activeFilter==='published'
-      ? publishedRows
-      : activeFilter==='draft'
-        ? draftRows
-        : rows;
-
-    list.innerHTML='';
-    if(!visibleRows.length){
-      const labels={all:t('draft.empty.all'),draft:t('draft.empty.draft'),published:t('draft.empty.published')};
-      list.innerHTML=`<p class="draft-empty">${labels[activeFilter]||labels.all}</p>`;
-      return;
+  let issueTargetRow=null;
+  const ISSUE_UNIT_PRICE=100;
+  function issueEscapeHtml(value){
+    return String(value??'').replace(/[&<>\"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
+  }
+  function issueFormatYen(value){return `¥${Math.max(0,Number(value)||0).toLocaleString('ja-JP')}`;}
+  function issueCurrentLimit(){return Math.max(1,Math.min(100000,Math.floor(Number($('#issueLimitInput')?.value||1))));}
+  function updateIssuePricePreview(){
+    const input=$('#issueLimitInput');if(!input)return;
+    const limit=issueCurrentLimit(),total=limit*ISSUE_UNIT_PRICE;
+    const calc=$('#issuePriceCalc'),totalEl=$('#issuePriceTotal'),button=$('#issueCreate');
+    if(calc)calc.textContent=`${limit.toLocaleString('ja-JP')}部 × ${issueFormatYen(ISSUE_UNIT_PRICE)}`;
+    if(totalEl)totalEl.textContent=issueFormatYen(total);
+    if(button)button.textContent=`${issueFormatYen(total)}で発行する`;
+    document.querySelectorAll('.issue-count-preset').forEach(preset=>{
+      preset.classList.toggle('is-active',Number(preset.dataset.issueLimit)===limit);
+    });
+  }
+  async function openIssueDialog(row){
+    if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
+    const fresh=await getDraftRecord(row?.id).catch(()=>null);
+    issueTargetRow=fresh||row;
+    const workId=draftMasterWorkId(issueTargetRow)||String(issueTargetRow?.workId||'');
+    if(!workId){appAlert('作品のMaster情報を確認できません。');return;}
+    const input=$('#issueLimitInput'),status=$('#issueStatus'),button=$('#issueCreate');
+    if(input)input.value='100';
+    if(status)status.textContent='';
+    if(button){button.disabled=true;button.title='Stripe決済は次の工程で接続します。';}
+    updateIssuePricePreview();
+    $('#issueDialog')?.showModal();
+  }
+  $('#issueLimitInput')?.addEventListener('input',updateIssuePricePreview);
+  $('#issueLimitInput')?.addEventListener('change',()=>{const input=$('#issueLimitInput');if(input)input.value=String(issueCurrentLimit());updateIssuePricePreview();});
+  document.querySelectorAll('.issue-count-preset').forEach(preset=>preset.addEventListener('click',()=>{
+    const input=$('#issueLimitInput');if(!input)return;
+    input.value=String(Math.max(1,Math.min(100000,Number(preset.dataset.issueLimit)||1)));
+    updateIssuePricePreview();
+  }));
+  $('#menuIssueCurrentButton')?.addEventListener('click',async()=>{
+    closeEasyMenu?.();
+    if(!workingDocument?.scenes?.length){appAlert('発行する作品を開いてください。');return;}
+    try{
+      await saveDraftNow({force:true});
+      const row=await getDraftRecord(currentDraftId);
+      if(!row)throw new Error('現在の作品情報を準備できませんでした。');
+      await openIssueDialog(row);
+    }catch(error){
+      console.error(error);
+      appAlert(String(error?.message||error));
     }
+  });
+  $('#issueCreate')?.addEventListener('click',()=>{});
 
-    visibleRows.forEach(row=>{
-      const total=row.sceneCount||row.document?.scenes?.length||0;
-      const rec=Math.min(total,Number(row.recProgress?.completedCount||row.recCompletedCount||0));
-      const publicationUrl=draftPublicationUrl(row);
-      const isPublished=Boolean(publicationUrl);
-      const isStopped=!isPublished && Boolean(row.publication?.id);
-      const status=isPublished?draftPublishStatus(row):(isStopped?'stopped':'draft');
-      const el=document.createElement('article');
-      el.className=`draft-row unified-work-row ${isPublished?'is-published':''} ${isStopped?'is-stopped':''} ${status==='dirty'?'is-dirty':''}`;
+  let issueManagerFilter='all';
+  let issueManagerItems=[];
+  function issueState(item){
+    return item?.status==='stopped'?'stopped':'active';
+  }
+  function issueStoppedAt(item){
+    const value=item?.stoppedAt||item?.updatedAt||'';
+    if(!value)return '';
+    const date=new Date(value);
+    return Number.isNaN(date.getTime())?'':date.toLocaleString('ja-JP');
+  }
+  function updateIssueManagerTabs(){
+    const all=issueManagerItems.length;
+    const active=issueManagerItems.filter(item=>issueState(item)==='active').length;
+    const stopped=all-active;
+    const counts={all,active,stopped};
+    const ids={all:'#issueAllCount',active:'#issueActiveCount',stopped:'#issueStoppedCount'};
+    Object.entries(ids).forEach(([key,selector])=>{const el=$(selector);if(el)el.textContent=String(counts[key]||0);});
+    document.querySelectorAll('[data-issue-filter]').forEach(button=>{
+      const selected=button.dataset.issueFilter===issueManagerFilter;
+      button.classList.toggle('is-active',selected);
+      button.setAttribute('aria-selected',selected?'true':'false');
+    });
+  }
+  function renderIssueManagerList(){
+    const box=$('#issueManagerList');if(!box)return;
+    updateIssueManagerTabs();
+    const items=issueManagerItems.filter(item=>issueManagerFilter==='all'||issueState(item)===issueManagerFilter);
+    if(!items.length){box.innerHTML=`<small style="opacity:.6">${issueManagerFilter==='active'?'発行中の一冊はありません。':issueManagerFilter==='stopped'?'停止済みの発行はありません。':'発行済みの一冊はありません。'}</small>`;return;}
+    box.innerHTML=items.map(item=>{
+      const active=issueState(item)==='active',distributable=active&&Number(item.remaining)>0;
+      const title=issueEscapeHtml(String(item.title||'無題'));
+      const episode=String(item.episode||'').trim()||(Number(item.episodeNumber)>0?`第${Number(item.episodeNumber)}話`:``);
+      const episodeTitle=String(item.episodeTitle||'').trim(),seriesTitle=String(item.seriesTitle||'').trim(),coverUrl=String(item.coverUrl||'').trim();
+      const created=item.createdAt?new Date(item.createdAt).toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+      const stoppedAt=!active?issueStoppedAt(item):'',episodeLine=[episode,episodeTitle].filter(Boolean).join('　');
+      const metaLine=seriesTitle&&seriesTitle!==String(item.title||'').trim()?seriesTitle:'';
+      const thumb=coverUrl?`<img class="issue-manager-cover" src="${issueEscapeHtml(coverUrl)}" alt="" loading="lazy">`:`<div class="issue-manager-cover issue-manager-cover-empty" aria-hidden="true">あ</div>`;
+      const status=active?`<span class="issue-manager-remaining">${distributable?`残り ${Number(item.remaining||0)}部`:'配付完了'}</span>`:'<span class="issue-manager-stopped">停止済み</span>';
+      const actions=distributable?`<div class="issue-manager-actions"><button type="button" data-global-issue-copy class="issue-manager-copy">配付URL</button><button type="button" data-global-issue-stop class="issue-manager-stop">停止</button></div>`:'';
+      return `<article data-global-issue-row="${issueEscapeHtml(String(item.issueId||''))}" class="issue-manager-item">${thumb}<div class="issue-manager-info">${metaLine?`<div class="issue-manager-series">${issueEscapeHtml(metaLine)}</div>`:''}<strong class="issue-manager-title">${title}</strong>${episodeLine?`<div class="issue-manager-episode">${issueEscapeHtml(episodeLine)}</div>`:''}<div class="issue-manager-stats"><span>${Number(item.issueLimit||0)}部発行</span><span>${Number(item.issuedCount||0)}部受取</span>${active?`<span>${distributable?`残り${Number(item.remaining||0)}部`:'配付完了'}</span>`:''}</div><div class="issue-manager-date">${!active&&stoppedAt?`発行終了 ${issueEscapeHtml(stoppedAt)}`:`発行 ${issueEscapeHtml(created)}`}</div></div><div class="issue-manager-side">${status}${actions}</div><input type="hidden" data-issue-url value="${issueEscapeHtml(String(item.url||''))}"></article>`;
+    }).join('');
+    box.querySelectorAll('[data-global-issue-row]').forEach(row=>{
+      const issueId=row.dataset.globalIssueRow,input=row.querySelector('[data-issue-url]');
+      row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);}catch(_){const helper=document.createElement('textarea');helper.value=input.value;document.body.appendChild(helper);helper.select();document.execCommand('copy');helper.remove();}showEasyToast('配付URLをコピーしました。');});
+      row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{const stopButton=e.currentTarget;if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;if(stopButton)stopButton.disabled=true;try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop',issueId})});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');showEasyToast('発行を停止しました。受取済みの一冊は引き続き読めます。');await loadAllIssueHistory();}catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}});
+    });
+  }
+  async function loadAllIssueHistory(){
+    const box=$('#issueManagerList');if(!box)return;
+    box.innerHTML='<small style="opacity:.6">発行状況を確認しています…</small>';
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{headers:authorAuthHeaders(),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error(payload?.error||'発行状況を取得できませんでした。');
+      issueManagerItems=Array.isArray(payload.issues)?payload.issues:[];
+      renderIssueManagerList();
+    }catch(error){box.innerHTML=`<small>${issueEscapeHtml(String(error?.message||error))}</small>`;}
+  }
+  document.querySelectorAll('[data-issue-filter]').forEach(button=>button.addEventListener('click',()=>{
+    issueManagerFilter=button.dataset.issueFilter||'all';
+    renderIssueManagerList();
+  }));
+  function openIssueManager(){
+    if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
+    $('#easyMenu')?.classList.remove('is-open');
+    $('#issueManagerDialog')?.showModal();
+    loadAllIssueHistory();
+  }
+  $('#menuIssueManageButton')?.addEventListener('click',openIssueManager);
+  $('#issueManagerClose')?.addEventListener('click',()=>$('#issueManagerDialog')?.close());
 
-      el.innerHTML=`
-        <div class="unified-work-copy">
-          <div class="unified-work-title-line">
-            <strong></strong>
-            <span class="unified-work-badges"></span>
-          </div>
-          <small class="unified-work-meta"></small>
-          <small class="published-url" ${isPublished?'':'hidden'}></small>
-        </div>
-        <div class="draft-row-actions unified-work-actions">
-          <button data-open>${t('draft.continue')}</button>
-          <button data-publish ${(!isPublished && !isStopped) || status==='dirty'?'':'hidden'}>${status==='dirty'?t('publish.update'):t('publish.action')}</button>
-          <button data-share ${isPublished?'':'hidden'}>${t('publish.share')}</button>
-          <button data-copy ${isPublished?'':'hidden'}>${t('draft.link')}</button>
-          <button data-stop ${isPublished?'':'hidden'}>${t('draft.unpublish')}</button>
-          <button data-republish ${isStopped?'':'hidden'}>${t('draft.republish')}</button>
-          <button data-delete>${t('draft.delete')}</button>
-        </div>`;
-
-      el.querySelector('strong').textContent=row.title||'Untitled';
-
-      const badges=el.querySelector('.unified-work-badges');
-      if(isPublished || isStopped){
-        const badge=document.createElement('span');
-        badge.className=`published-status ${status==='dirty'?'is-dirty':''} ${isStopped?'is-stopped':''}`;
-        badge.textContent=isStopped?t('draft.status.stopped'):(status==='dirty'?t('draft.status.dirty'):t('draft.status.published'));
-        badges.appendChild(badge);
-      }
-
-      const meta=[
-        `${total} Scenes`,
-        total?`REC ${rec}/${total}`:'',
-        formatDraftTime(row.updatedAt)
-      ].filter(Boolean).join(' · ');
-      el.querySelector('.unified-work-meta').textContent=meta;
-
-      if(isPublished){
-        el.querySelector('.published-url').textContent=publicationUrl;
-        const publishRow={...row,publication:{...(row.publication||{}),url:publicationUrl}};
-        el.querySelector('[data-share]').onclick=()=>shareDraftPublication(publishRow);
-        el.querySelector('[data-copy]').onclick=e=>copyAnyPublishedUrl(publicationUrl,e.currentTarget);
-        el.querySelector('[data-stop]').onclick=()=>stopDraftPublication(row);
-      }
-      if(isStopped)el.querySelector('[data-republish]').onclick=()=>republishDraftPublication(row);
-      const publishButton=el.querySelector('[data-publish]');
-      if(publishButton && !publishButton.hidden){
-        publishButton.onclick=async()=>{
-          const fresh=await getDraftRecord(row.id); if(!fresh)return;
-          await restoreDraftRecord(fresh);
-          $('#draftManagerDialog')?.close();
-          requestAnimationFrame(()=>openPublishDialogFromEasy());
-        };
-      }
-
-      el.querySelector('[data-open]').onclick=async()=>{
-        await restoreDraftRecord(await getDraftRecord(row.id));
-        $('#draftManagerDialog').close();
+  async function refreshDraftUI(showResume=true){
+    const rows=await listRecentScenes();
+    const label=$('#draftCountLabel');if(label)label.textContent=`${rows.length}件`;
+    const toolbarCount=$('#draftToolbarCount');if(toolbarCount)toolbarCount.textContent=`${rows.length}件`;
+    const menuCount=$('#menuDraftCount');if(menuCount)menuCount.textContent=`${rows.length}件`;
+    const list=$('#draftList');if(!list)return;
+    list.innerHTML='';
+    if(!rows.length){list.innerHTML='<p class="draft-empty">最近使った.sceneはまだありません。</p>';return;}
+    rows.forEach(row=>{
+      const el=document.createElement('article');el.className='recent-scene-row';
+      const detail=[row.seriesTitle,row.episode,row.episodeTitle].filter(Boolean).join('　');
+      const cover=row.coverThumb?`<img class="recent-scene-cover" alt="" src="${issueEscapeHtml(row.coverThumb)}">`:'<div class="recent-scene-cover recent-scene-cover-empty" aria-hidden="true">あ</div>';
+      el.innerHTML=`${cover}<div class="recent-scene-copy"><strong></strong><small></small><span class="recent-scene-filename"></span><time></time></div><div class="recent-scene-actions"><button type="button" data-recent-open>開く</button><button type="button" data-recent-remove aria-label="履歴から削除">×</button></div>`;
+      el.querySelector('strong').textContent=row.title||row.fileName||'Untitled';
+      const small=el.querySelector('small');small.textContent=detail||'作品情報なし';
+      const fileName=el.querySelector('.recent-scene-filename');fileName.textContent=row.fileName||'.scene';fileName.title=row.fileName||'.scene';
+      el.querySelector('time').textContent=formatDraftTime(row.lastOpenedAt);
+      el.querySelector('[data-recent-open]').onclick=async()=>{
+        const handle=row.handle;
+        if(handle&&typeof handle.getFile==='function'){
+          try{
+            let permission=typeof handle.queryPermission==='function'?await handle.queryPermission({mode:'read'}):'granted';
+            if(permission!=='granted'&&typeof handle.requestPermission==='function')permission=await handle.requestPermission({mode:'read'});
+            if(permission==='granted'){const file=await handle.getFile();$('#draftManagerDialog')?.close();await importScenePackage(file,{fileHandle:handle,recentId:row.id});return;}
+          }catch(error){console.warn('Recent .scene reopen failed',error);}
+        }
+        pendingRecentSceneId=row.id;$('#draftManagerDialog')?.close();$('#importPackageInput')?.click();
       };
-      el.querySelector('[data-delete]').onclick=async()=>{
-        const hasHosted=Boolean(row.publication?.id);
-        if(!await appConfirm(hasHosted?t('draft.deleteHostedConfirm',{title:row.title||'Untitled'}):t('draft.deleteLocalConfirm',{title:row.title||'Untitled'}),{danger:true,confirmLabel:uiLanguage==='ja'?'削除する':'Delete'}))return;
-        try{
-          if(hasHosted)await deleteHostedPublication(row.publication.id);
-          await removeDraftRecord(row.id);
-          if(currentDraftId===row.id){
-            currentDraftId=''; latestPublishedId=''; latestPublishedUrl=''; latestPublishedFingerprint='';
-            latestPublishedAt=0; latestPublicationStoppedAt=0; localStorage.removeItem(DRAFT_LAST_KEY);
-          }
-          await refreshDraftUI(true);
-        }catch(error){console.warn('Delete failed',error);appAlert(t('draft.deleteFailed'));}
-      };
-
+      el.querySelector('[data-recent-remove]').onclick=async()=>{await removeRecentScene(row.id);await refreshDraftUI(false);};
       list.appendChild(el);
     });
   }
 
   async function startNewDraft(){
     requestPersistentDraftStorage();
-    // Never abandon the currently edited work silently.
-    const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
-    const saved=await saveDraftNow();
-    if(hadWork && !saved){
-      appAlert(uiLanguage==='ja'?'現在の作品を自動保存できなかったため、新しい作品には切り替えませんでした。':'The current work could not be saved automatically, so Studio did not start a new work.');
-      return false;
-    }
-    workingDocument=null;relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceModeLocked)commerceModeLocked.checked=false;if(commerceSupportEnabled)commerceSupportEnabled.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    if(!await prepareWorkReplacement())return false;
+    workingDocument=null;coverStartMode='scene';coverStartTrigger='tap';relayEnabled=true;refreshRelayPolicyUI();if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}if(commerceModeFree)commerceModeFree.checked=true;if(commerceModePurchase)commerceModePurchase.checked=false;if(commerceModeLocked)commerceModeLocked.checked=false;if(commerceSupportEnabled)commerceSupportEnabled.checked=false;if(commerceAmountInput)commerceAmountInput.value='100';renderCommercePriceUI();easySourceDirty=true;protectedResplitPending=false;selectedSceneIndex=0;autoRecProgress={nextIndex:0,recordedCount:0};
+    await clearWorkingDraftCache();
     currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
     latestPublishedId='';
     latestPublishedUrl='';
     latestPublishedFingerprint='';
     latestPublishedAt=0;
-    titleInput.value='';authorInput.value='';bodyInput.value='';resetEasyRichSource();easyRichTextSnapshot='';renderEasyRichComposition();
+    titleInput.value='';authorInput.value='';bodyInput.value='';resetEasyRichSource();easyRichTextSnapshot='';renderEasyRichComposition();renderEasyOgpCardList();
     if(densitySelect)densitySelect.value='normal';
-    if(subtitleInput)subtitleInput.value='';applyRememberedWorkIdentity();if(seriesTitleInput)seriesTitleInput.value='';if(seriesLinkSelect)seriesLinkSelect.value='';if(episodeInput)episodeInput.value='';if(episodeNumberInput)episodeNumberInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';renderAuthorSeriesOptions();
+    // "New work" must be genuinely blank. Remembered work identity is useful
+    // when restoring a draft/session, but applying it here resurrected the
+    // previous title/subtitle/author immediately after the user chose New Work.
+    if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(seriesLinkSelect)seriesLinkSelect.value='';if(episodeInput)episodeInput.value='';if(episodeNumberInput)episodeNumberInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';renderAuthorSeriesOptions();
     coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';
     if(endingLabelInput)endingLabelInput.value=''; if(endingSeEnabled)endingSeEnabled.checked=false; setAssetField('endingSeInput','',''); if(endingSeFields)endingSeFields.hidden=true; endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateAutoRecStartLabel();
@@ -1778,6 +2025,55 @@
   function registerAsset(url, blob, name='asset'){
     if(!url || !blob)return;
     assetRegistry.set(url,{blob,name:String(name||'asset')});
+  }
+
+  // A file-open is a work boundary. Persist edits first, then detach the old
+  // Player, inspectors, Undo snapshots and object URLs so Chrome can collect them.
+  async function prepareWorkReplacement({keepAssetUrls=new Set()}={}){
+    const hadWork=Boolean(bodyInput.value.trim() || workingDocument?.scenes?.length);
+    const wasLive=liveEditEnabled;
+    finishCreditsInlineEdit();
+    finishLiveEndingInlineEdit({refresh:false});
+    try{if(autoRecActive)finishAutoRec(false);}catch(error){console.warn('AUTO REC cleanup failed',error);}
+    disableLiveEdit();
+    if(hadWork && !await saveDraftNow()){
+      if(wasLive)enableLiveEdit();
+      appAlert(uiLanguage==='ja'?'現在の作品を自動保存できなかったため、作品を切り替えませんでした。Master .sceneを書き出して保存してください。':'The current work could not be saved. Export a Master .scene before switching works.');
+      return false;
+    }
+    clearTimeout(draftSaveTimer);draftSaveTimer=null;
+    clearTimeout(liveInlineIntroTimer);clearTimeout(liveInlineDockTimer);
+    clearTimeout(undoBarTimer);undoBarTimer=null;
+    liveEditSoundAbort?.abort();liveEditSoundAbort=null;liveEditSoundBound=false;
+    disposeStudioPreviewSeek();player?.destroy();player=null;
+    desktopBodyResizeObserver?.disconnect();desktopBodyResizeObserver=null;
+    desktopDetailRangeFlushActive=null;desktopDetailRangeInteracting=false;
+    hideRichSelectionToolbar();
+    liveEditSheetBody?.replaceChildren();desktopLivePanelBody?.replaceChildren();
+    undoHistory=[];redoHistory=[];undoSnapshot=null;syncHistoryUi();
+    latestDraftSummary=null;pendingUnpublishDraft=null;sceneBackgroundPositionContext=null;
+    assetRegistry.forEach((_,url)=>{
+      if(keepAssetUrls.has(url))return;
+      if(/^blob:/i.test(url)){try{URL.revokeObjectURL(url);}catch(_){}}
+      assetRegistry.delete(url);
+    });
+    workingDocument=null;
+    coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';cinemaBackgroundUrl='';
+    const backgroundPreview=$('#cinemaBackgroundPreview');
+    if(backgroundPreview){backgroundPreview.style.backgroundImage='';backgroundPreview.hidden=true;}
+    document.querySelectorAll('input[type="file"]').forEach(input=>{input.value='';});
+    return true;
+  }
+
+  function materializePackageAsset(entries,assetsByPath,path,name){
+    if(assetsByPath.has(path))return assetsByPath.get(path);
+    const bytes=entries.get(path);
+    if(!bytes)return null;
+    const blob=new Blob([bytes],{type:guessMime(name)});
+    const url=URL.createObjectURL(blob);
+    registerAsset(url,blob,name);
+    assetsByPath.set(path,url);
+    return url;
   }
 
   async function snapshotPickedFile(file){
@@ -1838,6 +2134,10 @@
   function unregisterAsset(url){
     if(!url)return;
     const item=assetRegistry.get(url);
+    // A packaged asset can be shared by multiple Scenes (or Undo snapshots).
+    // Replacing one reference must not invalidate all the other references.
+    const usesAsset=doc=>{if(!doc)return false;let used=false;walkAssetRefs(doc,ref=>{if(ref.src===url)used=true;});return used;};
+    if(usesAsset(workingDocument) || [...undoHistory,...redoHistory].some(s=>usesAsset(s.workingDocument)))return item;
     assetRegistry.delete(url);
     if(/^blob:/i.test(url)){
       try{ URL.revokeObjectURL(url); }catch(_){}
@@ -2175,7 +2475,13 @@
       }
       row.appendChild(chips);return row;
     };
-    wrap.append(makeRow(uiLanguage==='en'?'Recent':'最近',readRecentTextColors()),makeRow(uiLanguage==='en'?'Pinned':'固定',readPinnedTextColors()));
+    const mobilePalette=matchMedia('(max-width:899px)').matches;
+    const recentColors=readRecentTextColors();
+    const pinnedColors=readPinnedTextColors();
+    wrap.append(
+      makeRow(uiLanguage==='en'?'Recent':'最近',mobilePalette?recentColors.slice(0,7):recentColors),
+      makeRow(uiLanguage==='en'?'Pinned':'固定',mobilePalette?pinnedColors.slice(0,7):pinnedColors)
+    );
     const actions=document.createElement('div');actions.className='text-color-palette-actions';
     const pin=document.createElement('button');pin.type='button';pin.className='text-color-pin';
     const current=normalizeTextColor(currentColor);
@@ -2361,6 +2667,14 @@
   function refreshLivePlayerDocumentChrome(){
     if(!player||!workingDocument)return;
     const doc=getDocumentForPlayback();
+    // ScenePlayer applies theme/font/tone datasets during load(). A document-chrome
+    // refresh does not re-run load(), so work-wide appearance changes from the
+    // Editor must update those datasets explicitly for immediate Live Preview.
+    if(player.host){
+      player.host.dataset.theme=doc.theme||'light';
+      player.host.dataset.font=doc.appearance?.typography?.fontFamily||'serif';
+      player.host.dataset.cinemaTone=doc.theme==='cinema'?(doc.appearance?.cinemaTone==='light'?'light':'dark'):'';
+    }
     if(typeof player.refreshDocumentChrome==='function'){
       player.refreshDocumentChrome({document:doc});
       if(liveEditEnabled&&player?.ended)requestAnimationFrame(prepareLiveEndingEditor);
@@ -2453,6 +2767,7 @@
 
   function updateCoverPreview(){
     if(!coverPreview)return;
+    coverPreview.dataset.startTrigger=normalizeCoverStartTrigger(coverStartTrigger);
     const bg=coverPreview.querySelector('.cover-preview-bg');
     if(bg){
       bg.style.backgroundImage=coverImageUrl ? `url("${coverImageUrl}")` : 'none';
@@ -2569,14 +2884,14 @@
   }
 
   function packageManifestFor(doc, coverPath=''){
-    const meta=workMetadataFromEasy();
+    const meta=doc?.metadata||{};
     const manifest={
       package:'scene-package',
       packageVersion:'1.0',
       sceneFormat:'1.0',
       title:doc.title || 'Untitled',
       author:doc.author || '',
-      language:meta.language || doc.language || 'und',
+      language:doc.language || languageInput?.value || 'und',
       entry:'scene.json'
     };
     if(meta.subtitle)manifest.subtitle=meta.subtitle;
@@ -2606,15 +2921,15 @@
   function isolateTablesIntoScenes(scene){
     const source=String(scene?.text||'');
     const ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
-    const tableRanges=ranges.filter(r=>r?.kind==='table').slice().sort((a,b)=>(Number(a.start)||0)-(Number(b.start)||0));
-    if(!tableRanges.length)return [scene];
+    const cardRanges=ranges.filter(r=>r?.kind==='table'||r?.kind==='linkCard').slice().sort((a,b)=>(Number(a.start)||0)-(Number(b.start)||0));
+    if(!cardRanges.length)return [scene];
     const content=Array.isArray(scene.content)?scene.content:[];
     const out=[];
     const pushProse=(a,b)=>{
       const raw=source.slice(a,b); const lead=(raw.match(/^\s*/)||[''])[0].length; const trail=(raw.match(/\s*$/)||[''])[0].length;
       const segStart=a+lead,segEnd=Math.max(segStart,b-trail); if(segEnd<=segStart)return;
       const segText=source.slice(segStart,segEnd);
-      const segRanges=ranges.filter(r=>r?.kind!=='table'&&(Number(r.end)||0)>segStart&&(Number(r.start)||0)<segEnd).map(r=>({
+      const segRanges=ranges.filter(r=>r?.kind!=='table'&&r?.kind!=='linkCard'&&(Number(r.end)||0)>segStart&&(Number(r.start)||0)<segEnd).map(r=>({
         ...r,start:Math.max(segStart,Number(r.start)||0)-segStart,end:Math.min(segEnd,Number(r.end)||0)-segStart
       })).filter(r=>r.end>r.start);
       out.push({...scene,text:segText,
@@ -2623,18 +2938,19 @@
       });
     };
     let cursor=0;
-    tableRanges.forEach((r,idx)=>{
+    cardRanges.forEach((r,idx)=>{
       const a=Math.max(0,Math.min(source.length,Number(r.start)||0));
       const b=Math.max(a,Math.min(source.length,Number(r.end)||a));
       pushProse(cursor,a);
-      const tableId=String(r.tableId||'');
-      const table=content.find(c=>c?.type==='table'&&String(c.id||'')===tableId);
-      if(table){
-        const marker=source.slice(a,b)||String(table.label||`［表 ${idx+1}］`);
+      const contentId=String(r.kind==='table'?r.tableId:r.cardId||'');
+      const contentType=r.kind==='table'?'table':'linkCard';
+      const block=content.find(c=>c?.type===contentType&&String(c.id||'')===contentId);
+      if(block){
+        const marker=source.slice(a,b)||(contentType==='table'?String(block.label||`［表 ${idx+1}］`):'\u2060');
         out.push({...scene,text:marker,
           richText:{version:1,ranges:[{...r,start:0,end:marker.length}]},
-          content:[clone(table)],
-          presentation:{...(scene.presentation||{}),display:'solo'}
+          content:[clone(block)],
+          presentation:{...(scene.presentation||{}),display:'solo',text:contentType==='linkCard'?{...(scene.presentation?.text||{}),writingMode:'horizontal-tb'}:{...(scene.presentation?.text||{})}}
         });
       }
       cursor=b;
@@ -2644,10 +2960,132 @@
   }
 
   function sceneHasTable(scene){
-    return Boolean((Array.isArray(scene?.content)?scene.content:[]).some(c=>c?.type==='table'));
+    return Boolean((Array.isArray(scene?.content)?scene.content:[]).some(c=>c?.type==='table'||c?.type==='linkCard'));
+  }
+
+  // Link cards are rendered from richText ranges; their source marker is only
+  // an anchor and must never be visible as prose. Replace old human-readable
+  // markers with an invisible word-joiner anchor, and remove unbound generic
+  // placeholders that came from pasted article text. This also makes the fix
+  // survive Easy re-splitting and draft reloads.
+  function normalizeEasyLinkCardPlaceholders(){
+    const cards=Array.isArray(easyRichSource?.cards)?easyRichSource.cards:[];
+    if(!cards.length)return false;
+    const source=String(bodyInput.value||''),cardIds=new Set(cards.map(card=>String(card.id||'')));
+    const cardMarks=(easyRichSource.marks||[]).filter(mark=>mark?.kind==='linkCard'&&cardIds.has(String(mark.cardId||'')));
+    const operations=[];
+    cardMarks.forEach(mark=>{
+      const start=Math.max(0,Math.min(source.length,Number(mark.start)||0));
+      const end=Math.max(start,Math.min(source.length,Number(mark.end)||start));
+      if(end>start)operations.push({start,end,replacement:'\u2060',cardId:String(mark.cardId||'')});
+    });
+    const generic=/(?:\*\*)?[ \t]*(?:\[|［)[ \t]*(?:\*\*)?[ \t]*(?:リンクカード|URLカード)[ \t]*(?:\*\*)?[ \t]*(?:\]|］)[ \t]*(?:\*\*)?/gi;
+    for(const match of source.matchAll(generic)){
+      const start=match.index,end=start+match[0].length;
+      if(!operations.some(op=>start<op.end&&end>op.start))operations.push({start,end,replacement:''});
+    }
+    // Remove leftover invisible anchors created by older drafts, except the one
+    // represented by each card range. This prevents duplicate cards and odd gaps.
+    for(const match of source.matchAll(/\u2060/g)){
+      const start=match.index,end=start+1;
+      if(!operations.some(op=>op.cardId&&start>=op.start&&end<=op.end))operations.push({start,end,replacement:''});
+    }
+    if(!operations.length&&!cardMarks.length)return false;
+    operations.sort((a,b)=>a.start-b.start||a.end-b.end);
+    const merged=[];
+    operations.forEach(op=>{
+      const last=merged[merged.length-1];
+      if(last&&op.start<last.end){
+        last.end=Math.max(last.end,op.end);
+        if(op.cardId){last.cardIds||=[];last.cardIds.push(op.cardId);last.replacement='\u2060';}
+      }else merged.push({...op,cardIds:op.cardId?[op.cardId]:[]});
+    });
+    let raw='',cursor=0;
+    merged.forEach(op=>{raw+=source.slice(cursor,op.start)+op.replacement;cursor=op.end;});
+    raw+=source.slice(cursor);
+    const mapToRaw=(position,bias='start')=>{
+      const pos=Math.max(0,Math.min(source.length,Number(position)||0));let removed=0;
+      for(const op of merged){
+        if(pos<op.start)break;
+        if(pos<=op.end)return op.start-removed+(bias==='end'?op.replacement.length:0);
+        removed+=op.end-op.start-op.replacement.length;
+      }
+      return pos-removed;
+    };
+    const rawAnchors=new Map();
+    cardMarks.forEach(mark=>rawAnchors.set(String(mark.cardId||''),mapToRaw(mark.start)));
+    cards.forEach(card=>{const id=String(card.id||'');if(!rawAnchors.has(id))rawAnchors.set(id,mapToRaw(card.start));});
+    // Cards are block elements. Canonicalize their text boundary to one blank
+    // line on each side when prose exists, regardless of how the URL was pasted.
+    const anchors=[...rawAnchors.entries()].map(([id,pos])=>({id,pos})).sort((a,b)=>a.pos-b.pos);
+    const pieces=[],segments=[],canonicalAnchors=new Map();let rawCursor=0,outputLength=0;
+    const appendSegment=(a,b,trimLeading,trimTrailing)=>{
+      let start=a,end=b;
+      if(trimLeading)while(start<end&&/[ \t\n]/.test(raw[start]))start++;
+      if(trimTrailing)while(end>start&&/[ \t\n]/.test(raw[end-1]))end--;
+      const content=raw.slice(start,end),targetStart=outputLength;
+      pieces.push(content);outputLength+=content.length;
+      segments.push({start:a,end:b,keptStart:start,keptEnd:end,targetStart});
+      return content.length>0;
+    };
+    anchors.forEach((anchor,index)=>{
+      const hasText=appendSegment(rawCursor,anchor.pos,true,true);
+      const hasPrevious=pieces.length>0&&pieces.some(piece=>piece.length>0);
+      if(hasText||(!hasText&&index>0&&hasPrevious)){pieces.push('\n\n');outputLength+=2;}
+      canonicalAnchors.set(anchor.id,outputLength);pieces.push('\u2060');outputLength++;rawCursor=anchor.pos+1;
+    });
+    let tailStart=rawCursor;while(tailStart<raw.length&&/[ \t\n]/.test(raw[tailStart]))tailStart++;
+    if(tailStart<raw.length){pieces.push('\n\n');outputLength+=2;appendSegment(rawCursor,raw.length,true,false);}
+    const next=pieces.join('');
+    const anchorsAreStable=cardMarks.length===cards.length&&cards.every(card=>{
+      const mark=cardMarks.find(item=>String(item.cardId||'')===String(card.id||''));
+      if(!mark)return false;
+      const a=Number(mark.start)||0,b=Number(mark.end)||0;
+      return b===a+1&&source.slice(a,b)==='\u2060'&&Number(card.start)===a&&Number(card.end)===b;
+    });
+    // Most keystrokes do not touch a card boundary. Keep the textarea value,
+    // selection and native undo stack untouched when nothing needs normalizing.
+    if(next===source&&anchorsAreStable){easyRichTextSnapshot=source;return false;}
+    const mapRawToCanonical=(position,bias='start')=>{
+      const pos=Math.max(0,Math.min(raw.length,Number(position)||0));
+      for(const segment of segments){
+        if(pos<segment.start)break;
+        if(pos<=segment.end){
+          if(pos<=segment.keptStart)return segment.targetStart;
+          if(pos>=segment.keptEnd)return segment.targetStart+(segment.keptEnd-segment.keptStart);
+          return segment.targetStart+(pos-segment.keptStart);
+        }
+      }
+      // Positions at/after a card anchor are shifted by the accumulated output delta.
+      let delta=0;
+      for(const anchor of anchors){
+        const target=canonicalAnchors.get(anchor.id);
+        const rawEnd=anchor.pos+1;
+        if(pos<anchor.pos)break;
+        if(pos<=rawEnd)return target+(pos===rawEnd?1:0);
+        delta=target+1-rawEnd;
+      }
+      return pos+delta;
+    };
+    const cardAnchor=new Map(anchors.map(anchor=>[anchor.id,canonicalAnchors.get(anchor.id)]));
+    const existingCardMarkIds=new Set(cardMarks.map(mark=>String(mark.cardId||'')));
+    easyRichSource.marks=(easyRichSource.marks||[]).map(mark=>{
+      if(mark?.kind==='linkCard'&&cardIds.has(String(mark.cardId||''))){const at=cardAnchor.get(String(mark.cardId||''))??0;return {...mark,start:at,end:at+1};}
+      const a=mapRawToCanonical(mapToRaw(mark.start)),b=mapRawToCanonical(mapToRaw(mark.end,'end'),'end');
+      return {...mark,start:a,end:b};
+    }).filter(mark=>mark.kind==='linkCard'||mark.end>mark.start);
+    cards.forEach(card=>{const id=String(card.id||'');if(!existingCardMarkIds.has(id)){const at=cardAnchor.get(id);easyRichSource.marks.push({start:at,end:at+1,kind:'linkCard',cardId:id});}});
+    easyRichSource.tables=(easyRichSource.tables||[]).map(item=>{const a=mapRawToCanonical(mapToRaw(item.start)),b=mapRawToCanonical(mapToRaw(item.end,'end'),'end');return {...item,start:a,end:b};}).filter(item=>item.end>item.start);
+    easyRichSource.cards=cards.map(card=>{const at=cardAnchor.get(String(card.id||''))??mapRawToCanonical(mapToRaw(card.start));return {...card,start:at,end:at+1,label:'\u2060'};});
+    const selectionStart=bodyInput.selectionStart,selectionEnd=bodyInput.selectionEnd;
+    bodyInput.value=next;
+    try{bodyInput.setSelectionRange(mapRawToCanonical(mapToRaw(selectionStart)),mapRawToCanonical(mapToRaw(selectionEnd,'end'),'end'));}catch(_){}
+    easyRichTextSnapshot=next;
+    return true;
   }
 
   function buildSceneDocument() {
+    normalizeEasyLinkCardPlaceholders();
     const chunks = splitBody(bodyInput.value);
     const languageSummary = SceneTextSplitter.summarizeLanguages?.(chunks) || { language: detectWorkLanguage(), languages: [detectWorkLanguage()] };
     let richCursor=0;
@@ -2677,12 +3115,17 @@
       return {
         id: makeSceneId(index), type: chunk.type || 'text', text: sceneText,
         ...(semantic.ranges?.length ? { richText:{version:1,ranges:semantic.ranges} } : {}),
-        ...(semantic.tables?.length ? { content:semantic.tables } : {}),
+        ...(semantic.tables?.length||semantic.cards?.length ? { content:[...(semantic.tables||[]),...(semantic.cards||[])] } : {}),
         ...(languageSummary.language === 'mul' && chunk.language ? { language: chunk.language } : {}),
         presentation: { display: 'stack', effect: 'auto', text: { size: 'auto' } }
       };
     });
     scenes = scenes.flatMap(isolateTablesIntoScenes).map((scene,index)=>({...scene,id:makeSceneId(index)}));
+    // Empty-start authoring: Live Editor is a creation surface, not only a text preview.
+    // Keep one real empty Scene so image/audio/Web Expression-only works can start here.
+    if(!scenes.length){
+      scenes=[{id:makeSceneId(0),type:'text',text:'',presentation:{display:'stack',effect:'auto',text:{size:'auto'}}}];
+    }
     if (selectedTheme === 'cinema' && cinemaBackgroundUrl && scenes[0]) {
       scenes[0].presentation.background = { src: cinemaBackgroundUrl, transition: 'fade', dim: cinemaTone === 'dark' ? 0.48 : 0.72, fit: 'cover', position: 'center center' };
     }
@@ -2709,6 +3152,7 @@
       commerce:{ ownCopyGate:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'reader_price':'copy')), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
       studio:{ commerceDraft:{ schemaVersion:'1', mode:commerceModeLocked?.checked?'locked':(commerceModePurchase?.checked?'purchase':(commerceSupportEnabled?.checked?'reader_price':'copy')), currency:'JPY', ...((commerceModePurchase?.checked||commerceModeLocked?.checked)?{amount:Math.floor(Number(commerceAmountInput?.value||100))}:{amount:100}), ...(commerceModeLocked?.checked?{lockScene:Math.max(2,Math.floor(Number(commerceLockSceneInput?.value||2)))}:{}) } },
       cover:{
+        startMode:coverStartMode==='comic'?'comic':'scene',startTrigger:coverStartTrigger,
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
         fontFamily:coverFontFamily,
@@ -2801,6 +3245,18 @@
     if(freshScene.presentation?.background){
       reused.presentation ||= {};
       reused.presentation.background=clone(freshScene.presentation.background);
+    }
+    // Easy and Live Editor share one card source. Refresh the card payload and
+    // its text anchors from the rebuilt Easy document while retaining other
+    // Scene-specific content and styling.
+    if(Array.isArray(freshScene.content)||Array.isArray(reused.content)){
+      const other=(reused.content||[]).filter(item=>item?.type!=='linkCard');
+      const freshCards=(freshScene.content||[]).filter(item=>item?.type==='linkCard').map(clone);
+      reused.content=[...other,...freshCards];if(!reused.content.length)delete reused.content;
+      const oldRanges=Array.isArray(reused.richText?.ranges)?reused.richText.ranges.filter(range=>range?.kind!=='linkCard'):[];
+      const freshRanges=(freshScene.richText?.ranges||[]).filter(range=>range?.kind==='linkCard').map(clone);
+      const exclusions=reused.richText?.autoRubyExcluded||[];
+      assignSceneRichText(reused,[...oldRanges,...freshRanges],exclusions);
     }
     return reused;
   }
@@ -2963,11 +3419,21 @@
     const oldScenes=oldDoc.scenes||[];
     const newTextScenes=fresh.scenes||[];
     const result=[];
+    const freshLinkCardIds=new Set(newTextScenes.flatMap(scene=>(scene.content||[]).filter(item=>item?.type==='linkCard').map(item=>String(item.id||''))));
 
     let ni=0;
 
     for(let oi=0; oi<oldScenes.length; oi++){
       const old=oldScenes[oi];
+      const oldCards=(old.content||[]).filter(item=>item?.type==='linkCard');
+      if(oldCards.length&&oldCards.every(card=>!freshLinkCardIds.has(String(card.id||'')))&&/^\s*［URLカード [^］]+］\s*$/.test(String(old.text||''))){
+        const shell=clone(old);shell.text='';shell.content=(shell.content||[]).filter(item=>item?.type!=='linkCard');
+        if(!shell.content.length)delete shell.content;
+        if(Array.isArray(shell.richText?.ranges)){shell.richText.ranges=shell.richText.ranges.filter(range=>range?.kind!=='linkCard');if(!shell.richText.ranges.length&&!shell.richText.autoRubyExcluded?.length)delete shell.richText;}
+        if(sceneHasAdvancedMeaning(shell))result.push(shell);
+        else lastEasyReconcileDeletedCount++;
+        continue;
+      }
       const oldText=normalizedSceneText(old.text);
 
       // Advanced-only / image-only / sound-only Scene:
@@ -3153,11 +3619,51 @@
     applyCommerceDraftToDocument(workingDocument);
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
     const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
-    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
+    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,startMode:coverStartMode==='comic'?'comic':'scene',startTrigger:coverStartTrigger,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
-  // Local prototype — Chat authoring helpers v0.3
+  // Web Expression common avatar v1 — shared by chat / comments / reviews.
+  const AHAKO_COMMON_AVATARS={"m01":"data:image/webp;base64,UklGRjYDAABXRUJQVlA4ICoDAADQDwCdASpAAEAAPpE6mUilo6KhNfXeYLASCWcAykL1vkuSxwH7xDdLYW6bmZz5MPqn2BjBU+dHiRymGt+qxEsYGNUpPtw8J0tNaQZcEwXFe+yC5V/GeRsQZDfWtW7RY00p7qZopym5Do67/bXBEcgObucxV6Bk6H+PH0m3PGnF/d/MYQkNLEgA/v28yvSRQ9Ho7yrp5O2F7xDGBQCSJm46379/MItb52fmHmfoVj17ZrAxGsbWdxJCG6PjP0PHod4VZUDay6yOdsW2lRa46v+mPM4BHWouPQHoY/3eCbwJ9OZtdeKu2S92Nft0gM7wgyT5sgNXNqc5+TBNuQf0xOqcxssmy5GKU8J95r3u31IurfWIq84dDsqeX4mkoZoQDpYAa7PRuXvk5hBdXCGPaw1NDNjhV3rD7o9Pb7P9bX/SucSSrhlJaWftsQNNmbL3VpZkNA1OZEAniQMXfnZXkc1ZCtek6+gZ/Nkr2vipw1p/0Ghw1Gm80QEYiHSPs/95O9ztHHGBWRN5iEPPIpFpaLI5b01IvIUH9prq4ocsg2a645Q+JF2GVHMRV1x18G/Arfz8ZkyWcC73bgggEnjD6+jMnVpxwFceejxTpHi+Hq+L2T98GMkMLZ3ImXtfA4yIHMR7Uj3TWhyYsIzQ1KBDz+a99X3qzS9gTe/UqZbn+WHtoG+/Za5FhPN/mVjzt17yRr5s0jslgyPoamM1lPuM2cWH3fBl/Q/SKbOSqiGdjmuFasKY1SXQPG8ISTUmOO9Gfln8DaadeMqieCE+JrJHdOOsBnY44bIdsLXgfFTsRbq7eU9ptyIyiXjYMQXSXJDZ5SzTninEFSmm3C0m7miOv6/xSToTI28T+N0j4p8qq/YUSCWKuWv1kWfyDzJ66Mr35XuAJcyLUJT9eaLE+Vd6r368qh3yJ+iW348zHUd4VbQrlkRAEKiMr6mSMT1BaKnpQGJVZMipiaUpICoVtbL7XipJiM9RO9hWnkeisKyTWlPyyJd0J9B3Vdln2yjHfSmEcx5k7q+vm0wgEq//v4RnR/mGHQgljMrfMh/xc1d3JQi29KfVQVGSmgJTAAA=","m02":"data:image/webp;base64,UklGRpoDAABXRUJQVlA4II4DAADwEACdASpAAEAAPpU6lkiloyIhNfdOYLASiWMAwFwgibq7/KWGeOju5l6aXqal5EtQRVNCeW+Eiu0c8XcL9dlQkvVn+wJ8tBfpu3uNCvucALl7zvx7WCxM/K0EtPgSVOR2VKDHE/KHwNDY1tV5Gn+Yjg/OiZXc+hgWa8h60HYNvn7EROzOtMqyS9a6XdXjicAA/v6Ts/grQm1CxVgb3wTp3+wdWYrVsnMxEdKiSq1Neej2bMyXlruVdCD1lZ8ppefm3SWjYIUj5j9YqbBCAvfBqOXCCnMCdtbKDPqbqZyYtih/TmCVap3kgn0ppA4TSsMXoQ8o2vfc46ttU5ajXHZJBhD13X4zxzYTiQmkT4VSWO+TqIqb8sL5moOhTIhTvN+WBRhZPjQJK7bOFtPVvVMA5q6l0NhqtwHNsy0I2dDtIsLiTcQHoSBwuYAAD+RzIbGAQ0/MHLiORQorkHLR2FT0oztQ0GiZCmuQ3eUaz1AZrsrjrIqjEKeGkRUKccqCNNj8qlDNmHiFAFZXapB3VtluG/BONBlk74/PK1EbREecsCJQsbszQcpzelm4JLw6ISnl6a5qMf6MNCbU3kxSjyzVLOZkFW0y9+CenbP4O+h7LRYLGc8nKUZtWC4yV6haCjGBnMLxPsUBpxVjNVnqKH7DBcSKgFa3JinflR0syG7z56BaZyIh+RHhe6jhj2nD6Nj75Y6pqv1laGUQBfbf5L5YF732o+AYlN7zwq8wqhaHmbTedxLHUxae0pzV+L9iJazEiqY3v7js6+z8ALbRJ3HBweD2BXaU6kutbh/hbC43TebakD6r8R46P1Zqzz56k9IQBVBq8MbQy2GrXaXVQizyDFUM4NMyjNh1vnp2m2KI/fKyJVD9sKiXlazbZL1rULa5T0tsrGmUrOlxFuOZKRSg0ZYjvY5/w0rHLM6kXZklw0FtmCfxFpaNEKAJa6AiSSR9UmP4qS052nhBtOvaVwygQk3Bmseo1+CKbzs6AyooTjxpTMigq73FtI0NgVqHO4GSYTz+nOLpegnKVv30ya0RlOrxQjYA6zU9Y5fIk+fKUnE4ynGHjQHds4eg83ttO4pucFVimK6l7RChHwg3dTC8an9VequoykfT4aOF3z6p0N79bPXTcVigsY/lK5tXCoyuw7ARImnONge6WhxwmmhZ/CYUR/+7HA6JJzqjipu3zLtQ441FWXGsNc1w9MAA","m03":"data:image/webp;base64,UklGRmIDAABXRUJQVlA4IFYDAADQEACdASpAAEAAPqFEnEumIyKhqBgLUMAUCWUAxnP4CgDaj8nod8/wOUu0cKRm/RVaSE8t8JpHlM12arb6EIVdsXk4CD0DCZfPI7R808EC5AdzGEqi8jjuJrhAdYc0saiuZVnOP9RS4JdkHAC6NNrjWQyj4TUPkmSfExQf9d3EmbyM8+ZT7PkmKV8vSYGwAAD++Bzp4oTo60IUaSzZ5Ph5+3GQbXbb3GeNvgDbMdpvSER4b/vLdDsi+gjtokCOYOPwGhq0GREbS3FTLGcSrILxtw2P4OM8nIea8l10PxqvjFVtXOBchsKqRRd/OVFX/EEDbxe8xC4lpDGDwSGtwSmWOhtihpMtiW+Wve6qLdQxMwD7qGlm88vbPWTX3swC91CVj96DXfVnGZFkTMKETwHNCLYP+/zcSvre79HL5I0khGGoJr1ASQ1Vye/6UTO7Sm0KVxbHQzegpDXzS7fAMzX29JWoDx3Stf6sUf5yFkwJTa3d+K1M8R7BF/PE58dRGj3mri+o9FG70VbypmUQZgIfJ0bhprdkZ31lOE9eoXQt9N/oyIgtksxocqiZHUqRXNWVg58u0dOpfVee70bx36t6iSDPxAoJq3fCCFZgiBat4ywBnLOlKeHCQwU5Tp9Pw3LcVYaosFeOR9Fu4gVikMfVtAtStgY3pwsLcP6RLd89u2VlSAEK9MZ5Z4hr5pzB1izLRidoVnlQntntHMgJc/ZiDFhxsd9cVDJNfIFya6Kyxx+ePJWouR3nOt0itoSWjcfDckhbVXBI5r1/oL0Cvd0KkmULjU9SKGG6zTZKnYfNhuDV0yyds/Dj9pztIDX1XxHA5759mtTsVP35R8TCnbzbr3ygt81gU6LP2YoCiV/65TRcLo6XD+2ni3GHb6GLBIdptDuz4O6G/PGf/s5OAZR2+q1LMm/+3hsqdpk8wEjzHBZ/qULXpXB0LGgg1RAXOREbC1l+JBeG+JfuEFkdPC6l7H8b1bBovgmVWeVIDOBjTfktiXzK0Bb5SZPtxdFMz3A0obncEbukRL5JOvjhQot4t7dWkTNjf0RJ143UU40YqbngQbWUdvoPeY+e4K26ll6dv1k6+Kt1fHOvtR0fuNhrcFN7cV/z4hdlhXbhbb9UUKFbygAAAA==","m04":"data:image/webp;base64,UklGRuoCAABXRUJQVlA4IN4CAADwDgCdASpAAEAAPp0+mEiloyIhM/mZWLATiWcAz+ANF06Kwu636p1Ctm6KWRpCneYydi9u9gsNLMKGJhXAuP7pxYgEgJL8ag8F7VTAr/KGOWOyQAkZW0y5edMBVj57dqCwfdGCalXjPcdTQniCr+DtKdonVe124HfpZVW0uK9+AAD+/xIdGqukPf+bYvET9XWxrPbZXDvw7n6N4Un/oPwF7fyz+rStixtwu2dU6CU7J/M8a59udzHo+Ro5gOB/P85rD7Qh94PRNj/r33OX1fG6krKlGvBbveXTtAFb/azKYzeBA8zTjEBf8NZazL2bn9UphF+rM+bI9vmOOlKRzhm4LFtZ2f9AkGxedNkCl0EzF0tk0aXpa7oM0up8dA9C3QFYdWycDj8cvjODVctdPUtAf6kbKQkBtkTo+q18WBMJ3Gsgf2+F/SSh44GPqQF0oipOu4Dy63MpoWkYFLI+5IlmlW6sWcNM8u8T8ooYLtl1G3qALG5ianKZYMOIKZdooV8qTD0eOeH4gKquRvUYmjRys8ZIsnWd7mqPsxJAkC3HrlYmph6+kbV8xnEOxiOqCqGd+t4rUMF1paaH5XXJNzj2elpinOA+H/3sri/M05zj90nIde9fmoF0Uc1EmJJYrq/gT/Or7MrVHoAqHGwfDRXnx6/jPrqEOqLc4oOepkbOEz7/CMWdN0n6B1pXTUsG3EQoqoCRqzJAifTkbOkuIxy1JciPtrgQbS0xrIqIOqJrZQd56EDXfwJCFaH2kM4WdPOKEpy6vCtKUQn1ba1bnCnOhbGrD8x0gEbmj2pgsLBirI7g240dwXDgUpJmId5oqgwUcqBy7mOF7swm9WhJBgyomqz/Q17vdibEY9ei75sKz/2WlMu5/5DNQI5DfaDWiu5P7u2aA6WTdDRc+L2hP7MibcGOF0L+fb5UGcHpDreK7tdFT2rttfvOnoCu7re1ZWHAg7fju5OL/+D2vdAAAA==","m05":"data:image/webp;base64,UklGRhoEAABXRUJQVlA4IA4EAACwEQCdASpAAEAAPqFEmUimJCIhMBQM+MAUCWcAw3a/uI9Yc/CcWK1XvI8EtNPj99DnO99NewT+uTA9jFIbICOEf1kZtrSkICZx/q3sodOdSCORIuMrkoOMEUXSl84d1LaHMAisqZTjI+Z+mirep+1oVJS6sg9kQ7JHm8YD/Fc/PQEpB6j/ArcbQ+pXHf76NhkxBEHVkJAA/v8SHaK65t1hn1q13SCM1GCG+goYvmC/vyG5BYNRIgOwRd1wrlSVQuLoQ6Ou/JsaUAL4hWw3IF4XPKOqqKUOogq3Kzuy/u/Nl6lQCppnE9Fww6p4yFEf3fNg4idGjMSmfKSvBcwQfNlXQg2/Ya+kIj3yoYO4gCYaPc0lVEvXblwyAmCzZ1J0YpLdyX0LgBO+ARq0tKMdQun2ncknl4+ZahTnl2DAgDaaKBFl8wCSujxIz+XpASPhl9t5OEelz/c8nLtkI2emz6nfDaxsyGF7T+6wxGi3j+f+SyrIvtMjiKIyVvahxY1RHtYIrM3swPnAUTr7Tzf3b4VpP7Q1BYLHT93yEUCzrQ7inKUhvSl/e1XyMX2U/zpNyV0I3pYJOv97OqELT1RuQLX+vb9/S+9bRfb+ojUaa5jfP8r2ZK59Tbs2/AvxHofyDT37HmLOEdyxGa6N0xToFqnahyaMr40JyjHa42pOVoq+vXRea5SI5InPS4TV/Kf/LEcdAOSESS0FnsLkqbPMQBgBFgU2TG7hqwuA26TTSg/SVe8glWkP+kBafCT3N3QndDsulLmAETXIhzx2EFwUH78OV0MdElchNJtJuWDN/Lt4TK3qsaPEdiizlxLJv01jFXFKO7kzs/lpX912jhMB0wKmHgk1WGKhgJsJ4s0ei//qLs0iush9S80RXkBOvI7nnl78ON5N9C5GRd4+jxIFMB890Sn5GUYXUbA/reblv1+h6X+4i2iVSs7KyyxyIEUVoq5fDNxdqITlBgYzPhrUCbEHlIblWlxI6H0fFUp9FxJcPK6RAJARSRMgu4pzF0rblGXULBI1N0lTsUF7IQ8GKUXYInMwX//a5cij+dH6fqtCOPblOgX4QgGysI18cunBMKP/oGNCOrRnmbNdOHV7Tw/F1DA6aL1zLZyLzFZxF73J97w0xTrCme0NSaEm0rX8+O6SOeaX+E6sd3Z3QCYZZqz0laxTB46RTXft+HySM+UsPfKyBEuMldXPw7YhaR5QRNb7ofB+8CYh3agVsDFTcQ2pzlw/fi+TE29Twn5KmxFx8ETDq9r0+nyHlXl8t8eRDT0YwqZ+WLyIDmyS5261biTlWf0D8fCv5UEfknmqOc8bLiVAa/jT191LatbuWtqf+m/dRYeelvAU9idH+RUi9tc8SnPJFwHz0UDXIOcAAAA=","m06":"data:image/webp;base64,UklGRg4EAABXRUJQVlA4IAIEAAAwEgCdASpAAEAAPpU+mEilo6KhM/zKqLASiWMAvJvGQTvO+83yiAJjTDgZeOngmk+R/v39drmnH8P9xvatqIxx7cTyBBatpcPfj+uGLKfcJ2H4JYMSXrm5mKQ7q3fNY1pwDnK21liRNw6Y6UP285P57aodwcaRfkzQXHHjHmUdRXRv3YvKaJ1lEBayVIoBzotFZlVomqR9OMygAP7/Eh2ZzjE/OgipXD54FkVgwE0aat9v/pTJH3+e/O4Qe9sGdfo4iab+GW+ItzcuvCaPF46j0vhzISaSmbRUmEzMWhf9sQzMkc55NoiCKEGqciOr2fIY9r4Gg346MM5rxOvr7xqOzLfFJ+TRdGj05RnWj5MZi/rFxZdoYhBLgk7Xsa2dh+nsoZhKreUIAb7cVhxyzBiH0XOzN4Zr5PzLV/l1fXXU0LoVEx5xBzayTntuz26oe64IGojtXioLyLFtGic8mtAHcAV456gHRpe9C4wErDI0UToHFbg7Q5uchAUdwjJ0pDWnTwWqf73/Dfs8vgq33Xa69t+0YLiFef6QDPMZOaUEJhSzGBMWjViuDwoBCNx6cxNAGv6i1hqRV19dqQZ6/at1MD9USC8+iMfRUU2isn+jForDU7t/sVm6A1U35LxTVgoNJ2w8VMgFiDB6x5P/yF1Oq74OpqAVNR+Cf9IhaUIvimmFj9Z+BKQI9HnVjiStIKtLmXj31FFykCORNagTKfhiutvTLKVWjGtEF9df6sjmnks2/Wa7vv1O3vyuCXq/a1gzA4/dbXiva1vdEqHMf+ghxaEpxiUQPTUYUBa6bUQ399HVfJXFqXhBjT8D/+NnE5XLnikJs7V8KLEXi8q/NPHpEA0NzhBoAiCeVa1eQuIXpb98qFERj6OMdtVFMKfQWn1Zw5zeVxyVScU/i+cKSg72WYHZaaQSmdcZ/dxJ5RwkVGjss9l79/c7VMHP419XE88QETJKHNL6BGEnxuaZA/Zs76MsQ+RlOigUwThFxrHDx7jsxWGrRUVN5Aac4f3XFPujBKV/ul0snXn1MRYNE7NTMQfbnnP0rIgoG0MnHzurnsUPGOMhqlSYdUVCL+wGgTIeiwpTM8FU9FK+/CFos417FkhH6S3mFo2FBT6bfo2L74PN8Z7hGfnBDyhGID+JolrKq0tH45IDnbL4TOpUs40SiIIk7o4nZlkiky7Qeh0GN4zYvEpNn7ss83GGOPcq83OFCug+LcLhcvazoFNS/HV+gn6d+aCq0+Ft8s63nxxwztxpmYHcjYM+sE/Cx8lMLU0TRfkaZlu1U8c497LQUW8ois6ZIJDhSnWsdZETeGzS7PE8E71w7bH69J72U4WsnoYw0wtvrVYNuCLHOdpybqC1vAA=","f01":"data:image/webp;base64,UklGRlgDAABXRUJQVlA4IEwDAACwDwCdASpAAEAAPqFIoEwmI6MiJBgK2MAUCWUAxQwr99uOZucDble80vyPahaV2xpJm2t0nNlolgSgAtHZYwgUiP107lI+OgTB7+YPFzo/Thi4QEcaI4umKB6AhZ/ehIjtouaeZRwESgHJnB9b/edNT/1t5eUEcrp+82wDZxYy6FytsooTgAD+/np5tFM9R0DoTYq1HWhhWCTjuKNunPbTNPajZd+YXf/tpE/+kuicngocXPF1Og42aweJmXKfMh3gMrNcQEqEQMTEPG6ROmPSYybxOYSiofdHwvBHRVxc5bTHYDkGi6r8LbLOLTfShru4deyNDZDHHhGZ+xkIEiNByLZ5leMKCSiauUUOF+ppYwvyD7X4y+9c2KX4dxW2yMt9YXG/NjQAQKPkhA20seafje/b0LjuqMkqNV4S3YNZMc2JO0KYCAYLJ8wOUz1/W004fYUa8KZ8CsUOwZDDwpS1B8jkg24xhNSFbHulc9kE8EeLRc09DUnCIl1t8KXcKmKoRmMGvgFRAVcFCSzdANg4zKkfPoIO6+e8d5GECbcdpu1I4kilnEogTQUmfUmLxRkaute91el2JZe9tL+UrflhpdygvfSvavD9tc1SlR2gSghZnRbWmlAIoyGQyQ8VPbUdlaOj0tUxu7rD8K3YVE/zbxc9a/ZJPL3Fbbk8lTCf0S+5INkv/uBVCFMhF4G6WiuaHolPHE3iKHfFVmsy8iyv65jdkG3doM8o5evWklDfZa3Tlun7GY9iU89TQOIDCmf88oliRhCQuKfNHNoTtQbHR6bdbWj5lMaJvBn3cb6AlFsbKhPz808+9pNst8zkeWTZzLkhn6/+OkWnZObsomyfrkWe5isE33bMq5qee+X9Ov+pFzu+gsmb2qV/uMSQhjIvzfyd/DGI0o6m6tYHLwYmplwgnv/opl5At8dpkNUSoE8ojAwtwT3gjKb01MkUEMtsNE3RE+JEraIA2niP8iV5Z64UkW6Q+yEwzOzmFNW8m77OY7XdKp3pM1zPgdMZvcXxrU6mTVOPUwb1Tx+gIsZgOU4PRZjSrD+XKRylb/qOKAz3n/ZSdwFfHJnYg8zZ/0maOVPYUAhK+VKgHSucoJJcW69VCWPIUwwtKtQA","f02":"data:image/webp;base64,UklGRrgCAABXRUJQVlA4IKwCAADwDgCdASpAAEAAPqFKnUsmJCKhphVc6MAUCWMAyjO8yw+xUj3gq904bWsLbyeZH0EM4H3rhvkL8evIw7P4s7XDUsHcUOC85YdRu9D34kc0xuze9LckJBF7lyxesc/ypcW02L2parZDdmxiLElBxNQG1/Sdr8nw/qB8c5pBh2uKAAD+/pOrBkMghqTCYGzRf+qFgwZyzGuJ/sJ8bytWCPB/e8X0utjKXJ6mdhrIOr3FQCqD3fMOP7GNfm9wUV6PWB+89JFfOCIT7Lm1J1IWluku4+cvzZPbGZLgy6J85AkytLov6AmJi2FmPLOlFfi9WCcDvNs3tTePjaD2QCodq8lscRlwTZzQCKreX0bGpJDDkqxZzZ6HEM/vt7ah4GPzZqVixAfBgOa1MFDTKpoMTuL11+9fd+1Ii9v+TzYCKDLs2hXuWSqYoLA1ejD1incBE8Yepk5KxIAT4CUw27yyTB8KpYkrQ6fBYQZywXl7dJazCX2/ZM7+w16LC6Z5RC1+6LetPAznT3ctx+adto41nFjD3g+7+1ZmFAbseODsnBGp1Yu+KHEyquitQ7qtNxrIJtbJnxpPkszXHWSi2JRoi7zC5oGsp/Q6W23fPm/tOh9Oz4+4LNtLz4E5wuUnZ/8cpuI3eJn7XixmQL+l16FqzuB43HyPQA0kq25twZXeTGUS0JqYjYMkBnOKuE+ioYQTHzz3vRuUwmlaAlwKHGVR2RVOfDmk2MPdDesM5N1eqdpefQfo+fX9BNLlAkQWnMlPbIWa8wA4OJRx3Yh4Rv7gYkStUDR/wyLRY2KC2SGkd3T4ce/a0xFGltFERzwkL0YFTCfZdG5hx08b3heySlm0s996HgPeijmjByEEXiklMQ5KJojQxTdtyiQnrRlE3Dj2XrNGrrBotPx5x2go4AA=","f03":"data:image/webp;base64,UklGRjYDAABXRUJQVlA4ICoDAAAwEQCdASpAAEAAPqFCnEmmI6KhLBgMAMAUCUAVBusgZ75dwIzTmf3y+fg0xjQiniAiNlimK//ZI8bXVtCx52t8kMFC/jnt2e2W/eSQIlwsIORCh2vvYfLeDXkTSz3W+POacd7wl240ozPuDtzVopBCnVJZDklmrBdvFW53nPWewVbWt+rWkqRZATApeqeksv6RgAD+/uwIkuf6/LqpiQVKh7hWzoGLUbnEPf7n+osb0t9/x0b6tA3ZMZ6VkAgw4yROYXqrCuNhRUbw5UT+H5mNHxIklxvtqW1A4pTT9RPFgU5kTYBcLCQHZh1jeki/KB1nCHhiofltTk2Jx4BryB9pjBbQ+5365+Md8HlRh35XkQKVOyuN++P1tcLn1f5xx1/xZ1fXAazWyv/iCyexHr7WyWRGwlI/5LGjytTFBQpt6oISVukBr30tSBahezMqqEy2qWopVEuxqorx8GyU9Y8BF66XZTVhxZlapHS9CKa1PcyRIfcS2jYzaY1DRhfZgQtQEMnQyS8JoOSpxshyK/ZVSvUssc2pe9cFLlXv7N5RFC9xoN0LLRe5J97bhHfMxqw0flb53RGfoXZFyhHA8FPU7/x/tz7cL1R9csPLXPbBqRLpQjb26gLOauqqjCrvDzueGkT/vF1hVb1DOOAYlYZ9C1Y9SRBGDS2tCyowa8GQM+g0hqwj8LcCNenADOZaqx98+gF+arGx6e9AN4MAPmVuuNVOceIiUeKljbeLEYJKG5Llj2KTpWZf5cJJ4B+qP2ox8V+xNCeU6F5ZmsYIdcEiV4crSeb76JSbs9bmqwIDqfiie6DSRL3O+eJIjulYCm5wgg6dJtCqHlX5bvKd9QyrJTtWtYYhDr16WBXwtit9Un2HktH2X3m60N03QvygEsZ3UcN3bzU4KtqxibrwUInctMD9PajLgoR0rPRhCrqFPTRMK+dSatDibgJ2axKcmHCh4b4qR7v6a5Llnqm6kXoTWJPQMphEOPc4X5bm1hBjHOPuxoHeDdh6ctRlfOine6hhrqnI5iOzWwL4TDNAYg04sp+OAZqzwAqGvnUrnLfhP60z/2IfCJHgAAA=","f04":"data:image/webp;base64,UklGRpQCAABXRUJQVlA4IIgCAABQDQCdASpAAEAAPp08m0iloyKhMBYN+LATiWcAz2c0thNpoWfUO8y0JWtpeFJY0+gXFo/6fhUi0kkUIH+X4Qh9Z2Of7Ho8I6UZKFxHlB/feiUgwsVgZj3rcxn45kUa9X0zBiba+95Z75aDssZhJZqaf43oAP799y8VoWMvsimsCaTHZzt9HPAtzifM2BdoFF9YZQxc0j/BcS+2gD/ZKuuHJjtHUaq/iDwTbxSOnUblaC0GRC8gVeriKFHIMia3keRCq5fzIw27UtFzsEANZG/DmI0p+iOqF+68d+vObIzodq9pkOpf881yZFI5Pc4xD/45of30Q++S9kmqkoPkTVEKRd2aRoKQec+9yTkJyM5XgzBrIVvHycUj1fGB2HAldh2/nnlCSs3x8Ua3uwKhRJNUpXsErq1z+/1l/uJGa4nEojynLepVpTFDNYQimBWPpGwlte7JQ76Ud45u+HrvaJ9n4QFGHKjBryA7tzHteE3+tMvNavAsoEx+o5GlNmZ5M9vXtxr7A1Ll7aianwfYbwiticNpJjh0q/RCPaeUTxPat09ZXQ1KGTiBHntc8/jk7ZWSsZGgDfneDSaRgOQJPCvGRKg6c0WvRw0phJIVh12pLWss0975u2fzy+sTvryPiZFcJQHB0kk4+W5VEqnWtSWuJ7/K7obToM/tYYHesMaeD/+CaG2XdHvqfevXayLkFUe5uEYvwSI9WUqhmB93L+hqVvNUgfwnGzyg9hT4bQD8D5IOq/JXcvv8skE2ytPfeGdapstS1YA0ohSANUthByT0ZKXoPNTEZrMSPgwAY5Lmga18lPgMP0fYKKsGzQp6rNQJl9vZv5A/gvtHax/esLI+9fdJ9xwAAAA=","f05":"data:image/webp;base64,UklGRv4DAABXRUJQVlA4IPIDAADwEACdASpAAEAAPqFCnkomI6KhqhmboMAUCWcAyAW9bBJrF5yZR24BriuPGJ6JGfp6q9g5VSJQFttZM2/TWGgf2UjE/jehgoH8kxz6aDsjKNiIw1yHmDvIUP3dRJD7p4OgAbvyubWYtu88FmHgm5tr/XgJNfNHrpn9ELwP7QqJqvvCYCuMG+x03saOx0mykIAA/v7CArt6+RpGUT1EQboAWTozWLE7p5zZK94Qii0hTnn5XV6kxV/v09LPUvM2bjMhwEIAtjKQf/6Q4yoGPHemXvILhBA45agtbhZWSpWLs6Y+pCCos3kne7vxc4Jjg2o4RWDvw8WDBtvdbAeyST/KLyG1Cg3G4PI52029gxA3gA7kwSjZ9yKG+H6Wi8EaOenpBSZbxgxEqT2vS6pPjRoq8W2rqJx5s/YcqFbOtF1qEDfRKI7qAPCgZPV6MWX69z2TnBg5qOF8IQ4nidI5gTNt7owZf7b7JPrCMYzIC1/v4DSDWco6t2HrH+9/LWaFS5/6kuei/YKuOeI5HEn8B4uvDaWH/tyjrxFIe6nzrTM8QPnPsHM+Q93L6TSNTgdzuTTaP6X3T/9A6gSThLr+aZiYOvHeHLmArcxVDq43wa2sr+VvymtE+agEk1rzytuaOByCa/psGWfpj0pHf2I3XjLxkv3nxfAwn2KVY3+od+Ji0DSQqo+28C898KDes+U5cJiSU3LGARBkItSVaZcO+3m57xBx1vqrl0maPgaateTve28dCgAX4LcINmVC9rcXLrWxHsLSP+H9hb9JBCo2ighd0JLdKRNf1sB2WBjkduEDfet2DX7FWWCHNRae1kBYmg+U86CN/9Vc86fpHe+ABlaWI5IuO5BilC+MM+dhuLJ59JwMsAgpq/pfuCe0XOLRdZsWB4Fn5O1i0MXYn16izn8yRJh1MLWUFZW8eWwwJlrURoe/Hq34+obJDvJN3mPzRqmrLJUgIOsAHSKKyPd8qkwO94cHvc+KgSOZ5pyBZKX04UE4+b2vItQA7bfRY3WgYvo9yv1RcqAMTpYq2jMjRkwZBvViRuOJAFrDfoIIGw7/4BXzV1znoiwG1kK7PiRcWFQfbgCp0m6fkQdm6eXyw5adsuMJm1k8qU0RRnqFuAQ3tDjZTzNPhOJI5tWJK275aOhy/w8Vwq+HH82I1dh4lkqTlC83i57sMxXqqLlrMr1mp/rdFUadFH46sdCe4/b/cM1hQOxfY5xADGTw4RDS5eJg0valdxSuR0zdjBvBvdUyedZLaj3b1lmvSByJmrmW0F3ZF/as4V1u1UO+vXp2bAm0f0jc+PdrWmFVgtrzxCxdkkbC4Iw2M/Pp1ymGZUm96AAAAA==","f06":"data:image/webp;base64,UklGRhwEAABXRUJQVlA4IBAEAADQEgCdASpAAEAAPpk6mEiloyIhMfqskLATCUAWZ3lgbxZueIbu3er5BQI7SPr9GTW1XnPNTTNzS/KB8VByP3I831g3dRuxA952/eEnMim2Si5UUvD812MDAkYkNuNpzMQJAb6VIE+295qauQd0J5/XKqGFare46VaAzjcn7Sbzm1C4XiEAFxCu0ZS3ITIeTtAJqedXxJOQxSZWlR4QEgAA/v8SAtnxDSS/mqBrAmmmbbNrcTzvBzCTQI+TR4CK77wKi2gBB7NI0q5jyN7FT//qf00ml5rRQnbiH+zbLpXdEIT4TOzwmnKk+YKJ+0OVJ/7tvkf5y/nrbg5VO1hH/SBb6xm4GJILYiKfRIslotVqgWpnqr8W2lhgkIla3OtfBZgyaSpZkk5Ay5S628lHaQBa169bJSAHcjpDL0Jw+unpocNA2H7cfbgACe67zapB/CYuKfRJSQkKEx0z9J2GXxxQ63nZM4QLzv7rLFGOkVtMB3OQcxwA55WEMD/y+bkztRWROt1mofPl32pUEQhVx5whtAmtqrsCzWSOKhvcFqb/7BVFpbs3usDRsk6cR7JIP5ptJrrmt5XMkzaxpnRjjG5os8ABc5lgU/sZJwxm7hLyQujNeJ0WuxicWUFRe2JpZGjA6+qEgzuX/1SqqTWsWi29f1OG6BZa673E1mgqbul0sWMQc8lRrJglolAZKQyxol5v49tJadeU/B6Kf4sIQqiwr9EUxSeO7dyOU9LqFs/irZeGzLOOFkInwmv72TGEiLspmGQnkJKzoDREEf6ZzJw/oQflqNhCzryxJx7H2Y7G9nMno7f9ulmbT6Q1vwf1REmW62Hhfpr8QQjRO89krVf2udchdGGMOgSTq8jld3gkai6AZncz9XGIYK1VCoNX4M3kldvMaAcrRezgyj+EZa3xm8tSkNbByEj64f1W+bTX8tUEDEuMsPtCWrgUAIDkjfzDa1FkyrzSrZpaEiKG7vkBrLXpQyhxcT2sI5oNgZwK3ehRUXNJiCwIyqZWWDzipeiBr0Hdkrdt4+y1ztwj3KvGKC82++icUSWtdbVr6gfBdAoTCRedGe9A8AZ/LD9YEBqfZlWBztKaC/48vYHVr8JCwQjpKFH1h1oZU+EuRie0MCOrVYHHpg/5ubtFWg4fbb2NBtjBqDLWfthgcBTkq5Zzyg2XS9kLhiBSxRjSBFrrj+BZruGdoKxK+cdiDcELV/L/8ygkNrqxIttJL7gRtfcwI8JJzQtCA6pD3RG6jXGrkTzYFiT8w4tk+kz6il70KhFntAHNB2BJoLn5iOilXc0CXjD1Ue29AJGPSGbs4XT4THRCunvO3nz3PuPQ6SVf61j9MaIh7+Ytugs1cp1BwI2itAcUKs03tPZUuCOniIAAAA==","a01":"data:image/webp;base64,UklGRoACAABXRUJQVlA4IHQCAADwDQCdASpAAEAAPqFEnEqmI6KhrBVbMMAUCWkA1NAyU6tQzNoVzV+sOvEf4PmXo/T8domYK1M+Nge2cq82Mnmd5nEou9kXyqxJYTfatcjABbgubzn/7YW944kAvXwPMUUZG2PXMkoUdqjZUGTe+gWI9HXE1rLdIgAA/vPBdRHpPg0E52kfb8IG3XCpEPGBM62LZ98Gwfb2z220dtXLCQ98JMXOJN7AcIDQCAabO+hNZI0wXxtF4uy6rs/hs3pOdt8yBmGDd9sv1OIvfJ939MhYEvbltE6Zdbd/++4/7Y/o99LfXbg7Hvbxyr83/fBbdSmo5trHvMsiPnlbWdvKwP4bJCgsPNWdvT57FLbYdLUDdhWSMJSRWHhk3Y0wLBy0p1EH4PBIkPjjfKG0rWi1OwqNi3kEKdR5OjRaM81TrWyr7lD7DICxXwiy4TfOzA7Ni7N1YaC30s6YnEm6MUVM5TZHmxM734Bl4ojnv9HTZZvUcKzkQP+dw2i1p9EF38HO9dw9aXg6zsW1KnEC53d0na6HSrROq6X2EBY/eIH9LHCopbPTeufxn8h2VQwfpg5Rh3UQMvXlH+C/dIXdnve2dVqEQvFJEOwckvQ81r2IQSYYydVexR2t7h6ldd9SBDEFlPuaMHck5vsVEsBbo0NB9z9y0in7Oj6ewNpkuOXy0lbBZkhzvW6sUu0jNXuZtlgaTDzGyUqZjz2m1zdjTXcqk7HYr7EaNwMR5JkEgeqggaOLhojggKzZSbTEmbrGwqBtJ749JG7Rem/apPNBhCYFrd6VESlms7/oWsgYBzxOTTCrKJv8NCL/Uqa0TPVXQ/SM9kcAAAAA","a02":"data:image/webp;base64,UklGRloDAABXRUJQVlA4IE4DAADQEACdASpAAEAAPqFEmkqmI6IhqhmdEMAUCWcAxVeyroX4Y+TYK8bedzLd0zbPyt+s7Vgc4ygjjlzs3vvQAif7gV1iZLye/ThHcxITxS55S0VmYOa+ms4Cyaec87vtFn6jNryabTPU27qsDyQVBeRr9dkHasnEazW7qu0YEWiypmKprw8gFe6AAKqVowXUAAD+/sIDpqRsYQUpW+CeEggNO/A0sbVquwM/MOQC2UNYa6ojLA1WlmL+tIW9/Abcf8/ld7Td+N2jA2FlB1blH8vsvWkcD7SDw1/t/cgeCpFmjFyvIURdeoquo5mFSJ5/WLrJ9xdQHYvZYdcY8B6WpIwtCXK2SLeO4PE4xmeAB3iwYKccCy/9xuL/bEOJE+1qCfF1Drs83R5BQRWFsS/ejudj+spL/0UykkdGVA6prWkS6qricNAlSs8zH7MyLKZzouyZQ5+SbzwfrDqfep6ii+MtwBax8diuaDXCaawYJlb84zTtYS6Y5fMF1W/LaBTRzT78HUlXKQ1vQ43HAZgvj+b7PsbE2Z7FSwHdjteF+CWK8LkCfHxQ0EXh/ZORCAiA5ES037k6H8wBqHMHo42Hr6PxzcfOhFfrkuTjx8J0g6cM0/xULzHzkUWw/XmLWn/zebRsczWH3ANf4bUDPaMIqPSa0sRqBe5LiRBRAlbkPNvsqeFi4zppQf46oZ+QxsD10YeaOU/u4ViHoe2WujvX1ufKpO3qH/o/h2+0+rGDN4t9ZqImnUVZ8rpYBvLuG5GXrErG/1XR9csDALq4d4tVfmTyuLQEyxKsViN37Sm+Tw7TZEk1ZpzabmKXd1DVgBYaMNcfwLdrL3r8JbW7blGNQxacsMd1D8mN38Te5Z6Q6yhp/bzwqqsEw2h4s7NDUfWkrbN70ll9kGMXwPny2HVXzDs+rV3DSZ6RYtu2WX35GJKidiSSzz77HMAbCbVTadt/klrbowyRrJMf8rSS/nYXM8WKyyLhe7Q6fZhLhnauBOhqxDH4VF3PM8v6/qE/RmVboJre7wCtf+1ec16hMGmaPcROjIbDb59hIP2gTlyZ2M9QZ3daBqUjmA1iDXzX6r9t49GCF9crfjO7SScH/y938rlg9iA6YIW3Ta0i71AAAAA=","a03":"data:image/webp;base64,UklGRoQDAABXRUJQVlA4IHgDAACQEQCdASpAAEAAPqFEnEqmI6KhqhM9EMAUCWIAvYucUaovoStvjzyreZ73fJsHWNWvZl2aeNopW/WdqweCjBKVTsuhEIFgNFm7VMbfCBQLJ1WKangr0iri5ziwGDScgATWRhvh+JK3X0mel1y4Ee3xD4HR4KM8u/3a+YAjHlArZ+qFMU/bPQZl+M6ae13uevBS45BPiAD+/sIPGEXr0rLsK5YEfZS4Y8GIlvH85ZwJpjZy1aNwpYlDeQoAO/CbOs83O6qk3viWyp3PLtJgARzL7GJC2N+lM0RS2dvKRoprosOKoOZUgPqBwvHUWVSIrEg5M+/fb2oNZehmv5Fyh23B8yNV+rX1hllbW/5O9qnknLDmborLYxJRkNCpuGH8UawFkoz2eOQMUvg+bXK5yhuM9ECu8ugwjkCTDLFpz0yhl5RIxoh+xVJuhZtzFkFhRBMbe2GjktViEItWCmZFxHAg/fhwHPXzbhUIQPz7Y0p+AtWshg/u2RdmEPC4XDuQuOweDcPfpoCghX0O2G5XmofQl8TTpQwNV3AhhiOSvDtxZK3djoEuh81jZct4nww1Ku62L2ez7pJH7U5+pnQF2SXNZS6/7rpwVJRUxIuuouU/n4VoHkCIZEwz490j099cjXWSoBZuW7poZIAHbznPrJ2orZMMyRm1RX5tIRl0eaXK9izbsuknx0v0aOFKmUDEaXIMGxVXwH1CmJ+RIPvj4ca5QBH2cIoJPg2FGjbsfweR+dFvv81e9giN8I318783+Hef2RQBVmOAp8duzFCmQqJwTDXJFIrkSXRI3e/hbabO8lnavXmxgjpzLF8pvIuXalVaDYo2uDauBkSjz+TFNLcGCif2J8DJ1KVWN4kgI9eiVUkoY5681Y2T52z0keczC9qyDo80bRQh/OelfzcmA7snb/Tw+whTd0FwTMa1GnG6wNrDF9BaKAThRzjlZR/jfQc2KqYfZSk+/kBW4izplYWHke0hVgaiKNcoWmtmoe+nbdTZofb4zPfk6Q9wgHlL5Kuv84PTq9xipq1nEnAeJftrIk8/fwrB9Ycbbc4Ip+9t6TNelUf2KseV09DyULqL8sx/H3SrmljAOoImEPKuE8Baug0RY2g/uGGfq8EgoV/hb120ZqSs7nna9qHZNLPWUcMGhlqAePM/PtwIFx3y/BMevC8bq7PwAAA=","a04":"data:image/webp;base64,UklGRswDAABXRUJQVlA4IMADAAAwEwCdASpAAEAAPqE8mEmmIyIhMfVckMAUCWYAuzMTCcyRbf2MI68N3b6c7RpyMCgagCRDMG6GOVW49/nxUHI/Zof4u3J4qe9Je6Lud+pwZkjHqpYZkIr5aPfVn5LUqQn6fL26bsKJ6+ixiysZV/aZ+M+BeNO6Cx/nisQuB1YLpw7wFCD6oO8thES1bI9Csl/fGeH6DS2kzTO6UH2xNRY7RwAA/v7sDbqWkAzLi7md8KSqj9ovTn1MTCXEDhpPnsefKuC5v3Odo6yFC9m5AMCrM/0jtCSeTCVfak2USxI7HIy/u6PXartOGg393S/osvMoqpO7XLWaKH/2vF7+0QXUD7QW0EhRC+kM6yGAJy9Fgi1KyJTr1uIzkQcTAFuKGhfDNyVfo7m2+VCHupza8nsptEwNPnUcDG6LpeXU/yo6HL8ATDB56Fccax5ljzDiQn0T1nSGeKRKNEni1RXq9lhcsqwoozY179Y4e8pBlC3381ypOniQupSPhnqdmcUuH3g0F3m6e5DIgyymwipuZAGH6d+lOR88M9I+DI59dHb62Cs7xWshX7g7D+fgHm0OW89J7ZGX7cqV3s1BUd/U+3kukIj6epZmD0y5E7+8xxqPeSs1UBi+nvH8GWhtBbk51MTETIwv5E0dWW/HivgcJLuTfsDETbiyhbzd8dvrZOsJaJtJkbMQ6Z8KBPkXS2lFY4RmtEGqLwPGZwt+2FxlJZwUExJOS6FNEV/zbm0TV9ojY/Uj0mBjA+4IIwGx9r6O6IEPR7mTpctUfogMY/j4z8YVQDxQpQKohXV9Jm6rmGgv/jCk7NbLbhHUpWmIsHBx1t7In9EGg7kvQ2VmrhD7fyZ4XcjHJoq7/vpAnLiPOGV5VLTwDqhvhpPSehduVUAXw90Wc0ZIo51mtFmZVgV9nW2R40+6DdhL0c1yTvtOwQ6mzjLTPjXoZGdXWqKG0vr2O6w6OZYwlnJfzKMKWUnQG6ztGLbqgo5XxoJWGw/7Ak+IySIZlT/gw1svu2xuJKa1PSqO86b5cm4kJFnDlDe1FcANd1JSUcEgb4kQ8xH4a9kRb/HJIoVOOVdugj3b+khezbjDKZ8L8lO82SxGPr5HXGoSPG6dRsbgp4FgwcyVESOMVVZhow/uo+iS5d1lW5sfUSxTXDkFpSasSf4mJYQWCXj4qbyuDdCEurFKs4J+HTWoRQhtJkvwycVaZdHKlc6o6QEVuH8QBCguEo9GyxStszAkoge3KInZXwKJ3v1BYxN80GC3gdze4y+YzqdZDzvMAAA=","a05":"data:image/webp;base64,UklGRjoDAABXRUJQVlA4IC4DAABQDwCdASpAAEAAPqFKn0smJCKhqhZpcMAUCUAZVWshIZWjeNNNay6aT5Lfqj2CUrtdFsOb92eDTz7XPcq/zuWHQhNIW0wBrmtlCGwrpwHN3jiASPpdi1NQa+budFnrcDlaBqElzrLeF43iu8+aLoi6ODG/2QRZB4yB4UhPhA1oMHrqcAD+/pOQfgtlkF8r1DkHtLC3VzXWJmkHmp3yCoNgrhNzcAfXjBQS566V+7NNGFPYWfCXg/6pxNhy9viJEsEixHyW+pip/9qI8zia9zGP0zJL9R8X8rL+sSskPDM8VYvLyiu+jSUdgxsIG9XMoVkF/y5xy0vb2X3oVGC9UN5cDs/c/LtKGeZph7HMLycRtUWvEp4fwLtdWnf3dkQKvZgtq4EJ405n7q62RMMmGya2TVCHtpZvIni+hnqjTzaN5cQjUHDoC0eo7Fcv9C7BOJvntawUHCVLsO6rzF0T9ljzWxQ1/gbGS79ycyohjBBPDA1Y1CERfVNTuLlzQ1uFdexrAMaSst2RnaTK++N7fLGLKITZC7QdG31p6gRpbf+WIIV1b7DkFP07yDRhR5GMvvE3W/Wk4Cb/LygBDQHUtTBcYMQOYCngbuYvOv23VH3PXfjSVnHe7+GX67wQ80jAWzQKeCQDI4R+brhy+Dl4s5HfRpet/eoyM2c8wKLTGifVGF3NIWFrljPwsMT3ghfqYobmNfJtFeg3CR1YjrRQiRuSZqU45t8mjA9bGkYhV9aXr4IymglhbmuBFvQ7yIsQuiSElMmSTzF4rh5VJBzfMg7EgJJzbDADRKWXAO7A1ZeA2dTzt6Ixeu+LJOCUIozL+9/6ABWWRlg63WpHVQ9NQh01fWLJdenXpFIZMd8Ih9wPjBqnPsWafx+Y2XSrN+mjHeiRKHVM0Hy43b5LTJoX4HK9XK6elqmXG3bEQ+0BVTmCUX2sEbFPVDhlsiCN2jLjwxMr2mLQ9M0lBYRtOQQ/rfbTxBeuIegmKMKxi+hFev1RdTh96UH6FVrXH/M2Y/sPxPphCZVDQMLGjdH00XBx3MssfjMp0rPzR16pPvA7UZdHexeUDZIboLc9SlWiAAAA","a06":"data:image/webp;base64,UklGRkADAABXRUJQVlA4IDQDAAAwEACdASpAAEAAPqFKnUsmJCKhpgsQwBQJYwDAW6GOyHrlX65MKjbfqRXbsg4BYb3c/T6VNZ0MrhxaUceoBtd7lamUL9t9o7dVJ1HqUkFNCCBlQgcZYacX8EgPAS8vEZZ+c6eUnNTCa3eTHm+1gDnZ/rgqcz7Qf+nGdy+1hIdhm/caB5Okji3eaQAA/v6Tj/Faemh4QdoEU9HFX+bs3oBFeM+lxUpqkjSwTDWQnGhZz0A06/cRxYZwqElh8+RU+ezX+WPq7d8fXaSnSMmv/zHGN2tqds81R7b0fOfcjWiofNLUnVdnKrQhFItihdeCSK1QUzguJfh4kqlQ+CyeskZ9Qe90YZvVYydx+K1LSr3D/uCM0DuCB52PHpV7M0saxrjQhA/1tqi33BgQ229i7StUw3sSByMHSs/D8YnHBdjW031o8h0SEZszOsuwJB44Gdx5e+2zIJeqh/pYot8Jc3AJtOPYn/Ls8SeV6ohEp9nhhc1wzGuQPcjJaURt7sNOb+2foH3Unyot00essk/9hJwI1CHJCXBbSUSlWYcTKs7ab6NTe7jYZSStk0Ca+o51vHpmsKiDT1eHVOH2vnKTS7zQl8jLbe9xraL/6L+xZDfw3sYJvKAZ8edM4Njd4GZniZPaBzLwOhYYnn4L6NXlMHiybB/lFZIffX+lbnI0jPktcylpbzc7WepBrhBJK7X+a5wSgKOy71/RQS+amuX/6Oy4x6PbtMRK8T9p6HC6mOn3New0/wwbv9SoPp/nP651d3hwWoDKvVdF6Q1TG3ITE0Gcv1XC8ByzHlUi5XOVUPZjgy9c2OSH7yH6N6WTsiJ/fEyowMNHcfXrMZhwgYwKLfAQ6m66XMKFQYBeTQwFde5bkIoec1bIcXvBqXjBtJgTeCDrTAzDthV0CDy0zk/ta5mWKKYVKUp/aoeVrdasNH/v/vX+ntSBl99T9DyhYxRxmyXxu/PCQtHbbV7hJl0bQJ3ltI+nmKbmPsPpCFWdaGjaC10M9Ss61IwRy6Soje77p3EdaX9/RXUjWa9Z3j0Ja5xwe62vEiUW3ABfvowKnM9zHcGItEkYfv5mMPHyoBn0Kkl4AAAA","o01":"data:image/webp;base64,UklGRrICAABXRUJQVlA4IKYCAABwDgCdASpAAEAAPpk+mUilo6KhMfcdsLATCWwAtvtaPtyRbe2sokOF/6YBSb3vhVXXPmWujJQow0ibb0N0Ave80SIkZMwL5a6Ycy7NZ/kAZoxWzPAAXJTwA4rKJ1JO+0Wb5y03G9BG5vPNlHQjdFhYvE/rRP4w1mk4DeAAAP73/DTMfnHwz4elWMLuNgKZx/v5G+bPoL9VZHzG34yTI7oAqBiN0zvHgROnm2NtaAkxwvoMfoYi2R0toj2eCrqM3v+p1iXk1SoUZqzNeCpHzoDcJOk8sX9xCDZOMf8oiE2f+f+E08dnFlsYa0IY3r/rwVM/9MA5aXerismFvK5yykFOdnpKwpcFOYM3IhFLTz/wJCkemHAL92VAb82eJgslZZbqsfvDVf+DIq+kxm673zq94CXT/YayleGP1MBOv9O5fNRmzpTTmczAze0seQzYnJYC6QFzq+hR8yLaGEPPVl8BuvzQ9bGbO0CKhdL6sdLhp+z54nUsro1lYQJBU7b5eWq6YEAhwsKedWLZPE8HCJMpoe4vdFlXTSQ/30WjgPUhswyPUKVgvEeyrO/unN5ulfHCtXiQnhKs/AzzlV2K77nr/IhTCPfhB1C1O5rek2DcFEHJs+2+/cGccKXlCYFP8oCL3qNtLJnoAdNjKQ56f4/e9EC9pD9pcMjsfR++B+J4c1HNI76sA9DAFGCJhTvu+GDn0UYXHfCFBPvi0sgcJeh5DYDZ8kqoR+a2P8BfACiXTUqSZ2eu1+PamNRRt2nBHkjcy1nb6P7BX3latCWQQ3N8k5/ZmFHIcHqSKkcsf6DybULFxNZeAAV3EaYCMVi7QFQNb05cWfI1bwLYIwY42UJ+75/bqLSCq1m39Bo1m01xlQLhubEgFLM28vuj1UC8ERHvEJwlAAA=","o02":"data:image/webp;base64,UklGRioDAABXRUJQVlA4IB4DAACQEACdASpAAEAAPqFGnkwmI6KiJBgMkMAUCWIAxq+mSxlpQev64DO4A57RyNrJrfkqtAXk7+EOlWaLUHzLQk4BlH88/s6ARAakYtiz5rFYTbwp+t3giWVm3Xmncc9xFcYWbaMpPhwQUS0BQ0ktcEMrYQwmj3CN7W6fG4Hm/zbcxrvh6WyAmZV87vqzMYAA/v56RA6VLkYaVDFVwE71IUE4Qbc3LJ03xzuNAjslCbZ0BwPx3WwdZ5Xp3IyA5JOlfD+AV9QHu1dft4O8NsrslaDdTlb0T5DfSHsbqZ4iiJRj/8A6T5vehfDAyrWf2rk/dbRJBBSftqPeVYfFykyEHqIO1XdpeTW2C2RQXvTlzHbP76nVHpYLByhhkXsoEKqWqak3W2AK/RjLaGFdT0YKwnvgcnM2zfDDDmwqh+BEnd/4/J9zPeS1Yyeps9KtnwIvKIDU5yf6aqbeeXpR0Nzev5PzWYY8Ep7jZKF99mYyKd2jcmMv/kIv1Ry1ROs6DbxzPGAGvimmAzx/tU5CC4dcZd8h3bN2kqRj0ezy3bfpdSzqumHK2x6Mwc1He+rxIn89buXIegY5eMYFOjQzzuj44X8aoZKqUiuOWnEI1ltZUhlKSDOkxxIXrw2Swh5FvcNDpxVZ5GTR/XV4FS60mrV4i4wYzGj4oecmpFR21auOkpR2I61AL0MjcikoCZvLldJ9iK2nlTahTGP7EBqqO5YcqF+dl8U6QRhFlg9ucEOfM8/kiNkpI7IrEpR8L/RSUojM8GalqCcFVKKr2klIvY9EIa/1HxlnGYG4J/w5zSMTXH+PT0yw6pJ95m2qLVT2HfxZ3z+3W6ASkSrWF5zjB6ETs63Kv0jzheXO7y/ls/vT+me7AX1Qj/JUgvnpdohpLFVS9/DsSWOyBrjUIalr2j7dCKqKcuHiCg+Uq895tph/acC5cDwZAz4RKUbJ7HzBK06Z2pFA91zfjjDjwSsipt2ISzD0V08XeZFKSH3FHlFeuLTInv5ZNvMHNaQsi4d3nGa+ZalCvtiCayfGfdN5FWuNWhhjKEpZdYnOtoj1NiEAAAA=","o03":"data:image/webp;base64,UklGRpgDAABXRUJQVlA4IIwDAACQDwCdASpAAEAAPqFGm0mmI6IhLhko4MAUCWMAucxDMAgSHd/SqtSXbxfNcFMwPgVpfZo//g8vr7VWbXRLsYZ395+hlVebJbXF6LEcY6Wvp2nlQCL8sPEdlzGFLxJB9N8Vaw8BQ/O9JOa2gDCmoEqN9Y9Z3A/HzfbnJvBdjAL7zNGuWNAAAP71XIS9JKb2G/n7lEqMXG/QldqjAlaSzEb+gzTarz7/NfEmPJ1DqXHomABarvY9e/TH/g88J/My2PR9Rm6PxyEO2IciXlmV8EB4u8hUt/4IYP97sER75VP3s6P7aER8wG/qZH7MypZMvhoNLckknURxtGE2CSBMVbns2lSE78eXqcV+OCnHNZNzjBbiPTKNYvrABllNyFHRopWiAfrAdGw6gHhSVmbL317/X81SRcUqgFLC5ckNus0d0tQOflxfYvr3fNiiJSWluvu0VhV4QSO7ccgbDkmF6GOIXelwMXkxbnxA+xnaglAANo5KHSElX3BIdAKeEEQveF9rhvlTaeUc15r3J2HrXxpqADpBVpwJdWLx2Qq0rTsiBQ8Qm9ddgjj8PhJ6x+Z7xh24YU+8slDvpRIcmyxtVS2o+iIALqL7rhkPQnDN1o/ElHEhJNrA3aPfrc+kXGFf9Ukj5pgQFL9q3VzeKnmpXXfrbT9Qiw/MNAzfdpIILgndQliHolZ3P3qe58Fy3CT0utrFe1Iv93XsGpz1OBdVQIXj7ZNc3P0FzWhs1YPqQ+Dlf1vjomKnK9KI+3Mrng00emJqVqtcagxyLb50+FDrCpzSm05ESoaFxsFwYUFmL5Xt9cHrEZPpMqmBKsMqbzFOw4mi3rfymc8TidthXxdRnrJjlrnvyWiMZVOb6y5LrHGZCqdfBYKAICLlH+At2QvYSOZSlJTr1acua+t0PIb0c2M7UwuwObwIzKjIMDsX7myMDO3eQQHBAoHyguSfbSIYf6O363s6rD2qItAwS2G3yamPbStSqEJJI7wzHLua4MjEPY5SUAsiG4HGXk5u3vsN0Yff/cBqYhLEdJMVEGYAHrVcfjtkR1Txz5zeWcsujmV8n6wTeGRYQ3iCRex7LT8izVfc+kjLgbc0dgtvP2qgL5CxHvRWAS7AwCwg35Bup3nr9BJ3gXQQt57AI92QvusNb5htmV8gx9NMralTwA06yWFVJvgEaqw951pLD4Bpm1qjNZS61HQOOsGNQAAAAA==","o04":"data:image/webp;base64,UklGRm4EAABXRUJQVlA4IGIEAACwEwCdASpAAEAAPqE8mUkmIyIhLhtscMAUCWQAuzN2UQalBVPgM+Ld128912Fid59wyriPr9G7Wz5ui1GaZ5TvrT2Bt1uas1uMDvyj95mwceUOtxZTnXP/uZR4MqN6b4Ujhi1GlDfGDbmJpnX+OYjeRtPDcPAQGw6BJquupabLe/ICMa8nh/IbJHXOLPSYMGkWbWagXGArqSLn8RxExx3ktYZ/fXzAAP7+7ALan/SyoPtz2fRDm9jTT9oOzCV9RRjn6W4XnunhdDO5lKytfj+6CHfE0ZLvJnuv8HMckZQBh0qXEeeH4IepABpul7rVIIxuPR/ITsasUqukQ5/7KFowFrKJ9BfqXv2ZGlMx/kWtjSGPoKMK9cOv+qUl3yoUuXs4uhTrCPhZn+09WtYfa/w+NlWzYyj3t5ce3v9PIugYvhp3FOzimv9f7sOXa1Tm6XYqpwCHczDZ3PmoQ/r8kzKZ4Q5K0jBSC1lQMcOvH5oA4IszsAi6+1mwGAJhIsg9T5HuiHUmQIAlNm2AteD5An8MKjnXEbYKZHugUR9Jq6r0f38IcLkU4HJFtUKNRCMksvDQKF3qsj2E6nCEsQxDE1q8naLUe+NZos91Befw8t8gPlHi3nBOWV8AwNfXIWt9E9CAlJbDPgoR+iFVDoOIPnb7Ws91jS8hIOkxHbEfLMcCNxA6WS2pyvhzcJPQxMkWDBl8ZXit7vCjphN7xnIrKQyzfCQuWObfxf2CCs0qKaWJVzzXr7wmQm3B8RnfrcyBN9IX1g31fM4itGPWOptq6OXa0AHR6tisaUvhJn15QEmppW6pDd8Vv+pjxFBC34qSqXAGGNmxhL3x6t6psJyQdISKOSJTne7RLMv9JuP+Vt99lH6LyC4CjNLqSD5jDoHKgAP/XesgQpydQLhAD1y3yn+3lIMLbtzuBdDWqg8DCiL5KRgO8kUJYgVRdYsuwSt1d3erHKiieCVE35iIPfSOfhJXP0ElGvOy8MNCX0tMealfiZnWZb69cwiplLmWE7sA5f0vXEDX2CLzI4uUbu5aTNi9QAf+8tOUX6ZqGZTPgNDExNJd6+1DJ/WuyDV5xaY+qtJXRmkb7xXwgr7fCkRCfNYBK/L3mlPHuiOxzaLYipqoa2K+UyR0E55l476P6liJD6HlpcKBuqoh4wXGa2CAbmEelil6aNlT9pzpGYpWa6ZYylAYy31XsrbBzgN3cXnXmZ5DhtRRMUFHZO0+kvEhTqDNIir5jGtmQaDP9p4cOTi/3WteWKMK2fnrFzcEl8XySv2Qp+ZNHJBZrmifhKc/5ymkNzVRDqKKbRXBj6MXk81s+NWXEm3Nx893C8p5PEQGQMOpDijFXic7+c8cP/cGqbBSxp5TWorVMsdNXsLiIpaioHHuAHD0EIHnR683CgSJsJFKmGBF9Rxd3hAn4dNEX3btZmveJB7Fns7to6EvonWIO/1+kttD8gluvbC5rCXrFeDeKmQF8QupuA8YC4LmOnNQAAA=","o05":"data:image/webp;base64,UklGRo4FAABXRUJQVlA4IIIFAACQFQCdASpAAEAAPok2lEilIyIhNf6OYKARCWYAuzOSAOG4B0dvdzwGm77y/PiOZH2JH6OE+oUYvZt2V377Ug8AdFPfQUAPEzz5fVfsD/r0zrgDIsNIaPN5vLVIPAVp+uqZ6Tv/S52GRas0vbk2OLz0n6milSclTomg/ugbbVm3c3vIbkanfdRfXWTjrTXtiaI0r+i8Fz9UcJAIx/rJqHW32rQ8OcbUjQchHvzjMSMOaOfTIZgAAP7/EgGsC5jueyF5mRmB3PxPUHzt8lU9FcM+awmoXsnLiik82h5cf3RhUJS+X3+aMmk6NTMVAi14smKKym+CtP/Efy2Kw1v4FziW2V289/CbahbBzPKI7Gql0dBDbfUDTlPXm/Yc67zRevlKfvEYjl9AFXVmPBOOlyFu+Re0by1RDWjn3im553SdB6tq70AdqdlP4bo6gfShPMETssPuQmNMw8lPIpQorbCL8D7rs0yFpc/gSed45ZosYPcCOOM74p/kgkmjtzCc4QfAesbw6uTf9/SZJufJtXsjSUOQmNb9fFb/Yf83s8xVdN+X0goOboml5U8fPn9Poo87GuhWrJVToYgTufVgebVDtRw9zHJJcK1kbwJxHT9479xdiw4AvBT+FCDFHX6KltkLEURvDarRHhY9H8QPmx3krGaqIm24Ifn+Xl9km2xbyTt0aMtHyTBRVcW8PsaC1SpvjNsjIRyTdZC/ydc4M0tYnARWzxSzkFM/WQUhlPilW8caXtIg0dCcGudWFNF5j9ElbS0EFxxEzJvmP1ILI81eolJ7WtjPBnG1jmkckjKvebbgTcQOCYfkHSi/H6JTLk6bd7Ve1EOT3P7VMMCptyZVtzhm5DPo2SDU30QAMxrqjdttBz3bd4WK0evIXyjYUJQfr3vJfzl/2KzK7tttM7fOhWJUQVua3dBZwWFDmOQxdpgPE8XJtgN16543VArg+h+f1mRqCs4RqKnzy5WZQig/63pqeDZGasKTOSCXabResBjnqeNf2lNLxK8CbhilqNmUGzoJPoX+0eNaJcbQ2vZt18tfaUnE9jV1Own2KezOUBPV0PTaanh9dYnVHPsapiDGz4UXqg1U9KVxdxUIYd2DrRfv4hKESZmgNYGx//4U3zomxHg0LiY+fWojzItaZ0/QYYNNzr0U1jPLrHVZgjOSo+eC2q2tqbCTD2b0VMJcqdZlbKi5kGlSNfFEPQhA29V8hIVIcGlR3Q/apgnoQVejaagKgpaqTzZAfEyuCzu9eehqFhDd0BgoimCJvTKZv/kQG01sF2e5s1csRgZIhpLEecrRv5IKPazmDyor03A/ric5yizNTTel0AHAXVp0pXcWjOTVPXw7JbM7uXrK/XMDWt7ZDUVXY53sE9PTXIj7VzTtkMwGgPBDtyq67ZR53x2I/zmtwr6D77aaX7DFsg2Tg3iZpCaOduBsI1eRzEx6tb/Le8UvmCwTNGlt4g/f1g6UvTwXgUbr0xwZSmbepIe6QMc8vloQvIdNuESPxBTPX6xwrUEf7DoeV6P79SvOVRbaLp0m7K00d4dzGmAbCk8sLP0QH+bhTRARYG9I8dLSgXy6zOR7v04vYafi0PbOoc/VPCEHxvxoY/Gbl6zqZUw8sTswVvcuqnAYdVLvcEAhUHZdlmI75eFlMnDabsjUXbzcTYr3k6W3PDWmpMtq2F0YTtqj5a/cjj0lm404duQq9sLZlW0bpP+kucmY4CdhLCDlkJa2FN6NjvOqKtJ8gIF7AXaNF0uKTe0wUnOhidI9K2n8r7Jb+GPPFj3HGXimowuxCGBJya5fbxVEs2mDJA8uP9obo3ItDj+66V72qXfnmXQbeSLCaxGl3vhxE7ztstnD71g8F6EldZJuvycrTgKEgAA=","o06":"data:image/webp;base64,UklGRsYDAABXRUJQVlA4ILoDAACQEQCdASpAAEAAPqFInUsmJCKhqBgKqMAUCWYAuGO9ka66Ron78Czbvc/gzZjC8b4TQzOPJ/9V+wanNBxe6CtRNf92Rs1IB03L/tf1Vwwf3qaGnSK3TWmfz0w5zvMXB6KucHR32JXdreK6962aAZM1MvqsxtEHxmt/SgLbL+xthRQ2he6YSJw4C3Wett/wrb5fxaWs4AD+/pOQinI5/t/vPn0qOCbir/cy3NaQOlsMVJfFD8uR+MbLxdlu/tTvT/g8tAAtyttrVMRkruJlqLy/X7PkohezlxioYYqbsO0T1Loe1apTHmde6s5TleRRgvvY+wZndu6+/kNjgz6qHEHKQOG+dKa96SJTZiGJiyUK/t8KwUSoGIG11dNiZPxzPzKOmxXX0TPjnx962v1uZS6LSdPaKMaiVjYfiY5dI7dpEGXv1oHOZ7a/sk+HY6XLa7Sit6uc1TG3trrr2zbGPF7f/P+ZX4LIOaX+AdiXOgseAV3c2V8S+g6vnEXPydwesb+f5Wdd/JljTr3bx4IiJGQOPtTJ75LKseF9Bc4cD14MlcYQ67ZS8j7li09HDJNEbP8Hvbshmrl/+ads6gJL9gq8ehkeZi0RnmP9BGEuEhAovle2/uu+ucIJktcsnQeVNAmDqItbaXm8RlHFpC4R+hjOHWov9OmNTTNdpKVUPdv+Uce0iYWrC69xTR0GTsdIx0ndC0OBIMGTugRAL9qHX/65GYZlT+Ij52QcMvaYnLS7fxSEfEjNj9UG7X0fzI5R5CB4K3fRfox3LiN25UTH3hES+HlY9xjJyqoV28FLdoJO+ww3NjS6azt8caAFdpPdAR5RpHOFfEfK2vL/+N3FnieNzF5nPr+Zerv8iRHYKAkBn/sWmYglBy4QiRvMO/S3bcDifeDfqgSEvOmNebEJyZomHxiTJbmUT67KuIt9txkZC+25iBybusB2xnDd3A5qrDesClVpqKdBhta//h2tDTvvfA2OXnPSF0JcIyKWslSvz6O3ZrE+PAjArOFHkYGUmlyJn3DzsrqoHE5oRfun9AaOrtHRxhMQZQKL4PSKvn3mHEQ5NKXAq1IVWlTBmJivRtrTtkAxfizSoHwjFpt8jz7B/NtP5yupHIVKu9O+HgCAONknXonYhJmtoeREdaz6APYtiwPbH6Cb0QWLl/SREyUloVMuOKu9wxc0L85w+7kGFGkdfT2RAUD5bdCLta+0nG2gDVtZM8g/fZjN663AjTNvHjMMjo6xfoOJkujIT/oBWidKCMdrHjExAAA="};
+  const AHAKO_COMMON_AVATAR_OPTIONS=[["","なし"],["m01","人物 男性 1"],["m02","人物 男性 2"],["m03","人物 男性 3"],["m04","人物 男性 4"],["m05","人物 男性 5"],["m06","人物 男性 6"],["f01","人物 女性 1"],["f02","人物 女性 2"],["f03","人物 女性 3"],["f04","人物 女性 4"],["f05","人物 女性 5"],["f06","人物 女性 6"],["a01","動物 1"],["a02","動物 2"],["a03","動物 3"],["a04","動物 4"],["a05","動物 5"],["a06","動物 6"],["o01","風景・モノ 1"],["o02","風景・モノ 2"],["o03","風景・モノ 3"],["o04","風景・モノ 4"],["o05","風景・モノ 5"],["o06","風景・モノ 6"]];
+  function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
+  function desktopCommonAvatarPicker(label,current,onChange){
+      const wrap=document.createElement('div');wrap.className='desktop-web-board-field ahako-common-avatar-field';
+      const title=document.createElement('span');title.textContent=label;
+      let selected=String(current||'');
+      const trigger=document.createElement('button');trigger.type='button';trigger.className='ahako-common-avatar-trigger';
+      const preview=document.createElement('span');preview.className='ahako-common-avatar-preview';
+      const caption=document.createElement('span');caption.className='ahako-common-avatar-caption';
+      const chevron=document.createElement('span');chevron.className='ahako-common-avatar-chevron';chevron.textContent='›';
+      const optionLabel=id=>AHAKO_COMMON_AVATAR_OPTIONS.find(x=>x[0]===id)?.[1]||'なし';
+      const paint=()=>{const src=ahakoAvatarSrc(selected);preview.innerHTML='';if(src){const im=document.createElement('img');im.src=src;im.alt='';preview.appendChild(im);}else preview.textContent='●';caption.textContent=optionLabel(selected);};
+      const closePicker=()=>{document.querySelectorAll('.ahako-common-avatar-popover').forEach(el=>el.remove());};
+      trigger.addEventListener('click',e=>{
+        e.preventDefault();e.stopPropagation();closePicker();
+        const pop=document.createElement('div');pop.className='ahako-common-avatar-popover';
+        const head=document.createElement('div');head.className='ahako-common-avatar-popover-head';
+        const ht=document.createElement('strong');ht.textContent=label;
+        const close=document.createElement('button');close.type='button';close.className='ahako-common-avatar-close';close.textContent='×';close.addEventListener('click',()=>pop.remove());head.append(ht,close);pop.appendChild(head);
+        const groups=[['人物（男性）','m'],['人物（女性）','f'],['動物','a'],['風景・モノ','o']];
+        groups.forEach(([group,prefix])=>{
+          const section=document.createElement('div');section.className='ahako-common-avatar-section';
+          const gh=document.createElement('div');gh.className='ahako-common-avatar-group-title';gh.textContent=group;section.appendChild(gh);
+          const grid=document.createElement('div');grid.className='ahako-common-avatar-grid';
+          AHAKO_COMMON_AVATAR_OPTIONS.filter(([id])=>id.startsWith(prefix)).forEach(([id,text])=>{
+            const b=document.createElement('button');b.type='button';b.className='ahako-common-avatar-choice'+(id===selected?' is-selected':'');b.title=text;
+            const im=document.createElement('img');im.src=ahakoAvatarSrc(id);im.alt=text;const lab=document.createElement('span');lab.textContent=text.replace(/^人物 男性 /,'').replace(/^人物 女性 /,'').replace(/^動物 /,'').replace(/^風景・モノ /,'');b.append(im,lab);
+            b.addEventListener('click',()=>{selected=id;paint();pop.remove();onChange(selected);});grid.appendChild(b);
+          });section.appendChild(grid);pop.appendChild(section);
+        });
+        const none=document.createElement('button');none.type='button';none.className='ahako-common-avatar-none';none.textContent='共通アバターを使わない';none.addEventListener('click',()=>{selected='';paint();pop.remove();onChange('');});pop.appendChild(none);
+        document.body.appendChild(pop);
+        const r=trigger.getBoundingClientRect(),pad=12;const pw=Math.min(430,window.innerWidth-pad*2);pop.style.width=pw+'px';let left=Math.min(Math.max(pad,r.left),window.innerWidth-pw-pad);let top=r.bottom+8;if(top+pop.offsetHeight>window.innerHeight-pad)top=Math.max(pad,r.top-pop.offsetHeight-8);pop.style.left=left+'px';pop.style.top=top+'px';
+        const outside=ev=>{if(!pop.contains(ev.target)&&!trigger.contains(ev.target)){pop.remove();document.removeEventListener('pointerdown',outside,true);}};setTimeout(()=>document.addEventListener('pointerdown',outside,true),0);
+      });
+      trigger.append(preview,caption,chevron);paint();wrap.append(title,trigger);return wrap;
+    }
+  
+    // Local prototype — Chat authoring helpers v0.3
   // Speaker presets live at work level so one tap can apply name/icon/side/colors.
   function ensureChatSpeakerStore(){
     if(!workingDocument)ensureWorkingDocumentFromEasy();
@@ -3180,7 +3686,7 @@
     p.text ||= {};
     p.text.align=preset.side==='right'?'right':'left';
     if(preset.textColor)p.text.color=preset.textColor; else delete p.text.color;
-    p.chat={...(p.chat||{}),speakerId:preset.id||'',icon:preset.icon||'',iconText:preset.iconText||'●',bubbleColor:preset.bubbleColor||'',bubbleTextColor:preset.bubbleTextColor||''};
+    p.chat={...(p.chat||{}),speakerId:preset.id||'',icon:preset.icon||'',iconPreset:preset.iconPreset||'',iconText:preset.iconText||'●',bubbleColor:preset.bubbleColor||'',bubbleTextColor:preset.bubbleTextColor||''};
     if(preset._editorFileName)p.chat._editorFileName=preset._editorFileName;
     if(preset.icon && /^blob:/i.test(preset.icon))p.chat._editorManaged=true;
     scene.subText=String(preset.name||'');
@@ -3203,6 +3709,7 @@
     Object.assign(preset,{
       name,
       icon:p.chat.icon||'',
+      iconPreset:p.chat.iconPreset||'',
       iconText:p.chat.iconText||'●',
       side:p.text.align==='right'?'right':'left',
       textColor:p.text.color||'',
@@ -3331,10 +3838,27 @@
     }
     scheduleDraftSave(40);return changed;
   }
+  function applyChatTimeModeForward(fromIndex,mode){
+    if(!workingDocument?.scenes?.length)return 0;
+    const start=Math.max(0,Number(fromIndex)||0);
+    let changed=0;
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation||{};
+      if(pr.view!=='chat')break;
+      const lt=ensureLogTime(sc);
+      if(lt.mode!==mode){lt.mode=mode;changed++;}
+      if(mode==='edit')lt.editedAt=boardNowString();
+    }
+    scheduleDraftSave(40);
+    return changed;
+  }
   function applyChatModeForward(fromIndex){
     if(!workingDocument?.scenes?.length)return 0;
     let changed=0;
-    for(let i=Math.max(0,Number(fromIndex)||0);i<workingDocument.scenes.length;i++){
+    const start=Math.max(0,Number(fromIndex)||0);
+    const sourceScene=workingDocument.scenes[start];
+    const inheritedTimeMode=ensureLogTime(sourceScene).mode||'none';
+    for(let i=start;i<workingDocument.scenes.length;i++){
       const sc=workingDocument.scenes[i];
       if(!sc || sc.type==='sound')continue;
       const pr=ensurePresentation(sc);
@@ -3346,9 +3870,422 @@
       pr.text ||= {};
       if(!pr.text.align || pr.text.align==='auto')pr.text.align='left';
       pr.chat ||= {};
+      const lt=ensureLogTime(sc);lt.mode=inheritedTimeMode;if(inheritedTimeMode==='edit')lt.editedAt=boardNowString();
     }
     scheduleDraftSave(40);
     return changed;
+  }
+  function commentId(){
+    return `comment-${Date.now().toString(36)}-${boardRandomId().slice(0,5)}`;
+  }
+  function initWebCommentMeta(scene,index){
+    const pr=ensurePresentation(scene);pr.webComment ||= {};
+    const c=pr.webComment;
+    if(!String(c.commentId||'').trim())c.commentId=commentId();
+    if(!String(c.name||'').trim())c.name='名無しさん';
+    if(c.icon===undefined)c.icon='';
+    if(c.iconText===undefined)c.iconText='●';
+    if(c.likes===undefined)c.likes=0;
+    if(c.replyTo===undefined)c.replyTo='';
+    if(c.role===undefined)c.role='extra';
+    return c;
+  }
+  function applyWebCommentTimeModeForward(fromIndex,mode){
+    if(!workingDocument?.scenes?.length)return 0;
+    let changed=0;
+    for(let i=Math.max(0,Number(fromIndex)||0);i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation||{};
+      if(pr.view!=='web-comment')break;
+      const lt=ensureLogTime(sc);if(lt.mode!==mode){lt.mode=mode;changed++;}
+      if(mode==='edit')lt.editedAt=boardNowString();
+    }
+    scheduleDraftSave(40);return changed;
+  }
+  function webCommentSectionDefaults(scene,index){
+    const pr=ensurePresentation(scene),c=initWebCommentMeta(scene,index),lt=ensureLogTime(scene);
+    c.reaction ||= {mode:'fixed',value:Math.max(0,Number(c.likes)||0),min:0,max:50,start:Math.max(0,Number(c.likes)||0),end:Math.max(0,Number(c.likes)||0),delay:0,duration:3,curve:'burst'};
+    return {
+      logTime:{mode:lt.mode||'none',workTime:lt.workTime||''},
+      reaction:JSON.parse(JSON.stringify(c.reaction))
+    };
+  }
+  function applyWebCommentDefaults(scene,index,defaults){
+    const pr=ensurePresentation(scene);pr.view='web-comment';pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};
+    const c=initWebCommentMeta(scene,index);
+    c.reaction=JSON.parse(JSON.stringify(defaults.reaction||{}));
+    if(c.reaction.mode==='random'){
+      const lo=Math.max(0,Number(c.reaction.min)||0),hi=Math.max(lo,Number(c.reaction.max)||lo);
+      c.likes=lo+Math.floor(Math.random()*(hi-lo+1));c.reaction.value=c.likes;
+    }else if(c.reaction.mode==='fixed'){
+      c.likes=Math.max(0,Number(c.reaction.value ?? c.likes)||0);c.reaction.value=c.likes;
+    }else if(c.reaction.mode==='dynamic'){
+      c.likes=Math.max(0,Number(c.reaction.end)||0);
+    }
+    const lt=ensureLogTime(scene);lt.mode=defaults.logTime?.mode||'none';lt.workTime=defaults.logTime?.workTime||'';
+    if(lt.mode==='edit')lt.editedAt=boardNowString();
+    return scene;
+  }
+  function applyWebCommentModeForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;
+    const start=Math.max(0,Number(fromIndex)||0),defaults=webCommentSectionDefaults(workingDocument.scenes[start],start);
+    let changed=0;
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i];if(!sc||sc.type==='sound')continue;
+      const pr=ensurePresentation(sc);
+      if(pr.view && !['world','web-comment'].includes(pr.view))continue;
+      if(pr.view!=='web-comment')changed++;
+      applyWebCommentDefaults(sc,i,defaults);
+    }
+    scheduleDraftSave(40);return changed;
+  }
+
+  const WEB_COMMENT_EXTRA_NAMES=["名無しさん", "通りすがり", "匿名希望", "名無しの読者", "見てるだけ", "ROM専", "たまたま来た人", "一般人A", "一般人B", "近所の人", "ねこ好き", "いぬ派", "コーヒー党", "夜ふかし", "早起き民", "帰宅中", "休憩中", "昼休み", "電車の中", "寝る前", "山田", "佐藤", "鈴木", "高橋", "田中", "伊藤", "渡辺", "山本", "中村", "小林", "加藤", "吉田", "山口", "松本", "井上", "木村", "林", "清水", "斎藤", "森", "池田", "橋本", "阿部", "石川", "山下", "中島", "石井", "小川", "前田", "岡田", "K", "M", "S", "T", "R", "N", "Y", "A", "mizu", "sora", "nagi", "haru", "aki", "ao", "kuro", "shiro", "user001", "user014", "user027", "user042", "user058", "user073", "user108", "user214", "user315", "user404", "user512", "user777", "見る専", "読む専", "コメント初心者", "古参っぽい人", "新参です", "現地民", "元地元民", "会社員", "学生", "主婦", "自営業", "パン好き", "映画好き", "本好き", "ゲーム好き", "写真好き", "音楽好き", "散歩民", "深夜組", "朝組", "関西民", "関東民", "それな民", "知らんけど", "ほんまか", "気になる", "様子見", "観測中", "二度見した", "たぶん人間", "まだ起きてる", "名無しA", "名無しB", "名無しC", "匿名1号", "匿名2号", "匿名3号", "通行人A", "通行人B", "閲覧者01", "閲覧者02", "mikan", "ringo", "lemon", "mint", "cocoa", "latte", "toast", "panda", "penguin", "rabbit", "fox", "owl", "crow", "moon", "cloud"];
+  function webCommentWeightedPick(items){
+    const total=items.reduce((n,x)=>n+x[1],0);let r=Math.random()*total;
+    for(const [value,w] of items){r-=w;if(r<=0)return value;}
+    return items[items.length-1][0];
+  }
+  function webCommentExtraLikes(){
+    const band=webCommentWeightedPick([['tiny',58],['small',27],['mid',11],['large',3],['viral',1]]);
+    if(band==='tiny')return Math.floor(Math.random()*6);
+    if(band==='small')return 6+Math.floor(Math.random()*25);
+    if(band==='mid')return 31+Math.floor(Math.random()*90);
+    if(band==='large')return 121+Math.floor(Math.random()*480);
+    return 601+Math.floor(Math.random()*4400);
+  }
+  function applyWebCommentExtrasForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;
+    const start=Math.max(0,Number(fromIndex)||0);let changed=0;
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation;
+      if(!sc||pr?.view!=='web-comment'){if(i>start)break;continue;}
+      const c=initWebCommentMeta(sc,i);
+      if((c.role||'extra')==='manual')continue;
+      c.role='extra';
+      c.name=WEB_COMMENT_EXTRA_NAMES[Math.floor(Math.random()*WEB_COMMENT_EXTRA_NAMES.length)];
+      if(!c.icon)c.iconPreset=['m01','m02','m03','m04','m05','m06','f01','f02','f03','f04','f05','f06','a01','a02','a03','a04','a05','a06','o01','o02','o03','o04','o05','o06'][Math.floor(Math.random()*24)];
+      const end=webCommentExtraLikes(),dynamic=Math.random()<0.68;
+      if(dynamic){
+        const startValue=Math.max(0,Math.floor(end*(Math.random()*.22)));
+        c.reaction={mode:'dynamic',value:end,min:0,max:end,start:startValue,end,delay:Number((Math.random()*1.8).toFixed(1)),duration:Number((Math.random()<0.88?(60+Math.random()*540):(600+Math.random()*600)).toFixed(1)),curve:webCommentWeightedPick([['irregular',35],['steps',18],['wave',16],['initial',9],['burst',9],['ease',6],['decay',5],['fire',2]])};
+        c.likes=end;
+      }else{
+        c.likes=end;c.reaction={mode:'fixed',value:end,min:0,max:end,start:end,end,delay:0,duration:3,curve:'linear'};
+      }
+      changed++;
+    }
+    scheduleDraftSave(40);return changed;
+  }
+  function reviewId(){ return `review-${Date.now().toString(36)}-${boardRandomId().slice(0,5)}`; }
+  function initWebReviewMeta(scene,index){
+    const pr=ensurePresentation(scene);pr.webReview ||= {};const r=pr.webReview;
+    if(!String(r.reviewId||'').trim())r.reviewId=reviewId();
+    if(!String(r.name||'').trim())r.name='ゲスト';
+    if(r.icon===undefined)r.icon='';
+    if(r.rating===undefined)r.rating=5;
+    if(r.verified===undefined)r.verified=false;
+    if(r.role===undefined)r.role='extra';
+    if(r.iconPreset===undefined)r.iconPreset='';
+    return r;
+  }
+  function applyWebReviewTimeModeForward(fromIndex,mode){
+    let changed=0;for(let i=Math.max(0,Number(fromIndex)||0);i<(workingDocument?.scenes?.length||0);i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation||{};if(pr.view!=='web-review')break;
+      const lt=ensureLogTime(sc);if(lt.mode!==mode){lt.mode=mode;changed++;}if(mode==='edit')lt.editedAt=boardNowString();
+    }scheduleDraftSave(40);return changed;
+  }
+  function applyWebReviewModeForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;let changed=0;const start=Math.max(0,Number(fromIndex)||0);
+    const inherited=ensureLogTime(workingDocument.scenes[start]).mode||'none';
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i];if(!sc||sc.type==='sound')continue;const pr=ensurePresentation(sc);
+      if(pr.view && !['world','web-review'].includes(pr.view))continue;if(pr.view!=='web-review')changed++;
+      pr.view='web-review';pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};
+      initWebReviewMeta(sc,i);const lt=ensureLogTime(sc);lt.mode=inherited;if(inherited==='edit')lt.editedAt=boardNowString();
+    }scheduleDraftSave(40);return changed;
+  }
+  const WEB_REVIEW_EXTRA_NAMES=['ゲスト','匿名ユーザー','購入者','利用者','旅行好き','本好き','映画好き','会社員','学生','主婦','山田','佐藤','鈴木','高橋','田中','K','M','S','user042','user108','mikan','sora','nagi','夜ふかし','通りすがり'];
+  function applyWebReviewExtrasForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;let changed=0;const start=Math.max(0,Number(fromIndex)||0);
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation;if(!sc||pr?.view!=='web-review'){if(i>start)break;continue;}
+      const r=initWebReviewMeta(sc,i);if((r.role||'extra')==='manual')continue;
+      r.role='extra';r.name=WEB_REVIEW_EXTRA_NAMES[Math.floor(Math.random()*WEB_REVIEW_EXTRA_NAMES.length)];
+      delete r.icon;delete r._editorFileName;delete r._editorManaged;
+      r.iconPreset=['m01','m02','m03','m04','m05','m06','f01','f02','f03','f04','f05','f06','a01','a02','a03','a04','a05','a06','o01','o02','o03','o04','o05','o06'][Math.floor(Math.random()*24)];
+      const x=Math.random();r.rating=x<.08?1:x<.18?2:x<.32?3:x<.58?4:5;r.verified=Math.random()<.62;changed++;
+    }scheduleDraftSave(40);return changed;
+  }
+  function snsId(){ return `sns-${Date.now().toString(36)}-${boardRandomId().slice(0,5)}`; }
+  function parseWebSNSProfileUrl(raw){
+    const value=String(raw||'').trim();
+    if(!value)return {platform:'',handle:''};
+    let candidate=value;
+    if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)&&/^[\w.-]+\.[a-z]{2,}(?:\/|$)/i.test(candidate))candidate='https://'+candidate;
+    try{
+      const u=new URL(candidate,location.href),host=u.hostname.toLowerCase().replace(/^www\./,'');
+      const seg=u.pathname.split('/').filter(Boolean).map(v=>{try{return decodeURIComponent(v)}catch(_){return v}});
+      const clean=v=>String(v||'').replace(/^@/,'').trim();
+      const reserved=new Set(['home','explore','search','settings','notifications','messages','compose','intent','share','i']);
+      let platform='',id='';
+      if(host==='x.com'||host==='twitter.com'||host.endsWith('.x.com')){platform='X';id=clean(seg[0]);if(reserved.has(id.toLowerCase()))id='';}
+      else if(host==='instagram.com'||host.endsWith('.instagram.com')){platform='Instagram';id=clean(seg[0]);}
+      else if(host==='threads.net'||host.endsWith('.threads.net')){platform='Threads';id=clean(seg[0]);}
+      else if(host==='tiktok.com'||host.endsWith('.tiktok.com')){platform='TikTok';id=clean(seg[0]);}
+      else if(host==='bsky.app'||host.endsWith('.bsky.app')){platform='Bluesky';id=seg[0]==='profile'?clean(seg[1]):'';}
+      else if(host==='note.com'||host.endsWith('.note.com')){platform='note';id=clean(seg[0]);}
+      else if(host==='facebook.com'||host.endsWith('.facebook.com')){platform='Facebook';id=seg[0]&&seg[0]!=='profile.php'?clean(seg[0]):'';}
+      else {const at=seg.find(v=>String(v).startsWith('@'));if(at){platform='Mastodon';id=clean(at);}else platform=host;}
+      return {platform,handle:id?`@${id}`:''};
+    }catch(_){return {platform:'',handle:''};}
+  }
+
+  function buildFlowCommentEditor(scene,index){const p=ensurePresentation(scene);let flowCommentCard;
+      const fc=p.flowComments||(p.flowComments={enabled:false,density:'normal',comments:[]});
+      flowCommentCard=desktopCard('', 'desktop-flow-comment-card');
+      flowCommentCard.addEventListener('keydown',e=>e.stopPropagation());flowCommentCard.addEventListener('keyup',e=>e.stopPropagation());
+      const flowHead=flowCommentCard.querySelector('h3');
+      const flowToggle=document.createElement('button');flowToggle.type='button';flowToggle.className='desktop-collapsible-head';
+      const updateFlowHead=()=>{flowToggle.textContent=`${u('流れるコメント','Flow comments')} ${fc.enabled?'ON':'OFF'} ${flowCommentCard.classList.contains('is-collapsed')?'▸':'▾'}`;};
+      if(!fc.enabled)flowCommentCard.classList.add('is-collapsed');
+      flowToggle.addEventListener('click',()=>{flowCommentCard.classList.toggle('is-collapsed');updateFlowHead();});
+      flowHead.replaceChildren(flowToggle);updateFlowHead();
+      const grid=document.createElement('div');grid.className='desktop-web-board-grid desktop-flow-comment-grid';
+      grid.append(
+        desktopMakeSelect(u('表示','Display'),[['off',u('なし','Off')],['on',u('このSceneに表示','Show on this Scene')]],fc.enabled?'on':'off',v=>{fc.enabled=v==='on';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});}),
+        desktopMakeSelect(u('密度','Density'),[['few',u('少なめ','Few')],['normal',u('通常','Normal')],['many',u('多い','Many')],['danmaku',u('弾幕','Danmaku')]],fc.density||'normal',v=>{fc.density=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});}),
+        desktopMakeSelect(u('状況・場面','Situation'),[['normal',u('通常','Normal')],['excited',u('盛り上がり','Excited')],['laugh',u('笑い','Laugh')],['surprise',u('驚き','Surprise')],['horror',u('不穏・ホラー','Horror')],['emotion',u('感動','Emotional')],['flame',u('炎上・荒れ','Flame')],['tsukkomi',u('ツッコミ','Tsukkomi')],['ending',u('拍手・エンディング','Applause / ending')]],fc.context||'normal',v=>{fc.context=v;scheduleDraftSave(40);})
+      );
+      const textWrap=document.createElement('label');textWrap.className='desktop-web-board-field';
+      const textLabel=document.createElement('span');textLabel.textContent=u('重要コメント（1行1件）','Important comments (one per line)');
+      const ta=document.createElement('textarea');ta.rows=5;ta.placeholder=u('やめろ\n後ろ後ろ\n！？','DON’T\nBEHIND YOU\n!?');ta.value=(Array.isArray(fc.comments)?fc.comments:[]).filter(x=>x&&x.role!=='extra').map(x=>x.text||'').filter(Boolean).join('\n');
+      ta.addEventListener('keydown',e=>e.stopPropagation());ta.addEventListener('keyup',e=>e.stopPropagation());
+      const saveManual=()=>{const extras=(Array.isArray(fc.comments)?fc.comments:[]).filter(x=>x&&x.role==='extra');const manual=ta.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map((text,i)=>({text,role:'manual',delay:Number((.4+i*1.15).toFixed(2))}));fc.comments=[...manual,...extras];scheduleDraftSave(80);};
+      ta.addEventListener('input',saveManual);ta.addEventListener('change',()=>{saveManual();refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});});ta.addEventListener('blur',()=>{saveManual();refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});});
+      textWrap.append(textLabel,ta);grid.append(textWrap);
+      const actions=document.createElement('div');actions.className='desktop-web-board-actions';
+      const flowExtraPools={
+        normal:['お','なるほど','へえ','そうなんだ','初見です','見てる','きた','ん？','たしかに','わかる','それな','ほう','ここ好き','いいね','まじか','続き気になる','今来た','なるほどね','ふむ','そういうことか','これ何だろ','気になる'],
+        excited:['きたあああ','きた','うおおお','待ってた','熱い','ここ好き','最高','いけええ','うわああ','やばい','これは来た','テンション上がる','始まった','でたー！','いいぞ','もっとやれ','うおお','ここからか','神展開','アツい'],
+        laugh:['ｗｗｗ','草','笑った','無理ｗ','なんでだよｗ','腹痛い','それは草','ｗｗｗｗｗ','やめてｗ','声出た','ずるい','おもろ','急にｗ','吹いた','何してんのｗ','耐えられん','草生える','これは笑う','オチｗ','好きｗ'],
+        surprise:['！？','え','は？','待って','まじか','うそ','えっ','何今の','ちょっと待て','聞いてない','うわ','マジ？','そう来る？','ええええ','なんで','びびった','予想外','そこ！？','嘘だろ','今の何'],
+        horror:['こわ','やめろ','後ろ','見えた','逃げろ','ざわ…','ん？','待って','いる','今なんかいた','振り返るな','やばい','音した','見ちゃだめ','後ろ後ろ','誰？','これ無理','鳥肌','消えた？','近づいてる','気づけ','そこにいる','怖すぎ','もう帰れ'],
+        emotion:['泣く','これはずるい','しんどい','好き','あかん泣く','沁みる','ここ好き','良かった','泣いた','尊い','言葉出ない','うわあ…','これは来る','胸が痛い','優しい','ありがとう','ここでそれか','泣かせるな','しんど','好きだわ'],
+        flame:['は？','いやいや','それはない','荒れてて草','おい','何言ってんだ','これは揉める','やば','コメント荒れてる','それ違うだろ','落ち着け','燃えてる','言い方ｗ','地獄','もう遅い','それ言う？','うわぁ','戦争始まった','賛否すごい','コメント欄終わった'],
+        tsukkomi:['なんでやねん','そこかよ','違う違う','おいｗ','いや草','そうはならんやろ','何してんねん','そこじゃない','誰が言うてんねん','急すぎる','知らんがな','なんでそうなる','お前かい','そっち！？','話聞けｗ','いや待て','それはおかしい','雑ｗ','無茶言うな','ツッコミ追いつかん'],
+        ending:['88888888','888888888888','おつ','お疲れさま','よかった','最高だった','ありがとう','👏👏👏','終わった','いい作品だった','余韻すごい','また来る','泣いた','8888','拍手','おつかれ','良かった！','ありがとう！','完走','ここまで見てよかった']
+      };
+      const extraPool=flowExtraPools[fc.context||'normal']||flowExtraPools.normal;
+      actions.append(
+        desktopAction(u('エキストラを生成','Generate extras'),()=>{const counts={few:4,normal:9,many:16,danmaku:28},n=counts[fc.density||'normal']||9;const manual=(Array.isArray(fc.comments)?fc.comments:[]).filter(x=>x&&x.role!=='extra');const extras=[];for(let i=0;i<n;i++){extras.push({text:extraPool[Math.floor(Math.random()*extraPool.length)],role:'extra',delay:Number((Math.random()*5.5).toFixed(2)),lane:Math.floor(Math.random()*8),speed:Number((7+Math.random()*7).toFixed(2))});}fc.enabled=true;fc.comments=[...manual,...extras];scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});},'is-primary'),
+        desktopAction(u('エキストラだけ消す','Clear extras'),()=>{fc.comments=(Array.isArray(fc.comments)?fc.comments:[]).filter(x=>x&&x.role!=='extra');scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});},'')
+      );
+      const flowContent=document.createElement('div');flowContent.className='desktop-collapsible-content';flowContent.append(grid,actions);flowCommentCard.append(flowContent);
+
+return flowCommentCard;}
+
+  var desktopCreditsInspectorScene=null;
+  function buildCreditsEditor(scene){
+    const pr=ensurePresentation(scene);pr.credits ||= {enabled:false,mode:'card',title:'CREDITS',duration:30,fontSize:22,gap:28,align:'center',colorMode:'auto',opacity:.72,entries:[]};
+    const m=pr.credits;if(!Array.isArray(m.entries))m.entries=[];
+    const card=desktopCard(u('提供・協力・クレジット','Credits'),'desktop-credits-card');
+    card.addEventListener('keydown',e=>e.stopPropagation());card.addEventListener('keyup',e=>e.stopPropagation());
+    const save=()=>{scheduleDraftSave(80);refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});};
+    const field=(label,obj,key,type='text',min,max,step)=>{const w=document.createElement('label');w.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=label;const inp=document.createElement(key==='note'?'textarea':'input');if(inp.tagName==='INPUT')inp.type=type;inp.value=obj[key]??'';if(min!==undefined)inp.min=min;if(max!==undefined)inp.max=max;if(step)inp.step=step;inp.addEventListener('input',()=>{obj[key]=type==='number'?Number(inp.value):inp.value;scheduleDraftSave(80);});inp.addEventListener('change',save);w.append(sp,inp);return w;};
+    const enable=document.createElement('label');enable.className='desktop-credits-enable';const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=m.enabled===true;enable.append(checkbox,document.createTextNode(u('このSceneで使う','Use on this Scene')));checkbox.addEventListener('change',()=>{m.enabled=checkbox.checked;updateCreditHead();save();});card.append(enable);
+    card.append(desktopMakeSelect(u('表示方式','Display'),[['card',u('カード','Card')],['roll',u('エンドロール','End roll')]],m.mode||'card',v=>{m.mode=v;rollSettings.hidden=v!=='roll';save();}));
+    card.append(desktopMakeSelect(u('枠と背景','Frame / background'),[['card',u('カード','Card')],['none',u('枠・背景なし','Borderless')]],m.surface||'card',v=>{m.surface=v;save();}),desktopMakeSelect(u('項目の列数','Entry columns'),[['1',u('1列','One column')],['2',u('2列（狭い画面は1列）','Two columns / one on narrow screens')]],String(m.columns||1),v=>{m.columns=Number(v);save();}));
+    const grid=document.createElement('div');grid.className='desktop-web-board-grid';
+    grid.append(field(u('タイトル','Title'),m,'title'),field(u('流れる時間（秒）','Roll duration (seconds)'),m,'duration','number',5,600,.5),field(u('文字サイズ','Font size'),m,'fontSize','number',12,48,1),field(u('項目の間隔','Entry spacing'),m,'gap','number',8,80,1),field(u('カード背景の濃さ（0〜1）','Card opacity (0–1)'),m,'opacity','number',0,1,.05));
+    const rollSettings=document.createElement('div');rollSettings.className='desktop-web-board-grid';
+    const stopField=field(u('止める高さ（上10〜中央50〜下90％）','Stop height (top 10 / center 50 / bottom 90%)'),m,'stopPosition','number',10,90,5);stopField.querySelector('input').value=m.stopPosition??50;stopField.hidden=!['hold','reveal'].includes(m.endMode);
+    const revealDelayField=field(u('最後の項目の表示遅延（秒）','Final entry reveal delay (seconds)'),m,'revealDelay','number',0,60,.5);revealDelayField.querySelector('input').value=m.revealDelay??0;revealDelayField.hidden=m.endMode!=='reveal';
+    rollSettings.append(field(u('開始遅延（秒）','Start delay (seconds)'),m,'startDelay','number',0,60,.5),desktopMakeSelect(u('終わり方','Ending'),[['exit',u('流れ切る','Scroll out')],['hold',u('最後の項目で止める','Hold final entry')],['reveal',u('流れ切って最後の項目をぼかし表示','Scroll out, then reveal final entry')]],m.endMode||'exit',v=>{m.endMode=v;stopField.hidden=!['hold','reveal'].includes(v);revealDelayField.hidden=v!=='reveal';save();}),stopField,revealDelayField);rollSettings.hidden=m.mode!=='roll';card.appendChild(rollSettings);
+    const colors=document.createElement('div');const colorChoice=desktopMakeSelect(u('文字色','Text color'),[['auto',u('雰囲気に合わせる','Match theme')],['custom',u('指定する','Custom')]],m.colorMode||'auto',v=>{m.colorMode=v;customColor.hidden=v!=='custom';save();});const customColor=field(u('指定色','Custom color'),m,'color','color');customColor.hidden=m.colorMode!=='custom';if(!m.color)customColor.querySelector('input').value='#ffffff';colors.append(colorChoice,customColor);card.append(colors);
+    card.append(grid,desktopMakeSelect(u('文字揃え','Alignment'),[['center',u('中央','Center')],['left',u('左','Left')]],m.align||'center',v=>{m.align=v;save();}));
+    const note=document.createElement('p');note.className='desktop-credits-help';note.textContent=u('本文・見出し・名前・補足はプレビューで直接編集できます。流れる文字をタップすると一覧、もう一度タップすると途中から再開。読者は文字・ロゴのリンクを直接開けます。','Edit text directly in the preview. Tap the roll for a static list; tap again to resume. Readers can open text and logo links directly.');card.appendChild(note);
+
+    const listHead=document.createElement('div');listHead.className='desktop-credits-list-head';const count=document.createElement('strong');const search=document.createElement('input');search.type='search';search.placeholder=u('見出し・名前で項目を探す','Find by heading or name');search.setAttribute('aria-label',search.placeholder);listHead.append(count,search);card.appendChild(listHead);
+    const list=document.createElement('div');list.className='desktop-credits-entry-list';card.appendChild(list);
+    let openEntry=null;
+    const render=()=>{
+      list.replaceChildren();const query=search.value?.trim().toLocaleLowerCase()||'';const matches=m.entries.map((entry,i)=>({entry,i})).filter(({entry})=>!query||[entry.heading,entry.name,entry.note].some(x=>String(x||'').toLocaleLowerCase().includes(query)));
+      count.textContent=query?u(`項目 ${matches.length} / ${m.entries.length}`,`Entries ${matches.length} / ${m.entries.length}`):u(`項目 ${m.entries.length}`,`Entries ${m.entries.length}`);
+      matches.forEach(({entry,i})=>{
+        const box=document.createElement('details');box.className='desktop-credits-entry-fold';box.open=openEntry===entry;
+        const summary=document.createElement('summary');const title=document.createElement('span');title.className='desktop-credits-entry-label';const updateLabel=()=>{title.textContent=`${i+1}｜${entry.kind==='spacer'?u(`余白 ${entry.height??40}px`,`Space ${entry.height??40}px`):(entry.kind==='heading'?u('見出し：','Heading: '):'')+([entry.heading,entry.name].filter(Boolean).join(' · ')||u('未入力','Untitled'))}`;};updateLabel();
+        const move=(delta)=>{const to=i+delta;if(to<0||to>=m.entries.length)return;[m.entries[i],m.entries[to]]=[m.entries[to],m.entries[i]];save();render();};
+        const up=desktopAction('↑',()=>move(-1),'');up.disabled=i===0;up.title=u('前へ','Move up');const down=desktopAction('↓',()=>move(1),'');down.disabled=i===m.entries.length-1;down.title=u('後ろへ','Move down');
+        [up,down].forEach(button=>{button.addEventListener('pointerdown',e=>e.stopPropagation());button.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();});});summary.append(title,up,down);
+        box.addEventListener('toggle',()=>{if(box.open){openEntry=entry;list.querySelectorAll('details').forEach(other=>{if(other!==box)other.open=false;});}else if(openEntry===entry)openEntry=null;});
+        const body=document.createElement('div');body.className='desktop-credits-entry-body';
+        const fields=document.createElement('div');fields.className='desktop-web-board-grid';fields.append(field(u('区分・見出し','Heading'),entry,'heading'),field(u('名前・表示名','Name'),entry,'name'),field(u('補足・指定クレジット表記','Note / required credit'),entry,'note'),field(u('リンク（https://…）','Link (https://…)'),entry,'url','url'));
+        const kind=desktopMakeSelect(u('項目の種類','Entry type'),[['item',u('通常項目','Credit')],['heading',u('中央見出し（全幅）','Centered heading / full width')],['spacer',u('余白','Space')]],entry.kind||'item',v=>{entry.kind=v;if(v==='spacer'&&entry.height===undefined)entry.height=40;openEntry=entry;save();render();});
+        body.appendChild(kind);
+        if(entry.kind==='heading'){fields.replaceChildren(field(u('中央見出し','Centered heading'),entry,entry.heading?'heading':'name'),field(u('補足','Note'),entry,'note'),field(u('リンク（https://…）','Link (https://…)'),entry,'url','url'));}
+        if(entry.kind==='spacer'){fields.replaceChildren(field(u('追加する余白の高さ（px）','Extra space height (px)'),entry,'height','number',0,240,4));}
+        body.addEventListener('input',updateLabel);
+        const actions=document.createElement('div');actions.className='desktop-web-board-actions';
+        actions.append(desktopAction(u('ロゴを選択','Choose logo'),()=>desktopPickFile('image/*',(url,name)=>{entry.logoUrl=url;entry._editorFileName=name;save();render();}),''),desktopAction(u('ロゴを外す','Remove logo'),()=>{delete entry.logoUrl;delete entry._editorFileName;save();render();},''),desktopAction(u('項目を削除','Delete entry'),async()=>{if(await openAppDialog({kind:'confirm',danger:true,title:u('項目を削除','Delete entry'),message:u('このクレジット項目を削除しますか？','Delete this credit entry?'),confirmLabel:u('削除','Delete')})){m.entries.splice(i,1);if(openEntry===entry)openEntry=null;save();render();}},''));
+        if(entry.kind==='spacer'){actions.removeChild(actions.children[0]);actions.removeChild(actions.children[0]);}
+        body.append(fields);if(entry.logoUrl&&entry.kind!=='spacer'){const img=document.createElement('img');img.src=entry.logoUrl;img.alt=entry.name||'';img.style.cssText='max-width:100%;max-height:90px;object-fit:contain';body.appendChild(img);}body.appendChild(actions);box.append(summary,body);list.appendChild(box);
+      });
+    };
+    search.addEventListener('input',render);render();card.append(desktopAction(u('＋ クレジット項目を追加','+ Add credit'),()=>{const entry={heading:'',name:'',note:'',url:''};m.entries.push(entry);openEntry=entry;search.value='';save();render();},'is-primary'));
+    const addKinds=document.createElement('div');addKinds.className='desktop-web-board-actions';
+    const addEntry=(entry)=>{m.entries.push(entry);openEntry=entry;search.value='';save();render();};
+    addKinds.append(desktopAction(u('＋ 中央見出し','+ Centered heading'),()=>addEntry({kind:'heading',name:'CAST'}),''),desktopAction(u('＋ 余白','+ Space'),()=>addEntry({kind:'spacer',height:40}),''));card.appendChild(addKinds);
+    const heading=card.querySelector('h3');const content=document.createElement('div');content.className='desktop-collapsible-content';content.append(...[...card.childNodes].filter(n=>n!==heading));const toggle=document.createElement('button');toggle.type='button';toggle.className='desktop-collapsible-head';const updateCreditHead=()=>{toggle.textContent=`${u('提供・協力・クレジット','Credits')} ${m.enabled?'ON':'OFF'} ${card.classList.contains('is-collapsed')?'▸':'▾'}`;};if(!m.enabled)card.classList.add('is-collapsed');toggle.addEventListener('click',()=>{card.classList.toggle('is-collapsed');updateCreditHead();});heading.replaceChildren(toggle);card.appendChild(content);updateCreditHead();return card;
+  }
+
+
+  function initWebSNSMeta(scene,index){ const pr=ensurePresentation(scene);pr.webSNS ||= {};const m=pr.webSNS;if(!m.postId)m.postId=snsId();if(!m.name)m.name='ユーザー';if(!m.handle)m.handle='@user';if(m.platform===undefined)m.platform='';if(m.icon===undefined)m.icon='';if(m.iconPreset===undefined)m.iconPreset='';if(m.profileUrl===undefined)m.profileUrl='';if(m.likes===undefined)m.likes=0;if(m.reposts===undefined)m.reposts=0;if(m.replies===undefined)m.replies=0;if(m.role===undefined)m.role='extra';if(m.deleted===undefined)m.deleted=false;return m; }
+  function applyWebSNSTimeModeForward(fromIndex,mode){let changed=0;for(let i=Math.max(0,Number(fromIndex)||0);i<(workingDocument?.scenes?.length||0);i++){const sc=workingDocument.scenes[i],pr=sc?.presentation||{};if(pr.view!=='web-sns')break;const lt=ensureLogTime(sc);if(lt.mode!==mode){lt.mode=mode;changed++;}if(mode==='edit')lt.editedAt=boardNowString();}scheduleDraftSave(40);return changed;}
+  function applyWebSNSModeForward(fromIndex){if(!workingDocument?.scenes?.length)return 0;let changed=0;const start=Math.max(0,Number(fromIndex)||0),inherited=ensureLogTime(workingDocument.scenes[start]).mode||'none';for(let i=start;i<workingDocument.scenes.length;i++){const sc=workingDocument.scenes[i];if(!sc||sc.type==='sound')continue;const pr=ensurePresentation(sc);if(pr.view&&!['world','web-sns'].includes(pr.view))continue;if(pr.view!=='web-sns')changed++;pr.view='web-sns';pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};initWebSNSMeta(sc,i);const lt=ensureLogTime(sc);lt.mode=inherited;if(inherited==='edit')lt.editedAt=boardNowString();}scheduleDraftSave(40);return changed;}
+  const WEB_SNS_EXTRA_NAMES=['山田','佐藤','鈴木','高橋','田中','sora','nagi','haru','mikan','panda','moon','cloud','夜ふかし','通りすがり','現地民','見る専','写真好き','本好き','映画好き','会社員','学生','user042','user108','user315'];
+  function applyWebSNSExtrasForward(fromIndex){if(!workingDocument?.scenes?.length)return 0;let changed=0;const start=Math.max(0,Number(fromIndex)||0),avatars=['m01','m02','m03','m04','m05','m06','f01','f02','f03','f04','f05','f06','a01','a02','a03','a04','a05','a06','o01','o02','o03','o04','o05','o06'];for(let i=start;i<workingDocument.scenes.length;i++){const sc=workingDocument.scenes[i],pr=sc?.presentation;if(!sc||pr?.view!=='web-sns'){if(i>start)break;continue;}const m=initWebSNSMeta(sc,i);if((m.role||'extra')==='manual')continue;m.name=WEB_SNS_EXTRA_NAMES[Math.floor(Math.random()*WEB_SNS_EXTRA_NAMES.length)];m.handle='@user'+Math.floor(Math.random()*9999);m.iconPreset=avatars[Math.floor(Math.random()*avatars.length)];m.profileUrl='';m.likes=Math.floor(Math.pow(Math.random(),2.4)*2500);m.reposts=Math.floor(m.likes*Math.random()*.38);m.replies=Math.floor(Math.pow(Math.random(),2.8)*Math.max(1,m.likes*.22));changed++;}scheduleDraftSave(40);return changed;}
+  function mailId(){ return `mail-${Date.now().toString(36)}-${boardRandomId().slice(0,5)}`; }
+  function initWebMailMeta(scene,index){
+    const pr=ensurePresentation(scene);pr.webMail ||= {};const m=pr.webMail;
+    if(!m.mailId)m.mailId=mailId();
+    if(!m.folder)m.folder='inbox';
+    if(!m.senderName)m.senderName='差出人';
+    if(m.senderAddress===undefined)m.senderAddress='';
+    if(m.to===undefined)m.to='';
+    if(m.cc===undefined)m.cc='';
+    if(!m.subject)m.subject='件名なし';
+    if(m.icon===undefined)m.icon='';
+    if(m.iconPreset===undefined)m.iconPreset='';
+    // v0.5: unread/read visual state was removed from the mail expression.
+    if(Object.prototype.hasOwnProperty.call(m,'unread'))delete m.unread;
+    if(m.starred===undefined)m.starred=false;
+    if(m.attachmentName===undefined)m.attachmentName='';
+    // v0.2: "deleted" was a v0.1-only display state. Migrate it away.
+    if(Object.prototype.hasOwnProperty.call(m,'deleted'))delete m.deleted;
+    return m;
+  }
+  function applyWebMailTimeModeForward(fromIndex,mode){
+    let changed=0;for(let i=Math.max(0,Number(fromIndex)||0);i<(workingDocument?.scenes?.length||0);i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation||{};if(pr.view!=='web-mail')break;
+      const lt=ensureLogTime(sc);if(lt.mode!==mode){lt.mode=mode;changed++;}if(mode==='edit')lt.editedAt=boardNowString();
+    }scheduleDraftSave(40);return changed;
+  }
+  function applyWebMailModeForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;let changed=0;const start=Math.max(0,Number(fromIndex)||0),inherited=ensureLogTime(workingDocument.scenes[start]).mode||'none';
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i];if(!sc||sc.type==='sound')continue;const pr=ensurePresentation(sc);
+      if(pr.view&&!['world','web-mail'].includes(pr.view))continue;if(pr.view!=='web-mail')changed++;
+      pr.view='web-mail';pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};
+      initWebMailMeta(sc,i);const lt=ensureLogTime(sc);lt.mode=inherited;if(inherited==='edit')lt.editedAt=boardNowString();
+    }scheduleDraftSave(40);return changed;
+  }
+  function notificationId(){ return `notification-${Date.now().toString(36)}-${boardRandomId().slice(0,5)}`; }
+  function initWebNotificationMeta(scene,index){
+    const pr=ensurePresentation(scene);pr.webNotification ||= {};const m=pr.webNotification;
+    if(!m.notificationId)m.notificationId=notificationId();
+    if(!m.kind)m.kind='other';
+    if(m.source===undefined)m.source='通知';
+    if(m.title===undefined)m.title='お知らせ';
+    if(m.icon===undefined)m.icon='';
+    if(m.iconPreset===undefined)m.iconPreset='';
+    if(m._editorFileName===undefined)m._editorFileName='';
+    if(m._editorManaged===undefined)m._editorManaged=false;
+    const lt=ensureLogTime(scene);
+    if(lt.relativeText===undefined)lt.relativeText='1時間前';
+    return m;
+  }
+  function applyWebNotificationTimeModeForward(fromIndex,mode){
+    let changed=0;for(let i=Math.max(0,Number(fromIndex)||0);i<(workingDocument?.scenes?.length||0);i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation||{};if(pr.view!=='web-notification')break;
+      const lt=ensureLogTime(sc);if(lt.mode!==mode){lt.mode=mode;changed++;}if(mode==='edit')lt.editedAt=boardNowString();
+    }scheduleDraftSave(40);return changed;
+  }
+  function applyWebNotificationModeForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;let changed=0;const start=Math.max(0,Number(fromIndex)||0),inherited=ensureLogTime(workingDocument.scenes[start]).mode||'none';
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i];if(!sc||sc.type==='sound')continue;const pr=ensurePresentation(sc);
+      if(pr.view&&!['world','web-notification'].includes(pr.view))continue;if(pr.view!=='web-notification')changed++;
+      pr.view='web-notification';pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};
+      initWebNotificationMeta(sc,i);const lt=ensureLogTime(sc);lt.mode=inherited;if(inherited==='edit')lt.editedAt=boardNowString();
+    }scheduleDraftSave(40);return changed;
+  }
+  function qaId(){ return `qa-${Date.now().toString(36)}-${boardRandomId().slice(0,5)}`; }
+  function initWebQAMeta(scene,index){
+    const pr=ensurePresentation(scene);pr.webQA ||= {};const q=pr.webQA;
+    q.question ||= {};q.answer ||= {};
+    const prev=Number.isInteger(index)&&index>0?workingDocument?.scenes?.[index-1]:null;
+    const prevPr=prev?.presentation||{},prevQ=prevPr.view==='web-qa'?(prevPr.webQA||{}):null;
+    if(!String(q.qaId||'').trim())q.qaId=prevQ?.qaId||qaId();
+    if(!q.kind){
+      const legacyQuestionBody=String(q.question?.body||'').trim();
+      if(legacyQuestionBody)q.kind='legacy-answer';
+      else q.kind=prevQ&&['question','answer'].includes(prevQ.kind)?'answer':'question';
+    }
+    if(q.kind==='answer'&&prevQ){
+      q.qaId=prevQ.qaId||q.qaId;
+      q.question=clone(prevQ.question||q.question||{});
+    }
+    if(q.question.title===undefined)q.question.title='質問タイトル';
+    if(q.question.body===undefined)q.question.body='';
+    if(q.question.name===undefined)q.question.name='質問者';
+    if(q.question.iconPreset===undefined)q.question.iconPreset='';
+    if(q.question.status===undefined)q.question.status='open';
+    if(q.kind==='question')q.question.body=String(scene?.text||'');
+    if(q.answer.name===undefined)q.answer.name='回答者';
+    if(q.answer.iconPreset===undefined)q.answer.iconPreset='';
+    if(q.answer.good===undefined)q.answer.good=0;
+    if(q.answer.best===undefined)q.answer.best=false;
+    if(q.answer.deleted===undefined)q.answer.deleted=false;
+    if(q.answer.role===undefined)q.answer.role='extra';
+    return q;
+  }
+  function startWebQAQuestionAt(index,{resetMeta=false}={}){
+    const sc=workingDocument?.scenes?.[index];if(!sc)return false;const pr=ensurePresentation(sc);
+    pr.view='web-qa';pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};
+    const q=initWebQAMeta(sc,index);q.kind='question';q.qaId=qaId();
+    if(resetMeta)q.question={title:'質問タイトル',body:String(sc.text||''),name:'質問者',iconPreset:'',status:'open'};
+    else {q.question ||= {};q.question.body=String(sc.text||'');}
+    for(let i=index+1;i<(workingDocument?.scenes?.length||0);i++){
+      const next=workingDocument.scenes[i],npr=next?.presentation;if(!next||npr?.view!=='web-qa')break;
+      const nq=initWebQAMeta(next,i);if(nq.kind==='question')break;
+      nq.kind='answer';nq.qaId=q.qaId;nq.question=clone(q.question);
+    }
+    scheduleDraftSave(40);return true;
+  }
+  function webQASectionDefaults(scene,index){
+    const q=initWebQAMeta(scene,index);return {question:clone(q.question||{})};
+  }
+  function applyWebQAModeForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;const start=Math.max(0,Number(fromIndex)||0);let changed=0;
+    const inherited=ensureLogTime(workingDocument.scenes[start]).mode||'none';
+    const first=workingDocument.scenes[start],firstPr=ensurePresentation(first);
+    firstPr.view='web-qa';firstPr.display=firstPr.display||'stack';firstPr.entryMotion=firstPr.entryMotion||'flow';firstPr.text ||= {};
+    const firstQ=initWebQAMeta(first,start);firstQ.kind='question';firstQ.qaId=qaId();firstQ.question.body=String(first.text||'');
+    const defaults={question:clone(firstQ.question||{}),qaId:firstQ.qaId};changed++;
+    let firstSeen=false;
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i];if(!sc||sc.type==='sound')continue;const pr=ensurePresentation(sc);
+      if(pr.view && !['world','web-qa'].includes(pr.view))continue;if(pr.view!=='web-qa')changed++;
+      pr.view='web-qa';pr.display=pr.display||'stack';pr.entryMotion=pr.entryMotion||'flow';pr.text ||= {};
+      const q=initWebQAMeta(sc,i);
+      if(!firstSeen){q.kind='question';q.qaId=defaults.qaId;q.question=clone(defaults.question);q.question.body=String(sc.text||'');firstSeen=true;}
+      else {q.kind='answer';q.qaId=defaults.qaId;q.question=clone(defaults.question);}
+      const lt=ensureLogTime(sc);lt.mode=inherited;if(inherited==='edit')lt.editedAt=boardNowString();
+    }scheduleDraftSave(40);return changed;
+  }
+  function applyWebQATimeModeForward(fromIndex,mode){
+    let changed=0;for(let i=Math.max(0,Number(fromIndex)||0);i<(workingDocument?.scenes?.length||0);i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation||{};if(pr.view!=='web-qa')break;const lt=ensureLogTime(sc);if(lt.mode!==mode){lt.mode=mode;changed++;}if(mode==='edit')lt.editedAt=boardNowString();
+    }scheduleDraftSave(40);return changed;
+  }
+  const WEB_QA_EXTRA_NAMES=['名無しさん','通りすがり','経験者','詳しい人','一般ユーザー','匿名回答者','会社員','学生','主婦','山田','佐藤','鈴木','K','M','S','user042','sora','nagi','夜ふかし','現地民'];
+  function applyWebQAExtrasForward(fromIndex){
+    if(!workingDocument?.scenes?.length)return 0;let changed=0;const start=Math.max(0,Number(fromIndex)||0),avatars=['m01','m02','m03','m04','m05','m06','f01','f02','f03','f04','f05','f06','a01','a02','a03','a04','a05','a06','o01','o02','o03','o04','o05','o06'];
+    for(let i=start;i<workingDocument.scenes.length;i++){
+      const sc=workingDocument.scenes[i],pr=sc?.presentation;if(!sc||pr?.view!=='web-qa'){if(i>start)break;continue;}const q=initWebQAMeta(sc,i),a=q.answer;
+      if(q.kind==='question')continue;
+      if((a.role||'extra')==='manual')continue;a.role='extra';a.name=WEB_QA_EXTRA_NAMES[Math.floor(Math.random()*WEB_QA_EXTRA_NAMES.length)];a.iconPreset=avatars[Math.floor(Math.random()*avatars.length)];a.good=Math.floor(Math.pow(Math.random(),2.2)*180);a.best=false;changed++;
+    }scheduleDraftSave(40);return changed;
   }
   function applyNormalModeForward(fromIndex){
     if(!workingDocument?.scenes?.length)return 0;
@@ -3358,7 +4295,7 @@
       if(!sc || sc.type==='sound')continue;
       const pr=ensurePresentation(sc);
       // Return log-style views to the normal reading view, while preserving their metadata.
-      if(pr.view && !['world','chat','web-board'].includes(pr.view))continue;
+      if(pr.view && !['world','chat','web-board','web-comment','web-review','web-qa','web-sns','web-mail','web-notification'].includes(pr.view))continue;
       if(pr.view!=='world'){pr.view='world';changed++;}
       pr.display=pr.display||'stack';
       pr.entryMotion=pr.entryMotion||'flow';
@@ -3407,6 +4344,14 @@
       .slice(0,80);
     return stem || 'untitled';
   }
+  function suggestedScenePackageFileName(title,episode=''){
+    const suffix=String(episode||'').trim();
+    return `${safeFileStem(title||'Untitled')}${suffix?`_${safeFileStem(suffix)}`:''}.scene`;
+  }
+  function normalizedScenePackageFileName(value,title,episode=''){
+    const raw=String(value||'').trim().replace(/\.scene$/i,'');
+    return `${safeFileStem(raw||suggestedScenePackageFileName(title,episode).replace(/\.scene$/i,''))}.scene`;
+  }
   function downloadTextFile(name,text,type='application/json'){
     const blob=new Blob([text],{type:`${type};charset=utf-8`});
     const url=URL.createObjectURL(blob);
@@ -3428,7 +4373,7 @@
     const a=document.createElement('a');
     a.href=url; a.download=name; a.style.display='none';
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    setTimeout(()=>URL.revokeObjectURL(url),120000);
   }
 
   const ZIP_TEXT_ENCODER=new TextEncoder();
@@ -3446,6 +4391,13 @@
     return (crc^0xFFFFFFFF)>>>0;
   }
 
+  function sameAssetBytes(a,b){
+    if(a===b)return true;
+    if(!a||!b||a.length!==b.length)return false;
+    for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;
+    return true;
+  }
+
   async function blobBytes(blob,fallbackUrl=''){
     try{return new Uint8Array(await blob.arrayBuffer());}
     catch(firstError){
@@ -3459,7 +4411,7 @@
   // Minimal standards-compliant ZIP writer using STORE (method 0).
   // STORE is deliberate: browser-side implementation stays dependency-free,
   // while images/audio are already compressed formats in most projects.
-  async function makeStoreZip(entries){
+  async function makeStoreZip(entries,onProgress=null){
     const locals=[];
     const centrals=[];
     let offset=0;
@@ -3505,6 +4457,8 @@
       centrals.push(central);
 
       offset+=local.length;
+      onProgress?.(locals.length,entries.length);
+      if(onProgress)await new Promise(resolve=>setTimeout(resolve,0));
     }
 
     const centralOffset=offset;
@@ -3660,6 +4614,63 @@
     return null;
   }
 
+  // Built-in avatars are runtime presets, never package assets. Older drafts
+  // and speaker presets can retain their former data-URI representation in
+  // `icon`; normalize those exact known images back to the compact preset ID
+  // before collecting package assets. Also recognize matching Blobs restored
+  // from already-exported packages so re-saving a legacy file cleans it up.
+  const COMMON_AVATAR_ID_BY_DATA_URL=new Map(
+    Object.entries(AHAKO_COMMON_AVATARS).map(([id,src])=>[src,id])
+  );
+  let commonAvatarByteIndex=null;
+  function getCommonAvatarByteIndex(){
+    if(commonAvatarByteIndex)return commonAvatarByteIndex;
+    commonAvatarByteIndex=new Map();
+    for(const [id,src] of Object.entries(AHAKO_COMMON_AVATARS)){
+      const payload=src.slice(src.indexOf(',')+1);
+      const binary=atob(payload);
+      const bytes=Uint8Array.from(binary,ch=>ch.charCodeAt(0));
+      const key=`${bytes.length}:${crc32(bytes)}`;
+      const candidates=commonAvatarByteIndex.get(key)||[];
+      candidates.push({id,bytes});
+      commonAvatarByteIndex.set(key,candidates);
+    }
+    return commonAvatarByteIndex;
+  }
+  async function normalizeCommonAvatarAssetRefs(doc){
+    const seen=new WeakSet(),blobRefs=[];
+    const visit=value=>{
+      if(!value||typeof value!=='object'||seen.has(value))return;
+      seen.add(value);
+      if(!Array.isArray(value)&&typeof value.icon==='string'){
+        const preset=COMMON_AVATAR_ID_BY_DATA_URL.get(value.icon);
+        if(preset){value.iconPreset=preset;delete value.icon;}
+        else if(/^blob:/i.test(value.icon))blobRefs.push({holder:value,src:value.icon});
+      }
+      if(Array.isArray(value))value.forEach(visit);
+      else Object.values(value).forEach(visit);
+    };
+    visit(doc);
+    if(!blobRefs.length)return doc;
+    const bySource=new Map();
+    for(const ref of blobRefs){
+      if(bySource.has(ref.src)){
+        const preset=bySource.get(ref.src);
+        if(preset){ref.holder.iconPreset=preset;delete ref.holder.icon;}
+        continue;
+      }
+      const registered=assetRegistry.get(ref.src);
+      if(!registered?.blob){bySource.set(ref.src,'');continue;}
+      const bytes=await blobBytes(registered.blob,ref.src);
+      const candidates=getCommonAvatarByteIndex().get(`${bytes.length}:${crc32(bytes)}`)||[];
+      const match=candidates.find(candidate=>sameAssetBytes(candidate.bytes,bytes));
+      const preset=match?.id||'';
+      bySource.set(ref.src,preset);
+      if(preset){ref.holder.iconPreset=preset;delete ref.holder.icon;}
+    }
+    return doc;
+  }
+
   function walkAssetRefs(doc,callback){
     const cover=doc?.cover;
     if(cover?.src)callback({kind:'cover',sceneIndex:-1,holder:cover,key:'src',src:cover.src,fileName:cover._editorFileName||coverImageFileName||''});
@@ -3699,12 +4710,33 @@
         fileName:chat._editorFileName||''
       });
 
-      const sceneImage=scene?.presentation?.image;
-      if(sceneImage?.src)callback({
-        kind:'sceneImage',sceneIndex,
-        holder:sceneImage,key:'src',src:sceneImage.src,
-        fileName:sceneImage._editorFileName||''
+      const webComment=scene?.presentation?.webComment;
+      if(webComment?.icon)callback({
+        kind:'commentIcon',sceneIndex,
+        holder:webComment,key:'icon',src:webComment.icon,
+        fileName:webComment._editorFileName||''
       });
+
+      const webReview=scene?.presentation?.webReview;
+      if(webReview?.icon)callback({
+        kind:'reviewIcon',sceneIndex,
+        holder:webReview,key:'icon',src:webReview.icon,
+        fileName:webReview._editorFileName||''
+      });
+
+      (scene?.presentation?.credits?.entries||[]).forEach((entry,entryIndex)=>{if(entry?.logoUrl)callback({kind:'creditLogo',sceneIndex,entryIndex,holder:entry,key:'logoUrl',src:entry.logoUrl,fileName:entry._editorFileName||''});});
+
+      const webSNS=scene?.presentation?.webSNS;
+      if(webSNS?.icon)callback({
+        kind:'snsIcon',sceneIndex,
+        holder:webSNS,key:'icon',src:webSNS.icon,
+        fileName:webSNS._editorFileName||''
+      });
+
+      const sceneImage=scene?.presentation?.image;
+      if(sceneImage?.src)callback({kind:'sceneImage',sceneIndex,holder:sceneImage,key:'src',src:sceneImage.src,fileName:sceneImage._editorFileName||''});
+      if(sceneImage?.cover?.src)callback({kind:'sceneImageCover',sceneIndex,holder:sceneImage.cover,key:'src',src:sceneImage.cover.src,fileName:sceneImage.cover._editorFileName||''});
+      (sceneImage?.pages||[]).forEach((page,pageIndex)=>{if(page?.src)callback({kind:'sceneImagePage',sceneIndex,pageIndex,holder:page,key:'src',src:page.src,fileName:page._editorFileName||''});});
 
       (scene?.audio||[]).forEach((cmd,audioIndex)=>{
         if(!cmd?.src)return;
@@ -3771,18 +4803,26 @@
     selectedSceneIndex=Math.max(0,Math.min(selected,Math.max(0,total-1)));
   }
 
-  async function buildScenePackage(documentOverride=null){
+  async function buildScenePackage(documentOverride=null,onProgress=null){
     const doc=documentOverride ? clone(documentOverride) : sceneDocumentForExport();
     ensureMasterIdentity(doc);
+    await normalizeCommonAvatarAssetRefs(doc);
     const packaged=clone(doc);
     const entries=[];
     const bySource=new Map();
+    // Different Blob URLs can hold the exact same image/audio bytes (for
+    // example, one chat avatar selected independently on many scenes).
+    // Reuse one package path for byte-identical assets, not only URL matches.
+    const byContent=new Map();
     let assetCounter=0;
 
     const refs=[];
     walkAssetRefs(packaged,ref=>refs.push(ref));
 
+    let processedRefs=0;
     for(const ref of refs){
+      onProgress?.(5+Math.round(55*processedRefs++/Math.max(1,refs.length)),`素材をまとめています ${processedRefs}/${refs.length}`);
+      if(onProgress)await new Promise(resolve=>setTimeout(resolve,0));
       const source=String(ref.src||'').trim();
       if(!source)continue;
 
@@ -3805,12 +4845,22 @@
           e.assetUrl=source;
           throw e;
         }
-        assetCounter++;
-        const ext=assetExtension(item.name||ref.fileName,item.blob.type);
-        const base=safeAssetBase(ref.fileName||item.name||`${ref.kind}_${assetCounter}`);
-        assetPath=`assets/${String(assetCounter).padStart(3,'0')}_${ref.kind}_${base}${ext}`;
+        const bytes=await blobBytes(item.blob,source);
+        const contentKey=`${bytes.length}:${crc32(bytes)}`;
+        const candidates=byContent.get(contentKey)||[];
+        const duplicate=candidates.find(candidate=>sameAssetBytes(candidate.bytes,bytes));
+        if(duplicate){
+          assetPath=duplicate.path;
+        }else{
+          assetCounter++;
+          const ext=assetExtension(item.name||ref.fileName,item.blob.type);
+          const base=safeAssetBase(ref.fileName||item.name||`${ref.kind}_${assetCounter}`);
+          assetPath=`assets/${String(assetCounter).padStart(3,'0')}_${ref.kind}_${base}${ext}`;
+          candidates.push({path:assetPath,bytes});
+          byContent.set(contentKey,candidates);
+          entries.push({name:assetPath,bytes});
+        }
         bySource.set(source,assetPath);
-        entries.push({name:assetPath,bytes:await blobBytes(item.blob,source)});
       }
       ref.holder[ref.key]=assetPath;
       ref.holder._editorFileName=
@@ -3846,7 +4896,8 @@
       {name:'studio-state.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(studioState,null,2))}
     );
 
-    const blob=await makeStoreZip(entries);
+    onProgress?.(60,'.sceneを生成しています…');
+    const blob=await makeStoreZip(entries,onProgress?(done,total)=>onProgress(60+Math.round(15*done/Math.max(1,total)),`.sceneを生成しています ${done}/${total}`):null);
     return {doc:packaged,manifest,studioState,blob,assetCount:packageAssetCount};
   }
 
@@ -3869,11 +4920,11 @@
     return value;
   }
 
-  async function buildDistributionScenePackage(documentOverride=null,{editionId=""}={}){
+  async function buildDistributionScenePackage(documentOverride=null,{editionId="",onProgress=null}={}){
     // Reuse the proven Master packager for asset collection/self-containment,
     // then sanitize only the package metadata/runtime document. This avoids a
     // second asset pipeline and keeps Master export behaviour untouched.
-    const masterResult=await buildScenePackage(documentOverride);
+    const masterResult=await buildScenePackage(documentOverride,onProgress?(value,label)=>onProgress(Math.round(value*.8),label):null);
     const entries=await readZipEntries(masterResult.blob);
 
     const sceneBytes=entries.get('scene.json');
@@ -3930,6 +4981,7 @@
       {name:'manifest.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(manifest,null,2))}
     );
 
+    onProgress?.(65,'配布版を生成しています…');
     const blob=await makeStoreZip(output);
     return {doc,manifest,blob,assetCount:masterResult.assetCount};
   }
@@ -3954,7 +5006,7 @@
     return runtime;
   }
 
-  async function registerRelayEditionSource(sourceDocument,editionId){
+  async function registerRelayEditionSource(sourceDocument,editionId,copyId=''){
     const ident=ensureMasterIdentity(sourceDocument);
     if(!ident?.workId||!ident?.ownerKey)throw new Error('Master identity missing');
 
@@ -3982,13 +5034,13 @@
         'X-Scene-Work-Id':ident.workId,
         'X-Scene-Owner-Key':ident.ownerKey
       }),
-      body:JSON.stringify({editionId,scene:runtime})
+      body:JSON.stringify({editionId,scene:runtime,...(copyId?{copyId}:{})})
     },30000);
     let payload=null;
     try{payload=await response.json();}catch(_){}
     // A timed-out first request may have succeeded server-side. A retry with
     // the same freshly generated editionId is safe to treat as registered.
-    if(response.status===409&&payload?.code==='EDITION_EXISTS'){
+    if(!copyId&&response.status===409&&payload?.code==='EDITION_EXISTS'){
       return {ok:true,editionId,alreadyExists:true};
     }
     if(!response.ok||!payload?.ok){
@@ -3996,44 +5048,21 @@
       error.code=payload?.code||'RELAY_SOURCE_FAILED';
       throw error;
     }
+    if(copyId&&(payload.copyRegistered!==true||payload.copyId!==copyId)){
+      const error=new Error('配布版の一冊を発行登録できませんでした。WorkerのV21更新を確認してから、配布版を書き出し直してください。');
+      error.code='DISTRIBUTION_COPY_NOT_REGISTERED';throw error;
+    }
     return payload;
   }
 
-  async function saveLatestMasterSceneByUser(){
+  function saveLatestMasterSceneByUser(){
     const masterDocument=latestPublishedMasterDocument||workingDocument;
-    if(!masterDocument?.scenes?.length)return false;
-    try{
-      const result=await buildScenePackage(masterDocument);
-      const name=`${safeFileStem(result.doc.title)}.scene`;
-      downloadBlobFile(name,result.blob);
-      setProjectIoStatus(
-        uiLanguage==='ja'
-          ? `最新版 ${name} を保存しました（revision ${result.doc?.studio?.identity?.revision||0}）`
-          : `Saved latest ${name} (revision ${result.doc?.studio?.identity?.revision||0})`
-      );
-      return true;
-    }catch(error){
-      console.warn('Latest master .scene save failed',error);
-      const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
-      setProjectIoStatus(
-        uiLanguage==='ja'
-          ? (assetFailure
-              ? '素材を.scene内へ回収できなかったため、保存を中止しました。壊れたMaster .sceneは作りません。'
-              : '最新版.sceneを保存できませんでした。もう一度お試しください。')
-          : (assetFailure
-              ? 'Saving was stopped because an asset could not be embedded. A broken Master .scene was not created.'
-              : 'Could not save the latest .scene. Please try again.'),
-        {error:true}
-      );
-      if(assetFailure){
-        appAlert(
-          uiLanguage==='ja'
-            ? `Master .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
-            : `The Master .scene must be self-contained.\n\nThis asset could not be retrieved, so export was stopped:\n${error?.assetUrl||''}`
-        );
-      }
+    if(!masterDocument?.scenes?.length){
+      setProjectIoStatus(uiLanguage==='ja'?'保存できる最新版.sceneがありません。':'No latest .scene is available to save.',{error:true});
       return false;
     }
+    openScenePackageExportDialog(masterDocument);
+    return true;
   }
 
   function showLatestMasterSceneSaveAction(){
@@ -4094,37 +5123,50 @@
   }
 
 
-  async function exportScenePackage(){
+  let sceneExportBusy=false;
+  let scenePackageFilenameManual=false;
+  let scenePackageExportSourceDocument=null;
+  function openScenePackageExportDialog(documentOverride=null){
     try{
-      if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
-      const result=await buildScenePackage();
-      const name=`${safeFileStem(result.doc.title)}.scene`;
-      downloadBlobFile(name,result.blob);
-      setProjectIoStatus(t('io.packageExported',{name,n:result.assetCount}));
+      if(!documentOverride&&!advancedScreen.hidden)syncAdvancedFieldsToScene();
+      const doc=documentOverride?clone(documentOverride):sceneDocumentForExport();
+      scenePackageExportSourceDocument=clone(doc);
+      $('#exportWorkTitle').value=doc.title||'';
+      $('#exportWorkAuthor').value=doc.author||'';
+      $('#exportWorkEpisode').value=doc.metadata?.episode||'';
+      $('#exportWorkEpisodeTitle').value=doc.metadata?.episodeTitle||'';
+      scenePackageFilenameManual=false;
+      $('#exportWorkFileName').value=suggestedScenePackageFileName(doc.title,doc.metadata?.episode);
+      $('#scenePackageExportDialog').showModal();
     }catch(error){
       console.error(error);
-      const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
-      if(assetFailure){
-        setProjectIoStatus(
-          uiLanguage==='ja'
-            ? '素材を.scene内へ回収できなかったため、書き出しを中止しました。'
-            : 'Export stopped because an asset could not be embedded.',
-          {error:true}
-        );
-        appAlert(
-          uiLanguage==='ja'
-            ? `Master .sceneを自己完結させるため、使用中の素材を回収しています。\n\n次の素材を取得できなかったため書き出しを中止しました。\n${error?.assetUrl||''}`
-            : `The Master .scene must be self-contained.\n\nThis asset could not be retrieved:\n${error?.assetUrl||''}`
-        );
-      }else{
-        const detail=(error && (error.stack||error.message)) ? String(error.stack||error.message) : String(error);
-        setProjectIoStatus(`${t('io.packageFailed')} ${detail.split('\n')[0]}`,{error:true});
-        appAlert(`${t('io.packageFailed')}\n\n${detail}`);
-      }
+      appAlert(t('io.invalid'));
     }
   }
 
+  async function exportScenePackage(exportMetadata={},documentOverride=null){
+    if(sceneExportBusy||window.AhakoFileSave.busy)return;
+    sceneExportBusy=true;
+    try{
+      if(!documentOverride&&!advancedScreen.hidden)syncAdvancedFieldsToScene();
+      const source=documentOverride?clone(documentOverride):sceneDocumentForExport();
+      source.title=String(exportMetadata.title??source.title??'').trim()||'Untitled';
+      source.author=String(exportMetadata.author??source.author??'').trim();
+      source.metadata||={};
+      source.metadata.episode=String(exportMetadata.episode??source.metadata.episode??'').trim();
+      source.metadata.episodeTitle=String(exportMetadata.episodeTitle??source.metadata.episodeTitle??'').trim();
+      const name=normalizedScenePackageFileName(exportMetadata.fileName,source.title,source.metadata.episode);
+      const saved=await window.AhakoFileSave.save({name,kind:'MASTER .SCENE',build:progress=>buildScenePackage(source,progress)});
+      if(saved?.status==='saved')setProjectIoStatus(t('io.packageExported',{name,n:saved.result.assetCount}));
+      else if(saved?.status==='ready')setProjectIoStatus('保存先を選んでください。');
+      else if(saved?.status==='download')setProjectIoStatus('ダウンロード履歴で保存完了を確認してください。');
+    }catch(error){console.error(error);setProjectIoStatus(String(error?.message||error),{error:true});}
+    finally{sceneExportBusy=false;}
+  }
+
   async function exportDistributionScenePackage(){
+    if(sceneExportBusy||window.AhakoFileSave.busy)return;
+    sceneExportBusy=true;
     try{
       if(!advancedScreen.hidden)syncAdvancedFieldsToScene();
       const chosenRelayPolicy=await confirmDistributionRelayPolicy();
@@ -4137,20 +5179,17 @@
       // written into the portable file and, when RELAY is ON, registered once
       // as the server-side URL RELAY source before the file is downloaded.
       const editionId=chosenRelayPolicy ? makeEditionId() : '';
-      const sourceDocument=clone(workingDocument);
-      const result=await buildDistributionScenePackage(sourceDocument,{editionId});
-      if(chosenRelayPolicy){
-        setProjectIoStatus(uiLanguage==='ja'?'RELAY用の版を登録しています…':'Registering RELAY Edition…');
-        await registerRelayEditionSource(sourceDocument,editionId);
-      }
-
-      const name=`${safeFileStem(result.doc.title)}_distribution.scene`;
-      downloadBlobFile(name,result.blob);
-      setProjectIoStatus(
-        uiLanguage==='ja'
-          ? `配布版 ${name} を書き出しました（copyId: ${result.doc?.distribution?.copyId||'-'}${editionId?` / editionId: ${editionId}`:''} / Studioでは編集できません / ${result.assetCount} assets）`
-          : `Exported distribution ${name} (copyId: ${result.doc?.distribution?.copyId||'-'}${editionId?` / editionId: ${editionId}`:''} / not editable in Studio / ${result.assetCount} assets)`
-      );
+      const sourceDocument=sceneDocumentForExport();
+      const name=`${safeFileStem(sourceDocument.title)}_distribution.scene`;
+      const saved=await window.AhakoFileSave.save({name,kind:'DISTRIBUTION .SCENE',build:async progress=>{
+        const result=await buildDistributionScenePackage(sourceDocument,{editionId,onProgress:progress});
+        if(chosenRelayPolicy){
+          progress(70,'RELAY用の版を登録しています…');
+          await registerRelayEditionSource(sourceDocument,editionId,result.doc.distribution.copyId);
+        }
+        progress(75,'配布版の準備ができました');return result;
+      }});
+      if(saved?.result)setProjectIoStatus(`配布版 ${name} を準備しました（copyId: ${saved.result.doc?.distribution?.copyId||'-'}）`);
     }catch(error){
       console.error(error);
       const assetFailure=error?.code==='MASTER_ASSET_FETCH_FAILED'||error?.code==='MASTER_ASSET_MISSING';
@@ -4176,10 +5215,10 @@
           appAlert(detail.split('\n')[0]);
         }
       }
-    }
+    }finally{sceneExportBusy=false;}
   }
 
-  async function importScenePackage(file){
+  async function importScenePackage(file,{fileHandle=null,recentId=""}={}){
     try{
       const entries=await readZipEntries(file);
       const sceneBytes=entries.get('scene.json') || [...entries.entries()].find(([name])=>/\.scene\.json$/i.test(name))?.[1];
@@ -4226,21 +5265,20 @@
         doc.metadata.episode=manifest.series?.episode||doc.metadata.episode||'';
         doc.metadata.episodeNumber=Number(manifest.series?.episodeNumber||doc.metadata.episodeNumber||0)||0;
         doc.metadata.description=manifest.description||doc.metadata.description||'';
-        if(languageInput)languageInput.value=['ja','en','mul'].includes(manifest.language)?manifest.language:'auto';
       }
+      if(!await prepareWorkReplacement())return;
+      if(manifest && languageInput)languageInput.value=['ja','en','mul'].includes(manifest.language)?manifest.language:'auto';
       let restored=0;
+      const assetsByPath=new Map();
 
       const refs=[];
       walkAssetRefs(doc,ref=>refs.push(ref));
       for(const ref of refs){
         const path=String(ref.src||'').replace(/^\.\//,'');
         if(!/^assets\//i.test(path))continue;
-        const bytes=entries.get(path);
-        if(!bytes)continue;
         const name=ref.fileName || path.split('/').pop() || 'asset';
-        const blob=new Blob([bytes],{type:guessMime(name)});
-        const url=URL.createObjectURL(blob);
-        registerAsset(url,blob,name);
+        const url=materializePackageAsset(entries,assetsByPath,path,name);
+        if(!url)continue;
         ref.holder[ref.key]=url;
         ref.holder._editorFileName=name;
         restored++;
@@ -4249,6 +5287,7 @@
       workingDocument=doc;
       ensureMasterIdentity(workingDocument);
       latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
+      await clearWorkingDraftCache();
       currentDraftId=createDraftId();localStorage.setItem(DRAFT_LAST_KEY,currentDraftId);
       restoreStudioStateFromPackage(studioState,doc);
       easySourceDirty=false;
@@ -4262,19 +5301,21 @@
         coverImageFileName=doc.cover._editorFileName||'cover';
         updateCoverPreview();
       } else if(manifest?.cover?.image && entries.get(manifest.cover.image)){
-        const bytes=entries.get(manifest.cover.image);
-        const blob=new Blob([bytes],{type:guessMime(manifest.cover.image)});
-        coverImageUrl=URL.createObjectURL(blob);
         coverImageFileName=manifest.cover.image.split('/').pop()||'cover';
-        assetRegistry.set(coverImageUrl,{blob,name:coverImageFileName});
+        coverImageUrl=materializePackageAsset(entries,assetsByPath,manifest.cover.image,coverImageFileName);
         setCoverPositionFromValue(manifest?.cover?.position||'center center',manifest?.cover?.positions);
         doc.cover={src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()};
         updateCoverPreview();
       } else {
         coverImageUrl=''; coverImageFileName=''; setCoverPositionFromValue('center center'); updateCoverPreview();
       }
+      // Drop the decompressed ZIP bytes before network verification/autosave.
+      entries.clear();assetsByPath.clear();refs.length=0;
       await hydrateMasterPublicationState(workingDocument,{warnStale:true});
       await saveDraftNow();
+      setActiveSceneFileName(file?.name||'');
+      await rememberRecentScene(file,fileHandle,workingDocument,{replaceId:recentId||pendingRecentSceneId});pendingRecentSceneId='';
+      await refreshDraftUI(false);
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
       // A loaded Master is already Scene-based. Open it directly in Live
       // Studio instead of sending the author through the legacy Toolbox.
@@ -4320,6 +5361,8 @@
     el.textContent=message||''; el.classList.toggle('is-error',Boolean(error));
   }
   function restoreEasyStateFromDocument(doc){
+    coverStartMode=doc?.cover?.startMode==='comic'?'comic':'scene';
+    coverStartTrigger=normalizeCoverStartTrigger(doc?.cover?.startTrigger);
     relayEnabled=relayPolicyEnabled(doc);
     refreshRelayPolicyUI();
     if(ownCopyEnabledInput)ownCopyEnabledInput.checked=doc?.sharing?.ownCopy?.enabled===true;
@@ -4353,7 +5396,7 @@
         if(pair.url)pair.url.value=item.url||item.href||'';
       });
     }
-    bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n'); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();
+    bodyInput.value=(doc.scenes||[]).map(scene=>scene.text||'').filter(Boolean).join('\n\n'); easyRichSource=richSourceFromSceneDocument(doc,bodyInput.value); normalizeEasyLinkCardPlaceholders(); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();renderEasyOgpCardList();
     updateCount();updateCoverPreview();updateEndingPreview();
     protectedResplitPending=false;
    
@@ -4388,6 +5431,11 @@
       const raw=await file.text();
       const parsed=JSON.parse(raw.replace(/^\uFEFF/,''));
       const doc=validateSceneFormatV1(parsed);
+      // Legacy JSON exports may reference assets still owned by this session.
+      // Transfer those assets rather than revoking URLs the new document needs.
+      const keepAssetUrls=new Set();
+      walkAssetRefs(doc,ref=>{if(assetRegistry.has(ref.src))keepAssetUrls.add(ref.src);});
+      if(!await prepareWorkReplacement({keepAssetUrls}))return;
       workingDocument=doc;
       ensureMasterIdentity(workingDocument);
       latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
@@ -4721,6 +5769,199 @@
   // Replace only publishAdapter.publish() when Hosting API is ready.
   // ---------------------------------------------------------
   const SCENE_STUDIO_API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  let ogpEditTarget=null;
+  let ogpInsertionRange={start:0,end:0};
+  const ogpCardDialog=$('#ogpCardDialog');
+  const ogpCardUrl=$('#ogpCardUrl'),ogpCardTitle=$('#ogpCardTitle'),ogpCardDescription=$('#ogpCardDescription'),ogpCardImage=$('#ogpCardImage');
+  const ogpCardStatus=$('#ogpCardStatus'),ogpFetchButton=$('#ogpFetchButton'),ogpCardSave=$('#ogpCardSave');
+  const safeWebUrl=value=>{try{const u=new URL(String(value||'').trim());return /^https?:$/.test(u.protocol)&&!u.username&&!u.password?u.href:'';}catch(_){return '';}};
+  const pastedWebUrl=value=>{const text=String(value||'').trim();return /^(?:https?:\/\/)[^\s<>]+$/i.test(text)?safeWebUrl(text):'';};
+  function insertOgpCardIntoScene(scene,range,card){
+    if(!scene)return;
+    const before=String(scene.text||''),start=Math.max(0,Math.min(before.length,Number(range?.start)||0)),end=Math.max(start,Math.min(before.length,Number(range?.end)||start));
+    const label='\u2060';
+    const prefix=start>0&&!before.slice(0,start).endsWith('\n\n')?'\n\n':'';
+    const suffix=end<before.length&&!before.slice(end).startsWith('\n\n')?'\n\n':'';
+    const fragment=prefix+label+suffix,after=before.slice(0,start)+fragment+before.slice(end),delta=fragment.length-(end-start);
+    const ranges=Array.isArray(scene.richText?.ranges)?scene.richText.ranges:[];
+    const adjust=r=>{if((Number(r.end)||0)<=start)return {...r};if((Number(r.start)||0)>=end)return {...r,start:(Number(r.start)||0)+delta,end:(Number(r.end)||0)+delta};return null;};
+    const kept=ranges.map(adjust).filter(Boolean);
+    const exclusions=Array.isArray(scene.richText?.autoRubyExcluded)?scene.richText.autoRubyExcluded.map(adjust).filter(Boolean):[];
+    captureUndo('URLカードの追加を元に戻せます');scene.text=after;scene.content=Array.isArray(scene.content)?scene.content:[];
+    const cardStart=start+prefix.length;scene.content.push({type:'linkCard',...card});
+    kept.push({start:cardStart,end:cardStart+label.length,kind:'linkCard',cardId:card.id});
+    assignSceneRichText(scene,kept,exclusions);
+    scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();
+  }
+  function removeSceneOgpCard(scene,id){
+    if(!scene)return;
+    const ranges=Array.isArray(scene.richText?.ranges)?scene.richText.ranges:[];
+    const text=String(scene.text||'');
+    const mark=ranges.find(r=>r?.kind==='linkCard'&&String(r.cardId)===String(id));
+    const fallbackLabel=`［URLカード ${String(id).slice(-4)}］`,fallbackAt=text.indexOf(fallbackLabel);
+    const location=mark|| (fallbackAt>=0?{start:fallbackAt,end:fallbackAt+fallbackLabel.length}:null);
+    let cutStart=location?Math.max(0,Math.min(text.length,Number(location.start)||0)):-1;
+    let cutEnd=location?Math.max(cutStart,Math.min(text.length,Number(location.end)||cutStart)):-1;
+    if(cutStart>=0){
+      const left=text.slice(0,cutStart),right=text.slice(cutEnd);
+      if(left.endsWith('\n\n'))cutStart-=2;else if(left.endsWith('\n'))cutStart--;
+      if(right.startsWith('\n\n'))cutEnd+=2;else if(right.startsWith('\n'))cutEnd++;
+    }
+    const next=cutStart>=0?text.slice(0,cutStart)+text.slice(cutEnd):text;
+    const shift=cutStart>=0?cutEnd-cutStart:0;
+    const nextRanges=ranges.filter(r=>!(r?.kind==='linkCard'&&String(r.cardId)===String(id))).map(r=>{
+      const a=Number(r.start)||0,b=Number(r.end)||a;
+      if(cutStart<0||b<=cutStart)return {...r};
+      if(a>=cutEnd)return {...r,start:a-shift,end:b-shift};
+      return null;
+    }).filter(Boolean);
+    const exclusions=Array.isArray(scene.richText?.autoRubyExcluded)?scene.richText.autoRubyExcluded.map(r=>{
+      const a=Number(r.start)||0,b=Number(r.end)||a;
+      if(cutStart<0||b<=cutStart)return {...r};
+      if(a>=cutEnd)return {...r,start:a-shift,end:b-shift};
+      return null;
+    }).filter(Boolean):[];
+    captureUndo('URLカードの削除を元に戻せます');
+    scene.text=next;
+    scene.content=(Array.isArray(scene.content)?scene.content:[]).filter(c=>!(c?.type==='linkCard'&&String(c.id)===String(id)));
+    assignSceneRichText(scene,nextRanges,exclusions);
+    scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();
+  }
+  function updateOgpCardPreview(){
+    const url=safeWebUrl(ogpCardUrl?.value);let host='';try{host=new URL(url).hostname;}catch(_){}
+    $('#ogpCardPreviewTitle').textContent=String(ogpCardTitle?.value||'').trim()||'タイトル';
+    $('#ogpCardPreviewDescription').textContent=String(ogpCardDescription?.value||'').trim()||'説明文';
+    $('#ogpCardPreviewDomain').textContent=host||'example.com';
+    const image=safeWebUrl(ogpCardImage?.value),img=$('#ogpCardPreviewImage');
+    img.hidden=!image;img.src=image||'';
+    img.onerror=()=>{img.hidden=true;};
+  }
+  function renderEasyOgpCardList(){
+    const host=$('#easyOgpCardList');if(!host)return;
+    const cards=Array.isArray(easyRichSource?.cards)?easyRichSource.cards:[];
+    host.replaceChildren();host.hidden=!cards.length;
+    cards.forEach(card=>{
+      const row=document.createElement('div');row.className='easy-ogp-card-row';
+      const image=document.createElement('img');image.alt='';image.loading='lazy';image.src=safeWebUrl(card.image)||'';image.hidden=!image.src;image.onerror=()=>{image.hidden=true;};
+      const copy=document.createElement('div');const title=document.createElement('strong');title.textContent=card.title||'URLカード';const url=document.createElement('small');url.textContent=card.url||'';copy.append(title,url);
+      const edit=document.createElement('button');edit.type='button';edit.textContent='編集';edit.addEventListener('click',()=>openOgpCardDialog({mode:'easy',card}));
+      const remove=document.createElement('button');remove.type='button';remove.textContent='削除';remove.addEventListener('click',()=>removeEasyOgpCard(card.id));
+      row.append(image,copy,edit,remove);host.appendChild(row);
+    });
+  }
+  function removeEasyOgpCard(id){
+    const card=(easyRichSource.cards||[]).find(x=>String(x.id)===String(id));if(!card)return;
+    const before=bodyInput.value,start=Math.max(0,Number(card.start)||0),end=Math.max(start,Number(card.end)||start);
+    const next=before.slice(0,start)+before.slice(end);
+    easyRichSource.cards=easyRichSource.cards.filter(x=>x!==card);
+    easyRichSource.marks=easyRichSource.marks.filter(x=>!(x.kind==='linkCard'&&String(x.cardId)===String(id)));
+    bodyInput.value=next;reconcileRichSourceAfterPlainEdit(before,next);easyRichTextSnapshot=next;renderEasyRichComposition();updateCount();easySourceDirty=true;syncEasyPublishButton();scheduleDraftSave?.(80);renderEasyOgpCardList();
+  }
+  function openOgpCardDialog({mode='new',card=null,scene=null,range=null,initialUrl=''}={}){
+    if(!ogpCardDialog)return;
+    ogpEditTarget=card?{mode,card,scene}:scene?{mode,scene,range}:null;
+    if(mode==='new')ogpInsertionRange={start:bodyInput.selectionStart||0,end:bodyInput.selectionEnd||bodyInput.selectionStart||0};
+    $('#ogpCardDialogTitle').textContent=card?'URLカードを編集':'URLカードを追加';
+    ogpCardSave.textContent=card?'変更を保存':'カードを追加';
+    ogpCardUrl.value=card?.url||initialUrl||'';ogpCardTitle.value=card?.title||'';ogpCardDescription.value=card?.description||'';ogpCardImage.value=card?.image||'';
+    ogpCardStatus.textContent='URLを入力してOGP取得を押してください。取得できない場合も手入力できます。';ogpCardStatus.className='ogp-card-status';
+    updateOgpCardPreview();
+    if(typeof ogpCardDialog.showModal==='function')ogpCardDialog.showModal();
+    if(!card&&initialUrl)setTimeout(fetchOgpForDialog,0);
+  }
+  async function fetchOgpForDialog(){
+    const target=safeWebUrl(ogpCardUrl.value);
+    if(!target){ogpCardStatus.textContent='http:// または https:// から始まるURLを入力してください。';ogpCardStatus.className='ogp-card-status is-error';return;}
+    ogpFetchButton.disabled=true;ogpCardStatus.textContent='OGP情報を取得しています…';ogpCardStatus.className='ogp-card-status';
+    try{
+      const response=await fetchWithTimeout(`${SCENE_STUDIO_API_BASE}/ogp?url=${encodeURIComponent(target)}`,{headers:{'Accept':'application/json'},cache:'no-store'},12000);
+      const data=await response.json().catch(()=>null);
+      if(!response.ok||!data?.ok)throw new Error(data?.error||`OGPを取得できませんでした (${response.status})`);
+      ogpCardUrl.value=data.url||target;
+      if(data.title)ogpCardTitle.value=data.title;
+      if(data.description)ogpCardDescription.value=data.description;
+      if(data.image)ogpCardImage.value=data.image;
+      ogpCardStatus.textContent='取得できました。各項目はこの画面で編集できます。';ogpCardStatus.className='ogp-card-status is-success';
+    }catch(error){
+      if(!ogpCardTitle.value)try{ogpCardTitle.value=new URL(target).hostname;}catch(_){}
+      ogpCardStatus.textContent=`OGPを取得できませんでした。タイトル・説明文・画像URLを手入力できます。${error?.message?` (${error.message})`:''}`;ogpCardStatus.className='ogp-card-status is-error';
+    }finally{ogpFetchButton.disabled=false;updateOgpCardPreview();}
+  }
+  async function requestOgpCardData(url){
+    const target=safeWebUrl(url);
+    if(!target)throw new Error('URLを確認してください。');
+    const response=await fetchWithTimeout(`${SCENE_STUDIO_API_BASE}/ogp?url=${encodeURIComponent(target)}`,{headers:{'Accept':'application/json'},cache:'no-store'},12000);
+    const data=await response.json().catch(()=>null);
+    if(!response.ok||!data?.ok)throw new Error(data?.error||`OGPを取得できませんでした (${response.status})`);
+    return data;
+  }
+  async function hydrateEasyOgpCards(cards){
+    const pending=(Array.isArray(cards)?cards:[]).filter(card=>safeWebUrl(card?.url));
+    if(!pending.length)return;
+    await Promise.all(pending.map(async card=>{
+      try{
+        const data=await requestOgpCardData(card.url);
+        const current=(easyRichSource.cards||[]).find(item=>String(item.id)===String(card.id));
+        if(!current)return;
+        Object.assign(current,{url:data.url||current.url,title:data.title||current.title,description:data.description||current.description,image:data.image||current.image,siteName:data.siteName||current.siteName});
+      }catch(error){
+        const current=(easyRichSource.cards||[]).find(item=>String(item.id)===String(card.id));
+        if(current&&!current.title){try{current.title=new URL(current.url).hostname;}catch(_){}}
+      }
+    }));
+    renderEasyOgpCardList();easySourceDirty=true;syncEasyPublishButton();scheduleDraftSave?.(80);
+  }
+  async function refreshSceneOgpCards(scene,cards,status,button){
+    const targets=(Array.isArray(cards)?cards:[]).filter(card=>safeWebUrl(card?.url));
+    if(!targets.length){status.textContent=u('取得できるURLカードがありません','No URL cards to refresh');return;}
+    button.disabled=true;
+    status.textContent=u('OGP情報を取得しています…','Refreshing OGP…');
+    let updated=0,failed=0,undoCaptured=false;
+    for(const card of targets){
+      try{
+        const data=await requestOgpCardData(card.url);
+        if(!undoCaptured){captureUndo('URLカードのOGP更新を元に戻せます');undoCaptured=true;}
+        if(data.title)card.title=data.title;
+        if(data.description)card.description=data.description;
+        if(data.image)card.image=data.image;
+        if(data.siteName)card.siteName=data.siteName;
+        updated++;
+      }catch(_){failed++;}
+    }
+    if(updated){scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();}
+    status.textContent=failed?u(`${updated}件更新・${failed}件取得できず`,`${updated} updated, ${failed} failed`):u(`${updated}件のOGPを更新しました`,`Updated ${updated} OGP cards`);
+    button.disabled=false;
+  }
+  function saveOgpCardFromDialog(){
+    const url=safeWebUrl(ogpCardUrl.value),image=safeWebUrl(ogpCardImage.value);
+    if(!url){ogpCardStatus.textContent='リンク先URLを確認してください。';ogpCardStatus.className='ogp-card-status is-error';return;}
+    const card={url,title:String(ogpCardTitle.value||'').trim().slice(0,240)||new URL(url).hostname,description:String(ogpCardDescription.value||'').trim().slice(0,1000),image,siteName:(()=>{try{return new URL(url).hostname;}catch(_){return '';}})()};
+    if(ogpEditTarget?.mode==='easy'){
+      Object.assign(ogpEditTarget.card,card);easySourceDirty=true;syncEasyPublishButton();scheduleDraftSave?.(60);renderEasyOgpCardList();
+    }else if(ogpEditTarget?.mode==='scene'&&ogpEditTarget.scene){
+      const scene=ogpEditTarget.scene,existing=ogpEditTarget.card&&(scene.content||[]).find(x=>x?.type==='linkCard'&&String(x.id)===String(ogpEditTarget.card.id));
+      if(existing){captureUndo('URLカードの変更を元に戻せます');Object.assign(existing,card);scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();}
+      else{const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;insertOgpCardIntoScene(scene,ogpEditTarget.range,{...card,id});}
+    }else{
+      const id=`ogpcard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+      const label=`［URLカード ${id.slice(-4)}］`;
+      const start=ogpInsertionRange.start,end=ogpInsertionRange.end;
+      const prefix=start>0&&!bodyInput.value.slice(0,start).endsWith('\n\n')?'\n\n':'';
+      const suffix=end<bodyInput.value.length&&!bodyInput.value.slice(end).startsWith('\n\n')?'\n\n':'';
+      const markerStart=prefix.length,fragmentText=prefix+label+suffix;
+      const easyCard={...card,id,start:markerStart,end:markerStart+label.length,label};
+      insertRichFragment({text:fragmentText,marks:[{start:markerStart,end:markerStart+label.length,kind:'linkCard',cardId:id}],tables:[],cards:[easyCard]},start,end);
+      renderEasyOgpCardList();bodyInput.focus();
+    }
+    ogpEditTarget=null;if(ogpCardDialog.open)ogpCardDialog.close();
+  }
+  $('#insertOgpCardButton')?.addEventListener('click',()=>openOgpCardDialog());
+  ogpFetchButton?.addEventListener('click',fetchOgpForDialog);
+  ogpCardSave?.addEventListener('click',saveOgpCardFromDialog);
+  $('#ogpCardClose')?.addEventListener('click',()=>ogpCardDialog.close());
+  $('#ogpCardCancel')?.addEventListener('click',()=>ogpCardDialog.close());
+  [ogpCardUrl,ogpCardTitle,ogpCardDescription,ogpCardImage].forEach(el=>el?.addEventListener('input',updateOgpCardPreview));
+  ogpCardUrl?.addEventListener('paste',()=>setTimeout(fetchOgpForDialog,0));
   const AUTHOR_AUTH_STORAGE_KEY='ahako-author-session-v1';
   const AUTHOR_AUTH_PENDING_KEY='ahako-author-auth-pending-v1';
   const AUTHOR_TERMS_VERSION='author-publish-v1';
@@ -5205,6 +6446,9 @@
   };
 
   let latestPublishedId='';
+  let latestPublicationWorkId='';
+  let latestPublicationVerified=false;
+  const legacyPublicationChecks=new Map();
   let latestPublishedMasterDocument=null;
   let staleRestoreRemoteRevision=0;
   let latestPublishedUrl='';
@@ -5436,6 +6680,9 @@
       );
       if(!result?.url)throw new Error('Publish URL missing');
 
+      latestPublicationWorkId=workingDocument?.studio?.identity?.workId||'';
+      latestPublicationVerified=true;
+      legacyPublicationChecks.delete(latestPublicationWorkId);
       latestPublishedId=result.id||latestPublishedId;
       latestPublishedUrl=result.url;
 
@@ -5566,6 +6813,8 @@
 
   let liveEditChromeObserver=null;
   let liveEditSoundBound=false;
+  let liveEditSoundAbort=null;
+  let studioPlayerEventsBound=false;
 
   function bindLiveEditSoundControl(){
     if(!player || liveEditSoundBound)return;
@@ -5573,6 +6822,8 @@
     if(!right)return;
 
     liveEditSoundBound=true;
+    liveEditSoundAbort=new AbortController();
+    const signal=liveEditSoundAbort.signal;
     right.hidden=false;
     right.disabled=false;
     right.textContent='♪';
@@ -5589,13 +6840,13 @@
       const muted=player.toggleMuted();
       right.classList.toggle('is-muted',muted);
       right.setAttribute('aria-pressed',muted?'false':'true');
-    },true);
+    },{capture:true,signal});
 
     playerHost.addEventListener('sceneplayer:mutechange',(e)=>{
       const muted=Boolean(e.detail?.muted);
       right.classList.toggle('is-muted',muted);
       right.setAttribute('aria-pressed',muted?'false':'true');
-    });
+    },{signal});
   }
 
   function syncLiveEditPreviewChrome(){
@@ -5627,9 +6878,70 @@
     liveEditChromeObserver.observe(playerHost,{attributes:true,attributeFilter:['class']});
   }
 
+  let disposeStudioPreviewSeek=()=>{};
+  function installStudioPreviewSeek(instance){
+    disposeStudioPreviewSeek();
+    const track=playerHost.querySelector('.sp-progress-track');if(!track)return;
+    const abort=new AbortController(),listen=(node,type,fn)=>node?.addEventListener(type,fn,{signal:abort.signal});
+    const input=document.createElement('input');input.type='range';input.className='studio-preview-seek';input.min='1';input.step='1';
+    track.removeAttribute('aria-hidden');track.classList.add('studio-preview-seek-track');track.appendChild(input);
+    let pending=null,target=0,queuedDocument=null,prepared=false;
+    const cancel=()=>{clearTimeout(pending);pending=null;queuedDocument=null;prepared=false;};
+    const sync=()=>{
+      const total=instance.document?.scenes?.length||0;
+      input.max=String(Math.max(1,total));input.disabled=total<2||autoRecActive;
+      const value=pending!==null?Math.min(total,target+1):Math.min(total,Math.max(1,instance.index+1));
+      input.value=String(Math.max(1,value));
+      const text=total?`Scene ${value} / ${total}`:'Scene 0 / 0';
+      input.setAttribute('aria-label',uiLanguage==='ja'?'Sceneを移動':'Seek Scene');input.setAttribute('aria-valuetext',text);
+      input.title=autoRecActive?(uiLanguage==='ja'?'AUTO REC中は移動できません':'Seeking is unavailable during AUTO REC'):text;
+      track.style.setProperty('--studio-seek-percent',`${total>1?(value-1)/(total-1)*100:0}%`);
+    };
+    const prepare=()=>{
+      if(prepared||autoRecActive)return;
+      prepared=true;
+      if(instance.auto)instance.stopAuto();
+      syncInlineTextToScene();finishInlineTextEdit();finishCreditsInlineEdit();finishLiveCoverInlineEdit({refresh:false});
+    };
+    const commit=()=>{
+      clearTimeout(pending);pending=null;
+      const doc=queuedDocument;queuedDocument=null;
+      if(player!==instance||instance.destroyed||autoRecActive||doc!==instance.document){sync();return;}
+      const index=Math.max(0,Math.min(target,(doc?.scenes?.length||1)-1));
+      if(index!==instance.index||instance.ended){
+        liveEditRenderAt(index,{preserveSheet:false});
+        syncPublishPreviewButton(false);syncLiveEditPreviewChrome();
+      }
+      sync();
+    };
+    listen(input,'input',()=>{
+      if(autoRecActive){cancel();sync();return;}
+      const requested=Number(input.value);prepare();target=Math.max(0,requested-1);queuedDocument=instance.document;
+      if(pending===null)pending=setTimeout(commit,75);
+      sync();
+    });
+    listen(input,'change',()=>{
+      if(autoRecActive){cancel();sync();return;}
+      const requested=Number(input.value);prepare();target=Math.max(0,requested-1);queuedDocument=instance.document;commit();prepared=false;
+    });
+    for(const type of ['click','dblclick','pointerdown','pointermove','pointerup','touchstart','touchmove','touchend','keydown','keyup']){
+      listen(input,type,event=>{event.stopPropagation();if(type==='pointerdown'||type==='keydown')prepare();});
+    }
+    listen(input,'pointercancel',()=>{if(pending!==null)commit();prepared=false;});
+    listen(input,'blur',()=>{if(pending!==null)commit();prepared=false;});
+    for(const type of ['sceneplayer:load','sceneplayer:scenechange','sceneplayer:restart'])listen(playerHost,type,()=>{cancel();sync();});
+    for(const type of ['sceneplayer:refresh','sceneplayer:coverstart','sceneplayer:end','sceneplayer:autochange'])listen(playerHost,type,sync);
+    for(const selector of ['#autoRecStart','#autoRecCancel'])listen($(selector),'click',()=>requestAnimationFrame(sync));
+    disposeStudioPreviewSeek=()=>{cancel();abort.abort();input.remove();track.classList.remove('studio-preview-seek-track');track.setAttribute('aria-hidden','true');};
+    sync();
+  }
+
   function ensurePlayer(){
     if(player)return player;
     player=new ScenePlayerCore(playerHost,{allowPrevious:true,keyboard:true,swipe:true,endOnNextAction:true,maxStackVisible:4,autoDelay:2600,uiLanguage});
+    installStudioPreviewSeek(player);
+    if(!studioPlayerEventsBound){
+    studioPlayerEventsBound=true;
     playerHost.addEventListener('sceneplayer:advanceintent',(event)=>{
       if(autoRecActive)recordAutoRecBoundary(event.detail||{});
     });
@@ -5652,6 +6964,7 @@
       // 公開状態は保持したまま公開ボタンだけ非表示へ戻す。
       syncPublishPreviewButton(false);
     });
+    }
     syncStudioPreviewDevice();
     return player;
   }
@@ -5684,9 +6997,22 @@
   // Detail inspectors are also used as temporary DOM factories by Editor v2.
   // If a setting refresh leaves one behind, it dims the whole authoring surface
   // and intercepts taps. Remove such orphan factory overlays automatically.
-  const desktopV2OverlayObserver=new MutationObserver(()=>{
+  const desktopV2OverlayObserver=new MutationObserver(records=>{
     if(!document.body.classList.contains('desktop-live-edit') || document.body.classList.contains('toolbox-detail-open'))return;
-    queueMicrotask(cleanupDesktopV2BuilderOverlays);
+    // The Player and Live Editor replace many descendants during a normal
+    // preview sync. Only inspect the page when a builder overlay itself was
+    // inserted; scanning the whole document after every Scene mutation causes
+    // avoidable work on every navigation.
+    let hasOrphanOverlay=false;
+    for(const record of records){
+      for(const node of record.addedNodes){
+        if(node.nodeType===1 && node.matches?.('.desktop-text-detail-overlay,.desktop-live-special-shade')){
+          hasOrphanOverlay=true;break;
+        }
+      }
+      if(hasOrphanOverlay)break;
+    }
+    if(hasOrphanOverlay)queueMicrotask(cleanupDesktopV2BuilderOverlays);
   });
   desktopV2OverlayObserver.observe(document.body,{childList:true,subtree:true});
 
@@ -5809,11 +7135,22 @@
     if(deviceButton){
       const next=deviceButton.dataset.previewDevice;
       if(next===studioPreviewDevice)return;
+      // If direct text layout editing is open, its current article/geometry belongs
+      // to the old logical viewport. Keep the authored normalized values, tear down
+      // only the editor chrome, then rebuild the Scene + editor for the new viewport.
+      const reopenDirectTextEditor=!!framePositionDragCleanup;
+      const reopenScene=reopenDirectTextEditor ? getSelectedScene?.() : null;
+      if(reopenDirectTextEditor)finishFramePositionDrag({save:true});
       studioPreviewDevice=next;
       localStorage.setItem(STUDIO_PREVIEW_DEVICE_KEY,studioPreviewDevice);
-      // Device switching is a viewport-only operation. Re-rendering the current
-      // Scene here restarted presentation layers and could leave the Player dimmed.
-      syncStudioPreviewDevice({rerender:false});
+      // A preview-device change always changes the logical viewport. Re-render
+      // the current Scene even when the direct text editor is already closed.
+      // Otherwise the current Scene keeps geometry calculated for the previous
+      // device until history/navigation happens to render it again.
+      syncStudioPreviewDevice({rerender:true});
+      if(reopenDirectTextEditor && reopenScene){
+        requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>openFramePositionDragEditor(reopenScene))));
+      }
       updateCoverPreview();
       // Cover crop is device-specific, so update the real Player cover directly.
       if(player?.els?.coverBg && coverImageUrl){
@@ -5835,16 +7172,14 @@
   }
   function syncUndoVisibilityForScreen(name){
     const inPlayer=name==='player';
-    const bar=$('#undoBar'), compact=$('#undoCompactButton');
-    // Preview / AUTO REC is reader-facing. Keep the snapshot, hide Studio chrome.
-    if(inPlayer){
-      if(undoBarTimer)window.clearTimeout(undoBarTimer);
-      undoBarTimer=null;
-      if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
-      return;
-    }
-    // In authoring screens the slot is always present; availability is shown by tone.
-    if(compact){compact.hidden=false;compact.disabled=!undoSnapshot;}
+    const bar=$('#undoBar'), compact=$('#undoCompactButton'), liveControls=$('#liveHistoryControls');
+    // The old Easy snackbar/compact Undo UI is retired. Keep history itself intact.
+    if(undoBarTimer)window.clearTimeout(undoBarTimer);
+    undoBarTimer=null;
+    if(bar){bar.hidden=true;bar.classList.remove('is-visible','is-hiding');}
+    if(compact){compact.hidden=true;compact.disabled=true;}
+    if(liveControls)liveControls.hidden=!inPlayer;
+    syncHistoryUi();
   }
   function setScreen(name){ editorScreen.hidden=name!=='easy'; advancedScreen.hidden=name!=='advanced'; playerScreen.hidden=name!=='player'; const open=name==='player'; const returnButton=$('#editReturnButton'); if(returnButton)returnButton.hidden=!open; document.documentElement.classList.toggle('easy-player-open',open); document.body.classList.toggle('easy-player-open',open); const modeLabel=$('#studioModeLabel'); if(modeLabel) modeLabel.textContent=name==='advanced'?(uiLanguage==='en'?'Toolbox':'道具箱'):'Easy Studio'; syncUndoVisibilityForScreen(name); }
   // v0.2.97: the shared authoring header stays the same size while scrolling.
@@ -5880,7 +7215,6 @@
   function getDocumentForPlayback(){ return normalizeAbsoluteCues(clone(workingDocument || buildSceneDocument())); }
   function openPlayer({from='easy', startAt=0}={}){
     if(from==='easy'){
-      if(!bodyInput.value.trim() && !workingDocument){bodyInput.focus();return;}
       ensureWorkingDocumentFromEasy();
       syncEasyShellToWorkingDocument();
     } else {
@@ -5918,6 +7252,16 @@
     p.setUILanguage?.(uiLanguage);
     const playbackDoc=getDocumentForPlayback();
     p.load(playbackDoc,{startAt});
+
+    // Empty Easy -> Live Editor still passes through the real Cover first.
+    // Arm the editor here, but do NOT focus yet: at this point the Cover is open.
+    // The actual inline edit starts synchronously from sceneplayer:coverstart,
+    // i.e. from the user's 「はじめる」 gesture after Scene 1 has rendered.
+    pendingEasyEmptyInlineStart = from==='easy'
+      && playbackDoc?.scenes?.length===1
+      && !String(playbackDoc.scenes[0]?.text||'').length
+      && !String(playbackDoc.scenes[0]?.subText||'').length;
+
     requestAnimationFrame(renderDesktopLivePanel);
     setTimeout(renderDesktopLivePanel,60);
     const ep=String(playbackDoc.metadata?.episode||'').trim();
@@ -5953,7 +7297,6 @@
   }
 
   function openAdvanced(){
-    if(!bodyInput.value.trim() && !workingDocument){bodyInput.focus();return;}
     ensureWorkingDocumentFromEasy();
     syncEasyShellToWorkingDocument();
     selectedSceneIndex=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));
@@ -5988,7 +7331,17 @@
   }
 
   function currentScene(){ return workingDocument?.scenes?.[selectedSceneIndex] || null; }
-  function ensurePresentation(scene){ scene.presentation ||= {}; scene.presentation.text ||= {}; return scene.presentation; }
+  function textFlipOptions(){
+    return uiLanguage==='en'
+      ? [['none','Normal'],['horizontal','Mirror (left / right)'],['vertical','Flip top / bottom'],['both','Rotate 180°']]
+      : [['none','通常'],['horizontal','左右反転（鏡文字）'],['vertical','上下反転'],['both','180度回転']];
+  }
+  function setSceneTextFlip(scene,value){
+    const text=ensurePresentation(scene).text;
+    if(['horizontal','vertical','both'].includes(value))text.flip=value;
+    else delete text.flip;
+  }
+  function ensurePresentation(scene){ scene.presentation ||= {}; scene.presentation.text ||= {}; if(scene.presentation.view==='credits'){scene.presentation.view='world';scene.presentation.credits ||= {};scene.presentation.credits.enabled=scene.presentation.credits.enabled!==false;scene.presentation.credits.colorMode ||= 'auto';} return scene.presentation; }
 
   const pct = (value, fallback=0) => Math.max(0, Math.min(100, Number(value ?? fallback))) / 100;
   const ms = (value, fallback=0) => Math.max(0, Number(value ?? fallback) || 0);
@@ -6328,7 +7681,7 @@
       scene.pause=Math.round(seconds*1000);
       rebuildAbsoluteCues();
     }
-    scene.text=$('#sceneTextInput').value;
+    remapRubyAfterTextEdit(scene,String(scene.text||''),$('#sceneTextInput').value);scene.text=$('#sceneTextInput').value;
     const sub=$('#sceneSubTextInput').value; if(sub)scene.subText=sub; else delete scene.subText;
     scene.type=$('#sceneTypeSelect').value;
     const p=ensurePresentation(scene); p.display=$('#sceneDisplaySelect').value; p.flow=$('#sceneFlowSelect')?.value==='horizontal'?'horizontal':'vertical'; p.view=$('#sceneViewSelect')?.value || 'world'; p.entryMotion=$('#sceneEntryMotionSelect')?.value || 'flow';
@@ -6341,6 +7694,7 @@
       p.effect=advancedEffect;
     }
     p.text.size=$('#sceneSizeSelect').value;
+    setSceneTextFlip(scene,$('#sceneTextFlipSelect')?.value||'none');
     const writingMode=$('#sceneWritingModeSelect')?.value || 'horizontal-tb';
     if(writingMode==='vertical-rl')p.text.writingMode='vertical-rl';else delete p.text.writingMode;
     const frameType=$('#sceneFrameSelect')?.value || 'none';
@@ -6379,6 +7733,7 @@
     $('#sceneTypeSelect').value=scene.type || 'text'; $('#sceneDisplaySelect').value=scene.presentation?.display || 'stack'; if($('#sceneFlowSelect'))$('#sceneFlowSelect').value=scene.presentation?.flow==='horizontal'?'horizontal':'vertical';
     if($('#sceneViewSelect')) $('#sceneViewSelect').value=scene.presentation?.view || 'world';
     if($('#sceneEntryMotionSelect')) $('#sceneEntryMotionSelect').value=scene.presentation?.entryMotion || 'flow';
+    if($('#sceneTextFlipSelect'))$('#sceneTextFlipSelect').value=scene.presentation?.text?.flip||'none';
     $('#sceneEffectSelect').value=scene.presentation?.typing?.enabled?'typewriter':(scene.presentation?.effect || 'auto'); $('#sceneSizeSelect').value=scene.presentation?.text?.size || 'auto'; if($('#sceneWritingModeSelect')) $('#sceneWritingModeSelect').value=scene.presentation?.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb'; if($('#sceneFrameSelect'))$('#sceneFrameSelect').value=isFrameType(scene.presentation?.frame?.type)?scene.presentation.frame.type:'none'; if($('#sceneFramePositionSelect'))$('#sceneFramePositionSelect').value=framePositionPreset(scene); if($('#sceneFramePositionAdjust'))$('#sceneFramePositionAdjust').disabled=typeof scene.text!=='string'||!scene.text.length; if($('#sceneWeightSelect')) $('#sceneWeightSelect').value=String(scene.presentation?.text?.fontWeight||0);
     const sceneColor=scene.presentation?.text?.color || '';
     $('#sceneColorSelect').value=!sceneColor?'auto':(sceneColor.toLowerCase()==='#ffffff'||sceneColor.toLowerCase()==='white'?'white':(sceneColor.toLowerCase()==='#000000'||sceneColor.toLowerCase()==='black'?'black':'custom'));
@@ -6635,9 +7990,13 @@
   function syncHistoryUi(){
     undoSnapshot=undoHistory.length ? undoHistory[undoHistory.length-1] : null;
     const undoBtn=$('#undoButton'), compact=$('#undoCompactButton'), redoBtn=$('#redoButton');
+    const liveUndo=$('#liveUndoButton'), liveRedo=$('#liveRedoButton');
     if(undoBtn)undoBtn.disabled=!undoHistory.length;
-    if(compact){compact.hidden=false;compact.disabled=!undoHistory.length;}
+    // Easy no longer exposes Studio Undo. Live Editor owns the visible history UI.
+    if(compact){compact.hidden=true;compact.disabled=true;}
     if(redoBtn)redoBtn.disabled=!redoHistory.length;
+    if(liveUndo)liveUndo.disabled=!undoHistory.length;
+    if(liveRedo)liveRedo.disabled=!redoHistory.length;
   }
 
   function pushBounded(stack,snapshot){
@@ -6739,15 +8098,7 @@
   function showUndo(label){
     scheduleDraftSave(120);
     syncHistoryUi();
-    if(!playerScreen?.hidden)return;
-    const bar=$('#undoBar'), msg=$('#undoMessage');
-    if(!bar)return;
-    if(undoBarTimer)window.clearTimeout(undoBarTimer);
-    if(msg){msg.dataset.rawLabel=label;msg.textContent=translateUndoLabel(label);}
-    bar.hidden=false;
-    bar.classList.remove('is-hiding');
-    requestAnimationFrame(()=>bar.classList.add('is-visible'));
-    undoBarTimer=window.setTimeout(hideUndoBar,3500);
+    // V-next: Easy has no Studio Undo UI. Live Editor exposes persistent ↶ / ↷ controls.
   }
 
   function clearUndo(){
@@ -6762,6 +8113,8 @@
   function applyHistorySnapshot(snap){
     if(!snap)return;
     workingDocument=snap.workingDocument ? clone(snap.workingDocument) : null;
+    coverStartMode=workingDocument?.cover?.startMode==='comic'?'comic':'scene';
+    coverStartTrigger=normalizeCoverStartTrigger(workingDocument?.cover?.startTrigger);
     selectedSceneIndex=snap.selectedSceneIndex;
     easySourceDirty=snap.easySourceDirty;
     if(titleInput)titleInput.value=snap.easy.title;
@@ -6810,10 +8163,6 @@
     undoBarTimer=null;
     syncHistoryUi();
     scheduleDraftSave(80);
-    if(!playerScreen?.hidden)return;
-    const bar=$('#undoBar'), msg=$('#undoMessage');
-    if(msg){msg.dataset.rawLabel=message;msg.textContent=message;}
-    if(bar){bar.hidden=false;bar.classList.remove('is-hiding');requestAnimationFrame(()=>bar.classList.add('is-visible'));undoBarTimer=window.setTimeout(hideUndoBar,3500);}
   }
 
   function restoreUndo(){
@@ -6852,9 +8201,10 @@
     if(sceneHasTable(mergePrev)||sceneHasTable(mergeCur)){showToast?.('表Sceneは文章Sceneと結合できません');return;}
     captureUndo('Scene結合を元に戻せます');
     const prev=workingDocument.scenes[selectedSceneIndex-1], cur=workingDocument.scenes[selectedSceneIndex];
+    const mergedExcluded=mergeAutoRubyExclusions(prev,cur);
     const mergedRanges=window.AhakoSceneEditCore?.mergeRanges?.(prev,cur)||[];
     prev.text=`${prev.text||''}${cur.text||''}`;
-    if(mergedRanges.length)prev.richText={version:1,ranges:mergedRanges}; else delete prev.richText;
+    assignSceneRichText(prev,mergedRanges,mergedExcluded);
     if(cur.subText&&!prev.subText)prev.subText=cur.subText;
     workingDocument.scenes.splice(selectedSceneIndex,1);
     selectedSceneIndex-=1;
@@ -6872,13 +8222,14 @@
     const left=text.slice(0,pos).trimEnd(), right=text.slice(pos).trimStart();
     if(!left||!right)return;
     captureUndo('Scene分割を元に戻せます');
+    const splitExcluded=splitAutoRubyExclusions(scene,pos,left,right,text);
     const splitRich=window.AhakoSceneEditCore?.splitRanges?.(scene,pos,left,right,text)||{left:[],right:[]};
     scene.text=left;
-    if(splitRich.left.length)scene.richText={version:1,ranges:splitRich.left}; else delete scene.richText;
+    assignSceneRichText(scene,splitRich.left,splitExcluded.left);
     const cloneScene=clone(scene);
     cloneScene.id=nextUniqueId();
     cloneScene.text=right;
-    if(splitRich.right.length)cloneScene.richText={version:1,ranges:splitRich.right}; else delete cloneScene.richText;
+    assignSceneRichText(cloneScene,splitRich.right,splitExcluded.right);
     delete cloneScene.subText;
     delete cloneScene.audio;
     if(cloneScene.presentation)delete cloneScene.presentation.background;
@@ -6928,9 +8279,8 @@
     // Some clipboard producers expose list items as <li> or ARIA role=list/listitem
     // without a literal <ul>/<ol> wrapper. V0.2 parsed every HTML clipboard, while
     // later versions added this fast gate and accidentally skipped those lists.
-    const htmlHasRich=/<(h[1-6]|strong|b|blockquote|ul|ol|li|table)\b/i.test(html)
-      || /role=["'](?:table|grid|list|listitem)["']/i.test(html);
-    if(!plainHasTable&&!plainHasRich&&!htmlHasRich)return;
+    const htmlHasRich=!!html;
+    if(!htmlHasRich&&!plainHasTable&&!plainHasRich)return;
     // Rich Paste v0.3: prefer the structured HTML whenever it carries semantics.
     // V0.2 preferred plain text as soon as it *looked* table-like; that threw away
     // HTML-only bold/list/quote information from ChatGPT and similar editors.
@@ -7024,8 +8374,9 @@
     }
     if(!fragment.text)return;
     event.preventDefault();insertRichFragment(fragment,bodyInput.selectionStart||0,bodyInput.selectionEnd||0);
+    if(fragment.cards?.length)hydrateEasyOgpCards(fragment.cards);
   });
-  bodyInput.addEventListener('input',()=>{ if(!applyingRichPaste)reconcileRichSourceAfterPlainEdit(easyRichTextSnapshot,bodyInput.value); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition(); updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
+  bodyInput.addEventListener('input',()=>{ if(!applyingRichPaste)reconcileRichSourceAfterPlainEdit(easyRichTextSnapshot,bodyInput.value); easyRichTextSnapshot=bodyInput.value; normalizeEasyLinkCardPlaceholders(); renderEasyRichComposition();renderEasyOgpCardList(); updateCount(); easySourceDirty=true; syncEasyPublishButton(); });
   $('#sceneSubTextInput').addEventListener('input',autoGrowSubText);
   coverLogoChoose?.addEventListener('click',()=>coverLogoInput?.click());
   coverLogoInput?.addEventListener('change',async()=>{
@@ -7034,7 +8385,7 @@
     try{
       const snap=await snapshotPickedFile(file);
       const logoBlob=await trimTransparentPng(snap.blob);
-      if(coverLogoUrl && /^blob:/i.test(coverLogoUrl))URL.revokeObjectURL(coverLogoUrl);
+      if(coverLogoUrl)unregisterAsset(coverLogoUrl);
       coverLogoUrl=URL.createObjectURL(logoBlob);
       coverLogoFileName=snap.name||'logo.png';
       assetRegistry.set(coverLogoUrl,{blob:logoBlob,name:coverLogoFileName});
@@ -7042,7 +8393,7 @@
     }catch(error){console.error(error);appAlert(u('作品ロゴを読み込めませんでした。','Could not load the work logo.'));coverLogoInput.value='';}
   });
   coverLogoClear?.addEventListener('click',()=>{
-    if(coverLogoUrl && /^blob:/i.test(coverLogoUrl))URL.revokeObjectURL(coverLogoUrl);
+    if(coverLogoUrl)unregisterAsset(coverLogoUrl);
     coverLogoUrl='';coverLogoFileName='';if(coverLogoInput)coverLogoInput.value='';
     if(coverQuickLogoClear)coverQuickLogoClear.hidden=true;
     refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();syncEasyPublishButton();scheduleDraftSave(80);
@@ -7051,7 +8402,7 @@
     if(!file)return;
     try{
       const snap=await snapshotPickedFile(file);
-      if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
+      if(coverImageUrl)unregisterAsset(coverImageUrl);
       coverImageUrl=URL.createObjectURL(snap.blob);
       coverImageFileName=snap.name||'cover';
       assetRegistry.set(coverImageUrl,{blob:snap.blob,name:coverImageFileName});
@@ -7071,7 +8422,7 @@
   }
   coverImageInput?.addEventListener('change',()=>applyCoverImageFile(coverImageInput.files?.[0]));
   coverImageClear?.addEventListener('click',()=>{if(coverQuickImageClear)coverQuickImageClear.hidden=true;
-    if(coverImageUrl && /^blob:/i.test(coverImageUrl))URL.revokeObjectURL(coverImageUrl);
+    if(coverImageUrl)unregisterAsset(coverImageUrl);
     coverImageUrl=''; coverImageFileName='';
     if(coverImageInput)coverImageInput.value='';
     refreshCoverPreviewLayout();syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();syncEasyPublishButton();scheduleDraftSave(80);
@@ -7143,6 +8494,8 @@
     if(episodeTitleInput)episodeTitleInput.value=coverQuickEpisodeTitle?.value||'';
     if(descriptionInput)descriptionInput.value=coverQuickDescription?.value||'';
     if(coverQuickFont)coverFontFamily=coverQuickFont.value||'serif';
+    if(coverQuickStartMode)coverStartMode=coverQuickStartMode.value==='comic'?'comic':'scene';
+    coverStartTrigger='tap';
     refreshCoverPreviewLayout();
     syncEasyShellToWorkingDocument();
 
@@ -7316,7 +8669,7 @@
   }
 
   function activePositionEditorImage(){
-    if(positionEditorMode==='background')return sceneBackgroundPositionContext?.scene?.presentation?.background?.src||'';
+    if(positionEditorMode==='background')return sceneBackgroundPositionContext?.sourceSrc||sceneBackgroundPositionContext?.background?.src||'';
     return coverImageUrl;
   }
   function renderCoverPositionStage(){
@@ -7324,7 +8677,7 @@
     const src=activePositionEditorImage();
     coverPositionStage.style.backgroundImage=src?`url("${src}")`:'none';
     coverPositionStage.style.backgroundPosition=positionPairCss({x:coverPositionX,y:coverPositionY});
-    if(positionEditorMode==='background')coverPositionStage.style.backgroundSize=sceneBackgroundPositionContext?.scene?.presentation?.background?.fit||'cover';
+    if(positionEditorMode==='background')coverPositionStage.style.backgroundSize=sceneBackgroundPositionContext?.background?.fit||sceneBackgroundPositionContext?.sourceFit||'cover';
   }
   function storeActiveCoverPosition(){
     if(positionEditorMode==='cover')coverPositions[coverPositionDevice]={x:coverPositionX,y:coverPositionY};
@@ -7370,13 +8723,18 @@
     document.documentElement.classList.add('cover-position-open');
   }
   function openSceneBackgroundPositionEditor(scene,onApply){
-    const bg=scene?.presentation?.background;
-    if(!coverPositionDialog||!bg?.src)return;
+    const current=scene?.presentation?.background;
+    const sceneIndex=workingDocument?.scenes?.indexOf(scene)??-1;
+    const source=current?.src?current:previousEffectiveBackground(sceneIndex);
+    if(!coverPositionDialog||!source?.src||current?.src==='')return;
+    // Inherited backgrounds have no source on this Scene. Keep that inheritance
+    // intact and only save a local framing override if the author changes it.
+    const bg=current?.src?current:{...(current||{}),fit:current?.fit||source.fit||'cover',position:current?.position||source.position||'center center'};
     portalCoverPositionDialog();
     const restoreCover={x:coverPositionX,y:coverPositionY};
     const pos=positionPairFromValue(bg.position||'center center');
     positionEditorMode='background';
-    sceneBackgroundPositionContext={scene,restoreCover,onApply};
+    sceneBackgroundPositionContext={scene,background:bg,sourceSrc:source.src,sourceFit:source.fit||'cover',inherited:!current?.src,restoreCover,onApply};
     coverPositionX=pos.x;coverPositionY=pos.y;
     coverPositionBeforeEdit={x:pos.x,y:pos.y};
     if(coverPositionStage)coverPositionStage.setAttribute('aria-label','背景画像の表示位置を調整');
@@ -7387,17 +8745,24 @@
     document.documentElement.classList.add('cover-position-open');
   }
 
-  // Return the background that is actually visible immediately before a
-  // Scene. Inherited Scenes are skipped; an explicit clear stops the search.
-  function previousEffectiveBackground(sceneIndex){
-    for(let i=Number(sceneIndex)-1;i>=0;i--){
+  // Match Player's cumulative background state: an image clear removes only
+  // the image, while brightness, texture and framing settings keep carrying.
+  function effectiveBackgroundAt(sceneIndex){
+    let state=null;
+    for(let i=0;i<=Number(sceneIndex);i++){
       const bg=workingDocument?.scenes?.[i]?.presentation?.background;
       if(!bg)continue;
-      if(bg.src==='')return null;
-      if(bg.src)return bg;
+      state ||= {};
+      Object.keys(bg).forEach(key=>{
+        const value=bg[key];
+        if(value!==undefined)state[key]=(value&&typeof value==='object'&&!Array.isArray(value))
+          ?{...(state[key]&&typeof state[key]==='object'?state[key]:{}),...value}
+          :value;
+      });
     }
-    return null;
+    return state;
   }
+  function previousEffectiveBackground(sceneIndex){return effectiveBackgroundAt(Number(sceneIndex)-1);}
 
   // Keep the current image, effects and transition, and copy only the crop
   // framing needed to align two same-composition images precisely.
@@ -7405,12 +8770,69 @@
     const scene=workingDocument?.scenes?.[sceneIndex];
     const current=scene?.presentation?.background;
     const previous=previousEffectiveBackground(sceneIndex);
-    if(!current?.src||!previous?.src)return false;
-    current.position=previous.position||'center center';
-    current.fit=previous.fit==='contain'?'contain':'cover';
-    if(previous.positions&&typeof previous.positions==='object')current.positions=clone(previous.positions);
-    else delete current.positions;
+    if(!scene?.presentation||current?.src===''||!previous?.src)return false;
+    const target=current?.src?current:{...(current||{})};
+    target.position=previous.position||'center center';
+    target.fit=previous.fit==='contain'?'contain':'cover';
+    if(previous.positions&&typeof previous.positions==='object')target.positions=clone(previous.positions);
+    else delete target.positions;
+    if(!current?.src)scene.presentation.background=target;
     return true;
+  }
+  function applyPreviousBackgroundFramingForward(sceneIndex){
+    const previous=previousEffectiveBackground(sceneIndex);
+    if(!previous?.src)return 0;
+    const position=previous.position||'center center';
+    const fit=previous.fit==='contain'?'contain':'cover';
+    const positions=previous.positions&&typeof previous.positions==='object'?clone(previous.positions):null;
+    let changed=0;
+    for(let i=Math.max(0,Number(sceneIndex)||0);i<(workingDocument?.scenes?.length||0);i++){
+      const scene=workingDocument.scenes[i];
+      if(!scene?.presentation)continue;
+      const current=scene.presentation.background;
+      if(current?.src==='')continue;
+      const effective=current?.src?current:previousEffectiveBackground(i);
+      if(!effective?.src)continue;
+      const target=current?.src?current:{...(current||{}),_editorManaged:true};
+      target.position=position;
+      target.fit=fit;
+      if(positions)target.positions=clone(positions);else delete target.positions;
+      if(!current?.src)scene.presentation.background=target;
+      changed++;
+    }
+    return changed;
+  }
+  function copyBackgroundAppearance(target,source){
+    if(!target||!source)return false;
+    const tone=source.tone==='light'?'light':'dark';
+    target.tone=tone;
+    target.dim=Number.isFinite(Number(source.dim))?Number(source.dim):(tone==='light'?.64:.38);
+    target.blur=Math.max(0,Number(source.blur)||0);
+    target.textures=source.textures&&typeof source.textures==='object'?clone(source.textures):{};
+    return true;
+  }
+  function copyPreviousBackgroundAppearance(sceneIndex){
+    const scene=workingDocument?.scenes?.[sceneIndex],source=previousEffectiveBackground(sceneIndex);
+    if(!scene?.presentation||!source)return false;
+    const target=scene.presentation.background&&typeof scene.presentation.background==='object'
+      ?scene.presentation.background:{_editorManaged:true};
+    copyBackgroundAppearance(target,source);
+    if(!scene.presentation.background||typeof scene.presentation.background!=='object')scene.presentation.background=target;
+    return true;
+  }
+  function applyPreviousBackgroundAppearanceForward(sceneIndex){
+    const source=previousEffectiveBackground(sceneIndex);
+    if(!source)return 0;
+    let changed=0;
+    for(let i=Math.max(0,Number(sceneIndex)||0);i<(workingDocument?.scenes?.length||0);i++){
+      const scene=workingDocument.scenes[i];
+      if(!scene?.presentation)continue;
+      let target=scene.presentation.background;
+      if(!target||typeof target!=='object')target=scene.presentation.background={_editorManaged:true};
+      copyBackgroundAppearance(target,source);
+      changed++;
+    }
+    return changed;
   }
   function closeCoverPositionEditor(save=true){
     if(!coverPositionDialog)return;
@@ -7418,8 +8840,8 @@
     if(positionEditorMode==='background' && sceneBackgroundPositionContext){
       const ctx=sceneBackgroundPositionContext;
       if(save){
-        const bg=ctx.scene?.presentation?.background;
-        if(bg?.src)bg.position=positionPairCss({x:coverPositionX,y:coverPositionY});
+        ctx.background.position=positionPairCss({x:coverPositionX,y:coverPositionY});
+        if(ctx.inherited&&ctx.scene?.presentation)ctx.scene.presentation.background=ctx.background;
       }
       coverPositionX=ctx.restoreCover.x;coverPositionY=ctx.restoreCover.y;
       sceneBackgroundPositionContext=null;
@@ -7522,6 +8944,8 @@
     coverQuickEpisodeTitle.value=episodeTitleInput?.value||'';
     if(coverQuickDescription)coverQuickDescription.value=descriptionInput?.value||'';
     if(coverQuickFont)coverQuickFont.value=coverFontFamily;
+    coverStartTrigger='tap';
+    if(coverQuickStartMode)coverQuickStartMode.value=(workingDocument?.cover?.startMode==='comic'||coverStartMode==='comic')?'comic':'scene';
     ensureCoverVisibilityPanel();
     syncCoverVisibilityControls();
     coverQuickImageClear.hidden=!coverImageUrl;
@@ -7553,6 +8977,7 @@
   coverPreviewSubtitle?.addEventListener('click',(event)=>{event.stopPropagation();openCoverQuickEditor('subtitle');});
   [coverQuickWorkTitle,coverQuickAuthor,coverQuickSubtitle,coverQuickEpisode,coverQuickEpisodeTitle,coverQuickDescription].forEach(el=>el?.addEventListener('input',syncCoverQuickToMain));
   coverQuickFont?.addEventListener('change',syncCoverQuickToMain);
+  coverQuickStartMode?.addEventListener('change',syncCoverQuickToMain);
   coverQuickLogo?.addEventListener('click',()=>coverLogoInput?.click());
   coverQuickLogoClear?.addEventListener('click',()=>coverLogoClear?.click());
   coverQuickImage?.addEventListener('click',()=>coverImageInput?.click());
@@ -7610,8 +9035,16 @@
     if(ownCopyEnabledInput){ownCopyEnabledInput.checked=true;ownCopyEnabledInput.disabled=true;}
     renderCommercePriceUI();syncEasyShellToWorkingDocument();loadSceneIntoFields();syncEasyPublishButton();scheduleDraftSave(80);
   }));
-  commerceSettingsDetails?.addEventListener('toggle',()=>{
-    if(commerceSettingsDetails.open)renderCommercePriceUI();
+  // V4: render the revenue note whenever the sales card is opened.
+  // Do not rely on the browser creating a global variable from the element id.
+  const commerceSettingsDetailsEl=document.getElementById('commerceSettingsDetails');
+  commerceSettingsDetailsEl?.addEventListener('toggle',()=>{
+    if(!commerceSettingsDetailsEl.open)return;
+    requestAnimationFrame(()=>renderCommercePriceUI());
+  });
+  // Also cover restored/open state and the very first paint.
+  requestAnimationFrame(()=>{
+    if(commerceSettingsDetailsEl?.open)renderCommercePriceUI();
   });
   commerceAmountInput?.addEventListener('input',()=>{
     renderCommercePriceUI();
@@ -7631,7 +9064,7 @@
   // create one history entry per interaction instead of one per input tick.
   const V36_UNDO_SETTING_IDS=new Set([
     'sceneTypeSelect','sceneDisplaySelect','sceneFlowSelect','sceneViewSelect',
-    'sceneEntryMotionSelect','sceneEffectSelect','sceneSizeSelect',
+    'sceneEntryMotionSelect','sceneEffectSelect','sceneTextFlipSelect','sceneSizeSelect',
     'sceneWritingModeSelect','sceneFrameSelect','sceneFramePositionSelect',
     'sceneWeightSelect','sceneColorSelect','sceneColorCustomInput',
     'sceneShadowSelect','sceneFontSelect'
@@ -7837,6 +9270,8 @@
   $('#undoButton')?.addEventListener('click',restoreUndo);
   $('#redoButton')?.addEventListener('click',restoreRedo);
   $('#undoCompactButton')?.addEventListener('click',restoreUndo);
+  $('#liveUndoButton')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();if(undoHistory.length)restoreUndo();});
+  $('#liveRedoButton')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();if(redoHistory.length)restoreRedo();});
 
   $('#deleteSceneDialog')?.addEventListener('close',()=>{
     if($('#deleteSceneDialog').returnValue==='delete') deleteSceneNow();
@@ -7865,7 +9300,7 @@
       floatingAdvanced.disabled=true;
     }
     const floatingPreview=$('#floatingPreviewButton');
-    if(floatingPreview)floatingPreview.disabled=!hasSource;
+    if(floatingPreview)floatingPreview.disabled=false;
     syncHistoryUi();
     const menuDraftCount=$('#menuDraftCount');
     const toolbarDraftCount=$('#draftToolbarCount');
@@ -7883,6 +9318,7 @@
   // whenever a Studio undo/redo entry exists. Native text undo remains the
   // fallback only when the corresponding Studio history stack is empty.
   document.addEventListener('keydown',(event)=>{
+    if(!liveEditEnabled)return;
     if(event.isComposing||!(event.ctrlKey||event.metaKey)||event.altKey)return;
     const key=String(event.key||'').toLowerCase();
     if(key!=='z'&&key!=='y')return;
@@ -7936,7 +9372,7 @@
   function applySample(){
     captureUndo('サンプル置換を元に戻せます');
     titleInput.value='声のそろう通り';
-    bodyInput.value=SAMPLE; resetEasyRichSource(); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();
+    bodyInput.value=SAMPLE; resetEasyRichSource(); easyRichTextSnapshot=bodyInput.value; renderEasyRichComposition();renderEasyOgpCardList();
     easySourceDirty=true;
     updateCount();
     updateCoverPreview();
@@ -7987,8 +9423,8 @@
   $('#draftManagerDialog')?.addEventListener('close',unlockDraftManagerBackground);
   $('#draftManagerDialog')?.addEventListener('cancel',()=>{requestAnimationFrame(unlockDraftManagerBackground);});
 
-  $$('.draft-manager-tab').forEach(tab=>tab.addEventListener('click',async()=>{
-    $$('.draft-manager-tab').forEach(item=>{
+  $$('.draft-manager-tab[data-draft-filter]').forEach(tab=>tab.addEventListener('click',async()=>{
+    $$('.draft-manager-tab[data-draft-filter]').forEach(item=>{
       const active=item===tab;
       item.classList.toggle('is-active',active);
       item.setAttribute('aria-selected',active?'true':'false');
@@ -8018,14 +9454,21 @@
   $$('.work-font-card').forEach(card=>card.addEventListener('click',()=>applyWorkFont(card.dataset.font)));
   $('#makeButton').addEventListener('click',()=>{openPlayer({from:'easy',startAt:0});updateEasyFileActions();});
   const easyMenuButton=$('#easyMenuButton');
+  const liveMenuButton=$('#liveMenuButton');
   const easyMenuPanel=$('#easyMenuPanel');
   const easyMenuBackdrop=$('#easyMenuBackdrop');
+  // The menu is shared by Easy and Live Editor, but it must not inherit either
+  // header's layout/visibility. Mount the popover at document level.
+  if(easyMenuBackdrop?.parentElement!==document.body)document.body.appendChild(easyMenuBackdrop);
+  if(easyMenuPanel?.parentElement!==document.body)document.body.appendChild(easyMenuPanel);
   function closeEasyMenu(){
     if(!easyMenuPanel)return;
     easyMenuPanel.hidden=true;
     if(easyMenuBackdrop)easyMenuBackdrop.hidden=true;
     document.body.classList.remove('easy-menu-open');
     easyMenuButton?.setAttribute('aria-expanded','false');
+    liveMenuButton?.setAttribute('aria-expanded','false');
+    document.body.classList.remove('live-menu-origin');
   }
   easyMenuButton?.addEventListener('click',(e)=>{
     e.stopPropagation();
@@ -8035,16 +9478,36 @@
     document.body.classList.toggle('easy-menu-open',Boolean(willOpen));
     easyMenuButton.setAttribute('aria-expanded',willOpen?'true':'false');
   });
+  liveMenuButton?.addEventListener('click',(e)=>{
+    e.preventDefault();e.stopPropagation();
+    const willOpen=easyMenuPanel?.hidden;
+    if(easyMenuPanel)easyMenuPanel.hidden=!willOpen;
+    if(easyMenuBackdrop)easyMenuBackdrop.hidden=!willOpen;
+    document.body.classList.toggle('easy-menu-open',Boolean(willOpen));
+    document.body.classList.toggle('live-menu-origin',Boolean(willOpen));
+    liveMenuButton.setAttribute('aria-expanded',willOpen?'true':'false');
+    easyMenuButton?.setAttribute('aria-expanded','false');
+  });
   easyMenuPanel?.addEventListener('click',(e)=>e.stopPropagation());
   easyMenuBackdrop?.addEventListener('click',closeEasyMenu);
 
   // v0.2.94: menu is a top-right popover; no drag-to-dismiss gesture.
   document.addEventListener('click',closeEasyMenu);
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
-  $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();exportScenePackage();});
   $('#menuExportDistributionButton')?.addEventListener('click',()=>{closeEasyMenu();exportDistributionScenePackage();});
   $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
-  $('#menuNewDraftButton')?.addEventListener('click',()=>{closeEasyMenu();$('#newDraftQuickButton')?.click();});
+  $('#menuNewDraftButton')?.addEventListener('click',async()=>{
+    closeEasyMenu();
+    if(!playerScreen?.hidden)closePlayer();
+    // A new work always belongs to Easy. Clear every Live-only shell state
+    // before creating it so the Easy header can never overlay the Player.
+    document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open','desktop-live-page-editor-open','live-edit-sheet-open','live-inline-text-edit','live-menu-origin');
+    document.documentElement.classList.remove('easy-player-open');
+    document.body.classList.remove('easy-player-open');
+    await startNewDraft();
+    setScreen('easy');
+    scrollScreenToTop(editorScreen);
+  });
   $('#floatingAdvancedButton')?.addEventListener('click',(event)=>{
     event.preventDefault();
     event.stopPropagation();
@@ -8067,7 +9530,40 @@
   // v0.3.04: this legacy button is no longer present in the compact header UI.
   // Guard it so initialization continues and later controls (including Preview return)
   // always receive their event listeners.
-  $('#exportPackageButton')?.addEventListener('click',exportScenePackage);
+  $('#exportPackageButton')?.addEventListener('click',openScenePackageExportDialog);
+  $('#menuExportPackageButton')?.addEventListener('click',()=>{closeEasyMenu();openScenePackageExportDialog();});
+  $('#scenePackageExportCancel')?.addEventListener('click',()=>{
+    $('#scenePackageExportDialog')?.close('cancel');
+    scenePackageExportSourceDocument=null;
+  });
+  $('#scenePackageExportForm')?.addEventListener('submit',(event)=>{
+    event.preventDefault();
+    const exportMetadata={
+      title:$('#exportWorkTitle')?.value||'',
+      author:$('#exportWorkAuthor')?.value||'',
+      episode:$('#exportWorkEpisode')?.value||'',
+      episodeTitle:$('#exportWorkEpisodeTitle')?.value||'',
+      fileName:$('#exportWorkFileName')?.value||''
+    };
+    const sourceDocument=scenePackageExportSourceDocument;
+    scenePackageExportSourceDocument=null;
+    $('#scenePackageExportDialog')?.close('export');
+    // Keep the native file picker inside the confirmation click's user gesture.
+    exportScenePackage(exportMetadata,sourceDocument);
+  });
+  $('#exportWorkFileName')?.addEventListener('input',()=>{scenePackageFilenameManual=true;});
+  ['exportWorkTitle','exportWorkEpisode'].forEach(id=>$('#'+id)?.addEventListener('input',()=>{
+    if(scenePackageFilenameManual)return;
+    $('#exportWorkFileName').value=suggestedScenePackageFileName($('#exportWorkTitle').value,$('#exportWorkEpisode').value);
+  }));
+  document.querySelectorAll('label[for="importPackageInput"]').forEach(label=>label.addEventListener('click',async event=>{
+    if(typeof window.showOpenFilePicker!=='function')return;
+    event.preventDefault();
+    try{
+      const [handle]=await window.showOpenFilePicker({multiple:false,types:[{description:'Scene',accept:{'application/octet-stream':['.scene','.zip'], 'application/zip':['.zip']}}]});
+      if(!handle)return;const file=await handle.getFile();closeEasyMenu();await importScenePackage(file,{fileHandle:handle,recentId:pendingRecentSceneId});pendingRecentSceneId='';
+    }catch(error){if(error?.name!=='AbortError')console.warn('Open .scene failed',error);}
+  }));
   $('#importSceneInput').addEventListener('change',async(event)=>{
     const file=event.target.files?.[0];
     if(file) await importSceneDocument(file);
@@ -8075,7 +9571,7 @@
   });
   $('#importPackageInput').addEventListener('change',async(event)=>{
     const file=event.target.files?.[0];
-    if(file){closeEasyMenu();await importScenePackage(file);}
+    if(file){closeEasyMenu();await importScenePackage(file,{recentId:pendingRecentSceneId});pendingRecentSceneId='';}
     updateAutoRecStartLabel();
     refreshDraftUI(true).catch(err=>console.warn('Draft UI refresh failed',err));
     updateEasyFileActions();
@@ -8088,6 +9584,7 @@
       if(requested)await restoreDraftRecord(requested);
     }
     await refreshDraftUI(true);
+    setActiveSceneFileName(activeSceneFileName);
     updateEasyFileActions();
   })().catch(err=>console.warn('Draft UI init failed',err));
   // v0.3.03: use the original proven return interaction.
@@ -8126,6 +9623,13 @@
     renderSceneList();
     if(liveEditEnabled && player && !playerScreen?.hidden) refreshLivePlayer({preserveSheet:true});
   }));
+  $('#sceneOgpCardButton')?.addEventListener('click',()=>{
+    const input=$('#sceneTextInput'),scene=currentScene();if(!input||!scene)return;
+    const selectionStart=input.selectionStart||0,selectionEnd=input.selectionEnd||selectionStart;
+    const selectedUrl=selectionEnd>selectionStart?pastedWebUrl(input.value.slice(selectionStart,selectionEnd)):'';
+    const start=selectedUrl?selectionStart:selectionEnd,end=selectedUrl?selectionEnd:selectionEnd;
+    syncAdvancedFieldsToScene();openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:selectedUrl});
+  });
 
   ['sceneBackgroundMode','sceneBackgroundTransition','sceneBackgroundExit','sceneBackgroundFit','sceneBackgroundMotion','sceneBackgroundDim','sceneBgmAction','sceneBgmLoop','sceneBgmVolume','sceneBgmFadeIn','sceneBgmFadeOut','sceneBgmVolumeChange','sceneBgmVolumeFade','sceneBgmStopFade','sceneAmbientAction','sceneAmbientLoop','sceneAmbientVolume','sceneAmbientFadeIn','sceneAmbientFadeOut','sceneAmbientVolumeChange','sceneAmbientVolumeFade','sceneAmbientStopFade','sceneSeEnabled','sceneSeVolume','sceneSeFadeIn'].forEach(id=>{
     const el=$('#'+id); if(!el)return; const evt=el.type==='range'?'input':'change'; el.addEventListener(evt,()=>{updateAdvancedConditionalUI();syncAdvancedFieldsToScene();renderSceneList();});
@@ -8219,6 +9723,8 @@
   function loadSceneFormatFromObject(value,{openPlayer=true,startAt=0}={}){
     const doc=validateSceneFormatV1(clone(value));
     workingDocument=doc;
+    coverStartMode=doc.cover?.startMode==='comic'?'comic':'scene';
+    coverStartTrigger=normalizeCoverStartTrigger(doc.cover?.startTrigger);
     latestPublishedId='';latestPublishedUrl='';latestPublishedFingerprint='';latestPublishedAt=0;
     easySourceDirty=false;
     selectedSceneIndex=0;
@@ -8244,6 +9750,95 @@
   const liveInlineToolbar=$('#liveInlineToolbar');
   const liveEditSheet=$('#liveEditSheet');
   const liveEditSheetBody=$('#liveEditSheetBody');
+
+
+  // iPhone Live Editor UI polish v2
+  // Presentation only: this decorates existing controls with inline SVG icons.
+  // It intentionally does NOT change the + Add Scene command or any editor data logic.
+  function mobileUiSvgIcon(name){
+    const icons={
+      text:'<path d="M5 6h14M12 6v12M8 18h8"/>',
+      type:'<path d="M5 18 10 6h4l5 12M7 14h10"/>',
+      size:'<path d="M7 17 17 7M10 7h7v7M14 17H7v-7"/>',
+      writing:'<path d="M5 7h14M5 12h14M5 17h14"/>',
+      align:'<path d="M5 7h14M5 12h10M5 17h14"/>',
+      position:'<path d="M7 7h10v10H7z" stroke-dasharray="3 2"/>',
+      color:'<path d="M12 4c3 4 6 7 6 10a6 6 0 1 1-12 0c0-3 3-6 6-10Z"/><path d="M18 18h2"/>',
+      sparkle:'<path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3Z"/><path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15Z"/>',
+      display:'<path d="M5 5h14v14H5z"/><path d="M8 9h8M8 13h6"/>',
+      flow:'<path d="M8 4v16M5 7l3-3 3 3M16 20V4m-3 13 3 3 3-3"/>',
+      motion:'<path d="M5 8h14M5 12h10M5 16h14"/>',
+      frame:'<path d="M6 6h12v12H6z" stroke-dasharray="3 2"/>',
+      image:'<path d="M4 5h16v14H4z"/><circle cx="9" cy="10" r="2"/><path d="m5 17 5-5 3 3 2-2 4 4"/>',
+      imageAdd:'<path d="M4 5h12v14H4z"/><path d="m5 17 4-4 3 3 2-2 2 2M19 8v6M16 11h6"/>',
+      copy:'<rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 16H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+      move:'<path d="M12 2v20M2 12h20M8 6l4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4M18 8l4 4-4 4"/>',
+      sunDown:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2"/>',
+      sunUp:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M18 6l2-2"/>',
+      sliders:'<path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 5v4M8 15v4"/>',
+      gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+      music:'<path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>',
+      folderMusic:'<path d="M3 7h6l2-2h10v14H3z"/><path d="M12 16v-6l5-1v5"/><circle cx="10.5" cy="16" r="1.5"/><circle cx="15.5" cy="14" r="1.5"/>',
+      up:'<path d="M12 20V4M6 10l6-6 6 6"/>',
+      down:'<path d="M12 4v16M6 14l6 6 6-6"/>',
+      link:'<path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.1-1.1"/>',
+      trash:'<path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/>',
+      chevron:'<path d="m9 6 6 6-6 6"/>'
+    };
+    const body=icons[name]||icons.sliders;
+    const span=document.createElement('span');span.className='mobile-ui-svg';span.setAttribute('aria-hidden','true');
+    span.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+    return span;
+  }
+  function mobileUiIconForText(raw){
+    const t=String(raw||'').trim();
+    if(/種類|Type/.test(t))return 'type';
+    if(/書体|Typeface/.test(t))return 'text';
+    if(/サイズ|Size|文字の大きさ/.test(t))return 'size';
+    if(/書字方向|Writing direction/.test(t))return 'writing';
+    if(/テキスト位置|Text position/.test(t))return 'position';
+    if(/^色$|Color/.test(t))return 'color';
+    if(/文字配置|Text alignment/.test(t))return 'align';
+    if(/出かた|Entrance/.test(t))return 'sparkle';
+    if(/^表示$|Display$/.test(t))return 'display';
+    if(/Sceneの流れ|Scene flow/.test(t))return 'flow';
+    if(/表示モード|Display mode/.test(t))return 'display';
+    if(/位置の動き|Position motion/.test(t))return 'motion';
+    if(/文字の枠|Text frame/.test(t))return 'frame';
+    if(/画像を選択|画像を変更|Choose image|Change image/.test(t))return 'imageAdd';
+    if(/表示位置を調整|Position/.test(t))return 'move';
+    if(/コピー|複製|Duplicate|Copy/.test(t))return 'copy';
+    if(/暗く|Darker/.test(t))return 'sunDown';
+    if(/明るく|Brighter/.test(t))return 'sunUp';
+    if(/詳細設定|details|細かく調整/.test(t))return 'sliders';
+    if(/^選択$|Choose$/.test(t))return 'folderMusic';
+    if(/上へ移動|Move up/.test(t))return 'up';
+    if(/下へ移動|Move down/.test(t))return 'down';
+    if(/結合|Merge/.test(t))return 'link';
+    if(/削除|Delete/.test(t))return 'trash';
+    return '';
+  }
+  function decorateMobileLiveControls(root=liveEditSheetBody){
+    if(!root || !matchMedia('(max-width:899px)').matches)return;
+    root.querySelectorAll('.live-edit-field').forEach(field=>{
+      if(field.dataset.mobileUiDecorated)return;
+      const select=field.querySelector('select');if(!select)return;
+      const label=[...field.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE).map(n=>n.textContent).join(' ').trim() || field.firstElementChild?.textContent || '';
+      const iconName=mobileUiIconForText(label);
+      if(iconName){field.classList.add('has-mobile-svg');field.insertBefore(mobileUiSvgIcon(iconName),select);}
+      field.dataset.mobileUiDecorated='1';
+    });
+    root.querySelectorAll('button').forEach(btn=>{
+      if(btn.dataset.mobileUiDecorated || btn.closest('.live-timing-rail'))return;
+      const iconName=mobileUiIconForText(btn.textContent);
+      if(iconName){btn.classList.add('has-mobile-svg');btn.prepend(mobileUiSvgIcon(iconName));}
+      if(btn.classList.contains('live-edit-detail')){btn.append(mobileUiSvgIcon('chevron'));btn.classList.add('has-mobile-chevron');}
+      btn.dataset.mobileUiDecorated='1';
+    });
+  }
+  if(liveEditSheetBody){
+    new MutationObserver(()=>decorateMobileLiveControls()).observe(liveEditSheetBody,{childList:true,subtree:true});
+  }
   const liveEditSheetTitle=$('#liveEditSheetTitle');
   const liveEditSceneNumber=$('#liveEditSceneNumber');
   const desktopLivePanel=$('#desktopLivePanel');
@@ -8304,6 +9899,7 @@
   const DESKTOP_BODY_HEIGHT_KEY='ahako-editor-v2-body-height-v1';
   let desktopBodyResizeObserver=null;
   let liveEditEnabled=false;
+  let pendingEasyEmptyInlineStart=false;
   let liveEditToolbarVisible=false;
   let liveInlineEditEl=null;
   let liveInlineEditField='text';
@@ -8340,7 +9936,8 @@
 
   function liveEditScene(){
     const advancedActive=advancedScreen && !advancedScreen.hidden;
-    const sourceIndex=advancedActive ? selectedSceneIndex : (player?.index ?? selectedSceneIndex);
+    const rawIndex=advancedActive ? selectedSceneIndex : (player?.index ?? selectedSceneIndex);
+    const sourceIndex=Number.isFinite(Number(rawIndex)) ? Number(rawIndex) : Number(selectedSceneIndex)||0;
     const i=Math.max(0,Math.min(sourceIndex,(workingDocument?.scenes?.length||1)-1));
     return {scene:workingDocument?.scenes?.[i]||null,index:i};
   }
@@ -8406,6 +10003,7 @@
   function finishInlineTextEdit(){
     hideRichSelectionToolbar();
     if(!liveInlineEditEl){
+      playerHost.classList.remove('live-inline-text-edit');document.body.classList.remove('live-inline-text-edit');
       resetInlineKeyboardShift();
       if(liveInlineToolbar)liveInlineToolbar.hidden=true;
       return;
@@ -8415,6 +10013,7 @@
       editingEl.removeAttribute('contenteditable');
       editingEl.removeAttribute('role');
       editingEl.classList.remove('live-inline-editing');
+      editingEl.closest('.sp-credits')?.classList.remove('is-body-editing');
     }
     liveInlineEditEl=null;
     liveInlineEditField='text';
@@ -8475,25 +10074,47 @@
     const inset=vv?Math.max(0,window.innerHeight-(vv.height+vv.offsetTop)):0;
     document.documentElement.style.setProperty('--live-keyboard-inset',`${Math.round(inset)}px`);
   }
+  // Read author line breaks from editable DOM, independent of layout/attachment.
+  // Detached ruby-stripped clones have no rendered innerText line boundaries.
+  function editablePlainText(root){
+    const blocks=new Set(['DIV','P','LI','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','PRE']);
+    const read=node=>{
+      if(node.nodeType===3)return String(node.nodeValue||'').replace(/\u00a0/g,' ');
+      if(['RT','RP'].includes(node.nodeName)||node.classList?.contains('sp-typing-cursor'))return '';
+      if(node.nodeName==='BR')return '\n';
+      const children=Array.from(node.childNodes||[]);
+      if(children.length===1&&children[0].nodeName==='BR'&&blocks.has(node.nodeName))return '';
+      let text='';
+      children.forEach(child=>{
+        if(blocks.has(child.nodeName)){
+          if(text&&!text.endsWith('\n'))text+='\n';
+          text+=read(child)+'\n';
+        }else text+=read(child);
+      });
+      if(children.length&&blocks.has(children[children.length-1].nodeName))text=text.slice(0,-1);
+      return text;
+    };
+    return read(root).replace(/\r\n?/g,'\n');
+  }
   function syncInlineTextToScene(){
     const el=liveInlineEditEl;
     if(!el)return '';
     const scene=liveInlineEditSceneRef;
     if(!scene)return '';
     let value;
-    if(liveInlineEditField==='text' && el.querySelector('.sp-rich-table-card')){
-      const copy=el.cloneNode(true);
-      const tableRanges=(Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[])
-        .filter(r=>r?.kind==='table').sort((a,b)=>(a.start||0)-(b.start||0));
-      const cards=[...copy.querySelectorAll('.sp-rich-table-card')];
-      cards.forEach((card,i)=>{
-        const r=tableRanges[i];
+    if(liveInlineEditField==='text' && el.querySelector('.sp-rich-table-card, .sp-rich-link-card, ruby')){
+      const copy=stripRubyReadings(el.cloneNode(true));
+      const blockRanges=(Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[])
+        .filter(r=>r?.kind==='table'||r?.kind==='linkCard').sort((a,b)=>(a.start||0)-(b.start||0));
+      const blocks=[...copy.querySelectorAll('.sp-rich-table-card, .sp-rich-link-card')];
+      blocks.forEach((block,i)=>{
+        const r=blockRanges[i];
         const label=r?String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)):'';
-        card.replaceWith(document.createTextNode(label||`［表 ${i+1}］`));
+        block.replaceWith(document.createTextNode(r?.kind==='linkCard'?'\u2060':(label||`［表 ${i+1}］`)));
       });
-      value=copy.innerText.replace(/\n$/,'');
+      value=editablePlainText(copy);
     }else{
-      value=el.innerText.replace(/\n$/,'');
+      value=editablePlainText(el);
     }
     if(liveInlineEditField==='subText'){
       if(value.length)scene.subText=value;
@@ -8503,8 +10124,9 @@
         else delete player.currentScene.subText;
       }
     }else{
+      remapRubyAfterTextEdit(scene,String(scene.text||''),value);
       scene.text=value;
-      if(player?.currentScene)player.currentScene.text=value;
+      if(player?.currentScene){player.currentScene.text=value;if(scene.richText)player.currentScene.richText=clone(scene.richText);}
       // Rich Text Player v0.19: list Live Edit must never keep stale listItem offsets.
       // Bullets/newlines are literal canonical text; semantics are rebuilt only from
       // lines that actually begin with a list marker. No word matching is used.
@@ -8541,6 +10163,8 @@
     const bar=document.createElement('div');bar.className='rich-selection-toolbar';bar.hidden=true;bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','選択した文字の書式');
     const button=(label,action,title,extra='')=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.richAction=action;b.title=title||label;b.setAttribute('aria-label',title||label);if(extra)b.classList.add(extra);bar.appendChild(b);return b;};
     button('B 太字','bold','太字','rich-bold-button');
+    button('I 斜体','italic','斜体','rich-italic-button');
+    button('ルビ','ruby','ふりがなを追加・編集');
     const dropdown=(label,action,items,title)=>{
       const wrap=document.createElement('div');wrap.className='rich-dropdown';wrap.dataset.richDropdown=action;
       const trigger=document.createElement('button');trigger.type='button';trigger.className='rich-dropdown-trigger';trigger.textContent=label+' ▼';trigger.title=title||label;trigger.setAttribute('aria-label',title||label);trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');
@@ -8555,6 +10179,7 @@
     dropdown('見出し','heading',[['1','見出し1'],['2','見出し2'],['3','見出し3']],'見出し');
     dropdown('リスト','list',[['bullet','・ 箇条書き'],['number','1. 番号付き']],'リスト');
     button('❝','quote','引用');
+    dropdown('文字向き','orientation',[[ 'tcy','縦中横' ],[ 'sideways','横倒し' ],[ 'upright','正立' ]],'選択した文字の縦書きでの向き');
     const sep=document.createElement('span');sep.className='rich-toolbar-separator';sep.setAttribute('aria-hidden','true');bar.appendChild(sep);
     button('解除','clear','選択範囲の書式を解除','rich-clear-button');
     document.body.appendChild(bar);richSelectionToolbar=bar;
@@ -8573,31 +10198,123 @@
       const item=e.target.closest?.('.rich-dropdown-item');
       if(item){e.preventDefault();e.stopPropagation();const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);return;}
       const t=e.target.closest?.('button[data-rich-action]');
-      if(t){e.preventDefault();e.stopPropagation();closeMenus();applyRichSelectionAction(t.dataset.richAction);}
+      if(t){e.preventDefault();e.stopPropagation();closeMenus();if(t.dataset.richAction==='ruby'){editRichRuby();return;}applyRichSelectionAction(t.dataset.richAction);}
     });
     color.addEventListener('input',()=>{});color.addEventListener('change',()=>applyRichSelectionAction('color',color.value));
     return bar;
   }
+  function autoRubyConfig(doc=workingDocument){return doc?.studio?.autoRuby||{version:1,settings:{mode:'difficult',grade:3,repeat:'work'},dictionary:{}};}
+  function openAutoRuby(scene,quick=false){
+    if(!scene||!workingDocument?.scenes?.includes(scene))return;
+    if(liveInlineEditEl){syncInlineTextToScene();finishInlineTextEdit();}
+    const doc=workingDocument,index=doc.scenes.indexOf(scene);
+    const changed=()=>{scheduleDraftSave(0);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel?.();};
+    const setConfig=config=>{doc.studio||={};doc.studio.autoRuby=clone(config);};
+    if(!window.SceneAutoRubyUI){appAlert('自動ルビの画面を読み込めません。更新ファイルを配置して再読み込みしてください。');return;}
+    window.SceneAutoRubyUI.open({document:doc,index,getDocument:()=>workingDocument,confirm:message=>appConfirm(message,{title:'自動ルビ'}),
+      onConfig:config=>{if(workingDocument!==doc)return;captureUndo('作者辞書・ルビ設定の変更を元に戻せます');setConfig(config);scheduleDraftSave(0);},
+      onApply:(plans,config)=>{if(workingDocument!==doc)return;captureUndo('自動ルビを元に戻せます');setConfig(config);for(const plan of plans){const target=doc.scenes[plan.index];target.richText||={version:1,ranges:[]};target.richText.ranges=clone(plan.ranges);}changed();showUndo('自動ルビを適用しました');},
+      onRemove:indices=>{if(workingDocument!==doc)return;captureUndo('自動ルビの解除を元に戻せます');for(const i of indices){const target=doc.scenes[i];if(target.richText)target.richText.ranges=(target.richText.ranges||[]).filter(r=>r.kind!=='ruby'||r.source!=='auto');}changed();showUndo('自動ルビを解除しました');},
+      onResetExclusions:indices=>{if(workingDocument!==doc)return;captureUndo('ルビの除外解除を元に戻せます');for(const i of indices)if(doc.scenes[i].richText)delete doc.scenes[i].richText.autoRubyExcluded;changed();showUndo('除外した箇所を再対象にしました');}
+    },quick);
+  }
+  function makeAutoRubyBodyControl(scene){
+    const row=document.createElement('div');row.className='auto-ruby-body-control';
+    const quick=document.createElement('button');quick.type='button';quick.className='is-primary';quick.textContent='このSceneに付ける';quick.title='前回のルビ設定で、このSceneへすぐ適用';quick.disabled=!String(scene.text||'').trim();quick.onclick=()=>openAutoRuby(scene,true);
+    const settings=document.createElement('button');settings.type='button';settings.textContent='ルビ設定・一括適用';settings.onclick=()=>openAutoRuby(scene,false);
+    const note=document.createElement('small');const config=autoRubyConfig();note.textContent=({all:'総ルビ',grade:`学年別：小${config.settings?.grade||3}まで既習`,difficult:'難しい語だけ'})[config.settings?.mode||'difficult'];
+    row.append(quick,settings,note);return row;
+  }
+  function assignSceneRichText(scene,ranges,excluded=[]){
+    if(ranges.length||excluded.length)scene.richText={version:1,ranges,...(excluded.length?{autoRubyExcluded:excluded}:{})};else delete scene.richText;
+  }
+  function splitAutoRubyExclusions(scene,pos,left,right,text){
+    const rightStart=pos+String(text).slice(pos).length-String(right).length;
+    const exclusions=scene.richText?.autoRubyExcluded||[];
+    return {left:exclusions.filter(r=>r.end<=left.length).map(r=>({...r})),right:exclusions.filter(r=>r.start>=rightStart).map(r=>({...r,start:r.start-rightStart,end:r.end-rightStart}))};
+  }
+  function mergeAutoRubyExclusions(prev,cur){
+    const offset=String(prev.text||'').length;
+    return [...(prev.richText?.autoRubyExcluded||[]).map(r=>({...r})),...(cur.richText?.autoRubyExcluded||[]).map(r=>({...r,start:r.start+offset,end:r.end+offset}))];
+  }
+  function excludeAutomaticRuby(scene,start,end){
+    scene.richText||={version:1,ranges:[]};scene.richText.autoRubyExcluded||=[];
+    const text=String(scene.text||'').slice(start,end);
+    scene.richText.autoRubyExcluded=scene.richText.autoRubyExcluded.filter(r=>!(r.start<end&&start<r.end));
+    scene.richText.autoRubyExcluded.push({start,end,text});
+  }
+  async function editRichRuby(){
+    const snap=richSelectionSnapshot;if(!snap?.scene)return;
+    const ranges=snap.scene.richText?.ranges||[];
+    const existing=ranges.find(r=>r.kind==='ruby'&&r.start<snap.end&&r.end>snap.start);
+    const target=existing?{...snap,start:existing.start,end:existing.end,selectedText:String(snap.scene.text||'').slice(existing.start,existing.end)}:{...snap};
+    // Keep an immutable selection while iPhone opens the reading input keyboard.
+    hideRichSelectionToolbar();
+    let rememberReading=false;
+    const value=await appPrompt(`「${target.selectedText}」のふりがな\n空欄で保存するとルビを解除します。`,existing?.reading||'',{title:'ルビ',inputLabel:'ふりがな',confirmLabel:'適用',checkboxLabel:'この作品の作者辞書にも登録する',onCheckbox:value=>rememberReading=value});
+    if(value===null||value===undefined)return;
+    if(!workingDocument?.scenes?.includes(target.scene.creditOwner||target.scene))return;
+    const reading=String(value).replace(/[\r\n]/g,'').trim().slice(0,200);
+    richSelectionSnapshot=target;
+    applyRichSelectionAction('ruby',reading);
+    if(rememberReading&&reading){workingDocument.studio||={};const config=clone(autoRubyConfig());config.dictionary||={};Object.defineProperty(config.dictionary,target.selectedText,{value:reading,enumerable:true,writable:true,configurable:true});workingDocument.studio.autoRuby=config;scheduleDraftSave(0);}
+  }
+  function inlineBaseText(el){return editablePlainText(stripRubyReadings(el.cloneNode(true)));}
+  function stripRubyReadings(root){root.querySelectorAll?.('rt,rp,.sp-typing-cursor').forEach(el=>el.remove());return root;}
+  function remapRubyAfterTextEdit(scene,before,after){
+    if(before===after||!scene.richText?.ranges)return;
+    let start=0;while(start<before.length&&start<after.length&&before[start]===after[start])start++;
+    let oldEnd=before.length,newEnd=after.length;
+    while(oldEnd>start&&newEnd>start&&before[oldEnd-1]===after[newEnd-1]){oldEnd--;newEnd--;}
+    const delta=newEnd-oldEnd;
+    scene.richText.autoRubyExcluded=(scene.richText.autoRubyExcluded||[]).flatMap(r=>r.end<=start?[r]:r.start>=oldEnd?[{...r,start:r.start+delta,end:r.end+delta}]:[]);
+    scene.richText.ranges=scene.richText.ranges.flatMap(r=>{
+      if(r.kind!=='ruby')return [r];
+      if(r.end<=start)return [r];
+      if(r.start>=oldEnd)return [{...r,start:r.start+delta,end:r.end+delta}];
+      // Changing the base word invalidates its old reading; never attach it to another word.
+      return [];
+    });
+  }
   function hideRichSelectionToolbar(){if(richSelectionToolbar)richSelectionToolbar.hidden=true;richSelectionSnapshot=null;}
+
+  // Route the existing rich-text toolbar to one credit field without touching Scene.text.
+  function creditRichTarget(owner,node){
+    const key=node?.dataset?.creditField,index=node?.dataset?.creditIndex;
+    if(!owner||!['title','heading','name','note'].includes(key))return null;
+    const credits=owner.presentation?.credits;
+    const holder=index===undefined?credits:credits?.entries?.[Number(index)];if(!holder)return null;
+    const target={id:`${owner.id}::credit:${index??'title'}:${key}`,creditOwner:owner,creditHolder:holder,creditKey:key};
+    Object.defineProperties(target,{
+      text:{get:()=>String(holder[key]||''),set:value=>{holder[key]=String(value||'');},enumerable:true},
+      richText:{get:()=>holder.richTextFields?.[key],set:value=>{holder.richTextFields ||= {};if(value)holder.richTextFields[key]=value;else delete holder.richTextFields[key];},configurable:true,enumerable:true}
+    });return target;
+  }
+  function removeEmptyCreditRichText(target){
+    const holder=target?.creditHolder,key=target?.creditKey;if(!holder)return;
+    const value=holder.richTextFields?.[key];if(value&&!value.ranges?.length&&!value.autoRubyExcluded?.length)delete holder.richTextFields[key];
+    if(holder.richTextFields&&!Object.keys(holder.richTextFields).length)delete holder.richTextFields;
+  }
+
   function previewRichSelection(){
     const sel=window.getSelection?.();
     if(!sel||!sel.rangeCount||sel.isCollapsed||!String(sel.toString()||'').length)return null;
     const r=sel.getRangeAt(0);
     const ownerText=node=>{
       const el=node?.nodeType===Node.ELEMENT_NODE?node:node?.parentElement;
-      return el?.closest?.('.sp-text')||null;
+      return el?.closest?.('[data-credit-field]')||el?.closest?.('.sp-text')||null;
     };
     const startEl=ownerText(r.startContainer),endEl=ownerText(r.endContainer);
     if(!startEl||startEl!==endEl||!playerHost.contains(startEl))return null;
     const article=startEl.closest('.sp-scene');
     if(!article||!article.classList.contains('is-active'))return null;
-    if(r.cloneContents().querySelector?.('.sp-rich-table-card'))return null;
+    if(r.cloneContents().querySelector?.('.sp-rich-table-card, .sp-rich-link-card'))return null;
     // Bind the selection to the Scene represented by the selected DOM itself.
     // This avoids depending on selectedSceneIndex/player.index timing while a drag is ending.
     const sceneId=article.dataset.sceneId||'';
     let index=(workingDocument?.scenes||[]).findIndex(sc=>String(sc?.id||'')===String(sceneId));
     if(index<0)index=Math.max(0,Math.min(player?.index??selectedSceneIndex,(workingDocument?.scenes?.length||1)-1));
-    const scene=workingDocument?.scenes?.[index]||null;if(!scene)return null;
+    const ownerScene=workingDocument?.scenes?.[index]||null;if(!ownerScene)return null;const scene=creditRichTarget(ownerScene,startEl)||ownerScene;
     // V124: derive source offsets from actual text nodes, never from Range.toString().
     // Range.toString() can inject visual newlines for display:block Rich Text (quotes etc.),
     // which made the next toolbar action point at the wrong characters.
@@ -8606,6 +10323,7 @@
       const walker=document.createTreeWalker(startEl,NodeFilter.SHOW_TEXT);
       let n;
       while((n=walker.nextNode())){
+        if(n.parentElement?.closest('rt,rp,.sp-typing-cursor'))continue;
         if(n===container){total+=Math.max(0,Math.min(Number(offset)||0,String(n.nodeValue||'').length));found=true;break;}
         if(container?.nodeType===Node.ELEMENT_NODE&&container.contains?.(n)){
           // Boundary is an element: count only text children preceding its child offset.
@@ -8616,7 +10334,7 @@
       }
       if(found)return total;
       // Element-boundary fallback: clone only DOM content, then strip table UI text.
-      try{const pre=document.createRange();pre.selectNodeContents(startEl);pre.setEnd(container,offset);const frag=pre.cloneContents();frag.querySelectorAll?.('.sp-rich-table-card').forEach(x=>x.remove());return String(frag.textContent||'').length;}catch(_){return 0;}
+      try{const pre=document.createRange();pre.selectNodeContents(startEl);pre.setEnd(container,offset);const frag=pre.cloneContents();frag.querySelectorAll?.('.sp-rich-table-card,.sp-rich-link-card,rt,rp,.sp-typing-cursor').forEach(x=>x.remove());return String(frag.textContent||'').length;}catch(_){return 0;}
     };
     const start=pointOffset(r.startContainer,r.startOffset),end=pointOffset(r.endContainer,r.endOffset);if(end<=start)return null;
     let rect=r.getBoundingClientRect();
@@ -8630,22 +10348,25 @@
     const overlap=r=>Number(r?.end)>start&&Number(r?.start)<end;
     const spanWith=pred=>ranges.find(r=>r?.kind==='span'&&covers(r)&&pred(r.style||{}));
     const bold=!!spanWith(st=>st.bold===true);
+    const italic=!!spanWith(st=>st.italic===true);
     const heading=ranges.find(r=>r?.kind==='heading'&&overlap(r));
     const list=ranges.find(r=>r?.kind==='listItem'&&overlap(r));
     const quote=ranges.find(r=>r?.kind==='quote'&&overlap(r));
+    const orientation=ranges.find(r=>r?.kind==='orientation'&&covers(r));
     const font=spanWith(st=>st.fontFamily)?.style?.fontFamily||'';
     const scale=spanWith(st=>Number(st.fontScale)>0)?.style?.fontScale;
     const color=spanWith(st=>st.color)?.style?.color||'';
     const setActive=(sel,on)=>{const el=bar.querySelector(sel);if(el){el.classList.toggle('is-active',!!on);el.setAttribute('aria-pressed',String(!!on));}};
-    setActive('[data-rich-action="bold"]',bold);setActive('[data-rich-action="quote"]',!!quote);
+    setActive('[data-rich-action="bold"]',bold);setActive('[data-rich-action="italic"]',italic);setActive('[data-rich-action="quote"]',!!quote);
     const labels={font:{serif:'明朝',sans:'ゴシック',mono:'等幅'},size:{'0.85':'小','1':'標準','1.2':'大','1.45':'特大'}};
     bar.querySelectorAll('.rich-dropdown').forEach(w=>{const action=w.dataset.richDropdown,tr=w.querySelector('.rich-dropdown-trigger');let value='';
-      if(action==='font')value=String(font||''); else if(action==='size'&&scale)value=String(Number(scale)); else if(action==='heading'&&heading)value=String(heading.level||''); else if(action==='list'&&list)value=list.ordered?'number':'bullet';
+      if(action==='font')value=String(font||''); else if(action==='size'&&scale)value=String(Number(scale)); else if(action==='heading'&&heading)value=String(heading.level||''); else if(action==='list'&&list)value=list.ordered?'number':'bullet'; else if(action==='orientation'&&orientation)value=String(orientation.orientation||'');
       w.classList.toggle('is-active',!!value);tr.classList.toggle('is-active',!!value);
       if(action==='font')tr.textContent=(value?(labels.font[value]||'書体'):'書体')+' ▼';
       if(action==='size')tr.textContent=(value?(labels.size[value]||'サイズ'):'サイズ')+' ▼';
       if(action==='heading')tr.textContent=(value?`見出し${value}`:'見出し')+' ▼';
       if(action==='list')tr.textContent=(value==='number'?'番号付き':value==='bullet'?'箇条書き':'リスト')+' ▼';
+      if(action==='orientation')tr.textContent=({tcy:'縦中横',sideways:'横倒し',upright:'正立'})[value]||'文字向き';
       w.querySelectorAll('.rich-dropdown-item').forEach(item=>item.classList.toggle('is-current',!!value&&item.dataset.richValue===value));
     });
     const input=bar.querySelector('input[data-rich-action="color"]');if(input&&/^#[0-9a-f]{6}$/i.test(color))input.value=color;
@@ -8671,6 +10392,7 @@
   function removeRichKindsInSelection(ranges,start,end,kinds){return ranges.filter(r=>!(kinds.includes(r?.kind)&&Number(r.end)>start&&Number(r.start)<end));}
   function applyRichSelectionAction(action,value=''){
     const snap=richSelectionSnapshot,scene=snap?.scene;if(!scene)return;
+    if(scene.creditOwner)finishCreditsInlineEdit();
     // V124: commit the editable DOM first, then detach it BEFORE structural mutation.
     // This makes scene.text the single source of truth; stale contenteditable DOM can no
     // longer write pre-conversion text back over bullets/numbers or rebuilt ranges.
@@ -8687,11 +10409,27 @@
     const canonical=String(scene.text||''),picked=String(snap.selectedText||'');
     if(picked){const hits=[];let at=canonical.indexOf(picked);while(at>=0){hits.push(at);at=canonical.indexOf(picked,at+1);}if(hits.length){const best=hits.reduce((a,b)=>Math.abs(b-start)<Math.abs(a-start)?b:a,hits[0]);start=best;end=best+picked.length;}}
     if(end<=start)return;
-    if(action==='clear')ranges=removeRichKindsInSelection(ranges,start,end,['span','heading','quote','listItem']);
+    if(action==='clear'){for(const r of ranges.filter(r=>r.kind==='ruby'&&r.source==='auto'&&overlaps(r)))excludeAutomaticRuby(scene,r.start,r.end);ranges=removeRichKindsInSelection(ranges,start,end,['span','heading','quote','listItem','ruby','orientation']);}
+    else if(action==='ruby'){
+      if(/\n/.test(canonical.slice(start,end))){appAlert('ルビは改行を含まない文字列を選択してください。');return;}
+      if(!value)excludeAutomaticRuby(scene,start,end);
+      else if(scene.richText?.autoRubyExcluded)scene.richText.autoRubyExcluded=scene.richText.autoRubyExcluded.filter(r=>!overlaps(r));
+      ranges=ranges.filter(r=>!(r?.kind==='ruby'&&overlaps(r)));
+      if(value)ranges.push({start,end,kind:'ruby',reading:String(value)});
+    }
     else if(action==='bold'){const cur=spanCover(st=>st.bold===true);if(cur)ranges=ranges.filter(r=>r!==cur);else ranges.push({start,end,kind:'span',style:{bold:true}});}
+    else if(action==='italic'){const cur=spanCover(st=>st.italic===true);if(cur)ranges=ranges.filter(r=>r!==cur);else ranges.push({start,end,kind:'span',style:{italic:true}});}
     else if(action==='font'&&value){const cur=spanCover(st=>String(st.fontFamily||'')===String(value));ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&r?.style?.fontFamily));if(!cur)ranges.push({start,end,kind:'span',style:{fontFamily:String(value)}});}
     else if(action==='size'&&value){const num=Number(value)||1,cur=spanCover(st=>Number(st.fontScale)===num);ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&Number(r?.style?.fontScale)>0));if(!cur)ranges.push({start,end,kind:'span',style:{fontScale:num}});}
     else if(action==='color'&&value)ranges.push({start,end,kind:'span',style:{color:String(value)}});
+    else if(action==='orientation'&&['tcy','sideways','upright'].includes(String(value))){
+      // Keep portions outside the selected interval and replace only its orientation.
+      ranges=ranges.flatMap(r=>{
+        if(r?.kind!=='orientation'||!overlaps(r))return [r];
+        const out=[];if(Number(r.start)<start)out.push({...r,end:start});if(Number(r.end)>end)out.push({...r,start:end});return out;
+      });
+      ranges.push({start,end,kind:'orientation',orientation:String(value)});
+    }
     else if(action==='heading'||action==='quote'||action==='bullet'||action==='number'){
       // V123: block Rich Text is paragraph structure, not an inline range mutation.
       // Rebuild the selected whole-line block from canonical text in one transaction.
@@ -8754,11 +10492,12 @@
       }
     }
     scene.richText.ranges=ranges.sort((a,b)=>(a.start||0)-(b.start||0)||(a.end||0)-(b.end||0));
-    if(!scene.richText.ranges.length)delete scene.richText;
+    if(!scene.richText.ranges.length&&!scene.richText.autoRubyExcluded?.length){if(scene.creditOwner){scene.richText=null;removeEmptyCreditRichText(scene);}else delete scene.richText;}
     scheduleDraftSave(0);hideRichSelectionToolbar();
     try{getSelection()?.removeAllRanges();}catch(_){ }
     if(liveInlineEditEl)finishInlineTextEdit();
     liveEditRenderAt(Number.isInteger(snap.index)?snap.index:workingDocument.scenes.indexOf(scene),{preserveSheet:false});
+    if(scene.creditOwner||scene.presentation?.credits?.enabled){playerHost.querySelector('.sp-scene.is-active .sp-credits.is-roll')?.classList.add('is-static','is-paused');}
     showUndo(action==='clear'?'書式を解除しました':'文字の書式を変更しました');
   }
   // V73: the Player itself handles pointer/tap release. Waiting until RAF meant the
@@ -8811,14 +10550,15 @@
     const before=range.cloneRange();
     before.selectNodeContents(el);
     before.setEnd(range.startContainer,range.startOffset);
-    return before.toString().length;
+    return editablePlainText(stripRubyReadings(before.cloneContents())).length;
   }
   function setInlineCaretOffset(offset){
     const el=liveInlineEditEl;if(!el)return false;
-    const target=Math.max(0,Math.min(Number(offset)||0,el.innerText.replace(/\n$/,'').length));
+    const target=Math.max(0,Math.min(Number(offset)||0,inlineBaseText(el).replace(/\n$/,'').length));
     const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
     let left=target,node=null;
     while((node=walker.nextNode())){
+      if(node.parentElement?.closest('rt,rp,.sp-typing-cursor'))continue;
       const len=node.nodeValue?.length||0;
       if(left<=len){
         const range=document.createRange(),sel=getSelection();
@@ -8840,7 +10580,7 @@
   }
   function jumpInlineCaretToPunctuation(direction){
     const el=liveInlineEditEl;if(!el)return;
-    const text=el.innerText.replace(/\n$/,'');
+    const text=inlineBaseText(el).replace(/\n$/,'');
     const pos=inlineCaretOffset();if(pos<0)return;
     // Scene editing usually splits at sentence / clause boundaries. Land AFTER punctuation/newline.
     const boundary=/[。、！？!?\n]/;
@@ -8874,24 +10614,95 @@
     collapseInlineCursorDock();
   }
 
+  let liveEmptyAuthoringOverlay=null;
+  function removeLiveEmptyAuthoringOverlay(){
+    liveEmptyAuthoringOverlay?.remove();
+    liveEmptyAuthoringOverlay=null;
+  }
+  function positionLiveEmptyAuthoringOverlay(){
+    if(!liveEmptyAuthoringOverlay||!liveEditEnabled||!playerHost)return;
+    const article=playerHost.querySelector('.sp-scene.is-active');
+    if(!article){removeLiveEmptyAuthoringOverlay();return;}
+    const r=article.getBoundingClientRect();
+    Object.assign(liveEmptyAuthoringOverlay.style,{
+      left:`${Math.round(r.left)}px`,
+      top:`${Math.round(r.top)}px`,
+      width:`${Math.max(0,Math.round(r.width))}px`,
+      height:`${Math.max(0,Math.round(r.height))}px`
+    });
+  }
   function ensureLiveEditEmptyTarget(){
-    if(!liveEditEnabled||!playerHost)return;
+    if(!liveEditEnabled||!playerHost){removeLiveEmptyAuthoringOverlay();return;}
     const {scene}=liveEditScene();
     const article=playerHost.querySelector('.sp-scene.is-active');
-    if(!scene||!article)return;
+    if(!scene||!article){removeLiveEmptyAuthoringOverlay();return;}
+
     let text=article.querySelector('.sp-text');
-    const empty=typeof scene.text!=='string'||scene.text.length===0;
+    const empty=String(scene.text||'').length===0 && String(scene.subText||'').length===0;
     article.classList.toggle('live-edit-empty-scene',empty);
-    if(empty&&!text){
+    if(!empty){
+      text?.classList.remove('live-edit-empty-target');
+      removeLiveEmptyAuthoringOverlay();
+      return;
+    }
+
+    if(!text){
       text=document.createElement('div');
       text.className='sp-text live-edit-empty-target';
       text.textContent='';
       try{player?._applyTextStyle?.(text,scene.presentation?.text||{},false);}catch(_){}
       article.appendChild(text);
-    }else if(text){
-      text.classList.toggle('live-edit-empty-target',empty);
+    }else{
+      text.classList.add('live-edit-empty-target');
     }
+
+    // Keep the activation surface OUTSIDE #scenePlayer.
+    // ScenePlayer owns gestures inside its host, so an in-player hit target can
+    // still lose the first tap to navigation. This body-level overlay sits over
+    // only the active Scene and turns the first tap into a trusted authoring
+    // gesture before ScenePlayer can see it.
+    if(!liveEmptyAuthoringOverlay){
+      const hit=document.createElement('button');
+      hit.type='button';
+      hit.className='live-empty-authoring-overlay';
+      hit.textContent=u('タップして入力','Tap to type');
+      hit.setAttribute('aria-label',u('この空Sceneに本文を入力','Type text in this empty Scene'));
+      Object.assign(hit.style,{
+        position:'fixed',
+        zIndex:'2147482500',
+        border:'0',
+        padding:'0',
+        margin:'0',
+        background:'transparent',
+        color:'rgba(110,110,115,.38)',
+        font:'600 13px/1.5 system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif',
+        letterSpacing:'.04em',
+        cursor:'text',
+        WebkitTapHighlightColor:'transparent',
+        touchAction:'manipulation'
+      });
+      const begin=(e)=>{
+        if(!liveEditEnabled||liveInlineEditEl)return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+        removeLiveEmptyAuthoringOverlay();
+        // startInlineTextEdit sets contenteditable and focuses synchronously,
+        // preserving iPhone software-keyboard activation as well as PC editing.
+        startInlineTextEdit('text',text);
+      };
+      hit.addEventListener('pointerdown',begin,true);
+      hit.addEventListener('mousedown',begin,true);
+      hit.addEventListener('touchstart',begin,{capture:true,passive:false});
+      document.body.appendChild(hit);
+      liveEmptyAuthoringOverlay=hit;
+    }
+    positionLiveEmptyAuthoringOverlay();
   }
+  window.addEventListener('resize',()=>requestAnimationFrame(positionLiveEmptyAuthoringOverlay));
+  window.addEventListener('scroll',()=>requestAnimationFrame(positionLiveEmptyAuthoringOverlay),true);
+  window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(positionLiveEmptyAuthoringOverlay));
+  window.visualViewport?.addEventListener('scroll',()=>requestAnimationFrame(positionLiveEmptyAuthoringOverlay));
   function liveEditSplitInlineAtCaret(){
     const {scene,index}=liveEditScene();if(!scene||!liveInlineEditEl)return;
     if(sceneHasTable(scene)){showToast?.('表Sceneは分割できません');return;}
@@ -8902,15 +10713,16 @@
     const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
     if(!left||!right){showUndo('分割する位置にカーソルを置いてください');return;}
     captureUndo('Scene分割を元に戻せます');
+    const splitExcluded=splitAutoRubyExclusions(scene,pos,left,right,text);
     const splitRich=window.AhakoSceneEditCore?.splitRanges?.(scene,pos,left,right,text)||{left:[],right:[]};
     scene.text=left;
-    if(splitRich.left.length)scene.richText={version:1,ranges:splitRich.left}; else delete scene.richText;
+    assignSceneRichText(scene,splitRich.left,splitExcluded.left);
     // The currently visible Scene becomes Player history when we move to the
     // new Scene. Shorten that DOM now so history cannot keep the old full text.
     liveInlineEditEl.innerText=left;
     if(player?.currentScene)player.currentScene.text=left;
     const next=clone(scene);next.id=nextUniqueId();next.text=right;
-    if(splitRich.right.length)next.richText={version:1,ranges:splitRich.right}; else delete next.richText;
+    assignSceneRichText(next,splitRich.right,splitExcluded.right);
     delete next.subText;delete next.audio;
     if(next.presentation)delete next.presentation.background;
     workingDocument.scenes.splice(index+1,0,next);
@@ -8948,14 +10760,18 @@ function bindLiveKeyboardViewport(){
 }
 bindLiveKeyboardViewport();
 
-function startInlineTextEdit(field='text'){
+function startInlineTextEdit(field='text',targetEl=null){
+    finishCreditsInlineEdit();
     const {scene}=liveEditScene(); if(!scene)return;
+    // Once real inline editing begins, the empty-Scene rescue overlay must get out
+    // of the way or it can visually cover the caret / steal the next pointer event.
+    removeLiveEmptyAuthoringOverlay();
     // Rich Text v0.8: table-bearing Scenes are editable too. Table cards are
     // non-editable islands and syncInlineTextToScene() restores their source
     // placeholders before reading the edited text back into Scene data.
     finishInlineTextEdit(); closeLiveEditSheet(); setLiveToolbarVisible(true);
     const selector=field==='subText'?'.sp-subtext':'.sp-text';
-    const el=playerHost.querySelector(`.sp-scene.is-active ${selector}`); if(!el)return;
+    const el=targetEl||playerHost.querySelector(`.sp-scene.is-active ${selector}`); if(!el)return;
 
     liveInlineEditField=field==='subText'?'subText':'text';
     liveInlineEditEl=el;
@@ -8972,10 +10788,11 @@ function startInlineTextEdit(field='text'){
     // contenteditable=true is the most reliable option on iPhone Safari.
     // The element itself stays in the Player; no duplicate textarea/modal is created.
     el.setAttribute('contenteditable','true');
-    el.querySelectorAll('.sp-rich-table-card').forEach(card=>card.setAttribute('contenteditable','false'));
+    el.querySelectorAll('.sp-rich-table-card, .sp-rich-link-card').forEach(card=>card.setAttribute('contenteditable','false'));
     el.setAttribute('role','textbox');
     el.setAttribute('aria-label',liveInlineEditField==='subText'?'Scene subtext':'Scene text');
     el.classList.add('live-inline-editing');
+    el.closest('.sp-credits')?.classList.add('is-body-editing');
     playerHost.classList.add('live-inline-text-edit');
     // Toolbar is a sibling of #scenePlayer, so expose editing state on body too.
     // The iOS keyboard pinning CSS and visualViewport updater key off this class.
@@ -9055,8 +10872,21 @@ function startInlineTextEdit(field='text'){
     requestAnimationFrame(cleanupDesktopV2BuilderOverlays);
   }
   function refreshLivePlayer({preserveSheet=true,preserveDesktopEditor=false}={}){
+    finishCreditsInlineEdit();
     if(!player||!workingDocument?.scenes?.length)return;
+    const directScene=framePositionDragScene;
+    const restoreDirect=!!framePositionDragCleanup && !!directScene && !framePositionDragReopen;
+    if(restoreDirect){
+      framePositionDragReopen=true;
+      finishFramePositionDrag({save:true,skipRefresh:true,keepEditorState:true});
+    }
     liveEditRenderAt(player.index,{preserveSheet,preserveDesktopEditor});
+    if(restoreDirect){
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        framePositionDragReopen=false;
+        if(framePositionDragScene===directScene)openFramePositionDragEditor(directScene);
+      }));
+    }
   }
   let mobileLiveDetailReturnSection='';
   let mobileLiveDetailOpening=false;
@@ -9313,38 +11143,75 @@ function startInlineTextEdit(field='text'){
   // Phase 6 / V99 — VIEW POINT authoring.
   // The author chooses stable viewpoints; the reader chooses WHEN to move to the next one.
   // No raw hand motion or timing is stored.
-  function openViewRecRecorder(image,onSave){
+  function openViewRecRecorder(image,onSave,bundleOptions={}){
     if(!image?.src)return;
+    const bundlePages=Array.isArray(bundleOptions.pages)?bundleOptions.pages.map(page=>({...page})):null;
+    let currentPageIndex=Math.max(0,Math.min(Math.max(0,(bundlePages?.length||1)-1),Number(bundleOptions.index)||0));
+    let currentImage=bundlePages?.[currentPageIndex]||image;
     const overlay=document.createElement('div');overlay.className='view-rec-recorder';
     const panel=document.createElement('div');panel.className='view-rec-recorder-panel';
     const head=document.createElement('div');head.className='view-rec-recorder-head';
     const title=document.createElement('div');title.className='view-rec-recorder-title';title.textContent='VIEW POINT';
+    const pageNav=document.createElement('div');pageNav.className='view-rec-page-nav';pageNav.hidden=!bundlePages;
+    const pageCounter=document.createElement('div');pageCounter.className='view-rec-page-counter';pageCounter.textContent=bundlePages?`${currentPageIndex+1} / ${bundlePages.length}`:'';
     const close=document.createElement('button');close.type='button';close.className='view-rec-recorder-close';close.textContent='×';close.setAttribute('aria-label',u('閉じる','Close'));
-    head.append(title,close);
+    const pagePrevTop=document.createElement('button');pagePrevTop.type='button';pagePrevTop.className='view-rec-page-arrow is-head is-prev';pagePrevTop.textContent='‹';pagePrevTop.setAttribute('aria-label',u('前のページ','Previous page'));
+    const pageNextTop=document.createElement('button');pageNextTop.type='button';pageNextTop.className='view-rec-page-arrow is-head is-next';pageNextTop.textContent='›';pageNextTop.setAttribute('aria-label',u('次のページ','Next page'));
+    pageNav.append(pagePrevTop,pageCounter,pageNextTop);head.append(title,pageNav,close);
+    const media=document.createElement('div');media.className='view-rec-recorder-media';
     const stage=document.createElement('div');stage.className='view-rec-recorder-stage';
-    const img=document.createElement('img');img.className='view-rec-recorder-image';img.src=image.src;img.alt=image.alt||'';img.draggable=false;stage.appendChild(img);
-    const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('見せたい位置へ移動・ズームして「＋ 視点を追加」','Move / zoom to the view you want, then add a viewpoint');
+    const img=document.createElement('img');img.className='view-rec-recorder-image';img.src=currentImage.src;img.alt=currentImage.alt||'';img.draggable=false;stage.appendChild(img);
+    const route=document.createElementNS('http://www.w3.org/2000/svg','svg');route.classList.add('view-rec-route');route.setAttribute('hidden','');stage.appendChild(route);
+    const pagePrevSide=document.createElement('button');pagePrevSide.type='button';pagePrevSide.className='view-rec-page-arrow is-margin is-prev';pagePrevSide.textContent='‹';pagePrevSide.setAttribute('aria-label',u('前のページ','Previous page'));
+    const pageNextSide=document.createElement('button');pageNextSide.type='button';pageNextSide.className='view-rec-page-arrow is-margin is-next';pageNextSide.textContent='›';pageNextSide.setAttribute('aria-label',u('次のページ','Next page'));
+    media.append(pagePrevSide,stage,pageNextSide);
+    const hint=document.createElement('div');hint.className='view-rec-recorder-hint';hint.textContent=u('視点を選ぶと位置とズームを再現。調整したら「この視点を更新」。導線は全景で確認できます。','Select a viewpoint to restore its position and zoom. Adjust it, then update that viewpoint. View the route on the full page.');
     const status=document.createElement('div');status.className='view-rec-recorder-status';
     const controls=document.createElement('div');controls.className='view-rec-recorder-controls';
     const add=document.createElement('button');add.type='button';add.className='view-rec-button is-rec';add.textContent=u('＋ 視点を追加','＋ Add viewpoint');
     const reset=document.createElement('button');reset.type='button';reset.className='view-rec-button';reset.textContent=u('全景に戻す','Reset view');
     const clearPoints=document.createElement('button');clearPoints.type='button';clearPoints.className='view-rec-button';clearPoints.textContent=u('視点を全削除','Clear viewpoints');
-    const save=document.createElement('button');save.type='button';save.className='view-rec-button is-primary';save.textContent=u('保存','Save');
+    const save=document.createElement('button');save.type='button';save.className='view-rec-button is-primary view-rec-save';save.textContent=u('保存','Save');
     const axis=document.createElement('button');axis.type='button';axis.className='view-rec-button';axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');axis.setAttribute('aria-pressed','false');
     const axisY=document.createElement('button');axisY.type='button';axisY.className='view-rec-button';axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');axisY.setAttribute('aria-pressed','false');
-    const cancel=document.createElement('button');cancel.type='button';cancel.className='view-rec-button';cancel.textContent=u('キャンセル','Cancel');
-    controls.append(add,reset,axis,axisY,clearPoints,save,cancel);panel.append(head,stage,hint,status,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='view-rec-button view-rec-cancel';cancel.textContent=u('キャンセル','Cancel');
+    const editbar=document.createElement('div');editbar.className='view-rec-editbar';
+    const pointSelect=document.createElement('select');pointSelect.className='view-rec-point-select';pointSelect.setAttribute('aria-label',u('編集する視点','Viewpoint to edit'));
+    const pointPrev=document.createElement('button');pointPrev.type='button';pointPrev.className='view-rec-button view-rec-point-prev';pointPrev.textContent='‹';pointPrev.setAttribute('aria-label',u('前の視点','Previous viewpoint'));
+    const pointNext=document.createElement('button');pointNext.type='button';pointNext.className='view-rec-button view-rec-point-next';pointNext.textContent='›';pointNext.setAttribute('aria-label',u('次の視点','Next viewpoint'));
+    const updatePoint=document.createElement('button');updatePoint.type='button';updatePoint.className='view-rec-button is-primary';updatePoint.textContent=u('この視点を更新','Update this viewpoint');
+    const durationLabel=document.createElement('label');durationLabel.className='view-rec-duration-label';durationLabel.append(document.createTextNode(u('この視点への移動','Move to this viewpoint')));
+    const durationSelect=document.createElement('select');durationSelect.setAttribute('aria-label',u('この視点への移動時間','Transition time to this viewpoint'));durationLabel.append(durationSelect);
+    const curveLabel=document.createElement('label');curveLabel.className='view-rec-duration-label';curveLabel.append(document.createTextNode(u('速度の変化','Speed curve')));
+    const curveSelect=document.createElement('select');curveSelect.setAttribute('aria-label',u('移動速度の変化','Transition speed curve'));[['ease-out',u('減速（これまで通り）','Slow down (original)')],['linear',u('等速','Constant speed')],['ease-in',u('加速','Speed up')],['ease-in-out',u('ゆっくり → 速く → ゆっくり','Slow → fast → slow')]].forEach(([v,label])=>{const o=document.createElement('option');o.value=v;o.textContent=label;curveSelect.append(o);});curveLabel.append(curveSelect);
+    const mapButton=document.createElement('button');mapButton.type='button';mapButton.className='view-rec-button';mapButton.textContent=u('導線を表示','Show route');mapButton.setAttribute('aria-pressed','false');
+    const playButton=document.createElement('button');playButton.type='button';playButton.className='view-rec-button';playButton.textContent=u('▶ 再生プレビュー','▶ Preview');
+    const deletePoint=document.createElement('button');deletePoint.type='button';deletePoint.className='view-rec-button';deletePoint.textContent=u('この視点を削除','Delete this viewpoint');
+    const orderPrev=document.createElement('button');orderPrev.type='button';orderPrev.className='view-rec-button';orderPrev.textContent=u('順番 ←','Order ←');
+    const orderNext=document.createElement('button');orderNext.type='button';orderNext.className='view-rec-button';orderNext.textContent=u('順番 →','Order →');
+    const pointActions=document.createElement('details');pointActions.className='view-rec-point-actions';const pointActionsLabel=document.createElement('summary');pointActionsLabel.textContent=u('順番・削除','Order / delete');const pointActionsBody=document.createElement('div');pointActionsBody.append(orderPrev,orderNext,deletePoint,clearPoints);pointActions.append(pointActionsLabel,pointActionsBody);
+    const pointNav=document.createElement('div');pointNav.className='view-rec-point-nav';pointNav.append(pointPrev,pointSelect,pointNext);
+    const primaryActions=document.createElement('div');primaryActions.className='view-rec-primary-actions';primaryActions.append(add,updatePoint);
+    const reviewActions=document.createElement('div');reviewActions.className='view-rec-review-actions';reviewActions.append(mapButton,playButton);
+    const makeTools=(label,className,items)=>{const details=document.createElement('details');details.className=`view-rec-tools ${className}`;const summary=document.createElement('summary');summary.textContent=label;const body=document.createElement('div');body.append(...items);details.append(summary,body);return details;};
+    const motionTools=makeTools(u('移動時間・速度','Timing / speed'),'view-rec-motion-tools',[durationLabel,curveLabel]);
+    const adjustTools=makeTools(u('表示・移動固定','View / axis lock'),'view-rec-adjust-tools',[reset,axis,axisY]);
+    pointActions.classList.add('view-rec-tools');clearPoints.classList.add('is-danger');
+    const toolGroups=document.createElement('div');toolGroups.className='view-rec-tool-groups';toolGroups.append(motionTools,adjustTools,pointActions);
+    editbar.append(pointNav,primaryActions,reviewActions,toolGroups);
+    controls.append(cancel,save);panel.append(head,media,hint,status,editbar,controls);overlay.appendChild(panel);document.body.appendChild(overlay);
 
     // V113 — reopening VIEW POINT is an edit, not an implicit destructive rebuild.
     // Preserve the saved point sequence unless the author explicitly clears it.
-    const savedPointSet=image?.viewPoints||image?.viewRec||null;
-    const savedPoints=Array.isArray(savedPointSet?.points)?savedPointSet.points.map(point=>JSON.parse(JSON.stringify(point))):[];
-    const state={scale:1,x:0,y:0,points:savedPoints,zoomAnimRaf:0,drag:false,lastX:0,lastY:0,pinchDistance:0,pinchScale:1,axisLockX:false,axisLockY:false,dragAnchorY:0,dragAnchorX:0};
+    const savedPointSet=currentImage?.viewPoints||currentImage?.viewRec||null;
+    const normalizePoint=point=>{const copy=JSON.parse(JSON.stringify(point));delete copy.fit;return copy;};
+    const savedPoints=Array.isArray(savedPointSet?.points)?savedPointSet.points.map(normalizePoint):[];
+    const state={scale:1,x:0,y:0,points:savedPoints,zoomAnimRaf:0,drag:false,lastX:0,lastY:0,pinchDistance:0,pinchScale:1,axisLockX:false,axisLockY:false,dragAnchorY:0,dragAnchorX:0,selected:-1,map:false,preview:false,previewTimer:0};
     // V102 — the authoring viewport itself follows the source-image aspect ratio.
     // VIEW POINT is therefore authored in image space, not in the current device/window shape.
     const sizeStageToSource=()=>{
-      const panelBox=panel.getBoundingClientRect(),headH=head.getBoundingClientRect().height||0,hintH=hint.getBoundingClientRect().height||0,statusH=status.getBoundingClientRect().height||0,controlsH=controls.getBoundingClientRect().height||0;
-      const maxW=Math.max(1,panelBox.width),maxH=Math.max(1,panelBox.height-headH-hintH-statusH-controlsH);
+      const mediaBox=media.getBoundingClientRect(),mobile=window.matchMedia('(max-width:600px)').matches;
+      const maxW=Math.max(1,mediaBox.width-(mobile?0:96)),maxH=Math.max(1,mediaBox.height);
       const nw=Math.max(1,img.naturalWidth||1),nh=Math.max(1,img.naturalHeight||1),ratio=nw/nh;
       let w=maxW,h=w/ratio;if(h>maxH){h=maxH;w=h*ratio;}
       stage.style.width=`${Math.max(1,w)}px`;stage.style.height=`${Math.max(1,h)}px`;stage.style.justifySelf='center';
@@ -9368,43 +11235,102 @@ function startInlineTextEdit(field='text'){
       const x=Math.max(0,Math.min(1-width,cx-width/2)),y=Math.max(0,Math.min(1-height,cy-height/2));
       return{type:'focus',rect:{x:+x.toFixed(5),y:+y.toFixed(5),width:+width.toFixed(5),height:+height.toFixed(5)}};
     };
-    const updateStatus=()=>{status.textContent=state.points.length?u(`視点 ${state.points.length}個 · 読者タップで順番に移動`,`Viewpoints: ${state.points.length} · reader taps to advance`):u('まだ視点はありません','No viewpoints yet');save.disabled=state.points.length<1;};
-    const zoomAt=(clientX,clientY,next)=>{const r=stage.getBoundingClientRect(),vp=viewport(),old=state.scale,scale=clampScale(next);if(Math.abs(scale-old)<.0001)return;const dx=clientX-r.left-vp.w/2,dy=clientY-r.top-vp.h/2,ratio=scale/old;state.x=dx-(dx-state.x)*ratio;state.y=dy-(dy-state.y)*ratio;state.scale=scale;apply();};
-    const resetView=()=>{state.scale=1;state.x=0;state.y=0;apply();};
+    const transitionTime=p=>Number.isFinite(Number(p?.transitionMs))?Math.max(100,Math.min(30000,Number(p.transitionMs))):420;
+    const transitionCurve=p=>['linear','ease-in','ease-in-out'].includes(p?.transitionCurve)?p.transitionCurve:'ease-out';
+    const curveProgress=(t,curve)=>curve==='linear'?t:curve==='ease-in'?t*t*t:curve==='ease-in-out'?(t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2):1-Math.pow(1-t,3);
+    const pointCenter=p=>p?.type==='fit'?{x:.5,y:.5}:p?.rect?{x:p.rect.x+p.rect.width/2,y:p.rect.y+p.rect.height/2}:{x:Number.isFinite(p?.cx)?p.cx:.5,y:Number.isFinite(p?.cy)?p.cy:.5};
+    const renderRoute=()=>{route.toggleAttribute('hidden',!state.map);route.replaceChildren();if(!state.map)return;const vp=viewport();route.setAttribute('viewBox',`0 0 ${vp.w} ${vp.h}`);const centers=state.points.map(pointCenter);const make=(tag,attrs)=>{const el=document.createElementNS('http://www.w3.org/2000/svg',tag);Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,String(v)));return el;};const line=make('polyline',{points:centers.map(c=>`${c.x*vp.w},${c.y*vp.h}`).join(' '),fill:'none',stroke:'#79c5ff','stroke-width':2.5});route.append(line);centers.forEach((c,i)=>{const g=make('g',{'data-point':i,role:'button',tabindex:0,'aria-label':u(`視点 ${i+1} を表示`,`Show viewpoint ${i+1}`)});g.append(make('circle',{cx:c.x*vp.w,cy:c.y*vp.h,r:16,fill:i===state.selected?'#087fff':'#142b40',stroke:'#fff','stroke-width':2}));const label=make('text',{x:c.x*vp.w,y:c.y*vp.h,'text-anchor':'middle','dominant-baseline':'central',fill:'#fff','font-size':14,'font-family':'system-ui','font-weight':800});label.textContent=String(i+1);g.append(label);g.addEventListener('click',e=>{e.stopPropagation();selectPoint(i);});g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectPoint(i);}});['pointerdown','touchstart','touchend','dblclick'].forEach(type=>g.addEventListener(type,e=>e.stopPropagation()));route.append(g);});};
+    const updateStatus=()=>{const count=state.points.length,selected=state.points[state.selected];status.textContent=state.preview?u(`プレビュー · 視点 ${state.selected+1} / ${count}`,`Preview · viewpoint ${state.selected+1} / ${count}`):selected?u(`視点 ${state.selected+1} / ${count} · 調整後に「この視点を更新」`,`Viewpoint ${state.selected+1} / ${count} · update after adjusting`):count?u(`視点 ${count}個 · 編集する視点を選んでください`,`${count} viewpoints · select one to edit`):u('まだ視点はありません','No viewpoints yet');save.disabled=!bundlePages&&count<1&&savedPoints.length<1;pointSelect.replaceChildren();const placeholder=document.createElement('option');placeholder.value='-1';placeholder.textContent=u('視点を選択','Select viewpoint');pointSelect.append(placeholder);state.points.forEach((p,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=u(`視点 ${i+1}`,`Viewpoint ${i+1}`);pointSelect.append(o);});pointSelect.value=String(state.selected);pointSelect.disabled=!count;[updatePoint,deletePoint,durationSelect,curveSelect].forEach(el=>el.disabled=!selected||state.preview);updatePoint.disabled=!selected||state.preview||state.map;add.disabled=state.map||state.preview;[mapButton,playButton].forEach(el=>el.disabled=!count);pointPrev.disabled=state.selected<=0||state.preview;pointNext.disabled=!count||state.selected>=count-1||state.preview;clearPoints.disabled=!count||state.preview;orderPrev.disabled=state.selected<=0||state.preview;orderNext.disabled=state.selected<0||state.selected>=count-1||state.preview;durationSelect.replaceChildren();const ms=transitionTime(selected);[...new Set([100,150,250,420,600,800,1000,1200,1500,2000,3000,4000,5000,7500,10000,15000,20000,30000,ms])].sort((a,b)=>a-b).forEach(v=>{const o=document.createElement('option');o.value=String(v);o.textContent=`${v/1000}${u('秒','s')}`;durationSelect.append(o);});durationSelect.value=String(ms);curveSelect.value=transitionCurve(selected);playButton.textContent=state.preview?u('■ 停止','■ Stop'):u('▶ 再生プレビュー','▶ Preview');mapButton.setAttribute('aria-pressed',String(state.map));renderRoute();};
+    const zoomAt=(clientX,clientY,next)=>{stopPreview();hideMap();const r=stage.getBoundingClientRect(),vp=viewport(),old=state.scale,scale=clampScale(next);if(Math.abs(scale-old)<.0001)return;updateStatus();const dx=clientX-r.left-vp.w/2,dy=clientY-r.top-vp.h/2,ratio=scale/old;state.x=dx-(dx-state.x)*ratio;state.y=dy-(dy-state.y)*ratio;state.scale=scale;apply();};
+    const resetView=()=>{state.scale=1;state.x=0;state.y=0;apply();updateStatus();};
     const dist=(a,b)=>Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY),center=(a,b)=>({x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2});
     const cancelZoomAnimation=()=>{if(state.zoomAnimRaf)cancelAnimationFrame(state.zoomAnimRaf);state.zoomAnimRaf=0;};
-    const animateViewTo=(target,duration=340)=>{cancelZoomAnimation();const from={x:state.x,y:state.y,scale:state.scale},started=performance.now(),ease=t=>1-Math.pow(1-t,3);const step=now=>{const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);state.x=from.x+(target.x-from.x)*e;state.y=from.y+(target.y-from.y)*e;state.scale=from.scale+(target.scale-from.scale)*e;apply();if(q<1)state.zoomAnimRaf=requestAnimationFrame(step);else state.zoomAnimRaf=0;};state.zoomAnimRaf=requestAnimationFrame(step);};
+    const animateViewTo=(target,duration=340,curve='ease-out')=>{cancelZoomAnimation();const from={x:state.x,y:state.y,scale:state.scale},started=performance.now(),ease=t=>curveProgress(t,curve);const step=now=>{const q=Math.max(0,Math.min(1,(now-started)/duration)),e=ease(q);state.x=from.x+(target.x-from.x)*e;state.y=from.y+(target.y-from.y)*e;state.scale=from.scale+(target.scale-from.scale)*e;apply();if(q<1)state.zoomAnimRaf=requestAnimationFrame(step);else state.zoomAnimRaf=0;};state.zoomAnimRaf=requestAnimationFrame(step);};
+    const stopPreview=()=>{state.preview=false;clearTimeout(state.previewTimer);state.previewTimer=0;cancelZoomAnimation();};
+    const hideMap=()=>{state.map=false;route.setAttribute('hidden','');mapButton.setAttribute('aria-pressed','false');};
+    const targetFor=p=>{const vp=viewport(),bw=Math.max(1,img.clientWidth),bh=Math.max(1,img.clientHeight);if(p?.type==='fit')return{x:0,y:0,scale:1};let scale,c=pointCenter(p);if(p?.rect)scale=Math.max(vp.w/(bw*Math.max(.01,p.rect.width)),vp.h/(bh*Math.max(.01,p.rect.height)));else if(p?.width&&p?.height)scale=Math.max(Math.min(vp.w/(bw*p.width),vp.h/(bh*p.height)),p.occupancy||1);else scale=p?.scale||1;scale=Math.max(1,Math.min(12,scale));return{x:(.5-c.x)*bw*scale,y:(.5-c.y)*bh*scale,scale};};
+    const showPoint=(index,animate=false)=>{const p=state.points[index];if(!p)return;state.selected=index;hideMap();const target=targetFor(p);if(animate)animateViewTo(target,transitionTime(p),transitionCurve(p));else{cancelZoomAnimation();Object.assign(state,target);apply();}updateStatus();};
+    const selectPoint=index=>{stopPreview();showPoint(index);};
+    const startPreview=()=>{stopPreview();if(!state.points.length)return;state.preview=true;showPoint(0);const advance=()=>{if(!state.preview)return;if(state.selected>=state.points.length-1){state.preview=false;updateStatus();return;}const next=state.selected+1;showPoint(next,true);state.previewTimer=setTimeout(advance,transitionTime(state.points[next])+700);};state.previewTimer=setTimeout(advance,700);};
+    pointPrev.onclick=()=>{if(state.selected>0)selectPoint(state.selected-1);};
+    pointNext.onclick=()=>{if(state.selected<state.points.length-1)selectPoint(state.selected+1);};
+    pointSelect.onchange=()=>{const index=Number(pointSelect.value);if(index>=0)selectPoint(index);};
+    updatePoint.onclick=()=>{if(state.selected<0)return;stopPreview();hideMap();const old=state.points[state.selected],metadata={...old};['type','rect','cx','cy','width','height','scale','occupancy','fit'].forEach(key=>delete metadata[key]);state.points[state.selected]={...metadata,...gazePoint()};updateStatus();};
+    durationSelect.onchange=()=>{if(state.selected<0)return;state.points[state.selected].transitionMs=Number(durationSelect.value);updateStatus();};
+    curveSelect.onchange=()=>{if(state.selected<0)return;state.points[state.selected].transitionCurve=curveSelect.value;updateStatus();};
+    deletePoint.onclick=()=>{if(state.selected<0)return;stopPreview();state.points.splice(state.selected,1);if(state.points.length)showPoint(Math.min(state.selected,state.points.length-1));else{state.selected=-1;hideMap();resetView();}updateStatus();};
+    const moveOrder=delta=>{const from=state.selected,to=from+delta;if(from<0||to<0||to>=state.points.length)return;stopPreview();[state.points[from],state.points[to]]=[state.points[to],state.points[from]];state.selected=to;updateStatus();};orderPrev.onclick=()=>moveOrder(-1);orderNext.onclick=()=>moveOrder(1);
+    mapButton.onclick=()=>{stopPreview();if(state.map){hideMap();if(state.selected>=0)showPoint(state.selected);else updateStatus();}else{state.map=true;state.scale=1;state.x=0;state.y=0;apply();updateStatus();}};
+    playButton.onclick=()=>{if(state.preview){stopPreview();updateStatus();}else startPreview();};
     const doubleTapZoomTarget=(clientX,clientY,nextScale)=>{const r=stage.getBoundingClientRect(),vp=viewport(),old=state.scale,scale=clampScale(nextScale),dx=clientX-r.left-vp.w/2,dy=clientY-r.top-vp.h/2,ratio=scale/old;return{x:dx-(dx-state.x)*ratio,y:dy-(dy-state.y)*ratio,scale};};
-    const toggleDoubleTapZoom=(x,y)=>state.scale>1.05?animateViewTo({x:0,y:0,scale:1}):animateViewTo(doubleTapZoomTarget(x,y,2));
+    const toggleDoubleTapZoom=(x,y)=>{stopPreview();hideMap();updateStatus();return state.scale>1.05?animateViewTo({x:0,y:0,scale:1}):animateViewTo(doubleTapZoomTarget(x,y,2));};
     let lastTapTime=0,lastTapX=0,lastTapY=0;
     const registerTap=(x,y)=>{const now=performance.now(),near=Math.hypot(x-lastTapX,y-lastTapY)<42;if(now-lastTapTime<330&&near){lastTapTime=0;toggleDoubleTapZoom(x,y);return true;}lastTapTime=now;lastTapX=x;lastTapY=y;return false;};
     stage.addEventListener('dblclick',e=>{e.preventDefault();toggleDoubleTapZoom(e.clientX,e.clientY);});
     stage.addEventListener('wheel',e=>{e.preventDefault();cancelZoomAnimation();zoomAt(e.clientX,e.clientY,state.scale*Math.exp(-e.deltaY*.0015));},{passive:false});
-    stage.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')return;cancelZoomAnimation();state.drag=true;state.lastX=e.clientX;state.lastY=e.clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;stage.setPointerCapture?.(e.pointerId);});
-    stage.addEventListener('pointermove',e=>{if(!state.drag||e.pointerType==='touch')return;if(!state.axisLockY)state.x+=e.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=e.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=e.clientX;state.lastY=e.clientY;apply();});
+    stage.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'||state.map)return;stopPreview();updateStatus();cancelZoomAnimation();state.drag=true;state.lastX=e.clientX;state.lastY=e.clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;stage.setPointerCapture?.(e.pointerId);});
+    stage.addEventListener('pointermove',e=>{if(e.pointerType==='touch'||!state.drag)return;if(!state.axisLockY)state.x+=e.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=e.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=e.clientX;state.lastY=e.clientY;apply();});
     const endDrag=()=>{state.drag=false;};stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',endDrag);
-    stage.addEventListener('touchstart',e=>{cancelZoomAnimation();if(e.touches.length===2){e.preventDefault();state.pinchDistance=dist(e.touches[0],e.touches[1]);state.pinchScale=state.scale;state.drag=false;}else if(e.touches.length===1){e.preventDefault();state.drag=true;state.lastX=e.touches[0].clientX;state.lastY=e.touches[0].clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;}},{passive:false});
+    stage.addEventListener('touchstart',e=>{if(state.map)return;stopPreview();updateStatus();cancelZoomAnimation();if(e.touches.length===2){e.preventDefault();state.pinchDistance=dist(e.touches[0],e.touches[1]);state.pinchScale=state.scale;state.drag=false;}else if(e.touches.length===1){e.preventDefault();const t=e.touches[0];state.drag=true;state.lastX=t.clientX;state.lastY=t.clientY;state.dragAnchorY=state.y;state.dragAnchorX=state.x;}},{passive:false});
     stage.addEventListener('touchmove',e=>{e.preventDefault();if(e.touches.length===2&&state.pinchDistance){const c=center(e.touches[0],e.touches[1]);zoomAt(c.x,c.y,state.pinchScale*(dist(e.touches[0],e.touches[1])/state.pinchDistance));}else if(e.touches.length===1&&state.drag){const t=e.touches[0];if(!state.axisLockY)state.x+=t.clientX-state.lastX;else state.x=state.dragAnchorX;if(!state.axisLockX)state.y+=t.clientY-state.lastY;else state.y=state.dragAnchorY;state.lastX=t.clientX;state.lastY=t.clientY;apply();}},{passive:false});
-    stage.addEventListener('touchend',e=>{if(!e.touches.length){const changed=e.changedTouches&&e.changedTouches[0],wasPinch=!!state.pinchDistance;state.drag=false;state.pinchDistance=0;if(!wasPinch&&changed)registerTap(changed.clientX,changed.clientY);}},{passive:false});
-    add.onclick=()=>{cancelZoomAnimation();state.points.push(gazePoint());updateStatus();};
-    clearPoints.onclick=()=>{cancelZoomAnimation();state.points=[];updateStatus();};
-    reset.onclick=()=>{cancelZoomAnimation();resetView();};
+    stage.addEventListener('touchend',e=>{if(!state.map&&!e.touches.length){const changed=e.changedTouches&&e.changedTouches[0],wasPinch=!!state.pinchDistance;state.drag=false;state.pinchDistance=0;if(!wasPinch&&changed&&!e.target.closest?.('.view-rec-page-arrow'))registerTap(changed.clientX,changed.clientY);}},{passive:false});
+    add.onclick=()=>{stopPreview();hideMap();state.points.push(gazePoint());state.selected=state.points.length-1;updateStatus();};
+    clearPoints.onclick=async()=>{
+      if(!state.points.length)return;
+      stopPreview();updateStatus();
+      const requestedPage=currentPageIndex,requestedPoints=state.points;
+      const message=bundlePages?u(`このページ（${currentPageIndex+1} / ${bundlePages.length}）の視点${state.points.length}個をすべて削除します。画像と他のページの視点は残ります。`,`Delete all ${state.points.length} viewpoints on page ${currentPageIndex+1} of ${bundlePages.length}? The image and other pages will remain.`):u(`この画像の視点${state.points.length}個をすべて削除します。画像は残ります。`,`Delete all ${state.points.length} viewpoints? The image will remain.`);
+      const ok=await appConfirm(message,{title:u('視点をすべて削除しますか？','Delete all viewpoints?'),kicker:'VIEW POINT',danger:true,confirmLabel:u('視点をすべて削除','Delete all viewpoints'),cancelLabel:u('戻る','Go back')});
+      if(!ok||!overlay.isConnected||currentPageIndex!==requestedPage||state.points!==requestedPoints)return;
+      hideMap();state.points=[];state.selected=-1;updateStatus();
+    };
+    reset.onclick=()=>{stopPreview();hideMap();resetView();};
     axis.onclick=()=>{state.axisLockX=!state.axisLockX;if(state.axisLockX)state.axisLockY=false;axis.classList.toggle('is-active',state.axisLockX);axisY.classList.remove('is-active');axis.setAttribute('aria-pressed',String(state.axisLockX));axisY.setAttribute('aria-pressed','false');axis.textContent=state.axisLockX?u('↔ 横移動固定 ON','↔ Horizontal lock ON'):u('↔ 横移動固定','↔ Lock horizontal');axisY.textContent=u('↕ 縦移動固定','↕ Lock vertical');};
     axisY.onclick=()=>{state.axisLockY=!state.axisLockY;if(state.axisLockY)state.axisLockX=false;axisY.classList.toggle('is-active',state.axisLockY);axis.classList.remove('is-active');axisY.setAttribute('aria-pressed',String(state.axisLockY));axis.setAttribute('aria-pressed','false');axisY.textContent=state.axisLockY?u('↕ 縦移動固定 ON','↕ Vertical lock ON'):u('↕ 縦移動固定','↕ Lock vertical');axis.textContent=u('↔ 横移動固定','↔ Lock horizontal');};
-    save.onclick=()=>{if(!state.points.length)return;onSave?.({version:3,coordinateSpace:'source',sizing:'source-rect',bounded:true,mode:'tap',points:state.points});cleanup();};
-    const resizeObserver=('ResizeObserver' in window)?new ResizeObserver(()=>{if(!img.naturalWidth)return;sizeStageToSource();if(state.scale<=1.0001&&Math.abs(state.x)<.01&&Math.abs(state.y)<.01){fitImageToStage();apply();}}):null;resizeObserver?.observe(stage);
-    const cleanup=()=>{cancelZoomAnimation();resizeObserver?.disconnect();overlay.remove();document.documentElement.classList.remove('view-rec-open');};
+    const currentPointSet=()=>({version:3,coordinateSpace:'source',sizing:'source-rect',bounded:true,mode:'tap',points:state.points.map(normalizePoint)});
+    const storeCurrentPage=()=>{if(!bundlePages)return;const page=bundlePages[currentPageIndex];if(!page)return;const set=currentPointSet();if(set.points.length){page.viewPoints=set;delete page.viewRec;}else{delete page.viewPoints;delete page.viewRec;}};
+    const updatePageNavigation=()=>{if(!bundlePages)return;pageCounter.textContent=`${currentPageIndex+1} / ${bundlePages.length}`;[pagePrevTop,pagePrevSide].forEach(button=>button.disabled=currentPageIndex<=0);[pageNextTop,pageNextSide].forEach(button=>button.disabled=currentPageIndex>=bundlePages.length-1);};
+    const loadCurrentPage=()=>{stopPreview();hideMap();state.selected=-1;currentImage=bundlePages[currentPageIndex];if(!currentImage?.src)return;state.scale=1;state.x=0;state.y=0;state.drag=false;state.pinchDistance=0;state.points=(currentImage.viewPoints?.points||currentImage.viewRec?.points||[]).map(normalizePoint);img.alt=currentImage.alt||'';status.textContent='';img.src=currentImage.src;updatePageNavigation();updateStatus();if(img.complete&&img.naturalWidth){sizeStageToSource();fitImageToStage();apply();}};
+    const movePage=delta=>{if(!bundlePages)return;const next=Math.max(0,Math.min(bundlePages.length-1,currentPageIndex+delta));if(next===currentPageIndex)return;storeCurrentPage();currentPageIndex=next;loadCurrentPage();};
+    [pagePrevTop,pagePrevSide].forEach(button=>{button.hidden=!bundlePages;button.onclick=e=>{e.stopPropagation();movePage(-1);};});
+    [pageNextTop,pageNextSide].forEach(button=>{button.hidden=!bundlePages;button.onclick=e=>{e.stopPropagation();movePage(1);};});
+    [pagePrevTop,pagePrevSide,pageNextTop,pageNextSide].forEach(button=>{['pointerdown','pointerup','touchstart','touchend'].forEach(type=>button.addEventListener(type,e=>e.stopPropagation(),{passive:true}));});
+    save.onclick=()=>{if(!bundlePages&&!state.points.length&&!savedPoints.length)return;storeCurrentPage();const result=currentPointSet();if(bundlePages)result.pages=bundlePages.map(page=>({...page}));onSave?.(result);cleanup();};
+    const resizeObserver=('ResizeObserver' in window)?new ResizeObserver(()=>{if(!img.naturalWidth)return;const view=state.preview&&state.selected>=0?state.points[state.selected]:gazePoint();cancelZoomAnimation();sizeStageToSource();fitImageToStage();Object.assign(state,targetFor(view));apply();updateStatus();}):null;resizeObserver?.observe(media);
+    const cleanup=()=>{stopPreview();cancelZoomAnimation();resizeObserver?.disconnect();overlay.remove();document.documentElement.classList.remove('view-rec-open');};
     close.onclick=cleanup;cancel.onclick=cleanup;overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});document.documentElement.classList.add('view-rec-open');
-    img.addEventListener('load',()=>{sizeStageToSource();fitImageToStage();apply();const old=image.viewPoints||image.viewRec;if(old?.points?.length)updateStatus();else if(old?.frames?.length)status.textContent=u('旧VIEW RECがあります。視点方式で録り直してください','Legacy VIEW REC found. Re-record as viewpoints.');else updateStatus();},{once:true});
+    img.addEventListener('load',()=>{sizeStageToSource();fitImageToStage();apply();if(!state.points.length&&currentImage?.viewRec?.frames?.length)status.textContent=u('旧VIEW RECがあります。視点方式で録り直してください','Legacy VIEW REC found. Re-record as viewpoints.');else updateStatus();});
+    if(img.complete&&img.naturalWidth){sizeStageToSource();fitImageToStage();apply();updateStatus();}
+  }
+
+  function saveSceneImageViewPoints(image,data){
+    if(Array.isArray(data?.pages)){
+      image.pages=data.pages;
+      const firstSet=data.pages[0]?.viewPoints||data.pages[0]?.viewRec;
+      if(firstSet)image.viewPoints=firstSet;else delete image.viewPoints;
+      delete image.viewRec;
+      return;
+    }
+    image.viewPoints=data;
+    delete image.viewRec;
+    // The bundle Player reads the first page; the ordinary editor reads image.
+    // Keep both representations synchronized after any first-page edit.
+    if(Array.isArray(image.pages)&&image.pages[0]){
+      image.pages[0]={...image.pages[0],viewPoints:data};
+      delete image.pages[0].viewRec;
+    }
   }
 
   function makeViewRecAuthoringField(image,onSaved){
+    const firstPage=Array.isArray(image?.pages)?image.pages[0]:null;
+    const pointSet=firstPage?.viewPoints||firstPage?.viewRec||image?.viewPoints||image?.viewRec;
+    const editingImage=firstPage?{...image,...firstPage,viewPoints:pointSet,viewRec:undefined}:image;
     const box=document.createElement('div');box.className='view-rec-authoring-field';
     const meta=document.createElement('div');meta.className='view-rec-authoring-meta';
-    const points=(image?.viewPoints?.points||image?.viewRec?.points||[]).length,legacy=image?.viewRec?.frames?.length||0;
+    const points=(pointSet?.points||[]).length,legacy=pointSet?.frames?.length||0;
     meta.textContent=points?u(`VIEW POINT：${points}視点 · タップ駆動`,`VIEW POINT: ${points} viewpoints · tap driven`):(legacy?u('VIEW REC：旧方式（録り直し推奨）','VIEW REC: legacy (re-record recommended)'):u('VIEW POINT：未設定','VIEW POINT: not set'));
     const button=document.createElement('button');button.type='button';button.className='view-rec-authoring-button';button.textContent=points?u('VIEW POINTを再編集','Edit VIEW POINT'):u('VIEW POINTを設定','Set VIEW POINT');
-    button.onclick=()=>openViewRecRecorder(image,onSaved);box.append(meta,button);return box;
+    button.onclick=()=>openViewRecRecorder(editingImage,onSaved,firstPage?{pages:image.pages,index:0}:{});box.append(meta,button);return box;
   }
 
   function desktopMakeSelect(label,values,current,onchange){
@@ -9421,6 +11347,121 @@ function startInlineTextEdit(field='text'){
     const input=document.createElement('input');input.type='file';input.accept=accept;input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
     input.addEventListener('change',async()=>{const file=input.files?.[0];if(file){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);onPicked(url,snap.name,file);scheduleDraftSave(60);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}input.remove();},{once:true});
     input.click();
+  }
+  async function pickSceneImagePages(onPicked,maxCount=100){
+    const input=document.createElement('input');input.type='file';input.accept='image/*';input.multiple=true;input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
+    input.addEventListener('change',async()=>{const files=[...(input.files||[])].slice(0,Math.max(0,Math.min(100,Number(maxCount)||0)));const picked=[];for(const file of files){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);picked.push({src:url,alt:'',_editorFileName:snap.name,_editorManaged:true});}if(picked.length)onPicked(picked);input.remove();},{once:true});input.click();
+  }
+  function createSceneImageRotationControl(value){
+    if(window.matchMedia?.('(max-width:600px)').matches){
+      const select=document.createElement('select');select.className='scene-image-rotation-wheel';
+      for(let degree=-20;degree<=20;degree++){const option=document.createElement('option');option.value=String(degree);option.textContent=`${degree}°`;select.appendChild(option);}
+      select.value=String(Math.max(-20,Math.min(20,Number(value)||0)));select.setAttribute('aria-label',u('傾き（度）','Rotation in degrees'));return select;
+    }
+    const input=document.createElement('input');input.type='text';input.value=String(Number(value)||0);input.inputMode='decimal';input.autocomplete='off';input.spellcheck=false;input.enterKeyHint='done';input.pattern='-?[0-9]*';input.setAttribute('aria-label',u('傾き（度）','Rotation in degrees'));return input;
+  }
+  function bindSceneImageRotationInput(input,range,applyRotation){
+    const stop=e=>e.stopPropagation();
+    ['pointerdown','touchstart','click','keydown','input'].forEach(type=>input.addEventListener(type,stop,{passive:type==='touchstart'}));
+    const commit=()=>{const raw=String(input.value).trim();if(!/^-?\d+$/.test(raw))return;const value=Math.max(-20,Math.min(20,Number(raw)||0));if(Number(range?.value)===value)return;applyRotation(value);};
+    input.addEventListener('change',commit);if(input.tagName!=='SELECT')input.addEventListener('blur',commit);
+    range?.addEventListener('pointerdown',stop);range?.addEventListener('touchstart',stop,{passive:true});range?.addEventListener('click',stop);
+  }
+  function sceneImagePages(image){const pages=Array.isArray(image?.pages)&&image.pages.length?image.pages:(image?.src?[{src:image.src,alt:image.alt||'',viewPoints:image.viewPoints||image.viewRec||null,_editorFileName:image._editorFileName||''}]:[]);if(pages.length&&image?.viewPoints&&!pages[0]?.viewPoints)return pages.map((page,index)=>index===0?{...page,viewPoints:image.viewPoints}:page);return pages;}
+  function replaceSceneImageFirst(image,url,name){
+    const pages=sceneImagePages(image);
+    const first={src:url,alt:'',_editorFileName:name,_editorManaged:true};
+    const nextPages=pages.length>1?[first,...pages.slice(1)]:[first];
+    return {...image,src:url,alt:'',pages:nextPages,viewPoints:undefined,viewRec:undefined,_editorFileName:name,_editorManaged:true};
+  }
+  function pickSceneImageFile(onPicked){
+    const input=document.createElement('input');input.type='file';input.accept='image/*';input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
+    input.addEventListener('change',async()=>{const file=input.files?.[0];if(file){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);onPicked({src:url,alt:'',_editorFileName:snap.name,_editorManaged:true});scheduleDraftSave(60);}input.remove();},{once:true});input.click();
+  }
+  function appendSceneImageCoverEditor(host,image,onChange){
+    const box=document.createElement('div');box.className='scene-image-cover-editor';
+    const title=document.createElement('strong');title.textContent=u('表紙','Cover');
+    const preview=document.createElement('div');preview.className='scene-image-cover-preview';
+    const drawPreview=()=>{preview.replaceChildren();if(image?.cover?.src){const thumb=document.createElement('img');thumb.src=image.cover.src;thumb.alt=image.cover.alt||u('表紙画像','Cover image');thumb.loading='lazy';preview.appendChild(thumb);}else{const empty=document.createElement('span');empty.textContent=u('未設定','Not set');preview.appendChild(empty);}};
+    const actions=document.createElement('div');actions.className='scene-image-cover-actions';
+    const choose=document.createElement('button');choose.type='button';choose.textContent=image?.cover?.src?u('表紙を変更','Change cover'):u('表紙を設定','Set cover');
+    choose.onclick=()=>pickSceneImageFile(cover=>{image={...image,cover};onChange(cover);drawPreview();choose.textContent=u('表紙を変更','Change cover');});
+    const remove=document.createElement('button');remove.type='button';remove.textContent=u('表紙を外す','Remove cover');remove.disabled=!image?.cover?.src;
+    remove.onclick=()=>{image={...image};delete image.cover;onChange(null);drawPreview();choose.textContent=u('表紙を設定','Set cover');remove.disabled=true;};
+    actions.append(choose,remove);box.append(title,preview,actions);drawPreview();host.appendChild(box);
+  }
+  function appendSceneImagePagesEditor(host,image,onChange){
+    const initialPages=sceneImagePages(image);
+    const manage=document.createElement('button');manage.type='button';manage.className='scene-image-pages-manage';
+    manage.textContent=u(`ページ束を管理（${initialPages.length}ページ）`,`Manage pages (${initialPages.length})`);
+    manage.setAttribute('aria-haspopup','dialog');
+    manage.onclick=()=>{
+      let pages=sceneImagePages(image).map(page=>({...page}));
+      const overlay=document.createElement('div');overlay.className='scene-image-pages-modal';overlay.setAttribute('role','presentation');
+      const panel=document.createElement('section');panel.className='scene-image-pages-modal-panel';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',u('ページ束を編集','Edit page bundle'));
+      const header=document.createElement('header');header.className='scene-image-pages-modal-head';
+      const heading=document.createElement('div');heading.className='scene-image-pages-modal-title';
+      const close=document.createElement('button');close.type='button';close.className='scene-image-pages-modal-close';close.textContent='×';close.setAttribute('aria-label',u('閉じる','Close'));
+      header.append(heading,close);
+      const list=document.createElement('div');list.className='scene-image-pages-modal-list';
+      const footer=document.createElement('footer');footer.className='scene-image-pages-modal-foot';
+      const add=document.createElement('button');add.type='button';add.className='scene-image-pages-add';
+      add.textContent=u('＋ ページを追加（複数選択可）','＋ Add pages (multi-select)');
+      const done=document.createElement('button');done.type='button';done.className='scene-image-pages-done';done.textContent=u('完了','Done');
+      footer.append(add,done);panel.append(header,list,footer);overlay.appendChild(panel);document.body.appendChild(overlay);
+      let dragRow=null,dragPointerId=null;
+      const stopDragListeners=()=>{document.removeEventListener('pointermove',onDragMove);document.removeEventListener('pointerup',onDragEnd);document.removeEventListener('pointercancel',onDragEnd);dragRow?.classList.remove('is-dragging');dragRow=null;dragPointerId=null;};
+      const onDragMove=e=>{
+        if(!dragRow||e.pointerId!==dragPointerId)return;e.preventDefault();
+        const target=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.scene-image-pages-modal-row');
+        if(target&&target!==dragRow&&list.contains(target)){
+          const rect=target.getBoundingClientRect();
+          if(e.clientY<rect.top+rect.height/2)list.insertBefore(dragRow,target);else list.insertBefore(dragRow,target.nextSibling);
+          [...list.querySelectorAll('.scene-image-pages-modal-row')].forEach((row,index)=>{const badge=row.querySelector('.scene-image-page-number');if(badge)badge.textContent=String(index+1);});
+        }
+        const bounds=list.getBoundingClientRect();if(e.clientY<bounds.top+34)list.scrollTop-=12;else if(e.clientY>bounds.bottom-34)list.scrollTop+=12;
+      };
+      const onDragEnd=e=>{
+        if(!dragRow||e.pointerId!==dragPointerId)return;
+        pages=[...list.querySelectorAll('.scene-image-pages-modal-row')].map(row=>row._pageValue).filter(Boolean);
+        stopDragListeners();commit();render();
+      };
+      const closeModal=()=>{stopDragListeners();overlay.remove();document.documentElement.classList.remove('scene-image-pages-open');document.removeEventListener('keydown',onKey,true);manage.focus({preventScroll:true});};
+      const onKey=e=>{if(e.key==='Escape'){e.preventDefault();closeModal();}};
+      const commit=()=>{onChange(pages.map(page=>({...page})));manage.textContent=u(`ページ束を管理（${pages.length}ページ）`,`Manage pages (${pages.length})`);};
+      const render=()=>{
+        heading.textContent=u(`ページ束（${pages.length}/100）`,`Page bundle (${pages.length}/100)`);
+        list.replaceChildren();
+        if(!pages.length){const empty=document.createElement('p');empty.className='scene-image-pages-empty';empty.textContent=u('ページがありません。画像を追加してください。','No pages yet. Add images to begin.');list.appendChild(empty);}
+        pages.forEach((page,index)=>{
+          const row=document.createElement('article');row.className='scene-image-pages-modal-row';
+          row._pageValue=page;
+          const preview=document.createElement('div');preview.className='scene-image-page-preview';
+          const thumb=document.createElement('img');thumb.src=page.src;thumb.alt=page.alt||page._editorFileName||`${index+1}`;thumb.loading='lazy';thumb.draggable=false;preview.appendChild(thumb);
+          const number=document.createElement('span');number.className='scene-image-page-number';number.textContent=String(index+1);preview.appendChild(number);
+          const info=document.createElement('div');info.className='scene-image-page-info';
+          const name=document.createElement('strong');name.textContent=page._editorFileName||page.alt||u(`ページ ${index+1}`,`Page ${index+1}`);name.title=name.textContent;
+          const vpCount=(page.viewPoints?.points||page.viewRec?.points||[]).length;
+          const meta=document.createElement('small');meta.textContent=vpCount?u(`VIEW POINT ${vpCount}視点`,`VIEW POINT · ${vpCount}`):u('VIEW POINT 未設定','VIEW POINT · not set');
+          info.append(name,meta);
+          const actions=document.createElement('div');actions.className='scene-image-page-actions';
+          const actionButton=(label,cls,fn)=>{const button=document.createElement('button');button.type='button';button.className=cls||'';button.textContent=label;button.onclick=fn;actions.appendChild(button);return button;};
+          const drag=actionButton('⠿','scene-image-page-drag',()=>{});drag.setAttribute('aria-label',u('ドラッグして順番を変更','Drag to reorder'));drag.title=u('長押ししてドラッグ','Press and drag');drag.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();dragRow=row;dragPointerId=e.pointerId;row.classList.add('is-dragging');document.addEventListener('pointermove',onDragMove,{passive:false});document.addEventListener('pointerup',onDragEnd);document.addEventListener('pointercancel',onDragEnd);});
+          actionButton(vpCount?u('視点編集','Edit view'):u('視点設定','Set view'),'scene-image-page-view',()=>openViewRecRecorder(page,data=>{if(Array.isArray(data.pages)){pages=data.pages;}else{pages[index]={...pages[index],viewPoints:data};delete pages[index].viewRec;}commit();render();},{pages,index}));
+          actionButton(u('差替','Replace'),'scene-image-page-replace',()=>pickSceneImageFile(nextPage=>{pages[index]={...nextPage};commit();render();}));
+          const up=actionButton('↑','scene-image-page-move',()=>{[pages[index-1],pages[index]]=[pages[index],pages[index-1]];commit();render();});up.disabled=index===0;up.setAttribute('aria-label',u('前へ','Move up'));
+          const down=actionButton('↓','scene-image-page-move',()=>{[pages[index+1],pages[index]]=[pages[index],pages[index+1]];commit();render();});down.disabled=index===pages.length-1;down.setAttribute('aria-label',u('後ろへ','Move down'));
+          const remove=actionButton(u('削除','Remove'),'scene-image-page-remove',()=>{if(pages.length<=1)return;pages.splice(index,1);commit();render();});remove.disabled=pages.length<=1;
+          row.append(preview,info,actions);list.appendChild(row);
+        });
+        add.disabled=pages.length>=100;
+      };
+      add.onclick=()=>pickSceneImagePages(added=>{pages=[...pages,...added].slice(0,100);commit();render();},100-pages.length);
+      close.onclick=closeModal;done.onclick=closeModal;overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+      document.documentElement.classList.add('scene-image-pages-open');document.addEventListener('keydown',onKey,true);render();
+      requestAnimationFrame(()=>close.focus({preventScroll:true}));
+    };
+    host.appendChild(manage);
   }
   function desktopCard(title,cls=''){
     const card=document.createElement('section');card.className=`desktop-live-card ${cls}`.trim();
@@ -9491,6 +11532,27 @@ function startInlineTextEdit(field='text'){
     slider.min=min;slider.max=max;slider.step=step;slider.value=value;
 
     const clamp=(n,lo,hi)=>Math.min(hi,Math.max(lo,n));
+    // A range can emit dozens of input events per second. Coalesce preview
+    // cloning/rendering while keeping the numeric readout immediate; flush the
+    // final value on release/change and defer IndexedDB saves until the drag ends.
+    let rangePreviewTimer=0;
+    let pendingRangeValue=0;
+    let hasPendingRangeValue=false;
+    let lastAppliedRangeValue=NaN;
+    const flushRangePreview=()=>{
+      if(rangePreviewTimer){clearTimeout(rangePreviewTimer);rangePreviewTimer=0;}
+      if(!hasPendingRangeValue)return;
+      const next=pendingRangeValue;
+      hasPendingRangeValue=false;
+      if(Object.is(next,lastAppliedRangeValue))return;
+      lastAppliedRangeValue=next;
+      oninput(next);
+    };
+    const queueRangePreview=(next)=>{
+      pendingRangeValue=next;
+      hasPendingRangeValue=true;
+      if(!rangePreviewTimer)rangePreviewTimer=setTimeout(flushRangePreview,80);
+    };
     const sliderToNumber=()=>{
       const raw=Number(slider.value);
       const shown=clean(raw*displayScale);
@@ -9498,7 +11560,7 @@ function startInlineTextEdit(field='text'){
     };
     const applySlider=()=>{
       sliderToNumber();
-      oninput(Number(slider.value));
+      queueRangePreview(Number(slider.value));
     };
     const applyNumber=()=>{
       let shown=Number(numeric.value);
@@ -9506,16 +11568,21 @@ function startInlineTextEdit(field='text'){
       shown=clamp(shown,displayMin,displayMax);
       numeric.value=String(clean(shown));
       slider.value=String(shown/displayScale);
-      oninput(Number(slider.value));
+      queueRangePreview(Number(slider.value));
     };
 
+    slider.addEventListener('pointerdown',()=>{
+      desktopDetailRangeInteracting=true;
+      desktopDetailRangeFlushActive=flushRangePreview;
+    });
     slider.addEventListener('input',applySlider);
+    slider.addEventListener('change',flushRangePreview);
     if(mobileWheel){
-      numeric.addEventListener('change',applyNumber);
+      numeric.addEventListener('change',()=>{applyNumber();flushRangePreview();});
     }else{
       numeric.addEventListener('input',applyNumber);
-      numeric.addEventListener('change',applyNumber);
-      numeric.addEventListener('blur',applyNumber);
+      numeric.addEventListener('change',()=>{applyNumber();flushRangePreview();});
+      numeric.addEventListener('blur',()=>{applyNumber();flushRangePreview();});
     }
 
     valueWrap.append(numeric);
@@ -9552,7 +11619,7 @@ function startInlineTextEdit(field='text'){
     const cap=document.createElement('span');cap.textContent=label||u('サイズ','Size');
     const row=document.createElement('div');row.className='v58-bulk-row';
     const value=document.createElement('select');
-    [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
+    [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
     value.value=ensurePresentation(scene).text?.size||'auto';
 
     const scope=document.createElement('select');scope.className='v58-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('適用範囲','Apply scope'));
@@ -9883,17 +11950,33 @@ function startInlineTextEdit(field='text'){
   }
 
   let framePositionDragCleanup=null;
+  let framePositionDragScene=null;
+  let framePositionDragReopen=false;
   function ensureFramePositionEditorStyle(){
     if(document.getElementById('framePositionEditorStyle'))return;
     const style=document.createElement('style');style.id='framePositionEditorStyle';style.textContent=`
       .frame-position-drag-shield{position:absolute;inset:0;z-index:90;touch-action:none;cursor:move;background:rgba(20,22,26,.035)}
       .frame-position-drag-shield::after{content:"";position:absolute;inset:12px;border:1px dashed rgba(80,84,92,.35);border-radius:16px;pointer-events:none}
-      .frame-position-drag-toolbar{position:absolute;z-index:92;left:50%;bottom:max(92px,calc(env(safe-area-inset-bottom) + 76px));transform:translateX(-50%);display:flex;gap:7px;align-items:center;padding:8px;border-radius:999px;background:rgba(25,26,29,.88);box-shadow:0 8px 30px rgba(0,0,0,.22);white-space:nowrap}
-      .frame-position-drag-toolbar button{appearance:none;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:transparent;color:#fff;font:600 12px/1 sans-serif;padding:9px 12px}
+      .frame-position-drag-toolbar{position:absolute;z-index:92;left:50%;bottom:max(76px,calc(env(safe-area-inset-bottom) + 62px));transform:translateX(-50%);display:flex;gap:5px;align-items:center;padding:5px;border-radius:999px;background:rgba(25,26,29,.82);box-shadow:0 6px 22px rgba(0,0,0,.18);white-space:nowrap}
+      .frame-position-drag-toolbar button{appearance:none;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:transparent;color:#fff;font:600 11px/1 sans-serif;padding:7px 10px}
       .frame-position-drag-toolbar button[data-save]{background:#fff;color:#17181b}
-      .frame-position-drag-hint{position:absolute;z-index:91;top:18px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:rgba(25,26,29,.78);color:#fff;font:600 12px/1.3 sans-serif;white-space:nowrap;pointer-events:none}
+      .frame-position-drag-hint{position:absolute;z-index:91;top:14px;left:50%;transform:translateX(-50%);padding:6px 10px;border-radius:999px;background:rgba(25,26,29,.72);color:#fff;font:600 11px/1.25 sans-serif;white-space:nowrap;pointer-events:none}
+      .frame-position-fixed-controls{position:absolute;z-index:94;left:50%;bottom:max(124px,calc(env(safe-area-inset-bottom) + 108px));transform:translateX(-50%);width:min(300px,calc(100% - 58px));display:grid;gap:6px;padding:8px 9px;border-radius:12px;background:rgba(25,26,29,.82);box-shadow:0 6px 22px rgba(0,0,0,.18);color:#fff;font:600 10px/1.15 sans-serif}
+      .frame-position-control-row{display:grid;grid-template-columns:54px minmax(0,1fr) 46px;gap:6px;align-items:center}
+      .frame-position-control-row > span{white-space:nowrap;word-break:keep-all}
+      .frame-position-control-row input[type="range"]{width:100%;margin:0;accent-color:#fff;touch-action:none;-webkit-user-select:none;user-select:none}
+      .frame-position-control-row input[type="number"]{width:46px;box-sizing:border-box;border:1px solid rgba(255,255,255,.22);border-radius:7px;background:rgba(255,255,255,.09);color:#fff;padding:5px 3px;text-align:center;font:700 10px/1 sans-serif}
+      @media (min-width:900px){
+        .frame-position-fixed-controls{width:270px;bottom:112px;padding:7px 8px;gap:5px}
+        .frame-position-control-row{grid-template-columns:50px minmax(0,1fr) 42px;gap:5px}
+        .frame-position-control-row input[type="number"]{width:42px;padding:4px 2px}
+        .frame-position-drag-toolbar{bottom:68px;padding:4px;gap:4px}
+        .frame-position-drag-toolbar button{font-size:10px;padding:6px 9px}
+      }
+      .frame-position-control-row input[type="number"]::-webkit-inner-spin-button{opacity:.65}
       .sp-scene.is-frame-position-dragging{transition:none!important;z-index:80!important;visibility:visible!important;opacity:1!important}
       .frame-position-adjust-button{width:100%;margin-top:10px;padding:11px 14px;border:1px solid rgba(100,105,115,.3);border-radius:10px;background:transparent;font:inherit}
+      
     `;document.head.appendChild(style);
   }
   function finishFramePositionDrag({save=false,reset=false}={}){
@@ -9902,6 +11985,7 @@ function startInlineTextEdit(field='text'){
   }
   function openFramePositionDragEditor(scene){
     if(!scene)return;
+    framePositionDragScene=scene;
     const p=ensurePresentation(scene);p.text||={};
     finishFramePositionDrag();
     closeDesktopTextDetail();
@@ -9913,8 +11997,10 @@ function startInlineTextEdit(field='text'){
       const frame=article?.querySelector('.sp-handdrawn-frame');
       const target=frame||article?.querySelector(':scope > .sp-text');
       if(!stage||!scenes||!article||!target){appAlert(u('配置できるテキストがありません','There is no text to position.'));return;}
-      const pcMode=studioPreviewDevice==='pc'&&window.matchMedia('(min-width:1100px)').matches&&document.body.classList.contains('desktop-live-edit');
+      const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
       const beforeText=p.text.position?clone(p.text.position):null;
+      const beforeSize=p.text.size;
+      const beforeAngle=p.text.angle;
       const beforeFrame=p.frame?.position?clone(p.frame.position):null;
       // V45: drag positioning mutates continuously outside the generic
       // select/input history watcher. Keep the true pre-drag document snapshot
@@ -9928,26 +12014,14 @@ function startInlineTextEdit(field='text'){
         queueMicrotask(()=>showUndo('テキスト位置の変更を元に戻せます'));
       };
       const initialPosition=p.text.position||p.frame?.position||{};
+      // Direct manipulation is viewport-relative, not device-specific.
+      // One normalized x/y must land at the same relative point on iPhone, tablet and PC.
       const setAdjustedPosition=(adjusted)=>{
-        if(pcMode){
-          const common=p.text.position&&typeof p.text.position==='object'?clone(p.text.position):clone(initialPosition);
-          p.text.position={preset:common.preset||'auto',...(Number.isFinite(Number(common.x))?{x:Number(common.x)}:{}),...(Number.isFinite(Number(common.y))?{y:Number(common.y)}:{}),pc:clone(adjusted)};
-        }else{
-          const pc=p.text.position?.pc&&typeof p.text.position.pc==='object'?clone(p.text.position.pc):(initialPosition?.pc?clone(initialPosition.pc):null);
-          p.text.position={...clone(adjusted),...(pc?{pc}:{})};
-        }
+        p.text.position=clone(adjusted);
         if(p.frame)delete p.frame.position;
       };
       const clearAdjustedPosition=()=>{
-        if(pcMode){
-          const common=p.text.position&&typeof p.text.position==='object'?clone(p.text.position):clone(initialPosition);
-          delete common.pc;
-          if((common.preset||'auto')==='auto'&&!Number.isFinite(Number(common.x))&&!Number.isFinite(Number(common.y)))delete p.text.position;
-          else p.text.position=common;
-        }else{
-          const pc=p.text.position?.pc&&typeof p.text.position.pc==='object'?clone(p.text.position.pc):null;
-          if(pc)p.text.position={preset:'auto',pc};else delete p.text.position;
-        }
+        delete p.text.position;
         if(p.frame)delete p.frame.position;
       };
       const liveScene=player?.document?.scenes?.find(item=>item?.id===scene.id);
@@ -9957,16 +12031,116 @@ function startInlineTextEdit(field='text'){
         if(position)liveScene.presentation.text.position=clone(position);else delete liveScene.presentation.text.position;
         if(liveScene.presentation.frame)delete liveScene.presentation.frame.position;
       };
+      const syncLiveSize=(size)=>{
+        if(!liveScene)return;
+        liveScene.presentation||={};liveScene.presentation.text||={};
+        if(size==null||size==='')delete liveScene.presentation.text.size;else liveScene.presentation.text.size=size;
+      };
+      const syncLiveAngle=(angle)=>{
+        if(!liveScene)return;
+        liveScene.presentation||={};liveScene.presentation.text||={};
+        if(!Number.isFinite(Number(angle))||Math.abs(Number(angle))<.5)delete liveScene.presentation.text.angle;else liveScene.presentation.text.angle=Number(angle);
+      };
       const stageRect=stage.getBoundingClientRect(),scenesRect=scenes.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
-      setAdjustedPosition({preset:'custom',x:Math.max(0,Math.min(1,(targetRect.left+targetRect.width/2-stageRect.left)/Math.max(1,stageRect.width))),y:Math.max(0,Math.min(1,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))});
+      // V7: reopening the editor must not re-measure and rewrite an already-authored
+      // normalized position. Re-measuring a rotated/scaled glyph box caused cumulative drift.
+      const existingPosition=p.text.position||p.frame?.position||null;
+      if(existingPosition?.preset!=='custom'||!Number.isFinite(Number(existingPosition.x))||!Number.isFinite(Number(existingPosition.y))){
+        setAdjustedPosition({preset:'custom',x:Math.max(-.35,Math.min(1.35,(targetRect.left+targetRect.width/2-stageRect.left)/Math.max(1,stageRect.width))),y:Math.max(-.35,Math.min(1.35,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))});
+      }else{
+        setAdjustedPosition({preset:'custom',x:Number(existingPosition.x),y:Number(existingPosition.y)});
+      }
       syncLivePosition(p.text.position);
+      playerHost?.classList.add('sp-direct-layout-editing');
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
-      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=pcMode?u('PC専用位置をタップ／ドラッグで調整','Adjust the PC-only position'):u('画面をタップ／ドラッグして配置','Tap or drag to position the text');
+      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('文字をドラッグで移動 ／ 下のバーでサイズ・回転','Drag text to move / use sliders for size & rotation');
+      const controls=document.createElement('div');controls.className='frame-position-fixed-controls';
+      const makeSliderRow=(label,min,max,step,value)=>{
+        const row=document.createElement('label');row.className='frame-position-control-row';
+        const name=document.createElement('span');name.textContent=label;
+        const range=document.createElement('input');range.type='range';range.min=String(min);range.max=String(max);range.step=String(step);range.value=String(value);
+        const number=document.createElement('input');number.type='number';number.min=String(min);number.max=String(max);number.step=String(step);number.value=String(value);
+        row.append(name,range,number);controls.append(row);return {range,number};
+      };
       const toolbar=document.createElement('div');toolbar.className='frame-position-drag-toolbar';
-      const auto=document.createElement('button');auto.type='button';auto.textContent=pcMode?u('共通位置','Use common'):u('自動','Auto');
+      const auto=document.createElement('button');auto.type='button';auto.textContent=u('自動','Auto');
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('取消','Cancel');
       const save=document.createElement('button');save.type='button';save.dataset.save='';save.textContent=u('決定','Done');
-      toolbar.append(auto,cancel,save);stage.append(shield,hint,toolbar);article.classList.add('is-frame-position-dragging');
+      toolbar.append(auto,cancel,save);stage.append(shield,hint,controls,toolbar);article.classList.add('is-frame-position-dragging');
+      const textNode=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text')||target;
+      // Preview-only: resizing should not change line breaks while this direct editor is open.
+      
+      const initialPx=Math.max(8,Math.min(420,Math.round(parseFloat(getComputedStyle(textNode).fontSize)||16)));
+      const initialAngle=Math.max(-180,Math.min(180,Math.round(Number(p.text.angle)||0)));
+      const sizeControl=makeSliderRow(u('文字サイズ','Size'),8,420,1,initialPx);
+      const angleControl=makeSliderRow(u('回転','Rotate'),-180,180,1,initialAngle);
+      const setSizeValue=raw=>{
+        const next=Math.max(8,Math.min(420,Math.round(Number(raw)||8)));
+        p.text.size=next;syncLiveSize(next);textNode.style.setProperty('font-size',`${next}px`,'important');
+        sizeControl.range.value=sizeControl.number.value=String(next);
+      };
+      const setAngleValue=raw=>{
+        const next=Math.max(-180,Math.min(180,Math.round(Number(raw)||0)));
+        if(Math.abs(next)<1)delete p.text.angle;else p.text.angle=next;syncLiveAngle(p.text.angle);
+        textNode.style.rotate=`${next}deg`;angleControl.range.value=angleControl.number.value=String(next);
+      };
+      // iOS Safari can fail to drag a native range thumb inside the scaled preview.
+      // Drive the value from pointer X ourselves so tap + drag behave identically.
+      const bindPreviewRange=(input,min,max,step,apply)=>{
+        let active=false;
+        const update=event=>{
+          const rect=input.getBoundingClientRect();
+          if(!rect.width)return;
+          const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+          const raw=min+ratio*(max-min);
+          const snapped=Math.round(raw/step)*step;
+          input.value=String(Math.max(min,Math.min(max,snapped)));apply(input.value);
+        };
+        input.addEventListener('pointerdown',event=>{active=true;event.preventDefault();event.stopPropagation();input.setPointerCapture?.(event.pointerId);update(event);});
+        input.addEventListener('pointermove',event=>{if(!active)return;event.preventDefault();event.stopPropagation();update(event);});
+        const end=event=>{if(!active)return;event.preventDefault();event.stopPropagation();update(event);active=false;try{input.releasePointerCapture?.(event.pointerId);}catch{}};
+        input.addEventListener('pointerup',end);input.addEventListener('pointercancel',()=>{active=false;});
+        input.addEventListener('input',event=>{if(!active)apply(event.target.value);});
+      };
+      const bindEditableNumber=(input,min,max,apply)=>{
+        // Do not clamp on every keystroke: on iPhone the field must be allowed to
+        // become temporarily empty so an existing value such as 89 can be replaced.
+        const commit=()=>{
+          if(input.value.trim()===''){input.value=String(min);apply(min);return;}
+          const n=Number(input.value);apply(Number.isFinite(n)?Math.max(min,Math.min(max,n)):min);
+        };
+        input.addEventListener('focus',()=>{requestAnimationFrame(()=>{try{input.select();}catch{}});});
+        input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();commit();input.blur();}});
+        input.addEventListener('change',commit);input.addEventListener('blur',commit);
+      };
+      bindPreviewRange(sizeControl.range,8,420,1,setSizeValue);
+      bindEditableNumber(sizeControl.number,8,420,setSizeValue);
+      bindPreviewRange(angleControl.range,-180,180,1,setAngleValue);
+      bindEditableNumber(angleControl.number,-180,180,setAngleValue);
+      // The Player normally advances on a stage click. Editing gestures can synthesize
+      // that click on release, so swallow all navigation clicks while this editor is open.
+      const blockEditorNavigation=event=>{
+        // Capture runs before the editor buttons. Never swallow their click.
+        if(event.target?.closest?.('.frame-position-drag-toolbar,.frame-position-fixed-controls'))return;
+        event.preventDefault();event.stopImmediatePropagation();event.stopPropagation();
+      };
+      stage.addEventListener('click',blockEditorNavigation,true);
+      stage.addEventListener('dblclick',blockEditorNavigation,true);
+      // iOS can dispatch touchend after pointer capture to the Player's swipe handler.
+      // Capture the release at the host while this editor is active so no editor
+      // gesture (text move or slider drag) can become Next Scene.
+      const blockEditorTouchRelease=event=>{
+        if(!playerHost?.classList.contains('sp-direct-layout-editing'))return;
+        // Keep authoring controls tappable on iPhone. Preventing touchend on
+        // Done/Cancel/Auto suppresses Safari's synthetic click entirely.
+        if(event.target?.closest?.('.frame-position-drag-toolbar,.frame-position-fixed-controls')){
+          event.stopPropagation();
+          return;
+        }
+        if(event.cancelable)event.preventDefault();
+        event.stopImmediatePropagation();event.stopPropagation();
+      };
+      playerHost?.addEventListener('touchend',blockEditorTouchRelease,true);
       let dragging=false;
       const applyPoint=(clientX,clientY)=>{
         const sr=stage.getBoundingClientRect(),cr=scenes.getBoundingClientRect(),geometry=player._measureSceneGeometry(article,sr);
@@ -9974,28 +12148,29 @@ function startInlineTextEdit(field='text'){
         // pane. Convert rendered pointer pixels back to that logical space
         // before clamping, saving and assigning the Scene transform.
         const scale=Math.max(.05,Number(player?._layoutScale?.())||1);
-        const width=geometry.inkRight-geometry.inkLeft,height=geometry.inkBottom-geometry.inkTop,margin=10;
         const stageWidth=Math.max(1,stage.clientWidth||sr.width/scale),stageHeight=Math.max(1,stage.clientHeight||sr.height/scale);
         const contentLeft=(cr.left-sr.left)/scale;
         let centerX=(clientX-sr.left)/scale,centerY=(clientY-sr.top)/scale;
-        centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,centerX));
-        centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,centerY));
+        // Free placement. Partial off-screen placement is intentional for effect text.
+        centerX=Math.max(-stageWidth*.35,Math.min(stageWidth*1.35,centerX));
+        centerY=Math.max(-stageHeight*.35,Math.min(stageHeight*1.35,centerY));
         setAdjustedPosition({preset:'custom',x:centerX/stageWidth,y:centerY/stageHeight});
         syncLivePosition(p.text.position);
         article.style.transform=`translate3d(${Math.round(centerX-contentLeft-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
+
       };
       shield.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();dragging=true;shield.setPointerCapture?.(event.pointerId);applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointermove',event=>{if(!dragging)return;event.preventDefault();applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointerup',event=>{event.preventDefault();event.stopPropagation();dragging=false;shield.releasePointerCapture?.(event.pointerId);});
       shield.addEventListener('pointercancel',event=>{event.preventDefault();event.stopPropagation();dragging=false;});
       shield.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
-      [toolbar,auto,cancel,save].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
-      framePositionDragCleanup=({save:keep=false,reset=false}={})=>{
-        shield.remove();hint.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
+      [toolbar,controls].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
+      framePositionDragCleanup=({save:keep=false,reset=false,skipRefresh=false,keepEditorState=false}={})=>{
+        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.removeEventListener('touchend',blockEditorTouchRelease,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)clearAdjustedPosition();
-        else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
-        syncLivePosition(p.text.position||p.frame?.position||null);
-        scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel?.();
+        else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(beforeAngle==null)delete p.text.angle;else p.text.angle=beforeAngle;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
+        syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);syncLiveAngle(p.text.angle);
+        scheduleDraftSave(40);if(!keepEditorState)framePositionDragScene=null;if(!skipRefresh)refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel?.();
       };
       auto.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();commitPositionHistory();finishFramePositionDrag({save:true,reset:true});});
       cancel.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();finishFramePositionDrag();});
@@ -10004,9 +12179,8 @@ function startInlineTextEdit(field='text'){
   }
   function makeFramePositionDragButton(scene){
     const button=document.createElement('button');button.type='button';button.className='frame-position-adjust-button';
-    const pcMode=studioPreviewDevice==='pc'&&window.matchMedia('(min-width:1100px)').matches&&document.body.classList.contains('desktop-live-edit');
-    const hasPc=Boolean(scene?.presentation?.text?.position?.pc);
-    button.textContent=pcMode?(hasPc?u('PC専用位置を再調整','Readjust PC-only position'):u('PC専用位置をドラッグ調整','Adjust PC-only position')):u('プレビュー上でドラッグ調整','Drag on preview to position');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
+    const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
+    button.textContent=u('プレビュー上で位置・サイズ・角度調整','Adjust position / size / angle on preview');button.disabled=typeof scene?.text!=='string'||!scene.text.length;
     button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openFramePositionDragEditor(scene);});return button;
   }
 
@@ -10137,9 +12311,11 @@ function openDesktopEffectDetail(){
     const p=ensurePresentation(scene);
     const before={
       effect:p.effect,
+      textFlip:p.text?.flip,
       display:p.display,
       view:p.view,
       entryMotion:p.entryMotion,
+      credits:clone(p.credits||null),
       typing:clone(p.typing||null),
       effectTiming:clone(p.effectTiming||null),
       disappear:clone(p.disappear||null)
@@ -10148,9 +12324,11 @@ function openDesktopEffectDetail(){
     const apply=()=>{scheduleDraftSave(40);replayCurrentDesktopEffect();};
     const restore=()=>{
       if(before.effect===undefined)delete p.effect;else p.effect=before.effect;
+      setSceneTextFlip(scene,before.textFlip);
       if(before.display===undefined)delete p.display;else p.display=before.display;
       if(before.view===undefined)delete p.view;else p.view=before.view;
       if(before.entryMotion===undefined)delete p.entryMotion;else p.entryMotion=before.entryMotion;
+      if(before.credits===null)delete p.credits;else p.credits=clone(before.credits);
       if(before.typing===null)delete p.typing;else p.typing=clone(before.typing);
       if(before.effectTiming===null)delete p.effectTiming;else p.effectTiming=clone(before.effectTiming);
       if(before.disappear===null)delete p.disappear;else p.disappear=clone(before.disappear);
@@ -10178,11 +12356,11 @@ function openDesktopEffectDetail(){
     const section=(name)=>{const s=document.createElement('section');s.className='desktop-text-detail-section';const h=document.createElement('h3');h.textContent=name;s.appendChild(h);body.appendChild(s);return s;};
     const two=(s)=>{const d=document.createElement('div');d.className='desktop-text-detail-two';s.appendChild(d);return d;};
 
-    const basic=section(u('基本','Basic'));
+    const basic=section(u('基本演出','Basic effects'));basic.classList.add('desktop-effect-basic-section');
     const basicGrid=two(basic);
     const currentEffect=p.typing?.enabled?'typewriter':(p.effect||'auto');
     const effectSelect=desktopDetailSelect(u('出かた','Entrance'),[
-      ['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]
+      ['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['murmur',u('ざわつく','Murmur')],['flash',u('閃光','Flash')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]
     ],currentEffect,v=>{
       ensureDesktopEffectVisibleDefaults(scene,{save:false});
       if(v==='typewriter'){
@@ -10200,12 +12378,13 @@ function openDesktopEffectDetail(){
       effectSelect,
       v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>{if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}}),
-      desktopDetailSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')]],p.view||'world',v=>{p.view=v;apply();}),
+      desktopDetailSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')]],p.view||'world',v=>{p.view=v;if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);apply();}),
       desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
-      desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();})
+      desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();}),
+      desktopDetailSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{setSceneTextFlip(scene,v);apply();})
     );
 
-    const timing=section(u('タイミング','Timing'));
+    const timing=section(u('タイミング','Timing'));timing.classList.add('desktop-effect-timing-section');
     const timingGrid=two(timing);
     p.effectTiming ||= {};
     timingGrid.append(
@@ -10238,23 +12417,19 @@ function openDesktopEffectDetail(){
       })
     );
 
-    const typingSec=section(u('タイプライター','Typewriter'));
+    // Typewriter is an Entrance-specific option, so keep its controls directly
+    // under Basic effects instead of showing a permanent standalone card.
     const typingOn=!!p.typing?.enabled;
-    typingSec.classList.toggle('is-disabled',!typingOn);
-    const typingGrid=two(typingSec);
-    const speed=desktopDetailRange(u('1文字の速度','Per-character speed'),{min:.01,max:.25,step:.005,value:(Number(p.typing?.speed)||55)/1000,unit:u(' 秒/文字',' sec/char'),format:v=>v.toFixed(3),oninput:v=>{if(!p.typing?.enabled)return;p.typing.speed=Math.round(v*1000);apply();}});
-    const cursor=desktopDetailSelect(u('カーソル','Cursor'),[['on',u('表示する','Show')],['off',u('表示しない','Hide')]],p.typing?.cursor===false?'off':'on',v=>{if(!p.typing?.enabled)return;p.typing.cursor=v!=='off';apply();});
-    if(!typingOn){speed.querySelectorAll('input').forEach(el=>el.disabled=true);cursor.querySelector('select').disabled=true;}
-    typingGrid.append(speed,cursor);
-    const typingNote=document.createElement('p');typingNote.className='desktop-text-detail-note';typingNote.textContent=typingOn?u('左のLive Previewで文字送りを確認できます。','Check the typewriter effect in the Live Preview on the left.'):u('「出かた」をタイプライターにすると設定できます。','Choose Typewriter as the entrance to enable these settings.');typingSec.appendChild(typingNote);
-
-    if(advancedScreen?.hidden){
-      const preview=section(u('プレビュー','Preview'));
-      const note=document.createElement('p');
-      note.className='desktop-text-detail-note';
-      note.textContent=u('変更はLive Previewへ即時反映され、自動保存されます。','Changes appear in Live Preview immediately and are autosaved.');
-      preview.appendChild(note);
+    if(typingOn){
+      const typingInline=document.createElement('div');typingInline.className='desktop-effect-typewriter-inline';
+      const typingTitle=document.createElement('strong');typingTitle.className='desktop-effect-typewriter-inline-title';typingTitle.textContent=u('タイプライター設定','Typewriter settings');
+      const typingGrid=document.createElement('div');typingGrid.className='desktop-text-detail-two desktop-effect-typewriter-grid';
+      const speed=desktopDetailRange(u('1文字の速度','Per-character speed'),{min:.01,max:.25,step:.005,value:(Number(p.typing?.speed)||55)/1000,unit:u(' 秒/文字',' sec/char'),format:v=>v.toFixed(3),oninput:v=>{if(!p.typing?.enabled)return;p.typing.speed=Math.round(v*1000);apply();}});
+      const cursor=desktopDetailSelect(u('カーソル','Cursor'),[['on',u('表示する','Show')],['off',u('表示しない','Hide')]],p.typing?.cursor===false?'off':'on',v=>{if(!p.typing?.enabled)return;p.typing.cursor=v!=='off';apply();});
+      typingGrid.append(speed,cursor);typingInline.append(typingTitle,typingGrid);basic.appendChild(typingInline);
     }
+
+    if(!desktopLiveActive()){body.appendChild(buildFlowCommentEditor(scene,index));body.appendChild(buildCreditsEditor(scene));}
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
     const reset=document.createElement('button');reset.type='button';reset.className='desktop-text-detail-reset';reset.textContent=desktopLiveActive()?u('リセット','Reset'):u('演出設定を初期化','Reset effect settings');
@@ -10974,16 +13149,19 @@ function openDesktopBackgroundDetail(){
     );
     const ensureImageState=()=>{
       if(!p.background || typeof p.background!=='object'){
+        const inherited=clone(previousFraming()||{});
+        delete inherited.src;
         p.background={
-          transition:p.background?.transition||'fade',
-          transitionDuration:Number(p.background?.transitionDuration)||700,
-          fit:p.background?.fit||'cover',
-          position:p.background?.position||'center center',
-          tone:p.background?.tone||'dark',
-          dim:Number.isFinite(Number(p.background?.dim))?Number(p.background.dim):.38,
-          blur:Number(p.background?.blur)||0,
-          motion:p.background?.motion||{type:'none'},
-          textures:p.background?.textures||{},
+          ...inherited,
+          transition:inherited.transition||'fade',
+          transitionDuration:Number(inherited.transitionDuration)||700,
+          fit:inherited.fit||'cover',
+          position:inherited.position||'center center',
+          tone:inherited.tone||'dark',
+          dim:Number.isFinite(Number(inherited.dim))?Number(inherited.dim):(inherited.tone==='light'?.64:.38),
+          blur:Number(inherited.blur)||0,
+          motion:inherited.motion||{type:'none'},
+          textures:inherited.textures||{},
           _editorManaged:true
         };
       }
@@ -11091,16 +13269,16 @@ function openDesktopBackgroundDetail(){
     });
 
     const sourceBg=explicit()||{};
+    const inheritedBackground=sourceBg.src?sourceBg:previousFraming();
     const sourcePositionAdjust=desktopAction(t('cover.positionAdjust'),()=>{
-      const bg=explicit();
-      if(!bg?.src)return;
+      if(!inheritedBackground?.src)return;
       captureUndo('背景位置の変更を元に戻せます');
       openSceneBackgroundPositionEditor(scene,()=>{
         scheduleDraftSave(40);
         refreshLivePlayer({preserveSheet:true});
       });
     },'is-primary');
-    if(!sourceBg.src)sourcePositionAdjust.disabled=true;
+    if(!inheritedBackground?.src||sourceBg.src==='')sourcePositionAdjust.disabled=true;
 
     assetActions.append(choose,clear);
     assetRow.append(thumb,assetActions);
@@ -11128,14 +13306,28 @@ function openDesktopBackgroundDetail(){
       closeDesktopBackgroundDetail();
       openDesktopBackgroundDetail();
     });
-    copyPreviousPosition.disabled=!sourceBg.src||!previousFraming()?.src;
+    copyPreviousPosition.disabled=(!sourceBg.src&&!inheritedBackground?.src)||sourceBg.src===''||!previousFraming()?.src;
     copyPreviousPosition.classList.add('desktop-background-copy-position');
     sourceSec.appendChild(copyPreviousPosition);
+    const copyPreviousPositionForward=desktopAction(u('前Sceneの表示位置を以降に一括適用','Apply previous Scene position to all following Scenes'),()=>{
+      captureUndo('後続Sceneの背景位置変更を元に戻せます');
+      if(!applyPreviousBackgroundFramingForward(index))return;
+      apply();
+      closeDesktopBackgroundDetail();
+      openDesktopBackgroundDetail();
+    });
+    copyPreviousPositionForward.disabled=!previousFraming()?.src||sourceBg.src==='';
+    copyPreviousPositionForward.classList.add('desktop-background-copy-forward');
+    sourceSec.appendChild(copyPreviousPositionForward);
 
     // LIGHT ---------------------------------------------------------------
     const lightSec=section(u('明るさ・質感','Brightness & texture'));
     const lightGrid=two(lightSec);
-    const bg0=explicit()||{};
+    const explicitBg=explicit()||{};
+    const inheritedBg=previousFraming()||{};
+    const bg0={...inheritedBg,...explicitBg,
+      textures:{...(inheritedBg.textures||{}),...(explicitBg.textures||{})},
+      motion:explicitBg.motion||inheritedBg.motion};
     if(bg0.motion && /^pan/.test(bg0.motion.type||''))ensurePanCoverage(bg0.motion);
     lightGrid.append(
       desktopDetailSelect(u('ベール','Veil'),[
@@ -11156,14 +13348,14 @@ function openDesktopBackgroundDetail(){
       desktopDetailRange(u('背景ぼかし','Background blur'),{
         min:0,max:24,step:.5,value:Number(bg0.blur)||0,unit:' px',
         format:v=>v.toFixed(1),
-        oninput:v=>{const bg=ensureImageState();if(v<=0)delete bg.blur;else bg.blur=v;apply();}
+        oninput:v=>{const bg=ensureImageState();bg.blur=Math.max(0,v);apply();}
       }),
       desktopDetailRange(u('ビネット','Vignette'),{
         min:0,max:1,step:.05,value:Number(bg0.textures?.vignette)||0,unit:' %',
         format:v=>Math.round(v*100),
         oninput:v=>{
           const bg=ensureImageState();bg.textures={...(bg.textures||{})};
-          if(v<=0)delete bg.textures.vignette;else bg.textures.vignette=v;apply();
+          bg.textures.vignette=Math.max(0,v);apply();
         }
       }),
       desktopDetailRange(u('粒子','Grain'),{
@@ -11171,7 +13363,7 @@ function openDesktopBackgroundDetail(){
         format:v=>Math.round(v*100),
         oninput:v=>{
           const bg=ensureImageState();bg.textures={...(bg.textures||{})};
-          if(v<=0)delete bg.textures.grain;else bg.textures.grain=v;apply();
+          bg.textures.grain=Math.max(0,v);apply();
         }
       }),
       desktopDetailRange(u('モノクロ','Monochrome'),{
@@ -11179,10 +13371,30 @@ function openDesktopBackgroundDetail(){
         format:v=>Math.round(v*100),
         oninput:v=>{
           const bg=ensureImageState();bg.textures={...(bg.textures||{})};
-          if(v<=0)delete bg.textures.monochrome;else bg.textures.monochrome=v;apply();
+          bg.textures.monochrome=Math.max(0,v);apply();
         }
       })
     );
+    const appearanceActions=document.createElement('div');
+    appearanceActions.className='desktop-background-appearance-actions';
+    const copyPreviousAppearanceAction=desktopAction(u('前Sceneの明るさ・質感をコピー','Copy previous Scene brightness & texture'),()=>{
+      captureUndo('明るさ・質感の変更を元に戻せます');
+      if(!copyPreviousBackgroundAppearance(index))return;
+      apply();
+      closeDesktopBackgroundDetail();
+      openDesktopBackgroundDetail();
+    });
+    copyPreviousAppearanceAction.disabled=!previousFraming();
+    const copyPreviousAppearanceForwardAction=desktopAction(u('前Sceneの明るさ・質感を以降に一括適用','Apply previous Scene brightness & texture to all following Scenes'),()=>{
+      captureUndo('後続Sceneの明るさ・質感変更を元に戻せます');
+      if(!applyPreviousBackgroundAppearanceForward(index))return;
+      apply();
+      closeDesktopBackgroundDetail();
+      openDesktopBackgroundDetail();
+    });
+    copyPreviousAppearanceForwardAction.disabled=!previousFraming();
+    appearanceActions.append(copyPreviousAppearanceAction,copyPreviousAppearanceForwardAction);
+    lightSec.appendChild(appearanceActions);
 
     // TRANSITION ----------------------------------------------------------
     const transSec=section(u('Scene切替','Scene transition'));
@@ -11440,6 +13652,7 @@ function openDesktopTextDetail(){
       v58MakeTextSizeBulkControl(scene,{label:u('サイズ','Size'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
       v64MakeWritingModeBulkControl(scene,{label:u('書字方向','Writing direction'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
       desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;apply();}),
+      desktopDetailSelect(u('斜体','Italic'),[['normal',u('通常','Normal')],['italic',u('斜体','Italic')]],p.text?.fontStyle||'normal',v=>{if(v==='italic')p.text.fontStyle='italic';else delete p.text.fontStyle;apply();}),
       v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
       desktopDetailSelect(u('文字影','Text shadow'),[['auto',t('effect.auto')],['none',t('shadow.none')],['soft',t('shadow.soft')],['strong',t('shadow.strong')]],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
     );
@@ -11461,7 +13674,7 @@ function openDesktopTextDetail(){
       desktopDetailRange(u('行間','Line height'),{min:1.2,max:2.5,step:.05,value:Number(p.text.lineHeight)||1.85,format:v=>v.toFixed(2),oninput:v=>{p.text.lineHeight=v;apply();}}),
       desktopDetailRange(u('字間','Letter spacing'),{min:-.05,max:.20,step:.005,value:Number(p.text.letterSpacing)||.035,unit:' em',format:v=>v.toFixed(3),oninput:v=>{p.text.letterSpacing=v;apply();}}),
       desktopDetailRange(u('左右の余白','Side margins'),{min:0,max:28,step:1,value:Number(p.text.sideMargin)||0,unit:' %',format:v=>Math.round(v),oninput:v=>{if(v<=0)delete p.text.sideMargin;else p.text.sideMargin=v;apply();}}),
-      desktopDetailRange(u('透明度','Opacity'),{min:.35,max:1,step:.05,value:Number(p.text.opacity)||1,unit:' %',format:v=>Math.round(v*100),oninput:v=>{if(v>=.999)delete p.text.opacity;else p.text.opacity=v;apply();}})
+      desktopDetailRange(u('文字の角度','Text angle'),{min:-180,max:180,step:1,value:Number(p.text.angle)||0,unit:' °',format:v=>Math.round(v),oninput:v=>{if(Math.abs(v)<.5)delete p.text.angle;else p.text.angle=v;apply();}})
     );
     const layoutSelects=two(layout);
     layoutSelects.append(
@@ -11653,16 +13866,26 @@ function openDesktopTextDetail(){
           onApply(st);
         }
       ),
-      desktopMakeSelect(
-        u('サイズ','Size'),
-        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
-        initial.size||'auto',
-        v=>{
-          const st=store();
-          st.size=v;
-          onApply(st);
-        }
-      )
+      (()=>{
+        const field=document.createElement('label');field.className='desktop-live-field desktop-shell-size-field';
+        const cap=document.createElement('span');cap.textContent=u('サイズ','Size');
+        const select=document.createElement('select');
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')],['px',u('px指定','Custom px')]].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;select.appendChild(option);});
+        const px=document.createElement('input');px.type='number';px.inputMode='numeric';px.min='8';px.max='420';px.step='1';px.className='desktop-shell-size-px';px.setAttribute('aria-label',u('文字サイズ px','Font size in pixels'));
+        const numeric=Number(initial.size);const hasNumeric=Number.isFinite(numeric)&&numeric>0;
+        select.value=hasNumeric?'px':(typeof initial.size==='string'?initial.size:'auto');
+        px.value=String(Math.round(hasNumeric?numeric:24));px.hidden=select.value!=='px';
+        // Keep Custom px inside the Size field. The old vertical append made the
+        // Size cell taller and pushed Typeface/Color out of the shared grid.
+        const row=document.createElement('div');row.className='desktop-shell-size-row';
+        Object.assign(row.style,{display:'grid',gridTemplateColumns:select.value==='px'?'minmax(0,1fr) 86px':'minmax(0,1fr)',gap:'8px',alignItems:'center'});
+        select.style.minWidth='0';px.style.width='100%';px.style.minWidth='0';px.style.boxSizing='border-box';
+        const paintRow=()=>{row.style.gridTemplateColumns=select.value==='px'?'minmax(0,1fr) 86px':'minmax(0,1fr)';px.hidden=select.value!=='px';};
+        const commitPx=()=>{const value=Math.max(8,Math.min(420,Math.round(Number(px.value)||24)));px.value=String(value);const st=store();st.size=value;onApply(st);};
+        select.addEventListener('change',()=>{paintRow();if(select.value==='px'){commitPx();px.focus();px.select();}else{const st=store();st.size=select.value;onApply(st);}});
+        px.addEventListener('input',commitPx);
+        row.append(select,px);field.append(cap,row);paintRow();return field;
+      })()
     );
 
     // Use the same color controls as the normal Aa editor:
@@ -11871,6 +14094,15 @@ function openDesktopTextDetail(){
       imageOps.append(desktopAction(u('画像を外す','Remove image'),()=>coverImageClear?.click(),false,'is-danger'));
     }
     imageCard.appendChild(imageOps);
+    const startCard=desktopCard(u('「はじめる」後の動作','After tapping START'));
+    const savedStartMode=workingDocument?.cover?.startMode==='comic'?'comic':'scene';
+    startCard.append(desktopMakeSelect(u('開始後','After start'),[['scene',u('Sceneから読む','Start with Scene')],['comic',u('漫画ビューアで1ページ目を開く','Open page 1 in comic viewer')]],savedStartMode,value=>{
+      coverStartMode=value==='comic'?'comic':'scene';
+      syncEasyShellToWorkingDocument();
+      refreshLivePlayerDocumentChrome();
+      syncEasyPublishButton();
+      scheduleDraftSave(70);
+    }));
     // Cover is intentionally a single-sheet editor. Unlike Scene authoring,
     // there are too few groups to justify tabs and switching tabs hides context.
     desktopLivePanel.hidden=false;
@@ -11883,7 +14115,7 @@ function openDesktopTextDetail(){
     const pageKicker=document.createElement('small');pageKicker.textContent='COVER';
     const pageTitle=document.createElement('strong');pageTitle.textContent=u('表紙を編集','Edit cover');
     pageHead.append(pageKicker,pageTitle);
-    shell.append(pageHead,textCard,styleCard,imageCard);
+    shell.append(pageHead,textCard,styleCard,imageCard,startCard);
     desktopLivePanelBody.appendChild(shell);
   }
 
@@ -11937,6 +14169,13 @@ function openDesktopTextDetail(){
   let desktopV2RangeDragging=false;
   let desktopV2RangeRenderPending=false;
   const finishDesktopV2RangeDrag=()=>{
+    if(desktopDetailRangeFlushActive){
+      const flush=desktopDetailRangeFlushActive;
+      desktopDetailRangeFlushActive=null;
+      desktopDetailRangeInteracting=false;
+      flush();
+      scheduleDraftSave(120);
+    }
     if(!desktopV2RangeDragging)return;
     desktopV2RangeDragging=false;
     if(desktopV2RangeRenderPending){
@@ -11954,13 +14193,14 @@ function openDesktopTextDetail(){
   window.addEventListener('pointerup',finishDesktopV2RangeDrag,true);
   window.addEventListener('pointercancel',finishDesktopV2RangeDrag,true);
 
-  function renderDesktopLivePanel(){
-    if(desktopV2RangeDragging){desktopV2RangeRenderPending=true;return;}
+  function renderDesktopLivePanelInternal(){
+    if(desktopV2RangeDragging||desktopDetailRangeInteracting){desktopV2RangeRenderPending=true;return;}
+    desktopV2RangeRenderPending=false;
     if(!desktopLivePanel)return;
     if(!desktopLiveActive()){
       desktopLivePanel.hidden=true;
       if(desktopV2Chrome)desktopV2Chrome.hidden=true;
-      document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open');
+      document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open','desktop-v2-settings-closed');
       return;
     }
     // Shell-page mode must be decided by the Player's authoritative state, not
@@ -11987,7 +14227,16 @@ function openDesktopTextDetail(){
     desktopSpecialIntent='scene';
     document.body.classList.remove('desktop-live-special-open');
     if(desktopTimingButton)desktopTimingButton.disabled=false;
-    const {scene,index}=liveEditScene();if(!scene)return;
+    let {scene,index}=liveEditScene();
+    // Player index can be briefly unset while the Live Editor is being opened
+    // from a restored draft. Fall back to the selected Scene so the inspector
+    // never stays as a blank white panel during that transition.
+    if(!scene&&workingDocument?.scenes?.length){index=Math.max(0,Math.min(selectedSceneIndex,workingDocument.scenes.length-1));scene=workingDocument.scenes[index]||null;}
+    if(!scene){
+      desktopLivePanel.hidden=false;
+      desktopLivePanelBody.innerHTML=`<div class="desktop-live-empty-state"><strong>${u('Sceneを読み込めませんでした','No Scene is available')}</strong><p>${u('作品を再読み込みするか、Sceneを追加してください。','Reload the work or add a Scene.')}</p></div>`;
+      return;
+    }
     desktopLivePanel.hidden=false;document.body.classList.add('desktop-live-edit');
     desktopSceneLabel.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     desktopPrevScene.disabled=index<=0;desktopNextScene.disabled=index>=workingDocument.scenes.length-1;
@@ -11995,14 +14244,17 @@ function openDesktopTextDetail(){
     if(desktopV2SceneLabel)desktopV2SceneLabel.textContent=`Scene ${index+1} / ${workingDocument.scenes.length}`;
     if(desktopV2Prev)desktopV2Prev.disabled=index<=0;
     if(desktopV2Next)desktopV2Next.disabled=index>=workingDocument.scenes.length-1;
+    // Cover/Ending temporarily disable +. A real Scene must always restore it.
+    if(desktopV2Add)desktopV2Add.disabled=false;
     if(desktopV2Settings)desktopV2Settings.setAttribute('aria-expanded',document.body.classList.contains('desktop-v2-settings-open')?'true':'false');
     if(desktopTimingOpen){renderDesktopTimingPanel();return;}
     if(desktopTimingButton){desktopTimingButton.classList.remove('is-active');desktopTimingButton.textContent=u('⌛ 時間','⌛ Time');}
-    desktopLivePanelBody.innerHTML='';
+    desktopLivePanelBody.innerHTML=`<div class="desktop-live-empty-state"><strong>${u('右Editorを読み込み中…','Loading Live Editor…')}</strong></div>`;
     const p=ensurePresentation(scene);p.text ||= {};
     const refresh=()=>{scheduleDraftSave(70);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();};
 
     const bodyCard=desktopCard(u('本文','Text'),'desktop-live-body-card');
+    bodyCard.prepend(makeAutoRubyBodyControl(scene));
     // Scene type is part of the manuscript's meaning, so keep it beside the
     // body instead of hiding it in the typography inspector. The former quick
     // Text card is not mounted in the current tab layout, which made these
@@ -12031,6 +14283,12 @@ function openDesktopTextDetail(){
     sceneTypeControl.append(sceneTypeLabel,sceneTypeOptions);
     const ta=document.createElement('textarea');ta.value=scene.text||'';ta.placeholder=u('本文を入力','Enter text');
     bindRememberedDesktopBodyHeight(ta);
+    const cardButton=document.createElement('button');cardButton.type='button';cardButton.className='live-edit-action desktop-ogp-card-action';cardButton.textContent=u('＋ URLカード','＋ URL card');cardButton.title=u('カーソル位置にURLカードを追加します','Add a URL card at the cursor');
+    cardButton.addEventListener('click',()=>{
+      const a=ta.selectionStart||0,b=ta.selectionEnd||a,selectedUrl=b>a?pastedWebUrl(ta.value.slice(a,b)):'';
+      const start=selectedUrl?a:b,end=selectedUrl?b:b;
+      scene.text=ta.value;openOgpCardDialog({mode:'scene',scene,range:{start,end},initialUrl:selectedUrl});
+    });
     // Writing should feel like writing, not replaying a Scene on every key.
     // While the field is focused, update only the visible text node. This keeps
     // typography/background stable and deliberately does NOT replay entrance,
@@ -12064,19 +14322,19 @@ function openDesktopTextDetail(){
       const ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
       const contents=Array.isArray(scene?.content)?scene.content:[];
       const removedIds=new Set();
-      ranges.filter(r=>r?.kind==='table').forEach((r,i)=>{
-        const oldLabel=String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)) || `［表 ${i+1}］`;
-        const variants=[oldLabel,`［表 ${i+1}］`,`[表 ${i+1}]`];
-        if(!variants.some(label=>label&&ta.value.includes(label)))removedIds.add(String(r.tableId||''));
+      ranges.filter(r=>r?.kind==='table'||r?.kind==='linkCard').forEach((r,i)=>{
+        const isCard=r.kind==='linkCard',id=String(isCard?r.cardId||'':r.tableId||'');
+        const label=String(scene.text||'').slice(Math.max(0,Number(r.start)||0),Math.max(0,Number(r.end)||0)) || (isCard?'［リンクカード］':`［表 ${i+1}］`);
+        if(!label||!ta.value.includes(label))removedIds.add(`${r.kind}:${id}`);
       });
       if(removedIds.size){
-        scene.richText.ranges=ranges.filter(r=>!(r?.kind==='table'&&removedIds.has(String(r.tableId||''))));
-        scene.content=contents.filter(c=>!(c?.type==='table'&&removedIds.has(String(c.id||''))));
-        if(!scene.richText.ranges.length)delete scene.richText;
+        scene.richText.ranges=ranges.filter(r=>!((r?.kind==='table'||r?.kind==='linkCard')&&removedIds.has(`${r.kind}:${String(r.kind==='table'?r.tableId||'':r.cardId||'')}`)));
+        scene.content=contents.filter(c=>!((c?.type==='table'||c?.type==='linkCard')&&removedIds.has(`${c.type}:${String(c.id||'')}`)));
+        if(!scene.richText.ranges.length&&!scene.richText.autoRubyExcluded?.length)delete scene.richText;
         if(!scene.content.length)delete scene.content;
       }
     };
-    ta.addEventListener('input',()=>{reconcileSceneTablesFromText();scene.text=ta.value;scheduleDraftSave(100);mirrorDesktopTextOnly('text',ta.value);});
+    ta.addEventListener('input',()=>{remapRubyAfterTextEdit(scene,String(scene.text||''),ta.value);reconcileSceneTablesFromText();scene.text=ta.value;scheduleDraftSave(100);mirrorDesktopTextOnly('text',ta.value);});
     ta.addEventListener('blur',finishDesktopTextMirror);
     ta.addEventListener('keydown',e=>{
       if(e.isComposing||e.key!=='Enter')return;
@@ -12145,6 +14403,27 @@ function openDesktopTextDetail(){
       writingButton(u('前Sceneと結合','Merge with previous'),'',liveEditMergePrevious,index<=0,'',false)
     );
     bodyCard.appendChild(writingActions);
+    const sceneCards=(Array.isArray(scene.content)?scene.content:[]).filter(c=>c?.type==='linkCard');
+    if(sceneCards.length){
+      const cardManager=document.createElement('div');cardManager.className='desktop-ogp-card-manager';
+      const managerHead=document.createElement('div');managerHead.className='desktop-ogp-card-head';
+      const managerLabel=document.createElement('strong');managerLabel.textContent=u('このSceneのURLカード','URL cards in this Scene');
+      const refreshButton=document.createElement('button');refreshButton.type='button';refreshButton.className='desktop-ogp-refresh';refreshButton.textContent=u('OGPを再取得','Refresh OGP');
+      const refreshStatus=document.createElement('small');refreshStatus.className='desktop-ogp-refresh-status';
+      refreshButton.addEventListener('click',()=>refreshSceneOgpCards(scene,sceneCards,refreshStatus,refreshButton));
+      managerHead.append(managerLabel,refreshButton,refreshStatus);cardManager.appendChild(managerHead);
+      sceneCards.forEach(card=>{
+        const row=document.createElement('div');row.className='desktop-ogp-card-row';
+        const info=document.createElement('div');info.className='desktop-ogp-card-info';
+        const title=document.createElement('span');title.textContent=card.title||'URLカード';
+        const url=document.createElement('small');url.textContent=card.url||'';info.append(title,url);
+        const edit=document.createElement('button');edit.type='button';edit.textContent=u('編集','Edit');edit.addEventListener('click',()=>openOgpCardDialog({mode:'scene',card,scene}));
+        const remove=document.createElement('button');remove.type='button';remove.textContent=u('削除','Delete');remove.addEventListener('click',()=>removeSceneOgpCard(scene,card.id));
+        row.append(info,edit,remove);cardManager.appendChild(row);
+      });
+      bodyCard.appendChild(cardManager);
+    }
+    bodyCard.appendChild(cardButton);
 
     const three=document.createElement('div');three.className='desktop-live-three';
     const textCard=desktopCard(uiLanguage==='en'?'Text (Aa)':'文字（Aa）');
@@ -12177,7 +14456,7 @@ function openDesktopTextDetail(){
     textGrid.append(
       desktopMakeSelect(u('種類','Type'),[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],scene.type||'text',v=>{scene.type=v;refresh();}),
       desktopMakeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;refresh();}),
-      desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
+      desktopMakeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],p.text.size||'auto',v=>{p.text.size=v;refresh();}),
       desktopMakeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;refresh();}),
       desktopMakeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;refresh();}),
       v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>renderDesktopLivePanel()}),
@@ -12197,7 +14476,7 @@ function openDesktopTextDetail(){
     const sceneImageTop=document.createElement('div');sceneImageTop.className='desktop-scene-image-top';
     const sceneImagePreview=document.createElement('div');sceneImagePreview.className='desktop-scene-image-preview';
     if(sceneImage?.src){
-      const img=document.createElement('img');img.src=sceneImage.src;img.alt=sceneImage.alt||'';
+      const img=document.createElement('img');img.src=sceneImage.cover?.src||sceneImage.src;img.alt=sceneImage.cover?.alt||sceneImage.alt||'';
       img.style.transform=`rotate(${Number(sceneImage.rotation)||0}deg)`;
       sceneImagePreview.appendChild(img);
     }else{
@@ -12211,7 +14490,7 @@ function openDesktopTextDetail(){
       ()=>desktopPickFile('image/*',(url,name)=>{
         captureUndo('Scene画像の変更を元に戻せます');
         p.image={
-          ...(p.image||{}),
+          ...replaceSceneImageFirst(p.image||{},url,name),
           src:url,
           fit:'contain',
           size:p.image?.size||((p.view==='chat')?'small':'large'),
@@ -12219,7 +14498,7 @@ function openDesktopTextDetail(){
           rotation:Number(p.image?.rotation)||0,
           tapAction:p.image?.tapAction||((p.image?.fullscreen===false)?'none':'fullscreen'),
           fullscreen:p.image?.fullscreen!==false,
-          alt:p.image?.alt||'',
+          alt:'',
           _editorFileName:name,
           _editorManaged:true
         };
@@ -12227,7 +14506,10 @@ function openDesktopTextDetail(){
       }),
       'is-primary'
     );
-    const sceneImageRemove=desktopAction(u('画像を外す','Remove image'),()=>{
+    const sceneImageRemove=desktopAction(u('画像を外す','Remove image'),async()=>{
+      const pageCount=Array.isArray(p.image?.pages)?p.image.pages.length:1;
+      const message=pageCount>1?u(`Scene画像とページ束の全${pageCount}ページをSceneから外します。続けますか？`,`Remove the Scene image and all ${pageCount} pages from this Scene?`):u('このScene画像を外します。続けますか？','Remove this Scene image?');
+      if(!await appConfirm(message,{title:u('Scene画像を外しますか？','Remove Scene image?'),kicker:'SCENE IMAGE',danger:true,confirmLabel:u('画像を外す','Remove image')}))return;
       captureUndo('Scene画像の削除を元に戻せます');
       // Keep the asset registered: Undo may restore this Scene image immediately.
       // Orphan cleanup can reclaim unused assets later.
@@ -12238,6 +14520,10 @@ function openDesktopTextDetail(){
     sceneImageActions.append(sceneImagePick,sceneImageRemove);
     sceneImageTop.append(sceneImagePreview,sceneImageActions);
     sceneImageCard.append(sceneImageTop);
+    if(sceneImage?.src){
+      appendSceneImagePagesEditor(sceneImageCard,sceneImage,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt||p.image.alt||'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined,tapAction:pages.some(page=>(page.viewPoints?.points||page.viewRec?.points||[]).length)?'viewRec':p.image.tapAction};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();});
+      appendSceneImageCoverEditor(sceneImageCard,sceneImage,cover=>{captureUndo('Scene画像の表紙設定を元に戻せます');if(cover)p.image.cover=cover;else delete p.image.cover;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();});
+    }
 
     if(sceneImage?.src){
       const sceneImageOptions=document.createElement('div');sceneImageOptions.className='desktop-scene-image-options';
@@ -12260,17 +14546,23 @@ function openDesktopTextDetail(){
       const rotationTitle=document.createElement('span');rotationTitle.textContent=u('傾き','Rotation');
       const rotationRow=document.createElement('div');rotationRow.className='desktop-scene-image-rotation-row';
       const rotationRange=document.createElement('input');rotationRange.type='range';rotationRange.min='-20';rotationRange.max='20';rotationRange.step='1';rotationRange.value=String(Number(sceneImage.rotation)||0);
-      const rotationNumber=document.createElement('input');rotationNumber.type='number';rotationNumber.min='-20';rotationNumber.max='20';rotationNumber.step='1';rotationNumber.value=String(Number(sceneImage.rotation)||0);rotationNumber.setAttribute('aria-label',u('傾き（度）','Rotation in degrees'));
+      const rotationNumber=createSceneImageRotationControl(sceneImage.rotation);
       const applyRotation=(raw)=>{const value=Math.max(-20,Math.min(20,Number(raw)||0));p.image.rotation=value;rotationRange.value=String(value);rotationNumber.value=String(value);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});const previewImg=sceneImagePreview.querySelector('img');if(previewImg)previewImg.style.transform=`rotate(${value}deg)`;};
       let rotationUndoCaptured=false;
       rotationRange.addEventListener('pointerdown',()=>{rotationUndoCaptured=false;});
       rotationRange.addEventListener('input',()=>{if(!rotationUndoCaptured){captureUndo('Scene画像の傾き変更を元に戻せます');rotationUndoCaptured=true;}applyRotation(rotationRange.value);});
       rotationRange.addEventListener('change',()=>{rotationUndoCaptured=false;});
-      rotationNumber.addEventListener('change',()=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(rotationNumber.value);});
+      bindSceneImageRotationInput(rotationNumber,rotationRange,raw=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(raw);});
       rotationRow.append(rotationRange,rotationNumber,document.createTextNode('°'));
       rotationField.append(rotationTitle,rotationRow);
 
       const currentTapAction=sceneImage.tapAction||((sceneImage.fullscreen===false)?'none':'fullscreen');
+      const pageDirectionField=desktopMakeSelect(
+        u('ページ送り方向','Page turn direction'),
+        [['ltr',u('左スワイプで次へ','Swipe left for next page')],['rtl',u('右スワイプで次へ（漫画向け）','Swipe right for next page (manga)')]],
+        sceneImage.pageDirection==='rtl'?'rtl':'ltr',
+        v=>{captureUndo('ページ送り方向の変更を元に戻せます');p.image.pageDirection=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}
+      );
       const tapActionField=desktopMakeSelect(
         u('タップ動作','Tap action'),
         [['none',u('なし','None')],['fullscreen',u('全画面','Fullscreen')],['viewRec','VIEW POINT']],
@@ -12284,8 +14576,9 @@ function openDesktopTextDetail(){
         }
       );
 
-      const viewRecField=currentTapAction==='viewRec' ? makeViewRecAuthoringField(sceneImage,data=>{captureUndo('VIEW RECの記録を元に戻せます');p.image.viewPoints=data;delete p.image.viewRec;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}) : null;
+      const viewRecField=currentTapAction==='viewRec' ? makeViewRecAuthoringField(sceneImage,data=>{captureUndo('VIEW RECの記録を元に戻せます');saveSceneImageViewPoints(p.image,data);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}) : null;
 
+      const roundedField=document.createElement('label');roundedField.className='desktop-scene-image-check';const roundedInput=document.createElement('input');roundedInput.type='checkbox';roundedInput.checked=sceneImage.rounded!==false;roundedInput.addEventListener('change',()=>{captureUndo('Scene画像の角丸設定を元に戻せます');p.image.rounded=roundedInput.checked;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});roundedField.append(roundedInput,document.createElement('span'));roundedField.lastChild.textContent=u('角を丸める','Round image corners');
       const shadowField=document.createElement('label');shadowField.className='desktop-scene-image-check';
       const shadowInput=document.createElement('input');shadowInput.type='checkbox';shadowInput.checked=sceneImage.shadow===true;
       shadowInput.addEventListener('change',()=>{captureUndo('Scene画像の影設定変更を元に戻せます');p.image.shadow=shadowInput.checked;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
@@ -12301,7 +14594,8 @@ function openDesktopTextDetail(){
       const captionInput=document.createElement('input');captionInput.type='checkbox';captionInput.checked=sceneImage.caption===true;
       captionInput.addEventListener('change',()=>{captureUndo('Scene画像のキャプション設定変更を元に戻せます');p.image.caption=captionInput.checked;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
       captionField.append(captionInput,document.createElement('span'));captionField.lastChild.textContent=u('説明を画像下に表示','Show description as caption');
-      sceneImageOptions.append(sizeField,alignField,rotationField,shadowField,tapActionField);if(viewRecField)sceneImageOptions.append(viewRecField);sceneImageOptions.append(altField,captionField);
+      const pageCountField=document.createElement('label');pageCountField.className='desktop-scene-image-check';const pageCountInput=document.createElement('input');pageCountInput.type='checkbox';pageCountInput.checked=sceneImage.showPageCount!==false;pageCountInput.addEventListener('change',()=>{captureUndo('ページ数バッジの表示設定を元に戻せます');p.image.showPageCount=pageCountInput.checked;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});pageCountField.append(pageCountInput,document.createElement('span'));pageCountField.lastChild.textContent=u('＋ページ数を表示','Show page count badge');
+      sceneImageOptions.append(sizeField,alignField,rotationField,roundedField,shadowField,tapActionField,pageCountField);if(sceneImagePages(sceneImage).length>1)sceneImageOptions.append(pageDirectionField);if(viewRecField)sceneImageOptions.append(viewRecField);sceneImageOptions.append(altField,captionField);
       sceneImageCard.append(sceneImageOptions);
 
       const sceneImageNote=document.createElement('small');sceneImageNote.className='desktop-scene-image-note';
@@ -12329,7 +14623,7 @@ function openDesktopTextDetail(){
       speakerPresets.forEach(sp=>{
         const chip=document.createElement('button');chip.type='button';chip.className='desktop-chat-speaker-chip'+(p.chat?.speakerId===sp.id?' is-active':'');
         const avatar=document.createElement('span');avatar.className='desktop-chat-speaker-chip-avatar';
-        if(sp.icon){const img=document.createElement('img');img.src=sp.icon;img.alt='';avatar.appendChild(img);} else avatar.textContent=sp.iconText||'●';
+        if(sp.icon||ahakoAvatarSrc(sp.iconPreset)){const img=document.createElement('img');img.src=sp.icon||ahakoAvatarSrc(sp.iconPreset);img.alt='';avatar.appendChild(img);} else avatar.textContent=sp.iconText||'●';
         const name=document.createElement('span');name.className='desktop-chat-speaker-chip-name';name.textContent=sp.name||u('話者','Speaker');
         const side=document.createElement('span');side.className='desktop-chat-speaker-chip-side';side.textContent=sp.side==='right'?'→':'←';
         chip.append(avatar,name,side);
@@ -12348,7 +14642,7 @@ function openDesktopTextDetail(){
 
       const speakerBox=document.createElement('div');speakerBox.className='desktop-chat-current-speaker';
       const preview=document.createElement('div');preview.className='desktop-chat-icon-preview is-large';
-      if(p.chat.icon){const img=document.createElement('img');img.src=p.chat.icon;img.alt='';preview.appendChild(img);} else preview.textContent=p.chat.iconText||'●';
+      if(p.chat.icon||ahakoAvatarSrc(p.chat.iconPreset)){const img=document.createElement('img');img.src=p.chat.icon||ahakoAvatarSrc(p.chat.iconPreset);img.alt='';preview.appendChild(img);} else preview.textContent=p.chat.iconText||'●';
       const speakerMeta=document.createElement('div');speakerMeta.className='desktop-chat-current-meta';
       const currentName=document.createElement('strong');currentName.textContent=String(scene.subText||u('話者未設定','No speaker'));
       const currentSub=document.createElement('span');currentSub.textContent=p.text?.align==='right'?u('右側の吹き出し','Right bubble'):u('左側の吹き出し','Left bubble');
@@ -12378,11 +14672,18 @@ function openDesktopTextDetail(){
       },'');
       quick.append(iconBtn,updateBtn,forwardBtn,normalForwardBtn);
       chatPanel.append(quick);
+      chatPanel.append(desktopCommonAvatarPicker(u('共通アバター','Common avatar'),p.chat.iconPreset||'',v=>{p.chat.iconPreset=v;if(v){delete p.chat.icon;delete p.chat._editorFileName;delete p.chat._editorManaged;}scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
       const chatLt=ensureLogTime(scene);
       const chatTimeRow=document.createElement('div');chatTimeRow.className='desktop-chat-quick-grid';
-      chatTimeRow.append(desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],chatLt.mode||'none',v=>{chatLt.mode=v;if(v==='edit')chatLt.editedAt=boardNowString();scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      chatTimeRow.append(desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],chatLt.mode||'none',v=>{chatLt.mode=v;if(v==='edit')chatLt.editedAt=boardNowString();applyChatTimeModeForward(index,v);scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      chatTimeRow.append(desktopMakeSelect(u('既読','Read receipt'),[['none',u('なし','None')],['individual',u('個別','Individual')],['auto',u('自動グループ','Auto group')],['manual',u('任意グループ','Manual group')]],p.chat.readMode||(p.chat.readStatus==='read'?'individual':'none'),v=>{p.chat.readMode=v;p.chat.readStatus=v==='none'?'none':'read';scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      if((p.chat.readMode||(p.chat.readStatus==='read'?'individual':'none'))!=='none'){const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('既読遅延（秒）','Read delay (sec)');const inp=document.createElement('input');inp.type='number';inp.min='0';inp.max='300';inp.step='0.1';inp.value=Number(p.chat.readDelay||0);inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.chat.readDelay=Math.max(0,Math.min(300,Number(inp.value)||0));scheduleDraftSave(80);});f.append(sp,inp);chatTimeRow.append(f);}
+      if((p.chat.readMode||'')==='manual'){const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('任意グループID','Manual group ID');const inp=document.createElement('input');inp.value=p.chat.readGroupId||'';inp.placeholder='A';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.chat.readGroupId=inp.value.trim();scheduleDraftSave(80);});f.append(sp,inp);chatTimeRow.append(f);}
+      p.messageState ||= {mode:'normal',delay:0};
+      chatTimeRow.append(desktopMakeSelect(u('メッセージ状態','Message state'),[['normal',u('通常','Normal')],['deleted',u('送信取消','Unsent')]],p.messageState.mode||'normal',v=>{p.messageState.mode=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      if(p.messageState.mode==='deleted'){const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('取消まで（秒）','Delay before unsend (sec)');const inp=document.createElement('input');inp.type='number';inp.min='0';inp.max='300';inp.step='0.1';inp.value=Number(p.messageState.delay||0);inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.messageState.delay=Math.max(0,Math.min(300,Number(inp.value)||0));scheduleDraftSave(80);});f.append(sp,inp);chatTimeRow.append(f);}
       if(chatLt.mode==='work'){
-        const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('作品時刻','Work time');const inp=document.createElement('input');inp.value=chatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{chatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(80);refresh();});f.append(sp,inp);chatTimeRow.append(f);
+        const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('作品時刻','Work time');const inp=document.createElement('input');inp.value=chatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{chatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(700);});inp.addEventListener('change',()=>{chatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});renderDesktopLivePanel();});f.append(sp,inp);chatTimeRow.append(f);
       }
       chatPanel.append(chatTimeRow);
 
@@ -12429,10 +14730,229 @@ function openDesktopTextDetail(){
       chatCard.append(chatPanel);
     }
 
+
+    let webCommentCard=null;
+    if((p.view||'world')==='web-comment'){
+      const c=initWebCommentMeta(scene,index);
+      c.reaction ||= {mode:'fixed',value:Math.max(0,Number(c.likes)||0),min:0,max:50,start:Math.max(0,Number(c.likes)||0),end:Math.max(0,Number(c.likes)||0),delay:0,duration:3,curve:'burst'};
+      webCommentCard=desktopCard(u('コメント欄設定','Comment settings'),'desktop-web-comment-card');
+      webCommentCard.addEventListener('keydown',e=>e.stopPropagation());webCommentCard.addEventListener('keyup',e=>e.stopPropagation());
+      const grid=document.createElement('div');grid.className='desktop-web-board-grid desktop-web-comment-grid';
+      const field=(label,key,placeholder='',type='text')=>{
+        const wrap=document.createElement('label');wrap.className='desktop-web-board-field';
+        const sp=document.createElement('span');sp.textContent=label;
+        const inp=document.createElement('input');inp.type=type;inp.value=c[key]??'';inp.placeholder=placeholder;
+        inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('keyup',e=>e.stopPropagation());
+        const commit=()=>{c[key]=type==='number'?Math.max(0,Number(inp.value)||0):inp.value;touchLogTime(scene);scheduleDraftSave(80);};
+        inp.addEventListener('input',commit);inp.addEventListener('change',()=>{commit();refreshLivePlayer({preserveSheet:false});});inp.addEventListener('blur',()=>{commit();refreshLivePlayer({preserveSheet:false});});
+        wrap.append(sp,inp);return wrap;
+      };
+      grid.append(field(u('名前','Name'),'name',u('名無しさん','Anonymous')));
+      grid.append(desktopMakeSelect(u('扱い','Role'),[['extra',u('エキストラ（自動設定対象）','Extra / auto')],['manual',u('重要コメント（手動・保護）','Important / manual')]],c.role||'extra',v=>{c.role=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+
+      const iconWrap=document.createElement('div');iconWrap.className='desktop-web-board-field';
+      const iconLabel=document.createElement('span');iconLabel.textContent=u('アイコン','Icon');
+      const iconActions=document.createElement('div');iconActions.className='desktop-web-board-actions';
+      const iconBtn=desktopAction(c.icon?u('アイコンを変更','Change icon'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{
+        c.icon=url;c._editorFileName=name;c._editorManaged=true;scheduleDraftSave(40);refresh();renderDesktopLivePanel();
+      }),'is-primary');
+      const iconRemove=desktopAction(u('画像を外す','Remove image'),()=>{delete c.icon;delete c._editorFileName;delete c._editorManaged;scheduleDraftSave(40);refresh();renderDesktopLivePanel();},'');
+      iconActions.append(iconBtn,iconRemove);iconWrap.append(iconLabel,iconActions);grid.append(iconWrap);
+      grid.append(desktopCommonAvatarPicker(u('共通アバター','Common avatar'),c.iconPreset||'',v=>{c.iconPreset=v;if(v){delete c.icon;delete c._editorFileName;delete c._editorManaged;}scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+
+      const replyOptions=[['',u('返信なし','No reply')]];
+      for(let i=0;i<index;i++){
+        const sc=workingDocument.scenes[i],wc=sc?.presentation?.webComment;
+        if(sc?.presentation?.view!=='web-comment'||!wc?.commentId||wc.replyTo)continue;
+        const excerpt=String(sc.text||'').replace(/\s+/g,' ').slice(0,26);
+        replyOptions.push([wc.commentId,`Scene ${i+1}｜${wc.name||'名無しさん'}「${excerpt}${String(sc.text||'').length>26?'…':''}」`]);
+      }
+      grid.append(desktopMakeSelect(u('返信先','Reply to'),replyOptions,c.replyTo||'',v=>{c.replyTo=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+
+      const reactionMode=desktopMakeSelect(u('いいね','Likes'),[
+        ['fixed',u('手動','Manual')],['random',u('自動ランダム','Random')],['dynamic',u('動的カウンター','Dynamic counter')]
+      ],c.reaction.mode||'fixed',v=>{c.reaction.mode=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      grid.append(reactionMode);
+      if(c.reaction.mode==='fixed'){
+        const f=field(u('いいね数','Likes'),'likes','0','number');grid.append(f);
+        c.reaction.value=Math.max(0,Number(c.likes)||0);
+      }else if(c.reaction.mode==='random'){
+        const range=document.createElement('div');range.className='desktop-web-board-field';
+        const sp=document.createElement('span');sp.textContent=u('ランダム範囲','Random range');
+        const row=document.createElement('div');row.className='desktop-web-board-actions';
+        const min=document.createElement('input'),max=document.createElement('input');min.type=max.type='number';min.min=max.min='0';min.value=c.reaction.min??0;max.value=c.reaction.max??50;
+        [min,max].forEach(x=>{x.addEventListener('keydown',e=>e.stopPropagation());});
+        const saveRange=()=>{c.reaction.min=Math.max(0,Number(min.value)||0);c.reaction.max=Math.max(c.reaction.min,Number(max.value)||0);scheduleDraftSave(80);};
+        min.addEventListener('input',saveRange);max.addEventListener('input',saveRange);
+        const reroll=desktopAction(u('再抽選','Reroll'),()=>{saveRange();const lo=c.reaction.min,hi=c.reaction.max;c.likes=lo+Math.floor(Math.random()*(hi-lo+1));c.reaction.value=c.likes;scheduleDraftSave(40);refresh();renderDesktopLivePanel();},'is-primary');
+        row.append(min,max,reroll);range.append(sp,row);grid.append(range);
+        if(!Number.isFinite(Number(c.likes)))c.likes=0;
+      }else{
+        const dyn=(label,key,def,step='1')=>{const w=document.createElement('label');w.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=label;const inp=document.createElement('input');inp.type='number';inp.min='0';inp.step=step;inp.value=c.reaction[key]??def;inp.addEventListener('keydown',e=>e.stopPropagation());const save=()=>{c.reaction[key]=Math.max(0,Number(inp.value)||0);c.likes=Math.max(0,Number(c.reaction.end)||0);scheduleDraftSave(80);};inp.addEventListener('input',save);inp.addEventListener('change',()=>{save();refreshLivePlayer({preserveSheet:false});});inp.addEventListener('blur',()=>{save();refreshLivePlayer({preserveSheet:false});});w.append(sp,inp);return w;};
+        grid.append(dyn(u('開始値','Start'),'start',0),dyn(u('終了値','End'),'end',100),dyn(u('開始遅延（秒）','Delay (sec)'),'delay',0,'0.1'),dyn(u('所要時間（秒）','Duration (sec)'),'duration',3,'0.1'));
+        grid.append(desktopMakeSelect(u('増え方','Growth'),[['linear',u('一定','Linear')],['ease',u('だんだん加速','Accelerate')],['burst',u('バズ型','Buzz / burst')],['wave',u('波ありバズ','Wave buzz')],['initial',u('初速型','Fast start')],['fire',u('炎上型','Viral spike')],['steps',u('階段型','Stepped')],['irregular',u('不規則型','Irregular')],['decay',u('減速型','Slowdown')]],c.reaction.curve||'burst',v=>{c.reaction.curve=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}));
+      }
+
+      const lt=ensureLogTime(scene);
+      const timeMode=desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();applyWebCommentTimeModeForward(index,v);scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      const workWrap=document.createElement('label');workWrap.className='desktop-web-board-field';
+      const workSp=document.createElement('span');workSp.textContent=u('作品時刻','Work time');
+      const workInp=document.createElement('input');workInp.value=lt.workTime||'';workInp.placeholder='2026/10/02 15:30:00';workInp.disabled=lt.mode!=='work';
+      workInp.addEventListener('keydown',e=>e.stopPropagation());workInp.addEventListener('input',()=>{lt.workTime=workInp.value;touchLogTime(scene);scheduleDraftSave(80);});
+      workWrap.append(workSp,workInp);
+      p.messageState ||= {mode:'normal',delay:0};
+      const state=desktopMakeSelect(u('コメント状態','Comment state'),[['normal',u('通常','Normal')],['deleted',u('削除済み','Deleted')]],p.messageState.mode||'normal',v=>{p.messageState.mode=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      const actions=document.createElement('div');actions.className='desktop-web-board-actions';
+      actions.append(
+        desktopAction(u('エキストラ群を自動設定','Auto-fill extras'),()=>{const n=applyWebCommentExtrasForward(index);refresh();renderDesktopLivePanel();},'is-primary'),
+        desktopAction(u('このScene以降をコメント欄化','Comments from this Scene'),()=>{applyWebCommentModeForward(index);refresh();renderDesktopLivePanel();},''),
+        desktopAction(u('このScene以降を通常に戻す','Normal from this Scene'),()=>{applyNormalModeForward(index);refresh();renderDesktopLivePanel();},'')
+      );
+      webCommentCard.append(grid,timeMode);
+      if(lt.mode==='work')webCommentCard.append(workWrap);
+      webCommentCard.append(state,actions);
+    }
+
+    let webReviewCard=null;
+    if((p.view||'world')==='web-review'){
+      const r=initWebReviewMeta(scene,index);webReviewCard=desktopCard(u('レビュー設定','Review settings'),'desktop-web-review-card');
+      webReviewCard.addEventListener('keydown',e=>e.stopPropagation());webReviewCard.addEventListener('keyup',e=>e.stopPropagation());
+      const grid=document.createElement('div');grid.className='desktop-web-board-grid desktop-web-review-grid';
+      const field=(label,key,placeholder='')=>{const w=document.createElement('label');w.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=label;const inp=document.createElement('input');inp.value=r[key]??'';inp.placeholder=placeholder;inp.addEventListener('keydown',e=>e.stopPropagation());const save=()=>{r[key]=inp.value;scheduleDraftSave(80);};inp.addEventListener('input',save);inp.addEventListener('change',()=>{save();refreshLivePlayer({preserveSheet:false});});w.append(sp,inp);return w;};
+      grid.append(field(u('投稿者','Reviewer'),'name',u('ゲスト','Guest')));
+      grid.append(desktopMakeSelect(u('扱い','Role'),[['extra',u('エキストラ（自動設定対象）','Extra / auto')],['manual',u('重要レビュー（手動・保護）','Important / manual')]],r.role||'extra',v=>{r.role=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      grid.append(desktopMakeSelect(u('評価','Rating'),[['5','★★★★★'],['4','★★★★☆'],['3','★★★☆☆'],['2','★★☆☆☆'],['1','★☆☆☆☆']],String(r.rating||5),v=>{r.rating=Math.max(1,Math.min(5,Number(v)||5));scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}));
+      grid.append(desktopMakeSelect(u('購入・利用確認','Verified'),[['false',u('表示なし','None')],['true',u('確認済み','Verified')]],String(!!r.verified),v=>{r.verified=v==='true';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}));
+      const iconWrap=document.createElement('div');iconWrap.className='desktop-web-board-field';const iconLabel=document.createElement('span');iconLabel.textContent=u('アイコン','Icon');const ia=document.createElement('div');ia.className='desktop-web-board-actions';
+      ia.append(desktopAction(r.icon?u('アイコンを変更','Change icon'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{r.icon=url;r._editorFileName=name;r._editorManaged=true;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}),'is-primary'),desktopAction(u('画像を外す','Remove image'),()=>{delete r.icon;delete r._editorFileName;delete r._editorManaged;scheduleDraftSave(40);refresh();renderDesktopLivePanel();},''));iconWrap.append(iconLabel,ia);grid.append(iconWrap);
+      grid.append(desktopCommonAvatarPicker(u('共通アバター','Common avatar'),r.iconPreset||'',v=>{r.iconPreset=v;if(v){delete r.icon;delete r._editorFileName;delete r._editorManaged;}scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      const lt=ensureLogTime(scene);const timeMode=desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();applyWebReviewTimeModeForward(index,v);scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      const workWrap=document.createElement('label');workWrap.className='desktop-web-board-field';const ws=document.createElement('span');ws.textContent=u('作品時刻','Work time');const wi=document.createElement('input');wi.value=lt.workTime||'';wi.placeholder='2026/10/02 15:30:00';wi.addEventListener('keydown',e=>e.stopPropagation());wi.addEventListener('input',()=>{lt.workTime=wi.value;scheduleDraftSave(80);});workWrap.append(ws,wi);
+      const actions=document.createElement('div');actions.className='desktop-web-board-actions';actions.append(desktopAction(u('エキストラ群を自動設定','Auto-fill extras'),()=>{applyWebReviewExtrasForward(index);refresh();renderDesktopLivePanel();},'is-primary'),desktopAction(u('このScene以降をレビュー化','Reviews from this Scene'),()=>{applyWebReviewModeForward(index);refresh();renderDesktopLivePanel();},''),desktopAction(u('このScene以降を通常に戻す','Normal from this Scene'),()=>{applyNormalModeForward(index);refresh();renderDesktopLivePanel();},''));
+      webReviewCard.append(grid,timeMode);if(lt.mode==='work')webReviewCard.append(workWrap);webReviewCard.append(actions);
+    }
+
+    let webQACard=null;
+    if((p.view||'world')==='web-qa'){
+      const q=initWebQAMeta(scene,index),question=q.question,answer=q.answer;webQACard=desktopCard(u('Q&A設定','Q&A settings'),'desktop-web-qa-card');
+      webQACard.addEventListener('keydown',e=>e.stopPropagation());webQACard.addEventListener('keyup',e=>e.stopPropagation());
+      const grid=document.createElement('div');grid.className='desktop-web-board-grid desktop-web-qa-grid';
+      const field=(label,obj,key,placeholder='')=>{const w=document.createElement('label');w.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=label;const inp=document.createElement('input');inp.value=obj[key]??'';inp.placeholder=placeholder;inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{obj[key]=inp.value;scheduleDraftSave(80);});inp.addEventListener('change',()=>refreshLivePlayer({preserveSheet:false}));w.append(sp,inp);return w;};
+      const area=(label,obj,key)=>{const w=document.createElement('label');w.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=label;const ta=document.createElement('textarea');ta.rows=4;ta.value=obj[key]||'';ta.addEventListener('keydown',e=>e.stopPropagation());ta.addEventListener('input',()=>{obj[key]=ta.value;scheduleDraftSave(80);});ta.addEventListener('change',()=>refreshLivePlayer({preserveSheet:false}));w.append(sp,ta);return w;};
+      const kind=q.kind==='question'?'question':(q.kind==='legacy-answer'?'legacy-answer':'answer');
+      const roleNote=document.createElement('div');roleNote.className='desktop-web-board-field';
+      const roleTitle=document.createElement('span');roleTitle.textContent=u('このSceneの役割','This Scene');
+      const roleValue=document.createElement('strong');roleValue.textContent=kind==='question'?u('質問','Question'):(kind==='legacy-answer'?u('回答（旧Q&A形式）','Answer (legacy Q&A)'):u('回答','Answer'));
+      const roleHelp=document.createElement('small');roleHelp.textContent=kind==='question'?u('Scene本文がそのまま質問本文になります。','Scene text is the question body.'):u('Scene本文がそのまま回答本文になります。','Scene text is the answer body.');
+      roleNote.append(roleTitle,roleValue,roleHelp);grid.append(roleNote);
+      if(kind==='question'){
+        question.body=String(scene.text||'');
+        grid.append(field(u('質問タイトル','Question title'),question,'title'),field(u('質問者','Questioner'),question,'name'));
+        grid.append(desktopCommonAvatarPicker(u('質問者アバター','Questioner avatar'),question.iconPreset||'',v=>{question.iconPreset=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+        grid.append(desktopMakeSelect(u('質問状態','Question status'),[['open',u('受付中','Open')],['resolved',u('解決済み','Resolved')]],question.status||'open',v=>{question.status=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}));
+      }else{
+        if(kind==='legacy-answer'){
+          grid.append(field(u('質問タイトル（旧形式）','Question title (legacy)'),question,'title'),area(u('質問本文（旧形式）','Question body (legacy)'),question,'body'),field(u('質問者（旧形式）','Questioner (legacy)'),question,'name'));
+          grid.append(desktopCommonAvatarPicker(u('質問者アバター（旧形式）','Questioner avatar (legacy)'),question.iconPreset||'',v=>{question.iconPreset=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+          grid.append(desktopMakeSelect(u('質問状態（旧形式）','Question status (legacy)'),[['open',u('受付中','Open')],['resolved',u('解決済み','Resolved')]],question.status||'open',v=>{question.status=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}));
+        }
+        grid.append(field(u('回答者','Answerer'),answer,'name'));
+        grid.append(desktopCommonAvatarPicker(u('回答者アバター','Answerer avatar'),answer.iconPreset||'',v=>{answer.iconPreset=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+        grid.append(desktopMakeSelect(u('扱い','Role'),[['extra',u('エキストラ（自動設定対象）','Extra / auto')],['manual',u('重要回答（手動・保護）','Important / manual')]],answer.role||'extra',v=>{answer.role=v;scheduleDraftSave(40);}));
+        grid.append(field(u('GOOD','GOOD'),answer,'good','0'));
+        grid.append(desktopMakeSelect(u('ベストアンサー','Best answer'),[['false',u('なし','No')],['true',u('ベストアンサー','Best answer')]],String(!!answer.best),v=>{answer.best=v==='true';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}));
+        grid.append(desktopMakeSelect(u('回答状態','Answer state'),[['false',u('通常','Normal')],['true',u('削除済み','Deleted')]],String(!!answer.deleted),v=>{answer.deleted=v==='true';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}));
+      }
+      const lt=ensureLogTime(scene),timeMode=desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();applyWebQATimeModeForward(index,v);scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      const workWrap=document.createElement('label');workWrap.className='desktop-web-board-field';const ws=document.createElement('span');ws.textContent=u('作品時刻','Work time');const wi=document.createElement('input');wi.value=lt.workTime||'';wi.placeholder='2026/10/03 13:40:00';wi.addEventListener('keydown',e=>e.stopPropagation());wi.addEventListener('input',()=>{lt.workTime=wi.value;scheduleDraftSave(80);});workWrap.append(ws,wi);
+      const actions=document.createElement('div');actions.className='desktop-web-board-actions';
+      if(kind!=='question')actions.append(desktopAction(u('このSceneを新しい質問にする','Start new question here'),()=>{startWebQAQuestionAt(index,{resetMeta:true});refresh();renderDesktopLivePanel();},'is-primary'));
+      actions.append(desktopAction(u('回答エキストラを自動設定','Auto-fill answer extras'),()=>{applyWebQAExtrasForward(index);refresh();renderDesktopLivePanel();},kind==='question'?'is-primary':''),desktopAction(u('このScene以降をQ&A化','Q&A from this Scene'),()=>{applyWebQAModeForward(index);refresh();renderDesktopLivePanel();},''),desktopAction(u('このScene以降を通常に戻す','Normal from this Scene'),()=>{applyNormalModeForward(index);refresh();renderDesktopLivePanel();},''));
+      webQACard.append(grid,timeMode);if(lt.mode==='work')webQACard.append(workWrap);webQACard.append(actions);
+    }
+
+    let webSNSCard=null;
+    if((p.view||'world')==='web-sns'){
+      const m=initWebSNSMeta(scene,index);webSNSCard=desktopCard(u('SNS投稿設定','SNS post settings'),'desktop-web-sns-card');
+      const grid=document.createElement('div');grid.className='desktop-web-board-grid desktop-web-sns-grid';
+      const field=(label,key,placeholder='')=>{const w=document.createElement('label');w.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=label;const inp=document.createElement('input');inp.value=m[key]??'';inp.placeholder=placeholder;inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{m[key]=inp.value;scheduleDraftSave(80);});inp.addEventListener('change',()=>refreshLivePlayer({preserveSheet:false}));w.append(sp,inp);return w;};
+      const nameField=field(u('表示名','Display name'),'name','ユーザー');
+      const handleField=field(u('@ID','Handle'),'handle','@user');
+      const profileField=field(u('プロフィールURL（任意）','Profile URL (optional)'),'profileUrl','https://x.com/...');
+      const platformField=document.createElement('label');platformField.className='desktop-web-board-field';const platformLabel=document.createElement('span');platformLabel.textContent=u('SNS種別（自動）','SNS type (auto)');const platformInput=document.createElement('input');platformInput.value=m.platform||'';platformInput.placeholder=u('URLから判定','Detected from URL');platformInput.readOnly=true;platformInput.tabIndex=-1;platformField.append(platformLabel,platformInput);
+      const handleInput=handleField.querySelector('input'),profileInput=profileField.querySelector('input');
+      const syncProfileFromUrl=()=>{
+        const parsed=parseWebSNSProfileUrl(profileInput?.value||'');
+        m.platform=parsed.platform||'';platformInput.value=m.platform;
+        if(parsed.handle){m.handle=parsed.handle;if(handleInput)handleInput.value=parsed.handle;}
+        scheduleDraftSave(80);
+      };
+      profileInput?.addEventListener('input',syncProfileFromUrl);
+      profileInput?.addEventListener('paste',()=>setTimeout(syncProfileFromUrl,0));
+      grid.append(nameField,handleField,profileField,platformField);
+      grid.append(desktopMakeSelect(u('扱い','Role'),[['extra',u('エキストラ（自動設定対象）','Extra / auto')],['manual',u('重要投稿（手動・保護）','Important / manual')]],m.role||'extra',v=>{m.role=v;scheduleDraftSave(40);}));
+      const iw=document.createElement('div');iw.className='desktop-web-board-field';const il=document.createElement('span');il.textContent=u('アイコン','Icon');const ia=document.createElement('div');ia.className='desktop-web-board-actions';ia.append(desktopAction(m.icon?u('アイコンを変更','Change icon'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{m.icon=url;m._editorFileName=name;m._editorManaged=true;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}),'is-primary'),desktopAction(u('画像を外す','Remove image'),()=>{delete m.icon;delete m._editorFileName;delete m._editorManaged;scheduleDraftSave(40);refresh();renderDesktopLivePanel();},''));iw.append(il,ia);grid.append(iw);
+      grid.append(desktopCommonAvatarPicker(u('共通アバター','Common avatar'),m.iconPreset||'',v=>{m.iconPreset=v;if(v){delete m.icon;delete m._editorFileName;delete m._editorManaged;}scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      grid.append(field(u('いいね','Likes'),'likes','0'),field(u('リポスト','Reposts'),'reposts','0'),field(u('返信','Replies'),'replies','0'));
+      grid.append(desktopMakeSelect(u('投稿状態','Post state'),[['false',u('通常','Normal')],['true',u('削除済み','Deleted')]],String(!!m.deleted),v=>{m.deleted=v==='true';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}));
+      const lt=ensureLogTime(scene),timeMode=desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();applyWebSNSTimeModeForward(index,v);scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      const actions=document.createElement('div');actions.className='desktop-web-board-actions';actions.append(desktopAction(u('エキストラ群を自動設定','Auto-fill extras'),()=>{applyWebSNSExtrasForward(index);refresh();renderDesktopLivePanel();},'is-primary'),desktopAction(u('このScene以降をSNS化','SNS from this Scene'),()=>{applyWebSNSModeForward(index);refresh();renderDesktopLivePanel();},''),desktopAction(u('このScene以降を通常に戻す','Normal from this Scene'),()=>{applyNormalModeForward(index);refresh();renderDesktopLivePanel();},''));
+      webSNSCard.append(grid,timeMode,actions);
+    }
+
+    let webMailCard=null;
+    if((p.view||'world')==='web-mail'){
+      const m=initWebMailMeta(scene,index);webMailCard=desktopCard(u('メール設定','Email settings'),'desktop-web-mail-card');
+      webMailCard.addEventListener('keydown',e=>e.stopPropagation());webMailCard.addEventListener('keyup',e=>e.stopPropagation());
+      const grid=document.createElement('div');grid.className='desktop-web-board-grid desktop-web-mail-grid';
+      const field=(label,key,placeholder='')=>{const w=document.createElement('label');w.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=label;const inp=document.createElement('input');inp.value=m[key]??'';inp.placeholder=placeholder;inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{m[key]=inp.value;scheduleDraftSave(80);});inp.addEventListener('change',()=>refreshLivePlayer({preserveSheet:false}));w.append(sp,inp);return w;};
+      grid.append(
+        desktopMakeSelect(u('メール種別','Folder / state'),[['inbox',u('受信メール','Inbox')],['sent',u('送信済み','Sent')],['draft',u('下書き','Draft')],['spam',u('迷惑メール','Spam')]],m.folder||'inbox',v=>{m.folder=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}),
+        field(u('差出人名','Sender name'),'senderName','差出人'),
+        field(u('差出人アドレス','From address'),'senderAddress','name@example.com'),
+        field(u('宛先','To'),'to','you@example.com'),
+        field(u('CC（任意）','CC (optional)'),'cc',''),
+        field(u('件名','Subject'),'subject','件名なし')
+      );
+      const iw=document.createElement('div');iw.className='desktop-web-board-field';const il=document.createElement('span');il.textContent=u('差出人アイコン','Sender icon');const ia=document.createElement('div');ia.className='desktop-web-board-actions';ia.append(desktopAction(m.icon?u('アイコンを変更','Change icon'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{m.icon=url;m._editorFileName=name;m._editorManaged=true;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}),'is-primary'),desktopAction(u('画像を外す','Remove image'),()=>{delete m.icon;delete m._editorFileName;delete m._editorManaged;scheduleDraftSave(40);refresh();renderDesktopLivePanel();},''));iw.append(il,ia);grid.append(iw);
+      grid.append(desktopCommonAvatarPicker(u('共通アバター','Common avatar'),m.iconPreset||'',v=>{m.iconPreset=v;if(v){delete m.icon;delete m._editorFileName;delete m._editorManaged;}scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      grid.append(
+        desktopMakeSelect(u('スター','Star'),[['false',u('なし','None')],['true',u('スター付き','Starred')]],String(!!m.starred),v=>{m.starred=v==='true';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}),
+        field(u('添付表示（任意）','Attachment label (optional)'),'attachmentName','例: IMG_1842.jpg / voice.m4a')
+      );
+      const lt=ensureLogTime(scene),timeMode=desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();applyWebMailTimeModeForward(index,v);scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      const workWrap=document.createElement('label');workWrap.className='desktop-web-board-field';const ws=document.createElement('span');ws.textContent=u('作品時刻','Work time');const wi=document.createElement('input');wi.value=lt.workTime||'';wi.placeholder='2026/10/04 10:00:00';wi.addEventListener('keydown',e=>e.stopPropagation());wi.addEventListener('input',()=>{lt.workTime=wi.value;scheduleDraftSave(80);});workWrap.append(ws,wi);
+      const actions=document.createElement('div');actions.className='desktop-web-board-actions';actions.append(desktopAction(u('このScene以降をメール化','Email from this Scene'),()=>{applyWebMailModeForward(index);refresh();renderDesktopLivePanel();},'is-primary'),desktopAction(u('このScene以降を通常に戻す','Normal from this Scene'),()=>{applyNormalModeForward(index);refresh();renderDesktopLivePanel();},''));
+      webMailCard.append(grid,timeMode);if(lt.mode==='work')webMailCard.append(workWrap);webMailCard.append(actions);
+    }
+
+    let webNotificationCard=null;
+    if((p.view||'world')==='web-notification'){
+      const m=initWebNotificationMeta(scene,index);webNotificationCard=desktopCard(u('通知設定','Notification settings'),'desktop-web-notification-card');
+      webNotificationCard.addEventListener('keydown',e=>e.stopPropagation());webNotificationCard.addEventListener('keyup',e=>e.stopPropagation());
+      const grid=document.createElement('div');grid.className='desktop-web-board-grid desktop-web-notification-grid';
+      const field=(label,key,placeholder='')=>{const w=document.createElement('label');w.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=label;const inp=document.createElement('input');inp.value=m[key]??'';inp.placeholder=placeholder;inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{m[key]=inp.value;scheduleDraftSave(80);});inp.addEventListener('change',()=>refreshLivePlayer({preserveSheet:false}));w.append(sp,inp);return w;};
+      grid.append(
+        desktopMakeSelect(u('通知種別','Notification type'),[['social',u('SNS','Social')],['mail',u('メール','Email')],['system',u('システム','System')],['message',u('メッセージ','Message')],['other',u('その他','Other')]],m.kind||'other',v=>{m.kind=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});}),
+        field(u('通知元','Source'),'source','例: X / メール / あ箱'),
+        field(u('タイトル','Title'),'title','お知らせ')
+      );
+      const iw=document.createElement('div');iw.className='desktop-web-board-field';const il=document.createElement('span');il.textContent=u('通知アイコン','Notification icon');const ia=document.createElement('div');ia.className='desktop-web-board-actions';ia.append(desktopAction(m.icon?u('アイコンを変更','Change icon'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{m.icon=url;m._editorFileName=name;m._editorManaged=true;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}),'is-primary'),desktopAction(u('画像を外す','Remove image'),()=>{delete m.icon;delete m._editorFileName;delete m._editorManaged;scheduleDraftSave(40);refresh();renderDesktopLivePanel();},''));iw.append(il,ia);grid.append(iw);
+      grid.append(desktopCommonAvatarPicker(u('共通アバター','Common avatar'),m.iconPreset||'',v=>{m.iconPreset=v;if(v){delete m.icon;delete m._editorFileName;delete m._editorManaged;}scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      const lt=ensureLogTime(scene),timeMode=desktopMakeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')],['relative',u('相対時刻','Relative time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();if(v==='relative'&&!lt.relativeText)lt.relativeText='1時間前';applyWebNotificationTimeModeForward(index,v);scheduleDraftSave(40);refresh();renderDesktopLivePanel();});
+      const workWrap=document.createElement('label');workWrap.className='desktop-web-board-field';const ws=document.createElement('span');ws.textContent=u('作品時刻','Work time');const wi=document.createElement('input');wi.value=lt.workTime||'';wi.placeholder='2026/10/04 10:00:00';wi.addEventListener('keydown',e=>e.stopPropagation());wi.addEventListener('input',()=>{lt.workTime=wi.value;scheduleDraftSave(80);});workWrap.append(ws,wi);
+      const relativeWrap=document.createElement('div');relativeWrap.className='desktop-web-board-field';const rs=document.createElement('span');rs.textContent=u('相対時刻','Relative time');const relativeSelect=desktopMakeSelect('',[['just-now',u('たった今','Just now')],['5-min',u('5分前','5 min ago')],['30-min',u('30分前','30 min ago')],['1-hour',u('1時間前','1 hour ago')],['3-hours',u('3時間前','3 hours ago')],['yesterday',u('昨日','Yesterday')]],(function(v){const map={'たった今':'just-now','5分前':'5-min','30分前':'30-min','1時間前':'1-hour','3時間前':'3-hours','昨日':'yesterday'};return map[v]||'1-hour';})(lt.relativeText||'1時間前'),v=>{const map={'just-now':'たった今','5-min':'5分前','30-min':'30分前','1-hour':'1時間前','3-hours':'3時間前','yesterday':'昨日'};lt.relativeText=map[v]||'1時間前';scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});relativeWrap.append(rs,relativeSelect);
+      const actions=document.createElement('div');actions.className='desktop-web-board-actions';actions.append(desktopAction(u('このScene以降を通知化','Notifications from this Scene'),()=>{applyWebNotificationModeForward(index);refresh();renderDesktopLivePanel();},'is-primary'),desktopAction(u('このScene以降を通常に戻す','Normal from this Scene'),()=>{applyNormalModeForward(index);refresh();renderDesktopLivePanel();},''));
+      webNotificationCard.append(grid,timeMode);if(lt.mode==='work')webNotificationCard.append(workWrap);if(lt.mode==='relative')webNotificationCard.append(relativeWrap);webNotificationCard.append(actions);
+    }
+
+    // Flow Comments v0.1: a Niconico-style overlay that can sit on top of any Scene.
+    const flowCommentCard=buildFlowCommentEditor(scene,index);
+
     const effectGrid=document.createElement('div');effectGrid.className='desktop-live-grid';
     const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
     effectGrid.append(
-      desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+      desktopMakeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['murmur',u('ざわつく','Murmur')],['flash',u('閃光','Flash')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
         ensureDesktopEffectVisibleDefaults(scene,{save:false});
         if(v==='typewriter'){
           p.effect='none';
@@ -12447,9 +14967,10 @@ function openDesktopTextDetail(){
       }),
       v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderDesktopLivePanel()}),
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()}),
-      desktopMakeSelect(u('表示モード','View mode'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')]],p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);refresh();renderDesktopLivePanel();}),
+      desktopMakeSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')]],p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);if(v==='web-comment')initWebCommentMeta(scene,index);if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
-      desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();})
+      desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
+      desktopMakeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);refresh();})
     );
     effectCard.append(effectGrid);
     effectCard.append(desktopDetail(t('detail.effect'),'effect'));
@@ -12488,14 +15009,20 @@ function openDesktopTextDetail(){
       const note=document.createElement('small');note.className='desktop-web-board-note';note.textContent=u('時刻はログ共通設定です。読者時刻はPlayerを開いた端末の現在時刻を表示します。','Time is shared log metadata. Reader time uses the current time on the reader device.');
       const forward=desktopAction(u('このScene以降を掲示板化','Board mode from this Scene onward'),()=>{const count=applyWebBoardModeForward(index);refresh();renderDesktopLivePanel();showUndo(`${count} Sceneを掲示板表示にしました`);},'is-primary');
       const normal=desktopAction(u('このScene以降を通常に戻す','Normal mode from this Scene onward'),()=>{const count=applyNormalModeForward(index);refresh();renderDesktopLivePanel();showUndo(`${count} Sceneを通常表示に戻しました`);},'');
-      webBoardCard.append(grid,threadRef,timeMode,workTimeWrap,forward,normal,note);
+      p.messageState ||= {mode:'normal',delay:0};
+      const boardStateWrap=document.createElement('div');boardStateWrap.className='desktop-web-board-grid';
+      boardStateWrap.append(desktopMakeSelect(u('書き込み状態','Post state'),[['normal',u('通常','Normal')],['deleted',u('削除済み','Deleted')]],p.messageState.mode||'normal',v=>{p.messageState.mode=v;scheduleDraftSave(40);refresh();renderDesktopLivePanel();}));
+      if(p.messageState.mode==='deleted'){const f=document.createElement('label');f.className='desktop-web-board-field';const sp=document.createElement('span');sp.textContent=u('削除まで（秒）','Delay before delete (sec)');const inp=document.createElement('input');inp.type='number';inp.min='0';inp.max='300';inp.step='0.1';inp.value=Number(p.messageState.delay||0);inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.messageState.delay=Math.max(0,Math.min(300,Number(inp.value)||0));scheduleDraftSave(80);});f.append(sp,inp);boardStateWrap.append(f);}
+      webBoardCard.append(grid,threadRef,timeMode,workTimeWrap,boardStateWrap,forward,normal,note);
     }
 
     const bgCard=desktopCard(uiLanguage==='en'?'Background (▣)':'背景（▣）','desktop-live-bg-card');
     const bg=p.background;
+    const inheritedBg=(!bg || (!bg.src && bg.src!=='')) ? previousEffectiveBackground(index) : null;
+    const displayedBg=bg?.src ? bg : inheritedBg;
     const bgTop=document.createElement('div');bgTop.className='desktop-live-bg-top';
     const bgPreview=document.createElement('div');bgPreview.className='desktop-live-bg-preview';
-    if(bg?.src){const img=document.createElement('img');img.src=bg.src;img.alt=u('背景','Background');bgPreview.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent=u('背景','Background');bgPreview.appendChild(ph);}
+    if(displayedBg?.src){const img=document.createElement('img');img.src=displayedBg.src;img.alt=u('背景','Background');bgPreview.appendChild(img);}else{const ph=document.createElement('div');ph.className='desktop-live-bg-placeholder';ph.textContent=u('背景','Background');bgPreview.appendChild(ph);}
     const bgControls=document.createElement('div');bgControls.className='desktop-live-bg-controls';
     const bgBtns=document.createElement('div');bgBtns.className='desktop-live-bg-source-row';
     bgBtns.append(
@@ -12503,7 +15030,7 @@ function openDesktopTextDetail(){
         captureUndo('背景設定の変更を元に戻せます');
         delete p.background;
         refresh();
-      },!bg?'is-selected':''),
+      },(!bg || (!bg.src && bg.src!==''))?'is-selected':''),
       desktopAction(bg?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{
         captureUndo('背景画像の変更を元に戻せます');
         p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:p.background?.position||'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
@@ -12520,7 +15047,7 @@ function openDesktopTextDetail(){
       },bg?.src===''?'is-selected':'')
     );
     const bgPositionAction=desktopAction(t('cover.positionAdjust'),()=>{
-      if(!p.background?.src)return;
+      if(p.background?.src==='')return;
       captureUndo('背景位置の変更を元に戻せます');
       openSceneBackgroundPositionEditor(scene,()=>{
         scheduleDraftSave(40);
@@ -12528,7 +15055,7 @@ function openDesktopTextDetail(){
         if(desktopLiveActive())renderDesktopLivePanel();
       });
     });
-    bgPositionAction.disabled=!bg?.src;
+    bgPositionAction.disabled=(!bg?.src&&!previousEffectiveBackground(index)?.src)||bg?.src==='';
     bgPositionAction.classList.add('desktop-live-bg-position');
     const bgCopyPreviousAction=desktopAction(u('前Sceneの表示位置をコピー','Copy previous Scene position'),()=>{
       captureUndo('背景位置の変更を元に戻せます');
@@ -12536,16 +15063,24 @@ function openDesktopTextDetail(){
       refresh();
       renderDesktopLivePanel();
     });
-    bgCopyPreviousAction.disabled=!bg?.src||!previousEffectiveBackground(index)?.src;
+    bgCopyPreviousAction.disabled=(!bg?.src&&!previousEffectiveBackground(index)?.src)||bg?.src==='';
     bgCopyPreviousAction.classList.add('desktop-live-bg-copy-position');
     const bgPositionRow=document.createElement('div');
     bgPositionRow.className='desktop-live-bg-position-row';
     bgPositionRow.append(bgPositionAction,bgCopyPreviousAction);
+    const bgCopyPreviousForwardAction=desktopAction(u('前Sceneの表示位置を以降に一括適用','Apply previous Scene position to all following Scenes'),()=>{
+      captureUndo('後続Sceneの背景位置変更を元に戻せます');
+      if(!applyPreviousBackgroundFramingForward(index))return;
+      refresh();
+      renderDesktopLivePanel();
+    });
+    bgCopyPreviousForwardAction.disabled=!previousEffectiveBackground(index)?.src||bg?.src==='';
+    bgCopyPreviousForwardAction.classList.add('desktop-live-bg-copy-forward');
     const tone=document.createElement('div');tone.className='desktop-live-choice desktop-live-bg-tone-row';
     tone.append(desktopAction(u('暗く','Dark'),()=>{if(p.background?.src){captureUndo('背景の明るさ変更を元に戻せます');p.background={...p.background,tone:'dark',dim:.38};refresh();}},bg?.src&&bg?.tone!=='light'?'is-selected':''),desktopAction(u('明るく','Light'),()=>{if(p.background?.src){captureUndo('背景の明るさ変更を元に戻せます');p.background={...p.background,tone:'light',dim:.64};refresh();}},bg?.src&&bg?.tone==='light'?'is-selected':''));
     const bgDetailAction=desktopDetail(t('detail.background'),'background');
     bgDetailAction.classList.add('desktop-live-bg-detail');
-    bgControls.append(bgBtns,bgPositionRow,tone,bgDetailAction);
+    bgControls.append(bgBtns,bgPositionRow,bgCopyPreviousForwardAction,tone,bgDetailAction);
     bgTop.append(bgPreview,bgControls);
     bgCard.appendChild(bgTop);
 
@@ -12676,7 +15211,7 @@ function openDesktopTextDetail(){
       textAlign:{group:u('文字','Text'),label:u('文字配置','Text alignment'),render:()=>desktopDetailSelect(u('文字配置','Text alignment'),[['auto',u('おまかせ','Auto')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],p.text.align||'auto',v=>{if(v==='auto')delete p.text.align;else p.text.align=v;quickApply();})},
       fontWeight:{group:u('文字','Text'),label:u('文字の太さ','Font weight'),render:()=>desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;quickApply();})},
       textFrame:{group:u('演出','Effects'),label:u('文字の枠','Text frame'),render:()=>desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;quickApply();})},
-      entrance:{group:u('演出','Effects'),label:u('出かた','Entrance'),render:()=>{const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');return desktopDetailSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{ensureDesktopEffectVisibleDefaults(scene,{save:false});if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}scheduleDraftSave(40);replayCurrentDesktopEffect();renderDesktopLivePanel();});}},
+      entrance:{group:u('演出','Effects'),label:u('出かた','Entrance'),render:()=>{const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');return desktopDetailSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['murmur',u('ざわつく','Murmur')],['flash',u('閃光','Flash')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{ensureDesktopEffectVisibleDefaults(scene,{save:false});if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}scheduleDraftSave(40);replayCurrentDesktopEffect();renderDesktopLivePanel();});}},
       display:{group:u('演出','Effects'),label:u('表示','Display'),render:()=>v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderDesktopLivePanel()})},
       flow:{group:u('演出','Effects'),label:u('Sceneの流れ','Scene flow'),render:()=>v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()})},
       entryMotion:{group:u('演出','Effects'),label:u('位置の動き','Position motion'),render:()=>desktopDetailSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;quickApply();})},
@@ -12726,10 +15261,56 @@ function openDesktopTextDetail(){
     panes.body.append(bodyCard);
     panes.body.appendChild(sceneCard);
     if(liveCommerceLockCard)panes.body.appendChild(liveCommerceLockCard);
+
+    // Work-wide appearance shortcuts belong at the bottom of the manuscript tab.
+    // They mirror Easy's LIGHT / DARK / CINEMA and typeface selectors, but do
+    // not sit above the tab rail where they can cause accidental taps.
+    const workAppearanceCard=desktopCard(u('作品全体','Whole work'),'desktop-v2-work-appearance-card');
+    const makeWorkAppearanceRow=(label,items,current,onPick)=>{
+      const row=document.createElement('div');row.className='desktop-v2-work-appearance-row';
+      const cap=document.createElement('span');cap.className='desktop-v2-work-appearance-label';cap.textContent=label;
+      const choices=document.createElement('div');choices.className='desktop-v2-work-appearance-choices';
+      const buttons=[];
+      items.forEach(([value,labelText])=>{
+        const b=document.createElement('button');b.type='button';b.textContent=labelText;b.dataset.value=value;
+        const on=value===current;b.classList.toggle('is-selected',on);b.setAttribute('aria-pressed',on?'true':'false');
+        b.addEventListener('click',()=>{
+          onPick(value);
+          buttons.forEach(btn=>{const selected=btn.dataset.value===value;btn.classList.toggle('is-selected',selected);btn.setAttribute('aria-pressed',selected?'true':'false');});
+        });
+        buttons.push(b);choices.appendChild(b);
+      });
+      row.append(cap,choices);return row;
+    };
+    const applyWorkAppearance=()=>{
+      scheduleDraftSave(40);
+      syncEasyPublishButton();
+      // Theme/typeface are document-wide chrome, so update the Player chrome
+      // as well as the currently rendered Scene. This keeps Editor and Easy in sync.
+      refreshLivePlayerDocumentChrome();
+      refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});
+    };
+    const themeRow=makeWorkAppearanceRow(u('雰囲気','Mood'),[['light','LIGHT'],['dark','DARK'],['cinema','CINEMA']],selectedTheme,theme=>{
+      applyTheme(theme);
+      if(workingDocument){workingDocument.theme=theme;workingDocument.appearance ||= {};if(theme==='cinema')workingDocument.appearance.cinemaTone=workingDocument.appearance.cinemaTone||'dark';}
+      applyWorkAppearance();
+    });
+    const fontRow=makeWorkAppearanceRow(u('書体','Typeface'),[['serif',u('明朝','Mincho')],['sans',u('ゴシック','Gothic')],['mono',u('等幅','Mono')]],selectedFont,font=>{
+      applyWorkFont(font);
+      applyWorkAppearance();
+    });
+    workAppearanceCard.append(themeRow,fontRow);
+    panes.body.appendChild(workAppearanceCard);
     if(!inlineExistingDetail('text',panes.text))panes.text.appendChild(textCard);
-    if(!inlineExistingDetail('effect',panes.effect))panes.effect.appendChild(effectCard);
-    if(chatCard)panes.effect.appendChild(chatCard);
-    if(webBoardCard)panes.effect.appendChild(webBoardCard);
+    const effectInlined=inlineExistingDetail('effect',panes.effect);
+    if(!effectInlined)panes.effect.appendChild(effectCard);
+    const effectBody=effectInlined?panes.effect.querySelector('.desktop-v2-inline-detail'):null;
+    const timingAnchor=effectBody?.querySelector('.desktop-effect-timing-section')||null;
+    const activeFormatCard=chatCard||webBoardCard||webCommentCard||webReviewCard||webQACard||webSNSCard||webMailCard||webNotificationCard||null;
+    if(activeFormatCard && effectBody && timingAnchor)effectBody.insertBefore(activeFormatCard,timingAnchor);
+    else if(activeFormatCard)panes.effect.appendChild(activeFormatCard);
+    if(flowCommentCard)panes.effect.appendChild(flowCommentCard);
+    panes.effect.appendChild(buildCreditsEditor(scene));
     if(!inlineExistingDetail('background',panes.background))panes.background.appendChild(bgCard);
     panes.image.appendChild(sceneImageCard);
     if(!inlineExistingDetail('audio',panes.audio))panes.audio.appendChild(audioCard);
@@ -12740,12 +15321,13 @@ function openDesktopTextDetail(){
       ['frequent','★'],['body',u('本文','Body')],['text',u('文字','Text')],['effect',u('演出','Effects')],
       ['background',u('背景','Background')],['image',u('画像','Image')],['audio',u('音','Audio')],['timing','⌛']
     ];
-    let activeTab=localStorage.getItem('ahako-editor-v2-tab')||'frequent';
+    let activeTab='frequent';try{activeTab=localStorage.getItem('ahako-editor-v2-tab')||'frequent';}catch{}
+    const creditScene=p.credits?.enabled===true;if(creditScene&&desktopCreditsInspectorScene!==scene)activeTab='effect';desktopCreditsInspectorScene=creditScene?scene:null;
     // One-time migration from the retired Scene tab.
     if(activeTab==='scene')activeTab='body';
     if(!panes[activeTab])activeTab='frequent';
     const activate=(key)=>{
-      activeTab=key;localStorage.setItem('ahako-editor-v2-tab',key);
+      activeTab=key;try{localStorage.setItem('ahako-editor-v2-tab',key);}catch{}
       tabRail.querySelectorAll('button').forEach(b=>b.classList.toggle('is-active',b.dataset.editorTab===key));
       Object.entries(panes).forEach(([k,el])=>el.classList.toggle('is-active',k===key));
     };
@@ -12760,11 +15342,35 @@ function openDesktopTextDetail(){
       tabRail.appendChild(b);
     });
     tabShell.append(tabRail,tabStage);
+    desktopLivePanelBody.innerHTML='';
     desktopLivePanelBody.append(tabShell);
     activate(activeTab);
     desktopSceneUnderlaySnapshot=desktopLivePanelBody.cloneNode(true);
     if(desktopShortcutButton)desktopShortcutButton.hidden=false;
     maybeShowDesktopWritingGuide();
+  }
+
+  // Keep a rendering exception from silently turning the entire inspector
+  // into an empty white pane. This boundary also provides the failing reason
+  // on-screen so it can be diagnosed from a screenshot.
+  function renderDesktopLivePanel(){
+    try{return renderDesktopLivePanelInternal();}
+    catch(error){
+      console.error('[LiveEditor] right panel render failed',error);
+      if(!desktopLivePanel||!desktopLivePanelBody||!desktopLiveActive())return;
+      desktopLivePanel.hidden=false;
+      document.body.classList.add('desktop-live-edit');
+      document.body.classList.remove('desktop-v2-settings-closed');
+      desktopLivePanelBody.innerHTML='';
+      const state=document.createElement('div');
+      state.className='desktop-live-empty-state';
+      const title=document.createElement('strong');
+      title.textContent=u('右Editorの描画でエラーが発生しました','The right editor could not be rendered');
+      const detail=document.createElement('pre');
+      detail.textContent=String(error?.message||error||'Unknown error');
+      state.append(title,detail);
+      desktopLivePanelBody.append(state);
+    }
   }
 
 
@@ -13044,7 +15650,7 @@ function openDesktopTextDetail(){
         v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;apply();}
       ),
       desktopDetailSelect(u('サイズ','Size'),
-        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],
         st.size||'auto',
         v=>{st.size=v;apply();}
       ),
@@ -13115,6 +15721,7 @@ function openDesktopTextDetail(){
     const head=liveEditSheet.querySelector('.live-edit-sheet-head');
     if(head)head.hidden=false;
     liveEditSheetTitle.textContent=uiLanguage==='en'?'Text':'文字';
+    liveEditSheetBody.append(makeAutoRubyBodyControl(scene));
     liveEditSheetBody.innerHTML='';
 
     const st=ctx.style;
@@ -13162,7 +15769,7 @@ function openDesktopTextDetail(){
         v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;rerender();}
       ),
       makeSelect(u('サイズ','Size'),
-        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],
         st.size||'auto',
         v=>{st.size=v;rerender();}
       ),
@@ -13193,6 +15800,75 @@ function openDesktopTextDetail(){
     // Cover / Ending intentionally stop at the compact Aa controls.
     // Scene text keeps its separate "文字の詳細設定" route below.
     return true;
+  }
+
+
+  // iPhone Text tab v3 — dedicated mobile presentation layer.
+  // Data/state/event handlers remain the same as the desktop editor; only the
+  // mobile control shell is separate so PC-sized selects can no longer collapse
+  // or leak bulk-apply controls into the iPhone sheet.
+  function renderMobileTextSheet(scene,index){
+    if(!scene||!liveEditSheetBody)return;
+    liveEditSheetTitle.textContent=uiLanguage==='en'?'Text':'文字';
+    const p=ensurePresentation(scene);p.text ||= {};
+    const rerender=()=>{scheduleDraftSave(80);refreshLivePlayer();};
+
+    const selectControl=({label,icon='text',values,current,onchange})=>{
+      const field=document.createElement('div');field.className='mobile-text-control';
+      const cap=document.createElement('div');cap.className='mobile-text-label';cap.textContent=label;
+      const shell=document.createElement('div');shell.className='mobile-text-select-shell';
+      const left=mobileUiSvgIcon(icon);left.classList.add('mobile-text-leading-icon');
+      const value=document.createElement('span');value.className='mobile-text-select-value';
+      const select=document.createElement('select');select.className='mobile-text-select';
+      values.forEach(([v,l,hidden])=>{const o=document.createElement('option');o.value=v;o.textContent=l;o.hidden=Boolean(hidden);select.appendChild(o);});
+      const syncValue=()=>{const opt=select.options[select.selectedIndex];value.textContent=opt?.textContent||'';};
+      select.value=current;syncValue();
+      select.addEventListener('change',()=>{syncValue();onchange(select.value);});
+      const chev=document.createElement('span');chev.className='mobile-text-chevron';chev.setAttribute('aria-hidden','true');chev.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+      shell.append(left,value,select,chev);field.append(cap,shell);return field;
+    };
+
+    const grid=document.createElement('div');grid.className='mobile-text-grid';
+    grid.append(
+      selectControl({label:u('種類','Type'),icon:'type',values:[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],current:scene.type||'text',onchange:v=>{scene.type=v;rerender();}}),
+      selectControl({label:u('書体','Typeface'),icon:'text',values:[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],current:p.text.fontFamily||'inherit',onchange:v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}}),
+      selectControl({label:u('サイズ','Size'),icon:'size',values:[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],current:p.text.size||'auto',onchange:v=>{p.text.size=v;rerender();}}),
+      selectControl({label:u('書字方向','Writing direction'),icon:'writing',values:[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],current:p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',onchange:v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;rerender();renderLiveEditSheet('text');}}),
+      selectControl({label:u('文字の太さ','Font weight'),icon:'text',values:[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],current:String(p.text?.fontWeight||0),onchange:v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;rerender();}}),
+      selectControl({label:u('テキスト位置','Text position'),icon:'position',values:FRAME_POSITION_OPTIONS,current:framePositionPreset(scene),onchange:v=>{captureUndo(u('テキスト位置の変更を元に戻せます','Undo text position change'));v66SetSceneTextPosition(scene,v);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(u('テキスト位置の変更を元に戻せます','Undo text position change')));}})
+    );
+
+    let colorValue=!p.text.color?'auto':(String(p.text.color).toLowerCase()==='#ffffff'?'white':(String(p.text.color).toLowerCase()==='#000000'?'black':'custom'));
+    grid.append(
+      selectControl({label:u('色','Color'),icon:'color',values:[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],current:colorValue,onchange:v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom'){if(!p.text.color||['#ffffff','#000000'].includes(String(p.text.color).toLowerCase()))p.text.color='#4a4a4a';}else delete p.text.color;rerender();renderLiveEditSheet('text');}}),
+      selectControl({label:p.text.writingMode==='vertical-rl'?u('横位置','Horizontal position'):u('文字配置','Text alignment'),icon:'align',values:p.text.writingMode==='vertical-rl'?[['auto',u('中央（おまかせ）','Center (automatic)')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]]:[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],current:p.text.align||'auto',onchange:v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();}})
+    );
+    liveEditSheetBody.append(grid);
+
+    const drag=makeFramePositionDragButton(scene);drag.classList.add('mobile-text-drag-action');drag.prepend(mobileUiSvgIcon('move'));liveEditSheetBody.append(drag);
+
+    if(colorValue==='custom'){
+      const custom=document.createElement('div');custom.className='mobile-text-custom-color';
+      const label=document.createElement('span');label.textContent=u('任意色','Custom color');
+      const initialColor=/^#[0-9a-f]{6}$/i.test(String(p.text.color||''))?String(p.text.color).toUpperCase():'#4A4A4A';
+      const code=document.createElement('code');code.textContent=initialColor;
+      const picker=makeCommittedTextColorPicker(initialColor,{compact:true,onPreview:c=>{code.textContent=c;previewCurrentSceneTextColor(c);},onCommit:c=>{captureUndo('文字色の変更を元に戻せます');p.text.color=c;code.textContent=c;rerender();queueMicrotask(()=>showUndo('文字色の変更を元に戻せます'));}});
+      custom.append(label,picker.root,code);liveEditSheetBody.append(custom);
+    }
+
+    const palette=document.createElement('section');palette.className='mobile-text-palette-card';
+    const makePaletteRow=(label,colors,{pinned=false}={})=>{
+      const row=document.createElement('div');row.className='mobile-text-palette-row';
+      const name=document.createElement('strong');name.textContent=label;
+      const chips=document.createElement('div');chips.className='mobile-text-palette-chips';
+      colors.slice(0,7).forEach(hex=>{const b=document.createElement('button');b.type='button';b.className='mobile-text-color-chip';b.style.backgroundColor=hex;b.setAttribute('aria-label',`${label} ${hex}`);if(normalizeTextColor(p.text.color)===hex)b.classList.add('is-current');b.addEventListener('pointerdown',()=>captureUndo('文字色の変更を元に戻せます'));b.addEventListener('click',()=>{rememberTextColor(hex);const current=liveEditScene()?.scene;if(!current)return;const cp=ensurePresentation(current);cp.text ||= {};cp.text.color=hex;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>{showUndo('文字色の変更を元に戻せます');renderLiveEditSheet('text');});});chips.appendChild(b);});
+      if(pinned){const plus=document.createElement('button');plus.type='button';plus.className='mobile-text-color-chip is-add';plus.textContent='+';plus.setAttribute('aria-label',u('現在の色を固定','Pin current color'));const current=normalizeTextColor(p.text.color);plus.disabled=!current;plus.addEventListener('click',()=>{if(!current)return;togglePinnedTextColor(current);renderLiveEditSheet('text');});chips.appendChild(plus);}
+      row.append(name,chips);return row;
+    };
+    palette.append(makePaletteRow(uiLanguage==='en'?'Recent':'最近',readRecentTextColors()),makePaletteRow(uiLanguage==='en'?'Pinned':'固定',readPinnedTextColors(),{pinned:true}));
+    liveEditSheetBody.append(palette);
+
+    const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail mobile-text-detail-launcher';detail.dataset.mobileUiDecorated='1';detail.append(mobileUiSvgIcon('gear'));const txt=document.createElement('span');txt.textContent=t('detail.text');detail.append(txt,mobileUiSvgIcon('chevron'));detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('text');});liveEditSheetBody.append(detail);
   }
 
   function renderLiveEditSheet(kind){
@@ -13233,6 +15909,12 @@ function openDesktopTextDetail(){
       return;
     }
 
+    if(kind==='text' && window.matchMedia('(max-width:899px)').matches){
+      finishInlineTextEdit();
+      renderMobileTextSheet(scene,index);
+      return;
+    }
+
     if(kind==='text'){
       finishInlineTextEdit();
       liveEditSheetTitle.textContent=uiLanguage==='en'?'Text':'文字';
@@ -13258,7 +15940,7 @@ function openDesktopTextDetail(){
       grid.append(
         makeSelect(u('種類','Type'),[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],scene.type||'text',v=>{scene.type=v;rerender();}),
         makeSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],p.text.fontFamily||'inherit',v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}),
-        makeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
+        makeSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],p.text.size||'auto',v=>{p.text.size=v;rerender();}),
         makeSelect(u('書字方向','Writing direction'),[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;rerender();}),
         makeSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;rerender();}),
         v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>renderLiveEditSheet('text')}),
@@ -13300,6 +15982,8 @@ function openDesktopTextDetail(){
         values.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;select.appendChild(o);});
         select.value=current;select.addEventListener('change',()=>onchange(select.value));wrap.appendChild(select);return wrap;
       };
+      const textFlipField=makeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);scheduleDraftSave(40);refreshLivePlayer();});
+      if((p.view||'world')==='chat')liveEditSheetBody.append(textFlipField);
       const makeEffectAction=(label,cls='')=>{const b=document.createElement('button');b.type='button';b.className=`live-edit-action ${cls}`.trim();b.textContent=label;return b;};
       const viewValues=[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')]];
 
@@ -13310,7 +15994,7 @@ function openDesktopTextDetail(){
         const grid=document.createElement('div');grid.className='live-edit-grid';
         const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');
         grid.append(
-          makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
+          makeSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['murmur',u('ざわつく','Murmur')],['flash',u('閃光','Flash')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{
             if(v==='typewriter'){
               p.effect='none';
               p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};
@@ -13324,7 +16008,8 @@ function openDesktopTextDetail(){
           v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderLiveEditSheet('effect')}),
           makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           makeSelect(u('位置の動き','Position motion'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
-          makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();})
+          makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();}),
+          textFlipField
         );
         liveEditSheetBody.append(grid);
         if((p.view||'world')==='web-board'){
@@ -13348,6 +16033,9 @@ function openDesktopTextDetail(){
           board.append(makeSelect(u('アンカー参照先','Anchor thread'),webBoardThreadOptions(String(p.webBoard.threadId||'')),p.webBoard.replyThreadId||'',v=>{p.webBoard.replyThreadId=v;scheduleDraftSave(40);refreshLivePlayer();}));
           const lt=ensureLogTime(scene);
           board.append(makeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],lt.mode||'none',v=>{lt.mode=v;if(v==='edit')lt.editedAt=boardNowString();applyWebBoardTimeModeForward(index,v,String(p.webBoard?.threadId||''));scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
+          p.messageState ||= {mode:'normal',delay:0};
+          board.append(makeSelect(u('書き込み状態','Post state'),[['normal',u('通常','Normal')],['deleted',u('削除済み','Deleted')]],p.messageState.mode||'normal',v=>{p.messageState.mode=v;scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
+          if(p.messageState.mode==='deleted'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('削除まで（秒）','Delay before delete (sec)'));const inp=document.createElement('input');inp.type='number';inp.min='0';inp.max='300';inp.step='0.1';inp.value=Number(p.messageState.delay||0);inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.messageState.delay=Math.max(0,Math.min(300,Number(inp.value)||0));scheduleDraftSave(80);});f.appendChild(inp);board.appendChild(f);}
           if(lt.mode==='work'){
             const tw=document.createElement('label');tw.className='live-edit-field';tw.append(u('作品時刻','Work time'));const ti=document.createElement('input');ti.type='text';ti.value=lt.workTime||'';ti.placeholder='2026/10/01 10:10:07';ti.addEventListener('keydown',e=>e.stopPropagation());ti.addEventListener('keyup',e=>e.stopPropagation());const commitWorkTime=()=>{lt.workTime=ti.value;touchLogTime(scene);scheduleDraftSave(80);};ti.addEventListener('input',commitWorkTime);ti.addEventListener('change',()=>{commitWorkTime();refreshLivePlayer();});ti.addEventListener('blur',()=>{commitWorkTime();refreshLivePlayer();});tw.appendChild(ti);board.appendChild(tw);
           }
@@ -13448,8 +16136,14 @@ function openDesktopTextDetail(){
 
       const mobileChatLt=ensureLogTime(scene);
       const mobileChatTime=document.createElement('div');mobileChatTime.className='live-chat-mode-box';
-      mobileChatTime.append(makeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],mobileChatLt.mode||'none',v=>{mobileChatLt.mode=v;if(v==='edit')mobileChatLt.editedAt=boardNowString();scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
-      if(mobileChatLt.mode==='work'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('作品時刻','Work time'));const inp=document.createElement('input');inp.value=mobileChatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{mobileChatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(80);refreshLivePlayer();});f.appendChild(inp);mobileChatTime.appendChild(f);}liveEditSheetBody.append(mobileChatTime);
+      mobileChatTime.append(makeSelect(u('時刻表示','Time display'),[['none',u('なし','None')],['work',u('作品時刻','Work time')],['edit',u('編集時刻','Edit time')],['reader',u('読者時刻','Reader time')]],mobileChatLt.mode||'none',v=>{mobileChatLt.mode=v;if(v==='edit')mobileChatLt.editedAt=boardNowString();applyChatTimeModeForward(index,v);scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
+      mobileChatTime.append(makeSelect(u('既読','Read receipt'),[['none',u('なし','None')],['individual',u('個別','Individual')],['auto',u('自動グループ','Auto group')],['manual',u('任意グループ','Manual group')]],p.chat.readMode||(p.chat.readStatus==='read'?'individual':'none'),v=>{p.chat.readMode=v;p.chat.readStatus=v==='none'?'none':'read';scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
+      if((p.chat.readMode||(p.chat.readStatus==='read'?'individual':'none'))!=='none'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('既読遅延（秒）','Read delay (sec)'));const inp=document.createElement('input');inp.type='number';inp.min='0';inp.max='300';inp.step='0.1';inp.value=Number(p.chat.readDelay||0);inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.chat.readDelay=Math.max(0,Math.min(300,Number(inp.value)||0));scheduleDraftSave(80);});f.appendChild(inp);mobileChatTime.appendChild(f);}
+      if((p.chat.readMode||'')==='manual'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('任意グループID','Manual group ID'));const inp=document.createElement('input');inp.value=p.chat.readGroupId||'';inp.placeholder='A';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.chat.readGroupId=inp.value.trim();scheduleDraftSave(80);});f.appendChild(inp);mobileChatTime.appendChild(f);}
+      p.messageState ||= {mode:'normal',delay:0};
+      mobileChatTime.append(makeSelect(u('メッセージ状態','Message state'),[['normal',u('通常','Normal')],['deleted',u('送信取消','Unsent')]],p.messageState.mode||'normal',v=>{p.messageState.mode=v;scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');}));
+      if(p.messageState.mode==='deleted'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('取消まで（秒）','Delay before unsend (sec)'));const inp=document.createElement('input');inp.type='number';inp.min='0';inp.max='300';inp.step='0.1';inp.value=Number(p.messageState.delay||0);inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{p.messageState.delay=Math.max(0,Math.min(300,Number(inp.value)||0));scheduleDraftSave(80);});f.appendChild(inp);mobileChatTime.appendChild(f);}
+      if(mobileChatLt.mode==='work'){const f=document.createElement('label');f.className='live-edit-field';f.append(u('作品時刻','Work time'));const inp=document.createElement('input');inp.value=mobileChatLt.workTime||'';inp.placeholder='2026/10/01 10:10:07';inp.addEventListener('keydown',e=>e.stopPropagation());inp.addEventListener('input',()=>{mobileChatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(700);});inp.addEventListener('change',()=>{mobileChatLt.workTime=inp.value;touchLogTime(scene);scheduleDraftSave(40);refreshLivePlayer();});f.appendChild(inp);mobileChatTime.appendChild(f);}liveEditSheetBody.append(mobileChatTime);
 
       const forward=makeEffectAction(u('このScene以降をチャット化','Chat mode from this Scene onward'),'is-primary');
       forward.onclick=()=>{const count=applyChatModeForward(index);if(count){scheduleDraftSave(40);refreshLivePlayer();renderLiveEditSheet('effect');showUndo(`${count} Sceneをチャット表示にしました`);}};
@@ -13535,16 +16229,20 @@ function openDesktopTextDetail(){
 
         const current=p.image&&typeof p.image==='object'?p.image:null;
         const status=document.createElement('div');status.className='live-scene-image-mobile-preview';
-        if(current?.src){const img=document.createElement('img');img.src=current.src;img.alt=current.alt||'';img.style.transform=`rotate(${Number(current.rotation)||0}deg)`;status.appendChild(img);}else status.textContent=u('Scene画像なし','No Scene image');
+        if(current?.src){const img=document.createElement('img');img.src=current.cover?.src||current.src;img.alt=current.cover?.alt||current.alt||'';img.style.transform=`rotate(${Number(current.rotation)||0}deg)`;status.appendChild(img);}else status.textContent=u('Scene画像なし','No Scene image');
         const pick=makeActionButton(current?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),'is-primary');
         pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{
           captureUndo('Scene画像の変更を元に戻せます');
-          p.image={...(p.image||{}),src:url,fit:'contain',size:p.image?.size||((p.view==='chat')?'small':'large'),align:p.image?.align||((p.view==='chat')?'speaker':'center'),tapAction:p.image?.tapAction||((p.image?.fullscreen===false)?'none':'fullscreen'),fullscreen:p.image?.fullscreen!==false,alt:p.image?.alt||'',_editorFileName:name,_editorManaged:true};
+          p.image={...replaceSceneImageFirst(p.image||{},url,name),src:url,fit:'contain',size:p.image?.size||((p.view==='chat')?'small':'large'),align:p.image?.align||((p.view==='chat')?'speaker':'center'),tapAction:p.image?.tapAction||((p.image?.fullscreen===false)?'none':'fullscreen'),fullscreen:p.image?.fullscreen!==false,alt:'',_editorFileName:name,_editorManaged:true};
           scheduleDraftSave(40);refreshLivePlayer();
           requestAnimationFrame(()=>renderMobileSceneImagePanel());
         },{keepPanel:true});
-        const remove=makeActionButton(u('画像を外す','Remove image'));remove.disabled=!current?.src;remove.onclick=()=>{captureUndo('Scene画像の削除を元に戻せます');delete p.image;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();};
+        const remove=makeActionButton(u('画像を外す','Remove image'));remove.disabled=!current?.src;remove.onclick=async()=>{const pageCount=Array.isArray(p.image?.pages)?p.image.pages.length:1;const message=pageCount>1?u(`Scene画像とページ束の全${pageCount}ページをSceneから外します。続けますか？`,`Remove the Scene image and all ${pageCount} pages from this Scene?`):u('このScene画像を外します。続けますか？','Remove this Scene image?');if(!await appConfirm(message,{title:u('Scene画像を外しますか？','Remove Scene image?'),kicker:'SCENE IMAGE',danger:true,confirmLabel:u('画像を外す','Remove image')}))return;captureUndo('Scene画像の削除を元に戻せます');delete p.image;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();};
         liveEditSheetBody.append(status,pick,remove);
+        if(current?.src){
+          appendSceneImagePagesEditor(liveEditSheetBody,current,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt||p.image.alt||'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined,tapAction:pages.some(page=>(page.viewPoints?.points||page.viewRec?.points||[]).length)?'viewRec':p.image.tapAction};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
+          appendSceneImageCoverEditor(liveEditSheetBody,current,cover=>{captureUndo('Scene画像の表紙設定を元に戻せます');if(cover)p.image.cover=cover;else delete p.image.cover;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
+        }
         if(current?.src){
           const opts=document.createElement('div');opts.className='live-edit-grid live-scene-image-options';
           opts.append(
@@ -13554,17 +16252,20 @@ function openDesktopTextDetail(){
           const rotation=document.createElement('label');rotation.className='live-edit-field live-scene-image-rotation';rotation.append(u('傾き','Rotation'));
           const rotationRow=document.createElement('div');rotationRow.className='live-scene-image-rotation-row';
           const rotationRange=document.createElement('input');rotationRange.type='range';rotationRange.min='-20';rotationRange.max='20';rotationRange.step='1';rotationRange.value=String(Number(current.rotation)||0);
-          const rotationNumber=document.createElement('input');rotationNumber.type='number';rotationNumber.min='-20';rotationNumber.max='20';rotationNumber.step='1';rotationNumber.value=String(Number(current.rotation)||0);
+          const rotationNumber=createSceneImageRotationControl(current.rotation);
           const applyRotation=(raw)=>{const value=Math.max(-20,Math.min(20,Number(raw)||0));p.image.rotation=value;rotationRange.value=String(value);rotationNumber.value=String(value);scheduleDraftSave(40);refreshLivePlayer();const previewImg=status.querySelector('img');if(previewImg)previewImg.style.transform=`rotate(${value}deg)`;};
-          let rotationUndoCaptured=false;rotationRange.onpointerdown=()=>{rotationUndoCaptured=false;};rotationRange.oninput=()=>{if(!rotationUndoCaptured){captureUndo('Scene画像の傾き変更を元に戻せます');rotationUndoCaptured=true;}applyRotation(rotationRange.value);};rotationRange.onchange=()=>{rotationUndoCaptured=false;};rotationNumber.onchange=()=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(rotationNumber.value);};
+          let rotationUndoCaptured=false;rotationRange.onpointerdown=()=>{rotationUndoCaptured=false;};rotationRange.oninput=()=>{if(!rotationUndoCaptured){captureUndo('Scene画像の傾き変更を元に戻せます');rotationUndoCaptured=true;}applyRotation(rotationRange.value);};rotationRange.onchange=()=>{rotationUndoCaptured=false;};bindSceneImageRotationInput(rotationNumber,rotationRange,raw=>{captureUndo('Scene画像の傾き変更を元に戻せます');applyRotation(raw);});
           rotationRow.append(rotationRange,rotationNumber,document.createTextNode('°'));rotation.append(rotationRow);
           opts.append(rotation);
 
+          const rounded=document.createElement('label');rounded.className='live-scene-image-check';const roundedCb=document.createElement('input');roundedCb.type='checkbox';roundedCb.checked=current.rounded!==false;roundedCb.onchange=()=>{captureUndo('Scene画像の角丸設定を元に戻せます');p.image.rounded=roundedCb.checked;scheduleDraftSave(40);refreshLivePlayer();};rounded.append(roundedCb,document.createTextNode(u('角を丸める','Round image corners')));
           const shadow=document.createElement('label');shadow.className='live-scene-image-check';const shadowCb=document.createElement('input');shadowCb.type='checkbox';shadowCb.checked=current.shadow===true;shadowCb.onchange=()=>{captureUndo('Scene画像の影設定変更を元に戻せます');p.image.shadow=shadowCb.checked;scheduleDraftSave(40);refreshLivePlayer();};shadow.append(shadowCb,document.createTextNode(u('影をつける','Add shadow')));
           const tapAction=makeSceneImageSelect(u('タップ動作','Tap action'),[['none',u('なし','None')],['fullscreen',u('全画面','Fullscreen')],['viewRec','VIEW POINT']],current.tapAction||((current.fullscreen===false)?'none':'fullscreen'),v=>{captureUndo('Scene画像のタップ動作変更を元に戻せます');p.image.tapAction=v;p.image.fullscreen=(v==='fullscreen');scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
+          const pageDirection=makeSceneImageSelect(u('ページ送り方向','Page turn direction'),[['ltr',u('左スワイプで次へ','Swipe left for next page')],['rtl',u('右スワイプで次へ（漫画向け）','Swipe right for next page (manga)')]],current.pageDirection==='rtl'?'rtl':'ltr',v=>{captureUndo('ページ送り方向の変更を元に戻せます');p.image.pageDirection=v;scheduleDraftSave(40);refreshLivePlayer();});
           const alt=document.createElement('label');alt.className='live-edit-field live-scene-image-alt';alt.append(u('画像の説明（任意）','Image description (optional)'));const inp=document.createElement('input');inp.type='text';inp.value=current.alt||'';inp.placeholder=u('例：面積2cm²の正方形','e.g. A square with area 2 cm²');inp.onchange=()=>{captureUndo('Scene画像の説明変更を元に戻せます');p.image.alt=inp.value.trim();scheduleDraftSave(40);refreshLivePlayer();};alt.append(inp);
           const caption=document.createElement('label');caption.className='live-scene-image-check';const captionCb=document.createElement('input');captionCb.type='checkbox';captionCb.checked=current.caption===true;captionCb.onchange=()=>{captureUndo('Scene画像のキャプション設定変更を元に戻せます');p.image.caption=captionCb.checked;scheduleDraftSave(40);refreshLivePlayer();};caption.append(captionCb,document.createTextNode(u('説明を画像下に表示','Show description as caption')));
-          liveEditSheetBody.append(opts,shadow,tapAction);if((current.tapAction||((current.fullscreen===false)?'none':'fullscreen'))==='viewRec')liveEditSheetBody.append(makeViewRecAuthoringField(current,data=>{captureUndo('VIEW RECの記録を元に戻せます');p.image.viewPoints=data;delete p.image.viewRec;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();}));liveEditSheetBody.append(alt,caption);
+          const pageCount=document.createElement('label');pageCount.className='live-scene-image-check';const pageCountCb=document.createElement('input');pageCountCb.type='checkbox';pageCountCb.checked=current.showPageCount!==false;pageCountCb.onchange=()=>{captureUndo('ページ数バッジの表示設定を元に戻せます');p.image.showPageCount=pageCountCb.checked;scheduleDraftSave(40);refreshLivePlayer();};pageCount.append(pageCountCb,document.createTextNode(u('＋ページ数を表示','Show page count badge')));
+          liveEditSheetBody.append(opts,rounded,shadow,tapAction,pageCount);if(sceneImagePages(current).length>1)liveEditSheetBody.append(pageDirection);if((current.tapAction||((current.fullscreen===false)?'none':'fullscreen'))==='viewRec')liveEditSheetBody.append(makeViewRecAuthoringField(current,data=>{captureUndo('VIEW RECの記録を元に戻せます');saveSceneImageViewPoints(p.image,data);scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();}));liveEditSheetBody.append(alt,caption);
         }
       };
       installVisualHeaderTabs('background');
@@ -13586,9 +16287,10 @@ function openDesktopTextDetail(){
         });
       });
       const positionAdjust=makeActionButton(t('cover.positionAdjust'));
-      positionAdjust.disabled=!bg?.src;
+      const inheritedBackground=bg?.src?bg:previousEffectiveBackground(liveEditScene().index);
+      positionAdjust.disabled=(!inheritedBackground?.src)||bg?.src==='';
       positionAdjust.onclick=()=>{
-        if(!p.background?.src)return;
+        if(p.background?.src==='')return;
         captureUndo('背景位置の変更を元に戻せます');
         openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(60);
@@ -13596,11 +16298,19 @@ function openDesktopTextDetail(){
         });
       };
       const copyPreviousPosition=makeActionButton(u('前Sceneの表示位置をコピー','Copy previous Scene position'));
-      copyPreviousPosition.disabled=!bg?.src||!previousEffectiveBackground(liveEditScene().index)?.src;
+      copyPreviousPosition.disabled=(!bg?.src&&!previousEffectiveBackground(liveEditScene().index)?.src)||bg?.src==='';
       copyPreviousPosition.onclick=()=>{
         const {index}=liveEditScene();
         captureUndo('背景位置の変更を元に戻せます');
         if(!copyPreviousBackgroundFraming(index))return;
+        scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');
+      };
+      const copyPreviousPositionForward=makeActionButton(u('前Sceneの表示位置を以降に一括適用','Apply previous Scene position to all following Scenes'));
+      copyPreviousPositionForward.disabled=!previousEffectiveBackground(liveEditScene().index)?.src||bg?.src==='';
+      copyPreviousPositionForward.onclick=()=>{
+        const {index}=liveEditScene();
+        captureUndo('後続Sceneの背景位置変更を元に戻せます');
+        if(!applyPreviousBackgroundFramingForward(index))return;
         scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');
       };
       const toneRow=document.createElement('div');toneRow.className='live-edit-choice-row live-edit-tone-row';
@@ -13618,7 +16328,7 @@ function openDesktopTextDetail(){
       if(!bg?.src){dark.disabled=true;light.disabled=true;}
       const status=document.createElement('div');status.className='live-edit-status';status.textContent=bg?.src?`${u('選択中：','Selected: ')}${bg._editorFileName||u('背景画像','background image')}`:(bg?.src===''?u('このSceneから背景なし','No background from this Scene'):u('前Sceneの背景を継続','Continue previous Scene background'));
       const detail=document.createElement('button');detail.type='button';detail.className='live-edit-detail';detail.textContent=u('暗さ・動き・切替を細かく調整','Adjust brightness, motion & transitions');detail.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openMobileLiveDetail('background');});
-      liveEditSheetBody.append(actions,pick,positionAdjust,copyPreviousPosition,toneRow,status,detail);return;
+      liveEditSheetBody.append(actions,pick,positionAdjust,copyPreviousPosition,copyPreviousPositionForward,toneRow,status,detail);return;
     }
 
     liveEditSheetTitle.textContent=uiLanguage==='en'?'Audio':'音';
@@ -13697,13 +16407,14 @@ function openDesktopTextDetail(){
     const left=text.slice(0,pos).trimEnd(),right=text.slice(pos).trimStart();
     if(!left||!right){showUndo('分割する位置にカーソルを置いてください');return;}
     captureUndo('Scene分割を元に戻せます');
+    const splitExcluded=splitAutoRubyExclusions(scene,pos,left,right,text);
     const splitRich=window.AhakoSceneEditCore?.splitRanges?.(scene,pos,left,right,text)||{left:[],right:[]};
     scene.text=left;
-    if(splitRich.left.length)scene.richText={version:1,ranges:splitRich.left}; else delete scene.richText;
+    assignSceneRichText(scene,splitRich.left,splitExcluded.left);
     const cloneScene=clone(scene);
     cloneScene.id=nextUniqueId();
     cloneScene.text=right;
-    if(splitRich.right.length)cloneScene.richText={version:1,ranges:splitRich.right}; else delete cloneScene.richText;
+    assignSceneRichText(cloneScene,splitRich.right,splitExcluded.right);
     delete cloneScene.subText;
     delete cloneScene.audio;
     if(cloneScene.presentation)delete cloneScene.presentation.background;
@@ -13723,12 +16434,13 @@ function openDesktopTextDetail(){
     if(sceneHasTable(prev)||sceneHasTable(scene)){showToast?.('表Sceneは文章Sceneと結合できません');return;}
     captureUndo('Scene結合を元に戻せます');
     const before=(prev.text||'').length;
+    const mergedExcluded=mergeAutoRubyExclusions(prev,scene);
     const mergedRanges=window.AhakoSceneEditCore?.mergeRanges?.(prev,scene)||[];
     // Merge without inserting any separator. This makes "split -> merge previous"
     // a true reverse operation: only line breaks that already belong to either
     // Scene's text are preserved.
     prev.text=`${prev.text||''}${scene.text||''}`;
-    if(mergedRanges.length)prev.richText={version:1,ranges:mergedRanges}; else delete prev.richText;
+    assignSceneRichText(prev,mergedRanges,mergedExcluded);
     if(scene.subText&&!prev.subText)prev.subText=scene.subText;
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(index-1);
@@ -13761,7 +16473,7 @@ function openDesktopTextDetail(){
     Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483647',display:'grid',placeItems:'center',background:'rgba(12,14,18,.45)',padding:'24px'});
     const modal=document.createElement('section');modal.className='desktop-writing-guide';
     Object.assign(modal.style,{width:'min(520px,calc(100vw - 48px))',background:'#fff',color:'#111',borderRadius:'24px',padding:'24px',boxShadow:'0 24px 80px rgba(0,0,0,.28)'});
-    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>${u('キーボードだけでも書けます','Write with the keyboard')}</strong></div><button type="button" aria-label="${u('閉じる','Close')}">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>${u('改行','New line')}</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>${u('カーソル位置で分割','Split at cursor')}</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>${u('次に空Scene','Add empty Scene')}</span></div><div><kbd>↑</kbd><span>${u('先頭行から前Sceneを編集','From first line: edit previous Scene')}</span></div><div><kbd>↓</kbd><span>${u('最終行から次Sceneを編集','From last line: edit next Scene')}</span></div></div><p>${u('分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。','To undo a split, use “Merge with previous” below the text field.')}</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
+    modal.innerHTML=`<div class="desktop-writing-guide-head"><div><small>PC LIVE EDITOR</small><strong>${u('キーボードだけでも書けます','Write with the keyboard')}</strong></div><button type="button" aria-label="${u('閉じる','Close')}">×</button></div><div class="desktop-writing-guide-list"><div><kbd>Enter</kbd><span>${u('改行','New line')}</span></div><div><kbd>Shift</kbd><b>＋</b><kbd>Enter</kbd><span>${u('カーソル位置で分割','Split at cursor')}</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Enter</kbd><span>${u('次に空Scene','Add empty Scene')}</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Z</kbd><span>${u('元に戻す','Undo')}</span></div><div><kbd>Ctrl / ⌘</kbd><b>＋</b><kbd>Shift</kbd><b>＋</b><kbd>Z</kbd><span>${u('やり直す','Redo')}</span></div><div><kbd>↑</kbd><span>${u('先頭行から前Sceneを編集','From first line: edit previous Scene')}</span></div><div><kbd>↓</kbd><span>${u('最終行から次Sceneを編集','From last line: edit next Scene')}</span></div></div><p>${u('分割を戻したい時は、本文欄の「前Sceneと結合」ボタンが便利です。','To undo a split, use “Merge with previous” below the text field.')}</p><button class="desktop-writing-guide-ok" type="button">OK</button>`;
     overlay.appendChild(modal);document.body.appendChild(overlay);
     const close=()=>{try{localStorage.setItem(DESKTOP_WRITING_GUIDE_KEY,'1');}catch(_){}overlay.remove();};
     modal.querySelector('.desktop-writing-guide-head button')?.addEventListener('click',close);
@@ -13814,9 +16526,10 @@ function openDesktopTextDetail(){
     const prev=workingDocument.scenes[index-1];
     if(sceneHasTable(prev)||sceneHasTable(scene)){showToast?.('表Sceneは文章Sceneと結合できません');return;}
     captureUndo('Scene結合を元に戻せます');
+    const mergedExcluded=mergeAutoRubyExclusions(prev,scene);
     const mergedRanges=window.AhakoSceneEditCore?.mergeRanges?.(prev,scene)||[];
     prev.text=`${prev.text||''}${scene.text||''}`;
-    if(mergedRanges.length)prev.richText={version:1,ranges:mergedRanges}; else delete prev.richText;
+    assignSceneRichText(prev,mergedRanges,mergedExcluded);
     if(scene.subText&&!prev.subText)prev.subText=scene.subText;
     workingDocument.scenes.splice(index,1);
     liveEditReloadAt(index-1);
@@ -13840,8 +16553,8 @@ function openDesktopTextDetail(){
     const grid=document.createElement('div');grid.className='live-edit-scene-actions';
     const action=(label,fn,disabled=false,danger=false)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.disabled=disabled;if(danger)b.classList.add('is-danger');b.addEventListener('click',fn);return b;};
     grid.append(
-      action(u('↑ 上へ移動','↑ Move up'),()=>liveEditMoveScene(-1),index===0),
-      action(u('↓ 下へ移動','↓ Move down'),()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1),
+      action(u('上へ移動','Move up'),()=>liveEditMoveScene(-1),index===0),
+      action(u('下へ移動','Move down'),()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1),
       action(u('前のSceneと結合','Merge with previous'),liveEditMergePrevious,index===0),
       action(u('複製','Duplicate'),liveEditDuplicateScene),
       action(u('削除','Delete'),liveEditDeleteScene,workingDocument.scenes.length<=1,true)
@@ -13872,6 +16585,13 @@ function openDesktopTextDetail(){
 
   function enableLiveEdit(){
     liveEditEnabled=true;
+    // The desktop inspector is the main editing surface. Open it on entry so
+    // the right side is never mistaken for an empty/failed Live Editor pane.
+    if(desktopLiveMQ.matches){
+      document.body.classList.add('desktop-v2-settings-open');
+      document.body.classList.remove('desktop-v2-settings-closed');
+      desktopV2Settings?.setAttribute('aria-expanded','true');
+    }
     // Re-entering Live Editor must not inherit a stale Cover/Ending inspector
     // from the previous session. Seed the mode from the pane that is visible now.
     desktopSpecialIntent=desktopSceneIsActuallyVisible()?'scene':(player?.ended?'ending':(liveCoverIsVisible()?'cover':'scene'));
@@ -13886,17 +16606,20 @@ function openDesktopTextDetail(){
     const historyKicker=playerHost.querySelector('.sp-history-kicker');if(historyKicker)historyKicker.textContent='SCENES';
   }
   function disableLiveEdit(){
+    pendingEasyEmptyInlineStart=false;
     finishInlineTextEdit();
     finishLiveCoverInlineEdit?.({refresh:false});
     liveCoverTextDraft=null;
     liveEditEnabled=false;
+    removeLiveEmptyAuthoringOverlay();
     closeLiveEditSheet();
     if(liveInlineToolbar)liveInlineToolbar.hidden=true;
     setLiveToolbarVisible(false);
     liveEditChromeObserver?.disconnect?.();
     liveEditChromeObserver=null;
     playerHost.classList.remove('live-edit-enabled');
-    if(desktopLivePanel)desktopLivePanel.hidden=true;document.body.classList.remove('desktop-live-edit');
+    if(desktopLivePanel)desktopLivePanel.hidden=true;document.body.classList.remove('desktop-live-edit','desktop-v2-settings-open','desktop-v2-settings-closed');
+    desktopV2Settings?.setAttribute('aria-expanded','false');
     syncStudioPreviewDevice();
     const recPanel=$('#autoRecPanel');if(recPanel)recPanel.hidden=false;
     if(player)player.options.historyAllScenes=false;
@@ -14156,6 +16879,7 @@ function openDesktopTextDetail(){
   desktopV2Settings?.addEventListener('click',()=>{
     const open=!document.body.classList.contains('desktop-v2-settings-open');
     document.body.classList.toggle('desktop-v2-settings-open',open);
+    document.body.classList.toggle('desktop-v2-settings-closed',!open);
     desktopV2Settings.setAttribute('aria-expanded',open?'true':'false');
     // Recompute the authoring canvas immediately: closed = full width,
     // open = width remaining to the left of the inspector.
@@ -14478,8 +17202,12 @@ function openDesktopTextDetail(){
       sel.value=value;wrap.append(span,sel);return {wrap,sel};
     };
     const font=mkSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],st.fontFamily||'inherit');
-    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof st.size==='string'?st.size:'auto');
-    grid.append(font.wrap,size.wrap);card.appendChild(grid);
+    const numericEndingSize=Number(st.size);const hasNumericEndingSize=Number.isFinite(numericEndingSize)&&numericEndingSize>0;
+    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')],['px',u('px指定','Custom px')]],hasNumericEndingSize?'px':(typeof st.size==='string'?st.size:'auto'));
+    const sizePxWrap=document.createElement('label');Object.assign(sizePxWrap.style,{display:'grid',gap:'7px',font:'700 13px/1.4 system-ui'});
+    const sizePxLabel=document.createElement('span');sizePxLabel.textContent=u('px','px');
+    const sizePx=document.createElement('input');sizePx.type='number';sizePx.inputMode='numeric';sizePx.min='8';sizePx.max='420';sizePx.step='1';sizePx.value=String(Math.round(hasNumericEndingSize?numericEndingSize:24));Object.assign(sizePx.style,{height:'46px',border:'1px solid #d7d9de',borderRadius:'12px',background:'#fff',padding:'0 10px',font:'600 15px/1 system-ui'});sizePxWrap.append(sizePxLabel,sizePx);sizePxWrap.hidden=size.sel.value!=='px';
+    grid.append(font.wrap,size.wrap,sizePxWrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');colorTitle.textContent=u('文字色','Text color');Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
     const colors=document.createElement('div');Object.assign(colors.style,{display:'flex',gap:'9px',alignItems:'center',marginTop:'8px',flexWrap:'wrap'});
@@ -14503,7 +17231,8 @@ function openDesktopTextDetail(){
         st.fontFamily=font.sel.value;
         syncEndingFontFamily(st.fontFamily,{syncStyle:true});
       }
-      st.size=size.sel.value;
+      if(size.sel.value==='px')st.size=Math.max(8,Math.min(420,Math.round(Number(sizePx.value)||24)));else st.size=size.sel.value;
+      sizePxWrap.hidden=size.sel.value!=='px';
       syncEasyShellToWorkingDocument();
       refreshLivePlayerDocumentChrome();
       applyEndingStyleToLiveElement(st);
@@ -14511,7 +17240,7 @@ function openDesktopTextDetail(){
       scheduleDraftSave(70);
       requestAnimationFrame(prepareLiveEndingEditor);
     };
-    font.sel.addEventListener('change',apply);size.sel.addEventListener('change',apply);
+    font.sel.addEventListener('change',apply);size.sel.addEventListener('change',()=>{sizePxWrap.hidden=size.sel.value!=='px';apply();if(size.sel.value==='px'){sizePx.focus();sizePx.select();}});sizePx.addEventListener('input',apply);
     picker.addEventListener('input',()=>{st.color=picker.value;apply();});
     done.addEventListener('click',closeLiveEndingStylePanel);
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeLiveEndingStylePanel();});
@@ -14840,7 +17569,7 @@ function openDesktopTextDetail(){
       sel.value=value;wrap.append(span,sel);return {wrap,sel};
     };
     const font=mkSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],style.fontFamily||'inherit');
-    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')]],typeof style.size==='string'?style.size:'auto');
+    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],typeof style.size==='string'?style.size:'auto');
     grid.append(font.wrap,size.wrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');
@@ -15169,6 +17898,82 @@ function openDesktopTextDetail(){
     e.preventDefault();e.stopImmediatePropagation();
     startPreviewTableCellEdit(card,cell);
   },true);
+  playerHost.addEventListener('click',(e)=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen||playerHost.classList.contains('sp-cover-open')||player?.ended)return;
+    const element=e.target.closest?.('.sp-scene.is-active .sp-rich-link-card');
+    if(!element)return;
+    const {scene}=liveEditScene();if(!scene)return;
+    const id=String(element.dataset.cardId||'');
+    const card=(Array.isArray(scene.content)?scene.content:[]).find(x=>x?.type==='linkCard'&&String(x.id||'')===id);
+    if(!card)return;
+    e.preventDefault();e.stopImmediatePropagation();openOgpCardDialog({mode:'scene',card,scene});
+  },true);
+
+
+  // Empty Scene authoring uses a body-level overlay so ScenePlayer never sees
+  // the first tap. Do not also intercept the same gesture inside #scenePlayer.
+
+
+
+  var creditsInlineSession=null;
+  function finishCreditsInlineEdit(){
+    const state=creditsInlineSession;if(!state)return;
+    creditsInlineSession=null;
+    state.save();state.abort.abort();state.node.removeAttribute('contenteditable');state.node.removeAttribute('role');state.wrap?.classList.remove('is-editing');
+    scheduleDraftSave(80);
+  }
+  function startCreditsInlineEdit(node){
+    const {scene}=liveEditScene();if(!scene||!node)return;
+    const key=node.dataset.creditField,index=node.dataset.creditIndex;
+    const m=ensurePresentation(scene).credits;
+    const holder=index===undefined?m:m?.entries?.[Number(index)];
+    if(!holder||!['title','heading','name','note'].includes(key))return;
+    if(creditsInlineSession?.node===node)return;
+    finishCreditsInlineEdit();finishInlineTextEdit();
+    captureUndo(u('クレジット編集を元に戻せます','Undo credit edit'));
+    const wrap=node.closest('.sp-credits'),abort=new AbortController();
+    const target=creditRichTarget(scene,node);const save=()=>{const before=String(holder[key]||'');const copy=stripRubyReadings(node.cloneNode(true));const value=editablePlainText(copy);remapRubyAfterTextEdit(target,before,value);holder[key]=value;scheduleDraftSave(180);};
+    creditsInlineSession={node,wrap,abort,save};wrap?.classList.add('is-editing');
+    node.setAttribute('contenteditable','true');node.setAttribute('role','textbox');node.setAttribute('aria-label',u('クレジットを編集','Edit credit'));
+    node.addEventListener('input',save,{signal:abort.signal});node.addEventListener('blur',()=>{finishCreditsInlineEdit();requestAnimationFrame(renderDesktopLivePanel);},{once:true,signal:abort.signal});
+    node.focus({preventScroll:true});
+  }
+  playerHost.addEventListener('keydown',e=>{
+    if(!creditsInlineSession||!e.target.closest?.('.sp-credits [contenteditable="true"]'))return;
+    e.stopImmediatePropagation();
+    if(e.key==='Escape'){e.preventDefault();finishCreditsInlineEdit();}
+  },true);
+  playerHost.addEventListener('pointerdown',e=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen||player?.ended)return;
+    if(e.target.closest?.('.sp-scene.is-active .sp-credits [data-credit-field]'))e.stopPropagation();
+  },true);
+  playerHost.addEventListener('click',e=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen||player?.ended)return;
+    const node=e.target.closest?.('.sp-scene.is-active .sp-credits [data-credit-field]');if(!node)return;
+    e.preventDefault();e.stopImmediatePropagation();if(captureAndShowRichSelection())return;startCreditsInlineEdit(node);
+  },true);
+
+  // Once direct writing has started, the release/click belonging to that same
+  // gesture must never fall through to ScenePlayer navigation.
+  for(const type of ['pointerup','click']){
+    playerHost.addEventListener(type,(e)=>{
+      if(!liveEditEnabled||!liveInlineEditEl)return;
+      const article=e.target.closest?.('.sp-scene.is-active');
+      if(!article)return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    },true);
+  }
+
+  // Web Expression Live Preview: reserve the physical gesture for direct text
+  // editing before ScenePlayer can reinterpret it as Scene advance.
+  playerHost.addEventListener('pointerdown',(e)=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
+    if(playerHost.classList.contains('sp-cover-open')||player?.ended)return;
+    const webText=e.target.closest?.('.sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-mail-text, .sp-scene.is-active .sp-web-notification-text');
+    if(!webText)return;
+    e.stopPropagation();
+  },true);
 
   // Live Edit: main text and subtext are both direct edit targets.
   // The CSS re-enables pointer events for both nodes; this capture listener
@@ -15176,38 +17981,70 @@ function openDesktopTextDetail(){
   playerHost.addEventListener('click',(e)=>{
     if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
     if(playerHost.classList.contains('sp-cover-open')||player?.ended)return;
-    if(liveInlineEditEl)return;
+    if(liveInlineEditEl){
+      if(e.target.closest?.('.sp-scene.is-active')){e.preventDefault();e.stopImmediatePropagation();}
+      return;
+    }
 
+    if(e.target.closest?.('.sp-credits')&&captureAndShowRichSelection()){e.preventDefault();e.stopImmediatePropagation();return;}
     const activeSubText=e.target.closest?.('.sp-scene.is-active .sp-subtext');
     const activeText=e.target.closest?.('.sp-scene.is-active .sp-text');
-    if(!activeSubText&&!activeText)return;
+    // Web Expression bodies render Scene.text into their own DOM instead of .sp-text.
+    // Treat those bodies as the same canonical Scene.text edit target.
+    const webText=e.target.closest?.('.sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-mail-text, .sp-scene.is-active .sp-web-notification-text');
+    if(!activeSubText&&!activeText&&!webText)return;
 
     e.preventDefault();
     e.stopImmediatePropagation();
     setLiveToolbarVisible(true);
-    startInlineTextEdit(activeSubText?'subText':'text');
+    startInlineTextEdit(activeSubText?'subText':'text',webText||null);
   },true);
-  playerHost.addEventListener('sceneplayer:coverstart',()=>{desktopSpecialIntent='cover';finishInlineTextEdit();finishLiveCoverInlineEdit({refresh:false});liveCoverTextDraft=coverTextStateFromDocument();pushLiveCoverTextDraftToEasy();closeLiveEditSheet();setLiveToolbarVisible(false);requestAnimationFrame(()=>requestAnimationFrame(renderDesktopLivePanel));});
-  playerHost.addEventListener('sceneplayer:scenechange',()=>finishLiveCoverInlineEdit({refresh:false}));
+  playerHost.addEventListener('sceneplayer:coverstart',()=>{
+    // Core emits coverstart AFTER the Cover's 「はじめる」 action has rendered Scene 1.
+    // From this point the author is editing a Scene, not the Cover.
+    desktopSpecialIntent='scene';
+    finishInlineTextEdit();
+    finishLiveCoverInlineEdit({refresh:false});
+    liveCoverTextDraft=coverTextStateFromDocument();
+    pushLiveCoverTextDraftToEasy();
+    closeLiveEditSheet();
+    setLiveToolbarVisible(desktopLiveActive());
+
+    if(pendingEasyEmptyInlineStart){
+      pendingEasyEmptyInlineStart=false;
+      const {scene}=liveEditScene();
+      if(scene && !String(scene.text||'').length && !String(scene.subText||'').length){
+        // Cover START has already rendered Scene 1. Build the empty text target
+        // without re-rendering the Player, then enter the exact same inline
+        // editor used by the top-bar + action. Studio Core no longer steals
+        // focus back to the reader stage while Live Edit is enabled.
+        ensureLiveEditEmptyTarget();
+        startInlineTextEdit('text');
+      }
+    }
+    requestAnimationFrame(()=>requestAnimationFrame(renderDesktopLivePanel));
+  });
+  playerHost.addEventListener('sceneplayer:scenechange',()=>{finishCreditsInlineEdit();finishLiveCoverInlineEdit({refresh:false});});
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
-    // A Scene change is authoritative. Keep this explicit mode until the
-    // player emits coverstart/end; otherwise the fading Cover DOM can make
-    // Scene 1 incorrectly reopen the Cover inspector.
+    // A Scene change is authoritative. A stale Cover class can survive a
+    // preview-device resize/reflow for a frame; never let that stale shell
+    // state pin the right inspector to Cover while a real Scene is visible.
+    playerHost?.classList?.remove('sp-cover-open');
     desktopSpecialIntent='scene';
     const detailKind=currentDesktopDetailKind();
     finishInlineTextEdit();
     closeLiveEditSheet();
     setLiveToolbarVisible(desktopLiveActive());
-    // Detail editing is auto-save. Flush the Scene we just left before
-    // retargeting the inspector to the newly visible Scene.
-    saveDraftNow().finally(()=>{
-      requestAnimationFrame(()=>{
-        ensureLiveEditEmptyTarget();
-        renderDesktopLivePanel();
-        if(detailKind){
-          requestAnimationFrame(()=>reopenDesktopDetailForCurrentScene(detailKind));
-        }
-      });
+    // The Player has already moved to the new Scene. Retarget the inspector
+    // immediately; waiting for IndexedDB serialization and draft-list refresh
+    // here made speaker/effect controls trail the preview by several seconds.
+    scheduleDraftSave(450);
+    requestAnimationFrame(()=>{
+      ensureLiveEditEmptyTarget();
+      renderDesktopLivePanel();
+      if(detailKind){
+        requestAnimationFrame(()=>reopenDesktopDetailForCurrentScene(detailKind));
+      }
     });
   });
   playerHost.addEventListener('sceneplayer:historyopen',()=>{finishInlineTextEdit();closeLiveEditSheet();setLiveToolbarVisible(false);});
@@ -15274,7 +18111,17 @@ function openDesktopTextDetail(){
       if(!handoff?.workId)return null;
       await bookshelfRequest(store.delete('studio'));
       const work=await bookshelfRequest(db.transaction(BOOKSHELF_WORKS_STORE,'readonly').objectStore(BOOKSHELF_WORKS_STORE).get(handoff.workId));
-      return work||null;
+      if(!work)return null;
+      let bytes=work.sceneBytes instanceof ArrayBuffer?work.sceneBytes:
+        (ArrayBuffer.isView(work.sceneBytes)?work.sceneBytes.buffer.slice(work.sceneBytes.byteOffset,work.sceneBytes.byteOffset+work.sceneBytes.byteLength):null);
+      if(!bytes&&work.blob instanceof Blob){
+        try{bytes=await work.blob.arrayBuffer();}catch(error){console.warn('Bookshelf Master Blob migration failed',error);}
+      }
+      if(!bytes)return work;
+      if(!work.sceneBytes&&work.blob instanceof Blob){
+        try{await bookshelfRequest(db.transaction(BOOKSHELF_WORKS_STORE,'readwrite').objectStore(BOOKSHELF_WORKS_STORE).put({...work,sceneBytes:bytes,blob:null}));}catch(error){console.warn('Bookshelf Master byte migration skipped',error);}
+      }
+      return {...work,sceneBytes:bytes,blob:null};
     } finally { db.close(); }
   }
 
@@ -15282,8 +18129,9 @@ function openDesktopTextDetail(){
     if(!openedFromBookshelf)return;
     try{
       const work=await takeBookshelfHandoff();
-      if(!work?.blob)return;
-      const file=new File([work.blob],work.fileName||`${work.title||'master'}.scene`,{type:'application/octet-stream'});
+      const bytes=work?.sceneBytes instanceof ArrayBuffer?work.sceneBytes:(ArrayBuffer.isView(work?.sceneBytes)?work.sceneBytes.buffer.slice(work.sceneBytes.byteOffset,work.sceneBytes.byteOffset+work.sceneBytes.byteLength):null);
+      if(!bytes)return;
+      const file=new File([bytes],work.fileName||`${work.title||'master'}.scene`,{type:'application/octet-stream'});
       await importScenePackage(file);
       setProjectIoStatus(uiLanguage==='ja' ? '本棚のMasterを開きました。編集後は「本棚へ保存して戻る」で更新できます。' : 'Opened the Master from Local Bookshelf.');
     }catch(error){
@@ -15314,13 +18162,15 @@ function openDesktopTextDetail(){
         location.href='../bookshelf/';
         return;
       }
+      await hydrateMasterPublicationState(workingDocument,{warnStale:false});
+      if(!await saveDraftNow({force:true}))throw new Error('draft-save-failed');
       const result=await buildScenePackage();
       const workId=String(result?.doc?.studio?.identity?.workId||'').trim();
       if(!workId)throw new Error('bookshelf-workid-missing');
       const entries=await readZipEntries(result.blob);
       const coverPath=String(result?.doc?.cover?.src||result?.manifest?.cover?.image||'').replace(/^\.\//,'');
-      let coverBlob=null;
-      if(coverPath&&entries.has(coverPath))coverBlob=new Blob([entries.get(coverPath)],{type:guessMime(coverPath)});
+      let coverBytes=null,coverMime='';
+      if(coverPath&&entries.has(coverPath)){coverBytes=entries.get(coverPath).slice().buffer;coverMime=guessMime(coverPath);}
       const db=await openBookshelfDb();
       try{
         const store=db.transaction(BOOKSHELF_WORKS_STORE,'readwrite').objectStore(BOOKSHELF_WORKS_STORE);
@@ -15334,8 +18184,12 @@ function openDesktopTextDetail(){
           sceneCount:Array.isArray(result.doc?.scenes)?result.doc.scenes.length:0,
           revision:Number(result.doc?.studio?.identity?.revision||0)||0,
           masterCreatedAt:String(result.doc?.studio?.identity?.createdAt||''),
-          coverBlob,
-          blob:result.blob,
+          coverBlob:null,
+          coverBytes,
+          coverMime,
+          shelfMetaVersion:7,
+          sceneBytes:await result.blob.arrayBuffer(),
+          blob:null,
           fileName:old?.fileName||`${safeFileStem(title)}.scene`,
           addedAt:old?.addedAt||now,
           updatedAt:now
@@ -15400,4 +18254,30 @@ function openDesktopTextDetail(){
   window.SceneStudioDebug={getSceneDocument:()=>clone(workingDocument||buildSceneDocument()),validateSceneFormatV1:(value)=>validateSceneFormatV1(value),exportSceneDocument,exportScenePackage,importScenePackage,getPlayer:()=>player,splitJapanese:(text,options={})=>JapaneseSceneSplitter.splitDetailed(text,options),splitEnglish:(text,options={})=>EnglishSceneSplitter.splitDetailed(text,options),splitAuto:(text,options={})=>SceneTextSplitter.splitDetailed(text,options),splitMultilingual:(text,options={})=>SceneTextSplitter.splitMultilingualDetailed(text,options),summarizeLanguages:(chunks)=>SceneTextSplitter.summarizeLanguages(chunks),detectWorkLanguage:(text)=>SceneTextSplitter.detectLanguage(text),getUILanguage:()=>uiLanguage,setUILanguage};
   if(densitySelect)densitySelect.value='normal';
   applyStaticUITranslations(); applyTheme('light'); updateCount();
+
+  /* AHAKO PUBLISHED MANAGER V1 */
+  (()=>{
+    let filter='all',items=[];
+    const esc=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+    const stateOf=item=>String(item?.state||'public')==='stopped'?'stopped':'public';
+    const publicationIdOf=item=>String(item?.publicationId||item?.publicId||'').trim();
+    const publicUrlOf=item=>{const id=publicationIdOf(item);return id?`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(id)}`:'';};
+    const dateText=item=>{const raw=item?.updatedAt||item?.publishedAt||item?.createdAt;if(!raw)return'';const d=new Date(raw);return Number.isNaN(d.getTime())?'':d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});};
+    function syncTabs(){
+      const all=items.length,pub=items.filter(x=>stateOf(x)==='public').length,stopped=all-pub;
+      const set=(id,n)=>{const el=document.querySelector(id);if(el)el.textContent=String(n)};set('#publishedAllCount',all);set('#publishedPublicCount',pub);set('#publishedStoppedCount',stopped);
+      const menu=document.querySelector('#menuPublishedCount');if(menu)menu.textContent=all?`${all}冊`:'0冊';
+      document.querySelectorAll('[data-published-filter]').forEach(b=>{const on=b.dataset.publishedFilter===filter;b.classList.toggle('is-active',on);b.setAttribute('aria-selected',on?'true':'false')});
+    }
+    async function copy(url,button){if(!url)return;try{await navigator.clipboard.writeText(url)}catch(_){const ta=document.createElement('textarea');ta.value=url;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}const old=button.textContent;button.textContent='コピー済み';setTimeout(()=>button.textContent=old,1100)}
+    function render(){
+      syncTabs();const box=document.querySelector('#publishedManagerList');if(!box)return;const rows=items.filter(x=>filter==='all'||stateOf(x)===filter);
+      if(!rows.length){box.innerHTML=`<small style="display:block;padding:18px 2px;opacity:.6">${filter==='public'?'公開中の作品はありません。':filter==='stopped'?'停止中の作品はありません。':'公開作品はありません。'}</small>`;return}
+      box.innerHTML=rows.map((x,i)=>{const state=stateOf(x),url=publicUrlOf(x),series=x.seriesTitle||x.series||'',episode=[x.episode||x.episodeLabel||'',x.episodeTitle||''].filter(Boolean).join('　'),cover=String(x.coverUrl||'');return `<article class="published-manager-item" data-published-index="${i}">${cover?`<img class="published-manager-cover" src="${esc(cover)}" alt="">`:'<div class="published-manager-cover published-manager-cover-empty">あ</div>'}<div class="published-manager-info">${series?`<div class="published-manager-series">${esc(series)}</div>`:''}<strong class="published-manager-title">${esc(x.title||'無題')}</strong>${episode?`<div class="published-manager-episode">${esc(episode)}</div>`:''}<div class="published-manager-date">${esc(dateText(x))}</div></div><div class="published-manager-side"><span class="published-manager-state">${state==='public'?'公開中':'停止中'}</span><div class="published-manager-actions">${state==='public'&&url?`<a class="is-primary" href="${esc(url)}" target="_blank" rel="noopener">開く</a><button type="button" data-pub-copy>URL</button>`:''}<button type="button" data-pub-state>${state==='public'?'停止':'再開'}</button><button type="button" class="is-danger" data-pub-delete>削除</button></div></div></article>`}).join('');
+      [...box.querySelectorAll('.published-manager-item')].forEach((row,pos)=>{const visible=rows[pos],url=publicUrlOf(visible);row.querySelector('[data-pub-copy]')?.addEventListener('click',e=>copy(url,e.currentTarget));row.querySelector('[data-pub-state]')?.addEventListener('click',async e=>{const makePublic=stateOf(visible)==='stopped',id=publicationIdOf(visible);if(!id)return appAlert('公開作品IDを確認できませんでした。');if(!await appConfirm(`「${visible.title||'無題'}」の公開を${makePublic?'再開':'停止'}しますか？`,{danger:!makePublic,confirmLabel:makePublic?'再開する':'停止する'}))return;e.currentTarget.disabled=true;try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(id)}/${makePublic?'republish':'unpublish'}`,{method:'POST',headers:authorAuthHeaders()});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'公開状態を変更できませんでした。');await load()}catch(err){await appAlert(String(err?.message||err));e.currentTarget.disabled=false}});row.querySelector('[data-pub-delete]')?.addEventListener('click',async e=>{const id=publicationIdOf(visible);if(!id)return appAlert('公開作品IDを確認できませんでした。');if(!await appConfirm(`「${visible.title||'無題'}」をサーバーから完全に削除しますか？\n\nこの操作は元に戻せません。`,{danger:true,confirmLabel:'削除する'}))return;e.currentTarget.disabled=true;try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(id)}`,{method:'DELETE',headers:authorAuthHeaders()});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'削除できませんでした。');await load()}catch(err){await appAlert(String(err?.message||err));e.currentTarget.disabled=false}})});
+    }
+    async function load(){const box=document.querySelector('#publishedManagerList');if(box)box.innerHTML='<small style="display:block;padding:18px 2px;opacity:.6">公開作品を確認しています…</small>';try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/works`,{headers:authorAuthHeaders(),cache:'no-store'});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||(r.status===401?'作者ログインが必要です。':'公開作品を読み込めませんでした。'));items=Array.isArray(j.works)?j.works:[];render()}catch(err){items=[];syncTabs();if(box)box.innerHTML=`<small style="display:block;padding:18px 2px;color:#9a3333">${esc(err?.message||err)}</small>`}}
+    function open(){document.querySelector('#easyMenuPanel')?.setAttribute('hidden','');document.querySelector('#easyMenuBackdrop')?.setAttribute('hidden','');const d=document.querySelector('#publishedManagerDialog');d?.showModal();load()}
+    document.querySelector('#menuPublishedManageButton')?.addEventListener('click',open);document.querySelector('#publishedManagerClose')?.addEventListener('click',()=>document.querySelector('#publishedManagerDialog')?.close());document.querySelectorAll('[data-published-filter]').forEach(b=>b.addEventListener('click',()=>{filter=b.dataset.publishedFilter||'all';render()}));
+  })();
 })();
