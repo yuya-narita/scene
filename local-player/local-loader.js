@@ -716,7 +716,7 @@
     const issueId=currentIssueId;if(!/^issue_[a-f0-9]{24}$/.test(issueId))return false;
     if(button)button.disabled=true;if(statusNode)statusNode.textContent='自分の一冊を用意しています…';
     try{
-      const response=await fetch(`${API_BASE}/issue/claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({issueId,readerId:publicReaderId()})});
+      const response=await fetch(`${API_BASE}/issue/claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({issueId,readerId:commerceReaderId()})});
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok||!payload?.scene){
         const code=String(payload?.code||'');
