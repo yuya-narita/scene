@@ -1804,9 +1804,19 @@
           e.currentTarget.disabled=true;
           try{
             $('#issueStatus').textContent='発行を停止しています…';
-            const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop',issueId})});
-            const j=await r.json().catch(()=>null);
-            if(!r.ok||!j?.ok)throw new Error(j?.error||'停止できませんでした。');
+            const debugUrl=`${SCENE_STUDIO_API_BASE}/author/issues`;
+            const debugBody={action:'stop',issueId};
+            let r,raw='';
+            try{
+              r=await fetch(debugUrl,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify(debugBody)});
+              raw=await r.text();
+            }catch(networkError){
+              await appAlert(`停止デバッグ\n\nissueId: ${issueId}\n送信先: ${debugUrl}\nmethod: POST\nbody: ${JSON.stringify(debugBody)}\n\n通信例外:\n${String(networkError?.message||networkError)}`);
+              throw networkError;
+            }
+            let j=null; try{j=raw?JSON.parse(raw):null;}catch(_){}
+            await appAlert(`停止デバッグ\n\nissueId: ${issueId}\n送信先: ${debugUrl}\nmethod: POST\nbody: ${JSON.stringify(debugBody)}\n\nHTTP: ${r.status} ${r.statusText||''}\nresponse:\n${raw||'(empty response)'}`);
+            if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);
             if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');
             $('#issueStatus').textContent='発行を停止しました。すでに受け取られた一冊はそのまま読めます。';
             await loadIssueHistory(workId);
@@ -1886,8 +1896,19 @@
           if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
           e.currentTarget.disabled=true;
           try{
-            const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop',issueId})});
-            const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'停止できませんでした。');
+            const debugUrl=`${SCENE_STUDIO_API_BASE}/author/issues`;
+            const debugBody={action:'stop',issueId};
+            let r,raw='';
+            try{
+              r=await fetch(debugUrl,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify(debugBody)});
+              raw=await r.text();
+            }catch(networkError){
+              await appAlert(`停止デバッグ\n\nissueId: ${issueId}\n送信先: ${debugUrl}\nmethod: POST\nbody: ${JSON.stringify(debugBody)}\n\n通信例外:\n${String(networkError?.message||networkError)}`);
+              throw networkError;
+            }
+            let j=null; try{j=raw?JSON.parse(raw):null;}catch(_){}
+            await appAlert(`停止デバッグ\n\nissueId: ${issueId}\n送信先: ${debugUrl}\nmethod: POST\nbody: ${JSON.stringify(debugBody)}\n\nHTTP: ${r.status} ${r.statusText||''}\nresponse:\n${raw||'(empty response)'}`);
+            if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);
             if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');
             await loadAllIssueHistory();
           }catch(error){await appAlert(String(error?.message||error));e.currentTarget.disabled=false;}
