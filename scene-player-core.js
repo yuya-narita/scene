@@ -678,15 +678,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _isCorsWebAudioAsset(src) {
       const value = String(src || '').trim();
-      if (!this._isExternalHttpAudio(value)) return false;
+      if (!value) return false;
       try {
         const url = new URL(value, global.location?.href || undefined);
-        // Scene Studio's R2 asset endpoint explicitly returns
-        // Access-Control-Allow-Origin: *. These files can therefore be routed
-        // through Web Audio safely, which is required for programmable volume
-        // and fades on iPhone/iPad Safari (HTMLMediaElement.volume is effectively
-        // system-controlled there). Keep arbitrary external URLs on the native
-        // path so a third-party server without CORS never turns silent.
+        // iOS Safari does not reliably honor script-written HTMLMediaElement.volume.
+        // Persistent BGM/Ambient therefore needs a GainNode whenever the source is
+        // safe to feed into Web Audio. This includes packaged .scene assets, which
+        // Local Player/Studio rewrite to blob: URLs, and ordinary same-origin media.
+        // Previously only the public R2 /asset/ URL was accepted here, so iPhone
+        // package playback silently fell back to native element.volume and every
+        // authored fade/volume change became effectively a hard full-volume change.
+        if (url.protocol === 'blob:' || url.protocol === 'data:') return true;
+        if (global.location?.origin && url.origin === global.location.origin) return true;
         return url.hostname === 'scene-studio-api.a-hako.workers.dev'
           && url.pathname.startsWith('/asset/');
       } catch (_) {
