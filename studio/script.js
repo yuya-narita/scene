@@ -1805,18 +1805,8 @@
           if(stopButton)stopButton.disabled=true;
           try{
             $('#issueStatus').textContent='発行を停止しています…';
-            const debugUrl=`${SCENE_STUDIO_API_BASE}/author/issues`;
-            const debugBody={action:'stop',issueId};
-            let r,raw='';
-            try{
-              r=await fetch(debugUrl,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify(debugBody)});
-              raw=await r.text();
-            }catch(networkError){
-              await appAlert(`停止デバッグ\n\nissueId: ${issueId}\n送信先: ${debugUrl}\nmethod: POST\nbody: ${JSON.stringify(debugBody)}\n\n通信例外:\n${String(networkError?.message||networkError)}`);
-              throw networkError;
-            }
-            let j=null; try{j=raw?JSON.parse(raw):null;}catch(_){}
-            await appAlert(`停止デバッグ\n\nissueId: ${issueId}\n送信先: ${debugUrl}\nmethod: POST\nbody: ${JSON.stringify(debugBody)}\n\nHTTP: ${r.status} ${r.statusText||''}\nresponse:\n${raw||'(empty response)'}`);
+            const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop',issueId})});
+            const j=await r.json().catch(()=>null);
             if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);
             if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');
             $('#issueStatus').textContent='発行を停止しました。すでに受け取られた一冊はそのまま読めます。';
@@ -1870,54 +1860,92 @@
     try{await navigator.clipboard.writeText(value);$('#issueStatus').textContent='配付URLをコピーしました。';}catch(_){const input=$('#issueResultUrl');input?.select();document.execCommand('copy');$('#issueStatus').textContent='配付URLをコピーしました。';}
   });
 
+  let issueManagerFilter='all';
+  let issueManagerItems=[];
+  function issueState(item){
+    return item?.status==='stopped'?'stopped':'active';
+  }
+  function issueStoppedAt(item){
+    const value=item?.stoppedAt||item?.updatedAt||'';
+    if(!value)return '';
+    const date=new Date(value);
+    return Number.isNaN(date.getTime())?'':date.toLocaleString('ja-JP');
+  }
+  function updateIssueManagerTabs(){
+    const all=issueManagerItems.length;
+    const active=issueManagerItems.filter(item=>issueState(item)==='active').length;
+    const stopped=all-active;
+    const counts={all,active,stopped};
+    const ids={all:'#issueAllCount',active:'#issueActiveCount',stopped:'#issueStoppedCount'};
+    Object.entries(ids).forEach(([key,selector])=>{const el=$(selector);if(el)el.textContent=String(counts[key]||0);});
+    document.querySelectorAll('[data-issue-filter]').forEach(button=>{
+      const selected=button.dataset.issueFilter===issueManagerFilter;
+      button.classList.toggle('is-active',selected);
+      button.setAttribute('aria-selected',selected?'true':'false');
+    });
+  }
+  function renderIssueManagerList(){
+    const box=$('#issueManagerList');if(!box)return;
+    updateIssueManagerTabs();
+    const items=issueManagerItems.filter(item=>issueManagerFilter==='all'||issueState(item)===issueManagerFilter);
+    if(!items.length){
+      box.innerHTML=`<small style="opacity:.6">${issueManagerFilter==='active'?'発行中の一冊はありません。':issueManagerFilter==='stopped'?'停止済みの発行はありません。':'発行済みの一冊はありません。'}</small>`;
+      return;
+    }
+    box.innerHTML=items.map(item=>{
+      const active=issueState(item)==='active';
+      const distributable=active&&Number(item.remaining)>0;
+      const title=issueEscapeHtml(String(item.title||'無題'));
+      const created=item.createdAt?new Date(item.createdAt).toLocaleString('ja-JP'):'';
+      const stoppedAt=!active?issueStoppedAt(item):'';
+      const status=active
+        ?`<span>${distributable?`残り ${Number(item.remaining||0)}部`:'配付完了'}</span>`
+        :'<span style="font-size:12px;font-weight:700;border:1px solid #cfd4da;border-radius:999px;padding:3px 8px;white-space:nowrap">停止済み</span>';
+      const controls=distributable?`
+          <input type="text" readonly value="${issueEscapeHtml(String(item.url||''))}" style="box-sizing:border-box;width:100%;min-height:36px;padding:0 8px;border:1px solid #d8dce1;border-radius:7px;font-size:11px">
+          <div style="display:flex;gap:7px"><button type="button" data-global-issue-copy style="flex:1">URLをコピー</button><button type="button" data-global-issue-stop style="flex:1">発行を停止</button></div>`:'';
+      return `<div data-global-issue-row="${issueEscapeHtml(String(item.issueId||''))}" style="padding:12px;border:1px solid #d8dce1;border-radius:12px;display:grid;gap:${active?'8':'6'}px;margin-bottom:9px">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><strong>${title}</strong><div style="font-size:11px;opacity:.6;margin-top:2px">${issueEscapeHtml(created)}</div></div>${!active?status:''}</div>
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${Number(item.issueLimit||0)}部中 ${Number(item.issuedCount||0)}部受取</strong>${active?status:''}</div>
+          ${!active&&stoppedAt?`<div style="font-size:11px;opacity:.6">発行終了 ${issueEscapeHtml(stoppedAt)}</div>`:''}
+          ${controls}
+        </div>`;
+    }).join('');
+    box.querySelectorAll('[data-global-issue-row]').forEach(row=>{
+      const issueId=row.dataset.globalIssueRow,input=row.querySelector('input');
+      row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{
+        try{await navigator.clipboard.writeText(input.value);}catch(_){input.select();document.execCommand('copy');}
+        showEasyToast('配付URLをコピーしました。');
+      });
+      row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{
+        const stopButton=e.currentTarget;
+        if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
+        if(stopButton)stopButton.disabled=true;
+        try{
+          const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop',issueId})});
+          const j=await r.json().catch(()=>null);
+          if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);
+          if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');
+          showEasyToast('発行を停止しました。受取済みの一冊は引き続き読めます。');
+          await loadAllIssueHistory();
+        }catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}
+      });
+    });
+  }
   async function loadAllIssueHistory(){
     const box=$('#issueManagerList');if(!box)return;
     box.innerHTML='<small style="opacity:.6">発行状況を確認しています…</small>';
     try{
       const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{headers:authorAuthHeaders(),cache:'no-store'});
       const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error(payload?.error||'発行状況を取得できませんでした。');
-      const items=payload.issues||[];
-      if(!items.length){box.innerHTML='<small style="opacity:.6">発行済みの一冊はありません。</small>';return;}
-      box.innerHTML=items.map(item=>{
-        const active=item.status==='active'&&Number(item.remaining)>0;
-        const stopped=item.status==='stopped';
-        const title=issueEscapeHtml(String(item.title||'無題'));
-        const created=item.createdAt?new Date(item.createdAt).toLocaleString('ja-JP'):'';
-        return `<div data-global-issue-row="${issueEscapeHtml(String(item.issueId||''))}" style="padding:12px;border:1px solid #d8dce1;border-radius:12px;display:grid;gap:8px;margin-bottom:9px">
-          <div><strong>${title}</strong><div style="font-size:11px;opacity:.6;margin-top:2px">${issueEscapeHtml(created)}</div></div>
-          <div style="display:flex;justify-content:space-between;gap:10px"><strong>${Number(item.issueLimit||0)}部中 ${Number(item.issuedCount||0)}部受取</strong><span>${stopped?'停止済み':`残り ${Number(item.remaining||0)}部`}</span></div>
-          <input type="text" readonly value="${issueEscapeHtml(String(item.url||''))}" style="box-sizing:border-box;width:100%;min-height:36px;padding:0 8px;border:1px solid #d8dce1;border-radius:7px;font-size:11px">
-          <div style="display:flex;gap:7px">${active?'<button type="button" data-global-issue-copy style="flex:1">URLをコピー</button><button type="button" data-global-issue-stop style="flex:1">発行を停止</button>':'<button type="button" disabled style="flex:1">URL停止中</button><button type="button" disabled style="flex:1">発行停止済み</button>'}</div>
-        </div>`;
-      }).join('');
-      box.querySelectorAll('[data-global-issue-row]').forEach(row=>{
-        const issueId=row.dataset.globalIssueRow,input=row.querySelector('input');
-        row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);}catch(_){input.select();document.execCommand('copy');}});
-        row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{
-          const stopButton=e.currentTarget;
-          if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
-          if(stopButton)stopButton.disabled=true;
-          try{
-            const debugUrl=`${SCENE_STUDIO_API_BASE}/author/issues`;
-            const debugBody={action:'stop',issueId};
-            let r,raw='';
-            try{
-              r=await fetch(debugUrl,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify(debugBody)});
-              raw=await r.text();
-            }catch(networkError){
-              await appAlert(`停止デバッグ\n\nissueId: ${issueId}\n送信先: ${debugUrl}\nmethod: POST\nbody: ${JSON.stringify(debugBody)}\n\n通信例外:\n${String(networkError?.message||networkError)}`);
-              throw networkError;
-            }
-            let j=null; try{j=raw?JSON.parse(raw):null;}catch(_){}
-            await appAlert(`停止デバッグ\n\nissueId: ${issueId}\n送信先: ${debugUrl}\nmethod: POST\nbody: ${JSON.stringify(debugBody)}\n\nHTTP: ${r.status} ${r.statusText||''}\nresponse:\n${raw||'(empty response)'}`);
-            if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);
-            if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');
-            await loadAllIssueHistory();
-          }catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}
-        });
-      });
+      issueManagerItems=Array.isArray(payload.issues)?payload.issues:[];
+      renderIssueManagerList();
     }catch(error){box.innerHTML=`<small>${issueEscapeHtml(String(error?.message||error))}</small>`;}
   }
+  document.querySelectorAll('[data-issue-filter]').forEach(button=>button.addEventListener('click',()=>{
+    issueManagerFilter=button.dataset.issueFilter||'all';
+    renderIssueManagerList();
+  }));
   function openIssueManager(){
     if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
     $('#easyMenu')?.classList.remove('is-open');

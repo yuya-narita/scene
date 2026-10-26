@@ -1149,6 +1149,11 @@
         <div><span>ISSUES</span><h2>発行一覧</h2><small>端末の制作途中が消えても、発行済みロットはここから管理できます。</small></div>
         <button id="issueManagerClose" type="button" aria-label="閉じる">×</button>
       </div>
+      <nav class="draft-manager-tabs" aria-label="発行の表示切替">
+        <button type="button" class="draft-manager-tab is-active" data-issue-filter="all" aria-selected="true">すべて <span id="issueAllCount">0</span></button>
+        <button type="button" class="draft-manager-tab" data-issue-filter="active" aria-selected="false">発行中 <span id="issueActiveCount">0</span></button>
+        <button type="button" class="draft-manager-tab" data-issue-filter="stopped" aria-selected="false">停止済み <span id="issueStoppedCount">0</span></button>
+      </nav>
       <div id="issueManagerList" class="draft-list draft-manager-unified-list" style="padding:12px 0"></div>
       <div class="draft-manager-foot"><small>発行済みのFrozen Editionはサーバー側に保持されます。</small></div>
     </div>
