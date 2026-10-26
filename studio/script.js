@@ -1775,13 +1775,16 @@
   }
 
   let issueTargetRow=null;
+  function issueEscapeHtml(value){
+    return String(value??'').replace(/[&<>\"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
+  }
   function issueHistoryHtml(items=[]){
     if(!items.length)return '<small style="opacity:.6">この作品の発行履歴はまだありません。</small>';
     return items.map(item=>{
       const active=item.status==='active'&&Number(item.remaining)>0;
-      return `<div data-issue-row="${escapeHtml(String(item.issueId||''))}" style="padding:10px;border:1px solid #d8dce1;border-radius:10px;display:grid;gap:7px">
+      return `<div data-issue-row="${issueEscapeHtml(String(item.issueId||''))}" style="padding:10px;border:1px solid #d8dce1;border-radius:10px;display:grid;gap:7px">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${Number(item.issueLimit||0)}部中 ${Number(item.issuedCount||0)}部受取</strong><small>残り ${Number(item.remaining||0)}部</small></div>
-        <input type="text" readonly value="${escapeHtml(String(item.url||''))}" style="box-sizing:border-box;width:100%;min-height:36px;padding:0 8px;border:1px solid #d8dce1;border-radius:7px;font-size:11px">
+        <input type="text" readonly value="${issueEscapeHtml(String(item.url||''))}" style="box-sizing:border-box;width:100%;min-height:36px;padding:0 8px;border:1px solid #d8dce1;border-radius:7px;font-size:11px">
         <div style="display:flex;gap:7px"><button type="button" data-issue-copy style="flex:1">URLをコピー</button>${active?'<button type="button" data-issue-stop style="flex:1">発行を停止</button>':'<button type="button" disabled style="flex:1">発行終了</button>'}</div>
       </div>`;
     }).join('');
@@ -1802,7 +1805,7 @@
           try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues/${encodeURIComponent(issueId)}`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'stop'})});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'停止できませんでした。');await loadIssueHistory(workId);}catch(error){appAlert(String(error?.message||error));e.currentTarget.disabled=false;}
         });
       });
-    }catch(error){box.innerHTML=`<small>${escapeHtml(String(error?.message||error))}</small>`;}
+    }catch(error){box.innerHTML=`<small>${issueEscapeHtml(String(error?.message||error))}</small>`;}
   }
   async function openIssueDialog(row){
     if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}

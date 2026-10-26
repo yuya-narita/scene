@@ -897,6 +897,8 @@
     // Author policy: older Distribution.scene files without an explicit policy
     // remain relayable; only an explicit false disables pass-along.
     if(raw?.sharing?.relay?.enabled === false)return null;
+    // Author-issued copies are direct Distribution copies, not RELAY seeds.
+    if(raw?.distribution?.issue?.issueId||raw?.distribution?.channel==='author-issue')return null;
     const workId=String(raw?.workId||'').trim();
     const editionId=String(raw?.edition?.editionId||'').trim();
     const copyId=String(raw?.distribution?.copyId||'').trim();
