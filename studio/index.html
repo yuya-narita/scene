@@ -1143,7 +1143,14 @@
     </form>
   </dialog>
 
-  <dialog id="issueManagerDialog" class="draft-manager-dialog">
+  <style>
+#issueManagerDialog .draft-manager-card{width:min(760px,calc(100vw - 28px));}
+#issueManagerDialog #issueManagerList{padding:4px 18px 14px!important;}
+.issue-manager-item{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 2px;border-bottom:1px solid #e5e7eb}.issue-manager-item:last-child{border-bottom:0}.issue-manager-cover{width:72px;height:96px;object-fit:cover;border-radius:7px;background:#f2f1ed;box-shadow:0 1px 5px rgba(0,0,0,.08)}.issue-manager-cover-empty{display:grid;place-items:center;font-family:serif;font-size:24px;color:#777}.issue-manager-info{min-width:0}.issue-manager-series{font-size:10px;letter-spacing:.06em;opacity:.5;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.issue-manager-title{display:block;font-size:15px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.issue-manager-episode{font-size:12px;margin-top:4px;opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.issue-manager-stats{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:9px;font-size:11px;font-weight:700}.issue-manager-date{font-size:10px;opacity:.48;margin-top:4px}.issue-manager-side{align-self:stretch;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:12px;min-width:86px}.issue-manager-stopped,.issue-manager-remaining{font-size:11px;white-space:nowrap}.issue-manager-stopped{border:1px solid #d6d9dd;border-radius:999px;padding:3px 8px;font-weight:700}.issue-manager-actions{display:flex;gap:6px}.issue-manager-actions button{width:auto!important;min-width:0!important;padding:7px 10px!important;border-radius:999px!important;font-size:11px!important;line-height:1!important;background:#fff!important}.issue-manager-copy{border:1px solid #202124!important;color:#202124!important}.issue-manager-stop{border:1px solid #d9dcdf!important;color:#7a3030!important}
+@media(max-width:620px){#issueManagerDialog #issueManagerList{padding:4px 12px 12px!important}.issue-manager-item{grid-template-columns:58px minmax(0,1fr);gap:10px;padding:12px 0}.issue-manager-cover{width:58px;height:78px}.issue-manager-side{grid-column:2;align-self:auto;flex-direction:row;align-items:center;justify-content:space-between;min-width:0}.issue-manager-actions{margin-left:auto}.issue-manager-title{font-size:14px}}
+</style>
+
+<dialog id="issueManagerDialog" class="draft-manager-dialog">
     <div class="draft-manager-card">
       <div class="draft-manager-head">
         <div><span>ISSUES</span><h2>発行一覧</h2><small>端末の制作途中が消えても、発行済みロットはここから管理できます。</small></div>

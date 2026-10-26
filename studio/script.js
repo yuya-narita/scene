@@ -1888,48 +1888,24 @@
     const box=$('#issueManagerList');if(!box)return;
     updateIssueManagerTabs();
     const items=issueManagerItems.filter(item=>issueManagerFilter==='all'||issueState(item)===issueManagerFilter);
-    if(!items.length){
-      box.innerHTML=`<small style="opacity:.6">${issueManagerFilter==='active'?'発行中の一冊はありません。':issueManagerFilter==='stopped'?'停止済みの発行はありません。':'発行済みの一冊はありません。'}</small>`;
-      return;
-    }
+    if(!items.length){box.innerHTML=`<small style="opacity:.6">${issueManagerFilter==='active'?'発行中の一冊はありません。':issueManagerFilter==='stopped'?'停止済みの発行はありません。':'発行済みの一冊はありません。'}</small>`;return;}
     box.innerHTML=items.map(item=>{
-      const active=issueState(item)==='active';
-      const distributable=active&&Number(item.remaining)>0;
+      const active=issueState(item)==='active',distributable=active&&Number(item.remaining)>0;
       const title=issueEscapeHtml(String(item.title||'無題'));
-      const created=item.createdAt?new Date(item.createdAt).toLocaleString('ja-JP'):'';
-      const stoppedAt=!active?issueStoppedAt(item):'';
-      const status=active
-        ?`<span>${distributable?`残り ${Number(item.remaining||0)}部`:'配付完了'}</span>`
-        :'<span style="font-size:12px;font-weight:700;border:1px solid #cfd4da;border-radius:999px;padding:3px 8px;white-space:nowrap">停止済み</span>';
-      const controls=distributable?`
-          <input type="text" readonly value="${issueEscapeHtml(String(item.url||''))}" style="box-sizing:border-box;width:100%;min-height:36px;padding:0 8px;border:1px solid #d8dce1;border-radius:7px;font-size:11px">
-          <div style="display:flex;gap:7px"><button type="button" data-global-issue-copy style="flex:1">URLをコピー</button><button type="button" data-global-issue-stop style="flex:1">発行を停止</button></div>`:'';
-      return `<div data-global-issue-row="${issueEscapeHtml(String(item.issueId||''))}" style="padding:12px;border:1px solid #d8dce1;border-radius:12px;display:grid;gap:${active?'8':'6'}px;margin-bottom:9px">
-          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><strong>${title}</strong><div style="font-size:11px;opacity:.6;margin-top:2px">${issueEscapeHtml(created)}</div></div>${!active?status:''}</div>
-          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${Number(item.issueLimit||0)}部中 ${Number(item.issuedCount||0)}部受取</strong>${active?status:''}</div>
-          ${!active&&stoppedAt?`<div style="font-size:11px;opacity:.6">発行終了 ${issueEscapeHtml(stoppedAt)}</div>`:''}
-          ${controls}
-        </div>`;
+      const episode=String(item.episode||'').trim()||(Number(item.episodeNumber)>0?`第${Number(item.episodeNumber)}話`:``);
+      const episodeTitle=String(item.episodeTitle||'').trim(),seriesTitle=String(item.seriesTitle||'').trim(),coverUrl=String(item.coverUrl||'').trim();
+      const created=item.createdAt?new Date(item.createdAt).toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+      const stoppedAt=!active?issueStoppedAt(item):'',episodeLine=[episode,episodeTitle].filter(Boolean).join('　');
+      const metaLine=seriesTitle&&seriesTitle!==String(item.title||'').trim()?seriesTitle:'';
+      const thumb=coverUrl?`<img class="issue-manager-cover" src="${issueEscapeHtml(coverUrl)}" alt="" loading="lazy">`:`<div class="issue-manager-cover issue-manager-cover-empty" aria-hidden="true">あ</div>`;
+      const status=active?`<span class="issue-manager-remaining">${distributable?`残り ${Number(item.remaining||0)}部`:'配付完了'}</span>`:'<span class="issue-manager-stopped">停止済み</span>';
+      const actions=distributable?`<div class="issue-manager-actions"><button type="button" data-global-issue-copy class="issue-manager-copy">配付URL</button><button type="button" data-global-issue-stop class="issue-manager-stop">停止</button></div>`:'';
+      return `<article data-global-issue-row="${issueEscapeHtml(String(item.issueId||''))}" class="issue-manager-item">${thumb}<div class="issue-manager-info">${metaLine?`<div class="issue-manager-series">${issueEscapeHtml(metaLine)}</div>`:''}<strong class="issue-manager-title">${title}</strong>${episodeLine?`<div class="issue-manager-episode">${issueEscapeHtml(episodeLine)}</div>`:''}<div class="issue-manager-stats"><span>${Number(item.issueLimit||0)}部発行</span><span>${Number(item.issuedCount||0)}部受取</span>${active?`<span>${distributable?`残り${Number(item.remaining||0)}部`:'配付完了'}</span>`:''}</div><div class="issue-manager-date">${!active&&stoppedAt?`発行終了 ${issueEscapeHtml(stoppedAt)}`:`発行 ${issueEscapeHtml(created)}`}</div></div><div class="issue-manager-side">${status}${actions}</div><input type="hidden" data-issue-url value="${issueEscapeHtml(String(item.url||''))}"></article>`;
     }).join('');
     box.querySelectorAll('[data-global-issue-row]').forEach(row=>{
-      const issueId=row.dataset.globalIssueRow,input=row.querySelector('input');
-      row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{
-        try{await navigator.clipboard.writeText(input.value);}catch(_){input.select();document.execCommand('copy');}
-        showEasyToast('配付URLをコピーしました。');
-      });
-      row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{
-        const stopButton=e.currentTarget;
-        if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
-        if(stopButton)stopButton.disabled=true;
-        try{
-          const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop',issueId})});
-          const j=await r.json().catch(()=>null);
-          if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);
-          if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');
-          showEasyToast('発行を停止しました。受取済みの一冊は引き続き読めます。');
-          await loadAllIssueHistory();
-        }catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}
-      });
+      const issueId=row.dataset.globalIssueRow,input=row.querySelector('[data-issue-url]');
+      row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);}catch(_){const helper=document.createElement('textarea');helper.value=input.value;document.body.appendChild(helper);helper.select();document.execCommand('copy');helper.remove();}showEasyToast('配付URLをコピーしました。');});
+      row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{const stopButton=e.currentTarget;if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;if(stopButton)stopButton.disabled=true;try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop',issueId})});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');showEasyToast('発行を停止しました。受取済みの一冊は引き続き読めます。');await loadAllIssueHistory();}catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}});
     });
   }
   async function loadAllIssueHistory(){
