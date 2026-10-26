@@ -5242,6 +5242,24 @@ body.live-inline-text-edit #scenePlayer .sp-footer{
   line-height:1.05!important;
 }
 
+
+#playerScreen .active-scene-file-name{
+  position:fixed!important;
+  left:20px!important;
+  top:calc(34px + env(safe-area-inset-top))!important;
+  z-index:2147483647!important;
+  max-width:min(300px,calc(100vw - 40px))!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  color:var(--sp-sub,#8d877f)!important;
+  font-size:10px!important;
+  font-weight:600!important;
+  line-height:1.2!important;
+  letter-spacing:.02em!important;
+  pointer-events:none!important;
+}
+
 /* Core history CSS has a serif fallback. Inline Scene typography now wins.
    Keep history navigation sizing unless the Scene explicitly authored a size. */
 #scenePlayer .sp-history-text,

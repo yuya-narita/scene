@@ -1149,6 +1149,15 @@
   const RECENT_SCENE_STORE='recentScenes';
   const RECENT_SCENE_LIMIT=10;
   let pendingRecentSceneId='';
+  let activeSceneFileName='';
+  function setActiveSceneFileName(name=''){
+    activeSceneFileName=String(name||'').trim();
+    const el=$('#activeSceneFileName');
+    if(!el)return;
+    const shown=activeSceneFileName||'未保存';
+    el.textContent=`FILE　${shown}`;
+    el.title=shown;
+  }
   const DRAFT_VERSION_LIMIT=10;
   const DRAFT_LAST_KEY='sceneStudio.lastDraftId';
   let currentDraftId=localStorage.getItem(DRAFT_LAST_KEY)||'';
@@ -5337,6 +5346,7 @@ return flowCommentCard;}
       entries.clear();assetsByPath.clear();refs.length=0;
       await hydrateMasterPublicationState(workingDocument,{warnStale:true});
       await saveDraftNow();
+      setActiveSceneFileName(file?.name||'');
       await rememberRecentScene(file,fileHandle,workingDocument,{replaceId:recentId||pendingRecentSceneId});pendingRecentSceneId='';
       await refreshDraftUI(false);
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
@@ -9607,6 +9617,7 @@ return flowCommentCard;}
       if(requested)await restoreDraftRecord(requested);
     }
     await refreshDraftUI(true);
+    setActiveSceneFileName(activeSceneFileName);
     updateEasyFileActions();
   })().catch(err=>console.warn('Draft UI init failed',err));
   // v0.3.03: use the original proven return interaction.
