@@ -1996,9 +1996,10 @@
       const el=document.createElement('article');el.className='recent-scene-row';
       const detail=[row.seriesTitle,row.episode,row.episodeTitle].filter(Boolean).join('　');
       const cover=row.coverThumb?`<img class="recent-scene-cover" alt="" src="${issueEscapeHtml(row.coverThumb)}">`:'<div class="recent-scene-cover recent-scene-cover-empty" aria-hidden="true">あ</div>';
-      el.innerHTML=`${cover}<div class="recent-scene-copy"><strong></strong><small></small><time></time></div><div class="recent-scene-actions"><button type="button" data-recent-open>開く</button><button type="button" data-recent-remove aria-label="履歴から削除">×</button></div>`;
+      el.innerHTML=`${cover}<div class="recent-scene-copy"><strong></strong><small></small><span class="recent-scene-filename"></span><time></time></div><div class="recent-scene-actions"><button type="button" data-recent-open>開く</button><button type="button" data-recent-remove aria-label="履歴から削除">×</button></div>`;
       el.querySelector('strong').textContent=row.title||row.fileName||'Untitled';
-      const small=el.querySelector('small');small.textContent=detail||row.fileName||'.scene';
+      const small=el.querySelector('small');small.textContent=detail||'作品情報なし';
+      const fileName=el.querySelector('.recent-scene-filename');fileName.textContent=row.fileName||'.scene';fileName.title=row.fileName||'.scene';
       el.querySelector('time').textContent=formatDraftTime(row.lastOpenedAt);
       el.querySelector('[data-recent-open]').onclick=async()=>{
         const handle=row.handle;
