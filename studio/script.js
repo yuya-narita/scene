@@ -13798,16 +13798,20 @@ function openDesktopTextDetail(){
           onApply(st);
         }
       ),
-      desktopMakeSelect(
-        u('サイズ','Size'),
-        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],
-        initial.size||'auto',
-        v=>{
-          const st=store();
-          st.size=v;
-          onApply(st);
-        }
-      )
+      (()=>{
+        const field=document.createElement('label');field.className='desktop-live-field desktop-shell-size-field';
+        const cap=document.createElement('span');cap.textContent=u('サイズ','Size');
+        const select=document.createElement('select');
+        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')],['px',u('px指定','Custom px')]].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;select.appendChild(option);});
+        const px=document.createElement('input');px.type='number';px.inputMode='numeric';px.min='8';px.max='420';px.step='1';px.className='desktop-shell-size-px';px.setAttribute('aria-label',u('文字サイズ px','Font size in pixels'));
+        const numeric=Number(initial.size);const hasNumeric=Number.isFinite(numeric)&&numeric>0;
+        select.value=hasNumeric?'px':(typeof initial.size==='string'?initial.size:'auto');
+        px.value=String(Math.round(hasNumeric?numeric:24));px.hidden=select.value!=='px';
+        const commitPx=()=>{const value=Math.max(8,Math.min(420,Math.round(Number(px.value)||24)));px.value=String(value);const st=store();st.size=value;onApply(st);};
+        select.addEventListener('change',()=>{px.hidden=select.value!=='px';if(select.value==='px'){commitPx();px.focus();px.select();}else{const st=store();st.size=select.value;onApply(st);}});
+        px.addEventListener('input',commitPx);
+        field.append(cap,select,px);return field;
+      })()
     );
 
     // Use the same color controls as the normal Aa editor:
@@ -17124,8 +17128,12 @@ function openDesktopTextDetail(){
       sel.value=value;wrap.append(span,sel);return {wrap,sel};
     };
     const font=mkSelect(u('書体','Typeface'),[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],st.fontFamily||'inherit');
-    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],typeof st.size==='string'?st.size:'auto');
-    grid.append(font.wrap,size.wrap);card.appendChild(grid);
+    const numericEndingSize=Number(st.size);const hasNumericEndingSize=Number.isFinite(numericEndingSize)&&numericEndingSize>0;
+    const size=mkSelect(u('サイズ','Size'),[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')],['px',u('px指定','Custom px')]],hasNumericEndingSize?'px':(typeof st.size==='string'?st.size:'auto'));
+    const sizePxWrap=document.createElement('label');Object.assign(sizePxWrap.style,{display:'grid',gap:'7px',font:'700 13px/1.4 system-ui'});
+    const sizePxLabel=document.createElement('span');sizePxLabel.textContent=u('px','px');
+    const sizePx=document.createElement('input');sizePx.type='number';sizePx.inputMode='numeric';sizePx.min='8';sizePx.max='420';sizePx.step='1';sizePx.value=String(Math.round(hasNumericEndingSize?numericEndingSize:24));Object.assign(sizePx.style,{height:'46px',border:'1px solid #d7d9de',borderRadius:'12px',background:'#fff',padding:'0 10px',font:'600 15px/1 system-ui'});sizePxWrap.append(sizePxLabel,sizePx);sizePxWrap.hidden=size.sel.value!=='px';
+    grid.append(font.wrap,size.wrap,sizePxWrap);card.appendChild(grid);
 
     const colorTitle=document.createElement('strong');colorTitle.textContent=u('文字色','Text color');Object.assign(colorTitle.style,{display:'block',marginTop:'16px',font:'800 13px/1.3 system-ui'});
     const colors=document.createElement('div');Object.assign(colors.style,{display:'flex',gap:'9px',alignItems:'center',marginTop:'8px',flexWrap:'wrap'});
@@ -17149,7 +17157,8 @@ function openDesktopTextDetail(){
         st.fontFamily=font.sel.value;
         syncEndingFontFamily(st.fontFamily,{syncStyle:true});
       }
-      st.size=size.sel.value;
+      if(size.sel.value==='px')st.size=Math.max(8,Math.min(420,Math.round(Number(sizePx.value)||24)));else st.size=size.sel.value;
+      sizePxWrap.hidden=size.sel.value!=='px';
       syncEasyShellToWorkingDocument();
       refreshLivePlayerDocumentChrome();
       applyEndingStyleToLiveElement(st);
@@ -17157,7 +17166,7 @@ function openDesktopTextDetail(){
       scheduleDraftSave(70);
       requestAnimationFrame(prepareLiveEndingEditor);
     };
-    font.sel.addEventListener('change',apply);size.sel.addEventListener('change',apply);
+    font.sel.addEventListener('change',apply);size.sel.addEventListener('change',()=>{sizePxWrap.hidden=size.sel.value!=='px';apply();if(size.sel.value==='px'){sizePx.focus();sizePx.select();}});sizePx.addEventListener('input',apply);
     picker.addEventListener('input',()=>{st.color=picker.value;apply();});
     done.addEventListener('click',closeLiveEndingStylePanel);
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeLiveEndingStylePanel();});
