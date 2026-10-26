@@ -2445,7 +2445,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         [this.els.coverEpisode,'episode'],
         [this.els.coverEpisodeTitle,'episodeTitle']
       ];
-      const coverSizeScale = { small:.78, normal:1, large:1.28, xl:1.6 };
+      const coverSizeScale = { small:.78, normal:1, large:1.28, xl:1.6, xxl:2.05, fullscreen:2.65, giant:3.25, breakout:4.0 };
       const coverFontMap = {
         serif:'var(--sp-font-serif)',
         sans:'var(--sp-font-sans)',
@@ -2462,9 +2462,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const baseSize=parseFloat(getComputedStyle(el).fontSize)||16;
         if (st.color) el.style.setProperty('color',String(st.color),'important');
         if (st.size && st.size !== 'auto') {
-          const resolved=typeof st.size==='number'
-            ? Number(st.size)
-            : baseSize*(coverSizeScale[String(st.size)]||1);
+          const rawSize=st.size;
+          const numericSize=typeof rawSize==='number'?Number(rawSize):(/^\d+(?:\.\d+)?(?:px)?$/i.test(String(rawSize).trim())?parseFloat(String(rawSize)):NaN);
+          const resolved=Number.isFinite(numericSize)
+            ? numericSize
+            : baseSize*(coverSizeScale[String(rawSize)]||1);
           if(Number.isFinite(resolved))el.style.setProperty('font-size',`${resolved}px`,'important');
         }
         if (st.fontFamily && st.fontFamily !== 'inherit') {
@@ -2478,13 +2480,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
         this.els.endingTitle.style.setProperty('font-family', endingFamily, 'important');
         const endingStyle=doc.ending?.style||{};
-        const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)'};
+        const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)',xxl:'clamp(38px,10vw,72px)',fullscreen:'clamp(48px,13vw,96px)',giant:'clamp(60px,16vw,120px)',breakout:'clamp(72px,20vw,160px)'};
         const fontMap={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};
         this.els.endingTitle.style.removeProperty('color');
         this.els.endingTitle.style.removeProperty('font-size');
         if(endingStyle.color)this.els.endingTitle.style.setProperty('color',String(endingStyle.color),'important');
         if(endingStyle.size&&endingStyle.size!=='auto'){
-          const size=typeof endingStyle.size==='number'?`${endingStyle.size}px`:sizeMap[endingStyle.size];
+          const rawSize=endingStyle.size;const numericSize=typeof rawSize==='number'?Number(rawSize):(/^\d+(?:\.\d+)?(?:px)?$/i.test(String(rawSize).trim())?parseFloat(String(rawSize)):NaN);const size=Number.isFinite(numericSize)?`${numericSize}px`:sizeMap[String(rawSize)];
           if(size)this.els.endingTitle.style.setProperty('font-size',size,'important');
         }
         if(endingStyle.fontFamily&&endingStyle.fontFamily!=='inherit'){
@@ -3113,7 +3115,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // authored per-field typography here as well. This prevents CSS defaults
       // from restoring the original cover sizes after publication.
       const coverStyles=this.document.cover?.styles||{};
-      const coverSizeScale={small:.78,normal:1,large:1.28,xl:1.6};
+      const coverSizeScale={small:.78,normal:1,large:1.28,xl:1.6,xxl:2.05,fullscreen:2.65,giant:3.25,breakout:4.0};
       const coverFontMap={
         serif:'var(--sp-font-serif)',
         sans:'var(--sp-font-sans)',
@@ -3138,9 +3140,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           el.style.setProperty('color',String(st.color),'important');
         }
         if(st.size && st.size!=='auto'){
-          const resolved=typeof st.size==='number'
-            ? Number(st.size)
-            : baseSize*(coverSizeScale[String(st.size)]||1);
+          const rawSize=st.size;
+          const numericSize=typeof rawSize==='number'?Number(rawSize):(/^\d+(?:\.\d+)?(?:px)?$/i.test(String(rawSize).trim())?parseFloat(String(rawSize)):NaN);
+          const resolved=Number.isFinite(numericSize)
+            ? numericSize
+            : baseSize*(coverSizeScale[String(rawSize)]||1);
           if(Number.isFinite(resolved))el.style.setProperty('font-size',`${resolved}px`,'important');
         }
         if(st.fontFamily && st.fontFamily!=='inherit'){
