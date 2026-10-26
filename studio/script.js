@@ -1916,6 +1916,19 @@
     }catch(error){console.error(error);if(status)status.textContent=String(error?.message||error);}
     finally{if(button)button.disabled=false;}
   }
+  $('#menuIssueCurrentButton')?.addEventListener('click',async()=>{
+    closeEasyMenu?.();
+    if(!workingDocument?.scenes?.length){appAlert('発行する作品を開いてください。');return;}
+    try{
+      await saveDraftNow({force:true});
+      const row=await getDraftRecord(currentDraftId);
+      if(!row)throw new Error('現在の作品情報を準備できませんでした。');
+      await openIssueDialog(row);
+    }catch(error){
+      console.error(error);
+      appAlert(String(error?.message||error));
+    }
+  });
   $('#issueCreate')?.addEventListener('click',createIssueFromDialog);
   $('#issueCopyUrl')?.addEventListener('click',async()=>{
     const value=String($('#issueResultUrl')?.value||'');if(!value)return;
