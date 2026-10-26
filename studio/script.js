@@ -1858,6 +1858,50 @@
     try{await navigator.clipboard.writeText(value);$('#issueStatus').textContent='配付URLをコピーしました。';}catch(_){const input=$('#issueResultUrl');input?.select();document.execCommand('copy');$('#issueStatus').textContent='配付URLをコピーしました。';}
   });
 
+  async function loadAllIssueHistory(){
+    const box=$('#issueManagerList');if(!box)return;
+    box.innerHTML='<small style="opacity:.6">発行状況を確認しています…</small>';
+    try{
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{headers:authorAuthHeaders(),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error(payload?.error||'発行状況を取得できませんでした。');
+      const items=payload.issues||[];
+      if(!items.length){box.innerHTML='<small style="opacity:.6">発行済みの一冊はありません。</small>';return;}
+      box.innerHTML=items.map(item=>{
+        const active=item.status==='active'&&Number(item.remaining)>0;
+        const stopped=item.status==='stopped';
+        const title=issueEscapeHtml(String(item.title||'無題'));
+        const created=item.createdAt?new Date(item.createdAt).toLocaleString('ja-JP'):'';
+        return `<div data-global-issue-row="${issueEscapeHtml(String(item.issueId||''))}" style="padding:12px;border:1px solid #d8dce1;border-radius:12px;display:grid;gap:8px;margin-bottom:9px">
+          <div><strong>${title}</strong><div style="font-size:11px;opacity:.6;margin-top:2px">${issueEscapeHtml(created)}</div></div>
+          <div style="display:flex;justify-content:space-between;gap:10px"><strong>${Number(item.issueLimit||0)}部中 ${Number(item.issuedCount||0)}部受取</strong><span>${stopped?'停止済み':`残り ${Number(item.remaining||0)}部`}</span></div>
+          <input type="text" readonly value="${issueEscapeHtml(String(item.url||''))}" style="box-sizing:border-box;width:100%;min-height:36px;padding:0 8px;border:1px solid #d8dce1;border-radius:7px;font-size:11px">
+          <div style="display:flex;gap:7px">${active?'<button type="button" data-global-issue-copy style="flex:1">URLをコピー</button><button type="button" data-global-issue-stop style="flex:1">発行を停止</button>':'<button type="button" disabled style="flex:1">URL停止中</button><button type="button" disabled style="flex:1">発行停止済み</button>'}</div>
+        </div>`;
+      }).join('');
+      box.querySelectorAll('[data-global-issue-row]').forEach(row=>{
+        const issueId=row.dataset.globalIssueRow,input=row.querySelector('input');
+        row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);}catch(_){input.select();document.execCommand('copy');}});
+        row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{
+          if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
+          e.currentTarget.disabled=true;
+          try{
+            const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'stop',issueId})});
+            const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'停止できませんでした。');
+            await loadAllIssueHistory();
+          }catch(error){await appAlert(String(error?.message||error));e.currentTarget.disabled=false;}
+        });
+      });
+    }catch(error){box.innerHTML=`<small>${issueEscapeHtml(String(error?.message||error))}</small>`;}
+  }
+  function openIssueManager(){
+    if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
+    $('#easyMenu')?.classList.remove('is-open');
+    $('#issueManagerDialog')?.showModal();
+    loadAllIssueHistory();
+  }
+  $('#menuIssueManageButton')?.addEventListener('click',openIssueManager);
+  $('#issueManagerClose')?.addEventListener('click',()=>$('#issueManagerDialog')?.close());
+
   async function refreshDraftUI(showResume=true){
     // Buttons need summaries, not every work's full document and Blob array.
     // Fetch the full row only when it is opened/published.

@@ -345,6 +345,9 @@
         <button id="menuDraftManageButton" class="easy-menu-item" type="button">
           <span>制作中一覧</span><small id="menuDraftCount">0件</small>
         </button>
+        <button id="menuIssueManageButton" class="easy-menu-item" type="button">
+          <span>発行一覧</span><small>配付中の一冊</small>
+        </button>
         <button id="menuNewDraftButton" class="easy-menu-item" type="button">
           <span>＋ 新しく作る</span><small>新しい下書き</small>
         </button>
@@ -1138,6 +1141,17 @@
         <button id="unpublishConfirm" value="unpublish" type="submit" class="danger">公開を停止</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="issueManagerDialog" class="draft-manager-dialog">
+    <div class="draft-manager-card">
+      <div class="draft-manager-head">
+        <div><span>ISSUES</span><h2>発行一覧</h2><small>端末の制作途中が消えても、発行済みロットはここから管理できます。</small></div>
+        <button id="issueManagerClose" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="issueManagerList" class="draft-list draft-manager-unified-list" style="padding:12px 0"></div>
+      <div class="draft-manager-foot"><small>発行済みのFrozen Editionはサーバー側に保持されます。</small></div>
+    </div>
   </dialog>
 
   <dialog id="draftManagerDialog" class="draft-manager-dialog">
