@@ -1804,7 +1804,7 @@
           e.currentTarget.disabled=true;
           try{
             $('#issueStatus').textContent='発行を停止しています…';
-            const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'stop',issueId})});
+            const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues/${encodeURIComponent(issueId)}`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop'})});
             const j=await r.json().catch(()=>null);
             if(!r.ok||!j?.ok)throw new Error(j?.error||'停止できませんでした。');
             $('#issueStatus').textContent='発行を停止しました。すでに受け取られた一冊はそのまま読めます。';
@@ -1885,7 +1885,7 @@
           if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;
           e.currentTarget.disabled=true;
           try{
-            const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({action:'stop',issueId})});
+            const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues/${encodeURIComponent(issueId)}`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop'})});
             const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'停止できませんでした。');
             await loadAllIssueHistory();
           }catch(error){await appAlert(String(error?.message||error));e.currentTarget.disabled=false;}
