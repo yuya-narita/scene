@@ -327,6 +327,9 @@
       <div id="easyMenuBackdrop" class="easy-menu-backdrop" hidden></div>
       <div id="easyMenuPanel" class="easy-menu-panel" hidden>
         <div class="easy-menu-grabber" aria-hidden="true"></div>
+        <button id="menuDraftManageButton" class="easy-menu-item" type="button">
+          <span>最近使った作品</span><small id="menuDraftCount">0件</small>
+        </button>
         <label class="easy-menu-item" for="importPackageInput">
           <span>作品を開く</span><small>.scene</small>
         </label>
@@ -339,17 +342,11 @@
         <button id="menuOpenBookshelfButton" class="easy-menu-item" type="button">
           <span>本棚を開く</span><small>保存せず移動</small>
         </button>
-        <button id="menuExportDistributionButton" class="easy-menu-item" type="button" disabled>
-          <span>配布版を書き出す</span><small>Distribution .scene</small>
+        <button id="menuPublishedManageButton" class="easy-menu-item" type="button">
+          <span>公開一覧</span><small id="menuPublishedCount">公開作品</small>
         </button>
         <button id="menuIssueCurrentButton" class="easy-menu-item" type="button">
           <span>この一冊を発行する</span><small>Issue</small>
-        </button>
-        <button id="menuDraftManageButton" class="easy-menu-item" type="button">
-          <span>最近使った作品</span><small id="menuDraftCount">0件</small>
-        </button>
-        <button id="menuPublishedManageButton" class="easy-menu-item" type="button">
-          <span>公開一覧</span><small id="menuPublishedCount">公開作品</small>
         </button>
         <button id="menuIssueManageButton" class="easy-menu-item" type="button">
           <span>発行一覧</span><small>配付中の一冊</small>
