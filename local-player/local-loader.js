@@ -741,7 +741,9 @@
 
   async function openIssuedRead(issueId){
     currentSourceMode='issue';currentIssueId=issueId;currentOfficialShelfId='';currentBookshelfCopyId='';currentRelayReceiverArrivalId='';setRelayEntryMode(false);
-    if(launcher)launcher.hidden=false;setStatus('発行された一冊を読み込んでいます…');if(openButton)openButton.disabled=true;
+    if(launcher)launcher.hidden=true;
+    if(backButton){backButton.hidden=true;const label=backButton.querySelector('span');if(label)label.textContent='戻る';backButton.setAttribute('aria-label','前の画面に戻る');}
+    setStatus('');if(openButton)openButton.disabled=true;
     try{
       const response=await fetch(`${API_BASE}/issue/read?issueId=${encodeURIComponent(issueId)}`,{method:'GET',cache:'no-store'});
       const payload=await response.json().catch(()=>null);
@@ -749,8 +751,10 @@
       const raw=JSON.parse(JSON.stringify(payload.scene));currentPackage={files:new Map(),manifest:{package:'author-issue-read',packageVersion:'1.0'},raw};
       if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;if(endingOwnWrap)endingOwnWrap.hidden=true;
       await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`issue:${issueId}`,suppressObservation:true});
-      launcher.hidden=true;if(backButton)backButton.hidden=false;setStatus('');finishAutoOpen();return true;
-    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
+      launcher.hidden=true;
+      if(backButton){const label=backButton.querySelector('span');if(label)label.textContent='戻る';backButton.setAttribute('aria-label','前の画面に戻る');backButton.hidden=false;}
+      setStatus('');finishAutoOpen();return true;
+    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;if(launcher)launcher.hidden=false;if(backButton)backButton.hidden=true;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
     finally{if(openButton)openButton.disabled=false;}
   }
 
