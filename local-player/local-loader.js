@@ -24,7 +24,15 @@
   let currentRelayReceiverArrivalId='';
   const BOOKSHELF_DB='ahako-local-bookshelf';
   const READER_BOOKS='readerBooks';
-  const API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  const PRODUCTION_API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  function apiBaseFromLocation(){
+    try{
+      const candidate=String(new URL(location.href).searchParams.get('issueApi')||'').trim().replace(/\/$/,'');
+      if(/^https:\/\/scene-studio-api(?:-sandbox)?\.a-hako\.workers\.dev$/i.test(candidate))return candidate;
+    }catch(_){}
+    return PRODUCTION_API_BASE;
+  }
+  const API_BASE=apiBaseFromLocation();
   const LOCAL_PLAYER_BASE=new URL('./',document.currentScript?.src||location.href);
   const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
   const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
