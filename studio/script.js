@@ -1976,7 +1976,22 @@
     updateIssueManagerTabs();
     const items=issueManagerItems.filter(item=>issueManagerFilter==='all'||issueState(item)===issueManagerFilter);
     if(!items.length){box.innerHTML=`<small style="opacity:.6">${issueManagerFilter==='active'?'発行中の一冊はありません。':issueManagerFilter==='stopped'?'配付停止中の発行はありません。':'発行済みの一冊はありません。'}</small>`;return;}
-    box.innerHTML=items.map(item=>{
+
+    const workKey=item=>{
+      const stable=String(item.publicId||item.readerId||item.workId||item.sceneId||'').trim();
+      if(stable)return `id:${stable}`;
+      return ['meta',String(item.seriesTitle||''),String(item.title||''),String(item.episode||item.episodeNumber||''),String(item.episodeTitle||'')].join('\u241f');
+    };
+    const groups=[];
+    const groupMap=new Map();
+    items.forEach(item=>{
+      const key=workKey(item);
+      let group=groupMap.get(key);
+      if(!group){group={key,items:[]};groupMap.set(key,group);groups.push(group);}
+      group.items.push(item);
+    });
+
+    const rowHtml=item=>{
       const active=issueState(item)==='active',distributable=active&&Number(item.remaining)>0;
       const title=issueEscapeHtml(String(item.title||'無題'));
       const episode=String(item.episode||'').trim()||(Number(item.episodeNumber)>0?`第${Number(item.episodeNumber)}話`:``);
@@ -1988,8 +2003,53 @@
       const status=active?`<span class="issue-manager-remaining">${distributable?`残り ${Number(item.remaining||0)}部`:'配付完了'}</span>`:'<span class="issue-manager-stopped">配付停止中</span>';
       const resumable=!active&&item._issueSource==='sandbox'&&Number(item.remaining)>0;
       const actions=distributable?`<div class="issue-manager-actions"><button type="button" data-global-issue-copy class="issue-manager-copy">配付URL</button><button type="button" data-global-issue-stop class="issue-manager-stop">配付停止</button></div>`:resumable?`<div class="issue-manager-actions"><button type="button" data-global-issue-resume class="issue-manager-copy">配付再開</button></div>`:'';
-      return `<article data-global-issue-row="${issueEscapeHtml(String(item.issueId||''))}" class="issue-manager-item">${thumb}<div class="issue-manager-info">${metaLine?`<div class="issue-manager-series">${issueEscapeHtml(metaLine)}</div>`:''}<strong class="issue-manager-title">${title}</strong>${episodeLine?`<div class="issue-manager-episode">${issueEscapeHtml(episodeLine)}</div>`:''}<div class="issue-manager-stats"><span>${Number(item.issueLimit||0)}部発行</span><span>${Number(item.issuedCount||0)}部受取</span>${active?`<span>${distributable?`残り${Number(item.remaining||0)}部`:'配付完了'}</span>`:''}</div><div class="issue-manager-date">${!active&&stoppedAt?`発行終了 ${issueEscapeHtml(stoppedAt)}`:`発行 ${issueEscapeHtml(created)}`}</div></div><div class="issue-manager-side">${status}${actions}</div><input type="hidden" data-issue-url value="${issueEscapeHtml(String(item.url||''))}"></article>`;
+      return `<article data-global-issue-row="${issueEscapeHtml(String(item.issueId||''))}" class="issue-manager-item">${thumb}<div class="issue-manager-info">${metaLine?`<div class="issue-manager-series">${issueEscapeHtml(metaLine)}</div>`:''}<strong class="issue-manager-title">${title}</strong>${episodeLine?`<div class="issue-manager-episode">${issueEscapeHtml(episodeLine)}</div>`:''}<div class="issue-manager-stats"><span>${Number(item.issueLimit||0)}部発行</span><span>${Number(item.issuedCount||0)}部受取</span>${active?`<span>${distributable?`残り${Number(item.remaining||0)}部`:'配付完了'}</span>`:''}</div><div class="issue-manager-date">${!active&&stoppedAt?`配付停止 ${issueEscapeHtml(stoppedAt)}`:`発行 ${issueEscapeHtml(created)}`}</div></div><div class="issue-manager-side">${status}${actions}</div><input type="hidden" data-issue-url value="${issueEscapeHtml(String(item.url||''))}"></article>`;
+    };
+
+    box.innerHTML=groups.map((group,index)=>{
+      const lots=group.items;
+      if(lots.length===1)return rowHtml(lots[0]);
+      const first=lots[0];
+      const activeCount=lots.filter(item=>issueState(item)==='active').length;
+      const stoppedCount=lots.length-activeCount;
+      const totalLimit=lots.reduce((sum,item)=>sum+Number(item.issueLimit||0),0);
+      const totalIssued=lots.reduce((sum,item)=>sum+Number(item.issuedCount||0),0);
+      const totalRemaining=lots.reduce((sum,item)=>sum+(issueState(item)==='active'?Number(item.remaining||0):0),0);
+      const title=issueEscapeHtml(String(first.title||'無題'));
+      const episode=String(first.episode||'').trim()||(Number(first.episodeNumber)>0?`第${Number(first.episodeNumber)}話`:``);
+      const episodeTitle=String(first.episodeTitle||'').trim();
+      const episodeLine=[episode,episodeTitle].filter(Boolean).join('　');
+      const seriesTitle=String(first.seriesTitle||'').trim();
+      const metaLine=seriesTitle&&seriesTitle!==String(first.title||'').trim()?seriesTitle:'';
+      const coverUrl=String(first.coverUrl||'').trim();
+      const thumb=coverUrl?`<img class="issue-manager-cover" src="${issueEscapeHtml(coverUrl)}" alt="" loading="lazy">`:`<div class="issue-manager-cover issue-manager-cover-empty" aria-hidden="true">あ</div>`;
+      const groupId=`issue-work-${index}`;
+      return `<section class="issue-manager-work-group" data-issue-work-group>
+        <button type="button" class="issue-manager-item issue-manager-work-summary" data-issue-work-toggle aria-expanded="false" aria-controls="${groupId}">
+          ${thumb}
+          <div class="issue-manager-info">
+            ${metaLine?`<div class="issue-manager-series">${issueEscapeHtml(metaLine)}</div>`:''}
+            <strong class="issue-manager-title">${title}</strong>
+            ${episodeLine?`<div class="issue-manager-episode">${issueEscapeHtml(episodeLine)}</div>`:''}
+            <div class="issue-manager-stats"><span>発行ロット ${lots.length}件</span><span>累計${totalLimit}部</span><span>${totalIssued}部受取</span>${totalRemaining>0?`<span>配付可能${totalRemaining}部</span>`:''}</div>
+          </div>
+          <div class="issue-manager-side"><span class="issue-manager-remaining">発行中 ${activeCount}${stoppedCount?` / 停止 ${stoppedCount}`:''}</span><span aria-hidden="true" style="font-size:18px;line-height:1">⌄</span></div>
+        </button>
+        <div id="${groupId}" data-issue-work-lots hidden style="padding-left:18px;border-left:1px solid rgba(127,127,127,.18);margin-left:12px">${lots.map(rowHtml).join('')}</div>
+      </section>`;
     }).join('');
+
+    box.querySelectorAll('[data-issue-work-toggle]').forEach(button=>button.addEventListener('click',()=>{
+      const group=button.closest('[data-issue-work-group]');
+      const lots=group?.querySelector('[data-issue-work-lots]');
+      if(!lots)return;
+      const opening=lots.hidden;
+      lots.hidden=!opening;
+      button.setAttribute('aria-expanded',opening?'true':'false');
+      const arrow=button.querySelector('.issue-manager-side span[aria-hidden="true"]');
+      if(arrow)arrow.textContent=opening?'⌃':'⌄';
+    }));
+
     box.querySelectorAll('[data-global-issue-row]').forEach(row=>{
       const issueId=row.dataset.globalIssueRow,input=row.querySelector('[data-issue-url]'),issueItem=issueManagerItems.find(item=>String(item.issueId||'')===String(issueId||'')),issueSource=issueItem?._issueSource||'production';
       row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);}catch(_){const helper=document.createElement('textarea');helper.value=input.value;document.body.appendChild(helper);helper.select();document.execCommand('copy');helper.remove();}showEasyToast('配付URLをコピーしました。');});
