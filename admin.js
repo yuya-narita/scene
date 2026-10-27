@@ -21,7 +21,7 @@ function liveRefundPayload(orderId){
   if(currentRefundAudit?.orderId!==orderId)throw new Error('返金対象の詳細を再取得してください');
   return {confirmEnvironment:'live',confirmOrderId:orderId,confirmAmount:Number(currentRefundAudit.amount)};
 }
-const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),authorCount:$('#authorCount'),authorList:$('#authorList'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),expiredPreviewSummary:$('#expiredPreviewSummary'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems'),auditOrderId:$('#auditOrderIdInput'),auditOrderButton:$('#auditOrderButton'),auditOrderStatus:$('#auditOrderStatus'),auditOrderResult:$('#auditOrderResult'),auditOrdersList:$('#auditOrdersList'),auditOrdersStatus:$('#auditOrdersStatus'),auditOrdersReload:$('#auditOrdersReloadButton'),auditOkCount:$('#auditOkCount'),auditAlertCount:$('#auditAlertCount'),auditPendingCount:$('#auditPendingCount'),auditTabBadge:$('#auditTabBadge'),dailyReconDay:$('#dailyReconDay'),dailyReconButton:$('#dailyReconButton'),dailyReconStatus:$('#dailyReconStatus'),dailyReconResult:$('#dailyReconResult'),issueAuditList:$('#issueAuditList'),issueAuditStatus:$('#issueAuditStatus'),issueAuditReload:$('#issueAuditReloadButton'),previewList:$('#previewList'),previewListCount:$('#previewListCount')};
+const els={login:$('#loginPanel'),content:$('#adminContent'),token:$('#tokenInput'),connect:$('#connectButton'),loginStatus:$('#loginStatus'),refresh:$('#refreshButton'),filter:$('#reportFilter'),list:$('#reportList'),openCount:$('#openCount'),shownCount:$('#shownCount'),contactFilter:$('#contactFilter'),contactList:$('#contactList'),openContactCount:$('#openContactCount'),shownContactCount:$('#shownContactCount'),contactTabBadge:$('#contactTabBadge'),authorCount:$('#authorCount'),authorList:$('#authorList'),workCount:$('#workCount'),publishedCount:$('#publishedCount'),suspendedCount:$('#suspendedCount'),r2Usage:$('#r2Usage'),assetCount:$('#assetCount'),heavyWorks:$('#heavyWorks'),orphanSummary:$('#orphanSummary'),orphanNote:$('#orphanNote'),expiredPreviewSummary:$('#expiredPreviewSummary'),cleanupOrphans:$('#cleanupOrphansButton'),todayViews:$('#todayViews'),todayCompletions:$('#todayCompletions'),todaySceneAdvances:$('#todaySceneAdvances'),todayCompletionRate:$('#todayCompletionRate'),popularWorks:$('#popularWorks'),readerTodayViews:$('#readerTodayViews'),readerTodayCompletions:$('#readerTodayCompletions'),readerTodaySceneAdvances:$('#readerTodaySceneAdvances'),readerTodayCompletionRate:$('#readerTodayCompletionRate'),readerTodayStudio:$('#readerTodayStudio'),readerTodayOfficial:$('#readerTodayOfficial'),readerSites:$('#readerSites'),readerModes:$('#readerModes'),distTodayReaders:$('#distTodayReaders'),distTodayCompletions:$('#distTodayCompletions'),distPeriodReaders:$('#distPeriodReaders'),distObservedCopies:$('#distObservedCopies'),distObservedWorks:$('#distObservedWorks'),distPeriodOpens:$('#distPeriodOpens'),distTopCopies:$('#distTopCopies'),distWorks:$('#distWorks'),relayPeriodCount:$('#relayPeriodCount'),relayCopies:$('#relayCopies'),relayWorks:$('#relayWorks'),relayMaxHop:$('#relayMaxHop'),relayTopCopies:$('#relayTopCopies'),relayWorksList:$('#relayWorksList'),workId:$('#workIdInput'),inspect:$('#inspectButton'),direct:$('#directResult'),reportTabBadge:$('#reportTabBadge'),reloadSelection:$('#reloadSelectionButton'),selectionStatus:$('#selectionStatus'),publishedWorksStatus:$('#publishedWorksStatus'),publishedWorks:$('#publishedWorks'),editionCandidates:$('#editionCandidates'),officialShelfItems:$('#officialShelfItems'),auditOrderId:$('#auditOrderIdInput'),auditOrderButton:$('#auditOrderButton'),auditOrderStatus:$('#auditOrderStatus'),auditOrderResult:$('#auditOrderResult'),auditOrdersList:$('#auditOrdersList'),auditOrdersStatus:$('#auditOrdersStatus'),auditOrdersReload:$('#auditOrdersReloadButton'),auditOkCount:$('#auditOkCount'),auditAlertCount:$('#auditAlertCount'),auditPendingCount:$('#auditPendingCount'),auditTabBadge:$('#auditTabBadge'),dailyReconDay:$('#dailyReconDay'),dailyReconButton:$('#dailyReconButton'),dailyReconStatus:$('#dailyReconStatus'),dailyReconResult:$('#dailyReconResult'),issueAuditList:$('#issueAuditList'),issueAuditStatus:$('#issueAuditStatus'),issueAuditReload:$('#issueAuditReloadButton'),payoutAuditList:$('#payoutAuditList'),payoutAuditStatus:$('#payoutAuditStatus'),payoutAuditReload:$('#payoutAuditReloadButton'),previewList:$('#previewList'),previewListCount:$('#previewListCount')};
 if(token)els.token.value=token;
 function headers(){return {'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};}
 async function api(path,options={}){
@@ -306,6 +306,30 @@ async function loadIssueAudits(){
   }finally{if(els.issueAuditReload)els.issueAuditReload.disabled=false;}
 }
 
+function payoutAuditCard(row,audit){
+  const bad=(audit?.mismatches||[]).length,state=String(row.status||''),stripe=String(audit?.stripeStatus||row.stripeStatus||'–');
+  const checks=Array.isArray(audit?.checks)?audit.checks:[];
+  return `<div class="audit-order-row ${audit?.status==='ok'?'is-ok':'is-alert'}"><div class="audit-order-main"><strong>${yen(row.amount)}</strong><span>${escapeHtml(state)}</span><span>Stripe ${escapeHtml(stripe)}</span></div><code>${escapeHtml(row.orderId||'')}</code><small>${escapeHtml(row.connectedAccountId||'')}</small>${bad?`<details><summary>不一致 ${bad}件</summary><div class="audit-check-list">${checks.filter(x=>!x.ok).map(x=>`<div class="audit-check is-bad"><span>×</span><code>${escapeHtml(x.name||'check')}</code><div><small>期待</small><b>${escapeHtml(auditValue(x.expected))}</b></div><div><small>実際</small><b>${escapeHtml(auditValue(x.actual))}</b></div></div>`).join('')}</div></details>`:''}</div>`;
+}
+async function loadPayoutAudits(){
+  if(!els.payoutAuditList)return;
+  if(els.payoutAuditReload)els.payoutAuditReload.disabled=true;
+  els.payoutAuditStatus.textContent='Payout OrderとStripe Payoutを照合しています…';
+  els.payoutAuditList.innerHTML='<div class="empty">作者出金を確認しています…</div>';
+  try{
+    const data=await api('/admin/commerce/payout-orders?limit=30'),rows=Array.isArray(data.orders)?data.orders:[];
+    const results=await mapWithConcurrency(rows,4,async row=>{const r=await api(`/admin/commerce/payout-order/${encodeURIComponent(row.orderId)}/audit`);return {row,audit:r.audit};});
+    const alerts=results.filter(x=>x.audit?.status!=='ok');
+    const processing=results.filter(x=>x.audit?.status==='ok'&&['reserved','processing'].includes(String(x.row.status||'')));
+    const completed=results.filter(x=>x.audit?.status==='ok'&&!['reserved','processing'].includes(String(x.row.status||'')));
+    els.payoutAuditStatus.textContent=`出金監査：正常 ${completed.length}件 / 処理中 ${processing.length}件 / 要確認 ${alerts.length}件`;
+    els.payoutAuditList.innerHTML=(alerts.length?`<div class="audit-alert-section"><div class="audit-list-title"><strong>要確認</strong><span>${alerts.length}件</span></div>${alerts.map(x=>payoutAuditCard(x.row,x.audit)).join('')}</div>`:`<div class="audit-all-clear"><strong>✓ 作者出金の要確認なし</strong><span>Payout Order・Stripe Payout・Connected Account・金額が一致しています。</span></div>`)
+      +(processing.length?`<details class="audit-normal" open><summary>処理中 ${processing.length}件</summary><div class="audit-normal-list">${processing.map(x=>payoutAuditCard(x.row,x.audit)).join('')}</div></details>`:'')
+      +(completed.length?`<details class="audit-normal"><summary>正常 ${completed.length}件を表示</summary><div class="audit-normal-list">${completed.map(x=>payoutAuditCard(x.row,x.audit)).join('')}</div></details>`:'');
+  }catch(e){els.payoutAuditStatus.textContent=`出金監査できませんでした: ${e.message}`;els.payoutAuditList.innerHTML='<div class="empty">読み込みに失敗しました。</div>';}
+  finally{if(els.payoutAuditReload)els.payoutAuditReload.disabled=false;}
+}
+
 async function loadAuditOrders(){
   if(!els.auditOrdersList)return;
   ensureIncompletePurchaseCounter();
@@ -373,7 +397,7 @@ function setAdminTab(name,{remember=true}={}){
   if(name==='reports'&&token)loadReports();
   if(name==='contacts'&&token)loadContacts();
   if(name==='authors'&&token)loadAuthors();
-  if(name==='audit'&&token){loadAuditOrders();loadIssueAudits();}
+  if(name==='audit'&&token){loadAuditOrders();loadIssueAudits();loadPayoutAudits();}
 }
 function formatJstDate(value){
   if(!value)return '発行日時不明';
@@ -892,6 +916,7 @@ if(els.dailyReconButton)els.dailyReconButton.addEventListener('click',runDailyRe
 if(els.auditOrderButton)els.auditOrderButton.addEventListener('click',runPaymentAudit);
 if(els.auditOrdersReload)els.auditOrdersReload.addEventListener('click',loadAuditOrders);
 if(els.issueAuditReload)els.issueAuditReload.addEventListener('click',loadIssueAudits);
+if(els.payoutAuditReload)els.payoutAuditReload.addEventListener('click',loadPayoutAudits);
 if(els.auditOrderId)els.auditOrderId.addEventListener('keydown',e=>{if(e.key==='Enter')runPaymentAudit();});
 document.querySelectorAll('[data-admin-tab]').forEach(b=>b.addEventListener('click',()=>setAdminTab(b.dataset.adminTab)));
 if(els.reloadSelection)els.reloadSelection.addEventListener('click',loadOfficialShelfAdmin);

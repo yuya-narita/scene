@@ -177,6 +177,9 @@
         <div class="audit-orders-head" style="margin-top:22px"><div><strong>発行決済</strong><small>一冊発行のStripe決済 ↔ 発行Order ↔ Issueを照合</small></div><button id="issueAuditReloadButton" type="button">再監査</button></div>
         <p id="issueAuditStatus" class="status"></p>
         <div id="issueAuditList" class="audit-orders-list"><div class="empty">発行決済を確認しています…</div></div>
+        <div class="audit-orders-head" style="margin-top:22px"><div><strong>作者出金</strong><small>Payout Order ↔ Stripe Payout ↔ Connected Account ↔ 金額・状態を照合</small></div><button id="payoutAuditReloadButton" type="button">再監査</button></div>
+        <p id="payoutAuditStatus" class="status"></p>
+        <div id="payoutAuditList" class="audit-orders-list"><div class="empty">作者出金を確認しています…</div></div>
         <details class="audit-manual"><summary>Order IDを直接入力</summary>
         <div class="payment-audit-form">
           <input id="auditOrderIdInput" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="order_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
