@@ -3,83 +3,172 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>あ箱 360° 本の塔</title>
+<title>あ箱 360° V2</title>
 <style>
+*{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050403;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}
-#stage{position:fixed;inset:0;touch-action:none;cursor:grab}
+#stage{position:fixed;inset:0;touch-action:none;cursor:grab;background:#090705}
 #stage:active{cursor:grabbing}
 canvas{display:block;width:100%;height:100%}
-.ui{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;background:linear-gradient(#0008,transparent)}
-.logo{font-size:20px;font-weight:700}.hint{font-size:12px;opacity:.72}
-.controls{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translateX(-50%);display:flex;gap:8px}
-button{border:1px solid #ffffff3a;background:#111c;color:#fff;border-radius:999px;padding:11px 15px;font-size:13px;backdrop-filter:blur(14px)}
-#motion{background:#f4efe6;color:#17130e}
+.top{position:fixed;z-index:3;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 15px) 18px 38px;display:flex;align-items:center;justify-content:space-between;pointer-events:none;background:linear-gradient(#0009,transparent)}
+.logo{font-weight:800;font-size:23px}.hint{font-size:12px;opacity:.72}
+.controls{position:fixed;z-index:4;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translateX(-50%);display:flex;gap:9px;align-items:center}
+button{appearance:none;border:1px solid #ffffff3d;background:#111c;color:#fff;border-radius:999px;padding:11px 16px;font:600 13px/1.1 inherit;backdrop-filter:blur(14px);white-space:nowrap}
+#motion[data-on="true"]{background:#f4efe6;color:#17130e}
+.status{position:fixed;z-index:3;bottom:calc(env(safe-area-inset-bottom) + 72px);left:50%;transform:translateX(-50%);font-size:11px;opacity:.65;pointer-events:none;white-space:nowrap}
+.fallback{position:fixed;inset:0;z-index:8;display:none;background:#090705 center/cover no-repeat}
+.fallback .msg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(84vw,440px);padding:18px;border-radius:16px;background:#000b;text-align:center;line-height:1.6}
+@media (min-width:800px){.logo{font-size:27px}.hint{font-size:13px}}
 </style>
 </head>
 <body>
 <div id="stage"></div>
-<div class="ui"><div class="logo">あ□</div><div class="hint">ドラッグ / スワイプで見渡す</div></div>
-<div class="controls"><button id="reset">中央へ</button><button id="motion">iPhoneで見渡す</button></div>
+<div class="top"><div class="logo">あ□</div><div class="hint">背景をつかんで見渡す</div></div>
+<div class="status" id="status">横360° / 上下 ±40°</div>
+<div class="controls"><button id="reset">中央へ</button><button id="motion" data-on="false">モーション OFF</button></div>
+<div id="fallback" class="fallback"><div class="msg">3D表示を開始できませんでした。<br>ブラウザを再読み込みしてください。</div></div>
+
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
 
-const stage=document.querySelector('#stage');
-const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.1,1100);
-const renderer=new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.setSize(innerWidth,innerHeight);
-stage.appendChild(renderer.domElement);
+const stage = document.querySelector('#stage');
+const motionBtn = document.querySelector('#motion');
+const resetBtn = document.querySelector('#reset');
+const statusEl = document.querySelector('#status');
+const fallback = document.querySelector('#fallback');
 
-const texture=new THREE.TextureLoader().load('./panorama.png');
-texture.colorSpace=THREE.SRGBColorSpace;
-const geo=new THREE.SphereGeometry(500,80,48);
-geo.scale(-1,1,1);
-scene.add(new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:texture})));
+let renderer, scene, camera;
+try{
+  renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:"high-performance"});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  stage.appendChild(renderer.domElement);
 
-let yaw=0, pitch=3, dragYaw=0, dragPitch=0;
-let motionYaw=0, motionPitch=0, baseAlpha=null, baseBeta=null, motionOn=false;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 1200);
+
+  const tex = await new THREE.TextureLoader().loadAsync('./panorama.png');
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+
+  const geo = new THREE.SphereGeometry(500, 96, 64);
+  geo.scale(-1,1,1);
+  scene.add(new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:tex})));
+}catch(err){
+  console.error(err);
+  fallback.style.display='block';
+  fallback.style.backgroundImage="url('./panorama.png')";
+}
+
+const PITCH_LIMIT = 40;
+let viewYaw=0, viewPitch=0;
+let sensorYaw=0, sensorPitch=0;
+let baseAlpha=null, baseBeta=null;
+let motionOn=false;
 let down=false,lastX=0,lastY=0;
 
-function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
-function render(){
-  const y=yaw+dragYaw+motionYaw, p=clamp(pitch+dragPitch+motionPitch,-82,82);
-  const phi=THREE.MathUtils.degToRad(90-p), theta=THREE.MathUtils.degToRad(y);
-  camera.lookAt(500*Math.sin(phi)*Math.sin(theta),500*Math.cos(phi),500*Math.sin(phi)*Math.cos(theta));
-  renderer.render(scene,camera); requestAnimationFrame(render);
-}
-render();
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const wrap=a=>((a+180)%360+360)%360-180;
 
-stage.addEventListener('pointerdown',e=>{down=true;lastX=e.clientX;lastY=e.clientY;stage.setPointerCapture(e.pointerId)});
-stage.addEventListener('pointermove',e=>{
- if(!down)return;
- dragYaw-=(e.clientX-lastX)*.12; dragPitch+=(e.clientY-lastY)*.12;
- dragPitch=clamp(dragPitch,-80,80); lastX=e.clientX;lastY=e.clientY;
+function draw(){
+  if(renderer){
+    const yaw=viewYaw + (motionOn?sensorYaw:0);
+    const pitch=clamp(viewPitch + (motionOn?sensorPitch:0),-PITCH_LIMIT,PITCH_LIMIT);
+    const phi=THREE.MathUtils.degToRad(90-pitch);
+    const theta=THREE.MathUtils.degToRad(yaw);
+    camera.lookAt(
+      500*Math.sin(phi)*Math.sin(theta),
+      500*Math.cos(phi),
+      500*Math.sin(phi)*Math.cos(theta)
+    );
+    renderer.render(scene,camera);
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+
+// "Grab the scenery": finger movement and image movement feel the same direction.
+stage.addEventListener('pointerdown',e=>{
+  down=true; lastX=e.clientX; lastY=e.clientY;
+  try{stage.setPointerCapture(e.pointerId)}catch{}
 });
-stage.addEventListener('pointerup',()=>down=false);
-stage.addEventListener('pointercancel',()=>down=false);
-stage.addEventListener('wheel',e=>{camera.fov=clamp(camera.fov+e.deltaY*.025,45,95);camera.updateProjectionMatrix()},{passive:true});
+stage.addEventListener('pointermove',e=>{
+  if(!down)return;
+  const dx=e.clientX-lastX, dy=e.clientY-lastY;
+  viewYaw += dx*0.115;
+  viewPitch -= dy*0.10;
+  viewPitch=clamp(viewPitch,-PITCH_LIMIT,PITCH_LIMIT);
+  lastX=e.clientX; lastY=e.clientY;
+});
+const endDrag=()=>down=false;
+stage.addEventListener('pointerup',endDrag);
+stage.addEventListener('pointercancel',endDrag);
 
-function orient(e){
- if(!motionOn||e.alpha==null)return;
- if(baseAlpha===null){baseAlpha=e.alpha;baseBeta=e.beta;return}
- let da=e.alpha-baseAlpha; if(da>180)da-=360;if(da<-180)da+=360;
- motionYaw=-da*.9;
- motionPitch=clamp((e.beta-baseBeta)*.8,-65,65);
+stage.addEventListener('wheel',e=>{
+  if(!camera)return;
+  camera.fov=clamp(camera.fov+e.deltaY*.018,48,68);
+  camera.updateProjectionMatrix();
+},{passive:true});
+
+function onOrientation(e){
+  if(!motionOn || e.alpha==null || e.beta==null)return;
+  if(baseAlpha===null){
+    baseAlpha=e.alpha; baseBeta=e.beta;
+    sensorYaw=0; sensorPitch=0; return;
+  }
+  sensorYaw = -wrap(e.alpha-baseAlpha)*0.85;
+  sensorPitch = clamp((e.beta-baseBeta)*0.72,-PITCH_LIMIT,PITCH_LIMIT);
 }
-window.addEventListener('deviceorientation',orient,true);
+window.addEventListener('deviceorientation',onOrientation,true);
 
-document.querySelector('#motion').onclick=async()=>{
- try{
-   if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
-     const r=await DeviceOrientationEvent.requestPermission();
-     if(r!=='granted')return;
-   }
-   motionOn=true;baseAlpha=null;baseBeta=null;
-   document.querySelector('#motion').textContent='モーション ON';
- }catch(e){alert('モーションセンサーを有効にできませんでした');}
-};
-document.querySelector('#reset').onclick=()=>{dragYaw=dragPitch=motionYaw=motionPitch=0;baseAlpha=null;baseBeta=null;camera.fov=72;camera.updateProjectionMatrix()};
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+async function enableMotion(){
+  try{
+    if(typeof DeviceOrientationEvent!=='undefined' &&
+       typeof DeviceOrientationEvent.requestPermission==='function'){
+      const result=await DeviceOrientationEvent.requestPermission();
+      if(result!=='granted'){
+        statusEl.textContent='モーション許可なし / スワイプで操作できます';
+        return;
+      }
+    }
+    baseAlpha=null;baseBeta=null;sensorYaw=0;sensorPitch=0;
+    motionOn=true;
+    motionBtn.dataset.on='true';
+    motionBtn.textContent='モーション ON';
+    statusEl.textContent='モーション＋スワイプ / 上下 ±40°';
+  }catch(err){
+    console.error(err);
+    statusEl.textContent='モーションを開始できません / スワイプは使用できます';
+  }
+}
+
+function disableMotion(){
+  // Bake current sensor offset into manual view so the picture does not jump.
+  viewYaw += sensorYaw;
+  viewPitch = clamp(viewPitch+sensorPitch,-PITCH_LIMIT,PITCH_LIMIT);
+  sensorYaw=0;sensorPitch=0;baseAlpha=null;baseBeta=null;
+  motionOn=false;
+  motionBtn.dataset.on='false';
+  motionBtn.textContent='モーション OFF';
+  statusEl.textContent='スワイプ操作 / 横360° / 上下 ±40°';
+}
+
+motionBtn.addEventListener('click',()=> motionOn ? disableMotion() : enableMotion());
+
+resetBtn.addEventListener('click',()=>{
+  viewYaw=0;viewPitch=0;sensorYaw=0;sensorPitch=0;baseAlpha=null;baseBeta=null;
+  if(camera){camera.fov=58;camera.updateProjectionMatrix();}
+});
+
+addEventListener('resize',()=>{
+  if(!camera||!renderer)return;
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1,2));
+  renderer.setSize(innerWidth,innerHeight);
+});
 </script>
-</body></html>
+</body>
+</html>
