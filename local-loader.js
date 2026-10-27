@@ -1,0 +1,1395 @@
+(() => {
+  'use strict';
+  const launcher=document.getElementById('localLauncher');
+  const dropZone=document.getElementById('localDropZone');
+  const openButton=document.getElementById('localOpenButton');
+  const fileInput=document.getElementById('localFileInput');
+  const status=document.getElementById('localStatus');
+  const ownCopyButton=document.getElementById('localOwnCopyButton');
+  const backButton=document.getElementById('localBackButton');
+  const shelfReturnLink=document.getElementById('publicShelfReturn');
+  const relayButton=document.getElementById('publicRelay');
+  const journey=document.getElementById('publicJourney');
+  const journeyMessage=document.getElementById('publicJourneyMessage');
+  const journeyPath=document.getElementById('publicJourneyPath');
+  const journeyPrompt=document.getElementById('publicJourneyPrompt');
+  const endingOwnWrap=document.getElementById('publicOwnCopyWrap');
+  const endingOwnButton=document.getElementById('publicOwnCopy');
+  const endingOwnStatus=document.getElementById('publicOwnCopyStatus');
+  const sceneHost=document.getElementById('scenePlayer');
+  let assetUrls=[];
+  let currentPackage=null;
+  let currentSourceMode='file';
+  let currentBookshelfCopyId='';
+  let currentRelayReceiverArrivalId='';
+  const BOOKSHELF_DB='ahako-local-bookshelf';
+  const READER_BOOKS='readerBooks';
+  const PRODUCTION_API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  function apiBaseFromLocation(){
+    try{
+      const candidate=String(new URL(location.href).searchParams.get('issueApi')||'').trim().replace(/\/$/,'');
+      if(/^https:\/\/scene-studio-api(?:-sandbox)?\.a-hako\.workers\.dev$/i.test(candidate))return candidate;
+    }catch(_){}
+    return PRODUCTION_API_BASE;
+  }
+  const API_BASE=apiBaseFromLocation();
+  const LOCAL_PLAYER_BASE=new URL('./',document.currentScript?.src||location.href);
+  const BOOKSHELF_CLAIM_SOURCE_SESSION='ahako:bookshelf:claim-source';
+  const BOOKSHELF_CLAIM_RETURN_PREFIX='ahako:bookshelf:claim-return:';
+  const RELAY_ORDER_TOKEN_PREFIX='ahako:relay-commerce-order:';
+  const OFFICIAL_READER_ID_KEY='ahako:official-reader-id';
+  const PUBLIC_READER_ID_KEY='ahako:public-own-copy-reader-id';
+  let currentOfficialShelfId='';
+  let currentIssueId='';
+  function bookshelfHomeUrl(){return new URL('../bookshelf/',LOCAL_PLAYER_BASE).href;}
+  function hideShelfReturn(){if(shelfReturnLink)shelfReturnLink.hidden=true;}
+  function showShelfReturnForSource(){
+    if(!shelfReturnLink)return false;
+    let label='';
+    if(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master')label='← 自分の本棚へ';
+    else if(currentSourceMode==='official-shelf')label='← あ箱の本へ';
+    if(!label){hideShelfReturn();return false;}
+    shelfReturnLink.href=bookshelfHomeUrl();
+    shelfReturnLink.textContent=label;
+    shelfReturnLink.hidden=false;
+    shelfReturnLink.classList.remove('is-reading');
+    if(window.matchMedia?.('(max-width:520px)').matches){
+      shelfReturnLink.style.width='max-content';
+      const fittedWidth=Math.ceil(shelfReturnLink.getBoundingClientRect().width);
+      shelfReturnLink.style.removeProperty('width');
+      if(fittedWidth)shelfReturnLink.style.setProperty('--shelf-return-expanded-width',`${fittedWidth}px`);
+    }
+    return true;
+  }
+  function canRestoreShelfFromHistory(target){
+    if(history.length<=1||!document.referrer)return false;
+    try{
+      const destination=new URL(target,location.href),previous=new URL(document.referrer);
+      const clean=path=>path.replace(/\/+$/,'');
+      return destination.origin===previous.origin&&clean(destination.pathname)===clean(previous.pathname)&&/\/bookshelf$/.test(clean(destination.pathname));
+    }catch(_){return false;}
+  }
+  shelfReturnLink?.addEventListener('click',event=>{if(!canRestoreShelfFromHistory(shelfReturnLink.href))return;event.preventDefault();history.back();});
+  function newBookshelfHandoffId(){
+    const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);
+    return 'handoff_'+Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  function rememberBookshelfClaimSource(handoffId,token){
+    try{
+      sessionStorage.setItem(BOOKSHELF_CLAIM_SOURCE_SESSION,`${handoffId}:${token}`);
+      sessionStorage.setItem(`${BOOKSHELF_CLAIM_RETURN_PREFIX}${handoffId}`,location.href);
+    }catch(_){}
+  }
+  function isLineInAppBrowser(){
+    return /(?:^|\s)Line\//i.test(String(navigator.userAgent||''))||/\bLine\b/i.test(String(navigator.userAgent||''));
+  }
+  function isXInAppBrowser(){
+    const ua=String(navigator.userAgent||'');
+    return /Twitter(?:\s|\/|Android|$)/i.test(ua)||/com\.atebits\.Tweetie2/i.test(ua);
+  }
+  function isIOSFamily(){
+    const ua=String(navigator.userAgent||'');
+    return /iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints||0)>1);
+  }
+  function isRealIOSSafari(){
+    if(!isIOSFamily())return false;
+    const ua=String(navigator.userAgent||'');
+    // iOS app webviews (X/LINE/etc.) generally do not expose Safari's
+    // Version/... Safari/... pair. Require both so an unknown in-app browser
+    // can never become the local bookshelf by accident.
+    return /Version\/[\d.]+/i.test(ua)&&/Safari\/[\d.]+/i.test(ua)&&!/(CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|GSA)\//i.test(ua);
+  }
+  function isIsolatedBookshelfBrowser(){
+    // On iOS, only real Safari may consume/save a bookshelf claim locally.
+    // This deliberately catches X even when X removes its Twitter UA marker.
+    return isLineInAppBrowser()||isXInAppBrowser()||(isIOSFamily()&&!isRealIOSSafari());
+  }
+  function bookshelfClaimUrl(token,{external=false,handoffId=''}={}){
+    if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
+    const u=new URL(bookshelfHomeUrl());
+    u.searchParams.set('claim',String(token));
+    if(/^handoff_[a-f0-9]{24}$/i.test(String(handoffId||'')))u.searchParams.set('handoff',String(handoffId));
+    // LINE can open this handoff URL in the device browser. Other in-app
+    // browsers keep the same URL until the user chooses their native Safari/
+    // browser button. The claim itself is not consumed in the source context.
+    if(external)u.searchParams.set('openExternalBrowser','1');
+    return u.href;
+  }
+
+  const u16=(v,o)=>v.getUint16(o,true);
+  const u32=(v,o)=>v.getUint32(o,true);
+  const norm=path=>String(path||'').replace(/^\.\//,'').replace(/^\//,'').replace(/\\/g,'/');
+
+  function revokeAssets(){for(const url of assetUrls){try{URL.revokeObjectURL(url)}catch(_){}}assetUrls=[];}
+  function setStatus(text){if(status)status.textContent=text||'';}
+  function finishAutoOpen(){document.documentElement.classList.remove('local-auto-open-pending');}
+  function setRelayEntryMode(active){
+    if(ownCopyButton)ownCopyButton.hidden=true;
+    if(!dropZone)return;
+    dropZone.classList.toggle('is-relay-entry',!!active);
+    dropZone.setAttribute('aria-label',active?'RELAYを受け取っています':'.sceneを開く');
+    const small=dropZone.querySelector('small');
+    const title=dropZone.querySelector('h1');
+    const desc=dropZone.querySelector('p:not(.local-status)');
+    const hint=dropZone.querySelector('span');
+    const privacy=dropZone.querySelector('.local-privacy-link');
+    if(active){
+      if(small)small.textContent='あ箱';
+      if(title)title.textContent='この一冊は、もう届きました。';
+      if(desc)desc.hidden=true;
+      if(openButton)openButton.hidden=true;
+      if(hint)hint.hidden=true;
+      if(privacy)privacy.hidden=true;
+      dropZone.removeAttribute('tabindex');
+      dropZone.removeAttribute('role');
+    }else{
+      if(small)small.textContent='あ箱 LOCAL PLAYER';
+      if(title)title.textContent='.sceneを開く';
+      if(desc)desc.hidden=false;
+      if(openButton)openButton.hidden=false;
+      if(hint)hint.hidden=false;
+      if(privacy)privacy.hidden=false;
+      dropZone.setAttribute('tabindex','0');
+      dropZone.setAttribute('role','button');
+    }
+  }
+
+
+
+
+  function bookshelfMasterIdFromLocation(){
+    let workId='';
+    try{workId=String(new URL(location.href).searchParams.get('bookshelfMaster')||'').trim();}catch(_){}
+    if(workId)return workId;
+    try{return String(sessionStorage.getItem('ahako:bookshelf:open-master')||'').trim();}catch(_){return '';}
+  }
+  function bookshelfCopyIdFromLocation(){
+    let copyId='';
+    try{copyId=String(new URL(location.href).searchParams.get('bookshelfCopy')||'').trim();}catch(_){}
+    if(copyId)return copyId;
+    try{return String(sessionStorage.getItem('ahako:bookshelf:open-copy')||'').trim();}catch(_){return '';}
+  }
+  function relayNowFromLocation(){
+    try{return new URL(location.href).searchParams.get('relayNow')==='1';}catch(_){return false;}
+  }
+  function reviewUrlFromLocation(){
+    try{
+      const value=String(new URL(location.href).searchParams.get('review')||'').trim();
+      if(!value)return '';
+      const u=new URL(value,location.href);
+      return u.protocol==='https:'?u.href:'';
+    }catch(_){return '';}
+  }
+  function officialShelfIdFromLocation(){
+    try{const value=String(new URL(location.href).searchParams.get('officialShelf')||'').trim();return /^shelf_[a-f0-9]{24}$/i.test(value)?value:'';}catch(_){return '';}
+  }
+  function issueIdFromLocation(){
+    try{const value=String(new URL(location.href).searchParams.get('issue')||'').trim().toLowerCase();return /^issue_[a-f0-9]{24}$/.test(value)?value:'';}catch(_){return '';}
+  }
+  function previewTokenFromLocation(){
+    try{const value=String(new URL(location.href).searchParams.get('preview')||'').trim();return /^[a-f0-9]{48}$/i.test(value)?value.toLowerCase():'';}catch(_){return '';}
+  }
+  function showPreviewExpiry(expiresAt){
+    let badge=document.getElementById('ahakoPreviewExpiryBadge');
+    if(!badge){
+      badge=document.createElement('div');
+      badge.id='ahakoPreviewExpiryBadge';
+      badge.setAttribute('role','status');
+      badge.style.cssText='position:fixed;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);z-index:2147483000;max-width:calc(100vw - 28px);box-sizing:border-box;padding:6px 10px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(16,16,16,.78);color:#fff;font:600 11px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.02em;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)';
+      document.body.appendChild(badge);
+    }
+    const t=Date.parse(String(expiresAt||''));
+    if(!Number.isFinite(t)){badge.textContent='作者確認用プレビュー';return;}
+    const d=new Date(t),parts=new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d),v={};
+    for(const part of parts)if(part.type!=='literal')v[part.type]=part.value;
+    badge.textContent=`作者確認用プレビュー ｜ 閲覧期限 ${v.year}/${v.month}/${v.day} ${v.hour}:${v.minute}まで`;
+  }
+  async function openPreviewFromUrl(token){
+    if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return false;
+    currentSourceMode='preview';
+    if(ownCopyButton)ownCopyButton.hidden=true;
+    if(relayButton)relayButton.hidden=true;
+    if(journey)journey.hidden=true;
+    if(endingOwnWrap)endingOwnWrap.hidden=true;
+    setStatus('確認用作品を読み込み中…');
+    try{
+      const response=await fetch(`${API_BASE}/preview/${encodeURIComponent(token)}/file`,{cache:'no-store'});
+      if(!response.ok)throw new Error(response.status===410?'この確認用リンクは期限切れ、または無効です。':'確認用作品を読み込めませんでした。');
+      const expiresAt=String(response.headers.get('X-Ahako-Preview-Expires-At')||'');
+      showPreviewExpiry(expiresAt);
+      const blob=await response.blob();
+      const disposition=String(response.headers.get('Content-Disposition')||'');
+      let name='preview.scene';const match=disposition.match(/filename\*=UTF-8''([^;]+)/i);if(match){try{name=decodeURIComponent(match[1]);}catch(_){}}
+      const file=new File([blob],name,{type:blob.type||'application/octet-stream',lastModified:Date.now()});
+      await openScene(file,{sourceMode:'preview',sourceKey:`preview:${token}`});
+      if(backButton)backButton.hidden=true;
+      if(relayButton)relayButton.hidden=true;
+      if(journey)journey.hidden=true;
+      if(endingOwnWrap)endingOwnWrap.hidden=true;
+      return true;
+    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
+  }
+  function officialReaderId(){
+    let id='';try{id=String(localStorage.getItem(OFFICIAL_READER_ID_KEY)||'');}catch(_){}
+    if(!/^reader_[a-f0-9]{32}$/i.test(id)){
+      try{id=`reader_${crypto.randomUUID().replaceAll('-','')}`;}catch(_){const a=new Uint8Array(16);crypto.getRandomValues(a);id=`reader_${[...a].map(v=>v.toString(16).padStart(2,'0')).join('')}`;}
+      try{localStorage.setItem(OFFICIAL_READER_ID_KEY,id);}catch(_){}
+    }
+    return id;
+  }
+  function clearBookshelfOpenHandoff(){
+    try{sessionStorage.removeItem('ahako:bookshelf:open-copy');}catch(_){}
+  }
+  function validBookshelfCopyId(v){return /^copy_[a-f0-9]{32}$/i.test(String(v||''));}
+  function idbRequest(req){return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('IndexedDB error'));});}
+  function commerceReaderId(){
+    let id='';try{id=String(localStorage.getItem(PUBLIC_READER_ID_KEY)||'');}catch(_){}
+    if(!/^reader_[a-f0-9]{32}$/i.test(id)){
+      try{id=`reader_${crypto.randomUUID().replaceAll('-','')}`;}catch(_){const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);id=`reader_${[...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}`;}
+      try{localStorage.setItem(PUBLIC_READER_ID_KEY,id);}catch(_){}
+    }
+    return id;
+  }
+  function openBookshelfDb(){
+    return new Promise((resolve,reject)=>{
+      const req=indexedDB.open(BOOKSHELF_DB);
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error||new Error('本棚を開けませんでした。'));
+      req.onupgradeneeded=()=>{try{req.transaction.abort();}catch(_){}reject(new Error('読者本棚がまだありません。'));};
+    });
+  }
+  async function findOwnedReaderBook(workId){
+    if(!/^[A-Za-z0-9_-]{12,80}$/.test(String(workId||'')))return null;
+    let db;try{db=await openBookshelfDb();}catch(_){return null;}
+    try{
+      if(!db.objectStoreNames.contains(READER_BOOKS))return null;
+      const rows=await idbRequest(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).getAll());
+      let archived=[];try{const parsed=JSON.parse(localStorage.getItem('ahako:bookshelf:archive:owned')||'[]');if(Array.isArray(parsed))archived=parsed;}catch(_){}
+      return (Array.isArray(rows)?rows:[]).find(row=>String(row?.workId||'')===String(workId)&&row?.role==='distribution'&&!archived.includes(String(row?.copyId||'')))||null;
+    }finally{db.close();}
+  }
+  function showAlreadyOwnedInBookshelf(row,{button=ownCopyButton,statusNode=status}={}){
+    if(statusNode)statusNode.textContent='この作品はすでに本棚にあります。購入せず、本棚を開いてください。';
+    if(button){button.disabled=false;button.textContent='本棚を開く';button.onclick=()=>{location.assign(bookshelfHomeUrl());};}
+    return true;
+  }
+  async function masterBookFromBookshelf(workId){
+    if(!validWorkId(workId))throw new Error('本棚のMasterを確認できません。');
+    const db=await openBookshelfDb();
+    try{
+      if(!db.objectStoreNames.contains('works'))throw new Error('作者本棚がまだありません。');
+      const rec=await idbRequest(db.transaction('works','readonly').objectStore('works').get(workId));
+      if(!rec)throw new Error('このMasterは本棚に見つかりませんでした。');
+      let bytes=rec.sceneBytes instanceof ArrayBuffer?rec.sceneBytes:
+        (ArrayBuffer.isView(rec.sceneBytes)?rec.sceneBytes.buffer.slice(rec.sceneBytes.byteOffset,rec.sceneBytes.byteOffset+rec.sceneBytes.byteLength):null);
+      if(!bytes&&rec.blob instanceof Blob){
+        try{bytes=await rec.blob.arrayBuffer();}
+        catch(readError){throw new Error(String(readError?.message||'このMasterのデータを本棚から読み出せませんでした。'));}
+      }
+      if(!bytes)throw new Error('このMasterのデータが本棚に見つかりませんでした。');
+      if(!rec.sceneBytes&&rec.blob instanceof Blob){
+        try{await idbRequest(db.transaction(WORKS,'readwrite').objectStore(WORKS).put({...rec,sceneBytes:bytes,blob:null}));}catch(error){console.warn('Master byte migration skipped',error);}
+      }
+      return {...rec,sceneBytes:bytes,blob:null};
+    }finally{db.close();}
+  }
+  async function openBookshelfMaster(workId){
+    currentBookshelfCopyId='';
+    currentSourceMode='bookshelf-master';
+    setRelayEntryMode(false);
+    if(launcher)launcher.hidden=false;
+    setStatus('作者本棚から開いています…');
+    if(openButton)openButton.disabled=true;
+    try{
+      // Published Masters should be read from the canonical publication, not the
+      // locally stored editing package. The bookshelf card may have a recovered
+      // server cover while an older local Master still contains a stale/missing
+      // cover asset. Reading the canonical document keeps the author shelf and
+      // public/official reading routes visually identical.
+      try{
+        const lookup=await fetch(`${API_BASE}/publication/${encodeURIComponent(workId)}`,{cache:'no-store'});
+        const identity=lookup.ok?await lookup.json():null;
+        const publicationId=identity?.ok&&identity?.exists?String(identity.id||'').trim():'';
+        if(publicationId){
+          setStatus('公開中の本を読み込んでいます…');
+          const response=await fetch(`${API_BASE}/work/${encodeURIComponent(publicationId)}?raw=1`,{cache:'no-store'});
+          const canonical=response.ok?await response.json():null;
+          if(canonical&&typeof canonical==='object'){
+            try{sessionStorage.removeItem('ahako:bookshelf:open-master');}catch(_){}
+            currentPackage=null;
+            if(relayButton)relayButton.hidden=true;
+            renderJourney(canonical);
+            await window.ScenePublicPlayer.loadDocument(canonical,{sourceKey:`bookshelf-master-public:${publicationId}`});
+            launcher.hidden=true;
+            if(backButton)backButton.hidden=true;
+            setStatus('');
+            finishAutoOpen();
+            return true;
+          }
+        }
+      }catch(error){console.warn('Published Master read fallback to local package',error);}
+      const rec=await masterBookFromBookshelf(workId);
+      try{sessionStorage.removeItem('ahako:bookshelf:open-master');}catch(_){}
+      const file=new File([rec.sceneBytes],rec.fileName||`${rec.title||'book'}.scene`,{type:'application/octet-stream'});
+      await openScene(file,{sourceMode:'bookshelf-master',sourceKey:`bookshelf-master:${workId}`});
+      return true;
+    }catch(error){
+      console.error(error);currentPackage=null;if(launcher)launcher.hidden=false;if(backButton)backButton.hidden=true;setStatus(String(error?.message||error));return false;
+    }finally{if(openButton)openButton.disabled=false;}
+  }
+  async function readerBookFromBookshelf(copyId){
+    if(!validBookshelfCopyId(copyId))throw new Error('本棚の一冊を確認できません。');
+    const db=await openBookshelfDb();
+    try{
+      if(!db.objectStoreNames.contains(READER_BOOKS))throw new Error('読者本棚がまだありません。');
+      const rec=await idbRequest(db.transaction(READER_BOOKS,'readonly').objectStore(READER_BOOKS).get(copyId));
+      if(!rec)throw new Error('この一冊は本棚に見つかりませんでした。');
+      // New copies keep sceneBytes (a structured-clone-safe ArrayBuffer) in
+      // IndexedDB. Older shelf rows still have a Blob, so read those while the
+      // database connection is open and migrate them for the next launch.
+      let bytes=rec.sceneBytes instanceof ArrayBuffer?rec.sceneBytes:
+        (ArrayBuffer.isView(rec.sceneBytes)?rec.sceneBytes.buffer.slice(rec.sceneBytes.byteOffset,rec.sceneBytes.byteOffset+rec.sceneBytes.byteLength):null);
+      if(!bytes&&rec.blob instanceof Blob){
+        try{bytes=await rec.blob.arrayBuffer();}
+        catch(readError){const error=new Error(String(readError?.message||'本棚のデータを読み出せませんでした。'));error.name=readError?.name||'Error';error.readerBook={workId:rec.workId,editionId:rec.editionId};throw error;}
+      }
+      if(!bytes)throw new Error('この一冊のデータが本棚に見つかりませんでした。');
+      if(!rec.sceneBytes&&rec.blob instanceof Blob){
+        try{await idbRequest(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).put({...rec,sceneBytes:bytes,blob:null}));}catch(error){console.warn('Reader book byte migration skipped',error);}
+      }
+      return {...rec,sceneBytes:bytes,blob:null};
+    }finally{db.close();}
+  }
+  async function openBookshelfCopy(copyId){
+    currentBookshelfCopyId=copyId;
+    currentSourceMode='bookshelf';
+    setRelayEntryMode(false);
+    if(launcher)launcher.hidden=false;
+    setStatus('本棚から開いています…');
+    if(openButton)openButton.disabled=true;
+    try{
+      const rec=await readerBookFromBookshelf(copyId);
+      clearBookshelfOpenHandoff();
+      const file=new File([rec.sceneBytes],rec.fileName||`${rec.title||'book'}_distribution.scene`,{type:'application/octet-stream'});
+      await openScene(file,{sourceMode:'bookshelf',sourceKey:`bookshelf:${copyId}`,syncPublicAppearance:true});
+      return true;
+    }catch(error){
+      // A previously stored iOS Blob can become unreadable even though its
+      // copy metadata remains. If this copy came from the active official
+      // shelf, let the reader continue from the published edition while the
+      // local byte-array format prevents the problem for new imports.
+      if(error?.name==='NotFoundError'&&error?.readerBook){
+        try{
+          const response=await fetch(`${API_BASE}/official-shelf`,{cache:'no-store'});
+          const payload=await response.json().catch(()=>null);
+          const item=(Array.isArray(payload?.items)?payload.items:[]).find(row=>String(row?.workId||'')===String(error.readerBook.workId||'')&&String(row?.editionId||'')===String(error.readerBook.editionId||''));
+          if(item?.shelfId&&await openOfficialShelfRead(item.shelfId))return true;
+        }catch(recoveryError){console.warn('Official shelf fallback skipped',recoveryError);}
+      }
+      finishAutoOpen();
+      console.error(error);
+      currentPackage=null;
+      if(launcher)launcher.hidden=false;
+      if(backButton)backButton.hidden=true;
+      setStatus(String(error?.message||error));
+      return false;
+    }finally{
+      if(openButton)openButton.disabled=false;
+    }
+  }
+
+  function ownCopyCredentialFromLocation(){
+    const publicId=relayPublicIdFromLocation();
+    const token=relayTokenFromLocation();
+    const arrivalId=validArrivalId(currentRelayReceiverArrivalId)
+      ? currentRelayReceiverArrivalId
+      : relayReceiverArrivalId(token,publicId);
+    if(validRelayPublicId(publicId))return {id:publicId,arrivalId};
+    if(validRelayToken(token))return {token,arrivalId};
+    return null;
+  }
+  function textBytes(value){return new TextEncoder().encode(String(value||''));}
+  async function putOwnedSceneInBookshelf(scene){
+    const copyId=String(scene?.distribution?.copyId||'').trim();
+    const workId=String(scene?.workId||'').trim();
+    const editionId=String(scene?.edition?.editionId||'').trim();
+    if(!validCopyId(copyId)||!validWorkId(workId)||!/^edition_[a-f0-9]{32}$/i.test(editionId)){
+      throw new Error('自分の一冊を確認できませんでした。');
+    }
+    const manifest={
+      package:'scene-package',packageVersion:'1.0',entry:'scene.json',
+      packageRole:'distribution',workId,editionId,copyId,
+      issuedAt:String(scene?.distribution?.issuedAt||scene?.edition?.issuedAt||new Date().toISOString()),
+      relayEnabled:scene?.sharing?.relay?.enabled!==false,
+      title:String(scene?.title||'Untitled'),author:String(scene?.author||'')
+    };
+    const blob=buildStoredZip([
+      ['scene.json',textBytes(JSON.stringify(scene,null,2))],
+      ['manifest.json',textBytes(JSON.stringify(manifest,null,2))]
+    ]);
+    const now=new Date().toISOString();
+    const coverUrl=/^https?:\/\//i.test(String(scene?.cover?.src||''))?String(scene.cover.src):'';
+    const rec={
+      role:'distribution',copyId,workId,editionId,
+      title:String(scene?.title||'Untitled'),author:String(scene?.author||''),
+      sceneCount:Array.isArray(scene?.scenes)?scene.scenes.length:0,
+      relayEnabled:scene?.sharing?.relay?.enabled!==false,
+      issuedAt:String(scene?.distribution?.issuedAt||''),
+      coverBlob:null,coverUrl,
+      blob,fileName:`${safeFileBase(scene?.title||'book')}_distribution.scene`,
+      addedAt:now,updatedAt:now
+    };
+    const db=await openBookshelfDb();
+    try{
+      if(!db.objectStoreNames.contains(READER_BOOKS))throw new Error('読者本棚がまだありません。');
+      await idbRequest(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).put(rec));
+    }finally{db.close();}
+    return rec;
+  }
+  function showOwnCopyGate(gate={}){
+    const old=document.getElementById('ownCopyGateSheet');
+    if(old)old.remove();
+    const mode=String(gate?.mode||'purchase');
+    const title=String(gate?.label||'自分の一冊');
+    const message=String(gate?.message||(
+      mode==='support'
+        ? 'この一冊を受け取るには、作者への支援が必要です。'
+        : 'この一冊を受け取るには、購入が必要です。'
+    ));
+    const overlay=document.createElement('div');
+    overlay.id='ownCopyGateSheet';
+    overlay.className='own-copy-gate-sheet';
+    overlay.innerHTML=`<div class="own-copy-gate-sheet__backdrop"></div>
+      <section class="own-copy-gate-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="ownCopyGateTitle">
+        <small>OWN COPY</small>
+        <h2 id="ownCopyGateTitle">${escapeHtml(title)}</h2>
+        <p>${escapeHtml(message)}</p>
+        <div class="own-copy-gate-sheet__notice">購入・支援の確認連携は準備中です。現在はこの先で新しい一冊を発行しません。</div>
+        <button type="button" data-gate-close>閉じる</button>
+      </section>`;
+    document.body.appendChild(overlay);
+    const close=()=>overlay.remove();
+    overlay.querySelector('.own-copy-gate-sheet__backdrop')?.addEventListener('click',close);
+    overlay.querySelector('[data-gate-close]')?.addEventListener('click',close);
+  }
+
+  function presentOwnCopyClaim(payload,{button=ownCopyButton,statusNode=status,onSuccess=null}={}){
+    const claimToken=String(payload?.bookshelfClaim?.token||'').trim();
+    const lineBrowser=isLineInAppBrowser();
+    const forceSafariHandoff=isIOSFamily()&&!isRealIOSSafari();
+    // The bookshelf deliberately returns to the source page when it detects
+    // the same tab's handoff marker. Set that marker only when this iOS
+    // in-app browser must launch a separate Safari context. Ordinary Safari
+    // and desktop should import the claim directly in the current tab.
+    const handoffId=forceSafariHandoff?newBookshelfHandoffId():'';
+    if(claimToken&&handoffId)rememberBookshelfClaimSource(handoffId,claimToken);
+    const claimUrl=bookshelfClaimUrl(claimToken,{external:lineBrowser,handoffId});
+    if(statusNode){
+      statusNode.textContent=forceSafariHandoff
+        ? '自分の一冊を用意しました。Safariの本棚で受け取れます。'
+        : '自分の一冊を用意しました。本棚を開きます。';
+    }
+    if(button){
+      button.disabled=false;
+      button.textContent='本棚を開く';
+      button.onclick=()=>{
+        if(!claimUrl){location.href=bookshelfHomeUrl();return;}
+        try{
+          const target=new URL(claimUrl);
+          if(target.protocol!=='https:')return;
+          if(forceSafariHandoff){
+            const safariUrl=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;
+            location.href=safariUrl;
+          }else{
+            location.href=target.href;
+          }
+        }catch(e){console.error(e);}
+      };
+    }
+    if(typeof onSuccess==='function')onSuccess(payload);
+    return true;
+  }
+  function relayOrderTokenKey(orderId){return `${RELAY_ORDER_TOKEN_PREFIX}${orderId}`;}
+  function cleanRelayCommerceReturnUrl(){
+    const u=new URL(location.href);
+    u.searchParams.delete('payment');u.searchParams.delete('order_id');
+    u.searchParams.set('relayPurchase','1');
+    return u.toString();
+  }
+  async function fulfillRelayPurchase(orderId,accessToken,{button=ownCopyButton,statusNode=status}={}){
+    const orderUrl=`${API_BASE}/commerce/order/${encodeURIComponent(orderId)}`;
+    let order=null;
+    for(let i=0;i<20;i++){
+      const response=await fetch(orderUrl,{headers:{'X-Order-Token':accessToken},cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'購入状態を確認できませんでした。'));
+      order=payload.order;
+      if(order?.status==='paid')break;
+      if(order?.status!=='pending_payment')throw new Error('この購入手続きは完了していません。');
+      if(statusNode)statusNode.textContent='Stripeの決済確定を待っています…';
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    if(order?.status!=='paid')throw new Error('決済確認に時間がかかっています。少し待ってから再確認してください。');
+    if(statusNode)statusNode.textContent='決済を確認しました。一冊を本棚に用意しています…';
+    const response=await fetch(`${API_BASE}/commerce/order/${encodeURIComponent(orderId)}/own-copy`,{
+      method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',body:JSON.stringify({})
+    });
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok||!payload?.bookshelfClaim?.token)throw new Error(String(payload?.error||'購入済みの一冊を本棚へ用意できませんでした。'));
+    try{sessionStorage.removeItem(relayOrderTokenKey(orderId));}catch(_){}
+    return presentOwnCopyClaim(payload,{button,statusNode});
+  }
+  async function resumeRelayPurchaseFromReturn(){
+    const u=new URL(location.href);
+    const orderId=String(u.searchParams.get('order_id')||'');
+    if(u.searchParams.get('relayPurchase')!=='1'||u.searchParams.get('payment')!=='success'||!/^order_[a-f0-9]{32}$/i.test(orderId))return false;
+    currentSourceMode='relay-url';setRelayEntryMode(true);
+    if(launcher)launcher.hidden=false;
+    if(ownCopyButton){ownCopyButton.hidden=false;ownCopyButton.disabled=true;ownCopyButton.textContent='購入を確認しています…';}
+    setStatus('Stripeの決済を確認しています…');
+    try{const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('payment');cleanUrl.searchParams.delete('order_id');cleanUrl.searchParams.delete('relayPurchase');history.replaceState(history.state,'',cleanUrl.toString());}catch(_){}
+    let accessToken='';try{accessToken=String(sessionStorage.getItem(relayOrderTokenKey(orderId))||'');}catch(_){}
+    if(!/^[a-f0-9]{48}$/i.test(accessToken)){
+      setStatus('購入情報を確認できません。もう一度「自分の一冊を受け取る」からお試しください。');
+      if(ownCopyButton){ownCopyButton.disabled=false;ownCopyButton.textContent='自分の一冊を受け取る';ownCopyButton.onclick=()=>receiveOwnCopy({button:ownCopyButton,statusNode:status});}
+      return true;
+    }
+    try{
+      await fulfillRelayPurchase(orderId,accessToken,{button:ownCopyButton,statusNode:status});
+      return true;
+    }catch(error){
+      console.error(error);setStatus(String(error?.message||error));
+      if(ownCopyButton){ownCopyButton.disabled=false;ownCopyButton.textContent='購入を再確認';ownCopyButton.onclick=()=>fulfillRelayPurchase(orderId,accessToken,{button:ownCopyButton,statusNode:status}).catch(e=>setStatus(String(e?.message||e)));}
+      return true;
+    }
+  }
+
+  function confirmSalesConditions(order,title='MY COPY'){
+    const amount=Number(order?.amount),currency=String(order?.currency||'JPY').toUpperCase();
+    if(!Number.isInteger(amount)||amount<=0||currency!=='JPY')return Promise.reject(new Error('購入金額を確認できません。'));
+    return new Promise(resolve=>{
+      const previousFocus=document.activeElement,overlay=document.createElement('div');
+      overlay.style.cssText='position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:16px;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom));';
+      const card=document.createElement('section');card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');card.setAttribute('aria-label','購入内容と販売条件');card.tabIndex=-1;
+      card.style.cssText='width:min(100%,440px);max-height:85vh;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:#fff;color:#171717;border-radius:16px;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:16px;line-height:1.7;text-align:left;';
+      card.innerHTML='<h2 style="font-size:20px;margin:0 0 12px">購入内容を確認</h2><p data-title style="overflow-wrap:anywhere"></p><p data-price style="font-weight:bold"></p><p>MY COPY 1冊の単発購入です。有料ロック作品では、購入により続きを読めるようになります。決済成功の確認後に受け取れます。</p><p>正常に提供できている作品の購入者都合の返金は原則受け付けません。二重課金・提供不具合・法令上の対応は別に受け付けます。</p><p>本棚は端末・ブラウザに保存されます。端末変更や保存データ削除後の再受取は保証できません。</p><p><a href="https://yuya-narita.github.io/scene/sales/" target="_blank" rel="noopener noreferrer" style="color:#174b97">販売条件・販売者情報</a> ／ <a href="https://yuya-narita.github.io/scene/terms/" target="_blank" rel="noopener noreferrer" style="color:#174b97">利用規約</a> ／ <a href="https://yuya-narita.github.io/scene/privacy/" target="_blank" rel="noopener noreferrer" style="color:#174b97">プライバシー</a></p><label style="display:flex;gap:10px;align-items:flex-start;padding:12px 0"><input type="checkbox" data-consent style="width:22px;height:22px;flex-shrink:0;margin-top:3px"><span>購入内容・販売条件・利用規約を確認し、同意します。</span></label><button type="button" data-proceed disabled style="width:100%;min-height:48px;background:#171717;color:#fff;border:0;border-radius:10px;font-size:16px;opacity:.45">購入手続きへ進む</button><button type="button" data-cancel style="width:100%;min-height:44px;margin-top:8px;background:#fff;color:#171717;border:1px solid #bbb;border-radius:10px;font-size:16px">戻る・キャンセル</button>';
+      card.querySelector('[data-title]').textContent=String(title||'MY COPY');card.querySelector('[data-price]').textContent='お支払総額 ¥'+amount.toLocaleString('ja-JP');
+      const check=card.querySelector('[data-consent]'),proceed=card.querySelector('[data-proceed]');
+      check.onchange=()=>{proceed.disabled=!check.checked;proceed.style.opacity=check.checked?'1':'.45';};
+      const finish=value=>{document.removeEventListener('keydown',onKey);overlay.remove();previousFocus?.focus?.();resolve(value);};
+      const onKey=event=>{if(event.key==='Escape'){event.preventDefault();finish(null);}else if(event.key==='Tab'){const items=[...card.querySelectorAll('a,input,button')].filter(x=>!x.disabled);const first=items[0],last=items[items.length-1];if(event.shiftKey&&(document.activeElement===first||document.activeElement===card)){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}};
+      card.querySelector('[data-cancel]').onclick=()=>finish(null);
+      proceed.onclick=()=>{if(check.checked)finish({accepted:true,version:'ahako-sales-20261013-v1',amount,currency});};
+      overlay.onclick=event=>{if(event.target===overlay)finish(null);};
+      overlay.appendChild(card);document.body.appendChild(overlay);document.addEventListener('keydown',onKey);card.focus();
+    });
+  }
+
+  async function startRelayPaidOwnCopy(gate,{button=ownCopyButton,statusNode=status}={}){
+    let readerAmount=null;
+    const mode=String(gate?.mode||'purchase').toLowerCase();
+    const credential=ownCopyCredentialFromLocation();
+    if(!credential)throw new Error('RELAYの受け取り情報を確認できませんでした。');
+    const readerId=commerceReaderId();
+    if(statusNode)statusNode.textContent='購入内容を確認しています…';
+    const requestOrder=async(amount)=>{
+      const response=await fetch(`${API_BASE}/relay/own/order`,{
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+        body:JSON.stringify({...credential,readerId,...(amount!==null?{readerAmount:amount}:{})})
+      });
+      return {response,payload:await response.json().catch(()=>null)};
+    };
+    let {response:orderResponse,payload:orderPayload}=await requestOrder(null);
+    if(!orderResponse.ok&&orderPayload?.code==='BAD_READER_PRICE'&&(mode==='reader_price'||mode==='support')){
+      const value=window.prompt('MY COPYの金額を入力してください（100円〜100,000円、100円単位）','100');
+      if(value===null){if(button)button.disabled=false;if(statusNode)statusNode.textContent='購入をキャンセルしました。';return false;}
+      readerAmount=Number(String(value).replace(/[,，円\s]/g,''));
+      if(!Number.isInteger(readerAmount)||readerAmount<100||readerAmount>100000||readerAmount%100!==0)throw new Error('100円〜100,000円の100円単位で入力してください。');
+      ({response:orderResponse,payload:orderPayload}=await requestOrder(readerAmount));
+    }
+    if(orderResponse.ok&&orderPayload?.ok&&orderPayload?.alreadyOwned&&orderPayload?.bookshelfClaim?.token){
+      return presentOwnCopyClaim(orderPayload,{button,statusNode});
+    }
+    if(!orderResponse.ok||!orderPayload?.ok||!orderPayload?.order?.orderId||!orderPayload?.accessToken)throw new Error(String(orderPayload?.error||'購入手続きを開始できませんでした。'));
+    const orderId=String(orderPayload.order.orderId),accessToken=String(orderPayload.accessToken);
+    try{sessionStorage.setItem(relayOrderTokenKey(orderId),accessToken);}catch(_){}
+    if(orderPayload.order.status==='paid')return fulfillRelayPurchase(orderId,accessToken,{button,statusNode});
+    const salesConsent=await confirmSalesConditions(orderPayload.order,String(gate?.title||'MY COPY'));
+    if(!salesConsent){if(button)button.disabled=false;if(statusNode)statusNode.textContent='購入をキャンセルしました。';return false;}
+    if(statusNode)statusNode.textContent='決済画面を用意しています…';
+    const checkoutResponse=await fetch(`${API_BASE}/commerce/order/${encodeURIComponent(orderId)}/checkout`,{
+      method:'POST',headers:{'Content-Type':'application/json','X-Order-Token':accessToken},cache:'no-store',
+      body:JSON.stringify({salesConsent,paymentMethod:'card',returnUrl:cleanRelayCommerceReturnUrl()})
+    });
+    const checkout=await checkoutResponse.json().catch(()=>null);
+    if(!checkoutResponse.ok||!checkout?.ok||!checkout?.checkoutUrl)throw new Error(String(checkout?.error||'決済を開始できませんでした。'));
+    if(statusNode)statusNode.textContent='決済画面へ移動します…';
+    location.href=checkout.checkoutUrl;
+    return true;
+  }
+
+  function sendBookshelfEvent(event,scene){
+    const workId=String(scene?.workId||scene?.distribution?.workId||'').trim();
+    const copyId=String(scene?.distribution?.copyId||'').trim();
+    if(event!=='own_copy_saved'||!/^[A-Za-z0-9_-]{12,80}$/.test(workId)||!/^copy_[a-f0-9]{32}$/i.test(copyId))return;
+    try{
+      fetch(`${API_BASE}/bookshelf-event`,{
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',keepalive:true,
+        body:JSON.stringify({event,workId,copyId})
+      }).catch(()=>{});
+    }catch(_){}
+  }
+
+  async function receiveOwnCopy({button=ownCopyButton,statusNode=status,onSuccess=null}={}){
+    const credential=ownCopyCredentialFromLocation();
+    if(!credential)return false;
+    const existingBook=await findOwnedReaderBook(String(currentPackage?.raw?.workId||''));
+    if(existingBook)return showAlreadyOwnedInBookshelf(existingBook,{button,statusNode});
+    if(button)button.disabled=true;
+    if(statusNode)statusNode.textContent='自分の一冊を用意しています…';
+    try{
+      const response=await fetch(`${API_BASE}/relay/own`,{
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+        body:JSON.stringify(credential)
+      });
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.scene){
+        const code=String(payload?.code||'');
+        if(code==='EDITION_STOPPED')throw new Error('この版の配布は終了しています。');
+        if(code==='EDITION_NOT_FOUND'||code==='RELAY_NOT_FOUND')throw new Error('この作品を見つけられませんでした。');
+        if(code==='OWN_COPY_NOT_AVAILABLE')throw new Error('この一冊はまだ誰かに届いていません。');
+        if(code==='RELAY_RECEIVER_REQUIRED')throw new Error('受け取り情報を確認できませんでした。');
+        if(code==='OWN_COPY_GATE_REQUIRED'){
+          await startRelayPaidOwnCopy(payload?.gate||{},{button,statusNode});
+          return true;
+        }
+        throw new Error(String(payload?.error||'自分の一冊を受け取れませんでした。'));
+      }
+      return presentOwnCopyClaim(payload,{button,statusNode,onSuccess});
+    }catch(error){
+      console.error(error);
+      if(statusNode)statusNode.textContent=String(error?.message||error);
+      if(button)button.disabled=false;
+      return false;
+    }
+  }
+
+  async function openAdminReview(reviewUrl){
+    currentSourceMode='review';
+    currentBookshelfCopyId='';
+    currentRelayReceiverArrivalId='';
+    setRelayEntryMode(false);
+    if(launcher)launcher.hidden=false;
+    setStatus('審査用の一冊を読み込んでいます…');
+    if(openButton)openButton.disabled=true;
+    try{
+      const response=await fetch(reviewUrl,{method:'GET',cache:'no-store'});
+      const raw=await response.json().catch(()=>null);
+      if(!response.ok||!raw||typeof raw!=='object')throw new Error(response.status===410?'審査リンクの期限が切れました。':'審査用Editionを読み込めませんでした。');
+      currentPackage={files:new Map(),manifest:{package:'admin-review',packageVersion:'1.0'},raw:JSON.parse(JSON.stringify(raw))};
+      if(relayButton)relayButton.hidden=true;
+      if(journey){renderJourney(raw);journey.setAttribute('aria-disabled','true');journey.classList.add('is-review');}
+      if(endingOwnWrap)endingOwnWrap.hidden=true;
+      await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`admin-review:${reviewUrl}`,suppressObservation:true});
+      launcher.hidden=true;if(backButton)backButton.hidden=false;setStatus('');
+      return true;
+    }catch(error){
+      console.error(error);currentPackage=null;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;
+    }finally{if(openButton)openButton.disabled=false;}
+  }
+
+  async function claimOfficialShelfCopy({button=endingOwnButton,statusNode=endingOwnStatus}={}){
+    const shelfId=currentOfficialShelfId;
+    if(!/^shelf_[a-f0-9]{24}$/i.test(shelfId))return false;
+    if(button)button.disabled=true;
+    if(statusNode)statusNode.textContent='自分の一冊を用意しています…';
+    try{
+      const response=await fetch(`${API_BASE}/official-shelf/claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({shelfId,readerId:officialReaderId()})});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.scene){
+        const code=String(payload?.code||'');
+        if(code==='SHELF_ALREADY_CLAIMED')throw new Error('この種本はすでに受け取っています。');
+        if(code==='SHELF_SOLD_OUT')throw new Error('この種本はすべて旅立ちました。');
+        throw new Error(String(payload?.error||'一冊を受け取れませんでした。'));
+      }
+      await putOwnedSceneInBookshelf(payload.scene);
+      sendBookshelfEvent('own_copy_saved',payload.scene);
+      if(statusNode)statusNode.textContent='本棚に入りました。';
+      if(button){button.disabled=false;button.textContent='本棚を開く';button.onclick=()=>{location.href='../bookshelf/';};}
+      return true;
+    }catch(error){console.error(error);if(statusNode)statusNode.textContent=String(error?.message||error);if(button)button.disabled=false;return false;}
+  }
+
+  async function claimIssuedCopy({button=endingOwnButton,statusNode=endingOwnStatus}={}){
+    const issueId=currentIssueId;if(!/^issue_[a-f0-9]{24}$/.test(issueId))return false;
+    if(button)button.disabled=true;if(statusNode)statusNode.textContent='自分の一冊を用意しています…';
+    try{
+      const response=await fetch(`${API_BASE}/issue/claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({issueId,readerId:commerceReaderId()})});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.scene){
+        const code=String(payload?.code||'');
+        if(code==='ISSUE_ALREADY_CLAIMED')throw new Error('この端末ではすでに受け取っています。');
+        if(code==='ISSUE_SOLD_OUT')throw new Error('この一冊はすべて受け取られました。');
+        throw new Error(String(payload?.error||'一冊を受け取れませんでした。'));
+      }
+      await putOwnedSceneInBookshelf(payload.scene);sendBookshelfEvent('own_copy_saved',payload.scene);
+      if(statusNode)statusNode.textContent=`本棚に入りました。残り ${Math.max(0,Number(payload.remaining)||0)}部`;
+      if(button){button.disabled=false;button.textContent='本棚を開く';button.onclick=()=>{location.href='../bookshelf/';};}
+      return true;
+    }catch(error){console.error(error);if(statusNode)statusNode.textContent=String(error?.message||error);if(button)button.disabled=false;return false;}
+  }
+
+  async function openIssuedRead(issueId){
+    currentSourceMode='issue';currentIssueId=issueId;currentOfficialShelfId='';currentBookshelfCopyId='';currentRelayReceiverArrivalId='';setRelayEntryMode(false);
+    if(launcher)launcher.hidden=true;
+    if(backButton){backButton.hidden=true;const label=backButton.querySelector('span');if(label)label.textContent='戻る';backButton.setAttribute('aria-label','前の画面に戻る');}
+    setStatus('');if(openButton)openButton.disabled=true;
+    try{
+      const response=await fetch(`${API_BASE}/issue/read?issueId=${encodeURIComponent(issueId)}`,{method:'GET',cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.scene)throw new Error(String(payload?.error||'発行された一冊を読み込めませんでした。'));
+      const raw=JSON.parse(JSON.stringify(payload.scene));currentPackage={files:new Map(),manifest:{package:'author-issue-read',packageVersion:'1.0'},raw};
+      if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;if(endingOwnWrap)endingOwnWrap.hidden=true;
+      await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`issue:${issueId}`,suppressObservation:true});
+      launcher.hidden=true;
+      if(backButton){const label=backButton.querySelector('span');if(label)label.textContent='戻る';backButton.setAttribute('aria-label','前の画面に戻る');backButton.hidden=false;}
+      setStatus('');finishAutoOpen();return true;
+    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;if(launcher)launcher.hidden=false;if(backButton)backButton.hidden=true;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
+    finally{if(openButton)openButton.disabled=false;}
+  }
+
+  async function openOfficialShelfRead(shelfId){
+    currentSourceMode='official-shelf';
+    currentOfficialShelfId=shelfId;
+    currentBookshelfCopyId='';currentRelayReceiverArrivalId='';
+    setRelayEntryMode(false);
+    if(launcher)launcher.hidden=false;
+    setStatus('あ箱の本を読み込んでいます…');
+    if(openButton)openButton.disabled=true;
+    try{
+      const response=await fetch(`${API_BASE}/official-shelf/read?shelfId=${encodeURIComponent(shelfId)}`,{method:'GET',cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.scene)throw new Error(response.status===410?'この版の配布は終了しています。':'あ箱の本を読み込めませんでした。');
+      const raw=JSON.parse(JSON.stringify(payload.scene));
+      currentPackage={files:new Map(),manifest:{package:'official-shelf-read',packageVersion:'1.0'},raw};
+      if(relayButton)relayButton.hidden=true;
+      if(journey)journey.hidden=true;
+      if(endingOwnWrap)endingOwnWrap.hidden=true;
+      await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`official-shelf:${shelfId}`,suppressObservation:true});
+      launcher.hidden=true;const hasShelfReturn=showShelfReturnForSource();if(backButton)backButton.hidden=hasShelfReturn;setStatus('');finishAutoOpen();
+      return true;
+    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;}
+    finally{if(openButton)openButton.disabled=false;}
+  }
+
+  // ------------------------------------------------------------
+  // V63.1 URL RELAY receiver
+  // A relay URL is a delivery ticket, not an owned local file. When a valid
+  // ?relay=TOKEN is present, resolve it through the Worker and hand the
+  // returned runtime Scene directly to the existing public Player. No file
+  // picker is shown to the recipient.
+  // ------------------------------------------------------------
+  function relayTokenFromLocation(){
+    try{return String(new URL(location.href).searchParams.get('relay')||'').trim();}catch(_){return '';}
+  }
+  function relayPublicIdFromLocation(){
+    try{return String(new URL(location.href).searchParams.get('relayKey')||'').trim();}catch(_){return '';}
+  }
+  function validRelayPublicId(v){return /^[A-Za-z0-9_-]{8,32}$/.test(String(v||''));}
+  function validRelayToken(v){return /^[a-f0-9]{48}$/i.test(String(v||''));}
+  function relayReceiverArrivalId(token='',publicId=''){
+    const credential=validRelayPublicId(publicId)?`id:${publicId}`:`token:${token}`;
+    const key=`ahako:url-relay-receiver:${credential}`;
+    let id='';try{id=String(localStorage.getItem(key)||'');}catch(_){}
+    if(!/^arrival_[a-f0-9]{32}$/i.test(id)){
+      try{id=`arrival_${crypto.randomUUID().replaceAll('-','')}`;}catch(_){const a=new Uint8Array(16);crypto.getRandomValues(a);id=`arrival_${[...a].map(v=>v.toString(16).padStart(2,'0')).join('')}`;}
+      try{localStorage.setItem(key,id);}catch(_){}
+    }
+    return id;
+  }
+  function relayResolveErrorMessage(code,fallback){
+    if(code==='RELAY_EXPIRED')return 'この一冊の受け取り期限が切れています。';
+    if(code==='RELAY_ALREADY_RECEIVED')return 'この一冊は、もう誰かのもとへ届きました。';
+    if(code==='RELAY_RECEIVER_REQUIRED')return 'このRELAY URLを受け取る準備ができませんでした。';
+    if(code==='EDITION_STOPPED')return 'この版のRELAYは作者により停止されています。';
+    if(code==='EDITION_NOT_FOUND'||code==='RELAY_NOT_FOUND')return 'この一冊の旅を見つけられませんでした。';
+    return String(fallback||'RELAYを読み込めませんでした。');
+  }
+  async function openRelayFromUrl(token='',publicId=''){
+    if(await resumeRelayPurchaseFromReturn())return true;
+    const hasToken=validRelayToken(token),hasPublicId=validRelayPublicId(publicId);
+    if(!hasToken&&!hasPublicId){
+      setStatus('このRELAY URLは正しくありません。');
+      return false;
+    }
+    currentSourceMode='relay-url';
+    setRelayEntryMode(true);
+    if(launcher)launcher.hidden=false;
+    setStatus('一冊を受け取っています…');
+    if(openButton)openButton.disabled=true;
+    try{
+      const receiverArrivalId=relayReceiverArrivalId(token,publicId);
+      currentRelayReceiverArrivalId=receiverArrivalId;
+      const credentialQuery=hasPublicId?`id=${encodeURIComponent(publicId)}`:`token=${encodeURIComponent(token)}`;
+      const query=`${credentialQuery}&arrivalId=${encodeURIComponent(receiverArrivalId)}`;
+      const response=await fetch(`${API_BASE}/relay/resolve?${query}`,{method:'GET',cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.scene){
+        const relayError=new Error(relayResolveErrorMessage(payload?.code,payload?.error));
+        relayError.code=String(payload?.code||'');
+        throw relayError;
+      }
+      const raw=JSON.parse(JSON.stringify(payload.scene));
+      // Keep the winning receiver arrival stable for observation and future
+      // "next one" RELAY creation. This makes reopening by the same browser
+      // continue the same anonymous reader node instead of minting another one.
+      const resolvedCopyId=String(payload?.relay?.copyId||raw?.distribution?.copyId||'');
+      const resolvedRelayId=String(payload?.relay?.relayId||raw?.distribution?.relay?.relayId||'');
+      if(/^copy_[a-f0-9]{32}$/i.test(resolvedCopyId)&&/^relay_[a-f0-9]{32}$/i.test(resolvedRelayId)){
+        try{localStorage.setItem(`ahako:distribution-arrival:${resolvedCopyId}:${resolvedRelayId}`,receiverArrivalId);}catch(_){}
+      }
+      currentPackage={files:new Map(),manifest:{package:'url-relay',packageVersion:'1.0'},raw};
+      if(relayButton)relayButton.hidden=true;
+      renderJourney(raw);
+      const previousUrls=assetUrls;assetUrls=[];
+      try{
+        await window.ScenePublicPlayer.loadDocument(raw,{sourceKey:`relay-url:${String(payload?.relay?.relayId||publicId||token)}`});
+      }catch(error){assetUrls=previousUrls;throw error;}
+      for(const u of previousUrls){try{URL.revokeObjectURL(u)}catch(_){} }
+      launcher.hidden=true;
+      if(backButton)backButton.hidden=true;
+      setStatus('');
+      return true;
+    }catch(error){
+      console.error(error);
+      currentPackage=null;
+      if(relayButton)relayButton.hidden=true;
+      if(journey)journey.hidden=true;
+      launcher.hidden=false;
+      setRelayEntryMode(true);
+      if(backButton)backButton.hidden=true;
+      setStatus(String(error?.message||error));
+      if(error?.code==='RELAY_ALREADY_RECEIVED'&&ownCopyButton){
+        const title=dropZone?.querySelector('h1');
+        if(title)title.textContent='この一冊は、もう届きました。';
+        ownCopyButton.hidden=false;
+        ownCopyButton.disabled=false;
+        ownCopyButton.textContent='自分の一冊を受け取る';
+        ownCopyButton.onclick=()=>receiveOwnCopy({button:ownCopyButton,statusNode:status});
+      }
+      return false;
+    }finally{
+      if(openButton)openButton.disabled=false;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Phase 4 RELAY
+  // Official RELAY does not mint a new copyId. It keeps the same issued copy
+  // and adds a new relay node so the journey can be observed without storing
+  // recipient identity. The package is rebuilt locally; work assets are not
+  // uploaded to the A-Hako API.
+  // ------------------------------------------------------------
+  const enc=new TextEncoder();
+  function randomRelayId(){
+    try{return `relay_${crypto.randomUUID().replaceAll('-','')}`;}catch(_){const a=new Uint8Array(16);crypto.getRandomValues(a);return `relay_${[...a].map(v=>v.toString(16).padStart(2,'0')).join('')}`;}
+  }
+  function validCopyId(v){return /^copy_[a-f0-9]{32}$/i.test(String(v||''));}
+  function validRelayId(v){return /^relay_[a-f0-9]{32}$/i.test(String(v||''));}
+  function validArrivalId(v){return /^arrival_[a-f0-9]{32}$/i.test(String(v||''));}
+  function validWorkId(v){return /^[A-Za-z0-9_-]{12,80}$/.test(String(v||''));}
+  function randomArrivalId(){try{return `arrival_${crypto.randomUUID().replaceAll('-','')}`;}catch(_){const a=new Uint8Array(16);crypto.getRandomValues(a);return `arrival_${[...a].map(v=>v.toString(16).padStart(2,'0')).join('')}`;}}
+  function currentArrivalId(copyId,relayId){
+    const key=`ahako:distribution-arrival:${copyId}:${relayId||'root'}`;
+    let id='';try{id=String(localStorage.getItem(key)||'');}catch(_){}
+    if(!validArrivalId(id)){id=randomArrivalId();try{localStorage.setItem(key,id);}catch(_){}}
+    return id;
+  }
+  function relayInfo(raw){
+    // Author policy: older Distribution.scene files without an explicit policy
+    // remain relayable; only an explicit false disables pass-along.
+    if(raw?.sharing?.relay?.enabled === false)return null;
+    // Author-issued copies are direct Distribution copies, not RELAY seeds.
+    if(raw?.distribution?.issue?.issueId||raw?.distribution?.channel==='author-issue')return null;
+    const workId=String(raw?.workId||'').trim();
+    const editionId=String(raw?.edition?.editionId||'').trim();
+    const copyId=String(raw?.distribution?.copyId||'').trim();
+    if(!validWorkId(workId)||!/^edition_[a-f0-9]{32}$/i.test(editionId)||!validCopyId(copyId))return null;
+    const source=raw?.distribution?.relay||{};
+    const sourceRelayId=validRelayId(source.relayId)?String(source.relayId):null;
+    const sourceHop=Number.isInteger(Number(source.hop))?Math.max(0,Math.min(999,Number(source.hop))):0;
+    const sourceArrivalId=currentArrivalId(copyId,sourceRelayId);
+    return {workId,editionId,copyId,sourceRelayId,sourceHop,sourceArrivalId};
+  }
+  function sentStateKey(info){
+    return `ahako:distribution-relay-sent:${info.copyId}:${info.sourceArrivalId}`;
+  }
+  function loadSentState(info){
+    if(!info)return null;
+    try{
+      const raw=localStorage.getItem(sentStateKey(info));
+      if(!raw)return null;
+      const value=JSON.parse(raw);
+      if(!value||value.sent!==true)return null;
+      return {
+        sent:true,
+        relayId:validRelayId(value.relayId)?String(value.relayId):null,
+        sentAt:String(value.sentAt||''),
+        hop:Number.isInteger(Number(value.hop))?Math.max(0,Math.min(1000,Number(value.hop))):Math.min(1000,info.sourceHop+1)
+      };
+    }catch(_){return null;}
+  }
+  function saveSentState(info,{relayId,hop,sentAt}){
+    if(!info)return;
+    try{
+      localStorage.setItem(sentStateKey(info),JSON.stringify({sent:true,relayId,hop,sentAt}));
+    }catch(_){ }
+  }
+  function issuedStateKey(info){return `ahako:url-relay-issued:${info.copyId}:${info.sourceArrivalId}`;}
+  function loadIssuedState(info){
+    try{const v=JSON.parse(localStorage.getItem(issuedStateKey(info))||'null');if(!v||!validRelayId(v.relayId)||!validRelayPublicId(v.publicId)||!/^https:\/\//.test(String(v.url||'')))return null;if(v.expiresAt&&Date.parse(v.expiresAt)<=Date.now()){localStorage.removeItem(issuedStateKey(info));return null;}return v;}catch(_){return null;}
+  }
+  function saveIssuedState(info,value){try{localStorage.setItem(issuedStateKey(info),JSON.stringify(value));}catch(_){}}
+
+  function journeyPathText(hop,sent=false){
+    const parts=['発行'];
+    if(hop<=0){parts.push('◎ あなた');}
+    else if(hop<=4){for(let i=1;i<hop;i++)parts.push('●');parts.push('◎ あなた');}
+    else{parts.push('●','●','…','●','◎ あなた');}
+    if(sent)parts.push('○');
+    return parts.join('  ─  ');
+  }
+  function renderJourney(raw,{sent=null}={}){
+    if(!journey)return;
+    const info=relayInfo(raw);
+    if(!info){journey.hidden=true;return;}
+    const issued=loadIssuedState(info);
+    const isSent=sent===null?issued?.shared===true:!!sent;
+    const hop=info.sourceHop;
+    journey.hidden=false;
+    journey.classList.toggle('is-sent',isSent);
+    if(journeyMessage){
+      journeyMessage.textContent=isSent
+        ? '次の一人へ送り出しました。'
+        : (hop>0 ? `${hop}回渡って、あなたに届きました。` : 'この一冊の旅は、ここから始まります。');
+    }
+    if(journeyPath)journeyPath.textContent=journeyPathText(hop,isSent);
+    if(journeyPrompt){
+      if(isSent){
+        journeyPrompt.textContent='○ は、まだ届いていない次の旅です。';
+      }else{
+        const readExpiresAt=String(raw?.distribution?.relay?.readExpiresAt||'');
+        const ms=Date.parse(readExpiresAt)-Date.now();
+        if(readExpiresAt&&Number.isFinite(ms)&&ms>0){
+          const days=Math.max(1,Math.ceil(ms/(24*60*60*1000)));
+          journeyPrompt.textContent=days<=1
+            ? 'この一冊の旅は、今日まで。面白かったら次の一人へ。'
+            : `この一冊は、あと${days}日あなたの手元にあります。面白かったら次の一人へ。`;
+        }else{
+          journeyPrompt.textContent='面白かったら、次の一人へ。';
+        }
+      }
+    }
+  }
+
+  function crc32(bytes){
+    let c=0xffffffff;
+    for(let i=0;i<bytes.length;i++){
+      c^=bytes[i];
+      for(let k=0;k<8;k++)c=(c>>>1)^((c&1)?0xedb88320:0);
+    }
+    return (c^0xffffffff)>>>0;
+  }
+  function dosDateTime(date=new Date()){
+    let y=Math.max(1980,date.getFullYear());
+    const time=(date.getHours()<<11)|(date.getMinutes()<<5)|(date.getSeconds()>>1);
+    const d=((y-1980)<<9)|((date.getMonth()+1)<<5)|date.getDate();
+    return {time,date:d};
+  }
+  function writeU16(a,o,v){a[o]=v&255;a[o+1]=(v>>>8)&255;}
+  function writeU32(a,o,v){a[o]=v&255;a[o+1]=(v>>>8)&255;a[o+2]=(v>>>16)&255;a[o+3]=(v>>>24)&255;}
+  function buildStoredZip(files){
+    const locals=[],centrals=[];let offset=0;const now=dosDateTime(new Date());
+    for(const [name0,data0] of files){
+      const name=norm(name0),nameBytes=enc.encode(name),data=data0 instanceof Uint8Array?data0:new Uint8Array(data0),crc=crc32(data);
+      const local=new Uint8Array(30+nameBytes.length+data.length);
+      writeU32(local,0,0x04034b50);writeU16(local,4,20);writeU16(local,6,0x0800);writeU16(local,8,0);writeU16(local,10,now.time);writeU16(local,12,now.date);writeU32(local,14,crc);writeU32(local,18,data.length);writeU32(local,22,data.length);writeU16(local,26,nameBytes.length);writeU16(local,28,0);local.set(nameBytes,30);local.set(data,30+nameBytes.length);locals.push(local);
+      const central=new Uint8Array(46+nameBytes.length);
+      writeU32(central,0,0x02014b50);writeU16(central,4,20);writeU16(central,6,20);writeU16(central,8,0x0800);writeU16(central,10,0);writeU16(central,12,now.time);writeU16(central,14,now.date);writeU32(central,16,crc);writeU32(central,20,data.length);writeU32(central,24,data.length);writeU16(central,28,nameBytes.length);writeU16(central,30,0);writeU16(central,32,0);writeU16(central,34,0);writeU16(central,36,0);writeU32(central,38,0);writeU32(central,42,offset);central.set(nameBytes,46);centrals.push(central);
+      offset+=local.length;
+    }
+    const centralOffset=offset,centralSize=centrals.reduce((n,a)=>n+a.length,0),count=centrals.length;
+    const eocd=new Uint8Array(22);writeU32(eocd,0,0x06054b50);writeU16(eocd,4,0);writeU16(eocd,6,0);writeU16(eocd,8,count);writeU16(eocd,10,count);writeU32(eocd,12,centralSize);writeU32(eocd,16,centralOffset);writeU16(eocd,20,0);
+    return new Blob([...locals,...centrals,eocd],{type:'application/octet-stream'});
+  }
+  function safeFileBase(v){return String(v||'scene').replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,' ').trim().slice(0,80)||'scene';}
+  async function createRelayUrl(info,hop){
+    const response=await fetch(`${API_BASE}/relay/create`,{
+      method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+      body:JSON.stringify({
+        workId:info.workId,editionId:info.editionId,copyId:info.copyId,
+        parentRelayId:info.sourceRelayId,sourceArrivalId:info.sourceArrivalId,hop
+      })
+    });
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok||!payload?.ok||!payload?.url||!validRelayId(payload?.relayId)||!validRelayPublicId(payload?.publicId)){
+      const code=String(payload?.code||'');
+      if(code==='EDITION_NOT_FOUND')throw new Error('この版はまだURL RELAY用に登録されていません。');
+      if(code==='EDITION_STOPPED')throw new Error('この版のRELAYは作者により停止されています。');
+      throw new Error(String(payload?.error||'RELAY URLを発行できませんでした。'));
+    }
+    return payload;
+  }
+  async function commitRelayUrl(publicId){
+    if(!validRelayPublicId(publicId))return false;
+    try{
+      const response=await fetch(`${API_BASE}/relay/commit`,{
+        method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',
+        body:JSON.stringify({id:publicId})
+      });
+      const payload=await response.json().catch(()=>null);
+      return !!(response.ok&&payload?.ok);
+    }catch(_){return false;}
+  }
+  function relayTokenFromUrl(url){
+    try{return String(new URL(url,location.href).searchParams.get('relay')||'').trim();}catch(_){return '';}
+  }
+  function escapeHtml(value){
+    return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+  function legacyCopyText(text){
+    try{
+      const area=document.createElement('textarea');
+      area.value=String(text||'');
+      area.setAttribute('readonly','');
+      area.style.position='fixed';area.style.left='-9999px';area.style.top='0';
+      document.body.appendChild(area);area.select();area.setSelectionRange(0,area.value.length);
+      const ok=document.execCommand&&document.execCommand('copy');
+      area.remove();
+      return !!ok;
+    }catch(_){return false;}
+  }
+  function isLikelyDesktop(){
+    try{return !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||'') && matchMedia('(pointer:fine)').matches;}catch(_){return false;}
+  }
+  async function copyRelayUrl(url){
+    if(navigator.clipboard?.writeText){
+      try{await navigator.clipboard.writeText(url);return true;}catch(e){console.warn('Clipboard API unavailable; falling back.',e);}
+    }
+    return legacyCopyText(url);
+  }
+  function relayShareSheet(url){
+    return new Promise(resolve=>{
+      const old=document.getElementById('relayShareSheet');
+      if(old)old.remove();
+
+      const overlay=document.createElement('div');
+      overlay.id='relayShareSheet';
+      overlay.className='relay-share-sheet';
+      overlay.innerHTML=`
+        <div class="relay-share-sheet__backdrop" data-relay-close></div>
+        <section class="relay-share-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="relayShareTitle">
+          <div class="relay-share-sheet__handle" aria-hidden="true"></div>
+          <h2 id="relayShareTitle">次の一人へ</h2>
+          <p>この一冊のURLを送ります。</p>
+          <div class="relay-share-sheet__url">${escapeHtml(url)}</div>
+          <button class="relay-share-sheet__primary" type="button" data-relay-share>共有する</button>
+          <button class="relay-share-sheet__copy" type="button" data-relay-copy>URLをコピー</button>
+          <button class="relay-share-sheet__cancel" type="button" data-relay-close>キャンセル</button>
+          <p class="relay-share-sheet__status" aria-live="polite"></p>
+        </section>`;
+      document.body.appendChild(overlay);
+
+      const status=overlay.querySelector('.relay-share-sheet__status');
+      let settled=false;
+      const finish=result=>{
+        if(settled)return;
+        settled=true;
+        overlay.remove();
+        resolve(result);
+      };
+
+      overlay.querySelectorAll('[data-relay-close]').forEach(el=>el.addEventListener('click',()=>finish({shared:false,cancelled:true})));
+
+      const shareButton=overlay.querySelector('[data-relay-share]');
+      if(!navigator.share)shareButton.hidden=true;
+      shareButton.addEventListener('click',async()=>{
+        try{
+          await navigator.share({url});
+          finish({shared:true,method:'native'});
+        }catch(e){
+          if(e?.name==='AbortError')return;
+          console.warn('Native URL share unavailable.',e);
+          status.textContent='共有画面を開けませんでした。URLをコピーしてください。';
+        }
+      });
+
+      overlay.querySelector('[data-relay-copy]').addEventListener('click',async()=>{
+        // This click is a fresh user gesture, so iOS Safari can copy without
+        // showing the old manual prompt in normal cases.
+        let ok=legacyCopyText(url);
+        if(!ok)ok=await copyRelayUrl(url);
+        if(ok){
+          status.textContent='コピーしました。';
+          setTimeout(()=>finish({shared:true,method:'mobile-copy'}),350);
+          return;
+        }
+        status.textContent='コピーできませんでした。URLを長押ししてコピーしてください。';
+      });
+    });
+  }
+
+  async function shareRelayUrl(url){
+    // Use the same in-app RELAY sheet on every device.
+    // It gives both desktop and mobile a consistent choice:
+    // native/system share when available, or one-tap URL copy.
+    return await relayShareSheet(url);
+  }
+
+  async function relayCurrentScene(){
+    if(!currentPackage)return;
+    const info=relayInfo(currentPackage.raw);
+    if(!info)return;
+    if(relayButton)relayButton.disabled=true;
+    if(journey){journey.classList.add('is-sharing');journey.setAttribute('aria-disabled','true');}
+    const hop=Math.min(1000,info.sourceHop+1);
+    try{
+      let issued=loadIssuedState(info);
+      if(!issued){
+        issued=await createRelayUrl(info,hop);
+        saveIssuedState(info,{url:String(issued.url),publicId:String(issued.publicId),relayId:String(issued.relayId),hop,expiresAt:String(issued.expiresAt||''),issuedAt:new Date().toISOString(),shared:false});
+      }
+      const result=await shareRelayUrl(String(issued.url));
+      if(result.cancelled)return;
+      if(result.shared){
+        // A successful share/copy may still not mean the recipient opened it.
+        // Commit the pending ○, but keep this card reusable and always reuse
+        // the exact same relay URL for this arrival.
+        await commitRelayUrl(String(issued.publicId));
+        issued={...issued,shared:true,sharedAt:new Date().toISOString()};
+        saveIssuedState(info,issued);
+        renderJourney(currentPackage.raw,{sent:true});
+      }
+    }catch(error){console.error(error);AhakoDialog.alert(`RELAY URLを作れませんでした: ${error?.message||error}`);}
+    finally{if(relayButton)relayButton.disabled=false;if(journey){journey.classList.remove('is-sharing');journey.removeAttribute('aria-disabled');}}
+  }
+
+  async function inflateRaw(bytes){
+    if(typeof DecompressionStream==='undefined')throw new Error('このブラウザは .scene の展開に必要な機能へ対応していません。');
+    const ds=new DecompressionStream('deflate-raw');
+    const stream=new Blob([bytes]).stream().pipeThrough(ds);
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  async function readZip(buffer){
+    const bytes=new Uint8Array(buffer),view=new DataView(buffer),min=Math.max(0,bytes.length-65557);let eocd=-1;
+    for(let i=bytes.length-22;i>=min;i--){if(u32(view,i)===0x06054b50){eocd=i;break;}}
+    if(eocd<0)throw new Error('ZIPコンテナとして認識できません。');
+    const count=u16(view,eocd+10);let p=u32(view,eocd+16);const files=new Map(),dec=new TextDecoder('utf-8');
+    for(let n=0;n<count;n++){
+      if(u32(view,p)!==0x02014b50)throw new Error('ZIP中央ディレクトリが壊れています。');
+      const method=u16(view,p+10),csize=u32(view,p+20),usize=u32(view,p+24),nameLen=u16(view,p+28),extraLen=u16(view,p+30),commentLen=u16(view,p+32),localOffset=u32(view,p+42);
+      const name=dec.decode(bytes.slice(p+46,p+46+nameLen));p+=46+nameLen+extraLen+commentLen;if(name.endsWith('/'))continue;
+      if(u32(view,localOffset)!==0x04034b50)throw new Error(`ZIPヘッダ破損: ${name}`);
+      const ln=u16(view,localOffset+26),le=u16(view,localOffset+28),start=localOffset+30+ln+le,packed=bytes.slice(start,start+csize);let data;
+      if(method===0)data=packed;else if(method===8)data=await inflateRaw(packed);else throw new Error(`未対応の圧縮方式: ${method}`);
+      if(usize&&data.length!==usize)console.warn('size mismatch',name,data.length,usize);files.set(norm(name),data);
+    }
+    return files;
+  }
+  function mime(path,data=null){
+    const p=path.toLowerCase();
+    if(p.endsWith('.mp3'))return'audio/mpeg';if(p.endsWith('.wav'))return'audio/wav';if(p.endsWith('.m4a')||p.endsWith('.mp4'))return'audio/mp4';if(p.endsWith('.aac'))return'audio/aac';if(p.endsWith('.ogg'))return'audio/ogg';if(p.endsWith('.opus'))return'audio/opus';if(p.endsWith('.flac'))return'audio/flac';if(p.endsWith('.webm'))return'audio/webm';
+    if(p.endsWith('.png'))return'image/png';if(p.endsWith('.jpg')||p.endsWith('.jpeg')||p.endsWith('.jfif'))return'image/jpeg';if(p.endsWith('.webp'))return'image/webp';if(p.endsWith('.gif'))return'image/gif';if(p.endsWith('.svg'))return'image/svg+xml';if(p.endsWith('.avif'))return'image/avif';if(p.endsWith('.heic'))return'image/heic';if(p.endsWith('.heif'))return'image/heif';if(p.endsWith('.bmp'))return'image/bmp';
+    if(p.endsWith('.woff2'))return'font/woff2';if(p.endsWith('.woff'))return'font/woff';
+    const b=data instanceof Uint8Array?data:new Uint8Array(data||0),ascii=(from,to)=>String.fromCharCode(...b.slice(from,to));
+    if(b.length>=8&&b[0]===0x89&&ascii(1,4)==='PNG')return'image/png';
+    if(b.length>=3&&b[0]===0xff&&b[1]===0xd8&&b[2]===0xff)return'image/jpeg';
+    if(b.length>=6&&(ascii(0,6)==='GIF87a'||ascii(0,6)==='GIF89a'))return'image/gif';
+    if(b.length>=12&&ascii(0,4)==='RIFF'&&ascii(8,12)==='WEBP')return'image/webp';
+    if(b.length>=12&&ascii(0,4)==='RIFF'&&ascii(8,12)==='WAVE')return'audio/wav';
+    if(b.length>=4&&ascii(0,4)==='OggS')return b.length>=36&&ascii(28,36)==='OpusHead'?'audio/opus':'audio/ogg';
+    if(b.length>=4&&ascii(0,4)==='fLaC')return'audio/flac';
+    if(b.length>=3&&ascii(0,3)==='ID3')return'audio/mpeg';
+    if(b.length>=2&&b[0]===0xff&&(b[1]&0xf6)===0xf0)return'audio/aac';
+    if(b.length>=2&&b[0]===0xff&&(b[1]&0xe0)===0xe0)return'audio/mpeg';
+    if(b.length>=12&&ascii(4,8)==='ftyp')return'audio/mp4';
+    if(b.length>=4&&b[0]===0x1a&&b[1]===0x45&&b[2]===0xdf&&b[3]===0xa3)return'audio/webm';
+    if(b.length){try{if(/^\s*(?:<\?xml[^>]*>\s*)?<svg[\s>]/i.test(new TextDecoder().decode(b.slice(0,512))))return'image/svg+xml';}catch(_){}}
+    return'application/octet-stream';
+  }
+  function jsonFile(files,name){
+    const b=files.get(norm(name));if(!b)throw new Error(`${name} が .scene 内にありません。`);
+    return JSON.parse(new TextDecoder('utf-8').decode(b));
+  }
+  function buildAssetMap(files){
+    const map=new Map();
+    for(const[name,data]of files){if(!name.startsWith('assets/'))continue;const url=URL.createObjectURL(new Blob([data],{type:mime(name,data)}));assetUrls.push(url);map.set(norm(name),url);}
+    return map;
+  }
+  function packagedAssetLookup(value,map){
+    if(typeof value!=='string'||!map?.size)return'';
+    const raw=norm(value).split(/[?#]/,1)[0];
+    if(map.has(raw))return map.get(raw);
+    try{const decoded=norm(decodeURIComponent(raw));return map.get(decoded)||'';}catch(_){return'';}
+  }
+  function hostedAssetUrl(value){
+    const input=String(value||'').trim();if(!input||/^(?:https?:|blob:|data:)/i.test(input))return input;
+    let file='';
+    const normalized=input.replace(/^\.\//,'');
+    if(normalized.startsWith('assets/'))file=normalized.slice(7).split(/[?#]/,1)[0];
+    else if(normalized.startsWith('/asset/'))file=normalized.slice(7).split(/[?#]/,1)[0];
+    else if(normalized.startsWith('asset/'))file=normalized.slice(6).split(/[?#]/,1)[0];
+    else if(/^[A-Za-z0-9_-]{12,96}(?:\.[A-Za-z0-9]{1,8})?$/.test(normalized))file=normalized;
+    if(!file||file.includes('/')||file.includes('\\'))return input;
+    try{file=decodeURIComponent(file);}catch(_){}
+    return `${API_BASE}/asset/${encodeURIComponent(file)}`;
+  }
+  const MEDIA_REFERENCE_KEYS=new Set(['src','url','icon','image','logoUrl','poster']);
+  function rewriteAssets(value,map,key=''){
+    if(Array.isArray(value))return value.map(v=>rewriteAssets(v,map,key));
+    if(typeof value==='string')return packagedAssetLookup(value,map)||(MEDIA_REFERENCE_KEYS.has(key)?hostedAssetUrl(value):value);
+    if(!value||typeof value!=='object')return value;
+    const out={};
+    for(const[k,v]of Object.entries(value))out[k]=rewriteAssets(v,map,k);
+    return out;
+  }
+  async function openScene(file,{sourceMode='file',sourceKey='',syncPublicAppearance=false}={}){
+    if(!file)return;
+    currentSourceMode=sourceMode;
+    if(endingOwnWrap)endingOwnWrap.hidden=true;
+    if(endingOwnStatus)endingOwnStatus.textContent='';
+    if(endingOwnButton){
+      endingOwnButton.disabled=false;
+      endingOwnButton.textContent='自分の一冊を受け取る';
+      endingOwnButton.onclick=null;
+    }
+    setStatus('読み込み中…');openButton.disabled=true;
+    try{
+      const files=await readZip(await file.arrayBuffer());
+      const manifest=jsonFile(files,'manifest.json');
+      if(manifest.package!=='scene-package')throw new Error(`未対応 package: ${manifest.package||'(なし)'}`);
+      if(String(manifest.packageVersion||'')!=='1.0')throw new Error(`未対応 Scene Package version: ${manifest.packageVersion||'(なし)'}`);
+      let raw=jsonFile(files,manifest.entry||'scene.json');
+      // V167: MY COPY stores the Master workId, while /work/:id expects the
+      // publicationId. V166 queried /work/<masterWorkId>, so the visual sync was
+      // silently skipped (404) and old copies could render the whole Player chrome
+      // with a stale light theme over a dark Scene. Resolve Master -> publication
+      // first, then copy only the visual theme contract from the live publication.
+      // The owned body, Edition, copyId, RELAY and journey identity stay untouched.
+      if(syncPublicAppearance&&raw?.distribution?.copyId&&(raw?.distribution?.workId||raw?.workId)){
+        try{
+          const masterWorkId=String(raw?.distribution?.workId||raw?.workId||'').trim();
+          const lookup=await fetch(`${API_BASE}/publication/${encodeURIComponent(masterWorkId)}`,{cache:'no-store'});
+          const identity=lookup.ok?await lookup.json():null;
+          const publicationId=identity?.ok&&identity?.exists?String(identity.id||'').trim():'';
+          if(publicationId){
+            const response=await fetch(`${API_BASE}/work/${encodeURIComponent(publicationId)}?raw=1`,{cache:'no-store'});
+            if(response.ok){
+              const canonical=await response.json();
+              if(canonical&&typeof canonical==='object'){
+                raw=JSON.parse(JSON.stringify(raw));
+                if(canonical.theme!==undefined)raw.theme=canonical.theme;
+                if(canonical.appearance!==undefined)raw.appearance=JSON.parse(JSON.stringify(canonical.appearance));
+              }
+            }
+          }
+        }catch(error){console.warn('MY COPY appearance sync skipped',error);}
+      }
+      currentPackage={files:new Map(files),manifest:JSON.parse(JSON.stringify(manifest)),raw:JSON.parse(JSON.stringify(raw))};
+      if(relayButton)relayButton.hidden=true;
+      renderJourney(raw);
+      // Validate/build first; revoke previous package only after the new package is ready.
+      const nextUrls=[];const previousUrls=assetUrls;assetUrls=[];
+      let doc;
+      try{const map=buildAssetMap(files);doc=rewriteAssets(raw,map);await window.ScenePublicPlayer.loadDocument(doc,{sourceKey:sourceKey||`local:${file.name}:${file.size}:${file.lastModified||0}`});}
+      catch(error){for(const u of assetUrls){try{URL.revokeObjectURL(u)}catch(_){}}assetUrls=previousUrls;throw error;}
+      for(const u of previousUrls){try{URL.revokeObjectURL(u)}catch(_){}}
+      launcher.hidden=true;const hasShelfReturn=showShelfReturnForSource();if(backButton)backButton.hidden=hasShelfReturn;setStatus('');finishAutoOpen();
+    }catch(error){finishAutoOpen();console.error(error);currentPackage=null;hideShelfReturn();if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));}
+    finally{openButton.disabled=false;fileInput.value='';}
+  }
+  function returnToLauncher(){
+    if(currentSourceMode==='review'){
+      try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
+      try{window.close();}catch(_){}
+      if(history.length>1){try{history.back();}catch(_){}}
+      return;
+    }
+    if(currentSourceMode==='relay-url'||currentSourceMode==='official-shelf'||currentSourceMode==='issue'||currentSourceMode==='preview'){try{history.back();}catch(_){}return;}
+    if(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master'){
+      try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
+      revokeAssets();
+      currentPackage=null;
+      location.href='../bookshelf/';
+      return;
+    }
+    // Let the current public Player own Core/audio teardown, then release only
+    // the Blob URLs that belong to the local package.
+    try{window.ScenePublicPlayer?.unloadDocument?.();}catch(error){console.warn(error);}
+    revokeAssets();
+    currentPackage=null;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;
+    setRelayEntryMode(false);
+    setStatus('');
+    fileInput.value='';
+    if(backButton)backButton.hidden=true;
+    launcher.hidden=false;
+  }
+  function openPicker(){fileInput.click();}
+  openButton.addEventListener('click',e=>{e.stopPropagation();openPicker();});
+  backButton?.addEventListener('click',returnToLauncher);
+  sceneHost?.addEventListener('sceneplayer:end',()=>{
+    const relayOwn=currentSourceMode==='relay-url'&&!!relayInfo(currentPackage?.raw);
+    const officialOwn=currentSourceMode==='official-shelf'&&/^shelf_[a-f0-9]{24}$/i.test(currentOfficialShelfId);
+    const issueOwn=currentSourceMode==='issue'&&/^issue_[a-f0-9]{24}$/.test(currentIssueId);
+    const canOwn=relayOwn||officialOwn||issueOwn;
+    if(!endingOwnWrap)return;
+    endingOwnWrap.hidden=!canOwn;
+    if(!canOwn)return;
+    if(endingOwnStatus)endingOwnStatus.textContent='';
+    if(endingOwnButton){
+      endingOwnButton.disabled=false;
+      endingOwnButton.textContent='自分の一冊を受け取る';
+      endingOwnButton.onclick=issueOwn?()=>claimIssuedCopy({button:endingOwnButton,statusNode:endingOwnStatus}):(officialOwn?()=>claimOfficialShelfCopy({button:endingOwnButton,statusNode:endingOwnStatus}):()=>receiveOwnCopy({button:endingOwnButton,statusNode:endingOwnStatus}));
+    }
+  });
+
+  relayButton?.addEventListener('click',relayCurrentScene);
+  journey?.addEventListener('click',()=>{if(currentSourceMode!=='review'&&relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing'))relayCurrentScene();});
+  journey?.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&currentSourceMode!=='review'&&relayInfo(currentPackage?.raw)&&!journey.classList.contains('is-sharing')){e.preventDefault();relayCurrentScene();}});
+  fileInput.addEventListener('change',()=>openScene(fileInput.files?.[0]));
+  ['dragenter','dragover'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.add('is-over');}));
+  ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
+  dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
+  dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
+  window.SceneLocalLoader={version:'5.16-reader-copy-arraybuffer',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openPreviewFromUrl,openBookshelfCopy,openBookshelfMaster};
+
+  const initialReviewUrl=reviewUrlFromLocation();
+  const initialPreviewToken=previewTokenFromLocation();
+  const initialIssueId=issueIdFromLocation();
+  const initialOfficialShelfId=officialShelfIdFromLocation();
+  const initialBookshelfMasterId=bookshelfMasterIdFromLocation();
+  const initialBookshelfCopyId=bookshelfCopyIdFromLocation();
+  const initialRelayNow=relayNowFromLocation();
+  const initialRelayToken=relayTokenFromLocation();
+  const initialRelayPublicId=relayPublicIdFromLocation();
+  if(initialReviewUrl){
+    openAdminReview(initialReviewUrl);
+  }else if(initialPreviewToken){
+    openPreviewFromUrl(initialPreviewToken);
+  }else if(initialIssueId){
+    openIssuedRead(initialIssueId);
+  }else if(initialOfficialShelfId){
+    openOfficialShelfRead(initialOfficialShelfId);
+  }else if(validWorkId(initialBookshelfMasterId)){
+    openBookshelfMaster(initialBookshelfMasterId);
+  }else if(validBookshelfCopyId(initialBookshelfCopyId)){
+    openBookshelfCopy(initialBookshelfCopyId).then(ok=>{
+      if(ok&&initialRelayNow&&relayInfo(currentPackage?.raw))setTimeout(()=>relayCurrentScene(),0);
+    });
+  }else if(initialRelayToken||initialRelayPublicId){
+    setRelayEntryMode(true);
+    if(launcher)launcher.hidden=false;
+    openRelayFromUrl(initialRelayToken,initialRelayPublicId);
+  }
+
+})();

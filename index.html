@@ -4,25 +4,45 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b1016">
-  <title>Scene Player｜あ箱</title>
-  <meta name="description" content="あ箱のScene Player。文章・音・背景が重なり合う、一冊ごとの読書体験を楽しめます。">
-  <link rel="canonical" href="https://yuya-narita.github.io/scene/">
+  <title>あ箱 Local Player</title>
+  <meta name="description" content="あ箱 Local Player。あなたの本棚にある一冊を読むためのプレイヤーです。">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="あ箱">
-  <meta property="og:title" content="Scene Player｜あ箱">
-  <meta property="og:description" content="文章・音・背景が重なり合う、一冊ごとの読書体験を楽しめます。">
-  <meta property="og:url" content="https://yuya-narita.github.io/scene/">
+  <meta property="og:title" content="あ箱 Local Player">
+  <meta property="og:description" content="あなたの本棚にある一冊を読むためのプレイヤーです。">
   <meta property="og:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Scene Player｜あ箱">
-  <meta name="twitter:description" content="文章・音・背景が重なり合う、一冊ごとの読書体験を楽しめます。">
+  <meta name="twitter:title" content="あ箱 Local Player">
+  <meta name="twitter:description" content="あなたの本棚にある一冊を読むためのプレイヤーです。">
   <meta name="twitter:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
-  <link rel="stylesheet" href="./scene-player-core.css?v=20261023-emoji-upright-trial-v2">
+  <script>try{const q=new URLSearchParams(location.search),copy=q.get('bookshelfCopy')||'',master=q.get('bookshelfMaster')||'',preview=q.get('preview')||'',issue=q.get('issue')||'';if(/^[a-f0-9]{48}$/i.test(preview)||/^copy_[a-f0-9]{32}$/i.test(copy)||/^[A-Za-z0-9_-]{12,80}$/.test(master)||/^issue_[a-f0-9]{24}$/i.test(issue))document.documentElement.classList.add('local-auto-open-pending')}catch(_){}</script>
+  <link rel="stylesheet" href="./scene-player-core.css?v=20261023-ios-text-default-v18">
   <link rel="stylesheet" href="./public-player.css?v=20261015-ending-v17">
-  <link rel="stylesheet" href="./ios-input-guard.css?v=70.4">
+  <link rel="stylesheet" href="./local-loader.css?v=63.35.5-auto-open">
+  <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
+  <script>window.__AHAKO_LOCAL_PLAYER__ = true;</script>
 </head>
 <body>
-  <a id="publicShelfReturn" class="public-shelf-return" href="./author/" hidden>← 作者の本棚へ</a>
+  <a id="publicShelfReturn" class="public-shelf-return" href="../bookshelf/" hidden>← 本棚へ</a>
+  <section id="localLauncher" class="local-launcher">
+    <div id="localDropZone" class="local-launcher-card" tabindex="0" role="button" aria-label=".sceneを開く">
+      <small>あ箱 LOCAL PLAYER</small>
+      <h1>.sceneを開く</h1>
+      <p>Master.scene / Distribution.scene を端末内で読み込みます。作品データはアップロードしません。</p>
+      <button id="localOpenButton" type="button">ファイルを選択</button>
+      <span>PCではここへドラッグ＆ドロップもできます</span>
+      <input id="localFileInput" type="file" hidden>
+      <p id="localStatus" class="local-status" aria-live="polite"></p>
+      <button id="localOwnCopyButton" class="local-own-copy" type="button" hidden>自分の一冊を受け取る</button>
+      <a class="local-privacy-link" href="https://yuya-narita.github.io/scene/privacy/" target="_blank" rel="noopener noreferrer">プライバシー</a>
+    </div>
+  </section>
+  <div id="localAutoOpen" class="local-auto-open" role="status" aria-live="polite" aria-label="本を開いています">
+    <span class="local-auto-open-spinner" aria-hidden="true"></span><span>本を開いています…</span>
+  </div>
+
+  <button id="localBackButton" class="local-back-button" type="button" hidden aria-label="ファイル選択に戻る">‹ <span>選択</span></button>
+
   <section id="publicIntro" class="public-intro" hidden>
     <div id="publicIntroCover" class="public-intro-cover"></div>
     <div id="publicIntroCoverDim" class="public-intro-cover-dim"></div>
@@ -41,8 +61,6 @@
       </div>
       <div class="public-intro-actions">
         <button id="publicStart" class="public-primary" type="button">はじめる</button>
-        <button id="publicGuideReceive" class="public-secondary" type="button" hidden>説明書を本棚に入れる</button>
-        <p id="publicGuideStatus" class="public-own-copy-status" aria-live="polite" hidden></p>
         <button id="publicContinue" class="public-secondary" type="button" hidden>途中から</button>
       </div>
     </div>
@@ -68,6 +86,13 @@
         <button id="publicOwnCopy" class="public-own-copy" type="button">自分の一冊を受け取る</button>
         <p id="publicOwnCopyStatus" class="public-own-copy-status" aria-live="polite"></p>
       </div>
+      <section id="publicJourney" class="public-journey" hidden aria-live="polite" role="button" tabindex="0" aria-label="次の一人へ">
+        <small>この一冊の旅</small>
+        <strong id="publicJourneyMessage"></strong>
+        <div id="publicJourneyPath" class="public-journey-path" aria-hidden="true"></div>
+        <p id="publicJourneyPrompt">面白かったら、次の一人へ。</p>
+      </section>
+      <button id="publicRelay" class="public-relay" type="button" hidden aria-hidden="true">次の一人へ</button>
     </div>
   </section>
 
@@ -124,7 +149,9 @@
     </form>
   </dialog>
 
-  <script src="./scene-player-core.js?v=20261023-emoji-upright-trial-v2"></script>
-  <script src="./public-player.js?v=20261020-start-cover-tap-v27"></script>
+  <script src="./scene-player-core.js?v=20261023-ios-text-default-v18"></script>
+  <script src="./public-player.js?v=20261016-restore-v26"></script>
+  <script src="../ahako-dialog.js?v=70.3"></script>
+  <script src="./local-loader.js?v=20261027-issue-autoload-v2"></script>
 </body>
 </html>
