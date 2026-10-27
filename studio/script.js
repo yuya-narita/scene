@@ -1905,18 +1905,7 @@
       });
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok||!payload?.checkoutUrl)throw new Error(payload?.error||`決済を開始できませんでした。 (HTTP ${response.status})`);
-      {
-        const checkoutUrl=String(payload.checkoutUrl||'');
-        const orderId=String(payload.orderId||payload.issueOrderId||payload.order?.orderId||'');
-        const successUrl=new URL(location.href.split('#')[0].split('?')[0]);
-        successUrl.searchParams.set('issue_payment','success');
-        if(orderId)successUrl.searchParams.set('issue_order_id',orderId);
-        const copied=window.prompt(
-          '【診断版】未決済注文の成功URLです。\nこの注文はまだ未決済です。URLをコピーしてからOKを押すとStripe Checkoutへ進みます。\n\norderId: '+(orderId||'(レスポンスに無し)'),
-          successUrl.toString()
-        );
-        location.href=checkoutUrl;
-      }
+      location.href=payload.checkoutUrl;
     }catch(error){
       console.error(error);if(status)status.textContent='';if(button)button.disabled=false;await appAlert(String(error?.message||error));
     }
@@ -1942,7 +1931,20 @@
       }catch(_){}
       await new Promise(resolve=>setTimeout(resolve,1000));
     }
-    await appAlert(last?.error||'決済は完了しています。発行処理を確認中です。少し待ってから「発行一覧」を開いてください。');
+    const finalStatus=String(last?.order?.status||'').toLowerCase();
+    if(finalStatus==='checkout_failed'){
+      await appAlert(last?.error||'決済に失敗しました。発行は行われていません。');
+      return;
+    }
+    if(finalStatus==='cancelled'||finalStatus==='canceled'){
+      await appAlert('発行決済はキャンセルされています。発行は行われていません。');
+      return;
+    }
+    if(finalStatus&&finalStatus!=='paid'){
+      await appAlert('決済はまだ完了していません。発行は行われていません。');
+      return;
+    }
+    await appAlert(last?.error||'決済結果をまだ確認できません。発行一覧を確認してください。');
   }
 
   let issueManagerFilter='all';
