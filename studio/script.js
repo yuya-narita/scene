@@ -1863,7 +1863,7 @@
     const input=$('#issueLimitInput'),status=$('#issueStatus'),button=$('#issueCreate');
     if(input)input.value='100';
     if(status)status.textContent='';
-    if(button){button.disabled=true;button.title='Stripe決済は次の工程で接続します。';}
+    if(button){button.disabled=false;button.title='';}
     updateIssuePricePreview();
     $('#issueDialog')?.showModal();
   }
@@ -1887,7 +1887,52 @@
       appAlert(String(error?.message||error));
     }
   });
-  $('#issueCreate')?.addEventListener('click',()=>{});
+  $('#issueCreate')?.addEventListener('click',async()=>{
+    const button=$('#issueCreate');
+    if(!issueTargetRow?.document?.scenes?.length){await appAlert('発行する作品データを確認できません。');return;}
+    if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
+    const workId=draftMasterWorkId(issueTargetRow)||String(issueTargetRow?.workId||'');
+    if(!workId){await appAlert('作品のMaster情報を確認できません。');return;}
+    const issueLimit=issueCurrentLimit(),total=issueLimit*ISSUE_UNIT_PRICE;
+    if(!await appConfirm(`${issueLimit.toLocaleString('ja-JP')}部を ${issueFormatYen(total)} で発行します。\n\nStripeの決済画面へ移動します。`,{confirmLabel:'決済へ進む'}))return;
+    if(button)button.disabled=true;
+    const status=$('#issueStatus');if(status)status.textContent='決済を準備しています…';
+    try{
+      const hosted=await prepareDocumentForPublish(issueTargetRow.document);
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues/checkout`,{
+        method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),
+        body:JSON.stringify({workId,issueLimit,scene:hosted,returnUrl:location.href.split('#')[0].split('?')[0]})
+      });
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok||!payload?.checkoutUrl)throw new Error(payload?.error||`決済を開始できませんでした。 (HTTP ${response.status})`);
+      location.href=payload.checkoutUrl;
+    }catch(error){
+      console.error(error);if(status)status.textContent='';if(button)button.disabled=false;await appAlert(String(error?.message||error));
+    }
+  });
+
+  async function handleIssuePaymentReturn(){
+    const params=new URLSearchParams(location.search),state=params.get('issue_payment'),orderId=params.get('issue_order_id');
+    if(!state||!orderId)return;
+    const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('issue_payment');cleanUrl.searchParams.delete('issue_order_id');history.replaceState({},'',cleanUrl.toString());
+    if(state==='cancel'){showEasyToast('発行決済をキャンセルしました。');return;}
+    if(state!=='success')return;
+    if(!authorSessionToken||!signedInAuthor?.authorId){await appAlert('決済結果を確認するため、作者ログインを確認してください。');return;}
+    let last=null;
+    for(let attempt=0;attempt<12;attempt++){
+      try{
+        const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issue-orders/${encodeURIComponent(orderId)}`,{headers:authorAuthHeaders(),cache:'no-store'});
+        const payload=await response.json().catch(()=>null);last=payload;
+        if(response.ok&&payload?.ok&&payload?.order?.status==='paid'&&payload?.issue){
+          showEasyToast(`${Number(payload.issue.issueLimit||0).toLocaleString('ja-JP')}部を発行しました。`);
+          openIssueManager();return;
+        }
+        if(payload?.order?.status==='checkout_failed')break;
+      }catch(_){}
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    await appAlert(last?.error||'決済は完了しています。発行処理を確認中です。少し待ってから「発行一覧」を開いてください。');
+  }
 
   let issueManagerFilter='all';
   let issueManagerItems=[];
@@ -18216,7 +18261,7 @@ function openDesktopTextDetail(){
     menuOpenBookshelfButton.addEventListener('click',()=>{closeEasyMenu();location.href='../bookshelf/';});
   }
   if(openedFromBookshelf)setTimeout(openMasterFromBookshelf,120);
-  restoreAuthorSession().then(()=>handleStripeConnectReturn());
+  restoreAuthorSession().then(async()=>{await handleStripeConnectReturn();await handleIssuePaymentReturn();});
 
   // Public, intentionally small integration surface.
   // Embed/API clients can pass a Scene Format object directly or fetch one.
