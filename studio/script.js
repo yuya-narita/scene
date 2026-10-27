@@ -2024,18 +2024,29 @@
       const coverUrl=String(first.coverUrl||'').trim();
       const thumb=coverUrl?`<img class="issue-manager-cover" src="${issueEscapeHtml(coverUrl)}" alt="" loading="lazy">`:`<div class="issue-manager-cover issue-manager-cover-empty" aria-hidden="true">あ</div>`;
       const groupId=`issue-work-${index}`;
-      return `<section class="issue-manager-work-group" data-issue-work-group>
-        <button type="button" class="issue-manager-item issue-manager-work-summary" data-issue-work-toggle aria-expanded="false" aria-controls="${groupId}">
+      return `<section data-issue-work-group style="width:100%;border-bottom:1px solid rgba(127,127,127,.18)">
+        <button type="button" data-issue-work-toggle aria-expanded="false" aria-controls="${groupId}" style="appearance:none;-webkit-appearance:none;width:100%;border:0;background:transparent;color:inherit;font:inherit;text-align:left;padding:18px 8px;display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:16px;align-items:center;cursor:pointer;border-radius:0">
           ${thumb}
-          <div class="issue-manager-info">
+          <div class="issue-manager-info" style="min-width:0">
             ${metaLine?`<div class="issue-manager-series">${issueEscapeHtml(metaLine)}</div>`:''}
             <strong class="issue-manager-title">${title}</strong>
             ${episodeLine?`<div class="issue-manager-episode">${issueEscapeHtml(episodeLine)}</div>`:''}
-            <div class="issue-manager-stats"><span>発行ロット ${lots.length}件</span><span>累計${totalLimit}部</span><span>${totalIssued}部受取</span>${totalRemaining>0?`<span>配付可能${totalRemaining}部</span>`:''}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:12px">
+              <span><b>${lots.length}</b>回発行</span>
+              <span>累計 <b>${totalLimit}</b>部</span>
+              <span><b>${totalIssued}</b>部受取</span>
+              ${totalRemaining>0?`<span>残り <b>${totalRemaining}</b>部</span>`:''}
+            </div>
           </div>
-          <div class="issue-manager-side"><span class="issue-manager-remaining">発行中 ${activeCount}${stoppedCount?` / 停止 ${stoppedCount}`:''}</span><span aria-hidden="true" style="font-size:18px;line-height:1">⌄</span></div>
+          <div style="align-self:stretch;min-width:92px;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:12px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+              ${activeCount?`<span style="border:1px solid rgba(127,127,127,.28);border-radius:999px;padding:4px 9px;font-size:11px;white-space:nowrap">発行中 ${activeCount}</span>`:''}
+              ${stoppedCount?`<span style="border:1px solid rgba(127,127,127,.28);border-radius:999px;padding:4px 9px;font-size:11px;white-space:nowrap;opacity:.72">停止 ${stoppedCount}</span>`:''}
+            </div>
+            <span data-issue-work-arrow aria-hidden="true" style="font-size:16px;line-height:1;opacity:.65;padding-right:4px">⌄</span>
+          </div>
         </button>
-        <div id="${groupId}" data-issue-work-lots hidden style="padding-left:18px;border-left:1px solid rgba(127,127,127,.18);margin-left:12px">${lots.map(rowHtml).join('')}</div>
+        <div id="${groupId}" data-issue-work-lots hidden style="margin:0 0 8px 88px;padding:0 0 0 14px;border-left:2px solid rgba(127,127,127,.16)">${lots.map(rowHtml).join('')}</div>
       </section>`;
     }).join('');
 
@@ -2046,7 +2057,7 @@
       const opening=lots.hidden;
       lots.hidden=!opening;
       button.setAttribute('aria-expanded',opening?'true':'false');
-      const arrow=button.querySelector('.issue-manager-side span[aria-hidden="true"]');
+      const arrow=button.querySelector('[data-issue-work-arrow]');
       if(arrow)arrow.textContent=opening?'⌃':'⌄';
     }));
 
