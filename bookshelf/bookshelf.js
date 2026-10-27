@@ -122,18 +122,42 @@ async function loadCommerceWallet({open=false}={}){
       }else if(payout.eligible){
         guide.textContent=`最低 ¥${minimum.toLocaleString('ja-JP')} ・ 月1回 ・ 手数料 ¥0`;
       }else{
-        guide.textContent='最低 ¥3,000 ・ 月1回 ・ 手数料 ¥0';
+        const reasons=Array.isArray(payout.blockedReasons)?payout.blockedReasons:[];
+        if(reasons.includes('ACCOUNT_RISK_HELD'))guide.textContent='現在、出金を一時停止しています。';
+        else if(reasons.includes('STRIPE_PAYOUTS_DISABLED')||reasons.includes('CONNECT_TRANSFERS_NOT_READY'))guide.textContent='Stripeの出金設定を確認してください。';
+        else guide.textContent='最低 ¥3,000 ・ 月1回 ・ 手数料 ¥0';
       }
     }
-    const payoutAction=$('#commerceWalletPayoutAction'),payoutReserved=$('#commerceWalletPayoutReserved');
-    const activePayout=(Array.isArray(data.payoutOrders)?data.payoutOrders:[]).find(row=>row.status==='reserved'||row.status==='processing');
+    const payoutAction=$('#commerceWalletPayoutAction'),payoutReserved=$('#commerceWalletPayoutReserved'),payoutRecent=$('#commerceWalletPayoutRecent');
+    const payoutOrders=Array.isArray(data.payoutOrders)?data.payoutOrders:[];
+    window.__ahakoWalletPayoutOrders=payoutOrders;
+    const activePayout=payoutOrders.find(row=>row.status==='reserved'||row.status==='processing');
     if(payoutAction)payoutAction.hidden=!payout.eligible||!!activePayout;
     if(payoutReserved){
       payoutReserved.hidden=!activePayout;
-      payoutReserved.innerHTML=activePayout?`<div><span>${activePayout.status==='processing'?'銀行へ出金処理中':'出金申請中'}</span><strong>¥${Math.max(0,Number(activePayout.amount)||0).toLocaleString('ja-JP')}</strong></div>${activePayout.status==='reserved'?`<div class="commerce-wallet-payout-buttons"><button class="is-primary" type="button" data-execute-payout="${escapeHtml(activePayout.orderId)}">銀行口座へ出金</button><button type="button" data-cancel-payout="${escapeHtml(activePayout.orderId)}">申請を取り消す</button></div>`:`<p class="commerce-wallet-payout-processing">Stripeで出金を処理しています。</p>`}`:'';
+      if(activePayout){
+        const amount=Math.max(0,Number(activePayout.amount)||0).toLocaleString('ja-JP');
+        if(activePayout.status==='reserved'){
+          payoutReserved.innerHTML=`<div><span>出金申請</span><strong>¥${amount}</strong></div><p>この金額を予約しています。銀行への出金前なら取り消せます。</p><div class="commerce-wallet-payout-buttons"><button class="is-primary" type="button" data-execute-payout="${escapeHtml(activePayout.orderId)}">銀行口座へ出金</button><button type="button" data-cancel-payout="${escapeHtml(activePayout.orderId)}">取り消す</button></div>`;
+        }else{
+          const arrival=activePayout.arrivalDate?new Date(Number(activePayout.arrivalDate)*1000).toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo'}):'';
+          payoutReserved.innerHTML=`<div><span>銀行へ出金処理中</span><strong>¥${amount}</strong></div><p>${arrival?`Stripe上の到着予定 ${escapeHtml(arrival)}。`:''}完了確認後に履歴へ反映します。</p>`;
+        }
+      }else payoutReserved.innerHTML='';
+    }
+    if(payoutRecent){
+      const recent=payoutOrders.find(row=>row.status==='paid'||row.status==='failed'||row.status==='cancelled');
+      payoutRecent.hidden=!recent;
+      if(recent){
+        const label=recent.status==='paid'?'出金完了':recent.status==='failed'?'出金失敗':'出金取消';
+        payoutRecent.innerHTML=`<span>${label}</span><strong>¥${Math.max(0,Number(recent.amount)||0).toLocaleString('ja-JP')}</strong>`;
+      }else payoutRecent.innerHTML='';
     }
     const payoutInput=$('#commerceWalletPayoutAmount');
-    if(payoutInput){payoutInput.min=String(minimum);payoutInput.max=String(withdrawable);if(!payoutInput.value&&payout.eligible)payoutInput.value=String(minimum);}
+    if(payoutInput){
+      payoutInput.min=String(minimum);payoutInput.max=String(withdrawable);
+      if(payout.eligible&&(Number(payoutInput.value)<minimum||Number(payoutInput.value)>withdrawable))payoutInput.value=String(minimum);
+    }
     if(status)status.textContent=data.connected?'':'Stripe Connect未接続です。';
     if(history){
       const rows=Array.isArray(data.transactions)?data.transactions:[];
@@ -146,6 +170,9 @@ async function reserveCommercePayout(){
   const input=$('#commerceWalletPayoutAmount'),button=$('#commerceWalletPayoutReserve'),status=$('#commerceWalletPayoutStatus');
   const amount=Math.floor(Number(input?.value)||0);
   if(amount<3000){if(status)status.textContent='3,000円以上で指定してください。';return;}
+  const max=Math.floor(Number(input?.max)||0);
+  if(max&&amount>max){if(status)status.textContent=`出金可能額 ¥${max.toLocaleString('ja-JP')} 以内で指定してください。`;return;}
+  if(!window.confirm(`¥${amount.toLocaleString('ja-JP')} を出金申請します。\n\nこの時点では銀行への出金はまだ行いません。`))return;
   if(button)button.disabled=true;if(status)status.textContent='出金額を予約しています…';
   try{
     await authorRequest('/author/payout-orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount})});
@@ -156,6 +183,9 @@ async function reserveCommercePayout(){
 }
 async function executeCommercePayout(orderId){
   if(!orderId)return;
+  const row=(window.__ahakoWalletPayoutOrders||[]).find(item=>item.orderId===orderId);
+  const amount=Math.max(0,Number(row?.amount)||0);
+  if(!window.confirm(`¥${amount.toLocaleString('ja-JP')} を登録済みの銀行口座へ出金します。\n\n実行後は取り消せません。よろしいですか？`))return;
   const status=$('#commerceWalletPayoutStatus');
   const button=document.querySelector(`[data-execute-payout="${CSS.escape(orderId)}"]`);
   if(button)button.disabled=true;if(status)status.textContent='Stripeへ出金を指示しています…';
