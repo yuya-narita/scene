@@ -5813,7 +5813,7 @@ return flowCommentCard;}
   // unpublished / published-clean / published-dirty
   // Replace only publishAdapter.publish() when Hosting API is ready.
   // ---------------------------------------------------------
-  const SCENE_STUDIO_API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  const SCENE_STUDIO_API_BASE='https://scene-studio-api-sandbox.a-hako.workers.dev'; // SANDBOX TEST BUILD
   let ogpEditTarget=null;
   let ogpInsertionRange={start:0,end:0};
   const ogpCardDialog=$('#ogpCardDialog');
