@@ -1900,8 +1900,8 @@
     try{
       const hosted=await prepareDocumentForPublish(issueTargetRow.document);
       const response=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issues/checkout`,{
-        method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),
-        body:JSON.stringify({workId,issueLimit,scene:hosted,returnUrl:location.href.split('#')[0].split('?')[0]})
+        method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache','X-Ahako-Sandbox-Author-Id':String(signedInAuthor?.authorId||'')}),
+        body:JSON.stringify({workId,issueLimit,scene:hosted,returnUrl:location.href.split('#')[0].split('?')[0],sandboxAuthorId:String(signedInAuthor?.authorId||'')})
       });
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok||!payload?.checkoutUrl)throw new Error(payload?.error||`決済を開始できませんでした。 (HTTP ${response.status})`);
@@ -1921,7 +1921,7 @@
     let last=null;
     for(let attempt=0;attempt<12;attempt++){
       try{
-        const response=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issue-orders/${encodeURIComponent(orderId)}`,{headers:authorAuthHeaders(),cache:'no-store'});
+        const response=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issue-orders/${encodeURIComponent(orderId)}`,{headers:authorAuthHeaders({'X-Ahako-Sandbox-Author-Id':String(signedInAuthor?.authorId||'')}),cache:'no-store'});
         const payload=await response.json().catch(()=>null);last=payload;
         if(response.ok&&payload?.ok&&payload?.order?.status==='paid'&&payload?.issue){
           showEasyToast(`${Number(payload.issue.issueLimit||0).toLocaleString('ja-JP')}部をSandboxで発行しました。`);
