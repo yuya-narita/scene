@@ -1979,14 +1979,14 @@
     box.querySelectorAll('[data-global-issue-row]').forEach(row=>{
       const issueId=row.dataset.globalIssueRow,input=row.querySelector('[data-issue-url]');
       row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);}catch(_){const helper=document.createElement('textarea');helper.value=input.value;document.body.appendChild(helper);helper.select();document.execCommand('copy');helper.remove();}showEasyToast('配付URLをコピーしました。');});
-      row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{const stopButton=e.currentTarget;if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;if(stopButton)stopButton.disabled=true;try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),body:JSON.stringify({action:'stop',issueId})});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');showEasyToast('発行を停止しました。受取済みの一冊は引き続き読めます。');await loadAllIssueHistory();}catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}});
+      row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{const stopButton=e.currentTarget;if(!await appConfirm('この発行URLから新しく受け取れないようにしますか？',{danger:true,confirmLabel:'停止する'}))return;if(stopButton)stopButton.disabled=true;try{const r=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issues`,{method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache','X-Ahako-Sandbox-Author-Id':String(signedInAuthor?.authorId||'')}),body:JSON.stringify({action:'stop',issueId,sandboxAuthorId:String(signedInAuthor?.authorId||'')})});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');showEasyToast('発行を停止しました。受取済みの一冊は引き続き読めます。');await loadAllIssueHistory();}catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}});
     });
   }
   async function loadAllIssueHistory(){
     const box=$('#issueManagerList');if(!box)return;
     box.innerHTML='<small style="opacity:.6">発行状況を確認しています…</small>';
     try{
-      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{headers:authorAuthHeaders(),cache:'no-store'});
+      const response=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issues?sandbox_author_id=${encodeURIComponent(String(signedInAuthor?.authorId||''))}`,{headers:authorAuthHeaders({'X-Ahako-Sandbox-Author-Id':String(signedInAuthor?.authorId||'')}),cache:'no-store'});
       const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error(payload?.error||'発行状況を取得できませんでした。');
       issueManagerItems=Array.isArray(payload.issues)?payload.issues:[];
       renderIssueManagerList();
