@@ -1335,8 +1335,8 @@ html{
 .series-choice.is-sort-gap{opacity:.18;border-style:dashed;pointer-events:none}
 .series-choice.series-sort-ghost{position:fixed;z-index:10;margin:0;pointer-events:none;box-sizing:border-box;opacity:.96;box-shadow:0 12px 30px #0003;transform:scale(1.02);cursor:grabbing}
 
-.commerce-payout-balance{margin-top:10px;padding:13px 16px;border:1px solid #e2dbd0;border-radius:14px;background:#f5f2ec}
-.commerce-payout-balance>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
-.commerce-payout-balance span{font-size:10px;color:#746c61}
-.commerce-payout-balance strong{font-size:19px;letter-spacing:-.03em}
-.commerce-payout-balance p{margin:6px 0 0;font-size:9px;line-height:1.55;color:#82796d}
+
+.commerce-wallet-payout-row{display:flex!important;align-items:baseline;justify-content:space-between;gap:14px;margin-top:12px;padding-top:12px;border-top:1px solid #ebe5dc}
+.commerce-wallet-payout-row>span{display:block!important;font-size:10px!important;color:#746c61!important}
+.commerce-wallet-payout-row>strong{display:block;font-size:18px;letter-spacing:-.03em}
+.commerce-wallet-payout-guide{margin:0!important;color:#8b8174;font-size:9px;line-height:1.5}

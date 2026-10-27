@@ -118,11 +118,11 @@ async function loadCommerceWallet({open=false}={}){
     if(guide){
       const reasons=Array.isArray(payout.blockedReasons)?payout.blockedReasons:[];
       if(reasons.includes('BELOW_MINIMUM')&&data.connected){
-        guide.textContent=`あと ¥${Math.max(0,minimum-withdrawable).toLocaleString('ja-JP')} で出金できます。最低 ¥${minimum.toLocaleString('ja-JP')} / 月1回 / 手数料 ¥0`;
+        guide.textContent=`あと ¥${Math.max(0,minimum-withdrawable).toLocaleString('ja-JP')} ・ 最低 ¥${minimum.toLocaleString('ja-JP')} ・ 月1回 ・ 手数料 ¥0`;
       }else if(payout.eligible){
-        guide.textContent=`¥${minimum.toLocaleString('ja-JP')}以上を任意額で出金できます。月1回 / 手数料 ¥0`;
+        guide.textContent=`最低 ¥${minimum.toLocaleString('ja-JP')} ・ 月1回 ・ 手数料 ¥0`;
       }else{
-        guide.textContent='出金可能額を確認中です。最低 ¥3,000 / 月1回 / 手数料 ¥0';
+        guide.textContent='最低 ¥3,000 ・ 月1回 ・ 手数料 ¥0';
       }
     }
     if(status)status.textContent=data.connected?'':'Stripe Connect未接続です。';

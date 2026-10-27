@@ -161,12 +161,16 @@
     <button id="closeCommerceWallet" class="dialog-close" type="button" aria-label="閉じる">×</button>
     <div class="commerce-wallet-body">
       <p class="eyebrow">AHAKO WALLET</p><h2>売上残高</h2>
-      <div class="commerce-wallet-balance"><strong id="commerceWalletAvailable">—</strong><span>作品の売上から得た、購入に使える残高</span><small id="commerceWalletPending"></small></div>
-      <div class="commerce-payout-balance">
-        <div><span>出金可能残高</span><strong id="commerceWalletWithdrawable">—</strong></div>
-        <p id="commerceWalletPayoutGuide">最低出金額 ¥3,000 / 月1回 / 任意額 / 手数料 ¥0</p>
+      <div class="commerce-wallet-balance">
+        <strong id="commerceWalletAvailable">—</strong>
+        <span>作品の売上から得た、購入に使える残高</span>
+        <small id="commerceWalletPending"></small>
+        <div class="commerce-wallet-payout-row">
+          <span>出金可能</span><strong id="commerceWalletWithdrawable">—</strong>
+        </div>
+        <p id="commerceWalletPayoutGuide" class="commerce-wallet-payout-guide">最低 ¥3,000 ・ 月1回 ・ 手数料 ¥0</p>
       </div>
-      <p class="commerce-wallet-note">あ箱での売上・購入・返金を下の履歴で確認できます。出金操作はまだ実装していません。</p>
+      <p class="commerce-wallet-note">あ箱での売上・購入・返金を下の履歴で確認できます。</p>
       <div class="commerce-wallet-history-head"><strong>取引履歴</strong><button id="reloadCommerceWallet" type="button">更新</button></div>
       <div id="commerceWalletHistory" class="commerce-wallet-history"><p>読み込んでいます…</p></div>
       <p id="commerceWalletStatus" class="author-status"></p>
