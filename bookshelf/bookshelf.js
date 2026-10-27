@@ -130,7 +130,7 @@ async function loadCommerceWallet({open=false}={}){
     if(payoutAction)payoutAction.hidden=!payout.eligible||!!activePayout;
     if(payoutReserved){
       payoutReserved.hidden=!activePayout;
-      payoutReserved.innerHTML=activePayout?`<div><span>出金申請中</span><strong>¥${Math.max(0,Number(activePayout.amount)||0).toLocaleString('ja-JP')}</strong></div><button type="button" data-cancel-payout="${escapeHtml(activePayout.orderId)}">申請を取り消す</button>`:'';
+      payoutReserved.innerHTML=activePayout?`<div><span>${activePayout.status==='processing'?'銀行へ出金処理中':'出金申請中'}</span><strong>¥${Math.max(0,Number(activePayout.amount)||0).toLocaleString('ja-JP')}</strong></div>${activePayout.status==='reserved'?`<div class="commerce-wallet-payout-buttons"><button class="is-primary" type="button" data-execute-payout="${escapeHtml(activePayout.orderId)}">銀行口座へ出金</button><button type="button" data-cancel-payout="${escapeHtml(activePayout.orderId)}">申請を取り消す</button></div>`:`<p class="commerce-wallet-payout-processing">Stripeで出金を処理しています。</p>`}`:'';
     }
     const payoutInput=$('#commerceWalletPayoutAmount');
     if(payoutInput){payoutInput.min=String(minimum);payoutInput.max=String(withdrawable);if(!payoutInput.value&&payout.eligible)payoutInput.value=String(minimum);}
@@ -152,6 +152,18 @@ async function reserveCommercePayout(){
     if(status)status.textContent='出金申請を受け付けました。';
     await loadCommerceWallet({open:true});
   }catch(error){if(status)status.textContent=error.message||'出金申請を受け付けられませんでした。';}
+  finally{if(button)button.disabled=false;}
+}
+async function executeCommercePayout(orderId){
+  if(!orderId)return;
+  const status=$('#commerceWalletPayoutStatus');
+  const button=document.querySelector(`[data-execute-payout="${CSS.escape(orderId)}"]`);
+  if(button)button.disabled=true;if(status)status.textContent='Stripeへ出金を指示しています…';
+  try{
+    await authorRequest(`/author/payout-orders/${encodeURIComponent(orderId)}/execute`,{method:'POST'});
+    if(status)status.textContent='銀行口座への出金処理を開始しました。';
+    await loadCommerceWallet({open:true});
+  }catch(error){if(status)status.textContent=error.message||'出金処理を確認できませんでした。';}
   finally{if(button)button.disabled=false;}
 }
 async function cancelCommercePayout(orderId){
@@ -2736,6 +2748,8 @@ if(previewClaimTokenFromLocation()){
 document.addEventListener('click',event=>{
   const reserve=event.target.closest?.('#commerceWalletPayoutReserve');
   if(reserve){event.preventDefault();reserveCommercePayout();return;}
+  const execute=event.target.closest?.('[data-execute-payout]');
+  if(execute){event.preventDefault();executeCommercePayout(execute.getAttribute('data-execute-payout'));return;}
   const cancel=event.target.closest?.('[data-cancel-payout]');
   if(cancel){event.preventDefault();cancelCommercePayout(cancel.getAttribute('data-cancel-payout'));}
 });

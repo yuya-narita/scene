@@ -1352,3 +1352,8 @@ html{
 .commerce-wallet-payout-reserved span{font-size:10px;color:#746c61}
 .commerce-wallet-payout-reserved strong{font-size:16px}
 .commerce-wallet-payout-reserved button{margin-top:7px;padding:5px 10px;border:1px solid #d8cec1;border-radius:999px;background:#fff;font-size:9px;color:#746c61;cursor:pointer}
+
+.commerce-wallet-payout-buttons{display:flex!important;gap:7px!important;margin-top:8px}
+.commerce-wallet-payout-buttons button{flex:1;margin:0!important}
+.commerce-wallet-payout-buttons .is-primary{background:#282521;color:#fff;border-color:#282521}
+.commerce-wallet-payout-processing{margin:7px 0 0;font-size:9px;color:#82796d}
