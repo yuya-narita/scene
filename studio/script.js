@@ -1900,8 +1900,8 @@
     try{
       const hosted=await prepareDocumentForPublish(issueTargetRow.document);
       const response=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issues/checkout`,{
-        method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache','X-Ahako-Sandbox-Author-Id':String(signedInAuthor?.authorId||'')}),
-        body:JSON.stringify({workId,issueLimit,scene:hosted,returnUrl:location.href.split('#')[0].split('?')[0],sandboxAuthorId:String(signedInAuthor?.authorId||'')})
+        method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),
+        body:JSON.stringify({workId,issueLimit,scene:hosted,returnUrl:location.href.split('#')[0].split('?')[0]})
       });
       const payload=await response.json().catch(()=>null);
       if(!response.ok||!payload?.ok||!payload?.checkoutUrl)throw new Error(payload?.error||`決済を開始できませんでした。 (HTTP ${response.status})`);
@@ -1921,11 +1921,11 @@
     let last=null;
     for(let attempt=0;attempt<12;attempt++){
       try{
-        const response=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issue-orders/${encodeURIComponent(orderId)}`,{headers:authorAuthHeaders({'X-Ahako-Sandbox-Author-Id':String(signedInAuthor?.authorId||'')}),cache:'no-store'});
+        const response=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issue-orders/${encodeURIComponent(orderId)}`,{headers:authorAuthHeaders(),cache:'no-store'});
         const payload=await response.json().catch(()=>null);last=payload;
         if(response.ok&&payload?.ok&&payload?.order?.status==='paid'&&payload?.issue){
-          showEasyToast(`${Number(payload.issue.issueLimit||0).toLocaleString('ja-JP')}部をSandboxで発行しました。`);
-          await appAlert(`Sandbox決済・発行に成功しました。\n\n${Number(payload.issue.issueLimit||0).toLocaleString('ja-JP')}部発行\n${String(payload.issue.url||'')}`);return;
+          showEasyToast(`${Number(payload.issue.issueLimit||0).toLocaleString('ja-JP')}部を発行しました。`);
+          await appAlert(`決済・発行に成功しました。\n\n${Number(payload.issue.issueLimit||0).toLocaleString('ja-JP')}部発行\n${String(payload.issue.url||'')}`);return;
         }
         if(payload?.order?.status==='checkout_failed')break;
       }catch(_){}
@@ -2064,24 +2064,20 @@
     box.querySelectorAll('[data-global-issue-row]').forEach(row=>{
       const issueId=row.dataset.globalIssueRow,input=row.querySelector('[data-issue-url]'),issueItem=issueManagerItems.find(item=>String(item.issueId||'')===String(issueId||'')),issueSource=issueItem?._issueSource||'production';
       row.querySelector('[data-global-issue-copy]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(input.value);}catch(_){const helper=document.createElement('textarea');helper.value=input.value;document.body.appendChild(helper);helper.select();document.execCommand('copy');helper.remove();}showEasyToast('配付URLをコピーしました。');});
-      row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{const stopButton=e.currentTarget;if(!await appConfirm('この発行URLからの新規受取を一時停止しますか？',{danger:true,confirmLabel:'配付停止'}))return;if(stopButton)stopButton.disabled=true;try{const stopBase=issueSource==='sandbox'?ISSUE_PAYMENT_API_BASE:SCENE_STUDIO_API_BASE;const stopHeaders=issueSource==='sandbox'?authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache','X-Ahako-Sandbox-Author-Id':String(signedInAuthor?.authorId||'')}):authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'});const stopBody=issueSource==='sandbox'?{action:'stop',issueId,sandboxAuthorId:String(signedInAuthor?.authorId||'')}:{action:'stop',issueId};const r=await fetch(`${stopBase}/author/issues`,{method:'POST',headers:stopHeaders,body:JSON.stringify(stopBody)});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');showEasyToast('配付を停止しました。残り部数は保持され、あとで再開できます。');await loadAllIssueHistory();}catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}});
-      row.querySelector('[data-global-issue-resume]')?.addEventListener('click',async e=>{const resumeButton=e.currentTarget;if(!await appConfirm('残り部数の配付を再開しますか？',{confirmLabel:'配付再開'}))return;if(resumeButton)resumeButton.disabled=true;try{const headers=authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache','X-Ahako-Sandbox-Author-Id':String(signedInAuthor?.authorId||'')});const body={action:'resume',issueId,sandboxAuthorId:String(signedInAuthor?.authorId||'')};const r=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issues`,{method:'POST',headers,body:JSON.stringify(body)});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||`配付を再開できませんでした。 (HTTP ${r.status})`);if(j?.issue?.status!=='active')throw new Error('再開APIは応答しましたが、配付中の状態を確認できませんでした。');showEasyToast('配付を再開しました。');await loadAllIssueHistory();}catch(error){await appAlert(String(error?.message||error));if(resumeButton)resumeButton.disabled=false;}});
+      row.querySelector('[data-global-issue-stop]')?.addEventListener('click',async e=>{const stopButton=e.currentTarget;if(!await appConfirm('この発行URLからの新規受取を一時停止しますか？',{danger:true,confirmLabel:'配付停止'}))return;if(stopButton)stopButton.disabled=true;try{const stopBase=SCENE_STUDIO_API_BASE;const stopHeaders=authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'});const stopBody={action:'stop',issueId};const r=await fetch(`${stopBase}/author/issues`,{method:'POST',headers:stopHeaders,body:JSON.stringify(stopBody)});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||`停止できませんでした。 (HTTP ${r.status})`);if(j?.issue?.status!=='stopped')throw new Error('停止APIは応答しましたが、停止状態を確認できませんでした。');showEasyToast('配付を停止しました。残り部数は保持され、あとで再開できます。');await loadAllIssueHistory();}catch(error){await appAlert(String(error?.message||error));if(stopButton)stopButton.disabled=false;}});
+      row.querySelector('[data-global-issue-resume]')?.addEventListener('click',async e=>{const resumeButton=e.currentTarget;if(!await appConfirm('残り部数の配付を再開しますか？',{confirmLabel:'配付再開'}))return;if(resumeButton)resumeButton.disabled=true;try{const headers=authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'});const body={action:'resume',issueId};const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{method:'POST',headers,body:JSON.stringify(body)});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||`配付を再開できませんでした。 (HTTP ${r.status})`);if(j?.issue?.status!=='active')throw new Error('再開APIは応答しましたが、配付中の状態を確認できませんでした。');showEasyToast('配付を再開しました。');await loadAllIssueHistory();}catch(error){await appAlert(String(error?.message||error));if(resumeButton)resumeButton.disabled=false;}});
     });
   }
   async function loadAllIssueHistory(){
     const box=$('#issueManagerList');if(!box)return;
     box.innerHTML='<small style="opacity:.6">発行状況を確認しています…</small>';
     try{
-      const authorId=String(signedInAuthor?.authorId||'');
-      const productionRequest=fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{headers:authorAuthHeaders(),cache:'no-store'})
-        .then(async response=>{const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error(payload?.error||'Production発行状況を取得できませんでした。');return (Array.isArray(payload.issues)?payload.issues:[]).map(item=>({...item,_issueSource:'production'}));});
-      const sandboxRequest=fetch(`${ISSUE_PAYMENT_API_BASE}/author/issues?sandbox_author_id=${encodeURIComponent(authorId)}`,{headers:authorAuthHeaders({'X-Ahako-Sandbox-Author-Id':authorId}),cache:'no-store'})
-        .then(async response=>{const payload=await response.json().catch(()=>null);if(!response.ok||!payload?.ok)throw new Error(payload?.error||'Sandbox発行状況を取得できませんでした。');return (Array.isArray(payload.issues)?payload.issues:[]).map(item=>({...item,_issueSource:'sandbox'}));});
-      const [productionResult,sandboxResult]=await Promise.allSettled([productionRequest,sandboxRequest]);
-      const productionItems=productionResult.status==='fulfilled'?productionResult.value:[];
-      const sandboxItems=sandboxResult.status==='fulfilled'?sandboxResult.value:[];
-      issueManagerItems=[...sandboxItems,...productionItems].sort((a,b)=>String(b.createdAt||b.issuedAt||'').localeCompare(String(a.createdAt||a.issuedAt||'')));
-      if(!issueManagerItems.length&&productionResult.status==='rejected'&&sandboxResult.status==='rejected')throw productionResult.reason||sandboxResult.reason;
+      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues`,{headers:authorAuthHeaders(),cache:'no-store'});
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok||!payload?.ok)throw new Error(payload?.error||'発行状況を取得できませんでした。');
+      issueManagerItems=(Array.isArray(payload.issues)?payload.issues:[])
+        .map(item=>({...item,_issueSource:'production'}))
+        .sort((a,b)=>String(b.createdAt||b.issuedAt||'').localeCompare(String(a.createdAt||a.issuedAt||'')));
       renderIssueManagerList();
     }catch(error){box.innerHTML=`<small>${issueEscapeHtml(String(error?.message||error))}</small>`;}
   }
@@ -5907,7 +5903,7 @@ return flowCommentCard;}
   // Replace only publishAdapter.publish() when Hosting API is ready.
   // ---------------------------------------------------------
   const SCENE_STUDIO_API_BASE='https://scene-studio-api.a-hako.workers.dev';
-  const ISSUE_PAYMENT_API_BASE='https://scene-studio-api-sandbox.a-hako.workers.dev'; // ISSUE PAYMENT SANDBOX ONLY
+  const ISSUE_PAYMENT_API_BASE=SCENE_STUDIO_API_BASE; // ISSUE PAYMENT LIVE
   let ogpEditTarget=null;
   let ogpInsertionRange={start:0,end:0};
   const ogpCardDialog=$('#ogpCardDialog');
