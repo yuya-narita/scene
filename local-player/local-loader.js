@@ -427,6 +427,10 @@
       ['scene.json',textBytes(JSON.stringify(scene,null,2))],
       ['manifest.json',textBytes(JSON.stringify(manifest,null,2))]
     ]);
+    // iOS Safari: IndexedDB に Blob のまま保存すると、画面遷移後に
+    // NotFoundError で読めなくなることがある。受取時点で ArrayBuffer
+    // に固定して保存し、本棚→Local Player の再読を安定させる。
+    const sceneBytes=await blob.arrayBuffer();
     const now=new Date().toISOString();
     const coverUrl=/^https?:\/\//i.test(String(scene?.cover?.src||''))?String(scene.cover.src):'';
     const rec={
@@ -436,7 +440,7 @@
       relayEnabled:scene?.sharing?.relay?.enabled!==false,
       issuedAt:String(scene?.distribution?.issuedAt||''),
       coverBlob:null,coverUrl,
-      blob,fileName:`${safeFileBase(scene?.title||'book')}_distribution.scene`,
+      sceneBytes,blob:null,fileName:`${safeFileBase(scene?.title||'book')}_distribution.scene`,
       addedAt:now,updatedAt:now
     };
     const db=await openBookshelfDb();
@@ -1361,7 +1365,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.16-reader-copy-arraybuffer',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openPreviewFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.17-ios-reader-copy-arraybuffer',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openPreviewFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialPreviewToken=previewTokenFromLocation();
