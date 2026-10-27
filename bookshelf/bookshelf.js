@@ -799,7 +799,20 @@ function orderedShelfBooks(books,tab){
   const archived=new Set(readIdList(archiveKey));
   const visible=books.filter(w=>!archived.has(shelfIdOf(w)));
   const archivedBooks=books.filter(w=>archived.has(shelfIdOf(w)));
-  const order=readIdList(orderKey),rank=new Map(order.map((id,i)=>[id,i]));
+  let order=readIdList(orderKey);
+  // Older/direct MY COPY receives could be saved to IndexedDB without being
+  // registered in the shelf-order list. Repair those once, newest first.
+  if(tab==='owned'){
+    const known=new Set(order);
+    const missing=visible.filter(w=>!known.has(shelfIdOf(w))).sort((a,b)=>
+      String(b.addedAt||b.updatedAt||'').localeCompare(String(a.addedAt||a.updatedAt||''))
+    ).map(shelfIdOf);
+    if(missing.length){
+      order=[...missing,...order.filter(id=>!missing.includes(id))];
+      writeIdList(orderKey,order);
+    }
+  }
+  const rank=new Map(order.map((id,i)=>[id,i]));
   visible.sort((a,b)=>{
     const ai=rank.has(shelfIdOf(a))?rank.get(shelfIdOf(a)):Number.MAX_SAFE_INTEGER;
     const bi=rank.has(shelfIdOf(b))?rank.get(shelfIdOf(b)):Number.MAX_SAFE_INTEGER;

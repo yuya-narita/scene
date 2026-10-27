@@ -427,9 +427,8 @@
       ['scene.json',textBytes(JSON.stringify(scene,null,2))],
       ['manifest.json',textBytes(JSON.stringify(manifest,null,2))]
     ]);
-    // iOS Safari: IndexedDB に Blob のまま保存すると、画面遷移後に
-    // NotFoundError で読めなくなることがある。受取時点で ArrayBuffer
-    // に固定して保存し、本棚→Local Player の再読を安定させる。
+    // iOS Safari: persist immutable bytes instead of a transient Blob so a
+    // received MY COPY can be reopened reliably after navigation.
     const sceneBytes=await blob.arrayBuffer();
     const now=new Date().toISOString();
     const coverUrl=/^https?:\/\//i.test(String(scene?.cover?.src||''))?String(scene.cover.src):'';
@@ -448,6 +447,14 @@
       if(!db.objectStoreNames.contains(READER_BOOKS))throw new Error('読者本棚がまだありません。');
       await idbRequest(db.transaction(READER_BOOKS,'readwrite').objectStore(READER_BOOKS).put(rec));
     }finally{db.close();}
+    // Match the normal bookshelf import path: a newly received MY COPY belongs
+    // at the head of the owned shelf, not in the unsorted "missing order" pool.
+    try{
+      const key='ahako:bookshelf:order:owned';
+      const parsed=JSON.parse(localStorage.getItem(key)||'[]');
+      const order=Array.isArray(parsed)?parsed.map(String).filter(Boolean):[];
+      localStorage.setItem(key,JSON.stringify([copyId,...order.filter(id=>id!==copyId)]));
+    }catch(_){}
     return rec;
   }
   function showOwnCopyGate(gate={}){
@@ -1365,7 +1372,7 @@
   ['dragleave','drop'].forEach(type=>dropZone.addEventListener(type,e=>{e.preventDefault();dropZone.classList.remove('is-over');}));
   dropZone.addEventListener('drop',e=>openScene(e.dataTransfer?.files?.[0]));
   dropZone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
-  window.SceneLocalLoader={version:'5.17-ios-reader-copy-arraybuffer',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openPreviewFromUrl,openBookshelfCopy,openBookshelfMaster};
+  window.SceneLocalLoader={version:'5.18-ios-mycopy-order',openFile:openScene,openPicker,returnToLauncher,relayCurrentScene,openRelayFromUrl,openPreviewFromUrl,openBookshelfCopy,openBookshelfMaster};
 
   const initialReviewUrl=reviewUrlFromLocation();
   const initialPreviewToken=previewTokenFromLocation();
