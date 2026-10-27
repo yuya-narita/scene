@@ -1340,3 +1340,15 @@ html{
 .commerce-wallet-payout-row>span{display:block!important;font-size:10px!important;color:#746c61!important}
 .commerce-wallet-payout-row>strong{display:block;font-size:18px;letter-spacing:-.03em}
 .commerce-wallet-payout-guide{margin:0!important;color:#8b8174;font-size:9px;line-height:1.5}
+
+.commerce-wallet-payout-action{margin-top:10px;padding-top:10px;border-top:1px solid #f0ebe4}
+.commerce-wallet-payout-input{display:flex;align-items:center;gap:7px;font-size:10px;color:#746c61}
+.commerce-wallet-payout-input input{min-width:0;flex:1;height:34px;border:1px solid #ddd4c8;border-radius:9px;background:#fff;padding:0 10px;font:inherit;font-size:13px;color:#282521}
+.commerce-wallet-payout-action>button{width:100%;margin-top:8px;height:34px;border:1px solid #d8cec1;border-radius:999px;background:#282521;color:#fff;font-size:10px;cursor:pointer}
+.commerce-wallet-payout-action>button:disabled{opacity:.45;cursor:default}
+.commerce-wallet-payout-action>small{display:block;margin-top:6px;min-height:1em;font-size:9px;color:#82796d}
+.commerce-wallet-payout-reserved{margin-top:10px;padding-top:10px;border-top:1px solid #f0ebe4}
+.commerce-wallet-payout-reserved>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.commerce-wallet-payout-reserved span{font-size:10px;color:#746c61}
+.commerce-wallet-payout-reserved strong{font-size:16px}
+.commerce-wallet-payout-reserved button{margin-top:7px;padding:5px 10px;border:1px solid #d8cec1;border-radius:999px;background:#fff;font-size:9px;color:#746c61;cursor:pointer}
