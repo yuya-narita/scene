@@ -1899,7 +1899,7 @@
     const status=$('#issueStatus');if(status)status.textContent='決済を準備しています…';
     try{
       const hosted=await prepareDocumentForPublish(issueTargetRow.document);
-      const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issues/checkout`,{
+      const response=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issues/checkout`,{
         method:'POST',headers:authorAuthHeaders({'Content-Type':'application/json','Cache-Control':'no-cache'}),
         body:JSON.stringify({workId,issueLimit,scene:hosted,returnUrl:location.href.split('#')[0].split('?')[0]})
       });
@@ -1921,11 +1921,11 @@
     let last=null;
     for(let attempt=0;attempt<12;attempt++){
       try{
-        const response=await fetch(`${SCENE_STUDIO_API_BASE}/author/issue-orders/${encodeURIComponent(orderId)}`,{headers:authorAuthHeaders(),cache:'no-store'});
+        const response=await fetch(`${ISSUE_PAYMENT_API_BASE}/author/issue-orders/${encodeURIComponent(orderId)}`,{headers:authorAuthHeaders(),cache:'no-store'});
         const payload=await response.json().catch(()=>null);last=payload;
         if(response.ok&&payload?.ok&&payload?.order?.status==='paid'&&payload?.issue){
-          showEasyToast(`${Number(payload.issue.issueLimit||0).toLocaleString('ja-JP')}部を発行しました。`);
-          openIssueManager();return;
+          showEasyToast(`${Number(payload.issue.issueLimit||0).toLocaleString('ja-JP')}部をSandboxで発行しました。`);
+          await appAlert(`Sandbox決済・発行に成功しました。\n\n${Number(payload.issue.issueLimit||0).toLocaleString('ja-JP')}部発行\n${String(payload.issue.url||'')}`);return;
         }
         if(payload?.order?.status==='checkout_failed')break;
       }catch(_){}
@@ -5813,7 +5813,8 @@ return flowCommentCard;}
   // unpublished / published-clean / published-dirty
   // Replace only publishAdapter.publish() when Hosting API is ready.
   // ---------------------------------------------------------
-  const SCENE_STUDIO_API_BASE='https://scene-studio-api-sandbox.a-hako.workers.dev'; // SANDBOX TEST BUILD
+  const SCENE_STUDIO_API_BASE='https://scene-studio-api.a-hako.workers.dev';
+  const ISSUE_PAYMENT_API_BASE='https://scene-studio-api-sandbox.a-hako.workers.dev'; // ISSUE PAYMENT SANDBOX ONLY
   let ogpEditTarget=null;
   let ogpInsertionRange={start:0,end:0};
   const ogpCardDialog=$('#ogpCardDialog');
