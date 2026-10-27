@@ -600,6 +600,57 @@
     return m?decodeURIComponent(m[1]):'';
   }
 
+  function reportIdentity(){
+    const href=new URL(location.href);
+    const issueId=String(href.searchParams.get('issue')||'').trim().toLowerCase();
+    if(/^issue_[a-f0-9]{24}$/.test(issueId)){
+      const issueApi=/sandbox/i.test(href.href)
+        ? 'https://scene-studio-api-sandbox.a-hako.workers.dev'
+        : 'https://scene-studio-api-sandbox.a-hako.workers.dev';
+      return {kind:'issue',id:issueId,workId:currentWorkId(),url:`${issueApi}/i/${issueId}`};
+    }
+
+    const src=String(source()||'');
+    try{
+      const u=new URL(src,location.href);
+      const m=u.pathname.match(/\/work\/([^/?#]+)/i);
+      if(m){
+        const workId=decodeURIComponent(m[1]);
+        return {kind:'work',id:workId,workId,url:`${u.origin}/work/${encodeURIComponent(workId)}`};
+      }
+    }catch(_){}
+
+    const docWorkId=String(documentData?.studio?.identity?.workId||documentData?.metadata?.workId||documentData?.workId||'').trim();
+    if(/^[A-Za-z0-9_-]{6,80}$/.test(docWorkId)){
+      return {kind:'work',id:docWorkId,workId:docWorkId,url:`https://scene-studio-api.a-hako.workers.dev/work/${encodeURIComponent(docWorkId)}`};
+    }
+
+    const relayToken=String(href.searchParams.get('relay')||'').trim();
+    const relayId=String(href.searchParams.get('id')||'').trim();
+    if(relayToken||relayId){
+      const u=new URL(href.origin+href.pathname);
+      if(relayId)u.searchParams.set('id',relayId);
+      else u.searchParams.set('relay',relayToken);
+      return {kind:'relay',id:relayId||relayToken,workId:'',url:u.toString()};
+    }
+
+    const copyId=String(href.searchParams.get('bookshelfCopy')||'').trim();
+    if(copyId)return {kind:'copy',id:copyId,workId:'',url:`local-copy:${copyId}`};
+    const masterId=String(href.searchParams.get('bookshelfMaster')||'').trim();
+    if(masterId)return {kind:'master',id:masterId,workId:masterId,url:`local-master:${masterId}`};
+
+    return {kind:'local',id:'',workId:'',url:'local-scene'};
+  }
+
+  function reportIdentityLabel(identity){
+    if(identity.kind==='issue')return ['発行ID',identity.id];
+    if(identity.kind==='work')return ['workId',identity.id];
+    if(identity.kind==='relay')return ['RELAY',identity.id||''];
+    if(identity.kind==='copy')return ['copyId',identity.id];
+    if(identity.kind==='master')return ['workId',identity.id];
+    return ['対象','ローカル作品'];
+  }
+
   function bindReportControls(){
     if(!reportButton||!reportDialog)return;
     const reason=()=>reportDialog.querySelector('input[name="reportReason"]:checked')?.value||'other';
@@ -615,9 +666,12 @@
         : '「その他」の報告では任意です。';
     };
     const sync=()=>{
-      const id=currentWorkId()||'不明';
-      if(reportWorkId)reportWorkId.textContent=id;
-      if(reportUrl)reportUrl.textContent=location.href;
+      const identity=reportIdentity();
+      const [label,id]=reportIdentityLabel(identity);
+      const labelNode=reportWorkId?.previousElementSibling;
+      if(labelNode&&labelNode.tagName==='SPAN')labelNode.textContent=label;
+      if(reportWorkId)reportWorkId.textContent=id||'—';
+      if(reportUrl)reportUrl.textContent=identity.url;
       if(reportStatus)reportStatus.textContent='根拠を確認できる情報と一緒に運営へ送信します。';
       if(reportCopy){reportCopy.disabled=false;reportCopy.textContent='運営に申立てを送る';}
       updateRequirements();
@@ -653,14 +707,15 @@
     }
 
     reportCopy?.addEventListener('click',async()=>{
-      const workId=currentWorkId();
+      const identity=reportIdentity();
+      const workId=identity.workId||currentWorkId();
       const claimReason=reason();
       const subject=reportSubject?.value||'other';
       const evidenceUrl=(reportEvidenceUrl?.value||'').trim();
       const details=(reportDetails?.value||'').trim();
       const contact=(reportContact?.value||'').trim();
       const required=rightsClaim();
-      if(!workId){if(reportStatus)reportStatus.textContent='公開作品IDを取得できませんでした。';return;}
+      if(!identity.id&&!workId&&identity.kind!=='local'){if(reportStatus)reportStatus.textContent='報告対象を取得できませんでした。';return;}
       if(!details){if(reportStatus)reportStatus.textContent='詳しい内容を入力してください。';reportDetails?.focus();return;}
       if(required&&!evidenceUrl){if(reportStatus)reportStatus.textContent='元作品・権利を確認できるURLを入力してください。';reportEvidenceUrl?.focus();return;}
       if(evidenceUrl){try{const u=new URL(evidenceUrl);if(!/^https?:$/.test(u.protocol))throw new Error();}catch{if(reportStatus)reportStatus.textContent='元作品URLを http(s):// から入力してください。';reportEvidenceUrl?.focus();return;}}
@@ -671,11 +726,11 @@
       reportCopy.disabled=true;reportCopy.textContent='送信中…';
       if(reportStatus)reportStatus.textContent='運営へ申立てを送信しています。';
       try{
-        const srcUrl=new URL(source(),location.href);
-        const apiBase=srcUrl.pathname.includes('/work/')?srcUrl.origin:'https://scene-studio-api.a-hako.workers.dev';
+        const srcUrl=(()=>{try{return new URL(source(),location.href);}catch(_){return null;}})();
+        const apiBase=identity.kind==='issue'?'https://scene-studio-api-sandbox.a-hako.workers.dev':(srcUrl?.pathname.includes('/work/')?srcUrl.origin:'https://scene-studio-api.a-hako.workers.dev');
         const response=await fetch(`${apiBase}/report`,{
           method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({workId,reason:claimReason,subject,evidenceUrl,details,contact,confirmed:true,url:location.href,sourceUrl:srcUrl.toString()})
+          body:JSON.stringify({workId,issueId:identity.kind==='issue'?identity.id:'',targetKind:identity.kind,targetId:identity.id,reason:claimReason,subject,evidenceUrl,details,contact,confirmed:true,url:identity.url,sourceUrl:srcUrl?.toString()||String(source()||'')})
         });
         const data=await response.json().catch(()=>({}));
         if(!response.ok||!data.ok)throw new Error(data.error||`HTTP ${response.status}`);
