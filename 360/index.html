@@ -1,12 +1,85 @@
-<!doctype html><html lang='ja'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>あ箱 360°背景テスト</title><style>*{box-sizing:border-box}html,body,#app{margin:0;width:100%;height:100%;overflow:hidden;background:#050505;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif}canvas{display:block;width:100%;height:100%}.hud{position:fixed;inset:0;pointer-events:none}.top{position:absolute;top:max(14px,env(safe-area-inset-top));left:16px;right:16px;display:flex;justify-content:space-between;align-items:center;text-shadow:0 2px 12px #000}.logo{font-size:24px;font-weight:800}.hint{font-size:12px;opacity:.75}.controls{position:absolute;bottom:max(20px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto}.controls button{border:1px solid #ffffff44;background:#111c;color:white;border-radius:999px;padding:11px 16px;font-weight:700;backdrop-filter:blur(10px)}.status{position:absolute;bottom:76px;left:50%;transform:translateX(-50%);font-size:12px;background:#0008;padding:7px 12px;border-radius:99px;white-space:nowrap}.dot{position:absolute;left:50%;top:50%;width:5px;height:5px;background:#fff9;border-radius:50%;transform:translate(-50%,-50%)}</style></head><body><div id='app'><canvas id='c'></canvas></div><div class='hud'><div class='top'><div class='logo'>あ□ <span style='font-size:11px;font-weight:500;opacity:.65'>360° TEST</span></div><div class='hint'>ドラッグ / スワイプで見渡す</div></div><div class='dot'></div><div class='status' id='status'>指で360°確認できます</div><div class='controls'><button id='gyro'>iPhoneで見渡す</button><button id='reset'>中央へ</button></div></div><script>
-const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');const img=new Image();img.src='panorama.png';let yaw=0,pitch=0,fov=85,drag=false,lx=0,ly=0,gyroOn=false,baseA=null,baseB=null;
-function resize(){const d=Math.min(devicePixelRatio||1,2);canvas.width=innerWidth*d;canvas.height=innerHeight*d;canvas.style.width=innerWidth+'px';canvas.style.height=innerHeight+'px';draw()}addEventListener('resize',resize);
-function draw(){if(!img.complete)return;const W=canvas.width,H=canvas.height,iw=img.naturalWidth,ih=img.naturalHeight;ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);const vw=iw*(fov/360), vh=vw*(H/W);let sy=ih/2-vh/2+(pitch/180)*ih;sy=Math.max(0,Math.min(ih-vh,sy));let sx=((yaw%360)+360)%360/360*iw-vw/2;function part(x,w,dx,dw){ctx.drawImage(img,x,sy,w,vh,dx,0,dw,H)}if(sx<0){let a=-sx;part(iw-a,a,0,W*a/vw);part(0,vw-a,W*a/vw,W*(vw-a)/vw)}else if(sx+vw>iw){let a=iw-sx;part(sx,a,0,W*a/vw);part(0,vw-a,W*a/vw,W*(vw-a)/vw)}else part(sx,vw,0,W,H)}
-img.onload=()=>{resize();draw()};
-function start(x,y){drag=true;lx=x;ly=y}function move(x,y){if(!drag)return;yaw-=(x-lx)*.12;pitch+=(y-ly)*.08;pitch=Math.max(-55,Math.min(55,pitch));lx=x;ly=y;draw()}function end(){drag=false}
-canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);start(e.clientX,e.clientY)});canvas.addEventListener('pointermove',e=>move(e.clientX,e.clientY));canvas.addEventListener('pointerup',end);canvas.addEventListener('wheel',e=>{fov=Math.max(45,Math.min(110,fov+e.deltaY*.03));draw()},{passive:true});
-function orient(e){if(!gyroOn||e.alpha==null)return;if(baseA==null){baseA=e.alpha;baseB=e.beta}yaw=(e.alpha-baseA)*-1;pitch=Math.max(-55,Math.min(55,(e.beta-baseB)*.8));draw()}
-addEventListener('deviceorientation',orient,true);
-document.getElementById('gyro').onclick=async()=>{try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){let r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw Error('permission')}gyroOn=true;baseA=baseB=null;document.getElementById('status').textContent='端末を動かして見渡せます';}catch(e){document.getElementById('status').textContent='モーション許可できませんでした';}};
-document.getElementById('reset').onclick=()=>{yaw=pitch=0;fov=85;baseA=baseB=null;draw()};
-</script></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>あ箱 360° 本の塔</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050403;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}
+#stage{position:fixed;inset:0;touch-action:none;cursor:grab}
+#stage:active{cursor:grabbing}
+canvas{display:block;width:100%;height:100%}
+.ui{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;background:linear-gradient(#0008,transparent)}
+.logo{font-size:20px;font-weight:700}.hint{font-size:12px;opacity:.72}
+.controls{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translateX(-50%);display:flex;gap:8px}
+button{border:1px solid #ffffff3a;background:#111c;color:#fff;border-radius:999px;padding:11px 15px;font-size:13px;backdrop-filter:blur(14px)}
+#motion{background:#f4efe6;color:#17130e}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="ui"><div class="logo">あ□</div><div class="hint">ドラッグ / スワイプで見渡す</div></div>
+<div class="controls"><button id="reset">中央へ</button><button id="motion">iPhoneで見渡す</button></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+
+const stage=document.querySelector('#stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.1,1100);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+stage.appendChild(renderer.domElement);
+
+const texture=new THREE.TextureLoader().load('./panorama.png');
+texture.colorSpace=THREE.SRGBColorSpace;
+const geo=new THREE.SphereGeometry(500,80,48);
+geo.scale(-1,1,1);
+scene.add(new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:texture})));
+
+let yaw=0, pitch=3, dragYaw=0, dragPitch=0;
+let motionYaw=0, motionPitch=0, baseAlpha=null, baseBeta=null, motionOn=false;
+let down=false,lastX=0,lastY=0;
+
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function render(){
+  const y=yaw+dragYaw+motionYaw, p=clamp(pitch+dragPitch+motionPitch,-82,82);
+  const phi=THREE.MathUtils.degToRad(90-p), theta=THREE.MathUtils.degToRad(y);
+  camera.lookAt(500*Math.sin(phi)*Math.sin(theta),500*Math.cos(phi),500*Math.sin(phi)*Math.cos(theta));
+  renderer.render(scene,camera); requestAnimationFrame(render);
+}
+render();
+
+stage.addEventListener('pointerdown',e=>{down=true;lastX=e.clientX;lastY=e.clientY;stage.setPointerCapture(e.pointerId)});
+stage.addEventListener('pointermove',e=>{
+ if(!down)return;
+ dragYaw-=(e.clientX-lastX)*.12; dragPitch+=(e.clientY-lastY)*.12;
+ dragPitch=clamp(dragPitch,-80,80); lastX=e.clientX;lastY=e.clientY;
+});
+stage.addEventListener('pointerup',()=>down=false);
+stage.addEventListener('pointercancel',()=>down=false);
+stage.addEventListener('wheel',e=>{camera.fov=clamp(camera.fov+e.deltaY*.025,45,95);camera.updateProjectionMatrix()},{passive:true});
+
+function orient(e){
+ if(!motionOn||e.alpha==null)return;
+ if(baseAlpha===null){baseAlpha=e.alpha;baseBeta=e.beta;return}
+ let da=e.alpha-baseAlpha; if(da>180)da-=360;if(da<-180)da+=360;
+ motionYaw=-da*.9;
+ motionPitch=clamp((e.beta-baseBeta)*.8,-65,65);
+}
+window.addEventListener('deviceorientation',orient,true);
+
+document.querySelector('#motion').onclick=async()=>{
+ try{
+   if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
+     const r=await DeviceOrientationEvent.requestPermission();
+     if(r!=='granted')return;
+   }
+   motionOn=true;baseAlpha=null;baseBeta=null;
+   document.querySelector('#motion').textContent='モーション ON';
+ }catch(e){alert('モーションセンサーを有効にできませんでした');}
+};
+document.querySelector('#reset').onclick=()=>{dragYaw=dragPitch=motionYaw=motionPitch=0;baseAlpha=null;baseBeta=null;camera.fov=72;camera.updateProjectionMatrix()};
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body></html>
