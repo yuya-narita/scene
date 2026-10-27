@@ -112,6 +112,19 @@ async function loadCommerceWallet({open=false}={}){
     if($('#commerceWalletAmount'))$('#commerceWalletAmount').textContent=`¥${available.toLocaleString('ja-JP')}`;
     if($('#commerceWalletAvailable'))$('#commerceWalletAvailable').textContent=`¥${available.toLocaleString('ja-JP')}`;
     if($('#commerceWalletPending'))$('#commerceWalletPending').textContent=pending?`処理中 ¥${pending.toLocaleString('ja-JP')}`:'Stripe確認済み';
+    const payout=data.payout||{},withdrawable=Math.max(0,Number(payout.withdrawable)||0),minimum=Math.max(0,Number(payout.minimumPayout)||3000);
+    if($('#commerceWalletWithdrawable'))$('#commerceWalletWithdrawable').textContent=`¥${withdrawable.toLocaleString('ja-JP')}`;
+    const guide=$('#commerceWalletPayoutGuide');
+    if(guide){
+      const reasons=Array.isArray(payout.blockedReasons)?payout.blockedReasons:[];
+      if(reasons.includes('BELOW_MINIMUM')&&data.connected){
+        guide.textContent=`あと ¥${Math.max(0,minimum-withdrawable).toLocaleString('ja-JP')} で出金できます。最低 ¥${minimum.toLocaleString('ja-JP')} / 月1回 / 手数料 ¥0`;
+      }else if(payout.eligible){
+        guide.textContent=`¥${minimum.toLocaleString('ja-JP')}以上を任意額で出金できます。月1回 / 手数料 ¥0`;
+      }else{
+        guide.textContent='出金可能額を確認中です。最低 ¥3,000 / 月1回 / 手数料 ¥0';
+      }
+    }
     if(status)status.textContent=data.connected?'':'Stripe Connect未接続です。';
     if(history){
       const rows=Array.isArray(data.transactions)?data.transactions:[];
