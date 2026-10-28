@@ -5451,6 +5451,8 @@ return flowCommentCard;}
       await rememberRecentScene(file,fileHandle,workingDocument,{replaceId:recentId||pendingRecentSceneId});pendingRecentSceneId='';
       await refreshDraftUI(false);
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
+      // V1.6.1: a loaded Master is immediately exportable again.
+      updateEasyFileActions();
       // A loaded Master is already Scene-based. Open it directly in Live
       // Studio instead of sending the author through the legacy Toolbox.
       openPlayer({from:'easy',startAt:selectedSceneIndex});
@@ -9607,6 +9609,7 @@ return flowCommentCard;}
   }
   easyMenuButton?.addEventListener('click',(e)=>{
     e.stopPropagation();
+    updateEasyFileActions();
     const willOpen=easyMenuPanel?.hidden;
     if(easyMenuPanel)easyMenuPanel.hidden=!willOpen;
     if(easyMenuBackdrop)easyMenuBackdrop.hidden=!willOpen;
@@ -9615,6 +9618,7 @@ return flowCommentCard;}
   });
   liveMenuButton?.addEventListener('click',(e)=>{
     e.preventDefault();e.stopPropagation();
+    updateEasyFileActions();
     const willOpen=easyMenuPanel?.hidden;
     if(easyMenuPanel)easyMenuPanel.hidden=!willOpen;
     if(easyMenuBackdrop)easyMenuBackdrop.hidden=!willOpen;
@@ -13247,6 +13251,8 @@ function openDesktopAudioDetail(){
     renderTrack();
   }
 
+let desktopBackgroundDetailSubtab='flat';
+
 function openDesktopBackgroundDetail(){
     if(!liveEditEnabled && advancedScreen?.hidden)return;
     closeDesktopBackgroundDetail();
@@ -13779,9 +13785,12 @@ function openDesktopBackgroundDetail(){
     panoPanel.appendChild(panoSec);
     body.replaceChildren(subTabs,flatPanel,panoPanel);
     const showPano=(on)=>{flatPanel.hidden=on;panoPanel.hidden=!on;flatTab.classList.toggle('is-active',!on);panoTab.classList.toggle('is-active',on);};
-    showPano(cb.checked);
-    flatTab.addEventListener('click',()=>showPano(false));panoTab.addEventListener('click',()=>showPano(true));
-    cb.addEventListener('change',()=>{const bg=ensureImageState();bg.projection=cb.checked?'360':'flat';if(cb.checked){bg.motionSensor=bg.motionSensor!==false;bg.motion={type:'none'};}apply();showPano(cb.checked);});
+    // V1.6.1: the editor sub-tab is an author UI choice, not Scene data.
+    // Moving between Scenes must not force Background <-> 360°.
+    showPano(desktopBackgroundDetailSubtab==='360');
+    flatTab.addEventListener('click',()=>{desktopBackgroundDetailSubtab='flat';showPano(false);});
+    panoTab.addEventListener('click',()=>{desktopBackgroundDetailSubtab='360';showPano(true);});
+    cb.addEventListener('change',()=>{const bg=ensureImageState();bg.projection=cb.checked?'360':'flat';if(cb.checked){bg.motionSensor=bg.motionSensor!==false;bg.motion={type:'none'};}apply();});
 
     modal.append(head,body,foot);
     overlay.appendChild(modal);
