@@ -2837,7 +2837,9 @@ html.sp-scene-image-open body{
 .sp-pano-view-lock{
   position:absolute;
   z-index:13;
-  right:max(12px,env(safe-area-inset-right));
+  /* V1.6.3.1: keep clear of the TAP safety zone on the lower-right. */
+  left:max(12px,env(safe-area-inset-left));
+  right:auto;
   bottom:calc(var(--sp-footer-h) + env(safe-area-inset-bottom) + 14px);
   width:34px;height:34px;
   padding:0;border:1px solid color-mix(in srgb,currentColor 22%,transparent);
