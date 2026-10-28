@@ -2571,7 +2571,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._scheduleAuto();
         return true;
       }
-      if(performance.now() < (Number(this._sceneBoundaryGuardUntil)||0))return true;
       this._clearAutoTimer();
 
       // The current Scene's entrance belongs only to its arrival.
@@ -3846,26 +3845,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const scenes = this.document.scenes;
       const active = scenes[this.index];
-
-      // Spatial/audio Scene boundary guard.
-      // Commit this synchronously on arrival so a rapid second tap cannot pass
-      // through the exact Scene that starts a panorama/360 background or BGM/Ambient.
-      if(this._audioRenderMode==='advance'){
-        const bg=active?.presentation?.background||{};
-        const audio=Array.isArray(active?.audio)?active.audio:[];
-        const startsPersistentAudio=audio.some(cmd=>{
-          const ch=String(cmd?.channel||'').toLowerCase();
-          const action=String(cmd?.action||'play').toLowerCase();
-          return (ch==='bgm'||ch==='ambient') && Boolean(cmd?.src) &&
-            (action==='play'||action==='start');
-        });
-        const commitsSpatial=Boolean(bg?.src) || bg?.projection==='panorama' || bg?.projection==='360';
-        this._sceneBoundaryGuardUntil=(commitsSpatial||startsPersistentAudio)
-          ?performance.now()+320:0;
-      }else{
-        this._sceneBoundaryGuardUntil=0;
-      }
-
       const display = this._hasCredits(active?.presentation) ? 'solo' : active?.presentation?.display || 'stack';
       const visible = this._visibleScenes(display);
       const isForwardStack = this._audioRenderMode === 'advance' && (display === 'stack' || display === 'overlay');
@@ -4267,48 +4246,23 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const stageW=Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
         const stageH=Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
         const src=String(this.backgroundState?.src||'');
-        const applyFiniteBounds=(ratio)=>{
-          if(!(ratio>0)||!(stageW>0)||!(stageH>0))return;
-          const renderedW=stageH*1.08*ratio;
-          if(renderedW<=stageW){
-            this._panoFiniteGrabMin=0;
-            this._panoFiniteGrabMax=0;
-            this._panoFiniteGrabX=0;
-            return;
-          }
-          // CSS background-position percentage uses:
-          // offsetX = (containerWidth - imageWidth) * xPercent / 100.
-          // TRUE GRAB adds pixels after that offset. Derive the exact pixel
-          // interval that keeps both image edges touching/covering the viewport.
-          const baseOffset=(stageW-renderedW)*(x/100);
-          this._panoFiniteGrabMin=(stageW-renderedW)-baseOffset;
-          this._panoFiniteGrabMax=-baseOffset;
-          this._panoFiniteGrabX=Math.max(
-            this._panoFiniteGrabMin,
-            Math.min(this._panoFiniteGrabMax,Number(this._panoFiniteGrabX)||0)
-          );
-        };
-        if(src){
-          this._panoRatioCache=this._panoRatioCache||new Map();
-          const cached=Number(this._panoRatioCache.get(src));
-          if(cached>0){
-            applyFiniteBounds(cached);
-          }else if(!this._panoRatioCache.has(src)){
-            this._panoRatioCache.set(src,-1);
-            const probe=new Image();
-            probe.onload=()=>{
-              if(this.backgroundState?.src!==src)return;
-              const ratio=(probe.naturalWidth&&probe.naturalHeight)
-                ?probe.naturalWidth/probe.naturalHeight:0;
-              this._panoRatioCache.set(src,ratio||0);
-              if(ratio>0){
-                applyFiniteBounds(ratio);
-                this._render360Background();
-              }
-            };
-            probe.onerror=()=>this._panoRatioCache.set(src,0);
-            probe.src=src;
-          }
+        if(src && this._panoLimitSrc!==src){
+          this._panoLimitSrc=src;
+          this._panoFiniteGrabLimit=NaN;
+          const probe=new Image();
+          probe.onload=()=>{
+            if(this._panoLimitSrc!==src)return;
+            const ratio=(probe.naturalWidth&&probe.naturalHeight)
+              ?probe.naturalWidth/probe.naturalHeight:0;
+            if(ratio>0){
+              const renderedW=stageH*1.08*ratio;
+              this._panoFiniteGrabLimit=Math.max(0,(renderedW-stageW)/2);
+              const limit=this._panoFiniteGrabLimit;
+              this._panoFiniteGrabX=Math.max(-limit,Math.min(limit,Number(this._panoFiniteGrabX)||0));
+              this._render360Background();
+            }
+          };
+          probe.src=src;
         }
       }
       const position=this._is360Background()
@@ -4364,10 +4318,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // Finite panorama portrait: TRUE GRAB stays synchronous.
             // Clamp from the rendered panorama width (auto 108% height).
             const nextGrab=drag.panoGrabX+dx;
-            const minGrab=Number(this._panoFiniteGrabMin);
-            const maxGrab=Number(this._panoFiniteGrabMax);
-            this._panoFiniteGrabX=(Number.isFinite(minGrab)&&Number.isFinite(maxGrab))
-              ?Math.max(minGrab,Math.min(maxGrab,nextGrab))
+            const maxGrab=Number(this._panoFiniteGrabLimit);
+            this._panoFiniteGrabX=Number.isFinite(maxGrab)
+              ?Math.max(-maxGrab,Math.min(maxGrab,nextGrab))
               :nextGrab;
           }else{
             this._panoYaw=this._isFinitePanorama()
@@ -4448,26 +4401,34 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._markLoadDiagSceneStart();
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
       this.host.classList.toggle('sp-bg-panorama-active', this._isFinitePanorama(next));
+
+      const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
+      this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
+
+      // iPhone first-entry fix:
+      // Mount the incoming panorama layer before any spatial render/bind work.
+      // The old order rendered the incoming panorama state into the outgoing layer
+      // before _swapBackground(), which only surfaced reliably on iPhone Safari.
+      if (srcChanged) this._swapBackground(next, transition, exit, motionPhase, leavingBackground);
+      else this._styleCurrentBackground(next, Boolean(sceneBg?.motion), motionPhase);
+
       if(this._isSpatialBackground(next)){
-        // Reader gaze carries only between consecutive Scenes of the same spatial mode.
         const enteringSpatial=previous?.projection!==next?.projection;
-        if(this._panoYaw==null || enteringSpatial)this._reset360Home();
-        this._bind360Gestures(); this._bind360Motion(); this._bindSpatialViewportStability();
+        if(this._panoYaw==null || enteringSpatial){
+          this._panoYaw=Number(next?.homeYaw)||0;
+          this._panoPitch=Number(next?.homePitch)||0;
+          this._motionLastAlpha=null;this._motionBaseBeta=null;
+          this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
+        }
+        this._bind360Gestures();
+        this._bind360Motion();
+        this._bindSpatialViewportStability();
+        this._render360Background();
       } else {
         this._motionLastAlpha=null; this._panoYawVelocity=0;
         this._panoViewLocked=false;
         clearTimeout(this._panoViewLockHideTimer);
         if(this.els?.panoViewLock)this.els.panoViewLock.hidden=true;
-      }
-      const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
-      // Keep the outgoing layer drawable until its exit animation completes.
-      this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
-
-      if (srcChanged) this._swapBackground(next, transition, exit, motionPhase, leavingBackground);
-      else this._styleCurrentBackground(next, Boolean(sceneBg?.motion), motionPhase);
-
-      if(this._isSpatialBackground(next)){
-        requestAnimationFrame(()=>{ if(this._isSpatialBackground())this._render360Background(); });
       }
       this._applyBackgroundOverlays(next);
       this._runBackgroundReveal(sceneBg?.reveal, transition);

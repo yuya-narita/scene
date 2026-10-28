@@ -1348,3 +1348,10 @@ body:has(.public-player.sp-immersive:not(.sp-immersive-controls):not(.sp-cover-o
 .public-intro.is-operator-guide #publicGuideReceive{order:2;flex:0 0 100%;width:100%!important;max-width:100%!important;}
 .public-intro.is-operator-guide #publicContinue{order:1;}
 .public-intro.is-operator-guide #publicGuideStatus{order:3;margin:0;}
+
+/* Public reading: Core owns the back button; remove the shell pill entirely. */
+body.public-core-reading .public-shelf-return{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
