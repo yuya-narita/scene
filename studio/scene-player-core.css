@@ -3305,3 +3305,21 @@ html.sp-scene-image-open body{
 .sp-core.sp-bg-360-active .sp-background{pointer-events:none}
 .sp-core.sp-bg-360-active .sp-bg-layer{inset:-2%;background-size:auto 108%;background-repeat:repeat-x;will-change:background-position,opacity,filter}
 .sp-core.sp-bg-360-active .sp-bg-layer.is-current{animation:none!important;transform:none!important}
+
+
+/* 360 Background V1.5.1 — PAST must fully cover the player.
+   The 360 background remains mounted behind it so closing PAST restores the same view. */
+.sp-history:not([hidden]){
+  inset:0 !important;
+  z-index:60 !important;
+  background:var(--sp-bg) !important;
+}
+.sp-history:not([hidden]) .sp-history-top{
+  padding-top:env(safe-area-inset-top) !important;
+  height:calc(58px + env(safe-area-inset-top)) !important;
+  box-sizing:border-box;
+}
+.sp-history:not([hidden]) .sp-history-scroll{
+  top:calc(58px + env(safe-area-inset-top)) !important;
+  bottom:0 !important;
+}
