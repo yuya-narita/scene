@@ -4090,7 +4090,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const targetPitch=Math.max(-pitchLimit,Math.min(pitchLimit,pitchDead*pitchGain));
         const pitchFollow=panoLandscapePitch?.22:.09;
         this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*pitchFollow;
-        this._render360Background();
+        if(this._isFinitePanorama()){
+          if(!this._panoMotionRenderRAF){
+            this._panoMotionRenderRAF=requestAnimationFrame(()=>{
+              this._panoMotionRenderRAF=0;
+              if(this._isFinitePanorama())this._render360Background();
+            });
+          }
+        }else{
+          this._render360Background();
+        }
         if(Math.abs(da)>.35 || Math.abs(db)>3.2)this._show360ViewLockControl();
       },{passive:true});
     }
@@ -4173,33 +4182,69 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const grabX=this._is360Background()?(Number(this._panoGrabX)||0):0;
       const panoPortrait=this._isFinitePanorama() &&
         Boolean(global.matchMedia?.('(orientation: portrait)').matches);
-      const panoGrabX=panoPortrait?(Number(this._panoFiniteGrabX)||0):0;
+      let panoGrabX=panoPortrait?(Number(this._panoFiniteGrabX)||0):0;
+      let panoRenderX=x;
       if(panoPortrait){
-        const stageW=Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
-        const stageH=Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
+        const layerW=Number(layer.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
+        const layerH=Number(layer.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
         const src=String(this.backgroundState?.src||'');
-        if(src && this._panoLimitSrc!==src){
-          this._panoLimitSrc=src;
-          this._panoFiniteGrabLimit=NaN;
+
+        this._panoRatioCache=this._panoRatioCache||new Map();
+        const applyCombinedClamp=(ratio)=>{
+          if(!(ratio>0)||!(layerW>0)||!(layerH>0))return;
+
+          // Portrait panorama CSS: background-size:auto 108%.
+          const renderedW=layerH*1.08*ratio;
+          if(renderedW<=layerW){
+            panoRenderX=50;
+            panoGrabX=0;
+            this._panoFiniteGrabX=0;
+            this._panoSensorYaw=0;
+            return;
+          }
+
+          // CSS percentage positioning:
+          // offset = (container - image) * percentage / 100.
+          // Add TRUE GRAB pixels, then clamp the FINAL composed camera.
+          const minOffset=layerW-renderedW; // right image edge == viewport right
+          const maxOffset=0;                // left image edge == viewport left
+          const baseOffset=(layerW-renderedW)*(panoRenderX/100);
+          const desiredOffset=baseOffset+panoGrabX;
+          const clampedOffset=Math.max(minOffset,Math.min(maxOffset,desiredOffset));
+
+          // Bake only the overflow correction into TRUE GRAB. This means motion
+          // + swipe can never reveal outside the image, and reversing responds
+          // immediately instead of paying back invisible overshoot.
+          const correction=clampedOffset-desiredOffset;
+          if(Math.abs(correction)>.01){
+            panoGrabX+=correction;
+            this._panoFiniteGrabX=panoGrabX;
+            if((clampedOffset>=maxOffset && this._panoYawVelocity<0) ||
+               (clampedOffset<=minOffset && this._panoYawVelocity>0)){
+              this._panoYawVelocity=0;
+            }
+          }
+        };
+
+        const cached=Number(this._panoRatioCache.get(src));
+        if(cached>0){
+          applyCombinedClamp(cached);
+        }else if(src && !this._panoRatioCache.has(src)){
+          this._panoRatioCache.set(src,-1);
           const probe=new Image();
           probe.onload=()=>{
-            if(this._panoLimitSrc!==src)return;
             const ratio=(probe.naturalWidth&&probe.naturalHeight)
               ?probe.naturalWidth/probe.naturalHeight:0;
-            if(ratio>0){
-              const renderedW=stageH*1.08*ratio;
-              this._panoFiniteGrabLimit=Math.max(0,(renderedW-stageW)/2);
-              const limit=this._panoFiniteGrabLimit;
-              this._panoFiniteGrabX=Math.max(-limit,Math.min(limit,Number(this._panoFiniteGrabX)||0));
-              this._render360Background();
-            }
+            this._panoRatioCache.set(src,ratio||0);
+            if(this.backgroundState?.src===src)this._render360Background();
           };
+          probe.onerror=()=>this._panoRatioCache.set(src,0);
           probe.src=src;
         }
       }
       const position=this._is360Background()
         ?`calc(${x}% + ${grabX}px) ${y}%`
-        :(panoPortrait?`calc(${x}% + ${panoGrabX}px) ${y}%`:`${x}% ${y}%`);
+        :(panoPortrait?`calc(${panoRenderX}% + ${panoGrabX}px) ${y}%`:`${x}% ${y}%`);
       // At a finite edge the sensor may continue firing while the visible camera
       // is stationary. Avoid repeating an identical DOM style write.
       if(layer.style.backgroundPosition!==position){
@@ -4245,13 +4290,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // True grab: the point under the finger/mouse follows it 1:1.
             this._panoGrabX=drag.grabX+dx;
           }else if(panoPortrait){
-            // Finite panorama portrait: TRUE GRAB stays synchronous.
-            // Clamp from the rendered panorama width (auto 108% height).
-            const nextGrab=drag.panoGrabX+dx;
-            const maxGrab=Number(this._panoFiniteGrabLimit);
-            this._panoFiniteGrabX=Number.isFinite(maxGrab)
-              ?Math.max(-maxGrab,Math.min(maxGrab,nextGrab))
-              :nextGrab;
+            // TRUE GRAB is 1:1. Do not clamp the finger and sensor separately:
+            // the renderer clamps their COMBINED camera against the real image edges.
+            this._panoFiniteGrabX=drag.panoGrabX+dx;
           }else{
             this._panoYaw=this._isFinitePanorama()
               ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
