@@ -192,6 +192,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._buildShell();
       this._bindControls();
       this._bindLandscapeImmersion();
+    
+      // Load diagnostics must start at Player boot, not only after spatial gestures bind.
+      this._initLoadDiagnostics();
     }
 
     _buildShell() {
@@ -4174,7 +4177,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       layer.style.backgroundPosition=`${x}% ${y}%`;
     }
     _bind360Gestures(){
-      this._initLoadDiagnostics();
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
       let drag=null;
       const isHorizontalPast=()=>this.currentScene?.presentation?.text?.writingMode==='vertical-rl'
