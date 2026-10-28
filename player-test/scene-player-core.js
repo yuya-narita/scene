@@ -4157,6 +4157,70 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     // AHAKO_360_PROTO_V1 — background-only panorama; text/UI stay screen-fixed.
+
+    _initLoadDiagnostics(){
+      if(this._loadDiag)return;
+      const q=(()=>{try{return new URLSearchParams(location.search)}catch(_){return null}})();
+      const stored=(()=>{try{return localStorage.getItem('ahakoLoadDiag')==='1'}catch(_){return false}})();
+      const enabled=Boolean((q && (q.get('diag')==='1'||q.get('loadDiag')==='1')) || stored);
+      this._loadDiag={
+        enabled, raf:0, last:performance.now(), frames:0, fps:0,
+        bgWrites:0, motionEvents:0, pointerMoves:0, sceneChanges:0,
+        sceneStart:0, lastSceneMs:0, longFrames:0, maxFrame:0,
+        node:null, timer:0
+      };
+      if(!enabled)return;
+      try{localStorage.setItem('ahakoLoadDiag','1')}catch(_){}
+      const n=document.createElement('div');
+      n.className='sp-load-diag';
+      n.setAttribute('aria-hidden','true');
+      Object.assign(n.style,{
+        position:'fixed',left:'max(6px, env(safe-area-inset-left))',
+        top:'max(6px, env(safe-area-inset-top))',zIndex:'2147483646',
+        padding:'6px 8px',borderRadius:'8px',
+        background:'rgba(0,0,0,.72)',color:'#fff',
+        font:'11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace',
+        whiteSpace:'pre',pointerEvents:'none',maxWidth:'calc(100vw - 12px)'
+      });
+      document.body.appendChild(n); this._loadDiag.node=n;
+      const tick=(now)=>{
+        const d=this._loadDiag;if(!d?.enabled)return;
+        const dt=now-d.last; d.frames++;
+        if(dt>34){d.longFrames++; d.maxFrame=Math.max(d.maxFrame,dt)}
+        if(dt>=1000){d.fps=Math.round(d.frames*1000/dt);d.frames=0;d.last=now}
+        d.raf=requestAnimationFrame(tick);
+      };
+      d.raf=requestAnimationFrame(tick);
+      d.timer=setInterval(()=>this._renderLoadDiagnostics(),500);
+      this._renderLoadDiagnostics();
+    }
+
+    _loadDiagCount(key,inc=1){
+      const d=this._loadDiag;if(d?.enabled)d[key]=(Number(d[key])||0)+inc;
+    }
+
+    _renderLoadDiagnostics(){
+      const d=this._loadDiag;if(!d?.enabled||!d.node)return;
+      const mode=this._is360Background?.()?'360':(this._isFinitePanorama?.()?'PANO':'FLAT');
+      const lock=this._panoViewLocked?'LOCK':'LIVE';
+      const mem=performance?.memory?.usedJSHeapSize
+        ? ` MEM ${(performance.memory.usedJSHeapSize/1048576).toFixed(0)}MB`
+        : '';
+      d.node.textContent=
+        `AHAKO LOAD DIAG  ${mode} ${lock}\n`+
+        `FPS ${String(d.fps).padStart(2)}  LONG ${d.longFrames}  MAX ${d.maxFrame.toFixed(0)}ms${mem}\n`+
+        `BG ${d.bgWrites}  MOTION ${d.motionEvents}  MOVE ${d.pointerMoves}\n`+
+        `SCENE ${d.sceneChanges}  LAST ${d.lastSceneMs.toFixed(1)}ms`;
+    }
+
+    _markLoadDiagSceneStart(){
+      const d=this._loadDiag;if(!d?.enabled)return;
+      d.sceneStart=performance.now(); d.sceneChanges++;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(d.sceneStart)d.lastSceneMs=performance.now()-d.sceneStart;
+      }));
+    }
+
     _is360Background(state=this.backgroundState){ return state?.projection === '360'; }
     _requestMotionPermissionIfNeeded(){
       const has360=(this.document?.scenes||[]).some(sc=>sc?.presentation?.background?.projection==='360');
@@ -4170,6 +4234,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _bind360Motion(){
       if(this._motionBound)return; this._motionBound=true;
       this._on(global,'deviceorientation',(e)=>{
+        this._loadDiagCount('motionEvents');
         if(!this._is360Background() || !this._motionAllowed || this.backgroundState?.motionSensor===false)return;
         if(this._motionBaseGamma==null){this._motionBaseGamma=Number(e.gamma)||0;this._motionBaseBeta=Number(e.beta)||0;}
         const dg=(Number(e.gamma)||0)-this._motionBaseGamma, db=(Number(e.beta)||0)-this._motionBaseBeta;
@@ -4186,6 +4251,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
     _reset360Home(){this._panoYaw=0;this._panoPitch=Number(this.backgroundState?.homePitch)||0;this._motionBaseGamma=null;this._motionBaseBeta=null;this._panoSensorYaw=0;this._panoSensorPitch=0;this._render360Background();}
     _render360Background(){
+      this._loadDiagCount('bgWrites');
       if(!this._is360Background())return;
       const layer=this._currentBackgroundLayer(); if(!layer)return;
       const yaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
@@ -4194,6 +4260,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       layer.style.backgroundPosition=`${x}% ${y}%`;
     }
     _bind360Gestures(){
+      this._initLoadDiagnostics();
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
       let drag=null;
       this._on(this.els.stage,'pointerdown',(e)=>{
@@ -4236,6 +4303,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       this._resetBackgroundRuntime();
       this.backgroundState = next;
+      this._markLoadDiagSceneStart();
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
       if(this._is360Background(next)){ if(this._panoYaw==null)this._reset360Home(); this._bind360Gestures(); this._bind360Motion(); }
       const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
