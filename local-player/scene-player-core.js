@@ -4001,7 +4001,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return { ...cache[target] };
     }
 
-    // AHAKO_360_PROTO_V1 — background-only panorama; text/UI stay screen-fixed.
+    // AHAKO_360_PROTO_V1_2 — screen-fixed text/UI, yaw-driven horizontal panorama.
     _is360Background(state=this.backgroundState){ return state?.projection === '360'; }
     _requestMotionPermissionIfNeeded(){
       const has360=(this.document?.scenes||[]).some(sc=>sc?.presentation?.background?.projection==='360');
@@ -4016,51 +4016,86 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(this._motionBound)return; this._motionBound=true;
       this._on(global,'deviceorientation',(e)=>{
         if(!this._is360Background() || !this._motionAllowed || this.backgroundState?.motionSensor===false)return;
-        if(this._motionBaseGamma==null){this._motionBaseGamma=Number(e.gamma)||0;this._motionBaseBeta=Number(e.beta)||0;}
-        const dg=(Number(e.gamma)||0)-this._motionBaseGamma, db=(Number(e.beta)||0)-this._motionBaseBeta;
-        // 360 V1.1: stronger hand-shake suppression + eased sensor follow.
-        // Tiny wrist noise is ignored; intentional movement still has enough range.
-        const dead=v=>Math.abs(v)<3.2?0:Math.sign(v)*(Math.abs(v)-3.2);
-        const targetYaw=Math.max(-34,Math.min(34,dead(dg)*.82));
-        const targetPitch=Math.max(-16,Math.min(16,dead(db)*.42));
-        const ease=.14;
-        this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+(targetYaw-(Number(this._panoSensorYaw)||0))*ease;
-        this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*ease;
+        const alpha=Number(e.alpha), beta=Number(e.beta);
+        if(!Number.isFinite(alpha)||!Number.isFinite(beta))return;
+        if(this._motionLastAlpha==null){
+          this._motionLastAlpha=alpha; this._motionBaseBeta=beta;
+          this._panoSensorYaw=Number(this._panoSensorYaw)||0;
+          this._panoSensorPitch=Number(this._panoSensorPitch)||0;
+          return;
+        }
+        // alpha is heading/yaw. Use the shortest incremental delta so crossing
+        // 359° -> 0° stays continuous and a chair can rotate through full 360°.
+        let da=alpha-this._motionLastAlpha;
+        if(da>180)da-=360; else if(da<-180)da+=360;
+        this._motionLastAlpha=alpha;
+        // Ignore tiny sensor chatter, then low-pass the intentional rotation.
+        if(Math.abs(da)<.28)da=0;
+        da=Math.max(-8,Math.min(8,da));
+        this._panoYawVelocity=(Number(this._panoYawVelocity)||0)*.58 + da*.42;
+        if(Math.abs(this._panoYawVelocity)<.08)this._panoYawVelocity=0;
+        this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+this._panoYawVelocity*.72;
+
+        const db=beta-(Number(this._motionBaseBeta)||0);
+        const pitchDead=Math.abs(db)<2.6?0:Math.sign(db)*(Math.abs(db)-2.6);
+        const targetPitch=Math.max(-14,Math.min(14,pitchDead*.32));
+        this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*.09;
         this._render360Background();
       },{passive:true});
     }
-    _reset360Home(){this._panoYaw=0;this._panoPitch=Number(this.backgroundState?.homePitch)||0;this._motionBaseGamma=null;this._motionBaseBeta=null;this._panoSensorYaw=0;this._panoSensorPitch=0;this._render360Background();}
+    _reset360Home(){
+      this._panoYaw=0;
+      this._panoPitch=Number(this.backgroundState?.homePitch)||0;
+      this._motionLastAlpha=null;this._motionBaseBeta=null;
+      this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
+      this._render360Background();
+    }
     _render360Background(){
       if(!this._is360Background())return;
       const layer=this._currentBackgroundLayer(); if(!layer)return;
       const yaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
-      const pitch=Math.max(-35,Math.min(35,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
-      const x=50 + yaw/3.6; const y=50 - pitch*.72;
+      const pitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
+      // repeat-x makes yaw unbounded: 360° is 100 percentage points.
+      const x=50 + yaw/3.6;
+      const y=50 - pitch*.95;
       layer.style.backgroundPosition=`${x}% ${y}%`;
     }
     _bind360Gestures(){
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
       let drag=null;
+      const EDGE=28;
       this._on(this.els.stage,'pointerdown',(e)=>{
         if(!this._is360Background()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
-        drag={x:e.clientX,y:e.clientY,yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,moved:false,id:e.pointerId};
+        const edgePast=this.options.allowPrevious && e.clientX<=EDGE;
+        drag={x:e.clientX,y:e.clientY,yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,moved:false,id:e.pointerId,edgePast};
+        try{this.els.stage.setPointerCapture?.(e.pointerId);}catch(_){}
       },true);
       this._on(this.els.stage,'pointermove',(e)=>{
         if(!drag||!this._is360Background())return;
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-        if(Math.hypot(dx,dy)>3)drag.moved=true;
+        if(Math.hypot(dx,dy)>5)drag.moved=true;
         if(!drag.moved)return;
-        // Claim the gesture before the Player's normal swipe/PAST handlers see it.
         if(e.cancelable)e.preventDefault();
         e.stopPropagation?.();e.stopImmediatePropagation?.();
         this.suppressNextClick=true;
-        // Natural grab. Vertical direction: finger up = look up, finger down = look down.
-        // Keep the first pixels deliberately gentle so the panorama never 'jumps'.
-        this._panoYaw=drag.yaw-dx*.115;
-        this._panoPitch=Math.max(-35,Math.min(35,drag.pitch+dy*.085));
+        if(drag.edgePast)return; // left-edge gesture is reserved for PAST.
+        // One full phone-width swipe is roughly half a turn. Start from the
+        // exact current yaw/pitch captured at pointerdown, so there is no jump.
+        this._panoYaw=drag.yaw-dx*.46;
+        this._panoPitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));
         this._render360Background();
       },true);
-      const end=(e)=>{if(!drag)return;if(drag.moved){this.suppressNextClick=true;e.preventDefault?.();e.stopPropagation?.();}drag=null;};
+      const end=(e)=>{
+        if(!drag)return;
+        const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+        if(drag.moved){
+          this.suppressNextClick=true;
+          e.preventDefault?.();e.stopPropagation?.();e.stopImmediatePropagation?.();
+          if(drag.edgePast && (dx>42 || dy>42))this.openHistory({dragDistance:Math.max(dx,dy)});
+        }
+        try{this.els.stage.releasePointerCapture?.(drag.id);}catch(_){}
+        drag=null;
+      };
       this._on(this.els.stage,'pointerup',end,true);this._on(this.els.stage,'pointercancel',end,true);
     }
 
@@ -4082,7 +4117,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._resetBackgroundRuntime();
       this.backgroundState = next;
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
-      if(this._is360Background(next)){ if(this._panoYaw==null)this._reset360Home(); this._bind360Gestures(); this._bind360Motion(); }
+      if(this._is360Background(next)){
+        const homeChanged=!this._is360Background(previous) || Number(previous?.homePitch)!==Number(next?.homePitch);
+        if(this._panoYaw==null || homeChanged)this._reset360Home();
+        this._bind360Gestures(); this._bind360Motion();
+      } else { this._motionLastAlpha=null; this._panoYawVelocity=0; }
       const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
       // Keep the outgoing layer drawable until its exit animation completes.
       this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
@@ -4146,7 +4185,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       layer.style.backgroundImage = state.src ? `url("${String(state.src).replace(/"/g, '\"')}")` : 'none';
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
-      if(state.projection==='360'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='repeat-x';}
+      if(state.projection==='360'){layer.style.backgroundSize='auto 138%';layer.style.backgroundRepeat='repeat-x';}
       else layer.style.backgroundRepeat='no-repeat';
       {
         const filters = [];
@@ -4164,7 +4203,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!layer) return;
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
-      if(state.projection==='360'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='repeat-x';}
+      if(state.projection==='360'){layer.style.backgroundSize='auto 138%';layer.style.backgroundRepeat='repeat-x';}
       else layer.style.backgroundRepeat='no-repeat';
       {
         const filters = [];
