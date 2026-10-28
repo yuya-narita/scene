@@ -4207,12 +4207,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(!panoLandscape){
           // 360° landscape needs a larger visual turn per finger travel than the
           // portrait/default grab. Motion-sensor sensitivity is intentionally unchanged.
-          const is360Landscape=this._is360Background() &&
+          const is360=this._is360Background();
+          const is360Landscape=is360 &&
             Boolean(global.matchMedia?.('(orientation: landscape)').matches);
-          // Landscape 360°: match the portrait grab direction, but use a much
-          // larger travel range so one edge-to-edge swipe can turn the view decisively.
-          const yawDragGain=is360Landscape?1.84:.46;
-          const yawDelta=is360Landscape?(dx*yawDragGain):(-dx*yawDragGain);
+          const coarsePointer=Boolean(global.matchMedia?.('(pointer: coarse)').matches);
+          // 360° tuning:
+          // - portrait matches the panorama/default grab amount (.46)
+          // - landscape uses a deliberately wide 2.6 gain for decisive turns
+          // - desktop mouse drag uses the opposite sign from touch so both feel
+          //   like grabbing the scene in their native interaction model.
+          const yawDragGain=is360Landscape?2.6:.46;
+          let yawDelta=-dx*yawDragGain;
+          if(is360 && !coarsePointer)yawDelta=dx*yawDragGain;
           this._panoYaw=this._isFinitePanorama()
             ?Math.max(-180,Math.min(180,drag.yaw+yawDelta))
             :(drag.yaw+yawDelta);
