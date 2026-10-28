@@ -4079,13 +4079,27 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const TEXT_PAST_SELECTOR='.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext, .sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-notification-text';
       const isHorizontalPast=()=>this.currentScene?.presentation?.text?.writingMode==='vertical-rl'
         && !this._hasCredits(this.currentScene?.presentation);
+      // V1.4: most Scene text intentionally has pointer-events:none, so event.target
+      // is usually the Scene/stage rather than .sp-text. Hit-test the actually
+      // painted text rectangles instead of relying on DOM event targeting.
+      const isPointOnPastText=(x,y)=>{
+        const active=this.els.stage.querySelector('.sp-scene.is-active');
+        if(!active)return false;
+        return Array.from(active.querySelectorAll(TEXT_PAST_SELECTOR.replaceAll('.sp-scene.is-active ',''))).some(node=>{
+          if(!node || node.hidden)return false;
+          const style=getComputedStyle(node);
+          if(style.display==='none'||style.visibility==='hidden'||Number(style.opacity)===0)return false;
+          const r=node.getBoundingClientRect();
+          return r.width>0&&r.height>0&&x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;
+        });
+      };
       this._on(this.els.stage,'pointerdown',(e)=>{
         if(!this._is360Background()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
         drag={
           x:e.clientX,y:e.clientY,
           yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
           moved:false,id:e.pointerId,
-          textPast:!!e.target.closest(TEXT_PAST_SELECTOR),
+          textPast:isPointOnPastText(e.clientX,e.clientY),
           pastGesture:false
         };
         try{this.els.stage.setPointerCapture?.(e.pointerId);}catch(_){}
@@ -4240,9 +4254,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const layer = this._currentBackgroundLayer();
       if (!layer) return;
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
-      layer.style.backgroundPosition = state.position || 'center center';
-      if(state.projection==='360'){layer.style.backgroundSize='auto 138%';layer.style.backgroundRepeat='repeat-x';}
-      else layer.style.backgroundRepeat='no-repeat';
+      // V1.4: a continuing 360° background owns its live backgroundPosition.
+      // Resetting it to center here caused a one-frame flash/jump when advancing
+      // after the reader had looked around. Flat backgrounds keep legacy behavior.
+      if(state.projection==='360'){
+        layer.style.backgroundSize='auto 138%';
+        layer.style.backgroundRepeat='repeat-x';
+      }else{
+        layer.style.backgroundPosition = state.position || 'center center';
+        layer.style.backgroundRepeat='no-repeat';
+      }
       {
         const filters = [];
         const blur = Math.max(0, asNumber(state.blur, 0));
@@ -4252,6 +4273,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         layer.style.filter = filters.join(' ');
       }
       if (resetMotion) this._applyBackgroundMotion(layer, state.motion, motionPhase);
+      if(state.projection==='360')this._render360Background();
     }
 
     _applyBackgroundExit(layer, exit, duration) {
