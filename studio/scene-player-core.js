@@ -2563,6 +2563,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._scheduleAuto();
         return true;
       }
+      // A Scene that commits a new background / persistent audio needs one paint
+      // opportunity before another rapid tap can leave it. Without this, iOS can
+      // pass straight through the authored boundary and both background + BGM
+      // appear to have been skipped. Normal text-only Scenes remain unrestricted.
+      if(performance.now() < (Number(this._sceneCommitGuardUntil)||0))return true;
       this._clearAutoTimer();
 
       // The current Scene's entrance belongs only to its arrival.
@@ -3911,6 +3916,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const mode = this._audioRenderMode;
         this._restoreAudioForIndex(this.index);
         if (mode === 'load') this._queueInitialOneShots(active);
+      }
+      {
+        const bgCommit=Boolean(active?.presentation?.background?.src)
+          || ['360','panorama'].includes(active?.presentation?.background?.projection);
+        const audioCommit=(Array.isArray(active?.audio)?active.audio:[]).some(cmd=>{
+          const action=String(cmd?.action||'play').toLowerCase();
+          return (cmd?.channel==='bgm'||cmd?.channel==='ambient') && (action==='play'||action==='start') && cmd?.src;
+        });
+        this._sceneCommitGuardUntil=(bgCommit||audioCommit)?performance.now()+180:0;
       }
       this._audioRenderMode = 'advance';
 

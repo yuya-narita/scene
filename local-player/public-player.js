@@ -50,6 +50,9 @@
 
   function setShelfReturnReading(reading){
     shelfReturnLink?.classList.toggle('is-reading',Boolean(reading));
+    // While reading, Core already owns the upper-left back control.
+    // Keeping the shelf-return pill underneath it produced the stray black dot.
+    if(shelfReturnLink && reading)shelfReturnLink.hidden=true;
   }
 
   const LOCAL_MODE = window.__AHAKO_LOCAL_PLAYER__ === true;
@@ -885,6 +888,14 @@
   }
 
   const PUBLIC_EXIT_FADE_MS = 850;
+  const pendingExitPlayers=new Set();
+
+  function flushPendingExitPlayers(){
+    pendingExitPlayers.forEach(oldPlayer=>{
+      try{oldPlayer.destroy({preserveHost:true});}catch(_){}
+    });
+    pendingExitPlayers.clear();
+  }
 
   function fadePublicAudio(duration = PUBLIC_EXIT_FADE_MS) {
     if (!player || typeof player.fadeOutAudio !== 'function') return 0;
@@ -893,10 +904,11 @@
 
   function destroyAfterFade(targetPlayer, duration = PUBLIC_EXIT_FADE_MS) {
     if (!targetPlayer) return;
+    pendingExitPlayers.add(targetPlayer);
     window.setTimeout(() => {
+      if(!pendingExitPlayers.has(targetPlayer))return;
+      pendingExitPlayers.delete(targetPlayer);
       try {
-        // The old and new Player instances can share #scenePlayer.
-        // Clean up the old instance without clearing the host used by the new one.
         targetPlayer.destroy({ preserveHost: true });
       } catch (_) {}
     }, Math.max(0, duration) + 80);
@@ -958,6 +970,10 @@
   }
 
   async function ensurePlayer(startAt = 0) {
+    // If CONTINUE is pressed before the previous Core's audio fade timer expires,
+    // dispose that stale Core now. It must never overlap the fresh Core mounted
+    // into the same #scenePlayer host.
+    flushPendingExitPlayers();
     setShelfReturnReading(true);
     if (player) {
       const previousPlayer = player;
