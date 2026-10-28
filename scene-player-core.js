@@ -4296,16 +4296,37 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // Clamp from the rendered panorama width (auto 108% height).
             const stageW=Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
             const stageH=Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
-            const bg=this.backgroundState||{};
-            const iw=Number(bg.naturalWidth||bg.width||0);
-            const ih=Number(bg.naturalHeight||bg.height||0);
-            const ratio=(iw>0&&ih>0)?iw/ih:0;
-            const renderedW=ratio?stageH*1.08*ratio:0;
-            const maxGrab=renderedW>stageW?(renderedW-stageW)/2:Infinity;
             const nextGrab=drag.panoGrabX+dx;
-            this._panoFiniteGrabX=Number.isFinite(maxGrab)
-              ?Math.max(-maxGrab,Math.min(maxGrab,nextGrab))
-              :nextGrab;
+
+            // Panorama is rendered with background-size:auto 108%.
+            // Cache the image aspect ratio outside the drag math once it becomes known.
+            this._panoAspectCache=this._panoAspectCache||new Map();
+            const layer=this.els?.bgLayer||this.els?.backgroundLayer||this.els?.background;
+            const bgImage=layer?global.getComputedStyle(layer).backgroundImage:'';
+            const urlMatch=bgImage&&bgImage.match(/url\(["']?(.*?)["']?\)/);
+            const bgUrl=urlMatch?.[1]||'';
+            let ratio=Number(this._panoAspectCache.get(bgUrl))||0;
+            if(!ratio && bgUrl && !this._panoAspectCache.has(bgUrl)){
+              this._panoAspectCache.set(bgUrl,-1);
+              const probe=new Image();
+              probe.onload=()=>{
+                const r=(probe.naturalWidth&&probe.naturalHeight)
+                  ?probe.naturalWidth/probe.naturalHeight:0;
+                this._panoAspectCache.set(bgUrl,r||0);
+              };
+              probe.onerror=()=>this._panoAspectCache.set(bgUrl,0);
+              probe.src=bgUrl;
+            }
+            if(ratio<0)ratio=0;
+
+            if(ratio>0){
+              const renderedW=stageH*1.08*ratio;
+              const maxGrab=Math.max(0,(renderedW-stageW)/2);
+              this._panoFiniteGrabX=Math.max(-maxGrab,Math.min(maxGrab,nextGrab));
+            }else{
+              // Do not block dragging while the one-time size probe is resolving.
+              this._panoFiniteGrabX=nextGrab;
+            }
           }else{
             this._panoYaw=this._isFinitePanorama()
               ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
