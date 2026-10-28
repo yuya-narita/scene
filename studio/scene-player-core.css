@@ -3305,6 +3305,9 @@ html.sp-scene-image-open body{
 .sp-core.sp-bg-360-active .sp-background{pointer-events:none}
 .sp-core.sp-bg-360-active .sp-bg-layer{inset:-2%;background-size:auto 108%;background-repeat:repeat-x;will-change:background-position,opacity,filter}
 .sp-core.sp-bg-360-active .sp-bg-layer.is-current{animation:none!important;transform:none!important}
+.sp-core.sp-bg-panorama-active .sp-background{pointer-events:none}
+.sp-core.sp-bg-panorama-active .sp-bg-layer{inset:-2%;background-size:auto 108%;background-repeat:no-repeat;will-change:background-position,opacity,filter}
+.sp-core.sp-bg-panorama-active .sp-bg-layer.is-current{animation:none!important;transform:none!important}
 
 
 /* 360 Background V1.5.1 — PAST must fully cover the player.

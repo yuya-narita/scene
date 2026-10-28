@@ -4152,10 +4152,19 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // stealing ordinary slow panorama drags.
         const pastDistance=Math.max(60,Number(this.options.swipeThreshold)||0);
         const velocity=amount/elapsed; // CSS px per ms in the PAST direction.
+        let effectiveAmount=amount;
+        if(this._isFinitePanorama() && !horizontal){
+          // At a finite panorama edge the finger may keep travelling while the
+          // camera is already clamped. Do not reinterpret that excess drag as PAST.
+          const targetYaw=Math.max(-180,Math.min(180,drag.yaw-dx*.46));
+          const cameraTravelPx=Math.abs(targetYaw-drag.yaw)/.46;
+          effectiveAmount=Math.min(amount,cameraTravelPx);
+        }
+        const effectiveVelocity=effectiveAmount/elapsed;
         const pastGesture=Boolean(drag.moved && this.options.allowPrevious
-          && directional && amount>=pastDistance && velocity>=.42);
+          && directional && effectiveAmount>=pastDistance && effectiveVelocity>=.42);
         if(drag.moved){
-          this._panoSuppressClickUntil=performance.now()+260;
+          this._panoSuppressClickUntil=performance.now()+650;
           e.preventDefault?.();e.stopPropagation?.();e.stopImmediatePropagation?.();
           if(pastGesture){
             // PAST is navigation, not a camera move. Undo the temporary panorama
