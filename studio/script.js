@@ -13729,68 +13729,90 @@ function openDesktopBackgroundDetail(){
     save.type='button';save.className='is-primary';save.textContent=t('common.save');
     foot.append(reset,spacer,close,save);
 
-    // 360 prototype: keep the existing Background UI untouched behind a local sub-tab.
+    // Background modes: fixed / finite panorama / 360°.
     const existingSections=Array.from(body.children);
     const subTabs=document.createElement('div');subTabs.className='ahako-bg-subtabs';
     const flatTab=document.createElement('button');flatTab.type='button';flatTab.textContent=u('背景','Background');
+    const finiteTab=document.createElement('button');finiteTab.type='button';finiteTab.textContent=u('パノラマ','Panorama');
     const panoTab=document.createElement('button');panoTab.type='button';panoTab.textContent='360°';
-    subTabs.append(flatTab,panoTab);
+    subTabs.append(flatTab,finiteTab,panoTab);
     const flatPanel=document.createElement('div');flatPanel.className='ahako-bg-subpanel';existingSections.forEach(n=>flatPanel.appendChild(n));
+    const finitePanel=document.createElement('div');finitePanel.className='ahako-bg-subpanel';
     const panoPanel=document.createElement('div');panoPanel.className='ahako-bg-subpanel';
-    const panoSec=document.createElement('section');panoSec.className='desktop-text-detail-section';
-    const ph=document.createElement('h3');ph.textContent=u('360°背景（試験）','360° background (prototype)');panoSec.appendChild(ph);
-    const note=document.createElement('p');note.className='desktop-text-detail-note';note.textContent=u('通常の背景画像を横360°として扱います。本文・吹き出し・UIは画面に固定されたまま、背景だけをスワイプ／端末モーションで見渡します。','Treat the current background image as a horizontal 360° panorama. Text and UI stay screen-fixed.');panoSec.appendChild(note);
-    const enable=document.createElement('label');enable.className='ahako-360-toggle';
-    const cb=document.createElement('input');cb.type='checkbox';cb.checked=(explicit()?.projection==='360');
-    const cbt=document.createElement('span');cbt.textContent=u('このSceneを360°背景にする','Use 360° background in this Scene');enable.append(cb,cbt);panoSec.appendChild(enable);
-    const open360HomeEditor=()=>{
-      const source=explicit()?.src?explicit():previousFraming();
-      if(!source?.src)return;
-      const bg=ensureImageState();
-      let yaw=Number(bg.homeYaw)||0,pitch=Number(bg.homePitch)||0;
-      const before={yaw,pitch};
-      const ov=document.createElement('div');
-      Object.assign(ov.style,{position:'fixed',inset:'0',zIndex:'2147483647',background:'rgba(10,12,16,.58)',backdropFilter:'blur(12px)',display:'grid',placeItems:'center',padding:'16px'});
-      const dlg=document.createElement('section');
-      Object.assign(dlg.style,{width:'min(820px,96vw)',maxHeight:'94vh',overflow:'auto',background:'#f7f7f8',color:'#111',borderRadius:'24px',padding:'18px',boxShadow:'0 24px 80px rgba(0,0,0,.28)'});
-      const head=document.createElement('div');Object.assign(head.style,{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',marginBottom:'8px'});
-      const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('キャンセル','Cancel');
-      const title=document.createElement('strong');title.textContent=u('初期視点','Initial view');Object.assign(title.style,{fontSize:'20px',justifySelf:'center'});
-      const saveBtn=document.createElement('button');saveBtn.type='button';saveBtn.textContent=u('保存','Save');Object.assign(saveBtn.style,{justifySelf:'end'});
-      [cancel,saveBtn].forEach(b=>Object.assign(b.style,{border:'0',background:'transparent',font:'inherit',padding:'8px 6px',cursor:'pointer'}));head.append(cancel,title,saveBtn);
-      const help=document.createElement('p');help.textContent=u('画像をドラッグして、Scene開始時に見せたい方向を中央へ合わせます','Drag the image to choose what the reader sees when this Scene begins.');Object.assign(help.style,{textAlign:'center',color:'#737780',fontSize:'13px',margin:'4px 0 14px'});
-      const stage=document.createElement('div');Object.assign(stage.style,{width:'min(390px,88vw)',height:'min(64vh,650px)',minHeight:'360px',margin:'0 auto',borderRadius:'16px',backgroundImage:`url(\"${source.src}\")`,backgroundSize:'auto 108%',backgroundRepeat:'repeat-x',backgroundColor:'#111',boxShadow:'0 12px 36px rgba(0,0,0,.16)',touchAction:'none',cursor:'grab'});
-      const readout=document.createElement('div');Object.assign(readout.style,{textAlign:'center',fontSize:'12px',color:'#777',marginTop:'10px'});
-      const reset=document.createElement('button');reset.type='button';reset.textContent=u('中央に戻す','Reset to center');Object.assign(reset.style,{display:'block',width:'min(390px,88vw)',margin:'12px auto 0',padding:'12px',border:'1px solid #d5d7dc',borderRadius:'12px',background:'#fff',font:'inherit'});
-      const render=()=>{stage.style.backgroundPosition=`${50+yaw/3.6}% ${50-pitch*.95}%`;readout.textContent=`${u('左右','Horizontal')} ${Math.round(yaw)}° / ${u('上下','Vertical')} ${Math.round(pitch)}°`;};
-      let drag=null;stage.addEventListener('pointerdown',e=>{drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw,pitch};stage.setPointerCapture?.(e.pointerId);stage.style.cursor='grabbing';e.preventDefault();});
-      stage.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;yaw=drag.yaw-dx*.46;pitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));render();e.preventDefault();});
-      const end=e=>{if(drag?.id===e.pointerId){drag=null;stage.style.cursor='grab';}};stage.addEventListener('pointerup',end);stage.addEventListener('pointercancel',end);
-      reset.addEventListener('click',()=>{yaw=0;pitch=0;render();});
-      const close=()=>ov.remove();cancel.addEventListener('click',close);ov.addEventListener('click',e=>{if(e.target===ov)close();});
-      saveBtn.addEventListener('click',()=>{captureUndo('360°初期視点の変更を元に戻せます');bg.homeYaw=yaw;bg.homePitch=pitch;apply();close();closeDesktopBackgroundDetail();openDesktopBackgroundDetail();});
-      dlg.append(head,help,stage,readout,reset);ov.appendChild(dlg);document.body.appendChild(ov);render();
+
+    const buildSpatialPanel=(projection)=>{
+      const is360=projection==='360';
+      const panel=document.createElement('section');panel.className='desktop-text-detail-section';
+      const h=document.createElement('h3');h.textContent=is360?u('360°背景','360° background'):u('パノラマ背景','Panorama background');panel.appendChild(h);
+      const note=document.createElement('p');note.className='desktop-text-detail-note';
+      note.textContent=is360
+        ? u('背景を360°見回せます。本文・吹き出し・UIは画面に固定され、スワイプ／端末モーションで視点を動かします。','Look around the background in 360°. Text and UI remain screen-fixed.')
+        : u('横長の背景を左右に見渡します。スワイプ／端末モーションで動き、画像の端で止まります。本文・吹き出し・UIは画面に固定されます。','Explore a wide background horizontally. Swipe or move the device; the view stops at the image edges.');
+      panel.appendChild(note);
+
+      const enable=document.createElement('label');enable.className='ahako-360-toggle';
+      const cb=document.createElement('input');cb.type='checkbox';cb.checked=(explicit()?.projection===projection);
+      const cbt=document.createElement('span');cbt.textContent=is360?u('このSceneを360°背景にする','Use 360° background in this Scene'):u('このSceneをパノラマ背景にする','Use panorama background in this Scene');
+      enable.append(cb,cbt);panel.appendChild(enable);
+
+      const openHomeEditor=()=>{
+        const source=explicit()?.src?explicit():previousFraming();if(!source?.src)return;
+        const bg=ensureImageState();
+        let yaw=Number(bg.homeYaw)||0,pitch=Number(bg.homePitch)||0;
+        const ov=document.createElement('div');
+        Object.assign(ov.style,{position:'fixed',inset:'0',zIndex:'2147483647',background:'rgba(10,12,16,.58)',backdropFilter:'blur(12px)',display:'grid',placeItems:'center',padding:'16px'});
+        const dlg=document.createElement('section');Object.assign(dlg.style,{width:'min(820px,96vw)',maxHeight:'94vh',overflow:'auto',background:'#f7f7f8',color:'#111',borderRadius:'24px',padding:'18px',boxShadow:'0 24px 80px rgba(0,0,0,.28)'});
+        const hd=document.createElement('div');Object.assign(hd.style,{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',marginBottom:'8px'});
+        const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('キャンセル','Cancel');
+        const ttl=document.createElement('strong');ttl.textContent=u('初期視点','Initial view');Object.assign(ttl.style,{fontSize:'20px',justifySelf:'center'});
+        const saveBtn=document.createElement('button');saveBtn.type='button';saveBtn.textContent=u('保存','Save');Object.assign(saveBtn.style,{justifySelf:'end'});
+        [cancel,saveBtn].forEach(b=>Object.assign(b.style,{border:'0',background:'transparent',font:'inherit',padding:'8px 6px',cursor:'pointer'}));hd.append(cancel,ttl,saveBtn);
+        const help=document.createElement('p');help.textContent=u('画像をドラッグして、Scene開始時に見せたい位置を中央へ合わせます','Drag the image to choose the starting view.');Object.assign(help.style,{textAlign:'center',color:'#737780',fontSize:'13px',margin:'4px 0 14px'});
+        const stage=document.createElement('div');Object.assign(stage.style,{width:'min(390px,88vw)',height:'min(64vh,650px)',minHeight:'360px',margin:'0 auto',borderRadius:'16px',backgroundImage:`url("${source.src}")`,backgroundSize:is360?'auto 108%':'auto 108%',backgroundRepeat:is360?'repeat-x':'no-repeat',backgroundColor:'#111',boxShadow:'0 12px 36px rgba(0,0,0,.16)',touchAction:'none',cursor:'grab'});
+        const readout=document.createElement('div');Object.assign(readout.style,{textAlign:'center',fontSize:'12px',color:'#777',marginTop:'10px'});
+        const reset=document.createElement('button');reset.type='button';reset.textContent=u('中央に戻す','Reset to center');Object.assign(reset.style,{display:'block',width:'min(390px,88vw)',margin:'12px auto 0',padding:'12px',border:'1px solid #d5d7dc',borderRadius:'12px',background:'#fff',font:'inherit'});
+        const clampYaw=v=>is360?v:Math.max(-180,Math.min(180,v));
+        const render=()=>{const x=is360?50+yaw/3.6:Math.max(0,Math.min(100,50+yaw/3.6));stage.style.backgroundPosition=`${x}% ${Math.max(0,Math.min(100,50-pitch*.95))}%`;readout.textContent=`${u('左右','Horizontal')} ${Math.round(yaw)}° / ${u('上下','Vertical')} ${Math.round(pitch)}°`;};
+        let drag=null;stage.addEventListener('pointerdown',e=>{drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw,pitch};stage.setPointerCapture?.(e.pointerId);stage.style.cursor='grabbing';e.preventDefault();});
+        stage.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;yaw=clampYaw(drag.yaw-dx*.46);pitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));render();e.preventDefault();});
+        const end=e=>{if(drag?.id===e.pointerId){drag=null;stage.style.cursor='grab';}};stage.addEventListener('pointerup',end);stage.addEventListener('pointercancel',end);
+        reset.addEventListener('click',()=>{yaw=0;pitch=0;render();});
+        const close=()=>ov.remove();cancel.addEventListener('click',close);ov.addEventListener('click',e=>{if(e.target===ov)close();});
+        saveBtn.addEventListener('click',()=>{captureUndo((is360?'360°':'パノラマ')+'初期視点の変更を元に戻せます');bg.homeYaw=yaw;bg.homePitch=pitch;apply();close();closeDesktopBackgroundDetail();openDesktopBackgroundDetail();});
+        dlg.append(hd,help,stage,readout,reset);ov.appendChild(dlg);document.body.appendChild(ov);render();
+      };
+
+      const grid=two(panel);
+      const homeField=document.createElement('label');homeField.className='desktop-text-detail-field';
+      const homeCap=document.createElement('span');homeCap.textContent=u('初期視点','Initial view');
+      const homeBtn=desktopAction(u('初期視点を調整','Adjust initial view'),openHomeEditor,'is-primary');
+      const sourceSpatial=explicit()?.src?explicit():previousFraming();if(!sourceSpatial?.src)homeBtn.disabled=true;
+      homeField.append(homeCap,homeBtn);
+      grid.append(homeField,desktopDetailSelect(u('モーションセンサー','Motion sensor'),[['on',u('使う','On')],['off',u('使わない','Off')]],explicit()?.motionSensor===false?'off':'on',v=>{const bg=ensureImageState();bg.motionSensor=v==='on';apply();}));
+
+      const op=document.createElement('p');op.className='desktop-text-detail-note';
+      op.textContent=is360
+        ? u('操作：左右スワイプ＝横360°／上下スワイプ＝見上げ・見下ろし。◎で現在の視点を固定できます。','Swipe to look around. Use ◎ to lock the current view.')
+        : u('操作：左右スワイプ／端末モーションで見渡し、画像端で停止します。上下も少し動かせます。◎で現在の視点を固定できます。','Swipe or move the device to look around; movement stops at the image edges. Use ◎ to lock the view.');
+      panel.appendChild(op);
+
+      cb.addEventListener('change',()=>{const bg=ensureImageState();bg.projection=cb.checked?projection:'flat';if(cb.checked){bg.motionSensor=bg.motionSensor!==false;bg.motion={type:'none'};}apply();});
+      return panel;
     };
-    const grid=two(panoSec);
-    const homeField=document.createElement('label');homeField.className='desktop-text-detail-field';
-    const homeCap=document.createElement('span');homeCap.textContent=u('初期視点','Initial view');
-    const homeBtn=desktopAction(u('初期視点を調整','Adjust initial view'),open360HomeEditor,'is-primary');
-    const source360=explicit()?.src?explicit():previousFraming();if(!source360?.src)homeBtn.disabled=true;
-    homeField.append(homeCap,homeBtn);
-    grid.append(
-      homeField,
-      desktopDetailSelect(u('モーションセンサー','Motion sensor'),[['on',u('使う','On')],['off',u('使わない','Off')]],explicit()?.motionSensor===false?'off':'on',v=>{const bg=ensureImageState();bg.motionSensor=v==='on';apply();})
-    );
-    const homeNote=document.createElement('p');homeNote.className='desktop-text-detail-note';homeNote.textContent=u('操作：左右スワイプ＝横360°／上下スワイプ＝見上げ・見下ろし。ドラッグ後はScene送りしません。モーション許可は作品開始時にまとめて要求します。','Swipe to look around. Dragging does not advance the Scene. Motion permission is requested when the work starts.');panoSec.appendChild(homeNote);
-    panoPanel.appendChild(panoSec);
-    body.replaceChildren(subTabs,flatPanel,panoPanel);
-    const showPano=(on)=>{flatPanel.hidden=on;panoPanel.hidden=!on;flatTab.classList.toggle('is-active',!on);panoTab.classList.toggle('is-active',on);};
-    // V1.6.1: the editor sub-tab is an author UI choice, not Scene data.
-    // Moving between Scenes must not force Background <-> 360°.
-    showPano(desktopBackgroundDetailSubtab==='360');
-    flatTab.addEventListener('click',()=>{desktopBackgroundDetailSubtab='flat';showPano(false);});
-    panoTab.addEventListener('click',()=>{desktopBackgroundDetailSubtab='360';showPano(true);});
-    cb.addEventListener('change',()=>{const bg=ensureImageState();bg.projection=cb.checked?'360':'flat';if(cb.checked){bg.motionSensor=bg.motionSensor!==false;bg.motion={type:'none'};}apply();});
+
+    finitePanel.appendChild(buildSpatialPanel('panorama'));
+    panoPanel.appendChild(buildSpatialPanel('360'));
+    body.replaceChildren(subTabs,flatPanel,finitePanel,panoPanel);
+
+    const showSpatialTab=(mode)=>{
+      desktopBackgroundDetailSubtab=mode;
+      flatPanel.hidden=mode!=='flat';finitePanel.hidden=mode!=='panorama';panoPanel.hidden=mode!=='360';
+      flatTab.classList.toggle('is-active',mode==='flat');finiteTab.classList.toggle('is-active',mode==='panorama');panoTab.classList.toggle('is-active',mode==='360');
+    };
+    showSpatialTab(['flat','panorama','360'].includes(desktopBackgroundDetailSubtab)?desktopBackgroundDetailSubtab:'flat');
+    flatTab.addEventListener('click',()=>showSpatialTab('flat'));
+    finiteTab.addEventListener('click',()=>showSpatialTab('panorama'));
+    panoTab.addEventListener('click',()=>showSpatialTab('360'));
 
     modal.append(head,body,foot);
     overlay.appendChild(modal);

@@ -431,7 +431,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       if(this.els.panoViewLock)this._on(this.els.panoViewLock,'click',(e)=>{
         e.preventDefault();e.stopPropagation();e.stopImmediatePropagation?.();
-        if(!this._is360Background())return;
+        if(!this._isSpatialBackground())return;
         this._set360ViewLocked(!this._panoViewLocked);
       });
       this._on(this.els.historyClose, 'click', (e) => {
@@ -4020,9 +4020,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     // AHAKO_360_PROTO_V1_2 — screen-fixed text/UI, yaw-driven horizontal panorama.
     _is360Background(state=this.backgroundState){ return state?.projection === '360'; }
+    _isFinitePanorama(state=this.backgroundState){ return state?.projection === 'panorama'; }
+    _isSpatialBackground(state=this.backgroundState){ return this._is360Background(state)||this._isFinitePanorama(state); }
     _requestMotionPermissionIfNeeded(){
-      const has360=(this.document?.scenes||[]).some(sc=>sc?.presentation?.background?.projection==='360');
-      if(!has360 || this._motionPermissionAsked) return;
+      const hasSpatial=(this.document?.scenes||[]).some(sc=>['360','panorama'].includes(sc?.presentation?.background?.projection));
+      if(!hasSpatial || this._motionPermissionAsked) return;
       this._motionPermissionAsked=true;
       const DOE=global.DeviceOrientationEvent;
       if(DOE && typeof DOE.requestPermission==='function'){
@@ -4032,7 +4034,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _bind360Motion(){
       if(this._motionBound)return; this._motionBound=true;
       this._on(global,'deviceorientation',(e)=>{
-        if(!this._is360Background() || !this._motionAllowed || this.backgroundState?.motionSensor===false || this._panoViewLocked)return;
+        if(!this._isSpatialBackground() || !this._motionAllowed || this.backgroundState?.motionSensor===false || this._panoViewLocked)return;
         const alpha=Number(e.alpha), beta=Number(e.beta);
         if(!Number.isFinite(alpha)||!Number.isFinite(beta))return;
         if(this._motionLastAlpha==null){
@@ -4062,7 +4064,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       },{passive:true});
     }
     _show360ViewLockControl(){
-      const b=this.els?.panoViewLock;if(!b||!this._is360Background())return;
+      const b=this.els?.panoViewLock;if(!b||!this._isSpatialBackground())return;
       b.hidden=false;
       b.classList.toggle('is-locked',Boolean(this._panoViewLocked));
       b.setAttribute('aria-pressed',this._panoViewLocked?'true':'false');
@@ -4097,13 +4099,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._render360Background();
     }
     _render360Background(){
-      if(!this._is360Background())return;
+      if(!this._isSpatialBackground())return;
       const layer=this._currentBackgroundLayer(); if(!layer)return;
       const yaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
       const pitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
-      // repeat-x makes yaw unbounded: 360° is 100 percentage points.
-      const x=50 + yaw/3.6;
-      const y=50 - pitch*.95;
+      // 360° repeats forever; Panorama is finite and stops at the image edges.
+      const rawX=50 + yaw/3.6;
+      const x=this._isFinitePanorama()?Math.max(0,Math.min(100,rawX)):rawX;
+      const y=Math.max(0,Math.min(100,50 - pitch*.95));
       layer.style.backgroundPosition=`${x}% ${y}%`;
     }
     _bind360Gestures(){
@@ -4112,7 +4115,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const isHorizontalPast=()=>this.currentScene?.presentation?.text?.writingMode==='vertical-rl'
         && !this._hasCredits(this.currentScene?.presentation);
       this._on(this.els.stage,'pointerdown',(e)=>{
-        if(!this._is360Background()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
+        if(!this._isSpatialBackground()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
         drag={
           x:e.clientX,y:e.clientY,
           yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
@@ -4121,7 +4124,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         try{this.els.stage.setPointerCapture?.(e.pointerId);}catch(_){}
       },true);
       this._on(this.els.stage,'pointermove',(e)=>{
-        if(!drag||!this._is360Background())return;
+        if(!drag||!this._isSpatialBackground())return;
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
         const distance=Math.hypot(dx,dy);
         if(distance>5)drag.moved=true;
@@ -4132,7 +4135,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // V1.5: every ordinary drag belongs to the panorama while the finger is
         // down. A fast, long flick in the established PAST direction is decided
         // only on release, so slow exploration remains predictable.
-        this._panoYaw=drag.yaw-dx*.46;
+        this._panoYaw=this._isFinitePanorama()?Math.max(-180,Math.min(180,drag.yaw-dx*.46)):(drag.yaw-dx*.46);
         this._panoPitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));
         this._render360Background();
         this._show360ViewLockControl();
@@ -4189,12 +4192,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._resetBackgroundRuntime();
       this.backgroundState = next;
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
-      if(this._is360Background(next)){
-        // V1.5: the reader's gaze is continuous state. Consecutive 360° Scenes
-        // keep the live yaw/pitch even when the image or authored homePitch changes.
-        // homePitch is a starting pose only when entering 360° from a flat Scene.
-        const entering360=!this._is360Background(previous);
-        if(this._panoYaw==null || entering360)this._reset360Home();
+      this.host.classList.toggle('sp-bg-panorama-active', this._isFinitePanorama(next));
+      if(this._isSpatialBackground(next)){
+        // Reader gaze carries only between consecutive Scenes of the same spatial mode.
+        const enteringSpatial=previous?.projection!==next?.projection;
+        if(this._panoYaw==null || enteringSpatial)this._reset360Home();
         this._bind360Gestures(); this._bind360Motion();
       } else {
         this._motionLastAlpha=null; this._panoYawVelocity=0;
@@ -4266,6 +4268,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
       if(state.projection==='360'){layer.style.backgroundSize='auto 138%';layer.style.backgroundRepeat='repeat-x';}
+      else if(state.projection==='panorama'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='no-repeat';}
       else layer.style.backgroundRepeat='no-repeat';
       {
         const filters = [];
@@ -4288,6 +4291,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(state.projection==='360'){
         layer.style.backgroundSize='auto 138%';
         layer.style.backgroundRepeat='repeat-x';
+      }else if(state.projection==='panorama'){
+        layer.style.backgroundSize='auto 108%';
+        layer.style.backgroundRepeat='no-repeat';
+        this._render360Background();
       }else{
         layer.style.backgroundPosition = state.position || 'center center';
         layer.style.backgroundRepeat='no-repeat';

@@ -1934,7 +1934,7 @@
           "type": "string"
         },
         "projection": {
-          "enum": ["flat", "360"]
+          "enum": ["flat", "panorama", "360"]
         },
         "homeYaw": {"type":"number"},
         "homePitch": {"type":"number","minimum":-35,"maximum":35},
