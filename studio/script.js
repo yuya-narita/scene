@@ -13723,6 +13723,33 @@ function openDesktopBackgroundDetail(){
     save.type='button';save.className='is-primary';save.textContent=t('common.save');
     foot.append(reset,spacer,close,save);
 
+    // 360 prototype: keep the existing Background UI untouched behind a local sub-tab.
+    const existingSections=Array.from(body.children);
+    const subTabs=document.createElement('div');subTabs.className='ahako-bg-subtabs';
+    const flatTab=document.createElement('button');flatTab.type='button';flatTab.textContent=u('背景','Background');
+    const panoTab=document.createElement('button');panoTab.type='button';panoTab.textContent='360°';
+    subTabs.append(flatTab,panoTab);
+    const flatPanel=document.createElement('div');flatPanel.className='ahako-bg-subpanel';existingSections.forEach(n=>flatPanel.appendChild(n));
+    const panoPanel=document.createElement('div');panoPanel.className='ahako-bg-subpanel';
+    const panoSec=document.createElement('section');panoSec.className='desktop-text-detail-section';
+    const ph=document.createElement('h3');ph.textContent=u('360°背景（試験）','360° background (prototype)');panoSec.appendChild(ph);
+    const note=document.createElement('p');note.className='desktop-text-detail-note';note.textContent=u('通常の背景画像を横360°として扱います。本文・吹き出し・UIは画面に固定されたまま、背景だけをスワイプ／端末モーションで見渡します。','Treat the current background image as a horizontal 360° panorama. Text and UI stay screen-fixed.');panoSec.appendChild(note);
+    const enable=document.createElement('label');enable.className='ahako-360-toggle';
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=(explicit()?.projection==='360');
+    const cbt=document.createElement('span');cbt.textContent=u('このSceneを360°背景にする','Use 360° background in this Scene');enable.append(cb,cbt);panoSec.appendChild(enable);
+    const grid=two(panoSec);
+    grid.append(
+      desktopDetailRange(u('初期の上下位置','Home vertical angle'),{min:-35,max:35,step:1,value:Number(explicit()?.homePitch)||0,unit:' °',format:v=>Math.round(v),oninput:v=>{const bg=ensureImageState();bg.homePitch=v;apply();}}),
+      desktopDetailSelect(u('モーションセンサー','Motion sensor'),[['on',u('使う','On')],['off',u('使わない','Off')]],explicit()?.motionSensor===false?'off':'on',v=>{const bg=ensureImageState();bg.motionSensor=v==='on';apply();})
+    );
+    const homeNote=document.createElement('p');homeNote.className='desktop-text-detail-note';homeNote.textContent=u('操作：左右スワイプ＝横360°／上下スワイプ＝見上げ・見下ろし。ドラッグ後はScene送りしません。モーション許可は作品開始時にまとめて要求します。','Swipe to look around. Dragging does not advance the Scene. Motion permission is requested when the work starts.');panoSec.appendChild(homeNote);
+    panoPanel.appendChild(panoSec);
+    body.replaceChildren(subTabs,flatPanel,panoPanel);
+    const showPano=(on)=>{flatPanel.hidden=on;panoPanel.hidden=!on;flatTab.classList.toggle('is-active',!on);panoTab.classList.toggle('is-active',on);};
+    showPano(cb.checked);
+    flatTab.addEventListener('click',()=>showPano(false));panoTab.addEventListener('click',()=>showPano(true));
+    cb.addEventListener('change',()=>{const bg=ensureImageState();bg.projection=cb.checked?'360':'flat';if(cb.checked){bg.motionSensor=bg.motionSensor!==false;bg.motion={type:'none'};}apply();showPano(cb.checked);});
+
     modal.append(head,body,foot);
     overlay.appendChild(modal);
     liveDetailHost().appendChild(overlay);

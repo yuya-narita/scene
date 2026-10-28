@@ -3300,3 +3300,8 @@ html.sp-scene-image-open body{
   transform:rotate(-90deg)!important;
   transform-origin:50% 50%!important;
 }
+
+/* AHAKO 360 Background prototype */
+.sp-core.sp-bg-360-active .sp-background{pointer-events:none}
+.sp-core.sp-bg-360-active .sp-bg-layer{inset:-2%;background-size:auto 108%;background-repeat:repeat-x;will-change:background-position,opacity,filter}
+.sp-core.sp-bg-360-active .sp-bg-layer.is-current{animation:none!important;transform:none!important}

@@ -1933,6 +1933,12 @@
         "src": {
           "type": "string"
         },
+        "projection": {
+          "enum": ["flat", "360"]
+        },
+        "homeYaw": {"type":"number"},
+        "homePitch": {"type":"number","minimum":-35,"maximum":35},
+        "motionSensor": {"type":"boolean"},
         "fit": {
           "enum": [
             "cover",

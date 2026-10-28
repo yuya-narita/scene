@@ -3186,6 +3186,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _beginFromCover(startEvent) {
+      this._requestMotionPermissionIfNeeded();
       if(!this.document || !this.els?.cover)return false;
       // Cover -> Scene 1 must always re-arm navigation as well as audio.
       // Without this reset a synthetic click suppressed at the end of the first
@@ -3997,6 +3998,59 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return { ...cache[target] };
     }
 
+    // AHAKO_360_PROTO_V1 — background-only panorama; text/UI stay screen-fixed.
+    _is360Background(state=this.backgroundState){ return state?.projection === '360'; }
+    _requestMotionPermissionIfNeeded(){
+      const has360=(this.document?.scenes||[]).some(sc=>sc?.presentation?.background?.projection==='360');
+      if(!has360 || this._motionPermissionAsked) return;
+      this._motionPermissionAsked=true;
+      const DOE=global.DeviceOrientationEvent;
+      if(DOE && typeof DOE.requestPermission==='function'){
+        try{ Promise.resolve(DOE.requestPermission()).then(v=>{this._motionAllowed=v==='granted';if(this._motionAllowed)this._bind360Motion();}).catch(()=>{}); }catch(_){ }
+      }else{ this._motionAllowed=true; this._bind360Motion(); }
+    }
+    _bind360Motion(){
+      if(this._motionBound)return; this._motionBound=true;
+      this._on(global,'deviceorientation',(e)=>{
+        if(!this._is360Background() || !this._motionAllowed || this.backgroundState?.motionSensor===false)return;
+        if(this._motionBaseGamma==null){this._motionBaseGamma=Number(e.gamma)||0;this._motionBaseBeta=Number(e.beta)||0;}
+        const dg=(Number(e.gamma)||0)-this._motionBaseGamma, db=(Number(e.beta)||0)-this._motionBaseBeta;
+        const dead=v=>Math.abs(v)<1.5?0:Math.sign(v)*(Math.abs(v)-1.5);
+        this._panoSensorYaw=Math.max(-42,Math.min(42,dead(dg)*1.35));
+        this._panoSensorPitch=Math.max(-22,Math.min(22,dead(db)*.72));
+        this._render360Background();
+      },{passive:true});
+    }
+    _reset360Home(){this._panoYaw=0;this._panoPitch=Number(this.backgroundState?.homePitch)||0;this._motionBaseGamma=null;this._motionBaseBeta=null;this._panoSensorYaw=0;this._panoSensorPitch=0;this._render360Background();}
+    _render360Background(){
+      if(!this._is360Background())return;
+      const layer=this._currentBackgroundLayer(); if(!layer)return;
+      const yaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
+      const pitch=Math.max(-35,Math.min(35,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
+      const x=50 + yaw/3.6; const y=50 - pitch*.72;
+      layer.style.backgroundPosition=`${x}% ${y}%`;
+    }
+    _bind360Gestures(){
+      if(this._panoGesturesBound)return;this._panoGesturesBound=true;
+      let drag=null;
+      this._on(this.els.stage,'pointerdown',(e)=>{
+        if(!this._is360Background()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
+        drag={x:e.clientX,y:e.clientY,yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,moved:false,id:e.pointerId};
+      },true);
+      this._on(this.els.stage,'pointermove',(e)=>{
+        if(!drag||!this._is360Background())return;
+        const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+        if(Math.hypot(dx,dy)>7)drag.moved=true;
+        if(!drag.moved)return;
+        // Natural grab: right drag reveals left side; upward drag looks upward.
+        this._panoYaw=drag.yaw-dx*.22;
+        this._panoPitch=Math.max(-35,Math.min(35,drag.pitch-dy*.16));
+        this._render360Background();
+      },true);
+      const end=(e)=>{if(!drag)return;if(drag.moved){this.suppressNextClick=true;e.preventDefault?.();e.stopPropagation?.();}drag=null;};
+      this._on(this.els.stage,'pointerup',end,true);this._on(this.els.stage,'pointercancel',end,true);
+    }
+
     _applyBackgroundForIndex(index) {
       const next = this._backgroundStateAt(index);
       const previous = this.backgroundState;
@@ -4014,6 +4068,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       this._resetBackgroundRuntime();
       this.backgroundState = next;
+      this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
+      if(this._is360Background(next)){ if(this._panoYaw==null)this._reset360Home(); this._bind360Gestures(); this._bind360Motion(); }
       const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
       // Keep the outgoing layer drawable until its exit animation completes.
       this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
@@ -4077,6 +4133,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       layer.style.backgroundImage = state.src ? `url("${String(state.src).replace(/"/g, '\"')}")` : 'none';
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
+      if(state.projection==='360'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='repeat-x';}
+      else layer.style.backgroundRepeat='no-repeat';
       {
         const filters = [];
         const blur = Math.max(0, asNumber(state.blur, 0));
@@ -4093,6 +4151,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!layer) return;
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
+      if(state.projection==='360'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='repeat-x';}
+      else layer.style.backgroundRepeat='no-repeat';
       {
         const filters = [];
         const blur = Math.max(0, asNumber(state.blur, 0));

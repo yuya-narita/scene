@@ -2340,3 +2340,8 @@ html.sp-scene-image-open body{
 .sp-rich-link-card-copy>small{overflow:hidden;color:#536372;text-overflow:ellipsis;white-space:nowrap;font:400 11px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif}
 .sp-rich-link-card-image{display:block;width:100%;height:100%;min-height:104px;max-height:160px;object-fit:cover;background:#ecece8}
 @media(max-width:520px){.sp-rich-link-card{width:min(88vw,560px);min-height:90px;grid-template-columns:minmax(0,1fr) minmax(82px,34%);font-size:13px}.sp-rich-link-card-copy{gap:4px;padding:10px 11px}.sp-rich-link-card-copy>strong{font-size:13px}.sp-rich-link-card-description{font-size:11px}.sp-rich-link-card-image{min-height:90px;max-height:120px}}
+
+/* AHAKO 360 Background prototype */
+.sp-core.sp-bg-360-active .sp-background{pointer-events:none}
+.sp-core.sp-bg-360-active .sp-bg-layer{inset:-2%;background-size:auto 108%;background-repeat:repeat-x;will-change:background-position,opacity,filter}
+.sp-core.sp-bg-360-active .sp-bg-layer.is-current{animation:none!important;transform:none!important}
