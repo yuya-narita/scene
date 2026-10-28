@@ -4174,6 +4174,29 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const panoPortrait=this._isFinitePanorama() &&
         Boolean(global.matchMedia?.('(orientation: portrait)').matches);
       const panoGrabX=panoPortrait?(Number(this._panoFiniteGrabX)||0):0;
+      if(panoPortrait){
+        const stageW=Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
+        const stageH=Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
+        const src=String(this.backgroundState?.src||'');
+        if(src && this._panoLimitSrc!==src){
+          this._panoLimitSrc=src;
+          this._panoFiniteGrabLimit=NaN;
+          const probe=new Image();
+          probe.onload=()=>{
+            if(this._panoLimitSrc!==src)return;
+            const ratio=(probe.naturalWidth&&probe.naturalHeight)
+              ?probe.naturalWidth/probe.naturalHeight:0;
+            if(ratio>0){
+              const renderedW=stageH*1.08*ratio;
+              this._panoFiniteGrabLimit=Math.max(0,(renderedW-stageW)/2);
+              const limit=this._panoFiniteGrabLimit;
+              this._panoFiniteGrabX=Math.max(-limit,Math.min(limit,Number(this._panoFiniteGrabX)||0));
+              this._render360Background();
+            }
+          };
+          probe.src=src;
+        }
+      }
       const position=this._is360Background()
         ?`calc(${x}% + ${grabX}px) ${y}%`
         :(panoPortrait?`calc(${x}% + ${panoGrabX}px) ${y}%`:`${x}% ${y}%`);
@@ -4224,39 +4247,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           }else if(panoPortrait){
             // Finite panorama portrait: TRUE GRAB stays synchronous.
             // Clamp from the rendered panorama width (auto 108% height).
-            const stageW=Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
-            const stageH=Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
             const nextGrab=drag.panoGrabX+dx;
-
-            // Panorama is rendered with background-size:auto 108%.
-            // Cache the image aspect ratio outside the drag math once it becomes known.
-            this._panoAspectCache=this._panoAspectCache||new Map();
-            const layer=this.els?.bgLayer||this.els?.backgroundLayer||this.els?.background;
-            const bgImage=layer?global.getComputedStyle(layer).backgroundImage:'';
-            const urlMatch=bgImage&&bgImage.match(/url\(["']?(.*?)["']?\)/);
-            const bgUrl=urlMatch?.[1]||'';
-            let ratio=Number(this._panoAspectCache.get(bgUrl))||0;
-            if(!ratio && bgUrl && !this._panoAspectCache.has(bgUrl)){
-              this._panoAspectCache.set(bgUrl,-1);
-              const probe=new Image();
-              probe.onload=()=>{
-                const r=(probe.naturalWidth&&probe.naturalHeight)
-                  ?probe.naturalWidth/probe.naturalHeight:0;
-                this._panoAspectCache.set(bgUrl,r||0);
-              };
-              probe.onerror=()=>this._panoAspectCache.set(bgUrl,0);
-              probe.src=bgUrl;
-            }
-            if(ratio<0)ratio=0;
-
-            if(ratio>0){
-              const renderedW=stageH*1.08*ratio;
-              const maxGrab=Math.max(0,(renderedW-stageW)/2);
-              this._panoFiniteGrabX=Math.max(-maxGrab,Math.min(maxGrab,nextGrab));
-            }else{
-              // Do not block dragging while the one-time size probe is resolving.
-              this._panoFiniteGrabX=nextGrab;
-            }
+            const maxGrab=Number(this._panoFiniteGrabLimit);
+            this._panoFiniteGrabX=Number.isFinite(maxGrab)
+              ?Math.max(-maxGrab,Math.min(maxGrab,nextGrab))
+              :nextGrab;
           }else{
             this._panoYaw=this._isFinitePanorama()
               ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
