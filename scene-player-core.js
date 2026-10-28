@@ -4225,13 +4225,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // current sensor yaw into manual yaw, then reset sensor integration.
             // Reversing the phone therefore responds immediately and the
             // available motion range never shrinks after repeated turns.
-            const sensorYaw=Number(this._panoSensorYaw)||0;
-            if(sensorYaw){
-              this._panoYaw=(Number(this._panoYaw)||0)+sensorYaw;
-              this._panoSensorYaw=0;
-              this._motionLastAlpha=null;
-            }
+            // The final pixel clamp is the only edge authority. Never bake
+            // sensor yaw into manual yaw here: doing so makes the last swipe
+            // position become a false future endpoint for motion.
+            this._panoSensorYaw=0;
             this._panoYawVelocity=0;
+            this._motionLastAlpha=null;
           }
         };
 
@@ -4267,6 +4266,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         && !this._hasCredits(this.currentScene?.presentation);
       this._on(this.els.stage,'pointerdown',(e)=>{
         if(!this._isSpatialBackground()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
+        if(this._isFinitePanorama()){
+          // Sensor -> finger handoff. Preserve the exact visible camera, then
+          // make that view the new neutral sensor origin before TRUE GRAB starts.
+          this._panoYaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
+          this._panoSensorYaw=0;
+          this._panoYawVelocity=0;
+          this._motionLastAlpha=null;
+          this._motionBaseBeta=null;
+        }
         drag={
           x:e.clientX,y:e.clientY,
           yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
@@ -4351,6 +4359,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         try{
           if(this.els.stage.hasPointerCapture?.(drag.id))this.els.stage.releasePointerCapture?.(drag.id);
         }catch(_){}
+        if(this._isFinitePanorama()){
+          // Finger -> sensor handoff. The finger's final view becomes the new
+          // sensor origin; subsequent motion can travel to BOTH real image edges.
+          this._panoSensorYaw=0;
+          this._panoYawVelocity=0;
+          this._motionLastAlpha=null;
+          this._motionBaseBeta=null;
+        }
         drag=null;
         requestAnimationFrame(()=>{ this._panoSuppressClickUntil=0; });
       };
