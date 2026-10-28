@@ -4225,12 +4225,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // current sensor yaw into manual yaw, then reset sensor integration.
             // Reversing the phone therefore responds immediately and the
             // available motion range never shrinks after repeated turns.
-            // The final pixel clamp is the only edge authority. Never bake
-            // sensor yaw into manual yaw here: doing so makes the last swipe
-            // position become a false future endpoint for motion.
-            this._panoSensorYaw=0;
+            // HOLD the composed camera at the real image edge.
+            // Do not zero/rebase sensorYaw here: doing that while the device is
+            // still physically turned teleports the camera back toward the last
+            // swipe landmark and creates an endless edge->landmark loop.
+            // The final pixel clamp above is the sole edge authority; velocity
+            // is stopped, while sensor orientation remains continuous so
+            // reversing the device moves away from the edge immediately.
             this._panoYawVelocity=0;
-            this._motionLastAlpha=null;
           }
         };
 
