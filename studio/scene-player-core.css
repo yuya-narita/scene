@@ -3364,3 +3364,14 @@ html.sp-scene-image-open body{
     bottom:max(12px,calc(env(safe-area-inset-bottom) + 8px))!important;
   }
 }
+
+/* Finite panorama: landscape is a full-screen window. Horizontal image range is
+   centered; any cover crop is explored vertically through the existing pitch. */
+@media (orientation:landscape){
+  .sp-core.sp-bg-panorama-active .sp-bg-layer{
+    inset:0!important;
+    background-size:cover!important;
+    background-repeat:no-repeat!important;
+    background-position:50% 50%;
+  }
+}

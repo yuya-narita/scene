@@ -4120,9 +4120,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // device-orientation yaw; finger dragging keeps its existing grab direction.
         this._panoYawVelocity=(Number(this._panoYawVelocity)||0)*.58 - da*.42;
         if(Math.abs(this._panoYawVelocity)<.08)this._panoYawVelocity=0;
-        this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+this._panoYawVelocity*.72;
+        const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+        if(!panoLandscape){
+          this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+this._panoYawVelocity*.72;
+        }else{
+          this._panoSensorYaw=0;
+          this._panoYawVelocity=0;
+        }
 
-        if(this._isFinitePanorama()){
+        if(this._isFinitePanorama() && !panoLandscape){
           // Panorama has real edges. Clamp the CAMERA STATE itself, not only the
           // rendered backgroundPosition. This prevents invisible sensor rotation
           // from accumulating beyond an edge and makes reverse rotation respond
@@ -4195,7 +4201,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if(this._isSpatialBackground()){
             this._panoYaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
             this._panoPitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
-            if(this._isFinitePanorama())this._panoYaw=Math.max(-180,Math.min(180,this._panoYaw));
+            if(this._isFinitePanorama()){
+              this._panoYaw=Math.max(-180,Math.min(180,this._panoYaw));
+              if(w>h)this._panoYaw=0;
+            }
             this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
             this._motionLastAlpha=null;this._motionBaseBeta=null;
             requestAnimationFrame(()=>requestAnimationFrame(()=>{
@@ -4217,7 +4226,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const pitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
       // 360° repeats forever; Panorama is finite and stops at the image edges.
       const rawX=50 + yaw/3.6;
-      const x=this._isFinitePanorama()?Math.max(0,Math.min(100,rawX)):rawX;
+      const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+      // A finite panorama that already fits horizontally in landscape should not
+      // make the reader manually re-center it. Keep X centered; pitch/Y remains live.
+      const x=panoLandscape?50:(this._isFinitePanorama()?Math.max(0,Math.min(100,rawX)):rawX);
       const y=Math.max(0,Math.min(100,50 - pitch*.95));
       const position=`${x}% ${y}%`;
       // At a finite edge the sensor may continue firing while the visible camera
@@ -4254,7 +4266,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // V1.5: every ordinary drag belongs to the panorama while the finger is
         // down. A fast, long flick in the established PAST direction is decided
         // only on release, so slow exploration remains predictable.
-        this._panoYaw=this._isFinitePanorama()?Math.max(-180,Math.min(180,drag.yaw-dx*.46)):(drag.yaw-dx*.46);
+        const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+        if(!panoLandscape){
+          this._panoYaw=this._isFinitePanorama()?Math.max(-180,Math.min(180,drag.yaw-dx*.46)):(drag.yaw-dx*.46);
+        }else{
+          this._panoYaw=0;
+        }
         this._panoPitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));
         this._render360Background();
         this._show360ViewLockControl();
