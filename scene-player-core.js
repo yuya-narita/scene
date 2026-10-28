@@ -4239,9 +4239,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const x=panoLandscape?50:(this._isFinitePanorama()?Math.max(0,Math.min(100,rawX)):rawX);
       const y=Math.max(0,Math.min(100,50 - pitch*.95));
       const grabX=this._is360Background()?(Number(this._panoGrabX)||0):0;
+      const panoPortrait=this._isFinitePanorama() &&
+        Boolean(global.matchMedia?.('(orientation: portrait)').matches);
+      const panoGrabX=panoPortrait?(Number(this._panoFiniteGrabX)||0):0;
       const position=this._is360Background()
         ?`calc(${x}% + ${grabX}px) ${y}%`
-        :`${x}% ${y}%`;
+        :(panoPortrait?`calc(${x}% + ${panoGrabX}px) ${y}%`:`${x}% ${y}%`);
       // At a finite edge the sensor may continue firing while the visible camera
       // is stationary. Avoid repeating an identical DOM style write.
       if(layer.style.backgroundPosition!==position){
@@ -4260,6 +4263,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           x:e.clientX,y:e.clientY,
           yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
           grabX:Number(this._panoGrabX)||0,
+          panoGrabX:Number(this._panoFiniteGrabX)||0,
           moved:false,id:e.pointerId,startedAt:performance.now()
         };
         try{this.els.stage.setPointerCapture?.(e.pointerId);}catch(_){}
@@ -4282,10 +4286,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // 360° landscape needs a larger visual turn per finger travel than the
           // portrait/default grab. Motion-sensor sensitivity is intentionally unchanged.
           const is360=this._is360Background();
+          const panoPortrait=this._isFinitePanorama() &&
+            Boolean(global.matchMedia?.('(orientation: portrait)').matches);
           if(is360){
-            // True grab: the point under the finger/mouse follows it by the
-            // same number of screen pixels, independent of orientation/device.
+            // True grab: the point under the finger/mouse follows it 1:1.
             this._panoGrabX=drag.grabX+dx;
+          }else if(panoPortrait){
+            // Finite panorama portrait: same 1:1 grab feel as 360°,
+            // with the finite image still clamped by the renderer.
+            this._panoFiniteGrabX=drag.panoGrabX+dx;
           }else{
             this._panoYaw=this._isFinitePanorama()
               ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
