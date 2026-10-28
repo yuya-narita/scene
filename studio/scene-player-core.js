@@ -4009,9 +4009,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(!this._is360Background() || !this._motionAllowed || this.backgroundState?.motionSensor===false)return;
         if(this._motionBaseGamma==null){this._motionBaseGamma=Number(e.gamma)||0;this._motionBaseBeta=Number(e.beta)||0;}
         const dg=(Number(e.gamma)||0)-this._motionBaseGamma, db=(Number(e.beta)||0)-this._motionBaseBeta;
-        const dead=v=>Math.abs(v)<1.5?0:Math.sign(v)*(Math.abs(v)-1.5);
-        this._panoSensorYaw=Math.max(-42,Math.min(42,dead(dg)*1.35));
-        this._panoSensorPitch=Math.max(-22,Math.min(22,dead(db)*.72));
+        // 360 V1.1: stronger hand-shake suppression + eased sensor follow.
+        // Tiny wrist noise is ignored; intentional movement still has enough range.
+        const dead=v=>Math.abs(v)<3.2?0:Math.sign(v)*(Math.abs(v)-3.2);
+        const targetYaw=Math.max(-34,Math.min(34,dead(dg)*.82));
+        const targetPitch=Math.max(-16,Math.min(16,dead(db)*.42));
+        const ease=.14;
+        this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+(targetYaw-(Number(this._panoSensorYaw)||0))*ease;
+        this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*ease;
         this._render360Background();
       },{passive:true});
     }
@@ -4034,11 +4039,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._on(this.els.stage,'pointermove',(e)=>{
         if(!drag||!this._is360Background())return;
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-        if(Math.hypot(dx,dy)>7)drag.moved=true;
+        if(Math.hypot(dx,dy)>3)drag.moved=true;
         if(!drag.moved)return;
-        // Natural grab: right drag reveals left side; upward drag looks upward.
-        this._panoYaw=drag.yaw-dx*.22;
-        this._panoPitch=Math.max(-35,Math.min(35,drag.pitch-dy*.16));
+        // Claim the gesture before the Player's normal swipe/PAST handlers see it.
+        if(e.cancelable)e.preventDefault();
+        e.stopPropagation?.();e.stopImmediatePropagation?.();
+        this.suppressNextClick=true;
+        // Natural grab. Vertical direction: finger up = look up, finger down = look down.
+        // Keep the first pixels deliberately gentle so the panorama never 'jumps'.
+        this._panoYaw=drag.yaw-dx*.115;
+        this._panoPitch=Math.max(-35,Math.min(35,drag.pitch+dy*.085));
         this._render360Background();
       },true);
       const end=(e)=>{if(!drag)return;if(drag.moved){this.suppressNextClick=true;e.preventDefault?.();e.stopPropagation?.();}drag=null;};

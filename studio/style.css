@@ -14442,4 +14442,4 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .ahako-bg-subtabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin:0 0 12px;border:1px solid #d9dde2;border-radius:12px;background:#f4f5f6;position:sticky;top:0;z-index:3}
 .ahako-bg-subtabs button{border:0;border-radius:9px;padding:9px 12px;background:transparent;font-weight:700;cursor:pointer}
 .ahako-bg-subtabs button.is-active{background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.12)}
-.ahako-360-toggle{display:flex;gap:10px;align-items:center;padding:12px;border:1px solid #d9dde2;border-radius:12px;margin:10px 0 14px;font-weight:700}
+.ahako-360-toggle{display:inline-flex;gap:8px;align-items:center;padding:6px 9px;border:0;border-radius:8px;margin:6px 0 12px;font-weight:600;font-size:12px;cursor:pointer;background:#f6f7f8}.ahako-360-toggle input{width:16px;height:16px;margin:0;accent-color:#111}.ahako-360-toggle span{white-space:nowrap}
