@@ -4219,10 +4219,19 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if(Math.abs(correction)>.01){
             panoGrabX+=correction;
             this._panoFiniteGrabX=panoGrabX;
-            if((clampedOffset>=maxOffset && this._panoYawVelocity<0) ||
-               (clampedOffset<=minOffset && this._panoYawVelocity>0)){
-              this._panoYawVelocity=0;
+
+            // Finite panorama must never accumulate invisible sensor rotation
+            // beyond an image edge. Preserve the visible camera by baking the
+            // current sensor yaw into manual yaw, then reset sensor integration.
+            // Reversing the phone therefore responds immediately and the
+            // available motion range never shrinks after repeated turns.
+            const sensorYaw=Number(this._panoSensorYaw)||0;
+            if(sensorYaw){
+              this._panoYaw=(Number(this._panoYaw)||0)+sensorYaw;
+              this._panoSensorYaw=0;
+              this._motionLastAlpha=null;
             }
+            this._panoYawVelocity=0;
           }
         };
 
