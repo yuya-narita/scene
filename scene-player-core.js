@@ -4368,6 +4368,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // grab offset, so motion starts from the exact same view without
           // treating the swipe landmark as a new artificial endpoint.
           const grabPx=Number(this._panoFiniteGrabX)||0;
+          const sensorYaw=Number(this._panoSensorYaw)||0;
+          if(sensorYaw){
+            this._panoYaw=(Number(this._panoYaw)||0)+sensorYaw;
+          }
           const layerW=Number(this.backgroundLayer?.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
           const layerH=Number(this.backgroundLayer?.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
           const src=String(this.backgroundState?.src||'');
@@ -4387,9 +4391,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           this._panoYawVelocity=0;
           this._motionLastAlpha=null;
           this._motionBaseBeta=null;
-          this._render360Background();
         }
         drag=null;
+        if(this._isFinitePanorama())requestAnimationFrame(()=>this._render360Background());
         requestAnimationFrame(()=>{ this._panoSuppressClickUntil=0; });
       };
       this._on(this.els.stage,'pointerup',end,true);
