@@ -3323,3 +3323,32 @@ html.sp-scene-image-open body{
   top:calc(58px + env(safe-area-inset-top)) !important;
   bottom:0 !important;
 }
+
+
+/* 360 Background V1.6.3 — transient reader view-lock brake.
+   Hidden by default; appears briefly after panorama movement and stays visible while locked. */
+.sp-pano-view-lock{
+  position:absolute;
+  z-index:13;
+  right:max(12px,env(safe-area-inset-right));
+  bottom:calc(var(--sp-footer-h) + env(safe-area-inset-bottom) + 14px);
+  width:34px;height:34px;
+  padding:0;border:1px solid color-mix(in srgb,currentColor 22%,transparent);
+  border-radius:999px;
+  display:grid;place-items:center;
+  background:color-mix(in srgb,var(--sp-bg) 72%,transparent);
+  color:var(--sp-sub);
+  -webkit-backdrop-filter:blur(10px);
+  backdrop-filter:blur(10px);
+  font:600 17px/1 system-ui,-apple-system,sans-serif;
+  opacity:.78;
+  touch-action:manipulation;
+}
+.sp-pano-view-lock[hidden]{display:none!important}
+.sp-pano-view-lock.is-locked{
+  opacity:.96;
+  color:var(--sp-fg);
+  border-color:color-mix(in srgb,currentColor 42%,transparent);
+}
+.sp-history:not([hidden]) ~ .sp-pano-view-lock,
+.sp-ending:not([hidden]) ~ .sp-pano-view-lock{display:none!important}

@@ -232,6 +232,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         </header>
         <main class="sp-stage" tabindex="0" aria-live="polite">
           <div class="sp-scenes"></div>
+          <button class="sp-pano-view-lock" type="button" aria-label="360°視点を固定" aria-pressed="false" hidden>◎</button>
           <button class="sp-tap-hint" type="button" aria-label="Next scene">TAP</button>
         </main>
         <section class="sp-history" hidden aria-label="Past scenes">
@@ -284,6 +285,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         footer: q('.sp-footer'),
         stage: q('.sp-stage'),
         scenes: q('.sp-scenes'),
+        panoViewLock: q('.sp-pano-view-lock'),
         history: q('.sp-history'),
         historyScroll: q('.sp-history-scroll'),
         historyList: q('.sp-history-list'),
@@ -427,6 +429,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.toggleAuto();
       });
 
+      if(this.els.panoViewLock)this._on(this.els.panoViewLock,'click',(e)=>{
+        e.preventDefault();e.stopPropagation();e.stopImmediatePropagation?.();
+        if(!this._is360Background())return;
+        this._set360ViewLocked(!this._panoViewLocked);
+      });
       this._on(this.els.historyClose, 'click', (e) => {
         e.stopPropagation();
         this.closeHistory();
@@ -4023,7 +4030,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _bind360Motion(){
       if(this._motionBound)return; this._motionBound=true;
       this._on(global,'deviceorientation',(e)=>{
-        if(!this._is360Background() || !this._motionAllowed || this.backgroundState?.motionSensor===false)return;
+        if(!this._is360Background() || !this._motionAllowed || this.backgroundState?.motionSensor===false || this._panoViewLocked)return;
         const alpha=Number(e.alpha), beta=Number(e.beta);
         if(!Number.isFinite(alpha)||!Number.isFinite(beta))return;
         if(this._motionLastAlpha==null){
@@ -4049,7 +4056,36 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const targetPitch=Math.max(-14,Math.min(14,pitchDead*.32));
         this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*.09;
         this._render360Background();
+        if(Math.abs(da)>.35 || Math.abs(db)>3.2)this._show360ViewLockControl();
       },{passive:true});
+    }
+    _show360ViewLockControl(){
+      const b=this.els?.panoViewLock;if(!b||!this._is360Background())return;
+      b.hidden=false;
+      b.classList.toggle('is-locked',Boolean(this._panoViewLocked));
+      b.setAttribute('aria-pressed',this._panoViewLocked?'true':'false');
+      b.setAttribute('aria-label',this._panoViewLocked?'360°視点固定を解除':'360°視点を固定');
+      b.textContent=this._panoViewLocked?'◉':'◎';
+      clearTimeout(this._panoViewLockHideTimer);
+      if(!this._panoViewLocked){
+        this._panoViewLockHideTimer=setTimeout(()=>{
+          if(!this._panoViewLocked && b)b.hidden=true;
+        },2600);
+      }
+    }
+    _set360ViewLocked(locked){
+      locked=Boolean(locked);
+      if(locked===Boolean(this._panoViewLocked)){this._show360ViewLockControl();return;}
+      if(locked){
+        // Bake the live sensor offset into the manual camera so freezing never jumps.
+        this._panoYaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
+        this._panoPitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
+      }
+      this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
+      this._motionLastAlpha=null;this._motionBaseBeta=null;
+      this._panoViewLocked=locked;
+      this._render360Background();
+      this._show360ViewLockControl();
     }
     _reset360Home(){
       this._panoYaw=Number(this.backgroundState?.homeYaw)||0;
@@ -4097,6 +4133,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._panoYaw=drag.yaw-dx*.46;
         this._panoPitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));
         this._render360Background();
+        this._show360ViewLockControl();
       },true);
       const end=(e)=>{
         if(!drag)return;
@@ -4157,7 +4194,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const entering360=!this._is360Background(previous);
         if(this._panoYaw==null || entering360)this._reset360Home();
         this._bind360Gestures(); this._bind360Motion();
-      } else { this._motionLastAlpha=null; this._panoYawVelocity=0; }
+      } else {
+        this._motionLastAlpha=null; this._panoYawVelocity=0;
+        this._panoViewLocked=false;
+        clearTimeout(this._panoViewLockHideTimer);
+        if(this.els?.panoViewLock)this.els.panoViewLock.hidden=true;
+      }
       const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
       // Keep the outgoing layer drawable until its exit animation completes.
       this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
