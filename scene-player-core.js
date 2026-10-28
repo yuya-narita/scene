@@ -585,6 +585,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             && e.target.closest('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext')) {
           return;
         }
+        // AHAKO_360_PROTO_V1_3 — suppress only the synthetic click emitted
+        // immediately after a panorama drag. A later intentional tap must advance
+        // on the first tap instead of being consumed by a stale boolean flag.
+        if (this._is360Background?.() && performance.now() < (this._panoSuppressClickUntil || 0)) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         if (this.suppressNextClick) {
           this.suppressNextClick = false;
           return;
@@ -4065,24 +4073,42 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _bind360Gestures(){
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
       let drag=null;
-      const EDGE=28;
+      const TEXT_PAST_SELECTOR='.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext, .sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-notification-text';
+      const isHorizontalPast=()=>this.currentScene?.presentation?.text?.writingMode==='vertical-rl'
+        && !this._hasCredits(this.currentScene?.presentation);
       this._on(this.els.stage,'pointerdown',(e)=>{
         if(!this._is360Background()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
-        const edgePast=this.options.allowPrevious && e.clientX<=EDGE;
-        drag={x:e.clientX,y:e.clientY,yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,moved:false,id:e.pointerId,edgePast};
+        drag={
+          x:e.clientX,y:e.clientY,
+          yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
+          moved:false,id:e.pointerId,
+          textPast:!!e.target.closest(TEXT_PAST_SELECTOR),
+          pastGesture:false
+        };
         try{this.els.stage.setPointerCapture?.(e.pointerId);}catch(_){}
       },true);
       this._on(this.els.stage,'pointermove',(e)=>{
         if(!drag||!this._is360Background())return;
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-        if(Math.hypot(dx,dy)>5)drag.moved=true;
+        const distance=Math.hypot(dx,dy);
+        if(distance>5)drag.moved=true;
         if(!drag.moved)return;
+
+        // Preserve the established あ箱 PAST direction, but only when the drag
+        // starts on visible text: normal/vertical flow = pull text down;
+        // vertical-writing/horizontal flow = pull text left.
+        if(drag.textPast && this.options.allowPrevious){
+          const horizontal=isHorizontalPast();
+          const correct=horizontal
+            ? (dx < -12 && Math.abs(dx) > Math.abs(dy)*1.15)
+            : (dy > 12 && Math.abs(dy) > Math.abs(dx)*1.15);
+          if(correct)drag.pastGesture=true;
+        }
         if(e.cancelable)e.preventDefault();
         e.stopPropagation?.();e.stopImmediatePropagation?.();
-        this.suppressNextClick=true;
-        if(drag.edgePast)return; // left-edge gesture is reserved for PAST.
-        // One full phone-width swipe is roughly half a turn. Start from the
-        // exact current yaw/pitch captured at pointerdown, so there is no jump.
+        if(drag.pastGesture)return;
+
+        // V1.2 feel retained: panorama owns all non-PAST drags.
         this._panoYaw=drag.yaw-dx*.46;
         this._panoPitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));
         this._render360Background();
@@ -4090,10 +4116,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const end=(e)=>{
         if(!drag)return;
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+        const threshold=Math.max(28,Number(this.options.swipeThreshold)||0);
         if(drag.moved){
-          this.suppressNextClick=true;
+          // Only block the browser's synthetic click from THIS drag. Do not arm
+          // suppressNextClick for the user's next real tap.
+          this._panoSuppressClickUntil=performance.now()+260;
           e.preventDefault?.();e.stopPropagation?.();e.stopImmediatePropagation?.();
-          if(drag.edgePast && (dx>42 || dy>42))this.openHistory({dragDistance:Math.max(dx,dy)});
+          if(drag.pastGesture){
+            const horizontal=isHorizontalPast();
+            const amount=horizontal?-dx:dy;
+            if(amount>=threshold)this.openHistory({dragDistance:amount});
+          }
         }
         try{this.els.stage.releasePointerCapture?.(drag.id);}catch(_){}
         drag=null;
