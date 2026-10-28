@@ -4054,7 +4054,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       },{passive:true});
     }
     _reset360Home(){
-      this._panoYaw=0;
+      this._panoYaw=Number(this.backgroundState?.homeYaw)||0;
       this._panoPitch=Number(this.backgroundState?.homePitch)||0;
       this._motionLastAlpha=null;this._motionBaseBeta=null;
       this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;

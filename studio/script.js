@@ -13737,9 +13737,42 @@ function openDesktopBackgroundDetail(){
     const enable=document.createElement('label');enable.className='ahako-360-toggle';
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=(explicit()?.projection==='360');
     const cbt=document.createElement('span');cbt.textContent=u('このSceneを360°背景にする','Use 360° background in this Scene');enable.append(cb,cbt);panoSec.appendChild(enable);
+    const open360HomeEditor=()=>{
+      const source=explicit()?.src?explicit():previousFraming();
+      if(!source?.src)return;
+      const bg=ensureImageState();
+      let yaw=Number(bg.homeYaw)||0,pitch=Number(bg.homePitch)||0;
+      const before={yaw,pitch};
+      const ov=document.createElement('div');
+      Object.assign(ov.style,{position:'fixed',inset:'0',zIndex:'2147483647',background:'rgba(10,12,16,.58)',backdropFilter:'blur(12px)',display:'grid',placeItems:'center',padding:'16px'});
+      const dlg=document.createElement('section');
+      Object.assign(dlg.style,{width:'min(820px,96vw)',maxHeight:'94vh',overflow:'auto',background:'#f7f7f8',color:'#111',borderRadius:'24px',padding:'18px',boxShadow:'0 24px 80px rgba(0,0,0,.28)'});
+      const head=document.createElement('div');Object.assign(head.style,{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',marginBottom:'8px'});
+      const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('キャンセル','Cancel');
+      const title=document.createElement('strong');title.textContent=u('初期視点','Initial view');Object.assign(title.style,{fontSize:'20px',justifySelf:'center'});
+      const saveBtn=document.createElement('button');saveBtn.type='button';saveBtn.textContent=u('保存','Save');Object.assign(saveBtn.style,{justifySelf:'end'});
+      [cancel,saveBtn].forEach(b=>Object.assign(b.style,{border:'0',background:'transparent',font:'inherit',padding:'8px 6px',cursor:'pointer'}));head.append(cancel,title,saveBtn);
+      const help=document.createElement('p');help.textContent=u('画像をドラッグして、Scene開始時に見せたい方向を中央へ合わせます','Drag the image to choose what the reader sees when this Scene begins.');Object.assign(help.style,{textAlign:'center',color:'#737780',fontSize:'13px',margin:'4px 0 14px'});
+      const stage=document.createElement('div');Object.assign(stage.style,{width:'min(390px,88vw)',height:'min(64vh,650px)',minHeight:'360px',margin:'0 auto',borderRadius:'16px',backgroundImage:`url(\"${source.src}\")`,backgroundSize:'auto 108%',backgroundRepeat:'repeat-x',backgroundColor:'#111',boxShadow:'0 12px 36px rgba(0,0,0,.16)',touchAction:'none',cursor:'grab'});
+      const readout=document.createElement('div');Object.assign(readout.style,{textAlign:'center',fontSize:'12px',color:'#777',marginTop:'10px'});
+      const reset=document.createElement('button');reset.type='button';reset.textContent=u('中央に戻す','Reset to center');Object.assign(reset.style,{display:'block',width:'min(390px,88vw)',margin:'12px auto 0',padding:'12px',border:'1px solid #d5d7dc',borderRadius:'12px',background:'#fff',font:'inherit'});
+      const render=()=>{stage.style.backgroundPosition=`${50+yaw/3.6}% ${50-pitch*.95}%`;readout.textContent=`${u('左右','Horizontal')} ${Math.round(yaw)}° / ${u('上下','Vertical')} ${Math.round(pitch)}°`;};
+      let drag=null;stage.addEventListener('pointerdown',e=>{drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw,pitch};stage.setPointerCapture?.(e.pointerId);stage.style.cursor='grabbing';e.preventDefault();});
+      stage.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;yaw=drag.yaw-dx*.46;pitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));render();e.preventDefault();});
+      const end=e=>{if(drag?.id===e.pointerId){drag=null;stage.style.cursor='grab';}};stage.addEventListener('pointerup',end);stage.addEventListener('pointercancel',end);
+      reset.addEventListener('click',()=>{yaw=0;pitch=0;render();});
+      const close=()=>ov.remove();cancel.addEventListener('click',close);ov.addEventListener('click',e=>{if(e.target===ov)close();});
+      saveBtn.addEventListener('click',()=>{captureUndo('360°初期視点の変更を元に戻せます');bg.homeYaw=yaw;bg.homePitch=pitch;apply();close();closeDesktopBackgroundDetail();openDesktopBackgroundDetail();});
+      dlg.append(head,help,stage,readout,reset);ov.appendChild(dlg);document.body.appendChild(ov);render();
+    };
     const grid=two(panoSec);
+    const homeField=document.createElement('label');homeField.className='desktop-text-detail-field';
+    const homeCap=document.createElement('span');homeCap.textContent=u('初期視点','Initial view');
+    const homeBtn=desktopAction(u('初期視点を調整','Adjust initial view'),open360HomeEditor,'is-primary');
+    const source360=explicit()?.src?explicit():previousFraming();if(!source360?.src)homeBtn.disabled=true;
+    homeField.append(homeCap,homeBtn);
     grid.append(
-      desktopDetailRange(u('初期の上下位置','Home vertical angle'),{min:-35,max:35,step:1,value:Number(explicit()?.homePitch)||0,unit:' °',format:v=>Math.round(v),oninput:v=>{const bg=ensureImageState();bg.homePitch=v;apply();}}),
+      homeField,
       desktopDetailSelect(u('モーションセンサー','Motion sensor'),[['on',u('使う','On')],['off',u('使わない','Off')]],explicit()?.motionSensor===false?'off':'on',v=>{const bg=ensureImageState();bg.motionSensor=v==='on';apply();})
     );
     const homeNote=document.createElement('p');homeNote.className='desktop-text-detail-note';homeNote.textContent=u('操作：左右スワイプ＝横360°／上下スワイプ＝見上げ・見下ろし。ドラッグ後はScene送りしません。モーション許可は作品開始時にまとめて要求します。','Swipe to look around. Dragging does not advance the Scene. Motion permission is requested when the work starts.');panoSec.appendChild(homeNote);
