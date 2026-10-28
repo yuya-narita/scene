@@ -4053,6 +4053,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(Math.abs(this._panoYawVelocity)<.08)this._panoYawVelocity=0;
         this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+this._panoYawVelocity*.72;
 
+        if(this._isFinitePanorama()){
+          // Panorama has real edges. Clamp the CAMERA STATE itself, not only the
+          // rendered backgroundPosition. This prevents invisible sensor rotation
+          // from accumulating beyond an edge and makes reverse rotation respond
+          // immediately.
+          const manualYaw=Number(this._panoYaw)||0;
+          const totalYaw=manualYaw+(Number(this._panoSensorYaw)||0);
+          const clampedYaw=Math.max(-180,Math.min(180,totalYaw));
+          if(clampedYaw!==totalYaw){
+            this._panoSensorYaw=clampedYaw-manualYaw;
+            // Do not keep inertial/smoothed velocity pushing into the hard edge.
+            if((clampedYaw>=180 && this._panoYawVelocity>0) ||
+               (clampedYaw<=-180 && this._panoYawVelocity<0)){
+              this._panoYawVelocity=0;
+            }
+          }
+        }
+
         const db=beta-(Number(this._motionBaseBeta)||0);
         const pitchDead=Math.abs(db)<2.6?0:Math.sign(db)*(Math.abs(db)-2.6);
         const targetPitch=Math.max(-14,Math.min(14,pitchDead*.32));
@@ -4105,7 +4123,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const rawX=50 + yaw/3.6;
       const x=this._isFinitePanorama()?Math.max(0,Math.min(100,rawX)):rawX;
       const y=Math.max(0,Math.min(100,50 - pitch*.95));
-      layer.style.backgroundPosition=`${x}% ${y}%`;
+      const position=`${x}% ${y}%`;
+      // At a finite edge the sensor may continue firing while the visible camera
+      // is stationary. Avoid repeating an identical DOM style write.
+      if(layer.style.backgroundPosition!==position){
+        layer.style.backgroundPosition=position;
+      }
     }
     _bind360Gestures(){
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
