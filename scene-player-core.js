@@ -544,8 +544,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         e.preventDefault();
         e.stopImmediatePropagation();
-        // Reuse the exact handler installed on the image. This keeps VIEW POINT,
-        // first-page fallback, and page-bundle navigation on one code path.
+        // Reuse the wrapper's own handler to keep VIEW POINT and page bundles in sync.
         imageTarget._sceneImageOpen?.(e);
       }, true);
 
@@ -3241,9 +3240,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const firstImage=this.els?.stage?.querySelector('.sp-scene.is-active .sp-scene-image');
         firstImage?._sceneImageOpenForReading?.(startEvent);
       }
-      // V112 — keyboard reading starts immediately after START. Move focus now
-      // and once more after the frame so mouse and keyboard starts both leave
-      // the Player ready for Enter without an extra Scene click.
+      // V112 — keyboard reading starts immediately after START. Do not require
+      // an extra click on the Scene just to move focus from the Cover controls.
       this.els?.stage?.focus?.({preventScroll:true});
       requestAnimationFrame(()=>this.els?.stage?.focus?.({preventScroll:true}));
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
@@ -3895,23 +3893,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.host.dataset.writingMode = active.presentation?.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
 
       this._applyCorePresentation(active);
+      this._applyBackgroundForIndex(this.index);
 
-      // iPhone Safari first-spatial-Scene stability:
-      // Bind the pointer/viewport listeners before the first panorama background
-      // is mounted. The handlers are inert while the resolved background is flat,
-      // so doing this one step early has no effect on ordinary Scenes.
-      const enteringProjection=active?.presentation?.background?.projection;
-      if(enteringProjection==='panorama' || enteringProjection==='360'){
-        this._bind360Gestures();
-        this._bindSpatialViewportStability();
-      }
-
-      // Audio belongs to the Scene boundary, not to successful completion of
-      // background setup. Start/restore it before background work so an iPhone
-      // spatial initialization failure cannot swallow this Scene's BGM.
       if (this._audioRenderMode === 'preview') {
         // Authoring refresh leaves the currently playing transport untouched.
       } else if (this._audioRenderMode === 'cover') {
+        // Cover preload: visuals only. Scene BGM / Ambient / SE must remain silent.
         this._stopAllAudio(true);
       } else if (this._audioRenderMode === 'advance') {
         this._applySceneAudio(active, false);
@@ -3920,8 +3907,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._restoreAudioForIndex(this.index);
         if (mode === 'load') this._queueInitialOneShots(active);
       }
-
-      this._applyBackgroundForIndex(this.index);
       this._audioRenderMode = 'advance';
 
       if (!isForwardStack) this._scheduleAuto();
@@ -4032,70 +4017,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     // AHAKO_360_PROTO_V1_2 — screen-fixed text/UI, yaw-driven horizontal panorama.
-
-    _initLoadDiagnostics(){
-      if(this._loadDiag)return;
-      const q=(()=>{try{return new URLSearchParams(location.search)}catch(_){return null}})();
-      const stored=(()=>{try{return localStorage.getItem('ahakoLoadDiag')==='1'}catch(_){return false}})();
-      const enabled=Boolean((q && (q.get('diag')==='1'||q.get('loadDiag')==='1')) || stored);
-      this._loadDiag={
-        enabled, raf:0, last:performance.now(), frames:0, fps:0,
-        bgWrites:0, motionEvents:0, pointerMoves:0, sceneChanges:0,
-        sceneStart:0, lastSceneMs:0, longFrames:0, maxFrame:0,
-        node:null, timer:0
-      };
-      if(!enabled)return;
-      try{localStorage.setItem('ahakoLoadDiag','1')}catch(_){}
-      const n=document.createElement('div');
-      n.className='sp-load-diag';
-      n.setAttribute('aria-hidden','true');
-      Object.assign(n.style,{
-        position:'fixed',left:'max(6px, env(safe-area-inset-left))',
-        top:'max(6px, env(safe-area-inset-top))',zIndex:'2147483646',
-        padding:'6px 8px',borderRadius:'8px',
-        background:'rgba(0,0,0,.72)',color:'#fff',
-        font:'11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace',
-        whiteSpace:'pre',pointerEvents:'none',maxWidth:'calc(100vw - 12px)'
-      });
-      document.body.appendChild(n); this._loadDiag.node=n;
-      const tick=(now)=>{
-        const d=this._loadDiag;if(!d?.enabled)return;
-        const dt=now-d.last; d.frames++;
-        if(dt>34){d.longFrames++; d.maxFrame=Math.max(d.maxFrame,dt)}
-        if(dt>=1000){d.fps=Math.round(d.frames*1000/dt);d.frames=0;d.last=now}
-        d.raf=requestAnimationFrame(tick);
-      };
-      d.raf=requestAnimationFrame(tick);
-      d.timer=setInterval(()=>this._renderLoadDiagnostics(),500);
-      this._renderLoadDiagnostics();
-    }
-
-    _loadDiagCount(key,inc=1){
-      const d=this._loadDiag;if(d?.enabled)d[key]=(Number(d[key])||0)+inc;
-    }
-
-    _renderLoadDiagnostics(){
-      const d=this._loadDiag;if(!d?.enabled||!d.node)return;
-      const mode=this._is360Background?.()?'360':(this._isFinitePanorama?.()?'PANO':'FLAT');
-      const lock=this._panoViewLocked?'LOCK':'LIVE';
-      const mem=performance?.memory?.usedJSHeapSize
-        ? ` MEM ${(performance.memory.usedJSHeapSize/1048576).toFixed(0)}MB`
-        : '';
-      d.node.textContent=
-        `AHAKO LOAD DIAG  ${mode} ${lock}\n`+
-        `FPS ${String(d.fps).padStart(2)}  LONG ${d.longFrames}  MAX ${d.maxFrame.toFixed(0)}ms${mem}\n`+
-        `BG ${d.bgWrites}  MOTION ${d.motionEvents}  MOVE ${d.pointerMoves}\n`+
-        `SCENE ${d.sceneChanges}  LAST ${d.lastSceneMs.toFixed(1)}ms`;
-    }
-
-    _markLoadDiagSceneStart(){
-      const d=this._loadDiag;if(!d?.enabled)return;
-      d.sceneStart=performance.now(); d.sceneChanges++;
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{
-        if(d.sceneStart)d.lastSceneMs=performance.now()-d.sceneStart;
-      }));
-    }
-
     _is360Background(state=this.backgroundState){ return state?.projection === '360'; }
     _isFinitePanorama(state=this.backgroundState){ return state?.projection === 'panorama'; }
     _isSpatialBackground(state=this.backgroundState){ return this._is360Background(state)||this._isFinitePanorama(state); }
@@ -4111,7 +4032,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _bind360Motion(){
       if(this._motionBound)return; this._motionBound=true;
       this._on(global,'deviceorientation',(e)=>{
-        this._loadDiagCount('motionEvents');
         if(!this._isSpatialBackground() || !this._motionAllowed || this.backgroundState?.motionSensor===false || this._panoViewLocked)return;
         const alpha=Number(e.alpha), beta=Number(e.beta);
         if(!Number.isFinite(alpha)||!Number.isFinite(beta))return;
@@ -4239,7 +4159,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _render360Background(){
-      this._loadDiagCount('bgWrites');
       if(!this._isSpatialBackground())return;
       const layer=this._currentBackgroundLayer(); if(!layer)return;
       const yaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
@@ -4288,7 +4207,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
     }
     _bind360Gestures(){
-      this._initLoadDiagnostics();
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
       let drag=null;
       const isHorizontalPast=()=>this.currentScene?.presentation?.text?.writingMode==='vertical-rl'
@@ -4306,7 +4224,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       },true);
       this._on(this.els.stage,'pointermove',(e)=>{
         if(!drag||!this._isSpatialBackground())return;
-        this._loadDiagCount('pointerMoves');
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
         const distance=Math.hypot(dx,dy);
         if(distance>5)drag.moved=true;
@@ -4411,7 +4328,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       this._resetBackgroundRuntime();
       this.backgroundState = next;
-      this._markLoadDiagSceneStart();
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
       this.host.classList.toggle('sp-bg-panorama-active', this._isFinitePanorama(next));
       if(this._isSpatialBackground(next)){
@@ -4852,9 +4768,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const totalDy=t.clientY-viewState.touchStartY;
             if(Math.hypot(totalDx,totalDy)>10)viewState.moved=true;
 
-            // Follow the finger while turning a page. The current sheet slides
-            // away and exposes the adjacent page underneath; release decides
-            // whether the turn completes or springs back.
             const activePages=viewer._scenePages||[];
             const activeIndex=viewer._scenePageIndex||0;
             if(viewState.scale<=1.01 && activePages.length>1 && Math.abs(totalDx)>12 && Math.abs(totalDx)>Math.abs(totalDy)*1.15){
@@ -4863,23 +4776,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               const target=activeIndex+(advances?1:-1);
               if(target>=0&&target<activePages.length){
                 if(!viewState.pageDrag){
-                  const underlay=document.createElement('img');
-                  underlay.className='sp-scene-image-page-follow-underlay';
-                  underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
+                  const underlay=document.createElement('img');underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
                   const rect=img.getBoundingClientRect(),frameRect=frame.getBoundingClientRect();
                   underlay.style.position='absolute';underlay.style.left=`${rect.left-frameRect.left}px`;underlay.style.top=`${rect.top-frameRect.top}px`;
-                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';
-                  underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
+                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
                   frame.insertBefore(underlay,img);img.style.zIndex='2';img.style.willChange='translate';
-                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);
-                  viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
+                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
                 }
-                const drag=viewState.pageDrag;
-                if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
-                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));
-                img.style.translate=`${dx}px 0`;
-                drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;
-                event.preventDefault();
+                const drag=viewState.pageDrag;if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
+                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));img.style.translate=`${dx}px 0`;drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;event.preventDefault();
               }
             }
 
@@ -4907,33 +4812,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             viewState.dragging=false;
 
             // Horizontal swipes turn pages only at fit scale; zoomed manga remains pannable.
-            const activePages=viewer._scenePages||[];
-            const activeIndex=viewer._scenePageIndex||0;
-            const draggedPage=viewState.pageDrag;
+            const activePages=viewer._scenePages||[],activeIndex=viewer._scenePageIndex||0,draggedPage=viewState.pageDrag;
             if(draggedPage){
-              const dx=x-viewState.touchStartX;
-              const commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32)) && Math.abs(dx)>Math.abs(vertical)*1.2 && duration<900;
+              const dx=x-viewState.touchStartX,commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32))&&Math.abs(dx)>Math.abs(vertical)*1.2&&duration<900;
               draggedPage.underlay.remove();viewState.pageDrag=null;img.style.willChange='';img.style.zIndex='';
-              if(commit){
-                const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
-                const advances=direction==='rtl'?dx>0:dx<0;
-                const target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
-                if(target!==activeIndex){
-                  if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}
-                  else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}
-                }else img.style.translate='';
-              }else{
-                img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
-              }
-              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
-              viewState.multiTouch=false;return;
+                if(commit){const advances=viewer._scenePageDirection==='rtl'?dx>0:dx<0,target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));if(target!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}}else img.style.translate='';}
+              else img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
+              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;viewState.multiTouch=false;return;
             }
             if(!viewState.multiTouch && viewState.scale<=1.01 && activePages.length>1 && Math.abs(x-viewState.touchStartX)>78 && Math.abs(x-viewState.touchStartX)>Math.abs(vertical)*1.2 && duration<700){
               clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
-              const dx=x-viewState.touchStartX;
-              const advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
-              const requested=activeIndex+(advances?1:-1);
-              const targetPage=Math.max(0,Math.min(activePages.length-1,requested));
+              const dx=x-viewState.touchStartX,advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
+              const targetPage=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
               if(targetPage!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange)viewer._sceneOnPageChange(targetPage);else{viewer._sceneShowPage?.(targetPage);viewer._sceneOnPageChange?.(targetPage);}}
               viewState.multiTouch=false;
               return;
@@ -4968,8 +4858,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               }
             }
 
-            // VIEW POINT owns the image transform. Resetting the manual zoom state
-            // on iPhone touchend briefly writes FIT between two authored points.
             if(viewState.scale<=1.01 && !frame.classList.contains('is-view-rec-playing')) resetView();
             viewState.multiTouch=false;
           }else if(event.touches.length===1 && viewState.scale>1.01){
@@ -5148,8 +5036,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       })();
       const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&typeof page.src==='string'&&page.src);
       let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
-      viewer._scenePages=pages;
-      viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';
+      viewer._scenePages=pages;viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';viewer._scenePageIndex=pageIndex;
       viewer._sceneOnPageChange=options?.onPageChange;
       const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
       const oldRestart=pageControls?.querySelector('.sp-image-reading-restart');if(oldRestart)oldRestart.hidden=!options?.readingResumeKey;
@@ -5199,7 +5086,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           img.src=nextSrc;
         }else frame?._fitSceneImageFrame?.();
       };
-      viewer._scenePageIndex=pageIndex;
       viewer._sceneShowPage=showPage;
       const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
       const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
@@ -5273,12 +5159,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
 
       const fallbackPageChange=(pageIndex)=>{
-        const pages=Array.isArray(image.pages)?image.pages:[];
-        const page=pages[pageIndex];if(!page?.src)return;
+        const pages=Array.isArray(image.pages)?image.pages:[],page=pages[pageIndex];if(!page?.src)return;
         const pagePoints=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
-        if((pagePoints?.points||[]).length){
-          this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
-        }else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
+        if((pagePoints?.points||[]).length)this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
+        else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
       };
       const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
       const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0||Number(image.resumePoint)>0||!!pageGhost;
@@ -5435,10 +5319,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // not need an extra fullscreen click before keyboard/tap progression begins.
           // Let the V110 pickup transition finish, then move straight to point 1.
           if(index<0&&points.length){
-            if(startAtAuthoredPoint){
-              index=Math.max(0,Math.min(points.length-1,Number(image.resumePoint)||0));apply(coords(points[index]));initializing=false;img.style.visibility='';rememberPoint();finishPageHandoff();
-              return;
-            }
+            if(startAtAuthoredPoint){index=0;apply(coords(points[0]));initializing=false;img.style.visibility='';return;}
             // Wait for the V110 pickup animation, then establish point 1 as a real
             // settled state. Only after that may Enter/tap advance to point 2.
             setTimeout(()=>{
@@ -5920,71 +5801,34 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
             if(r.kind==='orientation'&&(r.orientation==='sideways'||r.orientation==='upright'))span.style.textOrientation=r.orientation;
           });
-          // AHAKO V27: TCY has two paths.
-          // 1-2 glyphs use the browser's native tate-chu-yoko (stable for AI etc.).
-          // 3+ glyphs use a one-cell anchor with a centered horizontal child.
-          // This keeps the vertical line position/height unchanged while letting
-          // 2020 / NASA occupy about 1.8 glyph widths instead of being crushed.
+          // AHAKO short-horizontal TCY: preserve readable glyph size and allow
+          // a little horizontal overflow instead of crushing 3-4 characters
+          // into one vertical-cell width. 1-2 chars stay natural; 3-4 chars
+          // are gently condensed, never miniaturised.
+          // AHAKO V14: keep TCY inside the native vertical inline flow.
+          // Do NOT switch the span itself to horizontal writing-mode: doing so
+          // gives the run its own block-axis box and visibly shifts it left.
+          // text-combine-upright keeps the glyph run centered on the same
+          // vertical column as ordinary Japanese glyphs.
           if(visualTcy){
             const glyphs=Array.from(segmentText).length;
+            span.style.textCombineUpright='all';
+            span.style.webkitTextCombine='horizontal';
+            span.style.textOrientation='upright';
+            span.style.webkitTextOrientation='upright';
             span.style.whiteSpace='nowrap';
-            if(glyphs<=2){
-              span.style.textCombineUpright='all';
-              span.style.webkitTextCombine='horizontal';
-              span.style.textOrientation='upright';
-              span.style.webkitTextOrientation='upright';
-            }else{
-              span.classList.add('sp-rich-tcy-wide');
-              span.style.display='inline-block';
-              span.style.position='relative';
-              span.style.inlineSize='1em';
-              span.style.blockSize='1em';
-              span.style.width='1em';
-              span.style.height='1em';
-              span.style.textCombineUpright='none';
-              span.style.webkitTextCombine='none';
-              span.style.textOrientation='upright';
-              span.style.webkitTextOrientation='upright';
-              span.textContent='';
-              const wide=document.createElement('span');
-              wide.className='sp-rich-tcy-wide-inner';
-              wide.textContent=segmentText;
-              wide.style.position='absolute';
-              wide.style.left='50%';
-              wide.style.top='50%';
-              wide.style.width='1.55em';
-              wide.style.height='1em';
-              wide.style.writingMode='horizontal-tb';
-              wide.style.webkitWritingMode='horizontal-tb';
-              wide.style.textOrientation='mixed';
-              wide.style.webkitTextOrientation='mixed';
-              wide.style.whiteSpace='nowrap';
-              wide.style.textAlign='center';
-              wide.style.lineHeight='1em';
-              wide.style.letterSpacing=glyphs>=4?'-.08em':'-.03em';
-              wide.style.transform='translate(-50%,-50%)';
-              wide.style.transformOrigin='center center';
-              span.appendChild(wide);
-            }
+            span.style.transformOrigin='center center';
+            if(glyphs===3) span.style.transform='scaleX(.86)';
+            else if(glyphs>=4) span.style.transform='scaleX(.68)';
           }
-          // Emoji graphemes outside explicit TCY remain one visual unit.
-          // VS16 explicitly requests emoji presentation; on Apple/WebKit force
-          // the color-emoji font so sequences such as ‼️ do not fall back to ‼︎.
-          {
-            const _vs15=segmentText.includes('\uFE0E');
-            const _vs16=segmentText.includes('\uFE0F');
-            const _emojiPresentation=!_vs15&&(_vs16||/\p{Emoji_Presentation}/u.test(segmentText)||/\p{Regional_Indicator}/u.test(segmentText)||segmentText.includes('\u20E3'));
-            const _airplaneText=(segmentText==='\u2708\uFE0E'||segmentText==='\u2708');
-            if(_emojiPresentation&&!_iosTextDefaultSegment){
-              span.style.textCombineUpright='all';
-              span.style.webkitTextCombine='horizontal';
-              span.style.textOrientation='upright';
-              span.style.webkitTextOrientation='upright';
-              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-              span.style.fontVariantEmoji='emoji';
-            }else if(_airplaneText){
-              span.classList.add('sp-airplane-text-native');
-            }
+          // Emoji outside an explicit TCY range also stay in the native
+          // vertical inline flow; combining the single grapheme makes its
+          // center identical to the surrounding Japanese column.
+          if(!_iosTextDefaultSegment&&(!segmentText.includes('\uFE0E'))&&(segmentText.includes('\uFE0F')||/\p{Emoji_Presentation}/u.test(segmentText)||/\p{Regional_Indicator}/u.test(segmentText)||segmentText.includes('\u20E3'))){
+            span.style.textCombineUpright='all';
+            span.style.webkitTextCombine='horizontal';
+            span.style.textOrientation='upright';
+            span.style.webkitTextOrientation='upright';
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.

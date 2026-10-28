@@ -154,15 +154,7 @@
   function setShelfReturnReading(reading){
     const active=Boolean(reading);
     shelfReturnLink?.classList.toggle('is-reading',active);
-    if(!shelfReturnLink)return;
-    if(active){
-      // Core owns the upper-left back button while reading. Hiding the actual
-      // shell node prevents the iPhone-only collapsed black pill from leaking.
-      shelfReturnLink.hidden=true;
-    }else{
-      // Re-run the existing route logic so Cover gets the correct full label.
-      configureShelfReturn();
-    }
+    if(shelfReturnLink)shelfReturnLink.hidden=active;
   }
 
   configureShelfReturn();
