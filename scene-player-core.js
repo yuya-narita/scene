@@ -595,7 +595,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // AHAKO_360_PROTO_V1_3 — suppress only the synthetic click emitted
         // immediately after a panorama drag. A later intentional tap must advance
         // on the first tap instead of being consumed by a stale boolean flag.
-        if (this._is360Background?.() && performance.now() < (this._panoSuppressClickUntil || 0)) {
+        if (this._isSpatialBackground?.() && performance.now() < (this._panoSuppressClickUntil || 0)) {
           e.preventDefault();
           e.stopPropagation();
           return;
@@ -4152,12 +4152,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // Keep PAST intentional: it must be both a meaningful travel distance
         // and a flick. This preserves the same direction on every Scene without
         // stealing ordinary slow panorama drags.
-        const finitePanorama=this._isFinitePanorama();
-        const pastDistance=Math.max(finitePanorama?110:60,Number(this.options.swipeThreshold)||0);
+        const pastDistance=Math.max(60,Number(this.options.swipeThreshold)||0);
         const velocity=amount/elapsed; // CSS px per ms in the PAST direction.
-        const pastVelocity=finitePanorama?.72:.42;
         const pastGesture=Boolean(drag.moved && this.options.allowPrevious
-          && directional && amount>=pastDistance && velocity>=pastVelocity);
+          && directional && amount>=pastDistance && velocity>=.42);
         if(drag.moved){
           this._panoSuppressClickUntil=performance.now()+260;
           e.preventDefault?.();e.stopPropagation?.();e.stopImmediatePropagation?.();
