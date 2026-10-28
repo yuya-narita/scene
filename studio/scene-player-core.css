@@ -3336,7 +3336,7 @@ html.sp-scene-image-open body{
   /* V1.6.3.1: keep clear of the TAP safety zone on the lower-right. */
   left:max(12px,env(safe-area-inset-left));
   right:auto;
-  bottom:calc(var(--sp-footer-h) + env(safe-area-inset-bottom) + 14px);
+  bottom:calc(var(--sp-footer-h) + env(safe-area-inset-bottom) + 4px);
   width:34px;height:34px;
   padding:0;border:1px solid color-mix(in srgb,currentColor 22%,transparent);
   border-radius:999px;
@@ -3357,3 +3357,10 @@ html.sp-scene-image-open body{
 }
 .sp-history:not([hidden]) ~ .sp-pano-view-lock,
 .sp-ending:not([hidden]) ~ .sp-pano-view-lock{display:none!important}
+
+@media (orientation:landscape){
+  .sp-pano-view-lock{
+    left:max(12px,env(safe-area-inset-left))!important;
+    bottom:max(12px,calc(env(safe-area-inset-bottom) + 8px))!important;
+  }
+}

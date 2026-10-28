@@ -4186,6 +4186,32 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
       this._render360Background();
     }
+    _bindSpatialViewportStability(){
+      if(this._spatialViewportBound)return;
+      this._spatialViewportBound=true;
+      let lastW=global.innerWidth||0,lastH=global.innerHeight||0,timer=0;
+      const settle=()=>{
+        clearTimeout(timer);
+        timer=setTimeout(()=>{
+          const w=global.innerWidth||0,h=global.innerHeight||0;
+          if(w===lastW && h===lastH)return;
+          if(this._isSpatialBackground()){
+            this._panoYaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
+            this._panoPitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
+            if(this._isFinitePanorama())this._panoYaw=Math.max(-180,Math.min(180,this._panoYaw));
+            this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
+            this._motionLastAlpha=null;this._motionBaseBeta=null;
+            requestAnimationFrame(()=>requestAnimationFrame(()=>{
+              if(this._isSpatialBackground())this._render360Background();
+            }));
+          }
+          lastW=w;lastH=h;
+        },120);
+      };
+      this._on(global,'resize',settle,true);
+      this._on(global,'orientationchange',settle,true);
+    }
+
     _render360Background(){
       this._loadDiagCount('bgWrites');
       if(!this._isSpatialBackground())return;
@@ -4303,7 +4329,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // Reader gaze carries only between consecutive Scenes of the same spatial mode.
         const enteringSpatial=previous?.projection!==next?.projection;
         if(this._panoYaw==null || enteringSpatial)this._reset360Home();
-        this._bind360Gestures(); this._bind360Motion();
+        this._bind360Gestures(); this._bind360Motion(); this._bindSpatialViewportStability();
       } else {
         this._motionLastAlpha=null; this._panoYawVelocity=0;
         this._panoViewLocked=false;
