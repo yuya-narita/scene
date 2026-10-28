@@ -154,7 +154,15 @@
   function setShelfReturnReading(reading){
     const active=Boolean(reading);
     shelfReturnLink?.classList.toggle('is-reading',active);
-    document.body.classList.toggle('public-core-reading',active);
+    if(!shelfReturnLink)return;
+    if(active){
+      // Core owns the upper-left back button while reading. Hiding the actual
+      // shell node prevents the iPhone-only collapsed black pill from leaking.
+      shelfReturnLink.hidden=true;
+    }else{
+      // Re-run the existing route logic so Cover gets the correct full label.
+      configureShelfReturn();
+    }
   }
 
   configureShelfReturn();
@@ -1490,14 +1498,6 @@
   }
 
   const PUBLIC_EXIT_FADE_MS = 850;
-  const pendingExitPlayers=new Set();
-  function flushPendingExitPlayers(){
-    pendingExitPlayers.forEach(oldPlayer=>{
-      try{oldPlayer.destroy({preserveHost:true});}catch(_){}
-    });
-    pendingExitPlayers.clear();
-  }
-
 
   function fadePublicAudio(duration = PUBLIC_EXIT_FADE_MS) {
     if (!player || typeof player.fadeOutAudio !== 'function') return 0;
@@ -1506,11 +1506,12 @@
 
   function destroyAfterFade(targetPlayer, duration = PUBLIC_EXIT_FADE_MS) {
     if (!targetPlayer) return;
-    pendingExitPlayers.add(targetPlayer);
     window.setTimeout(() => {
-      if(!pendingExitPlayers.has(targetPlayer))return;
-      pendingExitPlayers.delete(targetPlayer);
-      try{targetPlayer.destroy({preserveHost:true});}catch(_){}
+      try {
+        // The old and new Player instances can share #scenePlayer.
+        // Clean up the old instance without clearing the host used by the new one.
+        targetPlayer.destroy({ preserveHost: true });
+      } catch (_) {}
     }, Math.max(0, duration) + 80);
   }
 
@@ -1569,7 +1570,6 @@
   }
 
   async function ensurePlayer(startAt = 0) {
-    flushPendingExitPlayers();
     setShelfReturnReading(true);
     if (player) {
       const previousPlayer = player;

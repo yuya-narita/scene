@@ -3895,12 +3895,23 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.host.dataset.writingMode = active.presentation?.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
 
       this._applyCorePresentation(active);
-      this._applyBackgroundForIndex(this.index);
 
+      // iPhone Safari first-spatial-Scene stability:
+      // Bind the pointer/viewport listeners before the first panorama background
+      // is mounted. The handlers are inert while the resolved background is flat,
+      // so doing this one step early has no effect on ordinary Scenes.
+      const enteringProjection=active?.presentation?.background?.projection;
+      if(enteringProjection==='panorama' || enteringProjection==='360'){
+        this._bind360Gestures();
+        this._bindSpatialViewportStability();
+      }
+
+      // Audio belongs to the Scene boundary, not to successful completion of
+      // background setup. Start/restore it before background work so an iPhone
+      // spatial initialization failure cannot swallow this Scene's BGM.
       if (this._audioRenderMode === 'preview') {
         // Authoring refresh leaves the currently playing transport untouched.
       } else if (this._audioRenderMode === 'cover') {
-        // Cover preload: visuals only. Scene BGM / Ambient / SE must remain silent.
         this._stopAllAudio(true);
       } else if (this._audioRenderMode === 'advance') {
         this._applySceneAudio(active, false);
@@ -3909,6 +3920,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._restoreAudioForIndex(this.index);
         if (mode === 'load') this._queueInitialOneShots(active);
       }
+
+      this._applyBackgroundForIndex(this.index);
       this._audioRenderMode = 'advance';
 
       if (!isForwardStack) this._scheduleAuto();
@@ -4401,34 +4414,26 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._markLoadDiagSceneStart();
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
       this.host.classList.toggle('sp-bg-panorama-active', this._isFinitePanorama(next));
-
-      const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
-      this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
-
-      // iPhone first-entry fix:
-      // Mount the incoming panorama layer before any spatial render/bind work.
-      // The old order rendered the incoming panorama state into the outgoing layer
-      // before _swapBackground(), which only surfaced reliably on iPhone Safari.
-      if (srcChanged) this._swapBackground(next, transition, exit, motionPhase, leavingBackground);
-      else this._styleCurrentBackground(next, Boolean(sceneBg?.motion), motionPhase);
-
       if(this._isSpatialBackground(next)){
+        // Reader gaze carries only between consecutive Scenes of the same spatial mode.
         const enteringSpatial=previous?.projection!==next?.projection;
-        if(this._panoYaw==null || enteringSpatial){
-          this._panoYaw=Number(next?.homeYaw)||0;
-          this._panoPitch=Number(next?.homePitch)||0;
-          this._motionLastAlpha=null;this._motionBaseBeta=null;
-          this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
-        }
-        this._bind360Gestures();
-        this._bind360Motion();
-        this._bindSpatialViewportStability();
-        this._render360Background();
+        if(this._panoYaw==null || enteringSpatial)this._reset360Home();
+        this._bind360Gestures(); this._bind360Motion(); this._bindSpatialViewportStability();
       } else {
         this._motionLastAlpha=null; this._panoYawVelocity=0;
         this._panoViewLocked=false;
         clearTimeout(this._panoViewLockHideTimer);
         if(this.els?.panoViewLock)this.els.panoViewLock.hidden=true;
+      }
+      const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
+      // Keep the outgoing layer drawable until its exit animation completes.
+      this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
+
+      if (srcChanged) this._swapBackground(next, transition, exit, motionPhase, leavingBackground);
+      else this._styleCurrentBackground(next, Boolean(sceneBg?.motion), motionPhase);
+
+      if(this._isSpatialBackground(next)){
+        requestAnimationFrame(()=>{ if(this._isSpatialBackground())this._render360Background(); });
       }
       this._applyBackgroundOverlays(next);
       this._runBackgroundReveal(sceneBg?.reveal, transition);
