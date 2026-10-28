@@ -49,10 +49,10 @@
   const reportContactHint=document.getElementById('publicReportContactHint');
 
   function setShelfReturnReading(reading){
-    shelfReturnLink?.classList.toggle('is-reading',Boolean(reading));
-    // While reading, Core already owns the upper-left back control.
-    // Keeping the shelf-return pill underneath it produced the stray black dot.
-    if(shelfReturnLink && reading)shelfReturnLink.hidden=true;
+    const active=Boolean(reading);
+    shelfReturnLink?.classList.toggle('is-reading',active);
+    document.body.classList.toggle('public-core-reading',active);
+    if(shelfReturnLink && active)shelfReturnLink.hidden=true;
   }
 
   const LOCAL_MODE = window.__AHAKO_LOCAL_PLAYER__ === true;
@@ -908,9 +908,7 @@
     window.setTimeout(() => {
       if(!pendingExitPlayers.has(targetPlayer))return;
       pendingExitPlayers.delete(targetPlayer);
-      try {
-        targetPlayer.destroy({ preserveHost: true });
-      } catch (_) {}
+      try { targetPlayer.destroy({ preserveHost: true }); } catch (_) {}
     }, Math.max(0, duration) + 80);
   }
 
@@ -970,9 +968,9 @@
   }
 
   async function ensurePlayer(startAt = 0) {
-    // If CONTINUE is pressed before the previous Core's audio fade timer expires,
-    // dispose that stale Core now. It must never overlap the fresh Core mounted
-    // into the same #scenePlayer host.
+    // iPhone can press CONTINUE while the Core that returned to the cover is
+    // still inside its 850ms audio fade. Never let two Core instances share
+    // #scenePlayer: dispose the stale one before mounting the resumed Core.
     flushPendingExitPlayers();
     setShelfReturnReading(true);
     if (player) {
