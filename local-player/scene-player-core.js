@@ -4207,7 +4207,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(!panoLandscape){
           // 360° landscape needs a larger visual turn per finger travel than the
           // portrait/default grab. Motion-sensor sensitivity is intentionally unchanged.
-          const is360Landscape=this._is360Background() && (global.innerWidth||0)>(global.innerHeight||0);
+          const is360Landscape=this._is360Background() &&
+            Boolean(global.matchMedia?.('(orientation: landscape)').matches);
           // Landscape 360°: match the portrait grab direction, but use a much
           // larger travel range so one edge-to-edge swipe can turn the view decisively.
           const yawDragGain=is360Landscape?1.84:.46;
