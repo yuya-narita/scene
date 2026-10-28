@@ -4295,9 +4295,36 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // True grab: the point under the finger/mouse follows it 1:1.
             this._panoGrabX=drag.grabX+dx;
           }else if(panoPortrait){
-            // Finite panorama portrait: same 1:1 grab feel as 360°,
-            // with the finite image still clamped by the renderer.
-            this._panoFiniteGrabX=drag.panoGrabX+dx;
+            // Finite panorama portrait: 1:1 grab, but unlike 360° it must stop
+            // when the actual scaled image reaches either viewport edge.
+            const layer=this.els?.bgLayer||this.els?.backgroundLayer||this.els?.background;
+            const viewportW=Number(layer?.clientWidth)||Number(global.innerWidth)||0;
+            const viewportH=Number(layer?.clientHeight)||Number(global.innerHeight)||0;
+            const img=layer?getComputedStyle(layer).backgroundImage:'';
+            let naturalRatio=0;
+            const m=img&&img.match(/url\(["']?(.*?)["']?\)/);
+            const cacheKey=m?.[1]||'';
+            this._panoImageRatioCache=this._panoImageRatioCache||{};
+            naturalRatio=Number(this._panoImageRatioCache[cacheKey])||0;
+            if(!naturalRatio && cacheKey){
+              const probe=new Image();
+              probe.onload=()=>{
+                if(probe.naturalWidth&&probe.naturalHeight){
+                  this._panoImageRatioCache[cacheKey]=probe.naturalWidth/probe.naturalHeight;
+                }
+              };
+              probe.src=cacheKey;
+            }
+            // Panorama CSS is auto 108%: scaled width = scaled height * aspect.
+            // Until intrinsic ratio is known, keep the previous offset rather than
+            // allowing an unclamped overshoot.
+            const scaledH=viewportH*1.08;
+            const scaledW=naturalRatio?scaledH*naturalRatio:0;
+            const maxGrab=scaledW>viewportW?(scaledW-viewportW)/2:0;
+            const nextGrab=drag.panoGrabX+dx;
+            this._panoFiniteGrabX=naturalRatio
+              ?Math.max(-maxGrab,Math.min(maxGrab,nextGrab))
+              :(Number(this._panoFiniteGrabX)||0);
           }else{
             this._panoYaw=this._isFinitePanorama()
               ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
