@@ -4275,7 +4275,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // only on release, so slow exploration remains predictable.
         const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
         if(!panoLandscape){
-          this._panoYaw=this._isFinitePanorama()?Math.max(-180,Math.min(180,drag.yaw-dx*.46)):(drag.yaw-dx*.46);
+          // 360° landscape needs a larger visual turn per finger travel than the
+          // portrait/default grab. Motion-sensor sensitivity is intentionally unchanged.
+          const is360Landscape=this._is360Background() && (global.innerWidth||0)>(global.innerHeight||0);
+          const yawDragGain=is360Landscape?.92:.46;
+          this._panoYaw=this._isFinitePanorama()
+            ?Math.max(-180,Math.min(180,drag.yaw-dx*yawDragGain))
+            :(drag.yaw-dx*yawDragGain);
         }else{
           this._panoYaw=0;
         }
