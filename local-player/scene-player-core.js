@@ -4071,31 +4071,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _bind360Gestures(){
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
       let drag=null;
-      const TEXT_PAST_SELECTOR='.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext, .sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-notification-text';
       const isHorizontalPast=()=>this.currentScene?.presentation?.text?.writingMode==='vertical-rl'
         && !this._hasCredits(this.currentScene?.presentation);
-      // V1.4: most Scene text intentionally has pointer-events:none, so event.target
-      // is usually the Scene/stage rather than .sp-text. Hit-test the actually
-      // painted text rectangles instead of relying on DOM event targeting.
-      const isPointOnPastText=(x,y)=>{
-        const active=this.els.stage.querySelector('.sp-scene.is-active');
-        if(!active)return false;
-        return Array.from(active.querySelectorAll(TEXT_PAST_SELECTOR.replaceAll('.sp-scene.is-active ',''))).some(node=>{
-          if(!node || node.hidden)return false;
-          const style=getComputedStyle(node);
-          if(style.display==='none'||style.visibility==='hidden'||Number(style.opacity)===0)return false;
-          const r=node.getBoundingClientRect();
-          return r.width>0&&r.height>0&&x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;
-        });
-      };
       this._on(this.els.stage,'pointerdown',(e)=>{
         if(!this._is360Background()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
         drag={
           x:e.clientX,y:e.clientY,
           yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
-          moved:false,id:e.pointerId,
-          textPast:isPointOnPastText(e.clientX,e.clientY),
-          pastGesture:false
+          moved:false,id:e.pointerId,startedAt:performance.now()
         };
         try{this.els.stage.setPointerCapture?.(e.pointerId);}catch(_){}
       },true);
@@ -4105,22 +4088,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const distance=Math.hypot(dx,dy);
         if(distance>5)drag.moved=true;
         if(!drag.moved)return;
-
-        // Preserve the established あ箱 PAST direction, but only when the drag
-        // starts on visible text: normal/vertical flow = pull text down;
-        // vertical-writing/horizontal flow = pull text left.
-        if(drag.textPast && this.options.allowPrevious){
-          const horizontal=isHorizontalPast();
-          const correct=horizontal
-            ? (dx < -12 && Math.abs(dx) > Math.abs(dy)*1.15)
-            : (dy > 12 && Math.abs(dy) > Math.abs(dx)*1.15);
-          if(correct)drag.pastGesture=true;
-        }
         if(e.cancelable)e.preventDefault();
         e.stopPropagation?.();e.stopImmediatePropagation?.();
-        if(drag.pastGesture)return;
 
-        // V1.2 feel retained: panorama owns all non-PAST drags.
+        // V1.5: every ordinary drag belongs to the panorama while the finger is
+        // down. A fast, long flick in the established PAST direction is decided
+        // only on release, so slow exploration remains predictable.
         this._panoYaw=drag.yaw-dx*.46;
         this._panoPitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));
         this._render360Background();
@@ -4128,16 +4101,29 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const end=(e)=>{
         if(!drag)return;
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-        const threshold=Math.max(28,Number(this.options.swipeThreshold)||0);
+        const elapsed=Math.max(1,performance.now()-drag.startedAt);
+        const horizontal=isHorizontalPast();
+        const amount=horizontal?-dx:dy;
+        const directional=horizontal
+          ? (dx<0 && Math.abs(dx)>Math.abs(dy)*1.15)
+          : (dy>0 && Math.abs(dy)>Math.abs(dx)*1.15);
+        // Keep PAST intentional: it must be both a meaningful travel distance
+        // and a flick. This preserves the same direction on every Scene without
+        // stealing ordinary slow panorama drags.
+        const pastDistance=Math.max(60,Number(this.options.swipeThreshold)||0);
+        const velocity=amount/elapsed; // CSS px per ms in the PAST direction.
+        const pastGesture=Boolean(drag.moved && this.options.allowPrevious
+          && directional && amount>=pastDistance && velocity>=.42);
         if(drag.moved){
-          // Only block the browser's synthetic click from THIS drag. Do not arm
-          // suppressNextClick for the user's next real tap.
           this._panoSuppressClickUntil=performance.now()+260;
           e.preventDefault?.();e.stopPropagation?.();e.stopImmediatePropagation?.();
-          if(drag.pastGesture){
-            const horizontal=isHorizontalPast();
-            const amount=horizontal?-dx:dy;
-            if(amount>=threshold)this.openHistory({dragDistance:amount});
+          if(pastGesture){
+            // PAST is navigation, not a camera move. Undo the temporary panorama
+            // travel made while judging the gesture before opening History.
+            this._panoYaw=drag.yaw;
+            this._panoPitch=drag.pitch;
+            this._render360Background();
+            this.openHistory({dragDistance:amount});
           }
         }
         try{this.els.stage.releasePointerCapture?.(drag.id);}catch(_){}
@@ -4165,8 +4151,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.backgroundState = next;
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
       if(this._is360Background(next)){
-        const homeChanged=!this._is360Background(previous) || Number(previous?.homePitch)!==Number(next?.homePitch);
-        if(this._panoYaw==null || homeChanged)this._reset360Home();
+        // V1.5: the reader's gaze is continuous state. Consecutive 360° Scenes
+        // keep the live yaw/pitch even when the image or authored homePitch changes.
+        // homePitch is a starting pose only when entering 360° from a flat Scene.
+        const entering360=!this._is360Background(previous);
+        if(this._panoYaw==null || entering360)this._reset360Home();
         this._bind360Gestures(); this._bind360Motion();
       } else { this._motionLastAlpha=null; this._panoYawVelocity=0; }
       const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
