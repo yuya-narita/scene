@@ -4119,7 +4119,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // Ignore tiny sensor chatter, then low-pass the intentional rotation.
         if(Math.abs(da)<.28)da=0;
         da=Math.max(-8,Math.min(8,da));
-        this._panoYawVelocity=(Number(this._panoYawVelocity)||0)*.58 + da*.42;
+        // Looking right should reveal the right side of the world. Reverse only the
+        // device-orientation yaw; finger dragging keeps its existing grab direction.
+        this._panoYawVelocity=(Number(this._panoYawVelocity)||0)*.58 - da*.42;
         if(Math.abs(this._panoYawVelocity)<.08)this._panoYawVelocity=0;
         this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+this._panoYawVelocity*.72;
 
