@@ -4155,10 +4155,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // Keep PAST intentional: it must be both a meaningful travel distance
         // and a flick. This preserves the same direction on every Scene without
         // stealing ordinary slow panorama drags.
-        const pastDistance=Math.max(60,Number(this.options.swipeThreshold)||0);
+        const finitePanorama=this._isFinitePanorama();
+        const pastDistance=Math.max(finitePanorama?110:60,Number(this.options.swipeThreshold)||0);
         const velocity=amount/elapsed; // CSS px per ms in the PAST direction.
+        const pastVelocity=finitePanorama?.72:.42;
         const pastGesture=Boolean(drag.moved && this.options.allowPrevious
-          && directional && amount>=pastDistance && velocity>=.42);
+          && directional && amount>=pastDistance && velocity>=pastVelocity);
         if(drag.moved){
           this._panoSuppressClickUntil=performance.now()+260;
           e.preventDefault?.();e.stopPropagation?.();e.stopImmediatePropagation?.();
@@ -4171,10 +4173,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             this.openHistory({dragDistance:amount});
           }
         }
-        try{this.els.stage.releasePointerCapture?.(drag.id);}catch(_){}
+        try{
+          if(this.els.stage.hasPointerCapture?.(drag.id))this.els.stage.releasePointerCapture?.(drag.id);
+        }catch(_){}
         drag=null;
       };
-      this._on(this.els.stage,'pointerup',end,true);this._on(this.els.stage,'pointercancel',end,true);
+      this._on(this.els.stage,'pointerup',end,true);
+      this._on(this.els.stage,'pointercancel',end,true);
+      // iPhone Safari can lose pointerup when a Scene transition swaps visual
+      // layers. Clear stale drag state so the following Scene always accepts swipe.
+      this._on(global,'blur',()=>{drag=null;},true);
     }
 
     _applyBackgroundForIndex(index) {
@@ -4214,6 +4222,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (srcChanged) this._swapBackground(next, transition, exit, motionPhase, leavingBackground);
       else this._styleCurrentBackground(next, Boolean(sceneBg?.motion), motionPhase);
 
+      if(this._isSpatialBackground(next)){
+        requestAnimationFrame(()=>{ if(this._isSpatialBackground())this._render360Background(); });
+      }
       this._applyBackgroundOverlays(next);
       this._runBackgroundReveal(sceneBg?.reveal, transition);
       emit(this.host, 'sceneplayer:backgroundchange', { index, scene: this.currentScene, background: { ...next }, srcChanged });
