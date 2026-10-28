@@ -4362,12 +4362,32 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if(this.els.stage.hasPointerCapture?.(drag.id))this.els.stage.releasePointerCapture?.(drag.id);
         }catch(_){}
         if(this._isFinitePanorama()){
-          // Finger -> sensor handoff. The finger's final view becomes the new
-          // sensor origin; subsequent motion can travel to BOTH real image edges.
+          // Finger -> sensor handoff on ONE shared camera.
+          // TRUE GRAB is a temporary pixel delta while the finger is down.
+          // When released, bake that delta into panoYaw and clear the temporary
+          // grab offset, so motion starts from the exact same view without
+          // treating the swipe landmark as a new artificial endpoint.
+          const grabPx=Number(this._panoFiniteGrabX)||0;
+          const layerW=Number(this.backgroundLayer?.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
+          const layerH=Number(this.backgroundLayer?.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
+          const src=String(this.backgroundState?.src||'');
+          const ratio=Number(this._panoRatioCache?.get(src))||0;
+          if(grabPx && ratio>0 && layerW>0 && layerH>0){
+            const renderedW=layerH*1.08*ratio;
+            const travel=renderedW-layerW;
+            if(travel>0){
+              // render uses x = 50 + yaw*0.08; CSS percentage position maps
+              // 100 percentage points across -travel pixels.
+              const deltaPercent=-(grabPx/travel)*100;
+              this._panoYaw=(Number(this._panoYaw)||0)+(deltaPercent/0.08);
+            }
+          }
+          this._panoFiniteGrabX=0;
           this._panoSensorYaw=0;
           this._panoYawVelocity=0;
           this._motionLastAlpha=null;
           this._motionBaseBeta=null;
+          this._render360Background();
         }
         drag=null;
         requestAnimationFrame(()=>{ this._panoSuppressClickUntil=0; });
