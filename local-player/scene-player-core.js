@@ -4170,7 +4170,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // make the reader manually re-center it. Keep X centered; pitch/Y remains live.
       const x=panoLandscape?50:(this._isFinitePanorama()?Math.max(0,Math.min(100,rawX)):rawX);
       const y=Math.max(0,Math.min(100,50 - pitch*.95));
-      const position=`${x}% ${y}%`;
+      const grabX=this._is360Background()?(Number(this._panoGrabX)||0):0;
+      const position=this._is360Background()
+        ?`calc(${x}% + ${grabX}px) ${y}%`
+        :`${x}% ${y}%`;
       // At a finite edge the sensor may continue firing while the visible camera
       // is stationary. Avoid repeating an identical DOM style write.
       if(layer.style.backgroundPosition!==position){
@@ -4187,6 +4190,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         drag={
           x:e.clientX,y:e.clientY,
           yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
+          grabX:Number(this._panoGrabX)||0,
           moved:false,id:e.pointerId,startedAt:performance.now()
         };
         try{this.els.stage.setPointerCapture?.(e.pointerId);}catch(_){}
@@ -4208,20 +4212,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // 360° landscape needs a larger visual turn per finger travel than the
           // portrait/default grab. Motion-sensor sensitivity is intentionally unchanged.
           const is360=this._is360Background();
-          const is360Landscape=is360 &&
-            Boolean(global.matchMedia?.('(orientation: landscape)').matches);
-          const coarsePointer=Boolean(global.matchMedia?.('(pointer: coarse)').matches);
-          // 360° tuning:
-          // - portrait matches the panorama/default grab amount (.46)
-          // - landscape uses a deliberately wide 2.6 gain for decisive turns
-          // - desktop mouse drag uses the opposite sign from touch so both feel
-          //   like grabbing the scene in their native interaction model.
-          const yawDragGain=is360Landscape?2.6:.46;
-          let yawDelta=-dx*yawDragGain;
-          if(is360 && !coarsePointer)yawDelta=dx*yawDragGain;
-          this._panoYaw=this._isFinitePanorama()
-            ?Math.max(-180,Math.min(180,drag.yaw+yawDelta))
-            :(drag.yaw+yawDelta);
+          if(is360){
+            // True grab: the point under the finger/mouse follows it by the
+            // same number of screen pixels, independent of orientation/device.
+            this._panoGrabX=drag.grabX+dx;
+          }else{
+            this._panoYaw=this._isFinitePanorama()
+              ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
+              :(drag.yaw-dx*.46);
+          }
         }else{
           this._panoYaw=0;
         }
