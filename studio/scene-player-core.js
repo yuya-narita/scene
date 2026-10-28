@@ -611,7 +611,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // 360° Scenes own their touch gestures. Background drag and text-only
           // PAST are resolved by the panorama pointer handler below, so the legacy
           // Player swipe navigation must not also advance/open PAST.
-          if (this._is360Background?.()) {
+          if (this._isSpatialBackground?.()) {
             this.touchStartY = null;
             this.touchStartX = null;
             return;
@@ -642,7 +642,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }, { passive: false });
 
         this._on(this.els.stage, 'touchend', (e) => {
-          if (this._is360Background?.()) {
+          if (this._isSpatialBackground?.()) {
             this.touchStartY = null;
             this.touchStartX = null;
             return;

@@ -650,20 +650,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       if (this.options.swipe) {
         this._on(this.els.stage, 'touchstart', (e) => {
-          if (this._is360Background?.()) { this.touchStartY=null; this.touchStartX=null; return; }
+          if (this._isSpatialBackground?.()) { this.touchStartY=null; this.touchStartX=null; return; }
           const t = e.changedTouches[0];
           this.touchStartY = t.clientY;
           this.touchStartX = t.clientX;
         }, { passive: true });
 
         this._on(this.els.stage, 'touchmove', (e) => {
-          if (this._is360Background?.()) { if(e.cancelable)e.preventDefault(); return; }
+          if (this._isSpatialBackground?.()) { if(e.cancelable)e.preventDefault(); return; }
           // Keep the page itself fixed. History has its own native momentum scroller.
           if (e.cancelable) e.preventDefault();
         }, { passive: false });
 
         this._on(this.els.stage, 'touchend', (e) => {
-          if (this._is360Background?.()) { this.touchStartY=null; this.touchStartX=null; return; }
+          if (this._isSpatialBackground?.()) { this.touchStartY=null; this.touchStartX=null; return; }
           if (this.touchStartY == null || this.touchStartX == null) return;
           const t = e.changedTouches[0];
           const dy = t.clientY - this.touchStartY;
