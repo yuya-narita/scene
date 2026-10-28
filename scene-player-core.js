@@ -4147,9 +4147,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
 
         const db=beta-(Number(this._motionBaseBeta)||0);
-        const pitchDead=Math.abs(db)<2.6?0:Math.sign(db)*(Math.abs(db)-2.6);
-        const targetPitch=Math.max(-14,Math.min(14,pitchDead*.32));
-        this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*.09;
+        const panoLandscapePitch=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+        // In landscape panorama the visible vertical crop is modest. Use a small
+        // dead-zone and faster response so a small physical tilt reaches it.
+        const pitchDeadZone=panoLandscapePitch?.7:2.6;
+        const pitchDead=Math.abs(db)<pitchDeadZone?0:Math.sign(db)*(Math.abs(db)-pitchDeadZone);
+        const pitchGain=panoLandscapePitch?.82:.32;
+        const pitchLimit=panoLandscapePitch?24:14;
+        const targetPitch=Math.max(-pitchLimit,Math.min(pitchLimit,pitchDead*pitchGain));
+        const pitchFollow=panoLandscapePitch?.22:.09;
+        this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*pitchFollow;
         this._render360Background();
         if(Math.abs(da)>.35 || Math.abs(db)>3.2)this._show360ViewLockControl();
       },{passive:true});
@@ -4272,7 +4279,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }else{
           this._panoYaw=0;
         }
-        this._panoPitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));
+        // Landscape finite panorama only exposes the small vertical crop created
+        // by cover, so make pitch follow the finger much more directly. PAST
+        // thresholds/direction remain untouched.
+        const pitchDragGain=panoLandscape?.62:.20;
+        this._panoPitch=Math.max(-40,Math.min(40,drag.pitch+dy*pitchDragGain));
         this._render360Background();
         this._show360ViewLockControl();
       },true);
