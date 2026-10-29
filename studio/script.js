@@ -18218,6 +18218,19 @@ function openDesktopTextDetail(){
     e.stopPropagation();
   },true);
 
+  // Spatial background + Live Edit: reserve a press that starts on editable
+  // Scene text for authoring before the panorama/360 stage can arm its drag.
+  // Keep this Studio-only and spatial-only so reader Player gestures and the
+  // accepted shared-camera panorama behavior remain completely untouched.
+  playerHost.addEventListener('pointerdown',(e)=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
+    if(playerHost.classList.contains('sp-cover-open')||player?.ended)return;
+    if(!player?._isSpatialBackground?.())return;
+    const editTarget=e.target.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
+    if(!editTarget)return;
+    e.stopPropagation();
+  },true);
+
   // Live Edit: main text and subtext are both direct edit targets.
   // The CSS re-enables pointer events for both nodes; this capture listener
   // wins before the stage can interpret the same tap as "next Scene".
