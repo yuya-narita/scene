@@ -4056,7 +4056,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node:null, timer:0
       };
       if(!enabled)return;
+      const d=this._loadDiag;
       try{localStorage.setItem('ahakoLoadDiag','1')}catch(_){}
+      // Clean up a shell left by an earlier failed first initialization.
+      document.querySelectorAll('.sp-load-diag').forEach(node=>{
+        if(node!==d.node)node.remove();
+      });
       const n=document.createElement('div');
       n.className='sp-load-diag';
       n.setAttribute('aria-hidden','true');
