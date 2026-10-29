@@ -986,26 +986,48 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           }
           try { if (audio.ended) audio.currentTime = 0; } catch (_) {}
         }
+        // R6: authorization prime must NEVER be allowed to run to natural end.
+        // D1/R5 device traces showed WebKit collapses an ended bank element to
+        // duration=0. A later play() then performs an implicit rewind/seek and
+        // immediately ends again, making BGM/SE completely silent. Attach the
+        // parking handler BEFORE play(), so the first real `playing` event parks
+        // the authorized element while its valid media timeline is still alive.
+        let parkedByPrime = false;
+        const parkPrime = () => {
+          if (entry.active || parkedByPrime) return;
+          parkedByPrime = true;
+          try { audio.pause(); audio.loop = false; audio.muted = true; audio.volume = 1; } catch (_) {}
+          entry.primed = true;
+          this._audioDiagLog('PRIME:PARKED', entry, {duration:Number(audio.duration), readyState:audio.readyState});
+          emit(this.host, 'sceneplayer:iosmediabankprimed', { channel: entry.channel, src: entry.src });
+        };
+        try { audio.addEventListener('playing', parkPrime, { once:true }); } catch (_) {}
         let result;
         try { result = audio.paused ? audio.play() : null; }
         catch (error) {
+          try { audio.removeEventListener('playing', parkPrime); } catch (_) {}
           emit(this.host, 'sceneplayer:iosmediabankblocked', { channel: entry.channel, src: entry.src, error });
           jobs.push(Promise.resolve(false));
           return;
         }
         if (result && typeof result.then === 'function') {
           jobs.push(result.then(() => {
+            // Some WebKit builds resolve play() before/without dispatching a
+            // separate playing event. Park here as a fallback, but never wait
+            // for the clip to advance or finish.
+            if (!parkedByPrime && !entry.active) parkPrime();
             entry.primed = true;
-            emit(this.host, 'sceneplayer:iosmediabankprimed', { channel: entry.channel, src: entry.src });
             return true;
           }).catch((error) => {
+            try { audio.removeEventListener('playing', parkPrime); } catch (_) {}
             entry.primed = false;
             emit(this.host, 'sceneplayer:iosmediabankblocked', { channel: entry.channel, src: entry.src, error });
             return false;
           }));
         } else {
-          entry.primed = !audio.paused;
-          jobs.push(Promise.resolve(entry.primed));
+          if (!parkedByPrime && !entry.active) parkPrime();
+          entry.primed = true;
+          jobs.push(Promise.resolve(true));
         }
       });
       this._iosBankPrimed = true;
