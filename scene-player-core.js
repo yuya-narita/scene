@@ -192,7 +192,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // AUDIO DIAGNOSTIC D1 — temporary device trace for the iOS orchestra.
       // Records the exact media state before/after each cue so normal reading,
       // AUTO and rapid tapping can be compared without changing playback logic.
-      this._audioDiagEnabled = true;
+      this._audioDiagEnabled = false;
       this._audioDiagRows = [];
       this._audioDiagStartedAt = performance.now();
 
@@ -884,6 +884,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _audioDiagBindEntry(entry) {
+      if (!this._audioDiagEnabled) return;
       const a = entry?.audio;
       if (!a || a.__spDiagBound) return;
       a.__spDiagBound = true;
