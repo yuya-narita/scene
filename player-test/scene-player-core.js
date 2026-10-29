@@ -922,7 +922,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         } else {
           try { audio.crossOrigin = null; } catch (_) {}
         }
-        try { audio.preload = 'auto'; audio.playsInline = true; audio.loop = true; } catch (_) {}
+        try { audio.preload = 'auto'; audio.playsInline = true; audio.loop = false; } catch (_) {}
         // iPhone native media-bank invariant: never park an authorized element at
         // volume=0. WebKit can fail to recover that element later. Silence with
         // muted=true; GainNode (when available) remains responsible for fades.
@@ -974,7 +974,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // START calls this before Scene 1 is rendered. AUTO may call it later
         // while Scene audio is already active; never mute/reset an active source.
         if (!entry.active) {
-          try { audio.loop = true; audio.muted = true; audio.volume = 1; } catch (_) {}
+          try { audio.loop = false; audio.muted = true; audio.volume = 1; } catch (_) {}
           if (entry.gainNode && this.audioContext) {
             try { entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
           }
@@ -1124,11 +1124,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       entry.active = false;
       if (entry.gainNode && this.audioContext) {
         try { entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime); entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
-        try { entry.audio.volume = 1; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
+        try { entry.audio.volume = 1; entry.audio.muted = true; entry.audio.loop = false; entry.audio.pause(); } catch (_) {}
       } else {
-        try { entry.audio.volume = 1; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
+        try { entry.audio.volume = 1; entry.audio.muted = true; entry.audio.loop = false; entry.audio.pause(); } catch (_) {}
       }
       if (reset) {
+        this._audioDiagLog('PARK:PAUSED', entry, { reason:'silence-reset' });
         // Do not assign 0 to an element that is already at 0. On iOS/WebKit a
         // muted, looping media element can turn redundant 0 -> 0 assignments
         // into an endless seeking/seeked storm (and eventually interrupt the
@@ -1152,8 +1153,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (!(ms > 0) && Number.isFinite(audio.duration) && audio.duration > startAt) {
           ms = Math.max(30, (audio.duration - startAt) * 1000 - 20);
         }
-        // Keep the authorized element PLAYING forever; only silence it. Pausing
-        // here would require a future Safari play() permission on a repeated SE.
+        // R5: never keep completed SEs native-looping in the background. Device
+        // traces proved WebKit can expose duration=0 and turn native loop into
+        // an endless seeking/seeked storm. Park the source paused+muted instead.
         if (!(ms > 0)) ms = 1500;
         entry.timer = setTimeout(() => {
           entry.timer = null;
@@ -1176,7 +1178,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Audio Conductor V3: one cue owns wake -> seek -> gate. Never let the
       // audible gate open merely because a timeout elapsed; WebKit must report
       // playback alive and the playhead must have actually landed on the cue.
-      try { audio.loop = true; audio.muted = true; audio.volume = 1; } catch (_) {}
+      try { audio.loop = false; audio.muted = true; audio.volume = 1; } catch (_) {}
       if (entry.gainNode && this.audioContext) {
         try {
           entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
@@ -1324,6 +1326,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         target,
         fadeIn,
         seek:true,
+        loop:false,
         // Start the SE lifetime only after the bank member is actually audible.
         // Otherwise a suspended iPhone element can spend part (or all) of its
         // timer asleep, producing the old clipped / missing first hit.
@@ -1353,7 +1356,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         startAt,
         target,
         fadeIn,
-        seek: shouldSeek
+        seek: shouldSeek,
+        loop: command.loop !== false
       });
       this.audioState[channel] = {
         src: command.src,
