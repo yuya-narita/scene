@@ -4309,9 +4309,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // True grab: the point under the finger/mouse follows it 1:1.
             this._panoGrabX=drag.grabX+dx;
           }else if(panoPortrait){
-            // TRUE GRAB is 1:1. Do not clamp the finger and sensor separately:
-            // the renderer clamps their COMBINED camera against the real image edges.
-            this._panoFiniteGrabX=drag.panoGrabX+dx;
+            // ONE shared camera: convert the finger's pixel travel directly into
+            // panoYaw while the finger is moving. There is no temporary pixel
+            // camera to "bake" on release, so release cannot jump.
+            const layer=this._currentBackgroundLayer();
+            const layerW=Number(layer?.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
+            const layerH=Number(layer?.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
+            const src=String(this.backgroundState?.src||'');
+            const ratio=Number(this._panoRatioCache?.get(src))||0;
+            const renderedW=(ratio>0&&layerH>0)?layerH*1.08*ratio:0;
+            const travel=renderedW-layerW;
+            if(travel>0){
+              // rawX = 50 + yaw/3.6 and CSS position spans `travel` pixels.
+              // This maps finger dx to exactly dx rendered pixels.
+              this._panoYaw=drag.yaw-(dx/travel)*360;
+              this._panoFiniteGrabX=0;
+            }else{
+              this._panoFiniteGrabX=drag.panoGrabX+dx;
+            }
           }else{
             this._panoYaw=this._isFinitePanorama()
               ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
@@ -4362,30 +4377,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if(this.els.stage.hasPointerCapture?.(drag.id))this.els.stage.releasePointerCapture?.(drag.id);
         }catch(_){}
         if(this._isFinitePanorama()){
-          // Finger -> sensor handoff on ONE shared camera.
-          // TRUE GRAB is a temporary pixel delta while the finger is down.
-          // When released, bake that delta into panoYaw and clear the temporary
-          // grab offset, so motion starts from the exact same view without
-          // treating the swipe landmark as a new artificial endpoint.
-          const grabPx=Number(this._panoFiniteGrabX)||0;
-          const sensorYaw=Number(this._panoSensorYaw)||0;
-          if(sensorYaw){
-            this._panoYaw=(Number(this._panoYaw)||0)+sensorYaw;
-          }
-          const layerW=Number(this.backgroundLayer?.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
-          const layerH=Number(this.backgroundLayer?.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
-          const src=String(this.backgroundState?.src||'');
-          const ratio=Number(this._panoRatioCache?.get(src))||0;
-          if(grabPx && ratio>0 && layerW>0 && layerH>0){
-            const renderedW=layerH*1.08*ratio;
-            const travel=renderedW-layerW;
-            if(travel>0){
-              // render uses x = 50 + yaw*0.08; CSS percentage position maps
-              // 100 percentage points across -travel pixels.
-              const deltaPercent=-(grabPx/travel)*100;
-              this._panoYaw=(Number(this._panoYaw)||0)+(deltaPercent/0.08);
-            }
-          }
+          // The drag already moved the shared panoYaw camera 1:1.
+          // Release only re-arms the sensor from this exact visible position.
           this._panoFiniteGrabX=0;
           this._panoSensorYaw=0;
           this._panoYawVelocity=0;
