@@ -1098,33 +1098,74 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (entry.gainNode && this.audioContext) {
         try { entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime); entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
       }
-      if (seek) { try { audio.currentTime = startAt; } catch (_) {} }
       entry.active = true;
       entry.targetVolume = target;
-
-      if (audio.paused) {
-        try { const p = audio.play(); if (p?.catch) p.catch(() => {}); } catch (_) {}
-      }
+      entry.__spActivationToken = (entry.__spActivationToken || 0) + 1;
+      const activationToken = entry.__spActivationToken;
 
       let opened = false;
+      let playbackReady = !audio.paused;
+      let seekReady = !seek;
       const openGate = () => {
-        if (opened || !entry.active) return;
+        if (opened || !entry.active || entry.__spActivationToken !== activationToken) return;
+        if (!playbackReady || !seekReady) return;
         opened = true;
         try { audio.volume = 1; audio.muted = this.muted; } catch (_) {}
-        if (this.muted) return;
-        if (fadeIn > 0) this._setIOSBankEntryVolume(entry, target, fadeIn);
-        else this._setIOSBankEntryVolume(entry, target, 0);
+        if (!this.muted) {
+          if (fadeIn > 0) this._setIOSBankEntryVolume(entry, target, fadeIn);
+          else this._setIOSBankEntryVolume(entry, target, 0);
+        }
+        if (typeof options.onOpened === 'function') {
+          try { options.onOpened(); } catch (_) {}
+        }
       };
 
-      if (seek && typeof audio.addEventListener === 'function') {
-        const onSeeked = () => openGate();
-        audio.addEventListener('seeked', onSeeked, { once: true });
-        // Some cached MP3s do not emit seeked for a 0 -> 0 assignment. Keep a
-        // short fallback, still long enough to avoid exposing the seek click.
-        this._audioTimeout(openGate, 45);
-      } else {
-        this._audioTimeout(openGate, 16);
+      // The Scene tap is the conductor cue. If iOS has suspended a bank member
+      // since START, wake that exact source synchronously inside this trusted
+      // gesture. Do not open its audible gate until play() has really resumed.
+      if (audio.paused) {
+        try {
+          const p = audio.play();
+          if (p && typeof p.then === 'function') {
+            p.then(() => {
+              if (entry.__spActivationToken !== activationToken) return;
+              playbackReady = true;
+              openGate();
+            }).catch((error) => {
+              if (entry.__spActivationToken !== activationToken) return;
+              playbackReady = false;
+              emit(this.host, 'sceneplayer:iosmediabankwakeblocked', { channel:entry.channel, src:entry.src, error });
+            });
+          } else {
+            playbackReady = !audio.paused;
+          }
+        } catch (error) {
+          playbackReady = false;
+          emit(this.host, 'sceneplayer:iosmediabankwakeblocked', { channel:entry.channel, src:entry.src, error });
+        }
       }
+
+      if (seek && typeof audio.addEventListener === 'function') {
+        const onSeeked = () => {
+          if (entry.__spActivationToken !== activationToken) return;
+          seekReady = true;
+          openGate();
+        };
+        // Register BEFORE assigning currentTime. Cached iPhone media can finish
+        // a 0 -> 0 seek immediately and the old ordering could miss the event.
+        audio.addEventListener('seeked', onSeeked, { once: true });
+        try { audio.currentTime = startAt; } catch (_) { seekReady = true; }
+        // Some cached MP3s never emit seeked for 0 -> 0. This fallback marks only
+        // the seek ready; playback must still have genuinely resumed above.
+        this._audioTimeout(() => {
+          if (entry.__spActivationToken !== activationToken) return;
+          seekReady = true;
+          openGate();
+        }, 60);
+      } else {
+        seekReady = true;
+      }
+      openGate();
       return true;
     }
 
@@ -1135,8 +1176,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const startAt = Math.max(0, asNumber(command.startAt, 0));
       const target = this.muted ? 0 : clamp(asNumber(command.volume, 1), 0, 1);
       const fadeIn = Math.max(0, asNumber(command.fadeIn, 0));
-      this._activateIOSBankEntry(entry, { startAt, target, fadeIn, seek:true });
-      this._scheduleIOSOneShotSilence(entry, command, startAt);
+      this._activateIOSBankEntry(entry, {
+        startAt,
+        target,
+        fadeIn,
+        seek:true,
+        // Start the SE lifetime only after the bank member is actually audible.
+        // Otherwise a suspended iPhone element can spend part (or all) of its
+        // timer asleep, producing the old clipped / missing first hit.
+        onOpened: () => this._scheduleIOSOneShotSilence(entry, command, startAt)
+      });
       emit(this.host, 'sceneplayer:audioplaystarted', { channel:'oneshot', role:command.role || 'se', action:'play', src:command.src, transport:'ios-live-media-bank' });
       emit(this.host, 'sceneplayer:oneshot', { command, transport:'ios-live-media-bank' });
       return true;
