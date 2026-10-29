@@ -1080,57 +1080,70 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const fadeIn = Math.max(0, asNumber(options.fadeIn, 0));
       const seek = options.seek !== false;
 
-      // V2.16: source-stable media is already PLAYING from START. The pop was
-      // produced by seek + unmute happening in the same instant. Keep it muted
-      // while seeking, establish zero gain first, then open the gate only after
-      // WebKit has settled the seek. On current iOS versions volume ramps are
-      // honoured when applied after this gate; on older versions this still
-      // removes the hard seek transient even if volume is system-controlled.
+      // Audio Conductor V3: one cue owns wake -> seek -> gate. Never let the
+      // audible gate open merely because a timeout elapsed; WebKit must report
+      // playback alive and the playhead must have actually landed on the cue.
       try { audio.loop = true; audio.muted = true; audio.volume = 1; } catch (_) {}
       if (entry.gainNode && this.audioContext) {
-        try { entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime); entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
+        try {
+          entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
+          entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+        } catch (_) { try { entry.gainNode.gain.value = 0; } catch (_) {} }
       }
       entry.active = true;
       entry.targetVolume = target;
       entry.__spActivationToken = (entry.__spActivationToken || 0) + 1;
-      const activationToken = entry.__spActivationToken;
-
+      const token = entry.__spActivationToken;
+      const cueStartedAt = performance.now();
       let opened = false;
       let playbackReady = !audio.paused;
-      let seekReady = !seek;
+      let seekEventSeen = !seek;
+
+      const playheadReady = () => {
+        if (!seek) return true;
+        if (audio.seeking) return false;
+        const t = Number(audio.currentTime);
+        if (!Number.isFinite(t)) return false;
+        // MP3 frame granularity can land a few hundredths away from startAt.
+        return Math.abs(t - startAt) <= 0.18;
+      };
+
       const openGate = () => {
-        if (opened || !entry.active || entry.__spActivationToken !== activationToken) return;
-        if (!playbackReady || !seekReady) return;
+        if (opened || !entry.active || entry.__spActivationToken !== token) return false;
+        if (!playbackReady || (!seekEventSeen && !playheadReady()) || !playheadReady()) return false;
         opened = true;
         try { audio.volume = 1; audio.muted = this.muted; } catch (_) {}
         if (!this.muted) {
           if (fadeIn > 0) this._setIOSBankEntryVolume(entry, target, fadeIn);
           else this._setIOSBankEntryVolume(entry, target, 0);
         }
+        emit(this.host, 'sceneplayer:audiocueopen', {
+          channel: entry.channel, src: entry.src,
+          latency: Math.round(performance.now() - cueStartedAt),
+          transport: 'ios-live-media-bank'
+        });
         if (typeof options.onOpened === 'function') {
           try { options.onOpened(); } catch (_) {}
         }
+        return true;
       };
 
-      // The Scene tap is the conductor cue. If iOS has suspended a bank member
-      // since START, wake that exact source synchronously inside this trusted
-      // gesture. Do not open its audible gate until play() has really resumed.
+      // Wake the exact pre-authorized player. Manual taps and AUTO therefore use
+      // the same cue path; AUTO is no longer a separate orchestra.
       if (audio.paused) {
         try {
           const p = audio.play();
           if (p && typeof p.then === 'function') {
             p.then(() => {
-              if (entry.__spActivationToken !== activationToken) return;
-              playbackReady = true;
+              if (entry.__spActivationToken !== token) return;
+              playbackReady = !audio.paused;
               openGate();
             }).catch((error) => {
-              if (entry.__spActivationToken !== activationToken) return;
+              if (entry.__spActivationToken !== token) return;
               playbackReady = false;
               emit(this.host, 'sceneplayer:iosmediabankwakeblocked', { channel:entry.channel, src:entry.src, error });
             });
-          } else {
-            playbackReady = !audio.paused;
-          }
+          } else playbackReady = !audio.paused;
         } catch (error) {
           playbackReady = false;
           emit(this.host, 'sceneplayer:iosmediabankwakeblocked', { channel:entry.channel, src:entry.src, error });
@@ -1138,26 +1151,32 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
 
       if (seek && typeof audio.addEventListener === 'function') {
-        const onSeeked = () => {
-          if (entry.__spActivationToken !== activationToken) return;
-          seekReady = true;
+        audio.addEventListener('seeked', () => {
+          if (entry.__spActivationToken !== token) return;
+          seekEventSeen = true;
           openGate();
-        };
-        // Register BEFORE assigning currentTime. Cached iPhone media can finish
-        // a 0 -> 0 seek immediately and the old ordering could miss the event.
-        audio.addEventListener('seeked', onSeeked, { once: true });
-        try { audio.currentTime = startAt; } catch (_) { seekReady = true; }
-        // Some cached MP3s never emit seeked for 0 -> 0. This fallback marks only
-        // the seek ready; playback must still have genuinely resumed above.
-        this._audioTimeout(() => {
-          if (entry.__spActivationToken !== activationToken) return;
-          seekReady = true;
-          openGate();
-        }, 60);
-      } else {
-        seekReady = true;
-      }
-      openGate();
+        }, { once: true });
+        try { audio.currentTime = startAt; }
+        catch (_) { seekEventSeen = true; }
+      } else seekEventSeen = true;
+
+      // Cached MP3s sometimes omit seeked for 0 -> 0. Poll the real playhead
+      // instead of guessing with a 45/60ms gate. The poll never makes audio
+      // audible until the requested cue is physically at the playhead.
+      const pollCue = () => {
+        if (opened || !entry.active || entry.__spActivationToken !== token) return;
+        playbackReady = playbackReady || !audio.paused;
+        if (playheadReady()) seekEventSeen = true;
+        if (openGate()) return;
+        if (performance.now() - cueStartedAt < 900) this._audioTimeout(pollCue, 16);
+        else emit(this.host, 'sceneplayer:audiocuenotready', {
+          channel: entry.channel, src: entry.src,
+          paused: !!audio.paused, seeking: !!audio.seeking,
+          currentTime: Number(audio.currentTime) || 0, startAt,
+          transport: 'ios-live-media-bank'
+        });
+      };
+      pollCue();
       return true;
     }
 
@@ -1837,7 +1856,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         if (entry) {
-          const finish = () => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
+          const finish = () => { requestAnimationFrame(() => requestAnimationFrame(() => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); })); };
           if (fadeOut > 0) {
             // Do not trust entry.active alone here. On iPhone the stable media
             // element can still be audibly playing while bookkeeping has already
