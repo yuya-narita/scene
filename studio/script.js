@@ -5453,9 +5453,26 @@ return flowCommentCard;}
       setProjectIoStatus(t('io.packageImported',{name:file.name||'scene.zip',n:doc.scenes.length,a:restored}));
       // V1.6.1: a loaded Master is immediately exportable again.
       updateEasyFileActions();
-      // A loaded Master is already Scene-based. Open it directly in Live
-      // Studio instead of sending the author through the legacy Toolbox.
-      openPlayer({from:'easy',startAt:selectedSceneIndex});
+      // A loaded Master is already Scene-based. Import is complete at this point.
+      // Live Studio startup is a separate phase: a Player/runtime failure must
+      // never be reported as a broken Scene Package after the document/assets
+      // have already been restored successfully.
+      try{
+        openPlayer({from:'easy',startAt:selectedSceneIndex});
+      }catch(playerError){
+        console.error('Scene Package imported, but Live Studio startup failed',playerError);
+        setProjectIoStatus(
+          uiLanguage==='ja'
+            ? '作品は正常に読み込みました。Live Editorの初回起動に失敗しました。▶からもう一度開いてください。'
+            : 'The work was imported successfully, but Live Editor failed to start. Open it again with ▶.',
+          {error:true}
+        );
+        appAlert(
+          uiLanguage==='ja'
+            ? '作品データは正常に読み込まれています。\n\nLive Editorの初回起動だけ失敗しました。\n閉じたあと、▶からもう一度開いてください。'
+            : 'The work data was imported successfully.\n\nOnly the first Live Editor startup failed.\nClose this notice and open it again with ▶.'
+        );
+      }
     }catch(error){
       console.error(error);
       setProjectIoStatus(t('io.packageInvalid'),{error:true});
