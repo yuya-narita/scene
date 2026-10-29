@@ -854,7 +854,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           try { audio.crossOrigin = null; } catch (_) {}
         }
         try { audio.preload = 'auto'; audio.playsInline = true; audio.loop = true; } catch (_) {}
-        try { audio.muted = true; audio.volume = 0; } catch (_) {}
+        // iPhone native media-bank invariant: never park an authorized element at
+        // volume=0. WebKit can fail to recover that element later. Silence with
+        // muted=true; GainNode (when available) remains responsible for fades.
+        try { audio.muted = true; audio.volume = 1; } catch (_) {}
         audio.src = spec.src;
         try { audio.load(); } catch (_) {}
         this._iosAudioBank.set(spec.key, {
@@ -901,7 +904,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // START calls this before Scene 1 is rendered. AUTO may call it later
         // while Scene audio is already active; never mute/reset an active source.
         if (!entry.active) {
-          try { audio.loop = true; audio.muted = true; audio.volume = entry.gainNode ? 1 : 0; } catch (_) {}
+          try { audio.loop = true; audio.muted = true; audio.volume = 1; } catch (_) {}
           if (entry.gainNode && this.audioContext) {
             try { entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
           }
@@ -1040,7 +1043,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         try { entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime); entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
         try { entry.audio.volume = 1; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
       } else {
-        try { entry.audio.volume = 0; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
+        try { entry.audio.volume = 1; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
       }
       if (reset) { try { entry.audio.currentTime = 0; } catch (_) {} }
     }
@@ -1083,7 +1086,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // WebKit has settled the seek. On current iOS versions volume ramps are
       // honoured when applied after this gate; on older versions this still
       // removes the hard seek transient even if volume is system-controlled.
-      try { audio.loop = true; audio.muted = true; audio.volume = entry.gainNode ? 1 : 0; } catch (_) {}
+      try { audio.loop = true; audio.muted = true; audio.volume = 1; } catch (_) {}
       if (entry.gainNode && this.audioContext) {
         try { entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime); entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
       }
@@ -1099,7 +1102,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const openGate = () => {
         if (opened || !entry.active) return;
         opened = true;
-        try { audio.volume = entry.gainNode ? 1 : 0; audio.muted = this.muted; } catch (_) {}
+        try { audio.volume = 1; audio.muted = this.muted; } catch (_) {}
         if (this.muted) return;
         if (fadeIn > 0) this._setIOSBankEntryVolume(entry, target, fadeIn);
         else this._setIOSBankEntryVolume(entry, target, 0);
