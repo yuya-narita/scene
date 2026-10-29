@@ -4045,45 +4045,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     // AHAKO_360_PROTO_V1_2 — screen-fixed text/UI, yaw-driven horizontal panorama.
 
     _initLoadDiagnostics(){
-      if(this._loadDiag)return;
-      const q=(()=>{try{return new URLSearchParams(location.search)}catch(_){return null}})();
-      const stored=(()=>{try{return localStorage.getItem('ahakoLoadDiag')==='1'}catch(_){return false}})();
-      const enabled=Boolean((q && (q.get('diag')==='1'||q.get('loadDiag')==='1')) || stored);
-      this._loadDiag={
-        enabled, raf:0, last:performance.now(), frames:0, fps:0,
-        bgWrites:0, motionEvents:0, pointerMoves:0, sceneChanges:0,
-        sceneStart:0, lastSceneMs:0, longFrames:0, maxFrame:0,
-        node:null, timer:0
-      };
-      if(!enabled)return;
-      const d=this._loadDiag;
-      try{localStorage.setItem('ahakoLoadDiag','1')}catch(_){}
-      // Clean up a shell left by an earlier failed first initialization.
-      document.querySelectorAll('.sp-load-diag').forEach(node=>{
-        if(node!==d.node)node.remove();
-      });
-      const n=document.createElement('div');
-      n.className='sp-load-diag';
-      n.setAttribute('aria-hidden','true');
-      Object.assign(n.style,{
-        position:'fixed',left:'max(6px, env(safe-area-inset-left))',
-        top:'max(6px, env(safe-area-inset-top))',zIndex:'2147483646',
-        padding:'6px 8px',borderRadius:'8px',
-        background:'rgba(0,0,0,.72)',color:'#fff',
-        font:'11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace',
-        whiteSpace:'pre',pointerEvents:'none',maxWidth:'calc(100vw - 12px)'
-      });
-      document.body.appendChild(n); this._loadDiag.node=n;
-      const tick=(now)=>{
-        const d=this._loadDiag;if(!d?.enabled)return;
-        const dt=now-d.last; d.frames++;
-        if(dt>34){d.longFrames++; d.maxFrame=Math.max(d.maxFrame,dt)}
-        if(dt>=1000){d.fps=Math.round(d.frames*1000/dt);d.frames=0;d.last=now}
-        d.raf=requestAnimationFrame(tick);
-      };
-      d.raf=requestAnimationFrame(tick);
-      d.timer=setInterval(()=>this._renderLoadDiagnostics(),500);
-      this._renderLoadDiagnostics();
+      // Developer-only overlay: never show it in normal Studio.
+      document.querySelectorAll('.sp-load-diag').forEach(node=>node.remove());
+      this._loadDiag=null;
     }
 
     _loadDiagCount(key,inc=1){
