@@ -1128,7 +1128,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       } else {
         try { entry.audio.volume = 1; entry.audio.muted = true; entry.audio.loop = true; } catch (_) {}
       }
-      if (reset) { try { entry.audio.currentTime = 0; } catch (_) {} }
+      if (reset) {
+        // Do not assign 0 to an element that is already at 0. On iOS/WebKit a
+        // muted, looping media element can turn redundant 0 -> 0 assignments
+        // into an endless seeking/seeked storm (and eventually interrupt the
+        // audio session). Only rewind when the playhead has actually moved.
+        try {
+          const t = Number(entry.audio.currentTime);
+          if (Number.isFinite(t) && t > 0.18 && !entry.audio.seeking) entry.audio.currentTime = 0;
+        } catch (_) {}
+      }
     }
 
     _scheduleIOSOneShotSilence(entry, command, startAt) {
@@ -1213,6 +1222,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         return true;
       };
 
+      // WebKit has an extra `interrupted` AudioContext state in addition to the
+      // standard `suspended` state. Treat anything except `running` as asleep.
+      // This matters for long reading pauses: the media element may still say
+      // paused=false while the output graph itself has been interrupted.
+      const ctx = this.audioContext;
+      if (ctx && ctx.state !== 'running') {
+        this._primeAudioContext(ctx);
+        try {
+          const resumed = ctx.resume();
+          if (resumed && typeof resumed.then === 'function') {
+            resumed.then(() => this._audioDiagLog('CTX:RESUMED', entry, {state:ctx.state}))
+              .catch((error) => this._audioDiagLog('CTX:RESUME_REJECTED', entry, {state:ctx.state,error:String(error?.message||error)}));
+          }
+        } catch (error) {
+          this._audioDiagLog('CTX:RESUME_THROW', entry, {state:ctx.state,error:String(error?.message||error)});
+        }
+      }
+
       // Wake the exact pre-authorized player. Manual taps and AUTO therefore use
       // the same cue path; AUTO is no longer a separate orchestra.
       if (audio.paused) {
@@ -1237,36 +1264,50 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
       }
 
-      if (seek && typeof audio.addEventListener === 'function') {
-        audio.addEventListener('seeked', () => {
-          if (entry.__spActivationToken !== token) return;
-          seekEventSeen = true;
-          this._audioDiagLog('SEEKED', entry, {startAt});
-          openGate();
-        }, { once: true });
-        try { audio.currentTime = startAt; }
+      // R4: seek ONCE, and only when it is actually necessary. In particular,
+      // never write currentTime=0 when WebKit already reports 0. D1 proved that
+      // redundant 0 -> 0 writes can create a seeking/seeked feedback storm.
+      let seekIssued = false;
+      const issueSeekOnce = () => {
+        if (!seek || seekIssued || entry.__spActivationToken !== token) return;
+        if (playheadReady()) { seekEventSeen = true; openGate(); return; }
+        // Wait until metadata/media state exists before asking WebKit to seek.
+        // A duration of 0/NaN is not a valid seekable timeline yet.
+        const dur = Number(audio.duration);
+        if (!(audio.readyState >= 1) || !Number.isFinite(dur) || dur <= 0 || audio.seeking) return;
+        seekIssued = true;
+        if (typeof audio.addEventListener === 'function') {
+          audio.addEventListener('seeked', () => {
+            if (entry.__spActivationToken !== token) return;
+            seekEventSeen = true;
+            this._audioDiagLog('SEEKED:ONCE', entry, {startAt});
+            openGate();
+          }, { once: true });
+        }
+        try { audio.currentTime = Math.min(startAt, Math.max(0, dur - 0.001)); }
         catch (_) { seekEventSeen = true; }
-      } else seekEventSeen = true;
+      };
 
-      // Cached MP3s sometimes omit seeked for 0 -> 0. Poll the real playhead
-      // instead of guessing with a 45/60ms gate. The poll never makes audio
-      // audible until the requested cue is physically at the playhead.
+      // Poll only observes readiness. It never writes currentTime, so it cannot
+      // manufacture a seek loop. 0 -> 0 is accepted immediately as ready.
       const pollCue = () => {
         if (opened || !entry.active || entry.__spActivationToken !== token) return;
         playbackReady = playbackReady || !audio.paused;
         if (playheadReady()) seekEventSeen = true;
+        else issueSeekOnce();
         if (openGate()) return;
-        if (performance.now() - cueStartedAt < 900) this._audioTimeout(pollCue, 16);
+        if (performance.now() - cueStartedAt < 1200) this._audioTimeout(pollCue, 16);
         else {
-          this._audioDiagLog('CUE:TIMEOUT', entry, {startAt,target,fadeIn});
+          this._audioDiagLog('CUE:TIMEOUT', entry, {startAt,target,fadeIn,seekIssued});
           emit(this.host, 'sceneplayer:audiocuenotready', {
-          channel: entry.channel, src: entry.src,
-          paused: !!audio.paused, seeking: !!audio.seeking,
-          currentTime: Number(audio.currentTime) || 0, startAt,
-          transport: 'ios-live-media-bank'
-        });
+            channel: entry.channel, src: entry.src,
+            paused: !!audio.paused, seeking: !!audio.seeking,
+            currentTime: Number(audio.currentTime) || 0, startAt,
+            transport: 'ios-live-media-bank'
+          });
         }
       };
+      issueSeekOnce();
       pollCue();
       return true;
     }
@@ -1676,7 +1717,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Keep the call to resume inside the trusted reading gesture, but do not
       // pre-connect media elements while the context is suspended.
       this._primeAudioContext(ctx);
-      if (ctx && ctx.state === 'suspended') {
+      if (ctx && ctx.state !== 'running') {
         try {
           const resumed = ctx.resume();
           if (resumed && typeof resumed.then === 'function') {
