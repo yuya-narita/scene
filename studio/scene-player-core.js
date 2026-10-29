@@ -191,7 +191,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._bufferPersistent = { bgm: null, ambient: null };
       this._bufferOneShots = new Set();
 
+      // AUDIO DIAGNOSTIC D1 — temporary device trace for the iOS orchestra.
+      // Records the exact media state before/after each cue so normal reading,
+      // AUTO and rapid tapping can be compared without changing playback logic.
+      this._audioDiagEnabled = true;
+      this._audioDiagRows = [];
+      this._audioDiagStartedAt = performance.now();
+
       this._buildShell();
+      this._initAudioDiagnosticOverlay();
       this._bindControls();
     }
 
@@ -809,6 +817,73 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._iosPersistentEntry = { bgm: null, ambient: null };
     }
 
+    _initAudioDiagnosticOverlay() {
+      if (!this._audioDiagEnabled || !global.document) return;
+      try {
+        const old = document.querySelector('.sp-audio-diag-d1');
+        if (old) old.remove();
+        const box = document.createElement('div');
+        box.className = 'sp-audio-diag-d1';
+        box.style.cssText = 'position:fixed;left:6px;top:6px;z-index:2147483647;width:min(94vw,520px);max-height:38vh;overflow:auto;background:rgba(0,0,0,.88);color:#9cff9c;font:10px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;padding:7px 8px;border-radius:8px;white-space:pre-wrap;word-break:break-all;pointer-events:auto;box-shadow:0 2px 12px #0008';
+        box.innerHTML = '<div style="display:flex;gap:6px;align-items:center;position:sticky;top:0;background:#000;padding-bottom:4px"><b style="flex:1;color:#fff">🎼 AUDIO DIAG D1</b><button data-copy style="font:inherit">COPY</button><button data-clear style="font:inherit">CLR</button></div><div data-lines>waiting…</div>';
+        document.body.appendChild(box);
+        this._audioDiagBox = box;
+        box.querySelector('[data-copy]')?.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const text = this._audioDiagRows.join('\n');
+          try { await navigator.clipboard.writeText(text); e.currentTarget.textContent='COPIED'; setTimeout(()=>e.currentTarget.textContent='COPY',900); } catch (_) {}
+        });
+        box.querySelector('[data-clear]')?.addEventListener('click', (e) => { e.stopPropagation(); this._audioDiagRows.length=0; this._audioDiagRender(); });
+        this._audioDiagLog('INIT', null, {iosBank:this._iosStableMediaBank, ua:navigator.userAgent});
+      } catch (_) {}
+    }
+
+    _audioDiagSnapshot(entry) {
+      const a = entry?.audio;
+      if (!a) return null;
+      let gain = null;
+      try { gain = entry.gainNode ? Number(entry.gainNode.gain.value.toFixed(3)) : null; } catch (_) {}
+      return {
+        ch: entry.channel, src: String(entry.src || '').split('/').pop().slice(-42),
+        t: Number.isFinite(a.currentTime) ? Number(a.currentTime.toFixed(3)) : null,
+        dur: Number.isFinite(a.duration) ? Number(a.duration.toFixed(3)) : null,
+        paused:!!a.paused, muted:!!a.muted, seeking:!!a.seeking, ended:!!a.ended,
+        rs:a.readyState, ns:a.networkState, vol:Number(a.volume), gain,
+        active:!!entry.active, primed:!!entry.primed,
+        ctx:this.audioContext?.state || null
+      };
+    }
+
+    _audioDiagLog(tag, entry, extra = {}) {
+      if (!this._audioDiagEnabled) return;
+      try {
+        const ms = Math.round(performance.now() - this._audioDiagStartedAt);
+        const scene = Number.isFinite(this.index) ? this.index + 1 : '?';
+        const snap = entry ? this._audioDiagSnapshot(entry) : null;
+        const payload = snap ? {...snap, ...extra} : extra;
+        const line = `${String(ms).padStart(6,' ')}ms S${scene} ${tag} ${JSON.stringify(payload)}`;
+        this._audioDiagRows.push(line);
+        if (this._audioDiagRows.length > 180) this._audioDiagRows.splice(0, this._audioDiagRows.length - 180);
+        this._audioDiagRender();
+      } catch (_) {}
+    }
+
+    _audioDiagRender() {
+      const el = this._audioDiagBox?.querySelector?.('[data-lines]');
+      if (!el) return;
+      el.textContent = this._audioDiagRows.slice(-16).join('\n') || 'waiting…';
+      try { this._audioDiagBox.scrollTop = this._audioDiagBox.scrollHeight; } catch (_) {}
+    }
+
+    _audioDiagBindEntry(entry) {
+      const a = entry?.audio;
+      if (!a || a.__spDiagBound) return;
+      a.__spDiagBound = true;
+      ['play','playing','pause','waiting','stalled','suspend','seeking','seeked','canplay','canplaythrough','ended','error'].forEach((type) => {
+        a.addEventListener(type, () => this._audioDiagLog(`EV:${type}`, entry));
+      });
+    }
+
     _ensureIOSBankGain(entry) {
       if (!entry?.audio || !(entry.channel === 'bgm' || entry.channel === 'ambient')) return null;
       if (!this._isCorsWebAudioAsset(entry.src)) return null;
@@ -871,6 +946,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           gainNode: null,
           useGain: false
         });
+        this._audioDiagBindEntry(this._iosAudioBank.get(spec.key));
       });
       this._iosAudioBank.forEach((entry) => this._ensureIOSBankGain(entry));
       emit(this.host, 'sceneplayer:iosmediabankready', { count: this._iosAudioBank.size });
@@ -1079,6 +1155,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const target = this.muted ? 0 : clamp(asNumber(options.target, 1), 0, 1);
       const fadeIn = Math.max(0, asNumber(options.fadeIn, 0));
       const seek = options.seek !== false;
+      this._audioDiagLog('CUE:BEGIN', entry, {startAt,target,fadeIn,seek});
 
       // Audio Conductor V3: one cue owns wake -> seek -> gate. Never let the
       // audible gate open merely because a timeout elapsed; WebKit must report
@@ -1117,6 +1194,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if (fadeIn > 0) this._setIOSBankEntryVolume(entry, target, fadeIn);
           else this._setIOSBankEntryVolume(entry, target, 0);
         }
+        this._audioDiagLog('CUE:OPEN', entry, {startAt,target,fadeIn,latency:Math.round(performance.now()-cueStartedAt)});
         emit(this.host, 'sceneplayer:audiocueopen', {
           channel: entry.channel, src: entry.src,
           latency: Math.round(performance.now() - cueStartedAt),
@@ -1137,10 +1215,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             p.then(() => {
               if (entry.__spActivationToken !== token) return;
               playbackReady = !audio.paused;
+              this._audioDiagLog('PLAY:RESOLVED', entry, {startAt});
               openGate();
             }).catch((error) => {
               if (entry.__spActivationToken !== token) return;
               playbackReady = false;
+              this._audioDiagLog('PLAY:REJECTED', entry, {startAt,error:String(error?.message||error)});
               emit(this.host, 'sceneplayer:iosmediabankwakeblocked', { channel:entry.channel, src:entry.src, error });
             });
           } else playbackReady = !audio.paused;
@@ -1154,6 +1234,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         audio.addEventListener('seeked', () => {
           if (entry.__spActivationToken !== token) return;
           seekEventSeen = true;
+          this._audioDiagLog('SEEKED', entry, {startAt});
           openGate();
         }, { once: true });
         try { audio.currentTime = startAt; }
@@ -1169,12 +1250,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (playheadReady()) seekEventSeen = true;
         if (openGate()) return;
         if (performance.now() - cueStartedAt < 900) this._audioTimeout(pollCue, 16);
-        else emit(this.host, 'sceneplayer:audiocuenotready', {
+        else {
+          this._audioDiagLog('CUE:TIMEOUT', entry, {startAt,target,fadeIn});
+          emit(this.host, 'sceneplayer:audiocuenotready', {
           channel: entry.channel, src: entry.src,
           paused: !!audio.paused, seeking: !!audio.seeking,
           currentTime: Number(audio.currentTime) || 0, startAt,
           transport: 'ios-live-media-bank'
         });
+        }
       };
       pollCue();
       return true;
@@ -2057,6 +2141,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!command || typeof command !== 'object') return;
       const channel = command.channel;
       const action = command.action;
+      if (channel === 'bgm' || channel === 'ambient' || channel === 'oneshot') {
+        const entry = this._iosBankEntry?.(channel, command.src);
+        this._audioDiagLog('CMD:'+String(channel)+':'+String(action), entry, {reconstruct, startAt:command.startAt||0, fadeIn:command.fadeIn||0, fadeOut:command.fadeOut||0, volume:command.volume});
+      }
       if (channel === 'oneshot') {
         // One-shots represent an event, so history reconstruction never replays them.
         if (!reconstruct && (action === 'play' || action === 'start')) {
