@@ -963,83 +963,31 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _primeIOSMediaBank() {
       if (!this._iosStableMediaBank || !this._iosAudioBank?.size) return Promise.resolve(false);
-      // IMPORTANT: every play() call is issued synchronously before the first
-      // await/microtask, while START/AUTO still owns the trusted iOS gesture.
-      const jobs = [];
-
-      // Prime the dedicated ending SE FIRST. Large works can contain many audio
-      // elements and iPhone may suspend later background media sessions. Keeping
-      // the final SE on its own element and authorizing it before the Scene bank
-      // makes manual and AUTO endings use the same already-running element.
-      if (this.endingAudio?.src) {
-        try {
-          this.endingAudio.loop = true;
-          this.endingAudio.muted = true;
-          this.endingAudio.volume = 1;
-          if (this.endingAudio.ended) this.endingAudio.currentTime = 0;
-          const endingPrime = this.endingAudio.paused ? this.endingAudio.play() : null;
-          if (endingPrime?.then) jobs.push(endingPrime.then(() => { this.endingAudio.__spPrimed = true; return true; }).catch((error) => { this.endingAudio.__spPrimed = false; emit(this.host,'sceneplayer:endingaudioprimeblocked',{src:this.endingAudio.src,error}); return false; }));
-          else this.endingAudio.__spPrimed = !this.endingAudio.paused;
-        } catch (error) { emit(this.host,'sceneplayer:endingaudioprimeblocked',{src:this.endingAudio.src,error}); }
-      }
+      // Audio Manager V1: preload only. Never call play() for future Scene audio.
+      // The old "authorize every source at START" strategy was proven by iPhone
+      // traces to collapse valid timelines into duration=0 / ended=true. A Scene
+      // cue now owns the first real play() for its source.
       this._iosAudioBank.forEach((entry) => {
-        const audio = entry.audio;
-        if (!audio) return;
-        // START calls this before Scene 1 is rendered. AUTO may call it later
-        // while Scene audio is already active; never mute/reset an active source.
-        if (!entry.active) {
-          try { audio.loop = false; audio.muted = true; audio.volume = 1; } catch (_) {}
-          if (entry.gainNode && this.audioContext) {
-            try { entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
-          }
-          try { if (audio.ended) audio.currentTime = 0; } catch (_) {}
-        }
-        // R6: authorization prime must NEVER be allowed to run to natural end.
-        // D1/R5 device traces showed WebKit collapses an ended bank element to
-        // duration=0. A later play() then performs an implicit rewind/seek and
-        // immediately ends again, making BGM/SE completely silent. Attach the
-        // parking handler BEFORE play(), so the first real `playing` event parks
-        // the authorized element while its valid media timeline is still alive.
-        let parkedByPrime = false;
-        const parkPrime = () => {
-          if (entry.active || parkedByPrime) return;
-          parkedByPrime = true;
-          try { audio.pause(); audio.loop = false; audio.muted = true; audio.volume = 1; } catch (_) {}
-          entry.primed = true;
-          this._audioDiagLog('PRIME:PARKED', entry, {duration:Number(audio.duration), readyState:audio.readyState});
-          emit(this.host, 'sceneplayer:iosmediabankprimed', { channel: entry.channel, src: entry.src });
-        };
-        try { audio.addEventListener('playing', parkPrime, { once:true }); } catch (_) {}
-        let result;
-        try { result = audio.paused ? audio.play() : null; }
-        catch (error) {
-          try { audio.removeEventListener('playing', parkPrime); } catch (_) {}
-          emit(this.host, 'sceneplayer:iosmediabankblocked', { channel: entry.channel, src: entry.src, error });
-          jobs.push(Promise.resolve(false));
-          return;
-        }
-        if (result && typeof result.then === 'function') {
-          jobs.push(result.then(() => {
-            // Some WebKit builds resolve play() before/without dispatching a
-            // separate playing event. Park here as a fallback, but never wait
-            // for the clip to advance or finish.
-            if (!parkedByPrime && !entry.active) parkPrime();
-            entry.primed = true;
-            return true;
-          }).catch((error) => {
-            try { audio.removeEventListener('playing', parkPrime); } catch (_) {}
-            entry.primed = false;
-            emit(this.host, 'sceneplayer:iosmediabankblocked', { channel: entry.channel, src: entry.src, error });
-            return false;
-          }));
-        } else {
-          if (!parkedByPrime && !entry.active) parkPrime();
-          entry.primed = true;
-          jobs.push(Promise.resolve(true));
-        }
+        const audio = entry?.audio;
+        if (!audio || entry.active) return;
+        try {
+          audio.loop = false;
+          audio.muted = true;
+          audio.volume = 1;
+          audio.preload = 'auto';
+          if (audio.readyState === 0) audio.load();
+        } catch (_) {}
+        entry.primed = false;
+        this._audioDiagLog('PRELOAD:READY', entry, {readyState:audio.readyState, duration:Number(audio.duration)});
       });
-      this._iosBankPrimed = true;
-      return Promise.allSettled(jobs).then(() => true);
+      // Keep AudioContext unlocked, but do not touch any media timeline here.
+      const ctx = this.audioContext;
+      if (ctx && ctx.state !== 'running') {
+        this._primeAudioContext(ctx);
+        try { ctx.resume()?.catch?.(()=>{}); } catch (_) {}
+      }
+      this._iosBankPrimed = false;
+      return Promise.resolve(true);
     }
 
     _iosAudioSrcAliases(src) {
@@ -1144,6 +1092,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _silenceIOSBankEntry(entry, reset = false) {
       if (!entry?.audio) return;
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
+      entry.__spActivationToken = (entry.__spActivationToken || 0) + 1;
       entry.active = false;
       if (entry.gainNode && this.audioContext) {
         try { entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime); entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); } catch (_) { entry.gainNode.gain.value = 0; }
@@ -1195,145 +1144,90 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const startAt = Math.max(0, asNumber(options.startAt, 0));
       const target = this.muted ? 0 : clamp(asNumber(options.target, 1), 0, 1);
       const fadeIn = Math.max(0, asNumber(options.fadeIn, 0));
-      const seek = options.seek !== false;
-      this._audioDiagLog('CUE:BEGIN', entry, {startAt,target,fadeIn,seek});
+      const seek = options.seek !== false && startAt > 0.001;
+      this._audioDiagLog('AM1:CUE', entry, {startAt,target,fadeIn,seek});
 
-      // Audio Conductor V3: one cue owns wake -> seek -> gate. Never let the
-      // audible gate open merely because a timeout elapsed; WebKit must report
-      // playback alive and the playhead must have actually landed on the cue.
-      try { audio.loop = false; audio.muted = true; audio.volume = 1; } catch (_) {}
-      if (entry.gainNode && this.audioContext) {
-        try {
-          entry.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
-          entry.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-        } catch (_) { try { entry.gainNode.gain.value = 0; } catch (_) {} }
-      }
       entry.active = true;
       entry.targetVolume = target;
       entry.__spActivationToken = (entry.__spActivationToken || 0) + 1;
       const token = entry.__spActivationToken;
       const cueStartedAt = performance.now();
-      let opened = false;
-      let playbackReady = !audio.paused;
-      let seekEventSeen = !seek;
 
-      const playheadReady = () => {
-        if (!seek) return true;
-        if (audio.seeking) return false;
-        const t = Number(audio.currentTime);
-        if (!Number.isFinite(t)) return false;
-        // MP3 frame granularity can land a few hundredths away from startAt.
-        return Math.abs(t - startAt) <= 0.18;
-      };
+      // One Scene cue is the only conductor. No START-prime, no silent playback,
+      // no 0->0 seek. Configure the audible gate BEFORE play() so the actual
+      // Scene gesture starts the real source directly.
+      try {
+        audio.loop = options.loop === true;
+        audio.volume = entry.gainNode ? 1 : target;
+        audio.muted = this.muted;
+      } catch (_) {}
+      if (entry.gainNode && this.audioContext) {
+        try {
+          const g = entry.gainNode.gain;
+          g.cancelScheduledValues(this.audioContext.currentTime);
+          g.setValueAtTime(fadeIn > 0 ? 0 : target, this.audioContext.currentTime);
+        } catch (_) {}
+      }
 
-      const openGate = () => {
-        if (opened || !entry.active || entry.__spActivationToken !== token) return false;
-        if (!playbackReady || (!seekEventSeen && !playheadReady()) || !playheadReady()) return false;
-        opened = true;
-        try { audio.volume = 1; audio.muted = this.muted; } catch (_) {}
-        if (!this.muted) {
-          if (fadeIn > 0) this._setIOSBankEntryVolume(entry, target, fadeIn);
-          else this._setIOSBankEntryVolume(entry, target, 0);
-        }
-        this._audioDiagLog('CUE:OPEN', entry, {startAt,target,fadeIn,latency:Math.round(performance.now()-cueStartedAt)});
-        emit(this.host, 'sceneplayer:audiocueopen', {
-          channel: entry.channel, src: entry.src,
-          latency: Math.round(performance.now() - cueStartedAt),
-          transport: 'ios-live-media-bank'
-        });
-        if (typeof options.onOpened === 'function') {
-          try { options.onOpened(); } catch (_) {}
-        }
-        return true;
-      };
-
-      // WebKit has an extra `interrupted` AudioContext state in addition to the
-      // standard `suspended` state. Treat anything except `running` as asleep.
-      // This matters for long reading pauses: the media element may still say
-      // paused=false while the output graph itself has been interrupted.
       const ctx = this.audioContext;
       if (ctx && ctx.state !== 'running') {
         this._primeAudioContext(ctx);
-        try {
-          const resumed = ctx.resume();
-          if (resumed && typeof resumed.then === 'function') {
-            resumed.then(() => this._audioDiagLog('CTX:RESUMED', entry, {state:ctx.state}))
-              .catch((error) => this._audioDiagLog('CTX:RESUME_REJECTED', entry, {state:ctx.state,error:String(error?.message||error)}));
+        try { ctx.resume()?.catch?.(()=>{}); } catch (_) {}
+      }
+
+      let seekDone = !seek;
+      let playStarted = false;
+      let opened = false;
+      const open = () => {
+        if (opened || !entry.active || entry.__spActivationToken !== token || !playStarted || !seekDone) return;
+        opened = true;
+        if (entry.gainNode && !this.muted && fadeIn > 0) this._setIOSBankEntryVolume(entry, target, fadeIn);
+        this._audioDiagLog('AM1:PLAYING', entry, {startAt,target,fadeIn,latency:Math.round(performance.now()-cueStartedAt)});
+        emit(this.host,'sceneplayer:audiocueopen',{channel:entry.channel,src:entry.src,latency:Math.round(performance.now()-cueStartedAt),transport:'ios-audio-manager-v1'});
+        if (typeof options.onOpened === 'function') { try { options.onOpened(); } catch (_) {} }
+      };
+
+      const startPlay = () => {
+        if (!entry.active || entry.__spActivationToken !== token) return;
+        let p;
+        try { p = audio.play(); }
+        catch (error) {
+          this._audioDiagLog('AM1:PLAY_THROW',entry,{error:String(error?.message||error)});
+          return;
+        }
+        if (p?.then) p.then(()=>{
+          if (entry.__spActivationToken !== token) return;
+          playStarted = !audio.paused;
+          this._audioDiagLog('AM1:PLAY_RESOLVED',entry,{startAt});
+          open();
+        }).catch((error)=>{
+          if (entry.__spActivationToken !== token) return;
+          this._audioDiagLog('AM1:PLAY_REJECTED',entry,{error:String(error?.message||error)});
+          emit(this.host,'sceneplayer:iosmediabankwakeblocked',{channel:entry.channel,src:entry.src,error});
+        });
+        else { playStarted = !audio.paused; open(); }
+      };
+
+      if (!seek) {
+        // startAt=0 is by far the common path. Do not write currentTime at all.
+        startPlay();
+      } else {
+        const doSeek = () => {
+          if (!entry.active || entry.__spActivationToken !== token) return;
+          const dur = Number(audio.duration);
+          if (!(audio.readyState >= 1) || !Number.isFinite(dur) || dur <= 0) {
+            audio.addEventListener('loadedmetadata', doSeek, {once:true});
+            try { if (audio.readyState === 0) audio.load(); } catch (_) {}
+            return;
           }
-        } catch (error) {
-          this._audioDiagLog('CTX:RESUME_THROW', entry, {state:ctx.state,error:String(error?.message||error)});
-        }
+          const targetTime = Math.min(startAt, Math.max(0, dur - 0.001));
+          const onSeeked = () => { if (entry.__spActivationToken !== token) return; seekDone=true; this._audioDiagLog('AM1:SEEKED',entry,{targetTime}); startPlay(); };
+          audio.addEventListener('seeked', onSeeked, {once:true});
+          try { audio.currentTime = targetTime; }
+          catch (_) { seekDone=true; startPlay(); }
+        };
+        doSeek();
       }
-
-      // Wake the exact pre-authorized player. Manual taps and AUTO therefore use
-      // the same cue path; AUTO is no longer a separate orchestra.
-      if (audio.paused) {
-        try {
-          const p = audio.play();
-          if (p && typeof p.then === 'function') {
-            p.then(() => {
-              if (entry.__spActivationToken !== token) return;
-              playbackReady = !audio.paused;
-              this._audioDiagLog('PLAY:RESOLVED', entry, {startAt});
-              openGate();
-            }).catch((error) => {
-              if (entry.__spActivationToken !== token) return;
-              playbackReady = false;
-              this._audioDiagLog('PLAY:REJECTED', entry, {startAt,error:String(error?.message||error)});
-              emit(this.host, 'sceneplayer:iosmediabankwakeblocked', { channel:entry.channel, src:entry.src, error });
-            });
-          } else playbackReady = !audio.paused;
-        } catch (error) {
-          playbackReady = false;
-          emit(this.host, 'sceneplayer:iosmediabankwakeblocked', { channel:entry.channel, src:entry.src, error });
-        }
-      }
-
-      // R4: seek ONCE, and only when it is actually necessary. In particular,
-      // never write currentTime=0 when WebKit already reports 0. D1 proved that
-      // redundant 0 -> 0 writes can create a seeking/seeked feedback storm.
-      let seekIssued = false;
-      const issueSeekOnce = () => {
-        if (!seek || seekIssued || entry.__spActivationToken !== token) return;
-        if (playheadReady()) { seekEventSeen = true; openGate(); return; }
-        // Wait until metadata/media state exists before asking WebKit to seek.
-        // A duration of 0/NaN is not a valid seekable timeline yet.
-        const dur = Number(audio.duration);
-        if (!(audio.readyState >= 1) || !Number.isFinite(dur) || dur <= 0 || audio.seeking) return;
-        seekIssued = true;
-        if (typeof audio.addEventListener === 'function') {
-          audio.addEventListener('seeked', () => {
-            if (entry.__spActivationToken !== token) return;
-            seekEventSeen = true;
-            this._audioDiagLog('SEEKED:ONCE', entry, {startAt});
-            openGate();
-          }, { once: true });
-        }
-        try { audio.currentTime = Math.min(startAt, Math.max(0, dur - 0.001)); }
-        catch (_) { seekEventSeen = true; }
-      };
-
-      // Poll only observes readiness. It never writes currentTime, so it cannot
-      // manufacture a seek loop. 0 -> 0 is accepted immediately as ready.
-      const pollCue = () => {
-        if (opened || !entry.active || entry.__spActivationToken !== token) return;
-        playbackReady = playbackReady || !audio.paused;
-        if (playheadReady()) seekEventSeen = true;
-        else issueSeekOnce();
-        if (openGate()) return;
-        if (performance.now() - cueStartedAt < 1200) this._audioTimeout(pollCue, 16);
-        else {
-          this._audioDiagLog('CUE:TIMEOUT', entry, {startAt,target,fadeIn,seekIssued});
-          emit(this.host, 'sceneplayer:audiocuenotready', {
-            channel: entry.channel, src: entry.src,
-            paused: !!audio.paused, seeking: !!audio.seeking,
-            currentTime: Number(audio.currentTime) || 0, startAt,
-            transport: 'ios-live-media-bank'
-          });
-        }
-      };
-      issueSeekOnce();
-      pollCue();
       return true;
     }
 
@@ -3441,9 +3335,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.ended = false;
       this._endingAudioStarted = false;
       this.unlockAudio(true);
-      // V2.15 iOS: authorize EVERY real source synchronously from this START
-      // gesture and keep the elements silently playing. Scene changes merely
-      // seek/unmute those already-authorized elements.
+      // Audio Manager V1: START only preloads future sources. It never play()s them.
+      // Each Scene cue owns the first real play() for its source.
       if (this._iosStableMediaBank) this._primeIOSMediaBank();
       // Keep the opaque Cover in front while Scene 1 is fully rendered.
       // iPhone Safari otherwise exposes the raw background for one frame before
@@ -3606,10 +3499,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.els.auto.classList.add('is-on');
       this.els.auto.setAttribute('aria-pressed', 'true');
 
-      // Current Scene audio is already in its proper manual state. Before AUTO
-      // timers take over, silently authorize the stable BGM/Ambient/SE elements
-      // that future Scenes will need. Do not schedule Scene advancement until
-      // those synchronous-gesture play() attempts have settled.
+      // Audio Manager V1: AUTO may preload future sources, but never silently play
+      // them. AUTO and manual Scene changes use the exact same cue path.
       const prime = this._iosStableMediaBank
         ? this._primeIOSMediaBank()
         : (this._iosBufferAudio ? this._preloadDocumentAudioBuffers() : this._primeFutureAudioPlayback());
