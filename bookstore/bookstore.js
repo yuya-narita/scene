@@ -12,7 +12,8 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('returnTo',location.href);return player.toString();}
 function norm(n){return books.length?((n%books.length)+books.length)%books.length:0;}
 function signedOffset(i){let d=i-index;if(d>books.length/2)d-=books.length;if(d<-books.length/2)d+=books.length;return d;}
-function bookMarkup(w){return `<span class="book-shell"><span class="book-spine"></span><span class="book-pages"></span><span class="book-bottom"></span><span class="book-face">${w.coverUrl?`<img src="${esc(w.coverUrl)}" alt="">`:'<span class="fallback">あ□</span>'}</span></span>`;}
+function bookMarkup(w){return `<span class="book-shell"><span class="book-spine"></span><span class="book-pages"></span><span class="book-bottom"></span><span class="book-face">${w.coverUrl?`<span class="cover-loading">あ□</span><img src="${esc(w.coverUrl)}" alt="" decoding="async">`:'<span class="fallback">あ□</span>'}</span></span>`;}
+function hydrateCoverLoadState(root=document){root.querySelectorAll('.book-face img').forEach(img=>{const face=img.closest('.book-face');const done=()=>face?.classList.add('is-cover-loaded');if(img.complete&&img.naturalWidth>0)done();else{img.addEventListener('load',done,{once:true});img.addEventListener('error',()=>face?.classList.add('is-cover-error'),{once:true});}});}
 // V2.4 — continuous circular ring. Every book owns a live angular position;
 // the centered book is never replaced at rest, it simply arrives at angle 0.
 const RING_STEP_DEG=27;
@@ -41,7 +42,7 @@ function setBookPose(b,pos){
   b.classList.toggle('is-far',Math.abs(angle)>105);
 }
 function updateFocusPanel(){if(!books.length)return;const w=books[index],a=w.author||{};document.querySelector('#focusTitle').textContent=w.title||'Untitled';document.querySelector('#focusAuthor').textContent=a.displayName||'作者';document.querySelector('#focusShelf').textContent=shelves[shelfIndex]?.label||'';}
-function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)=>{const slot=signedOffset(i);if(Math.abs(slot)>5)return;const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot+dragUnits);b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};stage.appendChild(b);});updateFocusPanel();}
+function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)=>{const slot=signedOffset(i);if(Math.abs(slot)>5)return;const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot+dragUnits);b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};stage.appendChild(b);});hydrateCoverLoadState(stage);updateFocusPanel();}
 function snapTo(i){index=norm(i);dragUnits=0;render();}
 function move(delta){if(books.length)glideToOffset(-delta);}
 function applyDrag(units){dragUnits=units;stage.querySelectorAll('.book').forEach(b=>{const slot=Number(b.dataset.slot||0);setBookPose(b,slot+units);});}
@@ -64,12 +65,12 @@ async function coastAndSnap(initialUnits,velocityUnitsMs){
   const ok=await animateOffset(pos,target,280+Math.abs(target-pos)*240,token);if(!ok)return;
   index=norm(index-Math.round(target));dragUnits=0;render();
 }
-function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.66);}else { dragUnits=0; }}
+function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.66);}else{dragUnits=0;/* V2.11.1: desktop pointer capture can swallow the button click. Resolve the visible cover directly on pointerup. */const hit=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.book');if(hit&&stage.contains(hit)){suppressClickUntil=Date.now()+220;const i=Number(hit.dataset.index),off=signedOffset(i);if(off===0)pick(books[i]);else glideToOffset(-off);}}}
 function readLaterItems(){try{const v=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&x.publicationId).slice(0,200):[];}catch(_){return[];}}
 function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{publicationId:w.publicationId,title:w.title||'Untitled',coverUrl:w.coverUrl||'',detail:[w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' '),authorName:a.displayName||'作者',authorId:a.authorId||'',authorSlug:a.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
 function syncLater(){const b=document.querySelector('#saveLater');if(!currentPicked)return;const saved=readLaterItems().some(x=>x.publicationId===currentPicked.publicationId);b.classList.toggle('is-saved',saved);b.textContent=saved?'✓ 保存済み':'あとで読む';b.setAttribute('aria-pressed',saved?'true':'false');}
 function toggleLater(){if(!currentPicked)return;const items=readLaterItems(),i=items.findIndex(x=>x.publicationId===currentPicked.publicationId);if(i>=0)items.splice(i,1);else items.unshift(readLaterRecord(currentPicked));try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));syncLater();}catch(_){}}
-function fillPicked(w){currentPicked=w;document.querySelector('#pickedCover').innerHTML=bookMarkup(w);document.querySelector('#pickedTitle').textContent=w.title||'Untitled';document.querySelector('#pickedContext').textContent=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK';document.querySelector('#pickedDetail').textContent=w.description||w.subtitle||'';document.querySelector('#pickedAuthor').textContent=w.author?.displayName?`著者　${w.author.displayName}`:'';document.querySelector('#readBook').href=playerUrl(w);syncLater();}
+function fillPicked(w){currentPicked=w;document.querySelector('#pickedCover').innerHTML=bookMarkup(w);hydrateCoverLoadState(document.querySelector('#pickedCover'));document.querySelector('#pickedTitle').textContent=w.title||'Untitled';document.querySelector('#pickedContext').textContent=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK';document.querySelector('#pickedDetail').textContent=w.description||w.subtitle||'';document.querySelector('#pickedAuthor').textContent=w.author?.displayName?`著者　${w.author.displayName}`:'';document.querySelector('#readBook').href=playerUrl(w);syncLater();}
 function pick(w){
   // V2.10.2: opening detail is a modal state. Motion/path animation must not keep
   // mutating the passage underneath while the user is trying to dismiss the detail.
@@ -104,23 +105,34 @@ detailCard.addEventListener('pointerup',e=>{if(!detailDrag||e.pointerId!==detail
 detailCard.addEventListener('pointercancel',()=>{detailDrag=null;resetDetailDrag();});
 document.querySelector('#prev').onclick=()=>move(-1);document.querySelector('#next').onclick=()=>move(1);
 stage.addEventListener('pointerdown',beginDrag);stage.addEventListener('pointermove',dragMove,{passive:false});stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',e=>endDrag(e,true));
-// V2.11: PC/trackpad ring navigation shares the same continuous ring coordinate as drag.
-let ringWheelTimer=0,ringWheelLast=0,ringWheelV=0;
+// V2.11.1: PC wheel and trackpad share the ring, but mouse-wheel notches are deliberately gentle.
+let ringWheelTimer=0,ringWheelLast=0,ringWheelV=0,lastMouseNotch=0;
 store.addEventListener('wheel',e=>{
   if(viewMode!=='ring'||!picked.hidden)return;
-  const raw=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
+  let raw=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
   if(Math.abs(raw)<.25)return;
   e.preventDefault();
   spinToken++;
-  const now=performance.now(),dt=Math.max(8,Math.min(50,now-(ringWheelLast||now-16)));ringWheelLast=now;
-  const units=Math.max(-.34,Math.min(.34,raw*.00225));
+  const now=performance.now();
+  // Traditional mouse wheels often report large discrete deltas (roughly 40-120+).
+  // Treat each notch as a small controlled nudge and never launch a long inertial coast.
+  const mouseLike=e.deltaMode!==0||Math.abs(raw)>=38;
+  if(mouseLike){
+    if(now-lastMouseNotch<48)return;
+    lastMouseNotch=now;
+    const step=Math.sign(raw)*.22;
+    applyDrag(dragUnits-step);
+    clearTimeout(ringWheelTimer);
+    ringWheelTimer=setTimeout(()=>{const target=Math.round(dragUnits);glideToOffset(Math.max(-1,Math.min(1,target||(-Math.sign(raw)))));},95);
+    return;
+  }
+  // Precision trackpads keep their continuous feel.
+  const dt=Math.max(8,Math.min(50,now-(ringWheelLast||now-16)));ringWheelLast=now;
+  const units=Math.max(-.16,Math.min(.16,raw*.00155));
   applyDrag(dragUnits-units);
   ringWheelV=(-units)/dt;
   clearTimeout(ringWheelTimer);
-  ringWheelTimer=setTimeout(()=>{
-    const v=ringWheelV;ringWheelV=0;ringWheelLast=0;
-    coastAndSnap(dragUnits,v*.72);
-  },72);
+  ringWheelTimer=setTimeout(()=>{const v=ringWheelV;ringWheelV=0;ringWheelLast=0;coastAndSnap(dragUnits,v*.34);},90);
 },{passive:false});
 
 function syncRingFromPath(){
@@ -182,7 +194,7 @@ function renderPath(){
     // The path surface resolves the intended cover from the actual projected rectangles.
     el.style.pointerEvents='none';
     el.dataset.raw=String(raw);
-    root.appendChild(el);
+    root.appendChild(el);hydrateCoverLoadState(el);
   }
   const n=norm(Math.round(pathProgress))+1;
   document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
