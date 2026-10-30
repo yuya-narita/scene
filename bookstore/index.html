@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#100b08">
+<title>あ箱書店 β</title>
+<link rel="stylesheet" href="./bookstore.css?v=1">
+</head>
+<body>
+<header class="shop-head">
+  <a class="brand" href="../bookshelf/" aria-label="本棚へ戻る"><strong>あ箱</strong><small>BOOK STORE β</small></a>
+  <div class="shop-title"><span>あ箱書店</span><small>本を探すんじゃなく、見つける。</small></div>
+  <a class="back" href="../bookshelf/">本棚へ</a>
+</header>
+<main>
+  <section class="store" id="store" aria-label="あ箱書店">
+    <div class="ambient" aria-hidden="true"></div>
+    <div class="shelf shelf-top" aria-hidden="true"></div>
+    <div class="shelf shelf-mid" aria-hidden="true"></div>
+    <div class="shelf shelf-low" aria-hidden="true"></div>
+    <div class="sign"><small>NEW ARRIVALS</small><strong>新しく入った本</strong></div>
+    <button class="nav prev" id="prev" aria-label="前の本">‹</button>
+    <div class="stage" id="stage" aria-live="polite"></div>
+    <button class="nav next" id="next" aria-label="次の本">›</button>
+    <div class="hint" id="hint">左右に動かして、棚を眺める</div>
+  </section>
+  <section class="picked" id="picked" hidden>
+    <div class="picked-cover" id="pickedCover"></div>
+    <div class="picked-copy">
+      <small id="pickedContext">PUBLIC BOOK</small>
+      <h1 id="pickedTitle"></h1>
+      <p id="pickedDetail"></p>
+      <p class="author" id="pickedAuthor"></p>
+      <div class="picked-actions"><button id="putBack">棚に戻す</button><a id="readBook" href="#">ひらく</a></div>
+    </div>
+  </section>
+  <section class="below">
+    <div><small>IN THE STORE</small><strong id="bookCount">読み込み中…</strong></div>
+    <p>いまは公開中の本を、そのまま店内に並べています。検索やランキングより先に、まず表紙が目に入る書店です。</p>
+  </section>
+</main>
+<script src="./bookstore.js?v=1"></script>
+</body>
+</html>
