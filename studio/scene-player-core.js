@@ -4197,6 +4197,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _is360Background(state=this.backgroundState){ return state?.projection === '360'; }
     _isFinitePanorama(state=this.backgroundState){ return state?.projection === 'panorama'; }
     _isSpatialBackground(state=this.backgroundState){ return this._is360Background(state)||this._isFinitePanorama(state); }
+    _isFinitePanoramaLandscape(){
+      if(!this._isFinitePanorama())return false;
+      const r=this.els?.stage?.getBoundingClientRect?.();
+      if(r && r.width>0 && r.height>0)return r.width>r.height;
+      return (global.innerWidth||0)>(global.innerHeight||0);
+    }
     _requestMotionPermissionIfNeeded(){
       const hasSpatial=(this.document?.scenes||[]).some(sc=>['360','panorama'].includes(sc?.presentation?.background?.projection));
       if(!hasSpatial || this._motionPermissionAsked) return;
@@ -4231,7 +4237,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // device-orientation yaw; finger dragging keeps its existing grab direction.
         this._panoYawVelocity=(Number(this._panoYawVelocity)||0)*.58 - da*.42;
         if(Math.abs(this._panoYawVelocity)<.08)this._panoYawVelocity=0;
-        const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+        const panoLandscape=this._isFinitePanoramaLandscape();
         if(!panoLandscape){
           this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+this._panoYawVelocity*.72;
         }else{
@@ -4258,7 +4264,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
 
         const db=beta-(Number(this._motionBaseBeta)||0);
-        const panoLandscapePitch=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+        const panoLandscapePitch=this._isFinitePanoramaLandscape();
         // In landscape panorama the visible vertical crop is modest. Use a small
         // dead-zone and faster response so a small physical tilt reaches it.
         const pitchDeadZone=panoLandscapePitch?.7:2.6;
@@ -4344,7 +4350,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const pitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
       // 360° repeats forever; Panorama is finite and stops at the image edges.
       const rawX=50 + yaw/3.6;
-      const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+      const panoLandscape=this._isFinitePanoramaLandscape();
       // A finite panorama that already fits horizontally in landscape should not
       // make the reader manually re-center it. Keep X centered; pitch/Y remains live.
       const x=panoLandscape?50:(this._isFinitePanorama()?Math.max(0,Math.min(100,rawX)):rawX);
@@ -4440,7 +4446,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // V1.5: every ordinary drag belongs to the panorama while the finger is
         // down. A fast, long flick in the established PAST direction is decided
         // only on release, so slow exploration remains predictable.
-        const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+        const panoLandscape=this._isFinitePanoramaLandscape();
         if(!panoLandscape){
           // 360° landscape needs a larger visual turn per finger travel than the
           // portrait/default grab. Motion-sensor sensitivity is intentionally unchanged.
