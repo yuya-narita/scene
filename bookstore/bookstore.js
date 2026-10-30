@@ -10,21 +10,51 @@ function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`
 function norm(n){return books.length?((n%books.length)+books.length)%books.length:0;}
 function signedOffset(i){let d=i-index;if(d>books.length/2)d-=books.length;if(d<-books.length/2)d+=books.length;return d;}
 function bookMarkup(w){return `<span class="book-shell"><span class="book-spine"></span><span class="book-pages"></span><span class="book-bottom"></span><span class="book-face">${w.coverUrl?`<img src="${esc(w.coverUrl)}" alt="">`:'<span class="fallback">あ□</span>'}</span></span>`;}
-function setBookPose(b,pos){const depth=Math.abs(pos),side=Math.sign(pos);b.style.setProperty('--pos',pos);b.style.setProperty('--depth',Math.min(depth,4));b.style.setProperty('--side',side);b.classList.toggle('is-far',depth>2.8);}
+// V2.4 — continuous circular ring. Every book owns a live angular position;
+// the centered book is never replaced at rest, it simply arrives at angle 0.
+const RING_STEP_DEG=27;
+function setBookPose(b,pos){
+  const angle=pos*RING_STEP_DEG,rad=angle*Math.PI/180;
+  const radius=Math.min(430,Math.max(320,stage.clientWidth*.52));
+  const x=Math.sin(rad)*radius;
+  const depth=1-Math.cos(rad); // 0 at the viewer, grows continuously toward the back
+  const z=105-depth*250;
+  const y=depth*12;
+  const scale=Math.max(.42,1.17-depth*.34);
+  const bright=Math.max(.48,1.06-depth*.28);
+  const opacity=Math.max(.24,1-depth*.34);
+  b.style.setProperty('--ring-x',`${x}px`);
+  b.style.setProperty('--ring-y',`${y}px`);
+  b.style.setProperty('--ring-z',`${z}px`);
+  b.style.setProperty('--ring-rot',`${angle*-0.72}deg`);
+  b.style.setProperty('--ring-scale',scale.toFixed(4));
+  b.style.setProperty('--ring-bright',bright.toFixed(4));
+  b.style.setProperty('--ring-opacity',opacity.toFixed(4));
+  b.style.zIndex=String(1000-Math.round(depth*100));
+  b.classList.toggle('is-far',Math.abs(angle)>105);
+}
 function updateFocusPanel(){if(!books.length)return;const w=books[index],a=w.author||{};document.querySelector('#focusTitle').textContent=w.title||'Untitled';document.querySelector('#focusAuthor').textContent=a.displayName||'作者';document.querySelector('#focusShelf').textContent=shelves[shelfIndex]?.label||'';}
-function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)=>{const slot=signedOffset(i);if(Math.abs(slot)>4)return;const b=document.createElement('button');b.className='book';b.dataset.slot=slot;setBookPose(b,slot);b.dataset.index=i;b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else snapTo(i);};stage.appendChild(b);});updateFocusPanel();}
-function snapTo(i){index=norm(i);render();}
-function move(delta){if(books.length)snapTo(index+delta);}
+function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)=>{const slot=signedOffset(i);if(Math.abs(slot)>5)return;const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot+dragUnits);b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};stage.appendChild(b);});updateFocusPanel();}
+function snapTo(i){index=norm(i);dragUnits=0;render();}
+function move(delta){if(books.length)glideToOffset(-delta);}
 function applyDrag(units){dragUnits=units;stage.querySelectorAll('.book').forEach(b=>{const slot=Number(b.dataset.slot||0);setBookPose(b,slot+units);});}
 function beginDrag(e){if(e.button!=null&&e.button!==0)return;spinToken++;drag={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastT:performance.now(),vx:0,moved:false};stage.classList.add('is-dragging');stage.setPointerCapture?.(e.pointerId);}
-function dragMove(e){if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.abs(dx)<5&&Math.abs(dy)<5)return;if(Math.abs(dy)>Math.abs(dx)*1.35&&!drag.moved){endDrag(e,true);return;}drag.moved=true;e.preventDefault();const now=performance.now(),dt=Math.max(1,now-drag.lastT);drag.vx=(e.clientX-drag.lastX)/dt;drag.lastX=e.clientX;drag.lastT=now;const spacing=Math.min(190,Math.max(120,stage.clientWidth*.34));applyDrag(dx/spacing);}
-function animateRollStep(dir,duration,token){return new Promise(resolve=>{if(token!==spinToken)return resolve();stage.classList.add('is-spinning');stage.style.setProperty('--spin-ms',`${duration}ms`);dragUnits=0;requestAnimationFrame(()=>{applyDrag(dir>0?-1:1);setTimeout(()=>{if(token===spinToken){index=norm(index+dir);dragUnits=0;render();stage.classList.remove('is-spinning');}resolve();},duration);});});}
-async function roulette(dir,steps){const token=++spinToken;for(let n=0;n<steps;n++){// V2.3: less roulette, more depth. 2–4 books max and a visible deceleration.
-  const p=n/Math.max(1,steps-1),t=105+Math.round(p*p*135);await animateRollStep(dir,t,token);if(token!==spinToken)break;
-}}
-function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){applyDrag(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const speed=Math.abs(d.vx),spacing=Math.min(190,Math.max(120,stage.clientWidth*.34));const projected=dragUnits+d.vx*185/spacing;let step=-Math.round(projected);if(step===0&&Math.abs(projected)>.18)step=projected<0?1:-1;// V2.3: quick flick adds at most 1–2 extra books. Hard cap = 4.
-  const boost=speed>1.75?2:speed>.95?1:0;if(boost)step=(step||(-Math.sign(d.vx)))*(1+boost);step=Math.max(-4,Math.min(4,step));dragUnits=0;if(Math.abs(step)<=1){snapTo(index+step);}else{render();roulette(Math.sign(step),Math.abs(step));}
- }else applyDrag(0);}
+function dragMove(e){if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.abs(dx)<5&&Math.abs(dy)<5)return;if(Math.abs(dy)>Math.abs(dx)*1.35&&!drag.moved){endDrag(e,true);return;}drag.moved=true;e.preventDefault();const now=performance.now(),dt=Math.max(1,now-drag.lastT);drag.vx=(e.clientX-drag.lastX)/dt;drag.lastX=e.clientX;drag.lastT=now;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));applyDrag(dx/spacing);}
+function easeOutCubic(t){return 1-Math.pow(1-t,3);}
+function animateOffset(from,to,duration,token){return new Promise(resolve=>{const t0=performance.now();function frame(now){if(token!==spinToken)return resolve(false);const p=Math.min(1,(now-t0)/duration),e=easeOutCubic(p);applyDrag(from+(to-from)*e);if(p<1)requestAnimationFrame(frame);else resolve(true);}requestAnimationFrame(frame);});}
+async function glideToOffset(target){if(!books.length)return;const token=++spinToken;const from=dragUnits;target=Math.max(-4,Math.min(4,target));const dist=Math.abs(target-from);const ok=await animateOffset(from,target,190+dist*72,token);if(!ok)return;const step=-Math.round(target);index=norm(index+step);dragUnits=0;render();}
+async function coastAndSnap(initialUnits,velocityUnitsMs){
+  const token=++spinToken;let pos=initialUnits,v=velocityUnitsMs,last=performance.now();
+  // Tuned for iPhone: a normal flick travels ~1–2 books; an intentional hard flick tops out near 4.
+  const maxTravel=3.75,origin=initialUnits;
+  await new Promise(resolve=>{function frame(now){if(token!==spinToken)return resolve();const dt=Math.min(32,now-last);last=now;pos+=v*dt;const travel=pos-origin;if(Math.abs(travel)>maxTravel){pos=origin+Math.sign(travel)*maxTravel;v*=.42;}v*=Math.pow(.965,dt/16.67);applyDrag(pos);if(Math.abs(v)>.0018)requestAnimationFrame(frame);else resolve();}requestAnimationFrame(frame);});
+  if(token!==spinToken)return;
+  const target=Math.max(-4,Math.min(4,Math.round(pos)));
+  const ok=await animateOffset(pos,target,220+Math.abs(target-pos)*180,token);if(!ok)return;
+  // Rebase only after the exact same visual pose has reached the center. No final-frame swap/pop.
+  index=norm(index-Math.round(target));dragUnits=0;render();
+}
+function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.72);}else glideToOffset(0);}
 function readLaterItems(){try{const v=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&x.publicationId).slice(0,200):[];}catch(_){return[];}}
 function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{publicationId:w.publicationId,title:w.title||'Untitled',coverUrl:w.coverUrl||'',detail:[w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' '),authorName:a.displayName||'作者',authorId:a.authorId||'',authorSlug:a.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
 function syncLater(){const b=document.querySelector('#saveLater');if(!currentPicked)return;const saved=readLaterItems().some(x=>x.publicationId===currentPicked.publicationId);b.classList.toggle('is-saved',saved);b.textContent=saved?'✓ 保存済み':'あとで読む';b.setAttribute('aria-pressed',saved?'true':'false');}
