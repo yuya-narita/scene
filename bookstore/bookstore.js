@@ -17,18 +17,19 @@ function hydrateCoverLoadState(root=document){root.querySelectorAll('.book-face 
 // V2.4 — continuous circular ring. Every book owns a live angular position;
 // the centered book is never replaced at rest, it simply arrives at angle 0.
 const RING_STEP_DEG=27;
-function setBookPose(b,pos){
+function setBookPose(b,pos,introDepth=1){
   const angle=pos*RING_STEP_DEG,rad=angle*Math.PI/180;
   const radius=Math.min(430,Math.max(320,stage.clientWidth*.52));
-  const x=Math.sin(rad)*radius;
+  const intro=Math.max(.38,Math.min(1,introDepth));
+  const x=Math.sin(rad)*radius*intro;
   const depth=1-Math.cos(rad); // 0 at the viewer, grows continuously toward the back
   // V2.5: keep the ring, but make the viewing position a pronounced focal crest.
   // The non-linear falloff keeps neighbours visibly behind instead of almost the same size.
   const focus=Math.exp(-Math.pow(Math.abs(angle)/23,2));
   // V2.6: focal strength sits between V2.4 and V2.5 — clear centre without billboard dominance.
-  const z=-55 + focus*190 - depth*145;
+  const z=-55 + focus*190 - depth*145 - (1-intro)*250;
   const y=depth*14;
-  const scale=Math.max(.40,.64 + focus*.46 - depth*.07);
+  const scale=Math.max(.24,(.64 + focus*.46 - depth*.07)*(.58 + .42*intro));
   const bright=Math.max(.44,.74 + focus*.30 - depth*.11);
   const opacity=Math.max(.22,.70 + focus*.28 - depth*.18);
   b.style.setProperty('--ring-x',`${x}px`);
@@ -78,7 +79,7 @@ function renderFirstViewRing(center){
   books.forEach((w,i)=>{
     const b=document.createElement('button');b.className='book';b.dataset.index=i;
     b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);
-    b.innerHTML=bookMarkup(w);setBookPose(b,wrappedOffsetFrom(center,i));
+    b.innerHTML=bookMarkup(w);setBookPose(b,wrappedOffsetFrom(center,i),.44);
     b.onclick=()=>{if(Date.now()<suppressClickUntil||stage.classList.contains('is-intro-spinning'))return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};
     stage.appendChild(b);
   });
@@ -89,7 +90,7 @@ function playFirstViewSpin(){
   firstViewSpinPlayed=true;
   const token=++spinToken;
   const travel=Math.min(10,Math.max(5.5,books.length*.42));
-  const duration=1650;
+  const duration=2050;
   const start=index-travel;
   suppressClickUntil=Date.now()+duration+250;
   stage.classList.add('is-intro-spinning');
@@ -98,10 +99,13 @@ function playFirstViewSpin(){
   function frame(now){
     if(token!==spinToken){stage.classList.remove('is-intro-spinning');return;}
     const t=Math.min(1,(now-t0)/duration);
-    // Quintic ease-out: clearly fast at entry, then a long smooth deceleration into the selected book.
+    // V2.11.5: start at the same distant-looking radius seen during a hard manual flick.
+    // The ring approaches the viewer while angular speed decays, then lands on the normal shelf pose.
     const e=1-Math.pow(1-t,5);
+    const approach=1-Math.pow(1-t,2.15);
+    const introDepth=.44+.56*approach;
     const center=start+(index-start)*e;
-    stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index))));
+    stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),introDepth));
     if(t<1){requestAnimationFrame(frame);return;}
     dragUnits=0;
     stage.querySelectorAll('.book').forEach(b=>{
