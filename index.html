@@ -1,56 +1,130 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#100b08">
-<title>あ箱書店 β</title>
-<link rel="stylesheet" href="./bookstore.css?v=2.11.2">
-
-<style id="v211-bg">
-/* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
-.store{background-image:linear-gradient(rgba(8,5,3,.16),rgba(8,5,3,.30)),url('./bookstore-v211-bg.png')!important;background-size:cover!important;background-position:center center!important;background-repeat:no-repeat!important;}
-.store>.ambient,.store>.shelf{opacity:0!important;pointer-events:none!important;}
-
-/* V2.11.2: glow experiment removed for motion/visibility isolation. */
-.book-face{background:linear-gradient(145deg,#24180f,#0e0a07);}
-.book-face .cover-loading{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(20px,5vw,42px);color:rgba(255,236,198,.82);background:radial-gradient(circle at 50% 42%,rgba(170,105,42,.28),rgba(12,8,5,.94) 72%);}
-/* Keep the image opaque whenever it exists; rebuilding the ring must not fade a cached cover in again. */
-.book-face img{opacity:1;}
-.book-face.is-cover-loaded .cover-loading{display:none;}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1016">
+  <title>Scene Player｜あ箱</title>
+  <meta name="description" content="あ箱のScene Player。文章・音・背景が重なり合う、一冊ごとの読書体験を楽しめます。">
+  <link rel="canonical" href="https://yuya-narita.github.io/scene/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="あ箱">
+  <meta property="og:title" content="Scene Player｜あ箱">
+  <meta property="og:description" content="文章・音・背景が重なり合う、一冊ごとの読書体験を楽しめます。">
+  <meta property="og:url" content="https://yuya-narita.github.io/scene/">
+  <meta property="og:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Scene Player｜あ箱">
+  <meta name="twitter:description" content="文章・音・背景が重なり合う、一冊ごとの読書体験を楽しめます。">
+  <meta name="twitter:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
+  <link rel="stylesheet" href="./scene-player-core.css?v=20261029-distribution-runtime-v1">
+  <link rel="stylesheet" href="./public-player.css?v=20261029-distribution-runtime-v1">
+  <link rel="stylesheet" href="./ios-input-guard.css?v=70.4">
 </head>
 <body>
-<header class="shop-head">
-  <a class="brand" href="../bookshelf/" aria-label="本棚へ戻る"><strong>あ箱</strong><small>BOOK STORE β</small></a>
-  <div class="shop-title"><span>あ箱書店</span><small>本を探すんじゃなく、見つける。</small></div>
-  <a class="back" href="../bookshelf/">本棚へ</a>
-</header>
-<main>
-  <section class="store" id="store" aria-label="あ箱書店">
-    <div class="ambient" aria-hidden="true"></div>
-    <div class="shelf shelf-top" aria-hidden="true"></div><div class="shelf shelf-mid" aria-hidden="true"></div><div class="shelf shelf-low" aria-hidden="true"></div>
-    <div class="sign"><small>NEW ARRIVALS</small><strong>新しく入った本</strong></div>
-    <div class="view-switch" role="group" aria-label="書店の見方"><button id="ringMode" type="button" class="is-active">本棚</button><button id="pathMode" type="button">通路</button></div>
-    <button class="nav prev" id="prev" aria-label="前の本">‹</button>
-    <div class="stage" id="stage" aria-live="polite"></div>
-    <div class="book-path" id="bookPath" hidden aria-label="本の道"><div class="path-floor" aria-hidden="true"></div><div class="path-books" id="pathBooks"></div><div class="path-status"><strong id="pathStatus">指で進む</strong><span id="pathSub">上へスワイプすると、本の道を歩けます</span></div><button id="motionStart" type="button">端末の動きで歩く</button></div>
-    <button class="nav next" id="next" aria-label="次の本">›</button>
-    <div class="focus-panel" id="focusPanel"><div><small id="focusShelf">新しく入った本</small><strong id="focusTitle">読み込み中…</strong><span id="focusAuthor"></span></div><button id="focusPick" type="button">手に取る</button></div><div class="hint" id="hint">左右にスワイプして、棚を眺める</div>
-  </section>
-  <section class="below"><div><small>IN THE STORE</small><strong id="bookCount">読み込み中…</strong></div><p>いまは公開中の本を、そのまま店内に並べています。検索やランキングより先に、まず表紙が目に入る書店です。</p></section>
-</main>
-<div class="detail-layer" id="picked" hidden>
-  <button class="detail-dismiss" id="detailDismiss" aria-label="棚に戻る"></button>
-  <div class="axis-hint" id="axisHint">左右：同じ棚の本　／　上下：棚を移動</div>
-  <article class="detail-card">
-    <div class="detail-book" id="pickedCover"></div>
-    <div class="detail-copy">
-      <small id="pickedContext">PUBLIC BOOK</small><h1 id="pickedTitle"></h1><p id="pickedDetail"></p><p class="author" id="pickedAuthor"></p>
+  <a id="publicShelfReturn" class="public-shelf-return" href="./author/" hidden>← 作者の本棚へ</a>
+  <section id="publicIntro" class="public-intro" hidden>
+    <div id="publicIntroCover" class="public-intro-cover"></div>
+    <div id="publicIntroCoverDim" class="public-intro-cover-dim"></div>
+    <div class="public-intro-frame">
+      <div class="public-intro-copy">
+        <div class="public-work-block">
+          <img id="publicIntroLogo" class="public-logo" alt="" hidden>
+          <h1 id="publicIntroTitle" class="public-title">Scene</h1>
+          <p id="publicIntroDescription" class="public-description"></p>
+          <p id="publicIntroAuthor" class="public-author"></p>
+        </div>
+        <div class="public-episode-block">
+          <p id="publicIntroEpisode" class="public-episode" hidden></p>
+          <p id="publicIntroEpisodeTitle" class="public-episode-title" hidden></p>
+        </div>
+      </div>
+      <div class="public-intro-actions">
+        <button id="publicStart" class="public-primary" type="button">はじめる</button>
+        <button id="publicGuideReceive" class="public-secondary" type="button" hidden>説明書を本棚に入れる</button>
+        <p id="publicGuideStatus" class="public-own-copy-status" aria-live="polite" hidden></p>
+        <button id="publicContinue" class="public-secondary" type="button" hidden>途中から</button>
+      </div>
     </div>
-    <div class="picked-actions"><button id="saveLater" type="button">あとで読む</button><a id="readBook" href="#">ひらく</a></div>
-  </article>
-</div>
-<script src="./bookstore.js?v=2.11.2"></script>
+  </section>
+
+  <div id="publicOpening" class="public-opening" hidden>
+    <div id="publicOpeningImage" class="public-opening-image"></div>
+    <div id="publicOpeningDim" class="public-opening-dim"></div>
+  </div>
+
+  <div id="scenePlayer" class="public-player" hidden></div>
+
+  <section id="publicEnding" class="public-ending" hidden>
+    <div class="public-ending-inner">
+      <p id="publicEndingLabel" class="public-ending-label" hidden></p>
+
+      <div id="publicEndingActions" class="public-ending-actions public-ending-three">
+        <a id="publicEndingLeft" class="public-ending-box" hidden><small></small><strong></strong></a>
+        <button id="publicEndingCover" class="public-ending-box public-ending-cover" type="button"><small>COVER</small><strong>表紙に戻る</strong></button>
+        <a id="publicEndingRight" class="public-ending-box" hidden><small></small><strong></strong></a>
+      </div>
+      <div id="publicOwnCopyWrap" class="public-own-copy-wrap" hidden>
+        <button id="publicOwnCopy" class="public-own-copy" type="button">自分の一冊を受け取る</button>
+        <p id="publicOwnCopyStatus" class="public-own-copy-status" aria-live="polite"></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="publicError" class="public-error" hidden>
+    <div class="public-error-card">
+      <strong id="publicErrorTitle">Sceneを開けませんでした</strong>
+      <p id="publicErrorMessage"></p>
+      <button id="publicRetry" type="button">もう一度読み込む</button>
+    </div>
+  </section>
+
+
+  <button id="publicReportButton" class="public-report-trigger" type="button">この作品について報告</button>
+
+  <dialog id="publicReportDialog" class="public-report-dialog">
+    <form method="dialog" class="public-report-card">
+      <button id="publicReportClose" class="public-report-close" type="button" aria-label="閉じる">×</button>
+      <small>REPORT</small>
+      <h2>この作品について報告</h2>
+      <fieldset class="public-report-section">
+        <legend>報告理由</legend>
+        <label><input type="radio" name="reportReason" value="unauthorized" checked> 自分の作品が無断で使用されている</label>
+        <label><input type="radio" name="reportReason" value="copyright"> 第三者の著作物・権利侵害と思われる</label>
+        <label><input type="radio" name="reportReason" value="other"> その他</label>
+      </fieldset>
+      <label class="public-report-field">
+        <span>問題のある箇所 <b>必須</b></span>
+        <select id="publicReportSubject">
+          <option value="text">本文・文章</option>
+          <option value="cover">表紙</option>
+          <option value="image">背景・画像</option>
+          <option value="audio">BGM・SE・音声</option>
+          <option value="other">その他</option>
+        </select>
+      </label>
+      <label class="public-report-field" id="publicReportEvidenceWrap">
+        <span>元作品・権利を確認できるURL <b id="publicReportEvidenceRequired">必須</b></span>
+        <input id="publicReportEvidenceUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://note.com/...">
+        <small>元作品の掲載ページなど、運営が比較できるURLを入力してください。</small>
+      </label>
+      <label class="public-report-field">
+        <span>詳しい内容 <b>必須</b></span>
+        <textarea id="publicReportDetails" rows="4" maxlength="1200" placeholder="例：上記URLで公開している本文が、そのまま使用されています。"></textarea>
+      </label>
+      <label class="public-report-field">
+        <span>連絡先メール <b id="publicReportContactRequired">必須</b></span>
+        <input id="publicReportContact" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com">
+        <small id="publicReportContactHint">確認が必要な場合に運営から連絡するために使用します。</small>
+      </label>
+      <label class="public-report-confirm"><input id="publicReportConfirm" type="checkbox"> <span>この報告内容が正確であることを確認します。</span></label>
+      <div class="public-report-meta"><span>workId</span><code id="publicReportWorkId">-</code><span>対象URL</span><code id="publicReportUrl">-</code></div>
+      <p id="publicReportStatus" class="public-report-status">根拠を確認できる情報と一緒に運営へ送信します。</p>
+      <button id="publicReportCopy" type="button" class="public-report-copy">運営に申立てを送る</button>
+    </form>
+  </dialog>
+
+  <script src="./scene-player-core.js?v=20261029-pano-shared-camera-v8"></script>
+  <script src="./public-player.js?v=20261029-distribution-runtime-v1"></script>
 </body>
 </html>
