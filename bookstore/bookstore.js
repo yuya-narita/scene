@@ -6,6 +6,7 @@ let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAc
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
 let roomId='new',routeTransitioning=false,dataReady=false;
+let roomShelfMode=false,roomShelfAllBooks=[];
 let fantasyGateTimer=0,fantasyGateVisible=false;
 const roomHistory=[];
 const PATH_DRAG_PX_PER_BOOK=150;
@@ -327,21 +328,61 @@ async function enterForest(){
   renderPath();
 }
 
+
+// V2.13.0 — Room shelf prototype: 4 covers per row, vertically continuing shelf.
+// Rows near the top tilt away to create the illusion of a very tall shelf.
+function renderRoomShelf(){
+  const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll'),grid=document.querySelector('#roomShelfGrid');
+  if(!wrap||!grid)return;
+  roomShelfMode=true;roomShelfAllBooks=fantasyBooks();grid.innerHTML='';
+  for(let start=0;start<roomShelfAllBooks.length;start+=4){
+    const row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(start);
+    const slice=roomShelfAllBooks.slice(start,start+4);
+    row.setAttribute('aria-label',`${Math.floor(start/4)+1}段目の本を見る`);
+    row.innerHTML=`<span class="room-shelf-books">${slice.map(w=>`<span class="room-shelf-book">${bookMarkup(w)}</span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
+    row.addEventListener('click',()=>openShelfRow(start));grid.appendChild(row);hydrateCoverLoadState(row);
+  }
+  wrap.hidden=false;stage.hidden=true;
+  document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
+  scroller.scrollTop=0;requestAnimationFrame(updateRoomShelfPerspective);
+}
+function updateRoomShelfPerspective(){
+  const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
+  const box=scroller.getBoundingClientRect(),h=Math.max(1,box.height);
+  scroller.querySelectorAll('.room-shelf-row').forEach(row=>{
+    const r=row.getBoundingClientRect(),cy=(r.top+r.bottom)/2,rel=(cy-box.top)/h;
+    const top=Math.max(0,Math.min(1,(.42-rel)/.42));
+    const bottom=Math.max(0,Math.min(1,(rel-.78)/.22));
+    const tilt=top*58-bottom*8,scale=1-top*.22-bottom*.05,z=-top*120;
+    row.style.setProperty('--shelf-tilt',`${tilt.toFixed(1)}deg`);row.style.setProperty('--shelf-scale',scale.toFixed(3));row.style.setProperty('--shelf-z',`${z.toFixed(0)}px`);row.style.opacity=String(Math.max(.34,1-top*.52-bottom*.22));
+  });
+}
+async function openShelfRow(start){
+  const selected=roomShelfAllBooks.slice(start,start+4);if(!selected.length)return;
+  roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=selected;index=0;dragUnits=0;stage.hidden=false;
+  document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
+  document.querySelector('#hint').textContent='左右にスワイプ　／　FANTASY FORESTをタップで棚一覧へ';
+  document.querySelector('.sign').classList.add('shelf-back-sign');
+  stage.innerHTML='';await preloadFirstViewCovers();renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
+  const startTime=performance.now(),dur=1450;
+  await new Promise(resolve=>{function frame(now){const t=Math.min(1,(now-startTime)/dur),ease=1-Math.pow(1-t,3.4),center=index-4.2*(1-ease),depth=.12+.88*(1-Math.pow(1-t,1.8));stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),depth));if(t<1)requestAnimationFrame(frame);else resolve()}requestAnimationFrame(frame)});
+  stage.classList.remove('is-intro-spinning');render();updateFocusPanel();
+}
+function backToRoomShelf(){
+  if(roomId!=='fantasy'||roomShelfMode)return;
+  books=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();document.querySelector('.sign').classList.remove('shelf-back-sign');renderRoomShelf();
+}
+
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
   await new Promise(r=>setTimeout(r,360));
-  roomHistory.push({id:'forest',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;
+  roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
   document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
-  stage.hidden=false;path.hidden=true;document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
-  stage.innerHTML='';stage.classList.add('room-arrival');
-  await preloadFirstViewCovers();renderFirstViewRing(index-6.5);stage.classList.add('is-intro-spinning');
-  const start=performance.now(),dur=1900,travel=6.5;
-  await new Promise(resolve=>{function frame(now){const t=Math.min(1,(now-start)/dur),ease=1-Math.pow(1-t,3),center=index-travel*(1-ease),depth=.10+.90*ease;stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),depth));if(t<1)requestAnimationFrame(frame);else resolve()}requestAnimationFrame(frame)});
-  stage.classList.remove('is-intro-spinning','room-arrival');render();updateFocusPanel();path?.classList.remove('route-leaving');routeTransitioning=false;
+  path.hidden=true;path?.classList.remove('route-leaving');
+  renderRoomShelf();routeTransitioning=false;
 }
-
 function setViewMode(mode){
   const next=mode==='path'?'path':'ring';
   if(next===viewMode)return;
@@ -502,6 +543,8 @@ async function enableMotion(){
   }catch(_){document.querySelector('#pathSub').textContent='下スワイプで進む／上スワイプで戻れます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
+document.querySelector('#roomShelfScroll')?.addEventListener('scroll',()=>requestAnimationFrame(updateRoomShelfPerspective),{passive:true});
+document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
 
 async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
