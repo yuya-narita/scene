@@ -130,3 +130,11 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 .room-shelf-row:active{filter:brightness(1.22)}
 .room-shelf-hint{position:absolute;z-index:3;left:50%;bottom:2px;transform:translateX(-50%);white-space:nowrap;font-size:9px;letter-spacing:.06em;color:#fffbd6;text-shadow:0 2px 7px #000;background:#07100899;border:1px solid #c9d9b233;border-radius:99px;padding:7px 12px;pointer-events:none}
 @media(max-width:680px){.room-shelf{left:6%;right:6%;top:23%;bottom:4%}.room-shelf-scroll{padding-top:20%;padding-left:2%;padding-right:2%}.room-shelf-row{height:112px}.room-shelf-books{gap:7px}.room-shelf-book .book-shell{width:min(100%,64px)}}
+
+/* V2.13.1 — stable tall shelf hit targets + direct-cover focus + swipe-up return */
+.room-shelf-row{isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform;transition:none}
+.room-shelf-book{pointer-events:auto;cursor:pointer;border-radius:4px;outline:none}
+.room-shelf-book:focus-visible{box-shadow:0 0 0 2px #fff,0 0 0 4px #9fbd7a}
+.stage.room-shelf-ring{transform:translateX(-50%) translateY(var(--shelf-return-y,0px)) scale(var(--shelf-return-scale,1));transform-origin:50% 82%;transition:transform .18s ease,opacity .18s ease}
+.stage.room-shelf-ring.is-dragging{transition:none}
+.stage.room-shelf-ring.is-shelf-returning{opacity:.45}

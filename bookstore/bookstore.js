@@ -6,7 +6,7 @@ let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAc
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
 let roomId='new',routeTransitioning=false,dataReady=false;
-let roomShelfMode=false,roomShelfAllBooks=[];
+let roomShelfMode=false,roomShelfAllBooks=[],roomShelfScrollRaf=0;
 let fantasyGateTimer=0,fantasyGateVisible=false;
 const roomHistory=[];
 const PATH_DRAG_PX_PER_BOOK=150;
@@ -158,8 +158,13 @@ function playFirstViewSpin(){
 function snapTo(i){index=norm(i);dragUnits=0;render();}
 function move(delta){if(books.length)glideToOffset(-delta);}
 function applyDrag(units){dragUnits=units;stage.querySelectorAll('.book').forEach(b=>{const slot=Number(b.dataset.slot||0);setBookPose(b,slot+units);});}
-function beginDrag(e){if(e.button!=null&&e.button!==0)return;spinToken++;drag={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastT:performance.now(),vx:0,moved:false};stage.classList.add('is-dragging');stage.setPointerCapture?.(e.pointerId);}
-function dragMove(e){if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.abs(dx)<5&&Math.abs(dy)<5)return;if(Math.abs(dy)>Math.abs(dx)*1.35&&!drag.moved){endDrag(e,true);return;}drag.moved=true;e.preventDefault();const now=performance.now(),dt=Math.max(1,now-drag.lastT);drag.vx=(e.clientX-drag.lastX)/dt;drag.lastX=e.clientX;drag.lastT=now;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));applyDrag(dx/spacing);}
+function beginDrag(e){if(e.button!=null&&e.button!==0)return;spinToken++;drag={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastT:performance.now(),vx:0,moved:false,axis:null};stage.classList.add('is-dragging');stage.setPointerCapture?.(e.pointerId);}
+function dragMove(e){if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.abs(dx)<5&&Math.abs(dy)<5)return;
+  if(!drag.axis)drag.axis=(roomId==='fantasy'&&!roomShelfMode&&Math.abs(dy)>Math.abs(dx)*1.15)?'shelf-return':'ring';
+  if(drag.axis==='shelf-return'){
+    drag.moved=true;e.preventDefault();const lift=Math.min(1,Math.max(0,-dy/180));stage.style.setProperty('--shelf-return-y',`${Math.min(0,dy*.62)}px`);stage.style.setProperty('--shelf-return-scale',String(1-lift*.18));stage.style.opacity=String(1-lift*.48);return;
+  }
+  drag.moved=true;e.preventDefault();const now=performance.now(),dt=Math.max(1,now-drag.lastT);drag.vx=(e.clientX-drag.lastX)/dt;drag.lastX=e.clientX;drag.lastT=now;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));applyDrag(dx/spacing);}
 function easeOutCubic(t){return 1-Math.pow(1-t,3);}
 function animateOffset(from,to,duration,token){return new Promise(resolve=>{const t0=performance.now();function frame(now){if(token!==spinToken)return resolve(false);const p=Math.min(1,(now-t0)/duration),e=easeOutCubic(p);applyDrag(from+(to-from)*e);if(p<1)requestAnimationFrame(frame);else resolve(true);}requestAnimationFrame(frame);});}
 async function glideToOffset(target){if(!books.length)return;const token=++spinToken;const from=dragUnits;target=Math.max(-4,Math.min(4,target));const dist=Math.abs(target-from);const ok=await animateOffset(from,target,190+dist*72,token);if(!ok)return;const step=-Math.round(target);commitRingSettle(step);}
@@ -177,7 +182,14 @@ async function coastAndSnap(initialUnits,velocityUnitsMs){
   const ok=await animateOffset(pos,target,280+Math.abs(target-pos)*240,token);if(!ok)return;
   commitRingSettle(-Math.round(target));
 }
-function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.66);}else{dragUnits=0;/* V2.11.1: desktop pointer capture can swallow the button click. Resolve the visible cover directly on pointerup. */const hit=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.book');if(hit&&stage.contains(hit)){suppressClickUntil=Date.now()+220;const i=Number(hit.dataset.index),off=signedOffset(i);if(off===0)pick(books[i]);else glideToOffset(-off);}}}
+function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');
+  if(d.axis==='shelf-return'){
+    const dy=e.clientY-d.y;stage.style.opacity='';
+    if(!cancel&&dy<-72){stage.classList.add('is-shelf-returning');stage.style.setProperty('--shelf-return-y','-120px');stage.style.setProperty('--shelf-return-scale','.76');setTimeout(backToRoomShelf,180)}
+    else{stage.style.setProperty('--shelf-return-y','0px');stage.style.setProperty('--shelf-return-scale','1')}
+    return;
+  }
+  if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.66);}else{dragUnits=0;/* V2.11.1: desktop pointer capture can swallow the button click. Resolve the visible cover directly on pointerup. */const hit=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.book');if(hit&&stage.contains(hit)){suppressClickUntil=Date.now()+220;const i=Number(hit.dataset.index),off=signedOffset(i);if(off===0)pick(books[i]);else glideToOffset(-off);}}}
 function readLaterItems(){try{const v=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&x.publicationId).slice(0,200):[];}catch(_){return[];}}
 function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{publicationId:w.publicationId,title:w.title||'Untitled',coverUrl:w.coverUrl||'',detail:[w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' '),authorName:a.displayName||'作者',authorId:a.authorId||'',authorSlug:a.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
 function syncLater(){const b=document.querySelector('#saveLater');if(!currentPicked)return;const saved=readLaterItems().some(x=>x.publicationId===currentPicked.publicationId);b.classList.toggle('is-saved',saved);b.textContent=saved?'✓ 保存済み':'あとで読む';b.setAttribute('aria-pressed',saved?'true':'false');}
@@ -339,8 +351,10 @@ function renderRoomShelf(){
     const row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(start);
     const slice=roomShelfAllBooks.slice(start,start+4);
     row.setAttribute('aria-label',`${Math.floor(start/4)+1}段目の本を見る`);
-    row.innerHTML=`<span class="room-shelf-books">${slice.map(w=>`<span class="room-shelf-book">${bookMarkup(w)}</span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
-    row.addEventListener('click',()=>openShelfRow(start));grid.appendChild(row);hydrateCoverLoadState(row);
+    row.innerHTML=`<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}</span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
+    row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book');openShelfRow(start,hit?Number(hit.dataset.bookOffset):0)});
+    row.addEventListener('keydown',e=>{const hit=e.target.closest('.room-shelf-book');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openShelfRow(start,Number(hit.dataset.bookOffset)||0)}});
+    grid.appendChild(row);hydrateCoverLoadState(row);
   }
   wrap.hidden=false;stage.hidden=true;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
@@ -348,20 +362,24 @@ function renderRoomShelf(){
 }
 function updateRoomShelfPerspective(){
   const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
-  const box=scroller.getBoundingClientRect(),h=Math.max(1,box.height);
+  const h=Math.max(1,scroller.clientHeight),scrollTop=scroller.scrollTop;
+  // Use layout coordinates, not transformed getBoundingClientRect(). Reading the transformed
+  // rectangle and feeding it back into the next transform caused iPhone Safari to flicker.
   scroller.querySelectorAll('.room-shelf-row').forEach(row=>{
-    const r=row.getBoundingClientRect(),cy=(r.top+r.bottom)/2,rel=(cy-box.top)/h;
+    const cy=row.offsetTop-scrollTop+row.offsetHeight/2,rel=cy/h;
     const top=Math.max(0,Math.min(1,(.42-rel)/.42));
     const bottom=Math.max(0,Math.min(1,(rel-.78)/.22));
     const tilt=top*58-bottom*8,scale=1-top*.22-bottom*.05,z=-top*120;
     row.style.setProperty('--shelf-tilt',`${tilt.toFixed(1)}deg`);row.style.setProperty('--shelf-scale',scale.toFixed(3));row.style.setProperty('--shelf-z',`${z.toFixed(0)}px`);row.style.opacity=String(Math.max(.34,1-top*.52-bottom*.22));
+    row.style.zIndex=String(100-Math.round(top*20+bottom*5));
   });
 }
-async function openShelfRow(start){
+async function openShelfRow(start,focusOffset=0){
   const selected=roomShelfAllBooks.slice(start,start+4);if(!selected.length)return;
-  roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=selected;index=0;dragUnits=0;stage.hidden=false;
+  roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=selected;index=Math.max(0,Math.min(selected.length-1,Number(focusOffset)||0));dragUnits=0;stage.hidden=false;
+  stage.classList.add('room-shelf-ring');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
-  document.querySelector('#hint').textContent='左右にスワイプ　／　FANTASY FORESTをタップで棚一覧へ';
+  document.querySelector('#hint').textContent='左右にスワイプ　／　上スワイプで棚へ戻る';
   document.querySelector('.sign').classList.add('shelf-back-sign');
   stage.innerHTML='';await preloadFirstViewCovers();renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
   const startTime=performance.now(),dur=1450;
@@ -370,7 +388,7 @@ async function openShelfRow(start){
 }
 function backToRoomShelf(){
   if(roomId!=='fantasy'||roomShelfMode)return;
-  books=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();document.querySelector('.sign').classList.remove('shelf-back-sign');renderRoomShelf();
+  books=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');renderRoomShelf();
 }
 
 async function enterFantasyRoom(){
@@ -543,7 +561,7 @@ async function enableMotion(){
   }catch(_){document.querySelector('#pathSub').textContent='下スワイプで進む／上スワイプで戻れます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
-document.querySelector('#roomShelfScroll')?.addEventListener('scroll',()=>requestAnimationFrame(updateRoomShelfPerspective),{passive:true});
+document.querySelector('#roomShelfScroll')?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
 
