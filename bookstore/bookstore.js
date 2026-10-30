@@ -20,7 +20,7 @@ const RING_STEP_DEG=27;
 function setBookPose(b,pos,introDepth=1){
   const angle=pos*RING_STEP_DEG,rad=angle*Math.PI/180;
   const radius=Math.min(430,Math.max(320,stage.clientWidth*.52));
-  const intro=Math.max(.38,Math.min(1,introDepth));
+  const intro=Math.max(.08,Math.min(1,introDepth));
   const x=Math.sin(rad)*radius*intro;
   const depth=1-Math.cos(rad); // 0 at the viewer, grows continuously toward the back
   // V2.5: keep the ring, but make the viewing position a pronounced focal crest.
@@ -29,9 +29,9 @@ function setBookPose(b,pos,introDepth=1){
   // V2.6: focal strength sits between V2.4 and V2.5 — clear centre without billboard dominance.
   const z=-55 + focus*190 - depth*145 - (1-intro)*250;
   const y=depth*14;
-  const scale=Math.max(.24,(.64 + focus*.46 - depth*.07)*(.58 + .42*intro));
+  const scale=Math.max(.08,(.64 + focus*.46 - depth*.07)*(.22 + .78*intro));
   const bright=Math.max(.44,.74 + focus*.30 - depth*.11);
-  const opacity=Math.max(.22,.70 + focus*.28 - depth*.18);
+  const opacity=Math.max(.10,(.70 + focus*.28 - depth*.18)*(.30 + .70*intro));
   b.style.setProperty('--ring-x',`${x}px`);
   b.style.setProperty('--ring-y',`${y}px`);
   b.style.setProperty('--ring-z',`${z}px`);
@@ -81,7 +81,7 @@ function renderFirstViewRing(center){
   books.forEach((w,i)=>{
     const b=document.createElement('button');b.className='book';b.dataset.index=i;
     b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);
-    b.innerHTML=bookMarkup(w);setBookPose(b,wrappedOffsetFrom(center,i),.44);
+    b.innerHTML=bookMarkup(w);setBookPose(b,wrappedOffsetFrom(center,i),.10);
     b.onclick=()=>{if(Date.now()<suppressClickUntil||stage.classList.contains('is-intro-spinning'))return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};
     stage.appendChild(b);
   });
@@ -118,7 +118,7 @@ function playFirstViewSpin(){
   firstViewSpinPlayed=true;
   const token=++spinToken;
   const travel=firstViewTravel();
-  const duration=2050;
+  const duration=2350;
   const start=index-travel;
   suppressClickUntil=Date.now()+duration+250;
   stage.classList.add('is-intro-spinning');
@@ -127,11 +127,11 @@ function playFirstViewSpin(){
   function frame(now){
     if(token!==spinToken){stage.classList.remove('is-intro-spinning');return;}
     const t=Math.min(1,(now-t0)/duration);
-    // V2.11.5: start at the same distant-looking radius seen during a hard manual flick.
-    // The ring approaches the viewer while angular speed decays, then lands on the normal shelf pose.
-    const e=1-Math.pow(1-t,5);
-    const approach=1-Math.pow(1-t,2.15);
-    const introDepth=.44+.56*approach;
+    // V2.11.8: the first visible frame is a tiny 'eye of the storm' deep in the shop.
+    // It opens continuously while the angular velocity decays, so no full-size cover appears before the vortex.
+    const e=1-Math.pow(1-t,4.6);
+    const approach=1-Math.pow(1-t,1.72);
+    const introDepth=.10+.90*approach;
     const center=start+(index-start)*e;
     stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),introDepth));
     if(t<1){requestAnimationFrame(frame);return;}
