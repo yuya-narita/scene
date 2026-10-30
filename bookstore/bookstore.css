@@ -81,3 +81,13 @@
 .path-books{overflow:visible}
 .path-item{transition:none;backface-visibility:hidden;transform-origin:50% 50%;pointer-events:auto}
 .path-item .book-shell{pointer-events:none}
+
+
+/* V2.9 — passage mode owns the viewport. Vertical gestures navigate the passage,
+   never the document underneath it. */
+body.book-path-active{height:100dvh;max-height:100dvh;overflow:hidden;overscroll-behavior:none}
+body.book-path-active main{height:100dvh;overflow:hidden}
+body.book-path-active .store{height:100dvh;min-height:100dvh;max-height:100dvh;touch-action:none;overscroll-behavior:none}
+body.book-path-active .below{display:none}
+body.book-path-active .book-path{top:18%;bottom:0;touch-action:none;overscroll-behavior:none}
+body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user-select:none}

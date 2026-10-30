@@ -4,6 +4,7 @@ const stage=document.querySelector('#stage'),picked=document.querySelector('#pic
 let books=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
 let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0,pathDirection=1,pathDirectionUntil=0;
+let pathBookHold=null,pathMotionAxis=0,pathMotionAxisT=0;
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
 const shelves=[{id:'new',label:'新しく入った本'}];
@@ -115,6 +116,7 @@ function setViewMode(mode){
   if(next===viewMode)return;
   if(next==='ring')syncRingFromPath();else syncPathFromRing();
   viewMode=next;
+  document.body.classList.toggle('book-path-active',viewMode==='path');
   document.querySelector('#ringMode').classList.toggle('is-active',viewMode==='ring');
   document.querySelector('#pathMode').classList.toggle('is-active',viewMode==='path');
   stage.hidden=viewMode!=='ring';
@@ -148,7 +150,25 @@ function renderPath(){
     el.style.transform=`translate3d(calc(-50% + ${x}px),calc(-50% + ${y}px),${z}px) rotateY(${rot}deg) scale(${scale})`;
     el.style.opacity=opacity;el.style.filter=`blur(${blur}px)`;el.style.zIndex=String(1000-Math.round(phase*30));
     el.dataset.raw=String(raw);
-    el.onclick=e=>{e.stopPropagation();pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w)};
+    // V2.9: motion/RAF used to rebuild the DOM between pointerdown and click, so only
+    // whichever front book happened to survive could be opened. Hold the road while a
+    // visible cover is touched and resolve the tap ourselves.
+    el.addEventListener('pointerdown',e=>{
+      e.stopPropagation();
+      pathVelocity=0;
+      pathBookHold={id:e.pointerId,raw,w,x:e.clientX,y:e.clientY,moved:false};
+      el.setPointerCapture?.(e.pointerId);
+    });
+    el.addEventListener('pointermove',e=>{if(!pathBookHold||pathBookHold.id!==e.pointerId)return;if(Math.hypot(e.clientX-pathBookHold.x,e.clientY-pathBookHold.y)>9)pathBookHold.moved=true;});
+    el.addEventListener('pointerup',e=>{
+      if(!pathBookHold||pathBookHold.id!==e.pointerId)return;
+      const h=pathBookHold;pathBookHold=null;e.stopPropagation();
+      if(h.moved)return;
+      pathVelocity=0;pathProgress=Math.max(0,h.raw);index=norm(h.raw);renderPath();pick(h.w);
+    });
+    el.addEventListener('pointercancel',()=>{pathBookHold=null});
+    // Invisible books leaving the screen must not leave an invisible tap shield behind.
+    el.style.pointerEvents=(opacity>.12&&passed<1.55)?'auto':'none';
     root.appendChild(el);
   }
   const n=norm(Math.round(pathProgress))+1;
@@ -158,6 +178,7 @@ function clampPath(v){return Math.max(0,v)}
 function renderPathFrame(now){
   if(!pathLastFrame)pathLastFrame=now;
   const dt=Math.min(34,Math.max(1,now-pathLastFrame));pathLastFrame=now;
+  if(pathBookHold){pathRaf=requestAnimationFrame(renderPathFrame);return;}
   if(Math.abs(pathVelocity)>.00005){
     pathProgress=clampPath(pathProgress+pathVelocity*dt);
     if(pathProgress<=0&&pathVelocity<0)pathVelocity=0;
@@ -195,16 +216,29 @@ function onPathPointerEnd(e){
   }
   addPathVelocity(launch)
 }
-function onOrientation(e){if(!motionOn||viewMode!=='path'||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
+function onOrientation(e){if(!motionOn||viewMode!=='path'||pathBookHold||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
 function onMotion(e){
-  if(!motionOn||viewMode!=='path')return;
-  const a=e.accelerationIncludingGravity||e.acceleration;if(!a)return;
-  const mag=Math.sqrt((a.x||0)**2+(a.y||0)**2+(a.z||0)**2),delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;
+  if(!motionOn||viewMode!=='path'||pathBookHold)return;
+  const g=e.accelerationIncludingGravity||e.acceleration;if(!g)return;
+  const mag=Math.sqrt((g.x||0)**2+(g.y||0)**2+(g.z||0)**2),delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;
   const now=performance.now();
   pathMotionEnergy=pathMotionEnergy*.80+Math.max(0,delta-.28)*.20;
+
+  // V2.9 experimental fore/aft estimator. Prefer gravity-free acceleration when Safari
+  // supplies it. A short low-pass on the device Z axis lets an actual backward movement
+  // bias the next walking impulses negative instead of forcing every step forward.
+  const a=e.acceleration;
+  if(a&&Number.isFinite(a.z)){
+    pathMotionAxis=pathMotionAxis*.86+a.z*.14;
+    if(now-pathMotionAxisT>180&&Math.abs(pathMotionAxis)>.34){
+      pathDirection=pathMotionAxis<0?-1:1;
+      pathDirectionUntil=now+720;
+      pathMotionAxisT=now;
+    }
+  }
   if(now-pathMotionLast>28&&pathMotionEnergy>.13){
     pathMotionLast=now;
-    const impulse=Math.min(.00185,.00018+pathMotionEnergy*.00055);
+    const impulse=Math.min(.00205,.00020+pathMotionEnergy*.00060);
     const dir=now<pathDirectionUntil?pathDirection:1;
     addPathVelocity(impulse*dir);
   }
@@ -214,7 +248,7 @@ async function enableMotion(){
     if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     motionOn=true;ensurePathLoop();window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrientation);
-    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='歩くと前進。上スワイプで進む／下スワイプで本当に戻る';
+    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='前後移動を実験中。上スワイプ＝進む／下スワイプ＝戻る';
   }catch(_){document.querySelector('#pathSub').textContent='上スワイプで進む／下スワイプで戻れます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
