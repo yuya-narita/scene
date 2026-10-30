@@ -51,3 +51,27 @@
  .picked-actions button,.picked-actions a{height:50px;display:flex;align-items:center;justify-content:center}
  .detail-preview .detail-copy:after{display:none}
 }
+
+
+/* V2.7 — stable detail chassis + continuous Book Path velocity */
+.detail-card{grid-template-areas:"cover copy" "cover actions";grid-template-rows:1fr 58px;align-items:stretch}
+.detail-card>.detail-book{grid-area:cover;align-self:center}
+.detail-card>.detail-copy{grid-area:copy}
+.detail-card>.picked-actions{grid-area:actions;align-self:end}
+.detail-actions-placeholder{pointer-events:none;opacity:.35}
+.detail-actions-placeholder span{flex:1;height:50px;display:flex;align-items:center;justify-content:center;border:1px solid #ffffff38;border-radius:99px}
+.book-path,.path-item{will-change:transform}
+@media(max-width:680px){
+  .detail-layer{padding:0;display:block;overflow:hidden}
+  .axis-hint{position:absolute;z-index:4;top:max(58px,calc(env(safe-area-inset-top) + 8px));left:50%;transform:translateX(-50%);height:28px;line-height:28px;margin:0;white-space:nowrap}
+  .detail-card:not(.detail-preview),.detail-preview{position:absolute;z-index:2;left:14px;right:14px;top:max(94px,calc(env(safe-area-inset-top) + 54px));bottom:max(82px,calc(env(safe-area-inset-bottom) + 68px));width:auto;height:auto;max-height:none;min-height:0;margin:0;display:block;contain:none;overflow:hidden}
+  .detail-card>.detail-book{position:absolute;left:50%;top:0;transform:translateX(-50%) perspective(900px) rotateY(-5deg);width:min(43vw,168px);height:auto;margin:0}
+  .detail-card>.detail-copy{position:absolute;left:8px;right:8px;top:47%;bottom:74px;width:auto;height:auto!important;padding:0!important;display:block!important;overflow:hidden}
+  .detail-card>.detail-copy small{position:absolute;left:0;right:0;top:0;height:20px;line-height:20px}
+  .detail-card>.detail-copy h1{position:absolute;left:0;right:0;top:27px;height:62px;max-height:62px!important;margin:0!important;font-size:25px;line-height:1.24}
+  .detail-card>.detail-copy>p:not(.author){position:absolute;left:0;right:0;top:96px;height:60px;max-height:60px!important;margin:0!important;font-size:13px;line-height:20px;-webkit-line-clamp:3}
+  .detail-card>.detail-copy .author{position:absolute;left:0;right:0;bottom:0;height:22px;line-height:22px;margin:0!important}
+  .detail-card>.picked-actions{position:absolute!important;left:8px;right:8px;bottom:8px;width:auto;height:52px!important;min-height:52px!important;margin:0!important;display:flex!important;gap:10px;visibility:visible!important;opacity:1!important;transform:none!important}
+  .detail-card>.picked-actions button,.detail-card>.picked-actions a,.detail-actions-placeholder span{flex:1;min-width:0;height:50px;padding:0 8px;display:flex;align-items:center;justify-content:center}
+  .detail-preview{translate:0 0}
+}

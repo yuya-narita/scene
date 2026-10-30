@@ -2,7 +2,8 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 const stage=document.querySelector('#stage'),picked=document.querySelector('#picked'),store=document.querySelector('#store');
 let books=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
-let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastStepAt=0,lastAccelMag=0;
+let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
+let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
 const shelves=[{id:'new',label:'新しく入った本'}];
@@ -69,7 +70,7 @@ function syncLater(){const b=document.querySelector('#saveLater');if(!currentPic
 function toggleLater(){if(!currentPicked)return;const items=readLaterItems(),i=items.findIndex(x=>x.publicationId===currentPicked.publicationId);if(i>=0)items.splice(i,1);else items.unshift(readLaterRecord(currentPicked));try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));syncLater();}catch(_){}}
 function fillPicked(w){currentPicked=w;document.querySelector('#pickedCover').innerHTML=bookMarkup(w);document.querySelector('#pickedTitle').textContent=w.title||'Untitled';document.querySelector('#pickedContext').textContent=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK';document.querySelector('#pickedDetail').textContent=w.description||w.subtitle||'';document.querySelector('#pickedAuthor').textContent=w.author?.displayName?`著者　${w.author.displayName}`:'';document.querySelector('#readBook').href=playerUrl(w);syncLater();}
 function pick(w){fillPicked(w);picked.hidden=false;document.body.style.overflow='hidden';}
-function detailCardMarkup(w){const a=w.author||{};return `<div class="detail-book">${bookMarkup(w)}</div><div class="detail-copy"><small>${esc([w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK')}</small><h1>${esc(w.title||'Untitled')}</h1><p>${esc(w.description||w.subtitle||'')}</p><p class="author">${a.displayName?`著者　${esc(a.displayName)}`:''}</p></div>`;}
+function detailCardMarkup(w){const a=w.author||{};return `<div class="detail-book">${bookMarkup(w)}</div><div class="detail-copy"><small>${esc([w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK')}</small><h1>${esc(w.title||'Untitled')}</h1><p>${esc(w.description||w.subtitle||'')}</p><p class="author">${a.displayName?`著者　${esc(a.displayName)}`:''}</p></div><div class="picked-actions detail-actions-placeholder" aria-hidden="true"><span>あとで読む</span><span>ひらく</span></div>`;}
 function removeDetailPreview(){if(detailPreview){detailPreview.remove();detailPreview=null;}}
 function detailTargetFromDrag(dx,dy){const horizontal=Math.abs(dx)>=Math.abs(dy);const amount=horizontal?dx:dy;return{horizontal,amount,delta:amount<0?1:-1};}
 function canMoveShelf(delta){return shelfIndex+delta>=0&&shelfIndex+delta<shelves.length;}
@@ -125,19 +126,46 @@ function renderPath(){
   const n=Math.floor(pathProgress)%Math.max(1,books.length)+1;
   document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
 }
-function advancePath(amount){pathProgress=Math.max(0,pathProgress+amount);renderPath();}
-function onPathPointerDown(e){if(e.target.closest('button.path-item,#motionStart'))return;pathDrag={id:e.pointerId,y:e.clientY,start:pathProgress};e.currentTarget.setPointerCapture?.(e.pointerId)}
-function onPathPointerMove(e){if(!pathDrag||e.pointerId!==pathDrag.id)return;const dy=e.clientY-pathDrag.y;if(Math.abs(dy)>4)e.preventDefault();pathProgress=Math.max(0,pathDrag.start-dy/115);renderPath()}
-function onPathPointerEnd(e){if(!pathDrag||e.pointerId!==pathDrag.id)return;pathDrag=null;pathProgress=Math.max(0,Math.round(pathProgress*2)/2);renderPath()}
-function onOrientation(e){if(!motionOn||viewMode!=='path'||typeof e.gamma!=='number')return;pathYaw=Math.max(-75,Math.min(75,e.gamma));renderPath()}
-function onMotion(e){if(!motionOn||viewMode!=='path')return;const a=e.accelerationIncludingGravity||e.acceleration;if(!a)return;const mag=Math.sqrt((a.x||0)**2+(a.y||0)**2+(a.z||0)**2);const delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;const now=performance.now();if(delta>1.35&&now-lastStepAt>280){lastStepAt=now;advancePath(.34)}}
+function clampPath(v){return Math.max(0,v)}
+function renderPathFrame(now){
+  if(!pathLastFrame)pathLastFrame=now;
+  const dt=Math.min(34,Math.max(1,now-pathLastFrame));pathLastFrame=now;
+  if(Math.abs(pathVelocity)>.00008){
+    pathProgress=clampPath(pathProgress+pathVelocity*dt);
+    if(pathProgress<=0&&pathVelocity<0)pathVelocity=0;
+    pathVelocity*=Math.pow(.955,dt/16.67);
+    renderPath();
+  }
+  pathRaf=requestAnimationFrame(renderPathFrame);
+}
+function ensurePathLoop(){if(!pathRaf){pathLastFrame=performance.now();pathRaf=requestAnimationFrame(renderPathFrame)}}
+function addPathVelocity(v){pathVelocity=Math.max(-.020,Math.min(.020,pathVelocity+v));ensurePathLoop()}
+function advancePath(amount){pathProgress=clampPath(pathProgress+amount);renderPath();}
+function onPathPointerDown(e){if(e.target.closest('button.path-item,#motionStart'))return;pathVelocity=0;pathDrag={id:e.pointerId,y:e.clientY,start:pathProgress,lastY:e.clientY,lastT:performance.now(),vy:0};e.currentTarget.setPointerCapture?.(e.pointerId)}
+function onPathPointerMove(e){if(!pathDrag||e.pointerId!==pathDrag.id)return;const dy=e.clientY-pathDrag.y;if(Math.abs(dy)>3)e.preventDefault();const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;pathProgress=clampPath(pathDrag.start-dy/88);renderPath()}
+function onPathPointerEnd(e){if(!pathDrag||e.pointerId!==pathDrag.id)return;const d=pathDrag;pathDrag=null;/* up = forward, down = back; release keeps gliding */addPathVelocity(-d.vy/88*.92)}
+function onOrientation(e){if(!motionOn||viewMode!=='path'||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
+function onMotion(e){
+  if(!motionOn||viewMode!=='path')return;
+  const a=e.accelerationIncludingGravity||e.acceleration;if(!a)return;
+  const mag=Math.sqrt((a.x||0)**2+(a.y||0)**2+(a.z||0)**2),delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;
+  const now=performance.now();
+  // V2.7: turn walking vibration into continuous velocity instead of discrete steps.
+  // Energy is smoothed so books flow past rather than jumping one event at a time.
+  pathMotionEnergy=pathMotionEnergy*.78+Math.max(0,delta-.34)*.22;
+  if(now-pathMotionLast>34&&pathMotionEnergy>.18){
+    pathMotionLast=now;
+    const impulse=Math.min(.00155,.00020+pathMotionEnergy*.00048);
+    addPathVelocity(impulse);
+  }
+}
 async function enableMotion(){
   try{
     if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
-    motionOn=true;window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrientation);
-    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='歩く動きを検出すると、道が少しずつ進みます';
-  }catch(_){document.querySelector('#pathSub').textContent='モーションを使えません。上スワイプでも歩けます';}
+    motionOn=true;ensurePathLoop();window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrientation);
+    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='歩くと滑らかに前進。上スワイプで進む／下スワイプで戻る';
+  }catch(_){document.querySelector('#pathSub').textContent='上スワイプで進む／下スワイプで戻れます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>pathDrag=null);document.querySelector('#motionStart').onclick=enableMotion;
