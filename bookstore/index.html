@@ -5,22 +5,19 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
-<link rel="stylesheet" href="./bookstore.css?v=2.11.1">
+<link rel="stylesheet" href="./bookstore.css?v=2.11.2">
 
 <style id="v211-bg">
 /* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
 .store{background-image:linear-gradient(rgba(8,5,3,.16),rgba(8,5,3,.30)),url('./bookstore-v211-bg.png')!important;background-size:cover!important;background-position:center center!important;background-repeat:no-repeat!important;}
 .store>.ambient,.store>.shelf{opacity:0!important;pointer-events:none!important;}
 
-/* V2.11.1: foreground books must read as real objects, not disappear into the illustrated shelves. */
-.book{isolation:isolate;}
-.book::before{content:"";position:absolute;left:50%;top:50%;width:78%;height:82%;transform:translate(-50%,-50%);border-radius:18px;background:radial-gradient(ellipse,rgba(255,226,160,.52) 0%,rgba(255,190,92,.22) 42%,rgba(255,170,64,0) 74%);filter:blur(20px);opacity:calc(.30 + var(--ring-bright,.7)*.42);pointer-events:none;z-index:-1;}
-.book[data-slot="0"]::before{width:105%;height:108%;filter:blur(28px);opacity:.92;}
+/* V2.11.2: glow experiment removed for motion/visibility isolation. */
 .book-face{background:linear-gradient(145deg,#24180f,#0e0a07);}
-.book-face .cover-loading{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(20px,5vw,42px);color:rgba(255,236,198,.82);background:radial-gradient(circle at 50% 42%,rgba(170,105,42,.28),rgba(12,8,5,.94) 72%);transition:opacity .22s ease;}
-.book-face img{opacity:0;transition:opacity .22s ease;}
-.book-face.is-cover-loaded img{opacity:1;}
-.book-face.is-cover-loaded .cover-loading{opacity:0;}
+.book-face .cover-loading{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(20px,5vw,42px);color:rgba(255,236,198,.82);background:radial-gradient(circle at 50% 42%,rgba(170,105,42,.28),rgba(12,8,5,.94) 72%);}
+/* Keep the image opaque whenever it exists; rebuilding the ring must not fade a cached cover in again. */
+.book-face img{opacity:1;}
+.book-face.is-cover-loaded .cover-loading{display:none;}
 </style>
 </head>
 <body>
@@ -54,6 +51,6 @@
     <div class="picked-actions"><button id="saveLater" type="button">あとで読む</button><a id="readBook" href="#">ひらく</a></div>
   </article>
 </div>
-<script src="./bookstore.js?v=2.11.1"></script>
+<script src="./bookstore.js?v=2.11.2"></script>
 </body>
 </html>

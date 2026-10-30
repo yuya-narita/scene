@@ -105,28 +105,43 @@ detailCard.addEventListener('pointerup',e=>{if(!detailDrag||e.pointerId!==detail
 detailCard.addEventListener('pointercancel',()=>{detailDrag=null;resetDetailDrag();});
 document.querySelector('#prev').onclick=()=>move(-1);document.querySelector('#next').onclick=()=>move(1);
 stage.addEventListener('pointerdown',beginDrag);stage.addEventListener('pointermove',dragMove,{passive:false});stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',e=>endDrag(e,true));
-// V2.11.1: PC wheel and trackpad share the ring, but mouse-wheel notches are deliberately gentle.
+// V2.11.2: mouse wheel is a continuous input first, then settles once after input stops.
+// Never magnet-snap between wheel notches; that was fighting the next notch and causing bounce-back.
 let ringWheelTimer=0,ringWheelLast=0,ringWheelV=0,lastMouseNotch=0;
+function settleRingWheel(delay=150){
+  clearTimeout(ringWheelTimer);
+  ringWheelTimer=setTimeout(async()=>{
+    if(viewMode!=='ring'||!picked.hidden||!books.length)return;
+    const token=++spinToken;
+    const from=dragUnits;
+    const target=Math.round(from);
+    // If the gesture did not cross half a book, return gently to the current book.
+    const ok=await animateOffset(from,target,210+Math.abs(target-from)*150,token);
+    if(!ok)return;
+    index=norm(index-Math.round(target));
+    dragUnits=0;
+    render();
+  },delay);
+}
 store.addEventListener('wheel',e=>{
   if(viewMode!=='ring'||!picked.hidden)return;
-  let raw=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
+  const raw=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
   if(Math.abs(raw)<.25)return;
   e.preventDefault();
-  spinToken++;
   const now=performance.now();
-  // Traditional mouse wheels often report large discrete deltas (roughly 40-120+).
-  // Treat each notch as a small controlled nudge and never launch a long inertial coast.
   const mouseLike=e.deltaMode!==0||Math.abs(raw)>=38;
   if(mouseLike){
-    if(now-lastMouseNotch<48)return;
+    // Cancel only an old settle animation. While the wheel is still rolling, just accumulate position.
+    if(now-lastMouseNotch<52)return;
     lastMouseNotch=now;
-    const step=Math.sign(raw)*.22;
+    spinToken++;
+    const step=Math.sign(raw)*.56; // roughly one deliberate notch = one neighbouring book after settle
     applyDrag(dragUnits-step);
-    clearTimeout(ringWheelTimer);
-    ringWheelTimer=setTimeout(()=>{const target=Math.round(dragUnits);glideToOffset(Math.max(-1,Math.min(1,target||(-Math.sign(raw)))));},95);
+    settleRingWheel(155);
     return;
   }
-  // Precision trackpads keep their continuous feel.
+  // Precision trackpads keep the existing continuous/inertial feel.
+  spinToken++;
   const dt=Math.max(8,Math.min(50,now-(ringWheelLast||now-16)));ringWheelLast=now;
   const units=Math.max(-.16,Math.min(.16,raw*.00155));
   applyDrag(dragUnits-units);
