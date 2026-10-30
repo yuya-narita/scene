@@ -138,3 +138,6 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 .stage.room-shelf-ring{transform:translateX(-50%) translateY(var(--shelf-return-y,0px)) scale(var(--shelf-return-scale,1));transform-origin:50% 82%;transition:transform .18s ease,opacity .18s ease}
 .stage.room-shelf-ring.is-dragging{transition:none}
 .stage.room-shelf-ring.is-shelf-returning{opacity:.45}
+
+/* V2.13.2: the expanded ring owns vertical gestures; do not let Safari turn the return swipe into page scroll. */
+.stage.room-shelf-ring{touch-action:none;overscroll-behavior:contain}

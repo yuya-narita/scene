@@ -561,7 +561,27 @@ async function enableMotion(){
   }catch(_){document.querySelector('#pathSub').textContent='下スワイプで進む／上スワイプで戻れます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
-document.querySelector('#roomShelfScroll')?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
+const roomShelfScroller=document.querySelector('#roomShelfScroll');
+let roomShelfTap=null;
+roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false};},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;if(Math.hypot(e.clientX-roomShelfTap.x,e.clientY-roomShelfTap.y)>9)roomShelfTap.moved=true;},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointerup',e=>{
+  if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;if(tap.moved||!roomShelfMode)return;
+  // iPhone Safari can lose hit-testing on perspective-transformed rows. Resolve the
+  // visible cover geometrically instead of trusting event.target.
+  let chosen=null;
+  for(const row of roomShelfScroller.querySelectorAll('.room-shelf-row')){
+    const booksInRow=[...row.querySelectorAll('.room-shelf-book')];
+    for(let offset=0;offset<booksInRow.length;offset++){
+      const r=booksInRow[offset].getBoundingClientRect();
+      if(e.clientX>=r.left-5&&e.clientX<=r.right+5&&e.clientY>=r.top-5&&e.clientY<=r.bottom+5){chosen={start:Number(row.dataset.start)||0,offset};break;}
+    }
+    if(chosen)break;
+  }
+  if(chosen){e.preventDefault();e.stopPropagation();openShelfRow(chosen.start,chosen.offset);}
+},{capture:true,passive:false});
+roomShelfScroller?.addEventListener('pointercancel',()=>{roomShelfTap=null},{capture:true});
+roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
 
