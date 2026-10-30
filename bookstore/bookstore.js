@@ -3,8 +3,8 @@ const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 const stage=document.querySelector('#stage'),picked=document.querySelector('#picked'),store=document.querySelector('#store');
 let books=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
 let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
-let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0,pathDirection=1,pathDirectionUntil=0;
-let pathBookHold=null,pathMotionAxis=0,pathMotionAxisT=0;
+let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
+let pathBookHold=null;
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
 const shelves=[{id:'new',label:'新しく入った本'}];
@@ -150,25 +150,11 @@ function renderPath(){
     el.style.transform=`translate3d(calc(-50% + ${x}px),calc(-50% + ${y}px),${z}px) rotateY(${rot}deg) scale(${scale})`;
     el.style.opacity=opacity;el.style.filter=`blur(${blur}px)`;el.style.zIndex=String(1000-Math.round(phase*30));
     el.dataset.raw=String(raw);
-    // V2.9: motion/RAF used to rebuild the DOM between pointerdown and click, so only
-    // whichever front book happened to survive could be opened. Hold the road while a
-    // visible cover is touched and resolve the tap ourselves.
-    el.addEventListener('pointerdown',e=>{
-      e.stopPropagation();
-      pathVelocity=0;
-      pathBookHold={id:e.pointerId,raw,w,x:e.clientX,y:e.clientY,moved:false};
-      el.setPointerCapture?.(e.pointerId);
-    });
-    el.addEventListener('pointermove',e=>{if(!pathBookHold||pathBookHold.id!==e.pointerId)return;if(Math.hypot(e.clientX-pathBookHold.x,e.clientY-pathBookHold.y)>9)pathBookHold.moved=true;});
-    el.addEventListener('pointerup',e=>{
-      if(!pathBookHold||pathBookHold.id!==e.pointerId)return;
-      const h=pathBookHold;pathBookHold=null;e.stopPropagation();
-      if(h.moved)return;
-      pathVelocity=0;pathProgress=Math.max(0,h.raw);index=norm(h.raw);renderPath();pick(h.w);
-    });
-    el.addEventListener('pointercancel',()=>{pathBookHold=null});
-    // Invisible books leaving the screen must not leave an invisible tap shield behind.
-    el.style.pointerEvents=(opacity>.12&&passed<1.55)?'auto':'none';
+    // V2.10: path covers do not own pointer hit-testing. In perspective, a large
+    // foreground button can geometrically cover a smaller book that is visibly behind it.
+    // The path surface resolves the intended cover from the actual projected rectangles.
+    el.style.pointerEvents='none';
+    el.dataset.raw=String(raw);
     root.appendChild(el);
   }
   const n=norm(Math.round(pathProgress))+1;
@@ -191,68 +177,78 @@ function renderPathFrame(now){
 function ensurePathLoop(){if(!pathRaf){pathLastFrame=performance.now();pathRaf=requestAnimationFrame(renderPathFrame)}}
 function addPathVelocity(v){pathVelocity=Math.max(-.026,Math.min(.026,pathVelocity+v));ensurePathLoop()}
 function advancePath(amount){pathProgress=clampPath(pathProgress+amount);renderPath();}
+function findPathBookAt(x,y){
+  const nodes=[...document.querySelectorAll('#pathBooks .path-item')];
+  let best=null,bestScore=Infinity;
+  for(const el of nodes){
+    const r=el.getBoundingClientRect();
+    if(x<r.left||x>r.right||y<r.top||y>r.bottom)continue;
+    const cx=(r.left+r.right)/2,cy=(r.top+r.bottom)/2;
+    const nx=(x-cx)/Math.max(1,r.width),ny=(y-cy)/Math.max(1,r.height);
+    const score=nx*nx+ny*ny;
+    if(score<bestScore){bestScore=score;best=el}
+  }
+  return best;
+}
 function onPathPointerDown(e){
-  if(e.target.closest('button.path-item,#motionStart'))return;
+  if(e.target.closest('#motionStart'))return;
   pathVelocity=0;
-  pathDrag={id:e.pointerId,y:e.clientY,start:pathProgress,lastY:e.clientY,lastT:performance.now(),vy:0};
+  const hit=findPathBookAt(e.clientX,e.clientY);
+  pathBookHold=hit?{raw:Number(hit.dataset.raw),x:e.clientX,y:e.clientY,moved:false}:null;
+  pathDrag={id:e.pointerId,y:e.clientY,x:e.clientX,start:pathProgress,lastY:e.clientY,lastT:performance.now(),vy:0,moved:false};
   e.currentTarget.setPointerCapture?.(e.pointerId)
 }
 function onPathPointerMove(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
-  const dy=e.clientY-pathDrag.y;if(Math.abs(dy)>3)e.preventDefault();
+  const dy=e.clientY-pathDrag.y,dx=e.clientX-pathDrag.x;
+  if(Math.hypot(dx,dy)>8){pathDrag.moved=true;if(pathBookHold)pathBookHold.moved=true}
+  if(Math.abs(dy)>3)e.preventDefault();
   const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;
-  // Larger denominator than V2.7: direct manipulation is controllable while release inertia supplies speed.
   pathProgress=clampPath(pathDrag.start-dy/102);renderPath()
 }
 function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
-  const d=pathDrag;pathDrag=null;
-  const launch=-d.vy/102*1.34;
-  if(Math.abs(launch)>.00015){
-    pathDirection=launch<0?-1:1;
-    // A deliberate backward swipe owns the direction briefly, so walking vibration cannot
-    // instantly cancel the user's attempt to return to a book they just passed.
-    pathDirectionUntil=performance.now()+1500;
+  const d=pathDrag,h=pathBookHold;pathDrag=null;pathBookHold=null;
+  if(!d.moved&&h&&!h.moved&&Number.isFinite(h.raw)){
+    const raw=h.raw,w=books[norm(raw)];
+    pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w);return;
   }
+  const launch=-d.vy/102*1.34;
   addPathVelocity(launch)
 }
-function onOrientation(e){if(!motionOn||viewMode!=='path'||pathBookHold||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
+function onOrientation(e){if(!motionOn||viewMode!=='path'||pathDrag||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
 function onMotion(e){
-  if(!motionOn||viewMode!=='path'||pathBookHold)return;
+  if(!motionOn||viewMode!=='path'||pathDrag)return;
   const g=e.accelerationIncludingGravity||e.acceleration;if(!g)return;
   const mag=Math.sqrt((g.x||0)**2+(g.y||0)**2+(g.z||0)**2),delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;
   const now=performance.now();
-  pathMotionEnergy=pathMotionEnergy*.80+Math.max(0,delta-.28)*.20;
-
-  // V2.9 experimental fore/aft estimator. Prefer gravity-free acceleration when Safari
-  // supplies it. A short low-pass on the device Z axis lets an actual backward movement
-  // bias the next walking impulses negative instead of forcing every step forward.
-  const a=e.acceleration;
-  if(a&&Number.isFinite(a.z)){
-    pathMotionAxis=pathMotionAxis*.86+a.z*.14;
-    if(now-pathMotionAxisT>180&&Math.abs(pathMotionAxis)>.34){
-      pathDirection=pathMotionAxis<0?-1:1;
-      pathDirectionUntil=now+720;
-      pathMotionAxisT=now;
-    }
-  }
-  if(now-pathMotionLast>28&&pathMotionEnergy>.13){
+  // Forward-only motion. V2.9 fore/aft estimation was intentionally removed: iPhone
+  // acceleration cannot reliably distinguish walking backward and could reverse while
+  // walking forward. A larger dead-zone also prevents a resting phone from creeping.
+  pathMotionEnergy=pathMotionEnergy*.84+Math.max(0,delta-.42)*.16;
+  if(now-pathMotionLast>38&&pathMotionEnergy>.22){
     pathMotionLast=now;
-    const impulse=Math.min(.00205,.00020+pathMotionEnergy*.00060);
-    const dir=now<pathDirectionUntil?pathDirection:1;
-    addPathVelocity(impulse*dir);
+    const impulse=Math.min(.00165,.00016+(pathMotionEnergy-.22)*.00052);
+    addPathVelocity(impulse);
   }
+}
+function onPathWheel(e){
+  if(viewMode!=='path')return;
+  const d=Math.abs(e.deltaY)>=Math.abs(e.deltaX)?e.deltaY:e.deltaX;if(Math.abs(d)<1)return;
+  e.preventDefault();
+  // Wheel down = forward, wheel up = backward. Trackpads get the same continuous feel.
+  addPathVelocity(Math.max(-.0065,Math.min(.0065,d*.000018)));
 }
 async function enableMotion(){
   try{
     if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     motionOn=true;ensurePathLoop();window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrientation);
-    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='前後移動を実験中。上スワイプ＝進む／下スワイプ＝戻る';
+    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='モーション＝前進のみ。上スワイプ＝進む／下スワイプ＝戻る';
   }catch(_){document.querySelector('#pathSub').textContent='上スワイプで進む／下スワイプで戻れます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
-const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>pathDrag=null);document.querySelector('#motionStart').onclick=enableMotion;
+const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
 
 async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}render();}catch(e){document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
