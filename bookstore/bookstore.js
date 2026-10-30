@@ -7,7 +7,9 @@ let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0
 let pathBookHold=null;
 let roomId='new',routeTransitioning=false;
 const roomHistory=[];
-const FANTASY_BRANCH_AT=4.2;
+const PATH_DRAG_PX_PER_BOOK=150;
+const PATH_MAX_VELOCITY=.008;
+const PATH_EXIT_PAD=1.35;
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
@@ -281,12 +283,17 @@ function setRoomVisual(id){
   document.querySelector('.sign strong').textContent=fantasy?'ファンタジーの本棚':'新しく入った本';
   shelfIndex=fantasy?1:0;
 }
+function pathEnd(){return Math.max(0,books.length-1+PATH_EXIT_PAD)}
+function atFantasyGate(){return roomId==='path'&&pathProgress>=Math.max(0,books.length-.35)}
 function updateFantasyGate(){
   const gate=document.querySelector('#fantasyGate');if(!gate)return;
-  const active=roomId==='path'&&pathProgress>=FANTASY_BRANCH_AT&&pathProgress<=FANTASY_BRANCH_AT+3.4;
+  const active=atFantasyGate();
   gate.hidden=!active;
-  document.querySelector('#bookPath')?.classList.toggle('at-fantasy-branch',active);
-  if(active)document.querySelector('#pathSub').textContent='右へスワイプすると、ファンタジーの森へ';
+  document.querySelector('#bookPath')?.classList.toggle('at-fantasy-gate',active);
+  if(active){
+    document.querySelector('#pathStatus').textContent='本の道の終点';
+    document.querySelector('#pathSub').textContent='もう一度、上へスワイプするとファンタジーの森へ';
+  }
 }
 async function enterFantasyRoom(){
   if(routeTransitioning)return;routeTransitioning=true;pathVelocity=0;
@@ -324,7 +331,8 @@ function renderPath(){
   // long enough to streak out through the left/right edges instead of popping away.
   const base=Math.floor(pathProgress),from=-3,to=10;
   for(let k=from;k<=to;k++){
-    const raw=base+k,w=books[norm(raw)],phase=raw-pathProgress;
+    const raw=base+k;if(raw<0||raw>=books.length)continue;
+    const w=books[raw],phase=raw-pathProgress;
     if(phase<-2.35||phase>9.5)continue;
     const el=document.createElement('button');el.className='path-item';el.type='button';el.setAttribute('aria-label',w.title||'本');el.innerHTML=bookMarkup(w);
     const side=(raw%2===0?-1:1);
@@ -350,25 +358,25 @@ function renderPath(){
     el.dataset.raw=String(raw);
     root.appendChild(el);hydrateCoverLoadState(el);
   }
-  const n=norm(Math.round(pathProgress))+1;
+  const n=Math.min(books.length,Math.max(1,Math.round(pathProgress)+1));
   document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;updateFantasyGate();
 }
-function clampPath(v){return Math.max(0,v)}
+function clampPath(v){return Math.max(0,Math.min(pathEnd(),v))}
 function renderPathFrame(now){
   if(!pathLastFrame)pathLastFrame=now;
   const dt=Math.min(34,Math.max(1,now-pathLastFrame));pathLastFrame=now;
   if(pathBookHold||!picked.hidden){pathRaf=requestAnimationFrame(renderPathFrame);return;}
   if(Math.abs(pathVelocity)>.00005){
     pathProgress=clampPath(pathProgress+pathVelocity*dt);
-    if(pathProgress<=0&&pathVelocity<0)pathVelocity=0;
+    if((pathProgress<=0&&pathVelocity<0)||(pathProgress>=pathEnd()&&pathVelocity>0))pathVelocity=0;
     // Long, smooth coast. Backward velocity uses the exact same physics as forward velocity.
-    pathVelocity*=Math.pow(.968,dt/16.67);
+    pathVelocity*=Math.pow(.94,dt/16.67);
     renderPath();
   }else pathVelocity=0;
   pathRaf=requestAnimationFrame(renderPathFrame);
 }
 function ensurePathLoop(){if(!pathRaf){pathLastFrame=performance.now();pathRaf=requestAnimationFrame(renderPathFrame)}}
-function addPathVelocity(v){pathVelocity=Math.max(-.026,Math.min(.026,pathVelocity+v));ensurePathLoop()}
+function addPathVelocity(v){pathVelocity=Math.max(-PATH_MAX_VELOCITY,Math.min(PATH_MAX_VELOCITY,pathVelocity+v));ensurePathLoop()}
 function advancePath(amount){pathProgress=clampPath(pathProgress+amount);renderPath();}
 function findPathBookAt(x,y){
   const nodes=[...document.querySelectorAll('#pathBooks .path-item')];
@@ -395,21 +403,19 @@ function onPathPointerMove(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const dy=e.clientY-pathDrag.y,dx=e.clientX-pathDrag.x;
   if(Math.hypot(dx,dy)>8){pathDrag.moved=true;if(pathBookHold)pathBookHold.moved=true}
-  if(Math.abs(dx)>Math.abs(dy)*1.25&&pathProgress>=FANTASY_BRANCH_AT&&pathProgress<=FANTASY_BRANCH_AT+3.4){e.preventDefault();document.querySelector('#fantasyGate')?.style.setProperty('--branch-pull',String(Math.max(0,Math.min(1,dx/120))));return;}
   if(Math.abs(dy)>3)e.preventDefault();
   const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;
-  pathProgress=clampPath(pathDrag.start-dy/102);renderPath()
+  pathProgress=clampPath(pathDrag.start-dy/PATH_DRAG_PX_PER_BOOK);renderPath()
 }
 function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
-  document.querySelector('#fantasyGate')?.style.removeProperty('--branch-pull');
-  if(dx>72&&Math.abs(dx)>Math.abs(dy)*1.2&&pathProgress>=FANTASY_BRANCH_AT&&pathProgress<=FANTASY_BRANCH_AT+3.4){enterFantasyRoom();return;}
+  if(atFantasyGate()&&dy<-48&&Math.abs(dy)>Math.abs(dx)*.75){enterFantasyRoom();return;}
   if(!d.moved&&h&&!h.moved&&Number.isFinite(h.raw)){
     const raw=h.raw,w=books[norm(raw)];
     pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w);return;
   }
-  const launch=-d.vy/102*1.34;
+  const launch=Math.max(-PATH_MAX_VELOCITY,Math.min(PATH_MAX_VELOCITY,-d.vy/PATH_DRAG_PX_PER_BOOK*.82));
   addPathVelocity(launch)
 }
 function onOrientation(e){if(!motionOn||viewMode!=='path'||pathDrag||!picked.hidden||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
@@ -434,7 +440,7 @@ function onPathWheel(e){
   const d=Math.abs(e.deltaY)>=Math.abs(e.deltaX)?e.deltaY:e.deltaX;if(Math.abs(d)<1)return;
   e.preventDefault();
   // Wheel down = forward, wheel up = backward. Trackpads get the same continuous feel.
-  addPathVelocity(Math.max(-.0065,Math.min(.0065,d*.000018)));
+  addPathVelocity(Math.max(-.0038,Math.min(.0038,d*.000012)));
 }
 async function enableMotion(){
   try{
