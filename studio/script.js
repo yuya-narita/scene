@@ -13768,7 +13768,10 @@ function openDesktopBackgroundDetail(){
       panel.appendChild(note);
 
       const enable=document.createElement('label');enable.className='ahako-360-toggle';
-      const cb=document.createElement('input');cb.type='checkbox';cb.checked=(explicit()?.projection===projection);
+      const cb=document.createElement('input');cb.type='checkbox';
+      // Spatial mode is cumulative in Player. Reflect the effective mode here too,
+      // so an inherited panorama/360 section does not look disabled in Studio.
+      cb.checked=(effectiveBackgroundAt(index)?.projection===projection);
       const cbt=document.createElement('span');cbt.textContent=is360?u('このSceneを360°背景にする','Use 360° background in this Scene'):u('このSceneをパノラマ背景にする','Use panorama background in this Scene');
       enable.append(cb,cbt);panel.appendChild(enable);
 
@@ -13813,7 +13816,35 @@ function openDesktopBackgroundDetail(){
         : u('操作：左右スワイプ／端末モーションで見渡し、画像端で停止します。上下も少し動かせます。◎で現在の視点を固定できます。','Swipe or move the device to look around; movement stops at the image edges. Use ◎ to lock the view.');
       panel.appendChild(op);
 
-      cb.addEventListener('change',()=>{const bg=ensureImageState();bg.projection=cb.checked?projection:'flat';if(cb.checked){bg.motionSensor=bg.motionSensor!==false;bg.motion={type:'none'};}apply();});
+      cb.addEventListener('change',()=>{
+        const bg=ensureImageState();
+        bg.projection=cb.checked?projection:'flat';
+        if(cb.checked){
+          bg.motionSensor=bg.motionSensor!==false;
+          bg.motion={type:'none'};
+          // Panorama is a section state, like 360°. Keep the same panorama mode
+          // while the same effective background image continues, instead of
+          // requiring a checkbox on every Scene. Different/cleared backgrounds
+          // remain untouched and start their own section.
+          if(projection==='panorama'){
+            const source=effectiveBackgroundAt(index)?.src||previousFraming()?.src||'';
+            for(let i=index+1;i<(workingDocument?.scenes?.length||0);i++){
+              const sc=workingDocument.scenes[i];
+              if(!sc?.presentation)continue;
+              const before=effectiveBackgroundAt(i-1);
+              const local=sc.presentation.background;
+              const localSrc=(local&&Object.prototype.hasOwnProperty.call(local,'src'))?local.src:undefined;
+              if(localSrc!==undefined && localSrc!=='' && localSrc!==source)break;
+              if(localSrc==='')break;
+              if((before?.src||'')!==source)break;
+              const target=(local&&typeof local==='object')?local:(sc.presentation.background={_editorManaged:true});
+              target.projection='panorama';
+              target.motionSensor=target.motionSensor!==false;
+            }
+          }
+        }
+        apply();
+      });
       return panel;
     };
 
