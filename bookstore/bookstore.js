@@ -63,6 +63,57 @@ function commitRingSettle(step){
   });
   updateFocusPanel();
 }
+// V2.11.4: first-view shelf spin. It uses the same ring coordinates and the same
+// cover DOM from start to finish, so the final landing does not rebuild or "tighten" the cover.
+let firstViewSpinPlayed=false;
+function wrappedOffsetFrom(center,i){
+  let d=i-center,n=books.length;
+  if(!n)return 0;
+  while(d>n/2)d-=n;
+  while(d<-n/2)d+=n;
+  return d;
+}
+function renderFirstViewRing(center){
+  stage.innerHTML='';
+  books.forEach((w,i)=>{
+    const b=document.createElement('button');b.className='book';b.dataset.index=i;
+    b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);
+    b.innerHTML=bookMarkup(w);setBookPose(b,wrappedOffsetFrom(center,i));
+    b.onclick=()=>{if(Date.now()<suppressClickUntil||stage.classList.contains('is-intro-spinning'))return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};
+    stage.appendChild(b);
+  });
+  hydrateCoverLoadState(stage);updateFocusPanel();
+}
+function playFirstViewSpin(){
+  if(firstViewSpinPlayed||!books.length||viewMode!=='ring')return;
+  firstViewSpinPlayed=true;
+  const token=++spinToken;
+  const travel=Math.min(10,Math.max(5.5,books.length*.42));
+  const duration=1650;
+  const start=index-travel;
+  suppressClickUntil=Date.now()+duration+250;
+  stage.classList.add('is-intro-spinning');
+  renderFirstViewRing(start);
+  const t0=performance.now();
+  function frame(now){
+    if(token!==spinToken){stage.classList.remove('is-intro-spinning');return;}
+    const t=Math.min(1,(now-t0)/duration);
+    // Quintic ease-out: clearly fast at entry, then a long smooth deceleration into the selected book.
+    const e=1-Math.pow(1-t,5);
+    const center=start+(index-start)*e;
+    stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index))));
+    if(t<1){requestAnimationFrame(frame);return;}
+    dragUnits=0;
+    stage.querySelectorAll('.book').forEach(b=>{
+      const i=Number(b.dataset.index),slot=signedOffset(i);
+      if(Math.abs(slot)>5){b.remove();return;}
+      b.dataset.slot=String(slot);setBookPose(b,slot);
+    });
+    stage.classList.remove('is-intro-spinning');
+    updateFocusPanel();
+  }
+  requestAnimationFrame(frame);
+}
 function snapTo(i){index=norm(i);dragUnits=0;render();}
 function move(delta){if(books.length)glideToOffset(-delta);}
 function applyDrag(units){dragUnits=units;stage.querySelectorAll('.book').forEach(b=>{const slot=Number(b.dataset.slot||0);setBookPose(b,slot+units);});}
@@ -323,5 +374,5 @@ async function enableMotion(){
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
 
-async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}render();}catch(e){document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}render();requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
