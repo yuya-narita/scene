@@ -2,6 +2,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 const stage=document.querySelector('#stage'),picked=document.querySelector('#picked'),store=document.querySelector('#store');
 let books=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
+let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastStepAt=0,lastAccelMag=0;
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
 const shelves=[{id:'new',label:'新しく入った本'}];
@@ -20,12 +21,13 @@ function setBookPose(b,pos){
   const depth=1-Math.cos(rad); // 0 at the viewer, grows continuously toward the back
   // V2.5: keep the ring, but make the viewing position a pronounced focal crest.
   // The non-linear falloff keeps neighbours visibly behind instead of almost the same size.
-  const focus=Math.exp(-Math.pow(Math.abs(angle)/19,2));
-  const z=-55 + focus*245 - depth*150;
+  const focus=Math.exp(-Math.pow(Math.abs(angle)/23,2));
+  // V2.6: focal strength sits between V2.4 and V2.5 — clear centre without billboard dominance.
+  const z=-55 + focus*190 - depth*145;
   const y=depth*14;
-  const scale=Math.max(.38,.64 + focus*.62 - depth*.08);
-  const bright=Math.max(.42,.72 + focus*.38 - depth*.12);
-  const opacity=Math.max(.20,.68 + focus*.32 - depth*.20);
+  const scale=Math.max(.40,.64 + focus*.46 - depth*.07);
+  const bright=Math.max(.44,.74 + focus*.30 - depth*.11);
+  const opacity=Math.max(.22,.70 + focus*.28 - depth*.18);
   b.style.setProperty('--ring-x',`${x}px`);
   b.style.setProperty('--ring-y',`${y}px`);
   b.style.setProperty('--ring-z',`${z}px`);
@@ -91,5 +93,54 @@ detailCard.addEventListener('pointercancel',()=>{detailDrag=null;resetDetailDrag
 document.querySelector('#prev').onclick=()=>move(-1);document.querySelector('#next').onclick=()=>move(1);
 stage.addEventListener('pointerdown',beginDrag);stage.addEventListener('pointermove',dragMove,{passive:false});stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',e=>endDrag(e,true));
 store.addEventListener('wheel',e=>{if(Math.abs(e.deltaX)>Math.abs(e.deltaY)&&Math.abs(e.deltaX)>12){e.preventDefault();move(e.deltaX>0?1:-1)}},{passive:false});
+
+function setViewMode(mode){
+  viewMode=mode==='path'?'path':'ring';
+  document.querySelector('#ringMode').classList.toggle('is-active',viewMode==='ring');
+  document.querySelector('#pathMode').classList.toggle('is-active',viewMode==='path');
+  stage.hidden=viewMode!=='ring';
+  document.querySelector('#bookPath').hidden=viewMode!=='path';
+  document.querySelector('#prev').hidden=viewMode!=='ring';document.querySelector('#next').hidden=viewMode!=='ring';
+  document.querySelector('#focusPanel').hidden=viewMode!=='ring';document.querySelector('#hint').hidden=viewMode!=='ring';
+  if(viewMode==='path')renderPath();
+}
+function renderPath(){
+  const root=document.querySelector('#pathBooks');if(!root||!books.length)return;root.innerHTML='';
+  // A deliberately approximate path: movement unlocks distance; it is not room-scale tracking.
+  const visible=10;
+  for(let k=0;k<visible;k++){
+    const raw=Math.floor(pathProgress)+k-1, w=books[norm(raw)], phase=(raw-pathProgress);
+    if(phase<-.9)continue;
+    const el=document.createElement('button');el.className='path-item';el.type='button';el.setAttribute('aria-label',w.title||'本');el.innerHTML=bookMarkup(w);
+    const z=-phase*145+70;
+    const side=(raw%2===0?-1:1);
+    const spread=Math.min(150,54+Math.max(0,phase)*18);
+    const x=side*spread-pathYaw*1.25;
+    const scale=Math.max(.30,1-Math.max(0,phase)*.105);
+    const opacity=Math.max(.18,1-Math.max(0,phase)*.095);
+    el.style.transform=`translate3d(calc(-50% + ${x}px),calc(-50% + ${phase*13}px),${z}px) rotateY(${side*-14}deg) scale(${scale})`;
+    el.style.opacity=opacity;el.style.zIndex=String(1000-Math.round(phase*30));
+    el.onclick=()=>{index=norm(raw);pick(w)};root.appendChild(el);
+  }
+  const n=Math.floor(pathProgress)%Math.max(1,books.length)+1;
+  document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
+}
+function advancePath(amount){pathProgress=Math.max(0,pathProgress+amount);renderPath();}
+function onPathPointerDown(e){if(e.target.closest('button.path-item,#motionStart'))return;pathDrag={id:e.pointerId,y:e.clientY,start:pathProgress};e.currentTarget.setPointerCapture?.(e.pointerId)}
+function onPathPointerMove(e){if(!pathDrag||e.pointerId!==pathDrag.id)return;const dy=e.clientY-pathDrag.y;if(Math.abs(dy)>4)e.preventDefault();pathProgress=Math.max(0,pathDrag.start-dy/115);renderPath()}
+function onPathPointerEnd(e){if(!pathDrag||e.pointerId!==pathDrag.id)return;pathDrag=null;pathProgress=Math.max(0,Math.round(pathProgress*2)/2);renderPath()}
+function onOrientation(e){if(!motionOn||viewMode!=='path'||typeof e.gamma!=='number')return;pathYaw=Math.max(-75,Math.min(75,e.gamma));renderPath()}
+function onMotion(e){if(!motionOn||viewMode!=='path')return;const a=e.accelerationIncludingGravity||e.acceleration;if(!a)return;const mag=Math.sqrt((a.x||0)**2+(a.y||0)**2+(a.z||0)**2);const delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;const now=performance.now();if(delta>1.35&&now-lastStepAt>280){lastStepAt=now;advancePath(.34)}}
+async function enableMotion(){
+  try{
+    if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
+    if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
+    motionOn=true;window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrientation);
+    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='歩く動きを検出すると、道が少しずつ進みます';
+  }catch(_){document.querySelector('#pathSub').textContent='モーションを使えません。上スワイプでも歩けます';}
+}
+document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
+const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>pathDrag=null);document.querySelector('#motionStart').onclick=enableMotion;
+
 async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}render();}catch(e){document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
