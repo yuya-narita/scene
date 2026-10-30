@@ -3,7 +3,7 @@ const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 const stage=document.querySelector('#stage'),picked=document.querySelector('#picked'),store=document.querySelector('#store');
 let books=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
 let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
-let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
+let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0,pathDirection=1,pathDirectionUntil=0;
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
 const shelves=[{id:'new',label:'新しく入った本'}];
@@ -95,68 +95,118 @@ document.querySelector('#prev').onclick=()=>move(-1);document.querySelector('#ne
 stage.addEventListener('pointerdown',beginDrag);stage.addEventListener('pointermove',dragMove,{passive:false});stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',e=>endDrag(e,true));
 store.addEventListener('wheel',e=>{if(Math.abs(e.deltaX)>Math.abs(e.deltaY)&&Math.abs(e.deltaX)>12){e.preventDefault();move(e.deltaX>0?1:-1)}},{passive:false});
 
+function syncRingFromPath(){
+  if(!books.length)return;
+  index=norm(Math.round(pathProgress));
+  dragUnits=0;
+}
+function syncPathFromRing(){
+  if(!books.length)return;
+  // Keep the current lap where possible, but align the road to the book selected in the ring.
+  const lap=Math.floor(pathProgress/Math.max(1,books.length))*books.length;
+  let candidate=lap+index;
+  const span=Math.max(1,books.length);
+  while(candidate-pathProgress>span/2)candidate-=span;
+  while(pathProgress-candidate>span/2)candidate+=span;
+  pathProgress=Math.max(0,candidate);
+}
 function setViewMode(mode){
-  viewMode=mode==='path'?'path':'ring';
+  const next=mode==='path'?'path':'ring';
+  if(next===viewMode)return;
+  if(next==='ring')syncRingFromPath();else syncPathFromRing();
+  viewMode=next;
   document.querySelector('#ringMode').classList.toggle('is-active',viewMode==='ring');
   document.querySelector('#pathMode').classList.toggle('is-active',viewMode==='path');
   stage.hidden=viewMode!=='ring';
   document.querySelector('#bookPath').hidden=viewMode!=='path';
   document.querySelector('#prev').hidden=viewMode!=='ring';document.querySelector('#next').hidden=viewMode!=='ring';
   document.querySelector('#focusPanel').hidden=viewMode!=='ring';document.querySelector('#hint').hidden=viewMode!=='ring';
-  if(viewMode==='path')renderPath();
+  if(viewMode==='path')renderPath();else render();
 }
 function renderPath(){
   const root=document.querySelector('#pathBooks');if(!root||!books.length)return;root.innerHTML='';
-  // A deliberately approximate path: movement unlocks distance; it is not room-scale tracking.
-  const visible=10;
-  for(let k=0;k<visible;k++){
-    const raw=Math.floor(pathProgress)+k-1, w=books[norm(raw)], phase=(raw-pathProgress);
-    if(phase<-.9)continue;
+  // V2.8: the road is genuinely bidirectional. Keep a few already-passed books alive
+  // long enough to streak out through the left/right edges instead of popping away.
+  const base=Math.floor(pathProgress),from=-3,to=10;
+  for(let k=from;k<=to;k++){
+    const raw=base+k,w=books[norm(raw)],phase=raw-pathProgress;
+    if(phase<-2.35||phase>9.5)continue;
     const el=document.createElement('button');el.className='path-item';el.type='button';el.setAttribute('aria-label',w.title||'本');el.innerHTML=bookMarkup(w);
-    const z=-phase*145+70;
     const side=(raw%2===0?-1:1);
-    const spread=Math.min(150,54+Math.max(0,phase)*18);
-    const x=side*spread-pathYaw*1.25;
-    const scale=Math.max(.30,1-Math.max(0,phase)*.105);
-    const opacity=Math.max(.18,1-Math.max(0,phase)*.095);
-    el.style.transform=`translate3d(calc(-50% + ${x}px),calc(-50% + ${phase*13}px),${z}px) rotateY(${side*-14}deg) scale(${scale})`;
-    el.style.opacity=opacity;el.style.zIndex=String(1000-Math.round(phase*30));
-    el.onclick=()=>{index=norm(raw);pick(w)};root.appendChild(el);
+    const future=Math.max(0,phase),passed=Math.max(0,-phase);
+    // Future books sit down the road. Once they pass the viewer they accelerate toward
+    // a screen edge, grow slightly, blur and fade: a visual "rush past" rather than a cut.
+    const spread=Math.min(178,50+future*19);
+    const exit=Math.min(innerWidth*.72,passed*(innerWidth*.34+70));
+    const x=side*(spread+exit)-pathYaw*1.25;
+    const y=future*13-passed*7;
+    const z=-future*145+70+passed*245;
+    const scale=passed>0?Math.min(1.34,1+passed*.18):Math.max(.28,1-future*.105);
+    const opacity=passed>0?Math.max(0,1-passed*.58):Math.max(.16,1-future*.095);
+    const blur=passed>0?Math.min(8,passed*3.2):0;
+    const rot=side*(-14-passed*9);
+    el.style.transform=`translate3d(calc(-50% + ${x}px),calc(-50% + ${y}px),${z}px) rotateY(${rot}deg) scale(${scale})`;
+    el.style.opacity=opacity;el.style.filter=`blur(${blur}px)`;el.style.zIndex=String(1000-Math.round(phase*30));
+    el.dataset.raw=String(raw);
+    el.onclick=e=>{e.stopPropagation();pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w)};
+    root.appendChild(el);
   }
-  const n=Math.floor(pathProgress)%Math.max(1,books.length)+1;
+  const n=norm(Math.round(pathProgress))+1;
   document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
 }
 function clampPath(v){return Math.max(0,v)}
 function renderPathFrame(now){
   if(!pathLastFrame)pathLastFrame=now;
   const dt=Math.min(34,Math.max(1,now-pathLastFrame));pathLastFrame=now;
-  if(Math.abs(pathVelocity)>.00008){
+  if(Math.abs(pathVelocity)>.00005){
     pathProgress=clampPath(pathProgress+pathVelocity*dt);
     if(pathProgress<=0&&pathVelocity<0)pathVelocity=0;
-    pathVelocity*=Math.pow(.955,dt/16.67);
+    // Long, smooth coast. Backward velocity uses the exact same physics as forward velocity.
+    pathVelocity*=Math.pow(.968,dt/16.67);
     renderPath();
-  }
+  }else pathVelocity=0;
   pathRaf=requestAnimationFrame(renderPathFrame);
 }
 function ensurePathLoop(){if(!pathRaf){pathLastFrame=performance.now();pathRaf=requestAnimationFrame(renderPathFrame)}}
-function addPathVelocity(v){pathVelocity=Math.max(-.020,Math.min(.020,pathVelocity+v));ensurePathLoop()}
+function addPathVelocity(v){pathVelocity=Math.max(-.026,Math.min(.026,pathVelocity+v));ensurePathLoop()}
 function advancePath(amount){pathProgress=clampPath(pathProgress+amount);renderPath();}
-function onPathPointerDown(e){if(e.target.closest('button.path-item,#motionStart'))return;pathVelocity=0;pathDrag={id:e.pointerId,y:e.clientY,start:pathProgress,lastY:e.clientY,lastT:performance.now(),vy:0};e.currentTarget.setPointerCapture?.(e.pointerId)}
-function onPathPointerMove(e){if(!pathDrag||e.pointerId!==pathDrag.id)return;const dy=e.clientY-pathDrag.y;if(Math.abs(dy)>3)e.preventDefault();const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;pathProgress=clampPath(pathDrag.start-dy/88);renderPath()}
-function onPathPointerEnd(e){if(!pathDrag||e.pointerId!==pathDrag.id)return;const d=pathDrag;pathDrag=null;/* up = forward, down = back; release keeps gliding */addPathVelocity(-d.vy/88*.92)}
+function onPathPointerDown(e){
+  if(e.target.closest('button.path-item,#motionStart'))return;
+  pathVelocity=0;
+  pathDrag={id:e.pointerId,y:e.clientY,start:pathProgress,lastY:e.clientY,lastT:performance.now(),vy:0};
+  e.currentTarget.setPointerCapture?.(e.pointerId)
+}
+function onPathPointerMove(e){
+  if(!pathDrag||e.pointerId!==pathDrag.id)return;
+  const dy=e.clientY-pathDrag.y;if(Math.abs(dy)>3)e.preventDefault();
+  const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;
+  // Larger denominator than V2.7: direct manipulation is controllable while release inertia supplies speed.
+  pathProgress=clampPath(pathDrag.start-dy/102);renderPath()
+}
+function onPathPointerEnd(e){
+  if(!pathDrag||e.pointerId!==pathDrag.id)return;
+  const d=pathDrag;pathDrag=null;
+  const launch=-d.vy/102*1.34;
+  if(Math.abs(launch)>.00015){
+    pathDirection=launch<0?-1:1;
+    // A deliberate backward swipe owns the direction briefly, so walking vibration cannot
+    // instantly cancel the user's attempt to return to a book they just passed.
+    pathDirectionUntil=performance.now()+1500;
+  }
+  addPathVelocity(launch)
+}
 function onOrientation(e){if(!motionOn||viewMode!=='path'||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
 function onMotion(e){
   if(!motionOn||viewMode!=='path')return;
   const a=e.accelerationIncludingGravity||e.acceleration;if(!a)return;
   const mag=Math.sqrt((a.x||0)**2+(a.y||0)**2+(a.z||0)**2),delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;
   const now=performance.now();
-  // V2.7: turn walking vibration into continuous velocity instead of discrete steps.
-  // Energy is smoothed so books flow past rather than jumping one event at a time.
-  pathMotionEnergy=pathMotionEnergy*.78+Math.max(0,delta-.34)*.22;
-  if(now-pathMotionLast>34&&pathMotionEnergy>.18){
+  pathMotionEnergy=pathMotionEnergy*.80+Math.max(0,delta-.28)*.20;
+  if(now-pathMotionLast>28&&pathMotionEnergy>.13){
     pathMotionLast=now;
-    const impulse=Math.min(.00155,.00020+pathMotionEnergy*.00048);
-    addPathVelocity(impulse);
+    const impulse=Math.min(.00185,.00018+pathMotionEnergy*.00055);
+    const dir=now<pathDirectionUntil?pathDirection:1;
+    addPathVelocity(impulse*dir);
   }
 }
 async function enableMotion(){
@@ -164,7 +214,7 @@ async function enableMotion(){
     if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     motionOn=true;ensurePathLoop();window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrientation);
-    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='歩くと滑らかに前進。上スワイプで進む／下スワイプで戻る';
+    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='歩くと前進。上スワイプで進む／下スワイプで本当に戻る';
   }catch(_){document.querySelector('#pathSub').textContent='上スワイプで進む／下スワイプで戻れます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');

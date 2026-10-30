@@ -75,3 +75,9 @@
   .detail-card>.picked-actions button,.detail-card>.picked-actions a,.detail-actions-placeholder span{flex:1;min-width:0;height:50px;padding:0 8px;display:flex;align-items:center;justify-content:center}
   .detail-preview{translate:0 0}
 }
+
+/* V2.8 — bidirectional Book Path + edge fly-by */
+.book-path{overflow:hidden;touch-action:none}
+.path-books{overflow:visible}
+.path-item{transition:none;backface-visibility:hidden;transform-origin:50% 50%;pointer-events:auto}
+.path-item .book-shell{pointer-events:none}
