@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
-<link rel="stylesheet" href="./bookstore.css?v=2.2">
+<link rel="stylesheet" href="./bookstore.css?v=2.3">
 </head>
 <body>
 <header class="shop-head">
@@ -21,12 +21,13 @@
     <button class="nav prev" id="prev" aria-label="前の本">‹</button>
     <div class="stage" id="stage" aria-live="polite"></div>
     <button class="nav next" id="next" aria-label="次の本">›</button>
-    <div class="hint" id="hint">左右にスワイプして、棚を眺める</div>
+    <div class="focus-panel" id="focusPanel"><div><small id="focusShelf">新しく入った本</small><strong id="focusTitle">読み込み中…</strong><span id="focusAuthor"></span></div><button id="focusPick" type="button">手に取る</button></div><div class="hint" id="hint">左右にスワイプして、棚を眺める</div>
   </section>
   <section class="below"><div><small>IN THE STORE</small><strong id="bookCount">読み込み中…</strong></div><p>いまは公開中の本を、そのまま店内に並べています。検索やランキングより先に、まず表紙が目に入る書店です。</p></section>
 </main>
 <div class="detail-layer" id="picked" hidden>
   <button class="detail-dismiss" id="detailDismiss" aria-label="棚に戻る"></button>
+  <div class="axis-hint" id="axisHint">左右：同じ棚の本　／　上下：棚を移動</div>
   <article class="detail-card">
     <div class="detail-book" id="pickedCover"></div>
     <div class="detail-copy">
@@ -35,6 +36,6 @@
     </div>
   </article>
 </div>
-<script src="./bookstore.js?v=2.2"></script>
+<script src="./bookstore.js?v=2.3"></script>
 </body>
 </html>
