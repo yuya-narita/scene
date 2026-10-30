@@ -18,11 +18,14 @@ function setBookPose(b,pos){
   const radius=Math.min(430,Math.max(320,stage.clientWidth*.52));
   const x=Math.sin(rad)*radius;
   const depth=1-Math.cos(rad); // 0 at the viewer, grows continuously toward the back
-  const z=105-depth*250;
-  const y=depth*12;
-  const scale=Math.max(.42,1.17-depth*.34);
-  const bright=Math.max(.48,1.06-depth*.28);
-  const opacity=Math.max(.24,1-depth*.34);
+  // V2.5: keep the ring, but make the viewing position a pronounced focal crest.
+  // The non-linear falloff keeps neighbours visibly behind instead of almost the same size.
+  const focus=Math.exp(-Math.pow(Math.abs(angle)/19,2));
+  const z=-55 + focus*245 - depth*150;
+  const y=depth*14;
+  const scale=Math.max(.38,.64 + focus*.62 - depth*.08);
+  const bright=Math.max(.42,.72 + focus*.38 - depth*.12);
+  const opacity=Math.max(.20,.68 + focus*.32 - depth*.20);
   b.style.setProperty('--ring-x',`${x}px`);
   b.style.setProperty('--ring-y',`${y}px`);
   b.style.setProperty('--ring-z',`${z}px`);
@@ -45,16 +48,19 @@ function animateOffset(from,to,duration,token){return new Promise(resolve=>{cons
 async function glideToOffset(target){if(!books.length)return;const token=++spinToken;const from=dragUnits;target=Math.max(-4,Math.min(4,target));const dist=Math.abs(target-from);const ok=await animateOffset(from,target,190+dist*72,token);if(!ok)return;const step=-Math.round(target);index=norm(index+step);dragUnits=0;render();}
 async function coastAndSnap(initialUnits,velocityUnitsMs){
   const token=++spinToken;let pos=initialUnits,v=velocityUnitsMs,last=performance.now();
-  // Tuned for iPhone: a normal flick travels ~1–2 books; an intentional hard flick tops out near 4.
-  const maxTravel=3.75,origin=initialUnits;
-  await new Promise(resolve=>{function frame(now){if(token!==spinToken)return resolve();const dt=Math.min(32,now-last);last=now;pos+=v*dt;const travel=pos-origin;if(Math.abs(travel)>maxTravel){pos=origin+Math.sign(travel)*maxTravel;v*=.42;}v*=Math.pow(.965,dt/16.67);applyDrag(pos);if(Math.abs(v)>.0018)requestAnimationFrame(frame);else resolve();}requestAnimationFrame(frame);});
+  // V2.5: velocity is allowed to decay naturally. Only a soft safety envelope prevents runaway spins.
+  // There is no hard clamp/brake in the visible part of the coast.
+  const origin=initialUnits;
+  const speed=Math.abs(v);
+  const softTravel=Math.min(5.6,2.2+speed*210);
+  await new Promise(resolve=>{function frame(now){if(token!==spinToken)return resolve();const dt=Math.min(32,now-last);last=now;pos+=v*dt;const travel=Math.abs(pos-origin);const edge=Math.max(0,(travel-softTravel*.82)/(softTravel*.18));const friction=.974-(Math.min(1,edge)*.010);v*=Math.pow(friction,dt/16.67);applyDrag(pos);if(Math.abs(v)>.00115&&travel<softTravel)requestAnimationFrame(frame);else resolve();}requestAnimationFrame(frame);});
   if(token!==spinToken)return;
-  const target=Math.max(-4,Math.min(4,Math.round(pos)));
-  const ok=await animateOffset(pos,target,220+Math.abs(target-pos)*180,token);if(!ok)return;
-  // Rebase only after the exact same visual pose has reached the center. No final-frame swap/pop.
+  const target=Math.round(pos);
+  // Magnetic capture starts only after the coast is already slow, so it feels like settling, not braking.
+  const ok=await animateOffset(pos,target,280+Math.abs(target-pos)*240,token);if(!ok)return;
   index=norm(index-Math.round(target));dragUnits=0;render();
 }
-function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.72);}else glideToOffset(0);}
+function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.66);}else glideToOffset(0);}
 function readLaterItems(){try{const v=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&x.publicationId).slice(0,200):[];}catch(_){return[];}}
 function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{publicationId:w.publicationId,title:w.title||'Untitled',coverUrl:w.coverUrl||'',detail:[w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' '),authorName:a.displayName||'作者',authorId:a.authorId||'',authorSlug:a.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
 function syncLater(){const b=document.querySelector('#saveLater');if(!currentPicked)return;const saved=readLaterItems().some(x=>x.publicationId===currentPicked.publicationId);b.classList.toggle('is-saved',saved);b.textContent=saved?'✓ 保存済み':'あとで読む';b.setAttribute('aria-pressed',saved?'true':'false');}
