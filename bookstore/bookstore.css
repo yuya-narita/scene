@@ -107,3 +107,8 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 @keyframes gateArrive{from{opacity:0;filter:blur(8px);transform:translate3d(-50%,42px,20px) scale(.86)}to{opacity:.94;filter:blur(0);transform:translate3d(-50%,18px,90px) scale(.96)}}
 .book-path.at-fantasy-gate .path-books{opacity:0!important;transition:opacity .8s ease!important}
 .store.room-fantasy .book-path{background:radial-gradient(ellipse at 50% 40%,rgba(79,119,54,.13),transparent 62%)}
+
+/* V2.12.3 — main-route gate uses time for breathing room; percentage passage is reserved for side branches. */
+.route-gate{animation:gateBloom 1.9s cubic-bezier(.16,.72,.22,1) both!important;will-change:opacity,transform,filter}
+@keyframes gateBloom{0%{opacity:0;filter:blur(13px);transform:translate3d(-50%,30px,50px) scale(.88)}45%{opacity:.28;filter:blur(7px)}100%{opacity:.94;filter:blur(0);transform:translate3d(-50%,18px,90px) scale(.96)}}
+.book-path.at-fantasy-gate .path-books{opacity:0!important;transition:opacity 1.15s ease!important}

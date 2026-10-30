@@ -6,12 +6,13 @@ let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAc
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
 let roomId='new',routeTransitioning=false,dataReady=false;
+let fantasyGateTimer=0,fantasyGateVisible=false;
 const roomHistory=[];
 const PATH_DRAG_PX_PER_BOOK=150;
 const PATH_MAX_VELOCITY=.008;
-const PATH_EXIT_PAD=4.2;
-const PATH_GATE_REVEAL_PAD=2.65;
-const FOREST_TRAVEL=5.5;
+const PATH_EXIT_PAD=1.0;
+const PATH_GATE_REVEAL_PAD=.12;
+const FOREST_TRAVEL=5.5; // reserved for future side-branch routes with % progress
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
@@ -287,35 +288,45 @@ function setRoomVisual(id){
 }
 function pathEnd(){
   if(!dataReady||!books.length)return 0;
-  if(roomId==='forest')return FOREST_TRAVEL;
+  if(roomId==='forest')return FOREST_TRAVEL; // future side branch
   return Math.max(0,books.length-1+PATH_EXIT_PAD);
 }
 function atFantasyGate(){return dataReady&&books.length>0&&roomId==='path'&&pathProgress>=books.length-1+PATH_GATE_REVEAL_PAD}
-function updateFantasyGate(){
-  const gate=document.querySelector('#fantasyGate');if(!gate)return;
-  const active=atFantasyGate();
-  gate.hidden=!active;
-  document.querySelector('#bookPath')?.classList.toggle('at-fantasy-gate',active);
-  if(active){
-    document.querySelector('#pathStatus').textContent='本の道の終点';
-    document.querySelector('#pathSub').textContent='入口をタップすると、ファンタジーの森へ';
-  }
+function hideFantasyGate(){
+  clearTimeout(fantasyGateTimer);fantasyGateTimer=0;fantasyGateVisible=false;
+  const gate=document.querySelector('#fantasyGate');if(gate)gate.hidden=true;
+  document.querySelector('#bookPath')?.classList.remove('at-fantasy-gate');
 }
+function revealFantasyGate(){
+  if(!atFantasyGate()||fantasyGateVisible)return;
+  fantasyGateVisible=true;
+  const gate=document.querySelector('#fantasyGate');if(gate)gate.hidden=false;
+  document.querySelector('#bookPath')?.classList.add('at-fantasy-gate');
+  document.querySelector('#pathStatus').textContent='本の道の終点';
+  document.querySelector('#pathSub').textContent='ファンタジーの森へ';
+}
+function updateFantasyGate(){
+  if(!atFantasyGate()){hideFantasyGate();return;}
+  if(fantasyGateVisible||fantasyGateTimer)return;
+  // The pause is temporal, not another stretch of road: finish the last swipe,
+  // breathe on the scenery, then let the destination surface slowly.
+  document.querySelector('#pathStatus').textContent='本の道を抜けた';
+  document.querySelector('#pathSub').textContent='';
+  fantasyGateTimer=setTimeout(()=>{fantasyGateTimer=0;if(atFantasyGate())revealFantasyGate();},780);
+}
+// Kept as a route primitive for future missable side branches. A side branch may
+// set roomId='forest' and use FOREST_TRAVEL / percentage progress before reaching a shelf.
 async function enterForest(){
-  if(routeTransitioning||!dataReady||!atFantasyGate())return;
-  routeTransitioning=true;pathVelocity=0;
-  const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
-  await new Promise(r=>setTimeout(r,320));
+  if(routeTransitioning||!dataReady)return;
   roomHistory.push({id:'path',progress:pathProgress});
   roomId='forest';books=fantasyBooks();pathProgress=0;pathYaw=0;
-  setRoomVisual('fantasy');
-  path?.classList.remove('route-leaving','at-fantasy-gate');
-  document.querySelector('#fantasyGate').hidden=true;
+  setRoomVisual('fantasy');hideFantasyGate();
   document.querySelector('#motionStart').hidden=true;
-  document.querySelector('#pathStatus').textContent='本をかきわけて進む';
+  document.querySelector('#pathStatus').textContent='ファンタジーの森　0%';
   document.querySelector('#pathSub').textContent='下スワイプ＝前進 ／ 上スワイプ＝後退';
-  renderPath();routeTransitioning=false;
+  renderPath();
 }
+
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
@@ -391,8 +402,8 @@ function renderPath(){
     document.querySelector('#fantasyGate').hidden=true;
   }else{
     const n=Math.min(books.length,Math.max(1,Math.round(pathProgress)+1));
-    if(pathProgress>books.length-.25&&!atFantasyGate()){document.querySelector('#pathStatus').textContent='本の道を抜けた';document.querySelector('#pathSub').textContent='もう少し先へ進む';}
-    else document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
+    if(pathProgress>books.length-.25){document.querySelector('#pathStatus').textContent='本の道を抜けた';document.querySelector('#pathSub').textContent='';}
+    else {document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;document.querySelector('#pathSub').textContent='下スワイプ＝前進 ／ 上スワイプ＝後退';}
     updateFantasyGate();
   }
 }
@@ -429,7 +440,7 @@ function findPathBookAt(x,y){
 function onPathPointerDown(e){
   if(!dataReady||!books.length||routeTransitioning)return;
   if(e.target.closest('#motionStart'))return;
-  if(e.target.closest('#fantasyGate')){enterForest();return;}
+  if(e.target.closest('#fantasyGate')){enterFantasyRoom();return;}
   if(roomId==='forest'&&pathProgress>=FOREST_TRAVEL-.08){enterFantasyRoom();return;}
   pathVelocity=0;
   const hit=findPathBookAt(e.clientX,e.clientY);
@@ -443,7 +454,7 @@ function onPathPointerMove(e){
   if(Math.hypot(dx,dy)>8){pathDrag.moved=true;if(pathBookHold)pathBookHold.moved=true}
   if(Math.abs(dy)>3)e.preventDefault();
   const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;
-  const dir=roomId==='forest'?1:-1;
+  const dir=1; // all passages: down swipe = forward, up swipe = backward
   pathProgress=clampPath(pathDrag.start+dir*dy/PATH_DRAG_PX_PER_BOOK);renderPath()
 }
 function onPathPointerEnd(e){
@@ -453,7 +464,7 @@ function onPathPointerEnd(e){
     const raw=h.raw,w=books[norm(raw)];
     pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w);return;
   }
-  const dir=roomId==='forest'?1:-1;
+  const dir=1; // all passages: down swipe = forward, up swipe = backward
   const launch=Math.max(-PATH_MAX_VELOCITY,Math.min(PATH_MAX_VELOCITY,dir*d.vy/PATH_DRAG_PX_PER_BOOK*.82));
   addPathVelocity(launch)
 }
@@ -479,7 +490,7 @@ function onPathWheel(e){
   const d=Math.abs(e.deltaY)>=Math.abs(e.deltaX)?e.deltaY:e.deltaX;if(Math.abs(d)<1)return;
   e.preventDefault();
   // Wheel down = forward, wheel up = backward. Trackpads get the same continuous feel.
-  const dir=roomId==='forest'?-1:1;
+  const dir=1;
   addPathVelocity(Math.max(-.0038,Math.min(.0038,dir*d*.000012)));
 }
 async function enableMotion(){
@@ -487,8 +498,8 @@ async function enableMotion(){
     if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     motionOn=true;ensurePathLoop();window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrientation);
-    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='モーション＝前進のみ。上スワイプ＝進む／下スワイプ＝戻る';
-  }catch(_){document.querySelector('#pathSub').textContent='上スワイプで進む／下スワイプで戻れます';}
+    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='モーション＝前進のみ。下スワイプ＝進む／上スワイプ＝戻る';
+  }catch(_){document.querySelector('#pathSub').textContent='下スワイプで進む／上スワイプで戻れます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
