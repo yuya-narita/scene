@@ -5,11 +5,13 @@ let books=[],allBooks=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,curr
 let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
-let roomId='new',routeTransitioning=false;
+let roomId='new',routeTransitioning=false,dataReady=false;
 const roomHistory=[];
 const PATH_DRAG_PX_PER_BOOK=150;
 const PATH_MAX_VELOCITY=.008;
-const PATH_EXIT_PAD=1.35;
+const PATH_EXIT_PAD=4.2;
+const PATH_GATE_REVEAL_PAD=2.65;
+const FOREST_TRAVEL=5.5;
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
@@ -283,8 +285,12 @@ function setRoomVisual(id){
   document.querySelector('.sign strong').textContent=fantasy?'ファンタジーの本棚':'新しく入った本';
   shelfIndex=fantasy?1:0;
 }
-function pathEnd(){return Math.max(0,books.length-1+PATH_EXIT_PAD)}
-function atFantasyGate(){return roomId==='path'&&pathProgress>=Math.max(0,books.length-.35)}
+function pathEnd(){
+  if(!dataReady||!books.length)return 0;
+  if(roomId==='forest')return FOREST_TRAVEL;
+  return Math.max(0,books.length-1+PATH_EXIT_PAD);
+}
+function atFantasyGate(){return dataReady&&books.length>0&&roomId==='path'&&pathProgress>=books.length-1+PATH_GATE_REVEAL_PAD}
 function updateFantasyGate(){
   const gate=document.querySelector('#fantasyGate');if(!gate)return;
   const active=atFantasyGate();
@@ -292,14 +298,29 @@ function updateFantasyGate(){
   document.querySelector('#bookPath')?.classList.toggle('at-fantasy-gate',active);
   if(active){
     document.querySelector('#pathStatus').textContent='本の道の終点';
-    document.querySelector('#pathSub').textContent='もう一度、上へスワイプするとファンタジーの森へ';
+    document.querySelector('#pathSub').textContent='入口をタップすると、ファンタジーの森へ';
   }
 }
+async function enterForest(){
+  if(routeTransitioning||!dataReady||!atFantasyGate())return;
+  routeTransitioning=true;pathVelocity=0;
+  const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
+  await new Promise(r=>setTimeout(r,320));
+  roomHistory.push({id:'path',progress:pathProgress});
+  roomId='forest';books=fantasyBooks();pathProgress=0;pathYaw=0;
+  setRoomVisual('fantasy');
+  path?.classList.remove('route-leaving','at-fantasy-gate');
+  document.querySelector('#fantasyGate').hidden=true;
+  document.querySelector('#motionStart').hidden=true;
+  document.querySelector('#pathStatus').textContent='本をかきわけて進む';
+  document.querySelector('#pathSub').textContent='下スワイプ＝前進 ／ 上スワイプ＝後退';
+  renderPath();routeTransitioning=false;
+}
 async function enterFantasyRoom(){
-  if(routeTransitioning)return;routeTransitioning=true;pathVelocity=0;
+  if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
   await new Promise(r=>setTimeout(r,360));
-  roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;
+  roomHistory.push({id:'forest',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
   document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
   stage.hidden=false;path.hidden=true;document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
@@ -309,6 +330,7 @@ async function enterFantasyRoom(){
   await new Promise(resolve=>{function frame(now){const t=Math.min(1,(now-start)/dur),ease=1-Math.pow(1-t,3),center=index-travel*(1-ease),depth=.10+.90*ease;stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),depth));if(t<1)requestAnimationFrame(frame);else resolve()}requestAnimationFrame(frame)});
   stage.classList.remove('is-intro-spinning','room-arrival');render();updateFocusPanel();path?.classList.remove('route-leaving');routeTransitioning=false;
 }
+
 function setViewMode(mode){
   const next=mode==='path'?'path':'ring';
   if(next===viewMode)return;
@@ -323,10 +345,14 @@ function setViewMode(mode){
   document.querySelector('#bookPath').hidden=viewMode!=='path';
   document.querySelector('#prev').hidden=viewMode!=='ring';document.querySelector('#next').hidden=viewMode!=='ring';
   document.querySelector('#focusPanel').hidden=viewMode!=='ring';document.querySelector('#hint').hidden=viewMode!=='ring';
-  if(viewMode==='path')renderPath();else render();
+  if(viewMode==='path'){
+    if(!dataReady){document.querySelector('#pathStatus').textContent='本を準備しています';document.querySelector('#pathSub').textContent='読み込みが終わるまで少しお待ちください';}
+    renderPath();
+  }else render();
 }
 function renderPath(){
-  const root=document.querySelector('#pathBooks');if(!root||!books.length)return;root.innerHTML='';
+  const root=document.querySelector('#pathBooks');if(!root)return;root.innerHTML='';
+  if(!dataReady||!books.length){document.querySelector('#fantasyGate').hidden=true;return;}
   // V2.8: the road is genuinely bidirectional. Keep a few already-passed books alive
   // long enough to streak out through the left/right edges instead of popping away.
   const base=Math.floor(pathProgress),from=-3,to=10;
@@ -358,8 +384,17 @@ function renderPath(){
     el.dataset.raw=String(raw);
     root.appendChild(el);hydrateCoverLoadState(el);
   }
-  const n=Math.min(books.length,Math.max(1,Math.round(pathProgress)+1));
-  document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;updateFantasyGate();
+  if(roomId==='forest'){
+    const pct=Math.min(100,Math.round(pathProgress/FOREST_TRAVEL*100));
+    document.querySelector('#pathStatus').textContent=pathProgress>=FOREST_TRAVEL-.08?'森の奥に本棚が見える':`ファンタジーの森　${pct}%`;
+    document.querySelector('#pathSub').textContent=pathProgress>=FOREST_TRAVEL-.08?'タップすると本棚へ':'下スワイプ＝前進 ／ 上スワイプ＝後退';
+    document.querySelector('#fantasyGate').hidden=true;
+  }else{
+    const n=Math.min(books.length,Math.max(1,Math.round(pathProgress)+1));
+    if(pathProgress>books.length-.25&&!atFantasyGate()){document.querySelector('#pathStatus').textContent='本の道を抜けた';document.querySelector('#pathSub').textContent='もう少し先へ進む';}
+    else document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
+    updateFantasyGate();
+  }
 }
 function clampPath(v){return Math.max(0,Math.min(pathEnd(),v))}
 function renderPathFrame(now){
@@ -392,7 +427,10 @@ function findPathBookAt(x,y){
   return best;
 }
 function onPathPointerDown(e){
+  if(!dataReady||!books.length||routeTransitioning)return;
   if(e.target.closest('#motionStart'))return;
+  if(e.target.closest('#fantasyGate')){enterForest();return;}
+  if(roomId==='forest'&&pathProgress>=FOREST_TRAVEL-.08){enterFantasyRoom();return;}
   pathVelocity=0;
   const hit=findPathBookAt(e.clientX,e.clientY);
   pathBookHold=hit?{raw:Number(hit.dataset.raw),x:e.clientX,y:e.clientY,moved:false}:null;
@@ -405,22 +443,23 @@ function onPathPointerMove(e){
   if(Math.hypot(dx,dy)>8){pathDrag.moved=true;if(pathBookHold)pathBookHold.moved=true}
   if(Math.abs(dy)>3)e.preventDefault();
   const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;
-  pathProgress=clampPath(pathDrag.start-dy/PATH_DRAG_PX_PER_BOOK);renderPath()
+  const dir=roomId==='forest'?1:-1;
+  pathProgress=clampPath(pathDrag.start+dir*dy/PATH_DRAG_PX_PER_BOOK);renderPath()
 }
 function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
-  if(atFantasyGate()&&dy<-48&&Math.abs(dy)>Math.abs(dx)*.75){enterFantasyRoom();return;}
   if(!d.moved&&h&&!h.moved&&Number.isFinite(h.raw)){
     const raw=h.raw,w=books[norm(raw)];
     pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w);return;
   }
-  const launch=Math.max(-PATH_MAX_VELOCITY,Math.min(PATH_MAX_VELOCITY,-d.vy/PATH_DRAG_PX_PER_BOOK*.82));
+  const dir=roomId==='forest'?1:-1;
+  const launch=Math.max(-PATH_MAX_VELOCITY,Math.min(PATH_MAX_VELOCITY,dir*d.vy/PATH_DRAG_PX_PER_BOOK*.82));
   addPathVelocity(launch)
 }
 function onOrientation(e){if(!motionOn||viewMode!=='path'||pathDrag||!picked.hidden||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
 function onMotion(e){
-  if(!motionOn||viewMode!=='path'||pathDrag||!picked.hidden)return;
+  if(!motionOn||viewMode!=='path'||roomId==='forest'||pathDrag||!picked.hidden)return;
   const g=e.accelerationIncludingGravity||e.acceleration;if(!g)return;
   const mag=Math.sqrt((g.x||0)**2+(g.y||0)**2+(g.z||0)**2),delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;
   const now=performance.now();
@@ -440,7 +479,8 @@ function onPathWheel(e){
   const d=Math.abs(e.deltaY)>=Math.abs(e.deltaX)?e.deltaY:e.deltaX;if(Math.abs(d)<1)return;
   e.preventDefault();
   // Wheel down = forward, wheel up = backward. Trackpads get the same continuous feel.
-  addPathVelocity(Math.max(-.0038,Math.min(.0038,d*.000012)));
+  const dir=roomId==='forest'?-1:1;
+  addPathVelocity(Math.max(-.0038,Math.min(.0038,dir*d*.000012)));
 }
 async function enableMotion(){
   try{
@@ -453,5 +493,5 @@ async function enableMotion(){
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
 
-async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();

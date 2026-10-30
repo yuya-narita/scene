@@ -101,3 +101,9 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 .route-gate small{font-size:9px!important;letter-spacing:.25em!important}.route-gate strong{font-size:21px!important;margin-top:7px!important}.route-gate span{font-size:11px!important;margin-top:9px!important}
 .book-path.at-fantasy-gate .path-books{opacity:.18;transition:opacity .45s ease}.book-path:not(.at-fantasy-gate) .path-books{transition:opacity .28s ease}
 @media(max-width:680px){.route-gate{left:50%!important;right:auto!important;top:25%!important;width:min(70vw,286px)!important}.route-gate strong{font-size:20px!important}}
+
+/* V2.12.2 — route-end breathing room + tap gate + forest rummage route */
+.route-gate{pointer-events:auto!important;cursor:pointer;animation:gateArrive .72s cubic-bezier(.2,.8,.2,1) both}
+@keyframes gateArrive{from{opacity:0;filter:blur(8px);transform:translate3d(-50%,42px,20px) scale(.86)}to{opacity:.94;filter:blur(0);transform:translate3d(-50%,18px,90px) scale(.96)}}
+.book-path.at-fantasy-gate .path-books{opacity:0!important;transition:opacity .8s ease!important}
+.store.room-fantasy .book-path{background:radial-gradient(ellipse at 50% 40%,rgba(79,119,54,.13),transparent 62%)}
