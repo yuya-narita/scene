@@ -1,13 +1,16 @@
 const API='https://scene-studio-api.a-hako.workers.dev';
 const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 const stage=document.querySelector('#stage'),picked=document.querySelector('#picked'),store=document.querySelector('#store');
-let books=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
+let books=[],allBooks=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
 let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
+let roomId='new',routeTransitioning=false;
+const roomHistory=[];
+const FANTASY_BRANCH_AT=4.2;
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
-const shelves=[{id:'new',label:'新しく入った本'}];
+const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('returnTo',location.href);return player.toString();}
 function norm(n){return books.length?((n%books.length)+books.length)%books.length:0;}
@@ -266,11 +269,46 @@ function syncPathFromRing(){
   while(pathProgress-candidate>span/2)candidate+=span;
   pathProgress=Math.max(0,candidate);
 }
+function fantasyBooks(){
+  const keys=['ファンタジ','異世界','魔法','魔王','勇者','冒険','剣','ドラゴン','fantasy','magic','rpg'];
+  const hit=allBooks.filter(w=>keys.some(k=>`${w.title||''} ${w.subtitle||''} ${w.description||''} ${w.episodeLabel||''} ${w.episodeTitle||''}`.toLowerCase().includes(k)));
+  return hit.length?hit:allBooks;
+}
+function setRoomVisual(id){
+  const fantasy=id==='fantasy';
+  store.classList.toggle('room-fantasy',fantasy);
+  document.querySelector('.sign small').textContent=fantasy?'FANTASY FOREST':'NEW ARRIVALS';
+  document.querySelector('.sign strong').textContent=fantasy?'ファンタジーの本棚':'新しく入った本';
+  shelfIndex=fantasy?1:0;
+}
+function updateFantasyGate(){
+  const gate=document.querySelector('#fantasyGate');if(!gate)return;
+  const active=roomId==='path'&&pathProgress>=FANTASY_BRANCH_AT&&pathProgress<=FANTASY_BRANCH_AT+3.4;
+  gate.hidden=!active;
+  document.querySelector('#bookPath')?.classList.toggle('at-fantasy-branch',active);
+  if(active)document.querySelector('#pathSub').textContent='右へスワイプすると、ファンタジーの森へ';
+}
+async function enterFantasyRoom(){
+  if(routeTransitioning)return;routeTransitioning=true;pathVelocity=0;
+  const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
+  await new Promise(r=>setTimeout(r,360));
+  roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;
+  setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
+  document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
+  stage.hidden=false;path.hidden=true;document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
+  stage.innerHTML='';stage.classList.add('room-arrival');
+  await preloadFirstViewCovers();renderFirstViewRing(index-6.5);stage.classList.add('is-intro-spinning');
+  const start=performance.now(),dur=1900,travel=6.5;
+  await new Promise(resolve=>{function frame(now){const t=Math.min(1,(now-start)/dur),ease=1-Math.pow(1-t,3),center=index-travel*(1-ease),depth=.10+.90*ease;stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),depth));if(t<1)requestAnimationFrame(frame);else resolve()}requestAnimationFrame(frame)});
+  stage.classList.remove('is-intro-spinning','room-arrival');render();updateFocusPanel();path?.classList.remove('route-leaving');routeTransitioning=false;
+}
 function setViewMode(mode){
   const next=mode==='path'?'path':'ring';
   if(next===viewMode)return;
   if(next==='ring')syncRingFromPath();else syncPathFromRing();
   viewMode=next;
+  if(next==='path'&&roomId==='new')roomId='path';else if(next==='ring'&&roomId==='path')roomId='new';
+  setRoomVisual(roomId==='fantasy'?'fantasy':'new');
   document.body.classList.toggle('book-path-active',viewMode==='path');
   document.querySelector('#ringMode').classList.toggle('is-active',viewMode==='ring');
   document.querySelector('#pathMode').classList.toggle('is-active',viewMode==='path');
@@ -313,7 +351,7 @@ function renderPath(){
     root.appendChild(el);hydrateCoverLoadState(el);
   }
   const n=norm(Math.round(pathProgress))+1;
-  document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
+  document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;updateFantasyGate();
 }
 function clampPath(v){return Math.max(0,v)}
 function renderPathFrame(now){
@@ -357,13 +395,16 @@ function onPathPointerMove(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const dy=e.clientY-pathDrag.y,dx=e.clientX-pathDrag.x;
   if(Math.hypot(dx,dy)>8){pathDrag.moved=true;if(pathBookHold)pathBookHold.moved=true}
+  if(Math.abs(dx)>Math.abs(dy)*1.25&&pathProgress>=FANTASY_BRANCH_AT&&pathProgress<=FANTASY_BRANCH_AT+3.4){e.preventDefault();document.querySelector('#fantasyGate')?.style.setProperty('--branch-pull',String(Math.max(0,Math.min(1,dx/120))));return;}
   if(Math.abs(dy)>3)e.preventDefault();
   const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;
   pathProgress=clampPath(pathDrag.start-dy/102);renderPath()
 }
 function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
-  const d=pathDrag,h=pathBookHold;pathDrag=null;pathBookHold=null;
+  const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
+  document.querySelector('#fantasyGate')?.style.removeProperty('--branch-pull');
+  if(dx>72&&Math.abs(dx)>Math.abs(dy)*1.2&&pathProgress>=FANTASY_BRANCH_AT&&pathProgress<=FANTASY_BRANCH_AT+3.4){enterFantasyRoom();return;}
   if(!d.moved&&h&&!h.moved&&Number.isFinite(h.raw)){
     const raw=h.raw,w=books[norm(raw)];
     pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w);return;
@@ -406,5 +447,5 @@ async function enableMotion(){
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
 
-async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
