@@ -70,7 +70,12 @@ function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{pub
 function syncLater(){const b=document.querySelector('#saveLater');if(!currentPicked)return;const saved=readLaterItems().some(x=>x.publicationId===currentPicked.publicationId);b.classList.toggle('is-saved',saved);b.textContent=saved?'✓ 保存済み':'あとで読む';b.setAttribute('aria-pressed',saved?'true':'false');}
 function toggleLater(){if(!currentPicked)return;const items=readLaterItems(),i=items.findIndex(x=>x.publicationId===currentPicked.publicationId);if(i>=0)items.splice(i,1);else items.unshift(readLaterRecord(currentPicked));try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));syncLater();}catch(_){}}
 function fillPicked(w){currentPicked=w;document.querySelector('#pickedCover').innerHTML=bookMarkup(w);document.querySelector('#pickedTitle').textContent=w.title||'Untitled';document.querySelector('#pickedContext').textContent=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK';document.querySelector('#pickedDetail').textContent=w.description||w.subtitle||'';document.querySelector('#pickedAuthor').textContent=w.author?.displayName?`著者　${w.author.displayName}`:'';document.querySelector('#readBook').href=playerUrl(w);syncLater();}
-function pick(w){fillPicked(w);picked.hidden=false;document.body.style.overflow='hidden';}
+function pick(w){
+  // V2.10.2: opening detail is a modal state. Motion/path animation must not keep
+  // mutating the passage underneath while the user is trying to dismiss the detail.
+  pathVelocity=0;pathBookHold=null;pathDrag=null;
+  fillPicked(w);picked.hidden=false;document.body.classList.add('book-detail-open');document.body.style.overflow='hidden';
+}
 function detailCardMarkup(w){const a=w.author||{};return `<div class="detail-book">${bookMarkup(w)}</div><div class="detail-copy"><small>${esc([w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK')}</small><h1>${esc(w.title||'Untitled')}</h1><p>${esc(w.description||w.subtitle||'')}</p><p class="author">${a.displayName?`著者　${esc(a.displayName)}`:''}</p></div><div class="picked-actions detail-actions-placeholder" aria-hidden="true"><span>あとで読む</span><span>ひらく</span></div>`;}
 function removeDetailPreview(){if(detailPreview){detailPreview.remove();detailPreview=null;}}
 function detailTargetFromDrag(dx,dy){const horizontal=Math.abs(dx)>=Math.abs(dy);const amount=horizontal?dx:dy;return{horizontal,amount,delta:amount<0?1:-1};}
@@ -85,7 +90,12 @@ function applyDetailDrag(dx,dy){const card=document.querySelector('.detail-card:
 }
 function resetDetailDrag(animate=true){const card=document.querySelector('.detail-card:not(.detail-preview)');if(card){if(animate)card.classList.add('detail-settling');card.style.transform='';card.style.opacity='';setTimeout(()=>card.classList.remove('detail-settling'),260);}if(detailPreview){if(animate){detailPreview.classList.add('detail-settling');detailPreview.style.opacity='0';}setTimeout(removeDetailPreview,animate?250:0);}document.querySelector('#axisHint').textContent='左右：同じ棚の本　／　上下：棚を移動';}
 function commitDetailHorizontal(delta,dx,dy){const card=document.querySelector('.detail-card:not(.detail-preview)'),preview=detailPreview;if(!preview){resetDetailDrag();return;}const horizontal=Math.abs(dx)>=Math.abs(dy),size=horizontal?picked.clientWidth:picked.clientHeight,sign=(horizontal?dx:dy)<0?-1:1;card.classList.add('detail-settling');preview.classList.add('detail-settling');if(horizontal){card.style.transform=`translate3d(${sign*size}px,0,0) scale(.97)`;preview.style.transform='translate3d(0,0,0) scale(1)';}else{card.style.transform=`translate3d(0,${sign*size}px,0) scale(.97)`;preview.style.transform='translate3d(0,0,0) scale(1)';}card.style.opacity='0';preview.style.opacity='1';setTimeout(()=>{index=norm(index+delta);render();fillPicked(books[index]);card.style.transform='';card.style.opacity='';card.classList.remove('detail-settling');removeDetailPreview();},245);}
-function closePick(){picked.hidden=true;currentPicked=null;document.body.style.overflow='';resetDetailDrag(false);}
+function closePick(){
+  picked.hidden=true;currentPicked=null;detailDrag=null;removeDetailPreview();
+  document.body.classList.remove('book-detail-open');
+  document.body.style.overflow=viewMode==='path'?'hidden':'';
+  resetDetailDrag(false);
+}
 document.querySelector('#detailDismiss').onclick=closePick;document.querySelector('#saveLater').onclick=toggleLater;document.querySelector('#focusPick').onclick=()=>books.length&&pick(books[index]);
 const detailCard=document.querySelector('.detail-card');
 detailCard.addEventListener('pointerdown',e=>{if(e.target.closest('a,button'))return;detailDrag={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,lastT:performance.now(),vx:0,vy:0,moved:false};detailCard.setPointerCapture?.(e.pointerId);});
@@ -164,7 +174,7 @@ function clampPath(v){return Math.max(0,v)}
 function renderPathFrame(now){
   if(!pathLastFrame)pathLastFrame=now;
   const dt=Math.min(34,Math.max(1,now-pathLastFrame));pathLastFrame=now;
-  if(pathBookHold){pathRaf=requestAnimationFrame(renderPathFrame);return;}
+  if(pathBookHold||!picked.hidden){pathRaf=requestAnimationFrame(renderPathFrame);return;}
   if(Math.abs(pathVelocity)>.00005){
     pathProgress=clampPath(pathProgress+pathVelocity*dt);
     if(pathProgress<=0&&pathVelocity<0)pathVelocity=0;
@@ -216,9 +226,9 @@ function onPathPointerEnd(e){
   const launch=-d.vy/102*1.34;
   addPathVelocity(launch)
 }
-function onOrientation(e){if(!motionOn||viewMode!=='path'||pathDrag||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
+function onOrientation(e){if(!motionOn||viewMode!=='path'||pathDrag||!picked.hidden||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
 function onMotion(e){
-  if(!motionOn||viewMode!=='path'||pathDrag)return;
+  if(!motionOn||viewMode!=='path'||pathDrag||!picked.hidden)return;
   const g=e.accelerationIncludingGravity||e.acceleration;if(!g)return;
   const mag=Math.sqrt((g.x||0)**2+(g.y||0)**2+(g.z||0)**2),delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;
   const now=performance.now();
