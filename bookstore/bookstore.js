@@ -85,11 +85,37 @@ function renderFirstViewRing(center){
   });
   hydrateCoverLoadState(stage);updateFocusPanel();
 }
+function firstViewTravel(){return Math.min(10,Math.max(5.5,books.length*.42));}
+// V2.11.6: decode the covers that will actually cross the focal zone before the intro starts.
+// This keeps the opening animation from outrunning image decode on iPhone/slow networks.
+async function preloadFirstViewCovers(){
+  if(!books.length)return;
+  const travel=firstViewTravel(),steps=Math.max(1,Math.ceil(travel));
+  const ids=new Set();
+  // Covers that become the focal/near-focal book while the ring travels from the distant start to index 0.
+  for(let n=0;n<=steps;n++){
+    const center=index-travel+(travel*n/steps);
+    const c=Math.round(center);
+    [-1,0,1].forEach(d=>ids.add(norm(c+d)));
+  }
+  // Cap network work while keeping the full focal path represented.
+  const ordered=[...ids].slice(0,14);
+  const jobs=ordered.map(i=>new Promise(resolve=>{
+    const url=books[i]?.coverUrl;if(!url)return resolve();
+    const img=new Image();let done=false;
+    const finish=()=>{if(done)return;done=true;resolve();};
+    img.decoding='async';img.onload=async()=>{try{if(img.decode)await img.decode();}catch(_){}finish();};
+    img.onerror=finish;img.src=url;
+    if(img.complete&&img.naturalWidth>0){Promise.resolve(img.decode?.()).catch(()=>{}).finally(finish);}
+    setTimeout(finish,3200);
+  }));
+  await Promise.all(jobs);
+}
 function playFirstViewSpin(){
   if(firstViewSpinPlayed||!books.length||viewMode!=='ring')return;
   firstViewSpinPlayed=true;
   const token=++spinToken;
-  const travel=Math.min(10,Math.max(5.5,books.length*.42));
+  const travel=firstViewTravel();
   const duration=2050;
   const start=index-travel;
   suppressClickUntil=Date.now()+duration+250;
@@ -378,5 +404,5 @@ async function enableMotion(){
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
 
-async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}render();requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}render();await preloadFirstViewCovers();requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
