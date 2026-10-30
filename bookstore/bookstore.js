@@ -235,10 +235,11 @@ function onMotion(e){
   // Forward-only motion. V2.9 fore/aft estimation was intentionally removed: iPhone
   // acceleration cannot reliably distinguish walking backward and could reverse while
   // walking forward. A larger dead-zone also prevents a resting phone from creeping.
-  pathMotionEnergy=pathMotionEnergy*.84+Math.max(0,delta-.42)*.16;
-  if(now-pathMotionLast>38&&pathMotionEnergy>.22){
+  // V2.10.3: keep V2.10.2 forward-only safety/detail guards, but restore V2.8 motion sensitivity.
+  pathMotionEnergy=pathMotionEnergy*.80+Math.max(0,delta-.28)*.20;
+  if(now-pathMotionLast>28&&pathMotionEnergy>.13){
     pathMotionLast=now;
-    const impulse=Math.min(.00165,.00016+(pathMotionEnergy-.22)*.00052);
+    const impulse=Math.min(.00185,.00018+pathMotionEnergy*.00055);
     addPathVelocity(impulse);
   }
 }
