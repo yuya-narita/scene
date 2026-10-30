@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
-<link rel="stylesheet" href="./bookstore.css?v=2.11.6">
+<link rel="stylesheet" href="./bookstore.css?v=2.11.7">
 
 <style id="v211-bg">
 /* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
@@ -19,7 +19,8 @@
 .book-face img{opacity:1;}
 .book-face.is-cover-loaded .cover-loading{display:none;}
 
-/* V2.11.6: the opening shelf spin is presentation-only until it lands. */
+/* V2.11.7: preload invisibly; reveal only the already-moving distant ring. */
+.stage.is-intro-waiting{visibility:hidden;}
 .stage.is-intro-spinning .book{pointer-events:none!important;}
 
 /* V2.11.3: the road gets its own threshold-to-fantasy background. */
@@ -58,6 +59,6 @@
     <div class="picked-actions"><button id="saveLater" type="button">あとで読む</button><a id="readBook" href="#">ひらく</a></div>
   </article>
 </div>
-<script src="./bookstore.js?v=2.11.6"></script>
+<script src="./bookstore.js?v=2.11.7"></script>
 </body>
 </html>

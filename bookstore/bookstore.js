@@ -67,6 +67,7 @@ function commitRingSettle(step){
 // V2.11.4: first-view shelf spin. It uses the same ring coordinates and the same
 // cover DOM from start to finish, so the final landing does not rebuild or "tighten" the cover.
 let firstViewSpinPlayed=false;
+let firstViewIntroReady=false;
 function wrappedOffsetFrom(center,i){
   let d=i-center,n=books.length;
   if(!n)return 0;
@@ -76,6 +77,7 @@ function wrappedOffsetFrom(center,i){
 }
 function renderFirstViewRing(center){
   stage.innerHTML='';
+  stage.classList.add('is-intro-ready');
   books.forEach((w,i)=>{
     const b=document.createElement('button');b.className='book';b.dataset.index=i;
     b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);
@@ -139,7 +141,7 @@ function playFirstViewSpin(){
       if(Math.abs(slot)>5){b.remove();return;}
       b.dataset.slot=String(slot);setBookPose(b,slot);
     });
-    stage.classList.remove('is-intro-spinning');
+    stage.classList.remove('is-intro-spinning','is-intro-ready');
     updateFocusPanel();
   }
   requestAnimationFrame(frame);
@@ -404,5 +406,5 @@ async function enableMotion(){
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
 
-async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}render();await preloadFirstViewCovers();requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
