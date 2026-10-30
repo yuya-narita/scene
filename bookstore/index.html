@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
-<link rel="stylesheet" href="./bookstore.css?v=2.11.2">
+<link rel="stylesheet" href="./bookstore.css?v=2.11.3">
 
 <style id="v211-bg">
 /* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
@@ -18,6 +18,10 @@
 /* Keep the image opaque whenever it exists; rebuilding the ring must not fade a cached cover in again. */
 .book-face img{opacity:1;}
 .book-face.is-cover-loaded .cover-loading{display:none;}
+
+/* V2.11.3: the road gets its own threshold-to-fantasy background. */
+.book-path{background-image:linear-gradient(rgba(7,5,3,.10),rgba(7,5,3,.18)),url('./bookstore-path-fantasy-v2113.png')!important;background-size:cover!important;background-position:center center!important;background-repeat:no-repeat!important;}
+.book-path .path-floor{opacity:.10!important;}
 </style>
 </head>
 <body>
@@ -51,6 +55,6 @@
     <div class="picked-actions"><button id="saveLater" type="button">あとで読む</button><a id="readBook" href="#">ひらく</a></div>
   </article>
 </div>
-<script src="./bookstore.js?v=2.11.2"></script>
+<script src="./bookstore.js?v=2.11.3"></script>
 </body>
 </html>

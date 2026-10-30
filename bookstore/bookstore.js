@@ -43,6 +43,26 @@ function setBookPose(b,pos){
 }
 function updateFocusPanel(){if(!books.length)return;const w=books[index],a=w.author||{};document.querySelector('#focusTitle').textContent=w.title||'Untitled';document.querySelector('#focusAuthor').textContent=a.displayName||'作者';document.querySelector('#focusShelf').textContent=shelves[shelfIndex]?.label||'';}
 function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)=>{const slot=signedOffset(i);if(Math.abs(slot)>5)return;const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot+dragUnits);b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};stage.appendChild(b);});hydrateCoverLoadState(stage);updateFocusPanel();}
+// V2.11.3: commit a settled ring without rebuilding the visible cover DOM.
+// Recreating the centered image at the exact landing frame can make its rasterized transform
+// look like it briefly "tightens" even when the numeric scale is unchanged.
+function commitRingSettle(step){
+  index=norm(index+step);dragUnits=0;
+  const live=new Map();
+  stage.querySelectorAll('.book').forEach(b=>{
+    const i=Number(b.dataset.index),slot=signedOffset(i);
+    if(Math.abs(slot)>5){b.remove();return;}
+    b.dataset.slot=String(slot);setBookPose(b,slot);live.set(i,b);
+  });
+  books.forEach((w,i)=>{
+    const slot=signedOffset(i);if(Math.abs(slot)>5||live.has(i))return;
+    const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;
+    b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot);
+    b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};
+    stage.appendChild(b);hydrateCoverLoadState(b);
+  });
+  updateFocusPanel();
+}
 function snapTo(i){index=norm(i);dragUnits=0;render();}
 function move(delta){if(books.length)glideToOffset(-delta);}
 function applyDrag(units){dragUnits=units;stage.querySelectorAll('.book').forEach(b=>{const slot=Number(b.dataset.slot||0);setBookPose(b,slot+units);});}
@@ -50,7 +70,7 @@ function beginDrag(e){if(e.button!=null&&e.button!==0)return;spinToken++;drag={i
 function dragMove(e){if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.abs(dx)<5&&Math.abs(dy)<5)return;if(Math.abs(dy)>Math.abs(dx)*1.35&&!drag.moved){endDrag(e,true);return;}drag.moved=true;e.preventDefault();const now=performance.now(),dt=Math.max(1,now-drag.lastT);drag.vx=(e.clientX-drag.lastX)/dt;drag.lastX=e.clientX;drag.lastT=now;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));applyDrag(dx/spacing);}
 function easeOutCubic(t){return 1-Math.pow(1-t,3);}
 function animateOffset(from,to,duration,token){return new Promise(resolve=>{const t0=performance.now();function frame(now){if(token!==spinToken)return resolve(false);const p=Math.min(1,(now-t0)/duration),e=easeOutCubic(p);applyDrag(from+(to-from)*e);if(p<1)requestAnimationFrame(frame);else resolve(true);}requestAnimationFrame(frame);});}
-async function glideToOffset(target){if(!books.length)return;const token=++spinToken;const from=dragUnits;target=Math.max(-4,Math.min(4,target));const dist=Math.abs(target-from);const ok=await animateOffset(from,target,190+dist*72,token);if(!ok)return;const step=-Math.round(target);index=norm(index+step);dragUnits=0;render();}
+async function glideToOffset(target){if(!books.length)return;const token=++spinToken;const from=dragUnits;target=Math.max(-4,Math.min(4,target));const dist=Math.abs(target-from);const ok=await animateOffset(from,target,190+dist*72,token);if(!ok)return;const step=-Math.round(target);commitRingSettle(step);}
 async function coastAndSnap(initialUnits,velocityUnitsMs){
   const token=++spinToken;let pos=initialUnits,v=velocityUnitsMs,last=performance.now();
   // V2.5: velocity is allowed to decay naturally. Only a soft safety envelope prevents runaway spins.
@@ -63,7 +83,7 @@ async function coastAndSnap(initialUnits,velocityUnitsMs){
   const target=Math.round(pos);
   // Magnetic capture starts only after the coast is already slow, so it feels like settling, not braking.
   const ok=await animateOffset(pos,target,280+Math.abs(target-pos)*240,token);if(!ok)return;
-  index=norm(index-Math.round(target));dragUnits=0;render();
+  commitRingSettle(-Math.round(target));
 }
 function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.66);}else{dragUnits=0;/* V2.11.1: desktop pointer capture can swallow the button click. Resolve the visible cover directly on pointerup. */const hit=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.book');if(hit&&stage.contains(hit)){suppressClickUntil=Date.now()+220;const i=Number(hit.dataset.index),off=signedOffset(i);if(off===0)pick(books[i]);else glideToOffset(-off);}}}
 function readLaterItems(){try{const v=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&x.publicationId).slice(0,200):[];}catch(_){return[];}}
@@ -118,9 +138,7 @@ function settleRingWheel(delay=150){
     // If the gesture did not cross half a book, return gently to the current book.
     const ok=await animateOffset(from,target,210+Math.abs(target-from)*150,token);
     if(!ok)return;
-    index=norm(index-Math.round(target));
-    dragUnits=0;
-    render();
+    commitRingSettle(-Math.round(target));
   },delay);
 }
 store.addEventListener('wheel',e=>{
