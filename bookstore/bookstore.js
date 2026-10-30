@@ -64,7 +64,7 @@ async function coastAndSnap(initialUnits,velocityUnitsMs){
   const ok=await animateOffset(pos,target,280+Math.abs(target-pos)*240,token);if(!ok)return;
   index=norm(index-Math.round(target));dragUnits=0;render();
 }
-function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.66);}else glideToOffset(0);}
+function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.66);}else { dragUnits=0; }}
 function readLaterItems(){try{const v=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&x.publicationId).slice(0,200):[];}catch(_){return[];}}
 function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{publicationId:w.publicationId,title:w.title||'Untitled',coverUrl:w.coverUrl||'',detail:[w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' '),authorName:a.displayName||'作者',authorId:a.authorId||'',authorSlug:a.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
 function syncLater(){const b=document.querySelector('#saveLater');if(!currentPicked)return;const saved=readLaterItems().some(x=>x.publicationId===currentPicked.publicationId);b.classList.toggle('is-saved',saved);b.textContent=saved?'✓ 保存済み':'あとで読む';b.setAttribute('aria-pressed',saved?'true':'false');}
@@ -104,7 +104,24 @@ detailCard.addEventListener('pointerup',e=>{if(!detailDrag||e.pointerId!==detail
 detailCard.addEventListener('pointercancel',()=>{detailDrag=null;resetDetailDrag();});
 document.querySelector('#prev').onclick=()=>move(-1);document.querySelector('#next').onclick=()=>move(1);
 stage.addEventListener('pointerdown',beginDrag);stage.addEventListener('pointermove',dragMove,{passive:false});stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',e=>endDrag(e,true));
-store.addEventListener('wheel',e=>{if(Math.abs(e.deltaX)>Math.abs(e.deltaY)&&Math.abs(e.deltaX)>12){e.preventDefault();move(e.deltaX>0?1:-1)}},{passive:false});
+// V2.11: PC/trackpad ring navigation shares the same continuous ring coordinate as drag.
+let ringWheelTimer=0,ringWheelLast=0,ringWheelV=0;
+store.addEventListener('wheel',e=>{
+  if(viewMode!=='ring'||!picked.hidden)return;
+  const raw=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
+  if(Math.abs(raw)<.25)return;
+  e.preventDefault();
+  spinToken++;
+  const now=performance.now(),dt=Math.max(8,Math.min(50,now-(ringWheelLast||now-16)));ringWheelLast=now;
+  const units=Math.max(-.34,Math.min(.34,raw*.00225));
+  applyDrag(dragUnits-units);
+  ringWheelV=(-units)/dt;
+  clearTimeout(ringWheelTimer);
+  ringWheelTimer=setTimeout(()=>{
+    const v=ringWheelV;ringWheelV=0;ringWheelLast=0;
+    coastAndSnap(dragUnits,v*.72);
+  },72);
+},{passive:false});
 
 function syncRingFromPath(){
   if(!books.length)return;
