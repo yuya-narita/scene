@@ -11872,6 +11872,44 @@ function startInlineTextEdit(field='text',targetEl=null){
     });
     row.append(value,scope);wrap.append(cap,row);return wrap;
   }
+  // Text shadow bulk apply follows the same one-shot scope contract as typeface.
+  let v70TextShadowBulkScene=null;
+  let v70TextShadowBulkArmed=false;
+  function v70TextShadowBulkSyncScene(scene){
+    if(v70TextShadowBulkScene!==scene){v70TextShadowBulkScene=scene;v70TextShadowBulkArmed=false;}
+  }
+  function v70SetSceneTextShadow(scene,value){
+    const pp=ensurePresentation(scene);pp.text ||= {};
+    if(value==='auto')delete pp.text.shadow;else pp.text.shadow=value;
+  }
+  function v70MakeTextShadowBulkControl(scene,{label=null,onApplied=null}={}){
+    v70TextShadowBulkSyncScene(scene);
+    const wrap=document.createElement('div');wrap.className='desktop-text-detail-field v58-bulk-field v70-shadow-bulk-field';
+    const cap=document.createElement('span');cap.textContent=label||u('文字影','Text shadow');
+    const row=document.createElement('div');row.className='v58-bulk-row';
+    const value=document.createElement('select');
+    [['auto',t('effect.auto')],['none',t('shadow.none')],['soft',t('shadow.soft')],['strong',t('shadow.strong')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
+    value.value=ensurePresentation(scene).text?.shadow||'auto';
+    const scope=document.createElement('select');scope.className='v58-bulk-scope v70-shadow-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('文字影の適用範囲','Text shadow apply scope'));
+    [['current',u('このScene','This Scene')],['forward',u('ここから先','From here')],['all',u('全Scene','All Scenes')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;scope.appendChild(o);});
+    const lock=()=>{v70TextShadowBulkArmed=false;scope.value='current';scope.disabled=true;scope.title=u('先に文字影を選んでください','Choose a text shadow first');};
+    const arm=()=>{v70TextShadowBulkScene=scene;v70TextShadowBulkArmed=true;scope.value='current';scope.disabled=false;scope.title=u('一括適用の範囲を選択','Choose bulk apply scope');};
+    scope.value='current';scope.disabled=!v70TextShadowBulkArmed;scope.title=scope.disabled?u('先に文字影を選んでください','Choose a text shadow first'):u('一括適用の範囲を選択','Choose bulk apply scope');
+    value.addEventListener('change',()=>{
+      if(!workingDocument?.scenes?.length)return;
+      const undoLabel=u('文字影の変更を元に戻せます','Undo text shadow change');
+      captureUndo(undoLabel);v70SetSceneTextShadow(scene,value.value);arm();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));
+    });
+    scope.addEventListener('change',()=>{
+      if(scope.disabled||!v70TextShadowBulkArmed||!workingDocument?.scenes?.length)return;
+      const mode=scope.value;if(mode==='current')return;
+      const index=Math.max(0,workingDocument.scenes.indexOf(scene));
+      const targets=mode==='all'?workingDocument.scenes:workingDocument.scenes.slice(index);
+      const undoLabel=u('文字影の一括適用を元に戻せます','Undo bulk text shadow apply');
+      captureUndo(undoLabel);targets.forEach(sc=>v70SetSceneTextShadow(sc,value.value));lock();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(undoLabel));onApplied?.();
+    });
+    row.append(value,scope);wrap.append(cap,row);return wrap;
+  }
   // V64 Phase 3: writing-direction bulk apply. Vertical writing is a linked preset:
   // it also switches Scene flow to horizontal/page-turn. Returning to horizontal writing
   // removes only the writing-mode override and deliberately preserves each Scene's flow.
@@ -13908,7 +13946,7 @@ function openDesktopTextDetail(){
       desktopDetailSelect(u('文字の太さ','Font weight'),[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],String(p.text?.fontWeight||0),v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;apply();}),
       desktopDetailSelect(u('斜体','Italic'),[['normal',u('通常','Normal')],['italic',u('斜体','Italic')]],p.text?.fontStyle||'normal',v=>{if(v==='italic')p.text.fontStyle='italic';else delete p.text.fontStyle;apply();}),
       v66MakeTextPositionBulkControl(scene,{label:u('テキスト位置','Text position'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}}),
-      desktopDetailSelect(u('文字影','Text shadow'),[['auto',t('effect.auto')],['none',t('shadow.none')],['soft',t('shadow.soft')],['strong',t('shadow.strong')]],p.text.shadow||'auto',v=>{if(v==='auto')delete p.text.shadow;else p.text.shadow=v;apply();})
+      v70MakeTextShadowBulkControl(scene,{label:u('文字影','Text shadow'),onApplied:()=>{if(desktopLiveActive())renderDesktopLivePanel();}})
     );
 
     // V62: text color remains a dedicated card, but avoid the duplicate outer heading.
