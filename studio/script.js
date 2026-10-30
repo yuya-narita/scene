@@ -1904,7 +1904,8 @@
         body:JSON.stringify({workId,issueLimit,scene:hosted,returnUrl:location.href.split('#')[0].split('?')[0]})
       });
       const payload=await response.json().catch(()=>null);
-      if(!response.ok||!payload?.ok||!payload?.checkoutUrl)throw new Error(payload?.error||`決済を開始できませんでした。 (HTTP ${response.status})`);
+      if(!response.ok||!payload?.ok||!payload?.checkoutUrl||!payload?.orderId)throw new Error(payload?.error||`決済を開始できませんでした。 (HTTP ${response.status})`);
+      try{sessionStorage.setItem('ahako_issue_payment_return',JSON.stringify({orderId:String(payload.orderId),authorId:String(signedInAuthor?.authorId||''),createdAt:Date.now()}));}catch(_){}
       location.href=payload.checkoutUrl;
     }catch(error){
       console.error(error);if(status)status.textContent='';if(button)button.disabled=false;await appAlert(String(error?.message||error));
@@ -1915,6 +1916,11 @@
     const params=new URLSearchParams(location.search),state=params.get('issue_payment'),orderId=params.get('issue_order_id');
     if(!state||!orderId)return;
     const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('issue_payment');cleanUrl.searchParams.delete('issue_order_id');history.replaceState({},'',cleanUrl.toString());
+    let pending=null;
+    try{pending=JSON.parse(sessionStorage.getItem('ahako_issue_payment_return')||'null');}catch(_){}
+    try{sessionStorage.removeItem('ahako_issue_payment_return');}catch(_){}
+    const validReturn=String(pending?.orderId||'')===String(orderId)&&String(pending?.authorId||'')===String(signedInAuthor?.authorId||'');
+    if(!validReturn)return;
     if(state==='cancel'){showEasyToast('発行決済をキャンセルしました。');return;}
     if(state!=='success')return;
     if(!authorSessionToken||!signedInAuthor?.authorId){await appAlert('決済結果を確認するため、作者ログインを確認してください。');return;}
