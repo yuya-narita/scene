@@ -13768,9 +13768,19 @@ function openDesktopBackgroundDetail(){
       panel.appendChild(note);
 
       const enable=document.createElement('label');enable.className='ahako-360-toggle';
-      const cb=document.createElement('input');cb.type='checkbox';cb.checked=(effectiveBackgroundAt(index)?.projection===projection);
-      const cbt=document.createElement('span');cbt.textContent=is360?u('このSceneを360°背景にする','Use 360° background in this Scene'):u('このSceneをパノラマ背景にする','Use panorama background in this Scene');
+      const effectiveProjection=(effectiveBackgroundAt(index)?.projection||'flat');
+      const explicitProjection=explicit()?.projection;
+      // A check mark means "this Scene starts a new background-mode section".
+      // Inherited mode is shown as status only, so authors do not see every
+      // Scene as individually checked even though the Player keeps the mode.
+      const cb=document.createElement('input');cb.type='checkbox';cb.checked=(explicitProjection===projection);
+      const cbt=document.createElement('span');cbt.textContent=is360?u('ここから360°背景にする','Use 360° background from here'):u('ここからパノラマ背景にする','Use panorama background from here');
       enable.append(cb,cbt);panel.appendChild(enable);
+      if(!cb.checked && effectiveProjection===projection){
+        const inherited=document.createElement('p');inherited.className='desktop-text-detail-note';
+        inherited.textContent=is360?u('前のSceneから360°背景を継続中','360° background continues from the previous Scene'):u('前のSceneからパノラマ背景を継続中','Panorama background continues from the previous Scene');
+        panel.appendChild(inherited);
+      }
 
       const openHomeEditor=()=>{
         const source=explicit()?.src?explicit():previousFraming();if(!source?.src)return;
@@ -13826,7 +13836,8 @@ function openDesktopBackgroundDetail(){
       flatPanel.hidden=mode!=='flat';finitePanel.hidden=mode!=='panorama';panoPanel.hidden=mode!=='360';
       flatTab.classList.toggle('is-active',mode==='flat');finiteTab.classList.toggle('is-active',mode==='panorama');panoTab.classList.toggle('is-active',mode==='360');
     };
-    showSpatialTab(['flat','panorama','360'].includes(desktopBackgroundDetailSubtab)?desktopBackgroundDetailSubtab:'flat');
+    const effectiveMode=effectiveBackgroundAt(index)?.projection;
+    showSpatialTab(['panorama','360'].includes(effectiveMode)?effectiveMode:(['flat','panorama','360'].includes(desktopBackgroundDetailSubtab)?desktopBackgroundDetailSubtab:'flat'));
     flatTab.addEventListener('click',()=>showSpatialTab('flat'));
     finiteTab.addEventListener('click',()=>showSpatialTab('panorama'));
     panoTab.addEventListener('click',()=>showSpatialTab('360'));
