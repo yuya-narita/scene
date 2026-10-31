@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
-<link rel="stylesheet" href="./bookstore.css?v=2.16.15r5">
+<link rel="stylesheet" href="./bookstore.css?v=2.17.0hall1">
 
 <style id="v211-bg">
 /* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
@@ -37,6 +37,18 @@
 <main>
   <section class="store" id="store" aria-label="あ箱書店">
     <div class="room-bg-layer" id="roomBgLayer" aria-hidden="true"></div>
+    <section class="central-hall" id="centralHall" aria-label="中央桜ホール">
+      <div class="hall-vignette" aria-hidden="true"></div>
+      <div class="hall-title"><small>CENTRAL SAKURA HALL</small><strong>中央桜ホール</strong><span>ここから、まだ知らない一冊へ。</span></div>
+      <div class="hall-directions">
+        <button class="hall-gate gate-front is-ready" id="hallBookPath" type="button"><small>NEW ARRIVALS</small><strong>本の道</strong><span>新着の本を見ながら歩く</span></button>
+        <button class="hall-gate gate-right is-locked" type="button" disabled><small>COMING SOON</small><strong>別の道</strong><span>準備中</span></button>
+        <button class="hall-gate gate-left is-locked" type="button" disabled><small>COMING SOON</small><strong>別の道</strong><span>準備中</span></button>
+        <button class="hall-gate gate-back is-locked" type="button" disabled><small>SECRET</small><strong>？？？</strong><span>まだ扉は開かない</span></button>
+      </div>
+      <div class="hall-hint">入口を選んで、書店を歩く</div>
+    </section>
+    <button class="hall-return" id="hallReturn" type="button" hidden>← 桜ホール</button>
     <div class="ambient" aria-hidden="true"></div>
     <div class="shelf shelf-top" aria-hidden="true"></div><div class="shelf shelf-mid" aria-hidden="true"></div><div class="shelf shelf-low" aria-hidden="true"></div>
     <div class="sign"><small>NEW ARRIVALS</small><strong>新しく入った本</strong></div>
@@ -60,6 +72,6 @@
     <div class="picked-actions"><button id="saveLater" type="button">あとで読む</button><a id="readBook" href="#">ひらく</a></div>
   </article>
 </div>
-<script src="./bookstore.js?v=2.16.15r5"></script>
+<script src="./bookstore.js?v=2.17.0hall1"></script>
 </body>
 </html>
