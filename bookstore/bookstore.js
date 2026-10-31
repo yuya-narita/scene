@@ -389,9 +389,15 @@ function applyRoomCamera(previewDeg=0,instant=false){
   // background-position percentages were too subtle / effectively invisible on iPhone Safari.
   // Keep the same shared yaw now; a true equirectangular asset can replace only this renderer later.
   const wrapped=((yaw%360)+540)%360-180;
-  const maxShift=Math.min(window.innerWidth*.34,260);
+  // V2.16.3: render the Room plate as a dedicated DOM layer.
+  // Do not depend on background-position: Safari was visually freezing that path.
+  const maxShift=Math.min(window.innerWidth*.30,220);
   const x=(wrapped/180)*maxShift;
-  store.style.setProperty('--room-bg-x',`${x.toFixed(1)}px`);
+  const bg=document.querySelector('#roomBgLayer');
+  if(bg){
+    bg.style.transition=instant?'none':'transform .28s cubic-bezier(.22,.7,.25,1)';
+    bg.style.transform=`translate3d(${(-x).toFixed(1)}px,0,0) scale(1.02)`;
+  }
   const grid=document.querySelector('#roomShelfGrid');
   if(grid){grid.style.transition=instant?'none':'transform .28s cubic-bezier(.22,.7,.25,1),opacity .22s';grid.style.transform=`perspective(900px) rotateY(${(-previewDeg*.22).toFixed(2)}deg) translateX(${(-previewDeg*.16).toFixed(2)}px)`;}
 }

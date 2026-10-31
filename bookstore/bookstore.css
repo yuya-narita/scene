@@ -154,3 +154,12 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 .room-motion{position:absolute;z-index:9;right:10px;top:9px;border:1px solid #d9e6c844;border-radius:99px;background:#071008b8;color:#fffbd6;padding:7px 10px;font-size:9px;letter-spacing:.04em;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
 .room-motion.is-on{border-color:#b9dc8a99;background:#173116d9;box-shadow:0 0 14px #8fbd6555}
 @media(max-width:680px){.room-motion{right:5px;top:6px;padding:6px 8px;font-size:8px}}
+
+
+/* V2.16.3 — Room background is a real DOM layer. iPhone Safari now receives
+   the same shared camera yaw through transform instead of background-position. */
+.room-bg-layer{position:absolute;z-index:0;top:0;bottom:0;left:-30%;width:160%;display:none;pointer-events:none;background-position:center center;background-size:cover;background-repeat:no-repeat;will-change:transform;transform:translate3d(0,0,0) scale(1.02);transform-origin:50% 50%;backface-visibility:hidden;-webkit-backface-visibility:hidden;}
+.store.room-fantasy{background-image:none!important;background:#0b1009!important;}
+.store.room-fantasy .room-bg-layer{display:block;background-image:linear-gradient(rgba(5,12,6,.20),rgba(4,8,5,.32)),url('./bookstore-path-fantasy-v2113.png');}
+.store.room-fantasy>.ambient{z-index:1;opacity:1!important;background:linear-gradient(90deg,#0006,transparent 18% 82%,#0006),linear-gradient(rgba(0,0,0,.04),rgba(0,0,0,.16));}
+.store.room-fantasy>.sign,.store.room-fantasy>.stage,.store.room-fantasy>.room-shelf,.store.room-fantasy>.book-path,.store.room-fantasy>.nav,.store.room-fantasy>.focus-panel,.store.room-fantasy>.hint{position:absolute;}
