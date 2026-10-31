@@ -22,6 +22,8 @@ const ROOM_SHELF_CAPACITY=12;
 let roomShelfFace=0;
 // V2.16.0 — shared Room camera: shelf ring + background + optional device yaw.
 let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
+// V2.16.11 — one shared Room camera. Touch/settle own yaw exclusively; motion only contributes deltas when unlocked.
+let roomCameraInputLock=false,roomCameraSettleRaf=0,roomMotionLatestAlpha=null;
 let roomVisibleFace=0; // V2.16.5: shelf faces live at fixed world angles; null means scenery-only view.
 const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22,ROOM_VIEW_SLOT_DEG=90;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
@@ -444,17 +446,36 @@ function settleRoomYaw(){
 }
 function rotateRoomShelf(delta){roomCameraYaw=nearestRoomViewSlot(roomCameraYaw)+delta*ROOM_VIEW_SLOT_DEG;roomCameraPreview=0;settleRoomYaw();}
 function onRoomOrientation(e){
-  // V2.16.10: while a finger owns the Room camera, device motion must not fight it.
-  if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||roomShelfTap||typeof e.alpha!=='number')return;const a=e.alpha;
-  if(roomMotionBaseAlpha==null){roomMotionBaseAlpha=a;roomMotionLastAlpha=a;return;}
-  let d=a-roomMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;roomMotionLastAlpha=a;roomCameraYaw-=d*.72;applyRoomCamera(0,true);
+  if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||typeof e.alpha!=='number')return;
+  const a=e.alpha;roomMotionLatestAlpha=a;
+  // While touch or snap animation owns the camera, only remember the newest sensor angle.
+  // Never write yaw here: this prevents the sensor and finger/RAF from pulling the same camera back and forth.
+  if(roomCameraInputLock||roomShelfTap||roomCameraSettleRaf){roomMotionLastAlpha=a;return;}
+  if(roomMotionLastAlpha==null){roomMotionBaseAlpha=a;roomMotionLastAlpha=a;return;}
+  let d=a-roomMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;roomMotionLastAlpha=a;
+  roomCameraYaw-=d*.72;roomCameraPreview=0;applyRoomCamera(0,true);
+}
+function rebaseRoomMotion(){
+  if(!roomMotionOn)return;
+  const a=roomMotionLatestAlpha;roomMotionBaseAlpha=(typeof a==='number'?a:null);roomMotionLastAlpha=(typeof a==='number'?a:null);
+}
+function animateRoomYaw(from,target,dur=280){
+  if(roomCameraSettleRaf)cancelAnimationFrame(roomCameraSettleRaf);
+  roomCameraInputLock=true;roomCameraPreview=0;const start=performance.now();
+  const tick=now=>{
+    const t=Math.min(1,(now-start)/dur),ease=1-Math.pow(1-t,3);
+    roomCameraYaw=from+(target-from)*ease;applyRoomCamera(0,true);
+    if(t<1){roomCameraSettleRaf=requestAnimationFrame(tick);return;}
+    roomCameraSettleRaf=0;roomCameraYaw=target;applyRoomCamera(0,true);rebaseRoomMotion();roomCameraInputLock=false;
+  };
+  roomCameraSettleRaf=requestAnimationFrame(tick);
 }
 async function toggleRoomMotion(){
   const b=document.querySelector('#roomMotion');
-  if(roomMotionOn){roomMotionOn=false;window.removeEventListener('deviceorientation',onRoomOrientation);roomMotionBaseAlpha=roomMotionLastAlpha=null;roomCameraPreview=0;applyRoomCamera(0,false);if(b){b.classList.remove('is-on');b.textContent='◎ 360°モーション OFF';}return;}
+  if(roomMotionOn){roomMotionOn=false;window.removeEventListener('deviceorientation',onRoomOrientation);roomMotionBaseAlpha=roomMotionLastAlpha=roomMotionLatestAlpha=null;roomCameraPreview=0;applyRoomCamera(0,false);if(b){b.classList.remove('is-on');b.textContent='◎ 360°モーション OFF';}return;}
   try{
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied');}
-    roomMotionOn=true;roomMotionBaseAlpha=roomMotionLastAlpha=null;window.addEventListener('deviceorientation',onRoomOrientation,{passive:true});if(b){b.classList.add('is-on');b.textContent='◉ 360°モーション ON';}
+    roomMotionOn=true;roomMotionBaseAlpha=roomMotionLastAlpha=roomMotionLatestAlpha=null;window.addEventListener('deviceorientation',onRoomOrientation,{passive:true});if(b){b.classList.add('is-on');b.textContent='◉ 360°モーション ON';}
   }catch(_){if(b)b.textContent='◎ モーション許可なし';}
 }
 function updateRoomShelfPerspective(){
@@ -661,17 +682,28 @@ document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.que
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;
 roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;
-  // Finger takes exclusive ownership of yaw. Freeze motion at the exact current view.
-  const currentYaw=roomCameraYaw+roomCameraPreview;roomCameraYaw=currentYaw;roomCameraPreview=0;
+  // Touch becomes the sole owner of the shared camera until release + snap completes.
+  if(roomCameraSettleRaf){cancelAnimationFrame(roomCameraSettleRaf);roomCameraSettleRaf=0;}
+  roomCameraInputLock=true;
+  const currentYaw=roomCameraYaw+roomCameraPreview;roomCameraYaw=currentYaw;roomCameraPreview=0;rebaseRoomMotion();
   roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0,startYaw:currentYaw};
 },{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){applyRoomCamera(-roomShelfTap.dx*ROOM_SWIPE_DEG_PER_PX,true);}},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
   if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;
-  // Rebase device orientation after touch release so motion resumes from this view with no jump.
-  if(roomMotionOn){roomMotionBaseAlpha=null;roomMotionLastAlpha=null;}
-  if(!roomShelfMode)return;
-  if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>18){e.preventDefault();e.stopPropagation();const dir=tap.dx<0?1:-1;roomCameraYaw=tap.startYaw;roomCameraPreview=0;const target=tap.startYaw+dir*ROOM_VIEW_SLOT_DEG;const from=tap.startYaw,start=performance.now(),dur=280;function tickRoomSlot(now){const t=Math.min(1,(now-start)/dur),ease=1-Math.pow(1-t,3);roomCameraYaw=from+(target-from)*ease;applyRoomCamera(0,true);if(t<1)requestAnimationFrame(tickRoomSlot);else{roomCameraYaw=target;applyRoomCamera(0,true);}}requestAnimationFrame(tickRoomSlot);}else{roomCameraYaw=tap.startYaw;roomCameraPreview=0;applyRoomCamera(0,false);}return;}
+  if(!roomShelfMode){roomCameraInputLock=false;rebaseRoomMotion();return;}
+  if(tap.moved){
+    if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>18){
+      e.preventDefault();e.stopPropagation();const dir=tap.dx<0?1:-1;
+      // Commit the exact dragged view first, then animate from there to the next 90° slot.
+      const draggedYaw=tap.startYaw-tap.dx*ROOM_SWIPE_DEG_PER_PX;
+      roomCameraYaw=draggedYaw;roomCameraPreview=0;applyRoomCamera(0,true);
+      const target=nearestRoomViewSlot(tap.startYaw)+dir*ROOM_VIEW_SLOT_DEG;animateRoomYaw(draggedYaw,target,280);
+    }else{
+      roomCameraYaw=tap.startYaw;roomCameraPreview=0;applyRoomCamera(0,false);rebaseRoomMotion();roomCameraInputLock=false;
+    }
+    return;
+  }
   // iPhone Safari can lose hit-testing on perspective-transformed rows. Resolve the
   // visible cover geometrically instead of trusting event.target.
   let chosen=null;
@@ -685,7 +717,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
   }
   if(chosen){e.preventDefault();e.stopPropagation();openShelfRow(chosen.start,chosen.offset);}
 },{capture:true,passive:false});
-roomShelfScroller?.addEventListener('pointercancel',()=>{roomShelfTap=null;if(roomMotionOn){roomMotionBaseAlpha=null;roomMotionLastAlpha=null;}},{capture:true});
+roomShelfScroller?.addEventListener('pointercancel',()=>{roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
