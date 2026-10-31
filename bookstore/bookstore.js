@@ -383,30 +383,57 @@ function applyRoomCamera(previewDeg=0,instant=false){
   roomCameraPreview=previewDeg;
   const yaw=roomCameraYaw+previewDeg;
   store.style.setProperty('--room-yaw',`${yaw.toFixed(2)}deg`);
-  // Existing fantasy art is not an equirectangular asset, so V2.16 uses it as a
-  // camera-linked parallax plate. A true 2:1 image can later drop into the same yaw.
-  // V2.16.1: move the existing wide fantasy plate in actual pixels.
-  // background-position percentages were too subtle / effectively invisible on iPhone Safari.
-  // Keep the same shared yaw now; a true equirectangular asset can replace only this renderer later.
+
+  // V2.16.4 — one continuous yaw drives the background. The current artwork is
+  // a flat plate, so keep its travel deliberately gentle until a true 2:1 asset lands.
   const wrapped=((yaw%360)+540)%360-180;
-  // V2.16.3: render the Room plate as a dedicated DOM layer.
-  // Do not depend on background-position: Safari was visually freezing that path.
-  const maxShift=Math.min(window.innerWidth*.30,220);
+  const maxShift=Math.min(window.innerWidth*.18,132);
   const x=(wrapped/180)*maxShift;
   const bg=document.querySelector('#roomBgLayer');
   if(bg){
-    bg.style.transition=instant?'none':'transform .28s cubic-bezier(.22,.7,.25,1)';
+    bg.style.transition='none';
     bg.style.transform=`translate3d(${(-x).toFixed(1)}px,0,0) scale(1.02)`;
   }
+
+  // Shelf faces stay front-on. During a turn they only slide horizontally;
+  // never rotate/keystone the covers.
   const grid=document.querySelector('#roomShelfGrid');
-  if(grid){grid.style.transition=instant?'none':'transform .28s cubic-bezier(.22,.7,.25,1),opacity .22s';grid.style.transform=`perspective(900px) rotateY(${(-previewDeg*.22).toFixed(2)}deg) translateX(${(-previewDeg*.16).toFixed(2)}px)`;}
+  if(grid){
+    grid.style.transition='none';
+    const step=Math.max(1,roomFaceAngle());
+    const progress=Math.max(-1,Math.min(1,previewDeg/step));
+    grid.style.transform=`translate3d(${(progress*-72).toFixed(2)}%,0,0)`;
+    grid.style.opacity=String(Math.max(.42,1-Math.abs(progress)*.48));
+  }
 }
-function rotateRoomShelf(delta){
-  if(!roomShelfMode)return;const faces=roomShelfFaces();if(faces.length<2)return;
-  roomShelfFace=(roomShelfFace+delta+faces.length)%faces.length;
-  roomCameraYaw=roomShelfFace*roomFaceAngle();roomCameraPreview=0;
-  renderRoomShelf();applyRoomCamera(0,false);
+function settleRoomShelf(delta){
+  if(!roomShelfMode)return;
+  const faces=roomShelfFaces();if(faces.length<2){applyRoomCamera(0,true);return;}
+  const step=roomFaceAngle(),from=roomCameraPreview,to=delta*step;
+  const start=performance.now(),dur=260;
+  function tick(now){
+    const t=Math.min(1,(now-start)/dur),e=1-Math.pow(1-t,3);
+    applyRoomCamera(from+(to-from)*e,true);
+    if(t<1){requestAnimationFrame(tick);return;}
+    // Commit the new face only after the shared camera has reached the same yaw.
+    roomShelfFace=(roomShelfFace+delta+faces.length)%faces.length;
+    roomCameraYaw+=delta*step;roomCameraPreview=0;
+    renderRoomShelf();
+    const grid=document.querySelector('#roomShelfGrid');
+    if(grid){
+      grid.style.transition='none';
+      grid.style.transform=`translate3d(${delta>0?72:-72}%,0,0)`;grid.style.opacity='.42';
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        grid.style.transition='transform .22s cubic-bezier(.22,.7,.25,1),opacity .18s';
+        grid.style.transform='translate3d(0,0,0)';grid.style.opacity='1';
+      }));
+    }
+    // yaw is already at the destination: no background snap here.
+    applyRoomCamera(0,true);
+  }
+  requestAnimationFrame(tick);
 }
+function rotateRoomShelf(delta){settleRoomShelf(delta);}
 function onRoomOrientation(e){
   if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||typeof e.alpha!=='number')return;
   const a=e.alpha;
@@ -415,7 +442,7 @@ function onRoomOrientation(e){
   // Gentle camera coupling: body turn rotates the Room; crossing half a face changes shelf.
   roomCameraPreview+=d*.72;
   const step=roomFaceAngle();
-  if(Math.abs(roomCameraPreview)>=step*.5){const dir=roomCameraPreview>0?1:-1;roomCameraPreview-=dir*step;roomShelfFace=(roomShelfFace+dir+roomShelfFaces().length)%roomShelfFaces().length;roomCameraYaw=roomShelfFace*step;renderRoomShelf();}
+  if(Math.abs(roomCameraPreview)>=step*.5){const dir=roomCameraPreview>0?1:-1;roomCameraPreview-=dir*step;roomShelfFace=(roomShelfFace+dir+roomShelfFaces().length)%roomShelfFaces().length;roomCameraYaw+=dir*step;renderRoomShelf();}
   applyRoomCamera(roomCameraPreview,true);
 }
 async function toggleRoomMotion(){
@@ -630,7 +657,7 @@ document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.que
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;
 roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0};},{capture:true,passive:true});
-roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){const step=roomFaceAngle();applyRoomCamera(Math.max(-step*.48,Math.min(step*.48,-roomShelfTap.dx*.34)),true);}},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){const step=roomFaceAngle();const span=Math.max(180,roomShelfScroller.clientWidth*.78);applyRoomCamera(Math.max(-step*.72,Math.min(step*.72,(-roomShelfTap.dx/span)*step)),true);}},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
   if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;if(!roomShelfMode)return;
   if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>42){e.preventDefault();e.stopPropagation();rotateRoomShelf(tap.dx<0?1:-1);}else applyRoomCamera(0,false);return;}

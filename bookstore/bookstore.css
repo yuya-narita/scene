@@ -163,3 +163,9 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 .store.room-fantasy .room-bg-layer{display:block;background-image:linear-gradient(rgba(5,12,6,.20),rgba(4,8,5,.32)),url('./bookstore-path-fantasy-v2113.png');}
 .store.room-fantasy>.ambient{z-index:1;opacity:1!important;background:linear-gradient(90deg,#0006,transparent 18% 82%,#0006),linear-gradient(rgba(0,0,0,.04),rgba(0,0,0,.16));}
 .store.room-fantasy>.sign,.store.room-fantasy>.stage,.store.room-fantasy>.room-shelf,.store.room-fantasy>.book-path,.store.room-fantasy>.nav,.store.room-fantasy>.focus-panel,.store.room-fantasy>.hint{position:absolute;}
+
+
+/* V2.16.4 — front-on shelf faces. Room turning is translation only; no rotateY. */
+.room-shelf-grid.shelf-turn-left,.room-shelf-grid.shelf-turn-right{animation:none!important}
+@keyframes shelfTurnLeft{0%,100%{transform:none}}
+@keyframes shelfTurnRight{0%,100%{transform:none}}
