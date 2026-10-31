@@ -24,6 +24,10 @@ let roomShelfFace=0;
 let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
 // V2.16.12 — shared Room camera + offscreen shelf exit. Shelf faces stay mounted until fully beyond the viewport.
 let roomCameraInputLock=false,roomCameraSettleRaf=0,roomMotionLatestAlpha=null,roomMotionRenderRaf=0;
+// V2.16.15 — the background follows the true camera immediately, while the shelf gets a tiny
+// compositor-only visual buffer. This evens out 2–6px frame jumps that are especially visible
+// on cover edges/text in iPhone Safari without changing the actual camera or snap logic.
+let roomShelfVisualYaw=null,roomShelfVisualTargetYaw=0,roomShelfVisualRaf=0,roomShelfVisualLastTs=0;
 let roomVisibleFace=0; // V2.16.5: shelf faces live at fixed world angles; null means scenery-only view.
 const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22,ROOM_VIEW_SLOT_DEG=90;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
@@ -374,6 +378,7 @@ function buildRoomShelfFaceLayer(face,f){
   return layer;
 }
 function renderRoomShelf(){
+  roomShelfVisualYaw=null;roomShelfVisualTargetYaw=roomCameraYaw+roomCameraPreview;roomShelfVisualLastTs=0;if(roomShelfVisualRaf){cancelAnimationFrame(roomShelfVisualRaf);roomShelfVisualRaf=0;}
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll'),grid=document.querySelector('#roomShelfGrid');
   if(!wrap||!grid)return;
   roomShelfMode=true;roomShelfAllBooks=fantasyBooks();
@@ -398,39 +403,59 @@ function renderRoomShelfFace(face,keepScroll=false){
   const wrap=document.querySelector('#roomShelf');if(wrap)wrap.dataset.shelfFace=String(face);
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${face+1} / ${faces.length}`;
 }
+function paintRoomShelfAtYaw(yaw){
+  const grid=document.querySelector('#roomShelfGrid');if(!grid)return;
+  const near=nearestShelfForYaw(yaw);
+  const travelPx=Math.max(window.innerWidth,grid.clientWidth)*1.18;
+  grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
+    const face=Number(layer.dataset.face)||0,delta=wrapDeg(shelfWorldAngle(face)-yaw),dist=Math.abs(delta);
+    const travel=Math.min(1.30,dist/ROOM_VIEW_SLOT_DEG),side=Math.sign(delta)||1;
+    const xPx=side*travel*travelPx;
+    const visible=dist<112;
+    layer.style.visibility=visible?'visible':'hidden';
+    layer.style.pointerEvents=dist<18?'auto':'none';
+    layer.style.opacity=visible?'1':'0';
+    layer.style.transform=`translate3d(${xPx}px,0,0)`;
+    layer.style.zIndex=String(100-Math.round(dist));
+  });
+  if(roomVisibleFace!==near.face&&near.dist<8)renderRoomShelfFace(near.face,true);
+}
+function scheduleRoomShelfVisualYaw(targetYaw,force=false){
+  roomShelfVisualTargetYaw=targetYaw;
+  if(force||roomShelfVisualYaw==null){
+    roomShelfVisualYaw=targetYaw;roomShelfVisualLastTs=0;
+    if(roomShelfVisualRaf){cancelAnimationFrame(roomShelfVisualRaf);roomShelfVisualRaf=0;}
+    paintRoomShelfAtYaw(roomShelfVisualYaw);return;
+  }
+  if(roomShelfVisualRaf)return;
+  const tick=ts=>{
+    roomShelfVisualRaf=0;
+    const dt=roomShelfVisualLastTs?Math.min(34,ts-roomShelfVisualLastTs):16.67;roomShelfVisualLastTs=ts;
+    // ~42 ms time constant: enough to hide Safari's visible stepping, short enough to feel attached to the finger.
+    const k=1-Math.exp(-dt/42);
+    const d=roomShelfVisualTargetYaw-roomShelfVisualYaw;
+    roomShelfVisualYaw+=d*k;
+    if(Math.abs(d)<0.025){roomShelfVisualYaw=roomShelfVisualTargetYaw;paintRoomShelfAtYaw(roomShelfVisualYaw);roomShelfVisualLastTs=0;return;}
+    paintRoomShelfAtYaw(roomShelfVisualYaw);
+    roomShelfVisualRaf=requestAnimationFrame(tick);
+  };
+  roomShelfVisualRaf=requestAnimationFrame(tick);
+}
 function applyRoomCamera(previewDeg=0,instant=false){
   if(roomId!=='fantasy')return;
   roomCameraPreview=previewDeg;const yaw=roomCameraYaw+previewDeg;
-  // V2.16.14: take layout measurements BEFORE any style writes. Reading clientHeight
-  // after changing CSS forced Safari to synchronously relayout the shelf every camera frame.
+  // Keep the panoramic background directly attached to the true shared camera.
   const panoW=Math.max(store.clientHeight*2,window.innerWidth*2);
-  const bg=document.querySelector('#roomBgLayer'),grid=document.querySelector('#roomShelfGrid');
+  const bg=document.querySelector('#roomBgLayer');
   store.style.setProperty('--room-yaw',`${yaw}deg`);
   if(bg){
     const phase=wrapDeg(yaw)/360;
     bg.style.transition='none';bg.style.backgroundSize=`${panoW}px 100%`;
     bg.style.transform=`translate3d(${-phase*panoW}px,0,0)`;
   }
-  // Shelf overview is deliberately a flat composited plane. Keep every cover/board static
-  // inside it and move only this one parent layer with a sub-pixel translate3d.
-  const near=nearestShelfForYaw(yaw);
-  if(grid){
-    const travelPx=Math.max(window.innerWidth,grid.clientWidth)*1.18;
-    grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
-      const face=Number(layer.dataset.face)||0,delta=wrapDeg(shelfWorldAngle(face)-yaw),dist=Math.abs(delta);
-      const travel=Math.min(1.30,dist/ROOM_VIEW_SLOT_DEG),side=Math.sign(delta)||1;
-      const xPx=side*travel*travelPx;
-      const visible=dist<112;
-      layer.style.visibility=visible?'visible':'hidden';
-      layer.style.pointerEvents=dist<18?'auto':'none';
-      layer.style.opacity=visible?'1':'0';
-      // No per-frame scale: scaling a shelf full of 3D book descendants made WebKit
-      // repeatedly re-rasterize them. Translation alone stays on the compositor.
-      layer.style.transform=`translate3d(${xPx}px,0,0)`;
-      layer.style.zIndex=String(100-Math.round(dist));
-    });
-    if(roomVisibleFace!==near.face&&near.dist<8){renderRoomShelfFace(near.face,true);}
-  }
+  // Shelf-only visual smoothing. `instant` means input is current, not that the shelf should bypass smoothing.
+  // Force only the first paint so entering the room never animates from an old session angle.
+  scheduleRoomShelfVisualYaw(yaw,roomShelfVisualYaw==null);
 }
 function scheduleRoomMotionRender(){
   if(roomMotionRenderRaf)return;

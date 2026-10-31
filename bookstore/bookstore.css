@@ -196,7 +196,7 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 }
 
 
-/* V2.16.14 — Safari shelf compositor pass.
+/* V2.16.15 — Safari shelf compositor pass.
    The moving unit is one flat shelf face. Avoid per-book 3D compositing/filter work while
    the room camera is moving; visual depth is kept by the static cover/page styling. */
 .store.room-fantasy .room-shelf-face{
