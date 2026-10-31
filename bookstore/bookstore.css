@@ -216,3 +216,16 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 
 /* V2.16.15R3: keep the path motion toggle independent from the live path gesture surface on iPhone Safari. */
 .book-path #motionStart{touch-action:manipulation;-webkit-user-select:none;user-select:none;pointer-events:auto}
+
+
+/* V2.16.15R4: path motion button is a store-level overlay, not a child of the
+   perspective/overflow gesture surface. The painted button and Safari hit-test box
+   are therefore the exact same DOM box. */
+.store > #motionStart.path-motion{
+  position:absolute;z-index:40;right:10px;top:calc(25% + 9px);
+  touch-action:manipulation;-webkit-user-select:none;user-select:none;pointer-events:auto;
+}
+.store > #motionStart.path-motion.is-on{border-color:#b9dc8a99;background:#173116d9;box-shadow:0 0 14px #8fbd6555}
+@media(max-width:680px){
+  .store > #motionStart.path-motion{right:5px;top:calc(22% + 6px);padding:6px 8px;font-size:8px}
+}

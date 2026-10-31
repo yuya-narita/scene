@@ -562,6 +562,7 @@ function setViewMode(mode){
   document.querySelector('#pathMode').classList.toggle('is-active',viewMode==='path');
   stage.hidden=viewMode!=='ring';
   document.querySelector('#bookPath').hidden=viewMode!=='path';
+  document.querySelector('#motionStart').hidden=viewMode!=='path';
   document.querySelector('#prev').hidden=viewMode!=='ring';document.querySelector('#next').hidden=viewMode!=='ring';
   document.querySelector('#focusPanel').hidden=viewMode!=='ring';document.querySelector('#hint').hidden=viewMode!=='ring';
   if(viewMode==='path'){
