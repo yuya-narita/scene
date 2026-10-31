@@ -23,7 +23,7 @@ let roomShelfFace=0;
 // V2.16.0 — shared Room camera: shelf ring + background + optional device yaw.
 let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
 let roomVisibleFace=0; // V2.16.5: shelf faces live at fixed world angles; null means scenery-only view.
-const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22,ROOM_VIEW_SLOT_DEG=45;
+const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22,ROOM_VIEW_SLOT_DEG=90;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('returnTo',location.href);return player.toString();}
@@ -415,20 +415,26 @@ function applyRoomCamera(previewDeg=0,instant=false){
       const face=Number(layer.dataset.face)||0,delta=wrapDeg(shelfWorldAngle(face)-yaw),dist=Math.abs(delta);
       // Page-turn feel: the current and next shelf already coexist. Keep every shelf front-on;
       // only screen position/scale/opacity change as the shared camera turns.
-      const range=72,p=Math.min(1,dist/range),side=Math.sign(delta)||1;
+      // V2.16.9: 90° shelf spacing. Keep neighbouring shelves mounted, but give
+      // the panorama a real visual gap between them. Only the shelf container moves;
+      // individual covers are not transformed per frame.
+      const range=74,p=Math.min(1,dist/range),side=Math.sign(delta)||1;
       const visible=dist<range;
+      const fade=Math.max(0,1-p);
       layer.style.visibility=visible?'visible':'hidden';
-      layer.style.pointerEvents=dist<20?'auto':'none';
-      layer.style.opacity=visible?String(Math.max(.10,1-p*.90)):'0';
-      layer.style.transform=`translate3d(${(side*p*48).toFixed(2)}%,0,0) scale(${(1-p*.08).toFixed(4)})`;
+      layer.style.pointerEvents=dist<18?'auto':'none';
+      layer.style.opacity=visible?String(Math.pow(fade,1.55)):'0';
+      layer.style.transform=`translate3d(${(side*p*76).toFixed(2)}%,0,0) scale(${(1-p*.045).toFixed(4)})`;
       layer.style.zIndex=String(100-Math.round(dist));
     });
-    if(roomVisibleFace!==near.face&&near.dist<ROOM_VIEW_SLOT_DEG*.5){renderRoomShelfFace(near.face,true);}
+    // Do not switch/rebuild the active shelf at an angular boundary. The faces are
+    // persistent world objects; update the label only once a shelf is genuinely front-on.
+    if(roomVisibleFace!==near.face&&near.dist<8){renderRoomShelfFace(near.face,true);}
   }
 }
-// V2.16.7 — the room has eight stable 45° viewing slots. Shelf 1 is at 0°, shelf 2 at 45°. Shelves occupy some
-// slots today; empty slots remain scenery and can receive future shelf faces without
-// changing the camera grammar. Every completed horizontal swipe settles to a slot.
+// V2.16.9 — four stable 90° viewing slots. Shelf 1 is at 0°, shelf 2 at 90°.
+// The empty quarter-turns are intentional scenery gaps. Every completed horizontal swipe
+// settles to a 90° slot while device motion remains free between slots.
 function nearestRoomViewSlot(yaw){return Math.round(yaw/ROOM_VIEW_SLOT_DEG)*ROOM_VIEW_SLOT_DEG;}
 function settleRoomYaw(){
   if(!roomShelfMode)return;
