@@ -141,3 +141,10 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 
 /* V2.13.2: the expanded ring owns vertical gestures; do not let Safari turn the return swipe into page scroll. */
 .stage.room-shelf-ring{touch-action:none;overscroll-behavior:contain}
+/* V2.15.0 — tall shelf faces form the Room ring. */
+.room-shelf-counter{position:absolute;z-index:5;right:4px;top:50%;transform:translateY(-50%);padding:6px 8px;border-radius:99px;background:#07100899;border:1px solid #c9d9b233;color:#fffbd6;font-size:9px;letter-spacing:.08em;pointer-events:none}
+.room-shelf-grid{transform-origin:50% 55%}
+.room-shelf-grid.shelf-turn-left{animation:shelfTurnLeft .32s cubic-bezier(.22,.7,.25,1)}
+.room-shelf-grid.shelf-turn-right{animation:shelfTurnRight .32s cubic-bezier(.22,.7,.25,1)}
+@keyframes shelfTurnLeft{0%{opacity:.42;transform:translateX(11%) rotateY(-18deg) scale(.96)}100%{opacity:1;transform:none}}
+@keyframes shelfTurnRight{0%{opacity:.42;transform:translateX(-11%) rotateY(18deg) scale(.96)}100%{opacity:1;transform:none}}

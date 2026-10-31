@@ -16,6 +16,10 @@ const PATH_GATE_REVEAL_PAD=.12;
 const FOREST_TRAVEL=5.5; // reserved for future side-branch routes with % progress
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
+// V2.15.0 — each Room is a circular ring of tall shelf faces.
+// Only the front shelf is rendered at full detail; horizontal swipes rotate shelves.
+const ROOM_SHELF_CAPACITY=12;
+let roomShelfFace=0;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('returnTo',location.href);return player.toString();}
@@ -336,35 +340,51 @@ async function enterForest(){
   setRoomVisual('fantasy');hideFantasyGate();
   document.querySelector('#motionStart').hidden=true;
   document.querySelector('#pathStatus').textContent='ファンタジーの森　0%';
-  document.querySelector('#pathSub').textContent='下スワイプ＝前進 ／ 上スワイプ＝後退';
+  document.querySelector('#pathSub').textContent='上スワイプ＝前進 ／ 下スワイプ＝後退';
   renderPath();
 }
 
 
-// V2.13.0 — Room shelf prototype: 4 covers per row, vertically continuing shelf.
-// Rows near the top tilt away to create the illusion of a very tall shelf.
+// V2.15.0 — Room shelf ring. A Room is surrounded by tall shelf faces.
+// Each face contains 4 columns x 3 rows for now; horizontal swipes rotate the
+// shelf ring, while vertical scrolling remains available inside a taller face later.
+function roomShelfFaces(){
+  const all=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();
+  const out=[];for(let i=0;i<all.length;i+=ROOM_SHELF_CAPACITY)out.push({start:i,books:all.slice(i,i+ROOM_SHELF_CAPACITY)});
+  return out.length?out:[{start:0,books:[]}];
+}
 function renderRoomShelf(){
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll'),grid=document.querySelector('#roomShelfGrid');
   if(!wrap||!grid)return;
-  roomShelfMode=true;roomShelfAllBooks=fantasyBooks();grid.innerHTML='';
-  for(let start=0;start<roomShelfAllBooks.length;start+=4){
-    const row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(start);
-    const slice=roomShelfAllBooks.slice(start,start+4);
-    row.setAttribute('aria-label',`${Math.floor(start/4)+1}段目の本を見る`);
+  roomShelfMode=true;roomShelfAllBooks=fantasyBooks();
+  const faces=roomShelfFaces();roomShelfFace=((roomShelfFace%faces.length)+faces.length)%faces.length;
+  const face=faces[roomShelfFace];grid.innerHTML='';
+  for(let local=0;local<face.books.length;local+=4){
+    const globalStart=face.start+local;
+    const row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(globalStart);
+    const slice=face.books.slice(local,local+4);
+    row.setAttribute('aria-label',`${Math.floor(globalStart/4)+1}段目の本を見る`);
     row.innerHTML=`<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}</span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
-    row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book');openShelfRow(start,hit?Number(hit.dataset.bookOffset):0)});
-    row.addEventListener('keydown',e=>{const hit=e.target.closest('.room-shelf-book');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openShelfRow(start,Number(hit.dataset.bookOffset)||0)}});
+    row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book');openShelfRow(globalStart,hit?Number(hit.dataset.bookOffset):0)});
+    row.addEventListener('keydown',e=>{const hit=e.target.closest('.room-shelf-book');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openShelfRow(globalStart,Number(hit.dataset.bookOffset)||0)}});
     grid.appendChild(row);hydrateCoverLoadState(row);
   }
   wrap.hidden=false;stage.hidden=true;
+  wrap.dataset.shelfFace=String(roomShelfFace);
+  const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${roomShelfFace+1} / ${faces.length}`;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
   scroller.scrollTop=0;requestAnimationFrame(updateRoomShelfPerspective);
+}
+function rotateRoomShelf(delta){
+  if(!roomShelfMode)return;const faces=roomShelfFaces();if(faces.length<2)return;
+  const grid=document.querySelector('#roomShelfGrid');if(!grid)return;
+  roomShelfFace=(roomShelfFace+delta+faces.length)%faces.length;
+  grid.classList.remove('shelf-turn-left','shelf-turn-right');void grid.offsetWidth;grid.classList.add(delta>0?'shelf-turn-left':'shelf-turn-right');
+  renderRoomShelf();
 }
 function updateRoomShelfPerspective(){
   const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
   const h=Math.max(1,scroller.clientHeight),scrollTop=scroller.scrollTop;
-  // Use layout coordinates, not transformed getBoundingClientRect(). Reading the transformed
-  // rectangle and feeding it back into the next transform caused iPhone Safari to flicker.
   scroller.querySelectorAll('.room-shelf-row').forEach(row=>{
     const cy=row.offsetTop-scrollTop+row.offsetHeight/2,rel=cy/h;
     const top=Math.max(0,Math.min(1,(.42-rel)/.42));
@@ -375,14 +395,13 @@ function updateRoomShelfPerspective(){
   });
 }
 async function openShelfRow(start,focusOffset=0){
-  // V2.14.0 — the ring now represents the whole Room shelf, not only one 4-book row.
-  // A tapped thumbnail still becomes the front/center book when the circular view opens.
+  // Thumbnail -> whole Room book ring. The tapped thumbnail is still the front book.
   const selected=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();if(!selected.length)return;
   const tappedIndex=Math.max(0,Math.min(selected.length-1,(Number(start)||0)+(Number(focusOffset)||0)));
   roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=selected;index=tappedIndex;dragUnits=0;stage.hidden=false;
   stage.classList.add('room-shelf-ring');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
-  document.querySelector('#hint').textContent='左右にスワイプして棚の本を見る　／　上スワイプで棚へ戻る';
+  document.querySelector('#hint').textContent='左右にスワイプしてRoomの本を見る　／　上スワイプで棚へ戻る';
   document.querySelector('.sign').classList.add('shelf-back-sign');
   stage.innerHTML='';await preloadFirstViewCovers();renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
   const startTime=performance.now(),dur=1450;
@@ -460,12 +479,12 @@ function renderPath(){
   if(roomId==='forest'){
     const pct=Math.min(100,Math.round(pathProgress/FOREST_TRAVEL*100));
     document.querySelector('#pathStatus').textContent=pathProgress>=FOREST_TRAVEL-.08?'森の奥に本棚が見える':`ファンタジーの森　${pct}%`;
-    document.querySelector('#pathSub').textContent=pathProgress>=FOREST_TRAVEL-.08?'タップすると本棚へ':'下スワイプ＝前進 ／ 上スワイプ＝後退';
+    document.querySelector('#pathSub').textContent=pathProgress>=FOREST_TRAVEL-.08?'タップすると本棚へ':'上スワイプ＝前進 ／ 下スワイプ＝後退';
     document.querySelector('#fantasyGate').hidden=true;
   }else{
     const n=Math.min(books.length,Math.max(1,Math.round(pathProgress)+1));
     if(pathProgress>books.length-.25){document.querySelector('#pathStatus').textContent='本の道を抜けた';document.querySelector('#pathSub').textContent='';}
-    else {document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;document.querySelector('#pathSub').textContent='下スワイプ＝前進 ／ 上スワイプ＝後退';}
+    else {document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;document.querySelector('#pathSub').textContent='上スワイプ＝前進 ／ 下スワイプ＝後退';}
     updateFantasyGate();
   }
 }
@@ -516,7 +535,7 @@ function onPathPointerMove(e){
   if(Math.hypot(dx,dy)>8){pathDrag.moved=true;if(pathBookHold)pathBookHold.moved=true}
   if(Math.abs(dy)>3)e.preventDefault();
   const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;
-  const dir=1; // all passages: down swipe = forward, up swipe = backward
+  const dir=-1; // all passages: up swipe = forward, down swipe = backward
   pathProgress=clampPath(pathDrag.start+dir*dy/PATH_DRAG_PX_PER_BOOK);renderPath()
 }
 function onPathPointerEnd(e){
@@ -526,7 +545,7 @@ function onPathPointerEnd(e){
     const raw=h.raw,w=books[norm(raw)];
     pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w);return;
   }
-  const dir=1; // all passages: down swipe = forward, up swipe = backward
+  const dir=-1; // all passages: up swipe = forward, down swipe = backward
   const launch=Math.max(-PATH_MAX_VELOCITY,Math.min(PATH_MAX_VELOCITY,dir*d.vy/PATH_DRAG_PX_PER_BOOK*.82));
   addPathVelocity(launch)
 }
@@ -560,16 +579,17 @@ async function enableMotion(){
     if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     motionOn=true;ensurePathLoop();window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrientation);
-    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='モーション＝前進のみ。下スワイプ＝進む／上スワイプ＝戻る';
-  }catch(_){document.querySelector('#pathSub').textContent='下スワイプで進む／上スワイプで戻れます';}
+    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='モーション＝前進のみ。上スワイプ＝進む／下スワイプ＝戻る';
+  }catch(_){document.querySelector('#pathSub').textContent='上スワイプで進む／下スワイプで戻れます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;
-roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false};},{capture:true,passive:true});
-roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;if(Math.hypot(e.clientX-roomShelfTap.x,e.clientY-roomShelfTap.y)>9)roomShelfTap.moved=true;},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0};},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
-  if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;if(tap.moved||!roomShelfMode)return;
+  if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;if(!roomShelfMode)return;
+  if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>42){e.preventDefault();e.stopPropagation();rotateRoomShelf(tap.dx<0?1:-1);}return;}
   // iPhone Safari can lose hit-testing on perspective-transformed rows. Resolve the
   // visible cover geometrically instead of trusting event.target.
   let chosen=null;
