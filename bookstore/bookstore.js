@@ -701,13 +701,29 @@ function onPathWheel(e){
   const dir=1;
   addPathVelocity(Math.max(-.0038,Math.min(.0038,dir*d*.000012)));
 }
-async function enableMotion(){
+function setPathMotionButton(){
+  const b=document.querySelector('#motionStart');if(!b)return;
+  b.classList.toggle('is-on',motionOn);
+  b.textContent=motionOn?'◉ モーション ON':'◎ モーション OFF';
+  b.setAttribute('aria-pressed',motionOn?'true':'false');
+}
+function disableMotion(){
+  motionOn=false;pathMotionEnergy=0;lastAccelMag=0;pathMotionLast=0;
+  window.removeEventListener('devicemotion',onMotion);window.removeEventListener('deviceorientation',onOrientation);
+  setPathMotionButton();
+  const sub=document.querySelector('#pathSub');if(sub&&viewMode==='path')sub.textContent='上スワイプ＝前進 ／ 下スワイプ＝後退';
+}
+async function togglePathMotion(){
+  if(motionOn){disableMotion();return;}
   try{
     if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied')}
-    motionOn=true;ensurePathLoop();window.addEventListener('devicemotion',onMotion);window.addEventListener('deviceorientation',onOrientation);
-    const b=document.querySelector('#motionStart');b.classList.add('is-on');b.textContent='モーション ON';document.querySelector('#pathSub').textContent='モーション＝前進のみ。上スワイプ＝進む／下スワイプ＝戻る';
-  }catch(_){document.querySelector('#pathSub').textContent='上スワイプで進む／下スワイプで戻れます';}
+    motionOn=true;lastAccelMag=0;pathMotionEnergy=0;pathMotionLast=0;ensurePathLoop();
+    window.removeEventListener('devicemotion',onMotion);window.removeEventListener('deviceorientation',onOrientation);
+    window.addEventListener('devicemotion',onMotion,{passive:true});window.addEventListener('deviceorientation',onOrientation,{passive:true});
+    setPathMotionButton();
+    const sub=document.querySelector('#pathSub');if(sub)sub.textContent='モーション＝前進のみ ／ 上スワイプ＝前進 ／ 下スワイプ＝後退';
+  }catch(_){disableMotion();const sub=document.querySelector('#pathSub');if(sub)sub.textContent='モーションを許可できませんでした。スワイプで移動できます';}
 }
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
@@ -773,7 +789,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
 roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
-const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
+const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=togglePathMotion;setPathMotionButton();document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
 
 async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
