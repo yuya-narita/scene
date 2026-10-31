@@ -24,11 +24,10 @@ let roomShelfFace=0;
 let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
 // V2.16.12 — shared Room camera + offscreen shelf exit. Shelf faces stay mounted until fully beyond the viewport.
 let roomCameraInputLock=false,roomCameraSettleRaf=0,roomMotionLatestAlpha=null,roomMotionRenderRaf=0;
-// V2.16.16 — adaptive shelf micro-smoothing. Keep the atmospheric softness from V2.16.15,
-// but cap visual lag so the shelf stays attached to the panorama. Only tiny frame-to-frame
-// stepping is filtered; slow motion and release settle back onto the true shared camera quickly.
+// V2.16.15 — the background follows the true camera immediately, while the shelf gets a tiny
+// compositor-only visual buffer. This evens out 2–6px frame jumps that are especially visible
+// on cover edges/text in iPhone Safari without changing the actual camera or snap logic.
 let roomShelfVisualYaw=null,roomShelfVisualTargetYaw=0,roomShelfVisualRaf=0,roomShelfVisualLastTs=0;
-let roomShelfVisualPrevTargetYaw=null,roomShelfVisualPrevTargetTs=0;
 let roomVisibleFace=0; // V2.16.5: shelf faces live at fixed world angles; null means scenery-only view.
 const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22,ROOM_VIEW_SLOT_DEG=90;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
@@ -379,7 +378,7 @@ function buildRoomShelfFaceLayer(face,f){
   return layer;
 }
 function renderRoomShelf(){
-  roomShelfVisualYaw=null;roomShelfVisualTargetYaw=roomCameraYaw+roomCameraPreview;roomShelfVisualLastTs=0;roomShelfVisualPrevTargetYaw=null;roomShelfVisualPrevTargetTs=0;if(roomShelfVisualRaf){cancelAnimationFrame(roomShelfVisualRaf);roomShelfVisualRaf=0;}
+  roomShelfVisualYaw=null;roomShelfVisualTargetYaw=roomCameraYaw+roomCameraPreview;roomShelfVisualLastTs=0;if(roomShelfVisualRaf){cancelAnimationFrame(roomShelfVisualRaf);roomShelfVisualRaf=0;}
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll'),grid=document.querySelector('#roomShelfGrid');
   if(!wrap||!grid)return;
   roomShelfMode=true;roomShelfAllBooks=fantasyBooks();
@@ -422,11 +421,7 @@ function paintRoomShelfAtYaw(yaw){
   if(roomVisibleFace!==near.face&&near.dist<8)renderRoomShelfFace(near.face,true);
 }
 function scheduleRoomShelfVisualYaw(targetYaw,force=false){
-  const now=performance.now();
-  const sampleDt=roomShelfVisualPrevTargetTs?Math.max(1,now-roomShelfVisualPrevTargetTs):16.67;
-  const sampleDelta=roomShelfVisualPrevTargetYaw==null?0:Math.abs(targetYaw-roomShelfVisualPrevTargetYaw);
-  const targetSpeed=sampleDelta/sampleDt; // deg/ms; used only to tune the visual filter.
-  roomShelfVisualPrevTargetYaw=targetYaw;roomShelfVisualPrevTargetTs=now;roomShelfVisualTargetYaw=targetYaw;
+  roomShelfVisualTargetYaw=targetYaw;
   if(force||roomShelfVisualYaw==null){
     roomShelfVisualYaw=targetYaw;roomShelfVisualLastTs=0;
     if(roomShelfVisualRaf){cancelAnimationFrame(roomShelfVisualRaf);roomShelfVisualRaf=0;}
@@ -436,23 +431,11 @@ function scheduleRoomShelfVisualYaw(targetYaw,force=false){
   const tick=ts=>{
     roomShelfVisualRaf=0;
     const dt=roomShelfVisualLastTs?Math.min(34,ts-roomShelfVisualLastTs):16.67;roomShelfVisualLastTs=ts;
-    const d=roomShelfVisualTargetYaw-roomShelfVisualYaw,ad=Math.abs(d);
-    // Adaptive micro-filter: strongest around the low/normal-speed range where cover edges reveal
-    // Safari stepping, but almost attached at crawl speed and during a fast flick.
-    const speed=targetSpeed;
-    let tau=18;
-    if(speed<0.018)tau=8;
-    else if(speed<0.16)tau=22;
-    else if(speed<0.34)tau=17;
-    else tau=10;
-    const k=1-Math.exp(-dt/tau);
+    // ~42 ms time constant: enough to hide Safari's visible stepping, short enough to feel attached to the finger.
+    const k=1-Math.exp(-dt/42);
+    const d=roomShelfVisualTargetYaw-roomShelfVisualYaw;
     roomShelfVisualYaw+=d*k;
-    // Never let smoothing create the V2.16.15 floating-shelf look. The visual camera may trail
-    // only a tiny fraction of the 90° room spacing.
-    const maxLag=speed<0.018?0.16:(speed<0.34?0.52:0.34);
-    const lag=roomShelfVisualTargetYaw-roomShelfVisualYaw;
-    if(Math.abs(lag)>maxLag)roomShelfVisualYaw=roomShelfVisualTargetYaw-Math.sign(lag)*maxLag;
-    if(ad<0.045){roomShelfVisualYaw=roomShelfVisualTargetYaw;paintRoomShelfAtYaw(roomShelfVisualYaw);roomShelfVisualLastTs=0;return;}
+    if(Math.abs(d)<0.025){roomShelfVisualYaw=roomShelfVisualTargetYaw;paintRoomShelfAtYaw(roomShelfVisualYaw);roomShelfVisualLastTs=0;return;}
     paintRoomShelfAtYaw(roomShelfVisualYaw);
     roomShelfVisualRaf=requestAnimationFrame(tick);
   };
