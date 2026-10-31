@@ -174,3 +174,10 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 .room-bg-layer{left:-200%;width:500%;top:0;bottom:0;transform:translate3d(0,0,0);contain:paint;will-change:transform;}
 .room-shelf-grid{backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:translate3d(0,0,0);contain:layout paint;}
 .room-shelf-row,.room-shelf-book,.room-shelf-book .book-shell{backface-visibility:hidden;-webkit-backface-visibility:hidden;}
+
+/* V2.16.8 — persistent front-facing shelf planes.
+   Faces coexist like adjacent manga pages; camera motion reveals them continuously. */
+#roomShelfGrid{position:relative;display:block;min-height:375px;transform:none!important;contain:none;}
+.room-shelf-face{position:absolute;inset:0;display:flex;flex-direction:column;gap:13px;transform-origin:50% 55%;transform-style:flat;will-change:transform,opacity;backface-visibility:hidden;-webkit-backface-visibility:hidden;}
+.room-shelf-face .room-shelf-row{flex:0 0 116px;}
+@media(max-width:680px){#roomShelfGrid{min-height:363px}.room-shelf-face .room-shelf-row{flex-basis:112px}}
