@@ -684,6 +684,22 @@ async function enableMotion(){
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;
+// V2.16.13 — low-speed drag is rendered once per animation frame from the latest pointer sample.
+// This keeps slow iPhone drags continuous instead of rendering at irregular pointer-event intervals.
+let roomShelfDragRaf=0,roomShelfPendingPreview=null;
+function queueRoomShelfPreview(previewDeg){
+  roomShelfPendingPreview=previewDeg;
+  if(roomShelfDragRaf)return;
+  roomShelfDragRaf=requestAnimationFrame(()=>{
+    roomShelfDragRaf=0;
+    if(roomShelfPendingPreview==null)return;
+    const v=roomShelfPendingPreview;roomShelfPendingPreview=null;applyRoomCamera(v,true);
+  });
+}
+function flushRoomShelfPreview(){
+  if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}
+  if(roomShelfPendingPreview!=null){const v=roomShelfPendingPreview;roomShelfPendingPreview=null;applyRoomCamera(v,true);}
+}
 roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;
   // Touch becomes the sole owner of the shared camera until release + snap completes.
   if(roomCameraSettleRaf){cancelAnimationFrame(roomCameraSettleRaf);roomCameraSettleRaf=0;}
@@ -691,9 +707,9 @@ roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;
   const currentYaw=roomCameraYaw+roomCameraPreview;roomCameraYaw=currentYaw;roomCameraPreview=0;rebaseRoomMotion();
   roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0,startYaw:currentYaw};
 },{capture:true,passive:true});
-roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){applyRoomCamera(-roomShelfTap.dx*ROOM_SWIPE_DEG_PER_PX,true);}},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const samples=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():null,last=samples&&samples.length?samples[samples.length-1]:e;roomShelfTap.dx=last.clientX-roomShelfTap.x;roomShelfTap.dy=last.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>5)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){queueRoomShelfPreview(-roomShelfTap.dx*ROOM_SWIPE_DEG_PER_PX);}},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
-  if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;
+  if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;flushRoomShelfPreview();const tap=roomShelfTap;roomShelfTap=null;
   if(!roomShelfMode){roomCameraInputLock=false;rebaseRoomMotion();return;}
   if(tap.moved){
     if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>18){
@@ -720,7 +736,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
   }
   if(chosen){e.preventDefault();e.stopPropagation();openShelfRow(chosen.start,chosen.offset);}
 },{capture:true,passive:false});
-roomShelfScroller?.addEventListener('pointercancel',()=>{roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
+roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);

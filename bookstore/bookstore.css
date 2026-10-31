@@ -181,3 +181,16 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 .room-shelf-face{position:absolute;inset:0;display:flex;flex-direction:column;gap:13px;transform-origin:50% 55%;transform-style:flat;will-change:transform,opacity;backface-visibility:hidden;-webkit-backface-visibility:hidden;}
 .room-shelf-face .room-shelf-row{flex:0 0 116px;}
 @media(max-width:680px){#roomShelfGrid{min-height:363px}.room-shelf-face .room-shelf-row{flex-basis:112px}}
+
+
+/* V2.16.13 — remove the invisible horizontal shelf wall.
+   The vertical shelf viewport used to clip translated persistent faces at its left/right edge.
+   Give the scroll compositor a much wider horizontal canvas while keeping the actual shelf grid
+   at the original visual width in the middle. Vertical scrolling remains on this same element. */
+.store.room-fantasy .room-shelf{overflow:visible;mask-image:none;-webkit-mask-image:none;}
+.store.room-fantasy .room-shelf-scroll{left:-110%;right:-110%;padding-left:0;padding-right:0;overflow-y:auto;overflow-x:hidden;}
+.store.room-fantasy #roomShelfGrid{width:29.4118%;margin-left:auto;margin-right:auto;}
+@media(max-width:680px){
+  .store.room-fantasy .room-shelf-scroll{left:-110%;right:-110%;padding-left:0;padding-right:0;}
+  .store.room-fantasy #roomShelfGrid{width:29.4118%;}
+}
