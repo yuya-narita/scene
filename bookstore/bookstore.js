@@ -382,6 +382,8 @@ function renderRoomShelf(){
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll'),grid=document.querySelector('#roomShelfGrid');
   if(!wrap||!grid)return;
   roomShelfMode=true;roomShelfAllBooks=fantasyBooks();
+  // Defensive lifecycle guard: a room shelf must never inherit the path-only overlay.
+  const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   const faces=roomShelfFaces();roomShelfFace=((roomShelfFace%faces.length)+faces.length)%faces.length;
   grid.innerHTML='';faces.forEach((f,i)=>grid.appendChild(buildRoomShelfFaceLayer(i,f)));
   wrap.hidden=false;stage.hidden=true;wrap.dataset.shelfFace=String(roomShelfFace);
@@ -546,6 +548,9 @@ async function enterFantasyRoom(){
   await new Promise(r=>setTimeout(r,360));
   roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
+  // V2.16.15R5: the path motion control is a store-level overlay, so explicitly
+  // retire it when the route leaves the book path. Its ON/OFF state is preserved.
+  const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
   path.hidden=true;path?.classList.remove('route-leaving');
   renderRoomShelf();routeTransitioning=false;
