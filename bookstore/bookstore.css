@@ -213,3 +213,6 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
   transform-style:flat;
   -webkit-transform-style:flat;
 }
+
+/* V2.16.15R3: keep the path motion toggle independent from the live path gesture surface on iPhone Safari. */
+.book-path #motionStart{touch-action:manipulation;-webkit-user-select:none;user-select:none;pointer-events:auto}

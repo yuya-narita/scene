@@ -789,7 +789,17 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
 roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
-const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=togglePathMotion;setPathMotionButton();document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
+const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});const pathMotionButton=document.querySelector('#motionStart');
+// R3: iPhone Safari can cancel the synthetic click while live DeviceMotion keeps the
+// path repainting. Toggle on pointerup instead, and keep the event completely out of
+// the path drag surface so ON can always be turned OFF with one tap.
+if(pathMotionButton){
+  pathMotionButton.onclick=null;
+  pathMotionButton.addEventListener('pointerdown',(e)=>{e.stopPropagation();});
+  pathMotionButton.addEventListener('pointerup',(e)=>{e.preventDefault();e.stopPropagation();togglePathMotion();});
+  pathMotionButton.addEventListener('pointercancel',(e)=>{e.stopPropagation();});
+}
+setPathMotionButton();document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
 
 async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
