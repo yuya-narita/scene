@@ -512,8 +512,9 @@ function updateRoomShelfPerspective(){
     const cy=row.offsetTop-scrollTop+row.offsetHeight/2,rel=cy/h;
     const top=Math.max(0,Math.min(1,(.42-rel)/.42));
     const bottom=Math.max(0,Math.min(1,(rel-.78)/.22));
-    const tilt=top*58-bottom*8,scale=1-top*.22-bottom*.05,z=-top*120;
-    row.style.setProperty('--shelf-tilt',`${tilt.toFixed(1)}deg`);row.style.setProperty('--shelf-scale',scale.toFixed(3));row.style.setProperty('--shelf-z',`${z.toFixed(0)}px`);row.style.opacity=String(Math.max(.34,1-top*.52-bottom*.22));
+    // V2.16.15R1: keep the tall-shelf perspective, but do not make the upper row look disabled.
+    const tilt=top*58-bottom*8,scale=1-top*.16-bottom*.05,z=-top*120;
+    row.style.setProperty('--shelf-tilt',`${tilt.toFixed(1)}deg`);row.style.setProperty('--shelf-scale',scale.toFixed(3));row.style.setProperty('--shelf-z',`${z.toFixed(0)}px`);row.style.opacity=String(Math.max(.76,1-top*.20-bottom*.16));
     row.style.zIndex=String(100-Math.round(top*20+bottom*5));
   });
 }
@@ -533,7 +534,10 @@ async function openShelfRow(start,focusOffset=0){
 }
 function backToRoomShelf(){
   if(roomId!=='fantasy'||roomShelfMode)return;
+  // V2.16.15R1: always hand the shared camera back to motion when the shelf returns.
+  roomShelfTap=null;roomCameraInputLock=false;roomCameraPreview=0;rebaseRoomMotion();
   books=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');renderRoomShelf();
+  requestAnimationFrame(()=>{rebaseRoomMotion();applyRoomCamera(0,true);});
 }
 
 async function enterFantasyRoom(){
@@ -758,7 +762,13 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
     }
     if(chosen)break;
   }
-  if(chosen){e.preventDefault();e.stopPropagation();openShelfRow(chosen.start,chosen.offset);}
+  if(chosen){
+    e.preventDefault();e.stopPropagation();
+    // V2.16.15R1: opening the ring must release touch ownership. Otherwise the
+    // 360° sensor remains logically ON but its camera writes stay locked after returning.
+    roomCameraInputLock=false;roomCameraPreview=0;rebaseRoomMotion();
+    openShelfRow(chosen.start,chosen.offset);
+  }
 },{capture:true,passive:false});
 roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
