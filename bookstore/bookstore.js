@@ -23,7 +23,7 @@ let roomShelfFace=0;
 // V2.16.0 — shared Room camera: shelf ring + background + optional device yaw.
 let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
 let roomVisibleFace=0; // V2.16.5: shelf faces live at fixed world angles; null means scenery-only view.
-const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22;
+const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22,ROOM_VIEW_SLOT_DEG=45;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('returnTo',location.href);return player.toString();}
@@ -427,13 +427,17 @@ function applyRoomCamera(previewDeg=0,instant=false){
     }
   }
 }
+// V2.16.6 — the room has eight stable 45° viewing slots. Shelves occupy some
+// slots today; empty slots remain scenery and can receive future shelf faces without
+// changing the camera grammar. Every completed horizontal swipe settles to a slot.
+function nearestRoomViewSlot(yaw){return Math.round(yaw/ROOM_VIEW_SLOT_DEG)*ROOM_VIEW_SLOT_DEG;}
 function settleRoomYaw(){
-  if(!roomShelfMode)return;const current=roomCameraYaw+roomCameraPreview,near=nearestShelfForYaw(current);
-  const snap=near.dist<=ROOM_SHELF_SNAP_DEG,target=snap?current+near.delta:current,from=current,start=performance.now(),dur=snap?220:120;
-  function tick(now){const t=Math.min(1,(now-start)/dur),e=1-Math.pow(1-t,3),v=from+(target-from)*e;roomCameraYaw=v;roomCameraPreview=0;applyRoomCamera(0,true);if(t<1)requestAnimationFrame(tick);}
+  if(!roomShelfMode)return;
+  const current=roomCameraYaw+roomCameraPreview,target=nearestRoomViewSlot(current),from=current,start=performance.now(),dur=240;
+  function tick(now){const t=Math.min(1,(now-start)/dur),e=1-Math.pow(1-t,3),v=from+(target-from)*e;roomCameraYaw=v;roomCameraPreview=0;applyRoomCamera(0,true);if(t<1)requestAnimationFrame(tick);else{roomCameraYaw=target;applyRoomCamera(0,true);}}
   requestAnimationFrame(tick);
 }
-function rotateRoomShelf(delta){roomCameraYaw+=delta*72;roomCameraPreview=0;settleRoomYaw();}
+function rotateRoomShelf(delta){roomCameraYaw=nearestRoomViewSlot(roomCameraYaw)+delta*ROOM_VIEW_SLOT_DEG;roomCameraPreview=0;settleRoomYaw();}
 function onRoomOrientation(e){
   if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||typeof e.alpha!=='number')return;const a=e.alpha;
   if(roomMotionBaseAlpha==null){roomMotionBaseAlpha=a;roomMotionLastAlpha=a;return;}
