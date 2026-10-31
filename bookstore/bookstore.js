@@ -20,6 +20,8 @@ let shelfIndex=0;
 // Only the front shelf is rendered at full detail; horizontal swipes rotate shelves.
 const ROOM_SHELF_CAPACITY=12;
 let roomShelfFace=0;
+// V2.16.0 — shared Room camera: shelf ring + background + optional device yaw.
+let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('returnTo',location.href);return player.toString();}
@@ -373,14 +375,45 @@ function renderRoomShelf(){
   wrap.dataset.shelfFace=String(roomShelfFace);
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${roomShelfFace+1} / ${faces.length}`;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
-  scroller.scrollTop=0;requestAnimationFrame(updateRoomShelfPerspective);
+  scroller.scrollTop=0;requestAnimationFrame(()=>{updateRoomShelfPerspective();applyRoomCamera(roomCameraPreview,true)});
+}
+function roomFaceAngle(){const n=Math.max(1,roomShelfFaces().length);return 360/n;}
+function applyRoomCamera(previewDeg=0,instant=false){
+  if(roomId!=='fantasy')return;
+  roomCameraPreview=previewDeg;
+  const yaw=roomCameraYaw+previewDeg;
+  store.style.setProperty('--room-yaw',`${yaw.toFixed(2)}deg`);
+  // Existing fantasy art is not an equirectangular asset, so V2.16 uses it as a
+  // camera-linked parallax plate. A true 2:1 image can later drop into the same yaw.
+  const x=Math.max(-16,Math.min(16,yaw*.055));
+  store.style.setProperty('--room-bg-x',`${x.toFixed(2)}vw`);
+  const grid=document.querySelector('#roomShelfGrid');
+  if(grid){grid.style.transition=instant?'none':'transform .28s cubic-bezier(.22,.7,.25,1),opacity .22s';grid.style.transform=`perspective(900px) rotateY(${(-previewDeg*.22).toFixed(2)}deg) translateX(${(-previewDeg*.16).toFixed(2)}px)`;}
 }
 function rotateRoomShelf(delta){
   if(!roomShelfMode)return;const faces=roomShelfFaces();if(faces.length<2)return;
-  const grid=document.querySelector('#roomShelfGrid');if(!grid)return;
   roomShelfFace=(roomShelfFace+delta+faces.length)%faces.length;
-  grid.classList.remove('shelf-turn-left','shelf-turn-right');void grid.offsetWidth;grid.classList.add(delta>0?'shelf-turn-left':'shelf-turn-right');
-  renderRoomShelf();
+  roomCameraYaw=roomShelfFace*roomFaceAngle();roomCameraPreview=0;
+  renderRoomShelf();applyRoomCamera(0,false);
+}
+function onRoomOrientation(e){
+  if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||typeof e.alpha!=='number')return;
+  const a=e.alpha;
+  if(roomMotionBaseAlpha==null){roomMotionBaseAlpha=a;roomMotionLastAlpha=a;return;}
+  let d=a-roomMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;roomMotionLastAlpha=a;
+  // Gentle camera coupling: body turn rotates the Room; crossing half a face changes shelf.
+  roomCameraPreview+=d*.72;
+  const step=roomFaceAngle();
+  if(Math.abs(roomCameraPreview)>=step*.5){const dir=roomCameraPreview>0?1:-1;roomCameraPreview-=dir*step;roomShelfFace=(roomShelfFace+dir+roomShelfFaces().length)%roomShelfFaces().length;roomCameraYaw=roomShelfFace*step;renderRoomShelf();}
+  applyRoomCamera(roomCameraPreview,true);
+}
+async function toggleRoomMotion(){
+  const b=document.querySelector('#roomMotion');
+  if(roomMotionOn){roomMotionOn=false;window.removeEventListener('deviceorientation',onRoomOrientation);roomMotionBaseAlpha=roomMotionLastAlpha=null;roomCameraPreview=0;applyRoomCamera(0,false);if(b){b.classList.remove('is-on');b.textContent='◎ 360°モーション OFF';}return;}
+  try{
+    if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied');}
+    roomMotionOn=true;roomMotionBaseAlpha=roomMotionLastAlpha=null;window.addEventListener('deviceorientation',onRoomOrientation,{passive:true});if(b){b.classList.add('is-on');b.textContent='◉ 360°モーション ON';}
+  }catch(_){if(b)b.textContent='◎ モーション許可なし';}
 }
 function updateRoomShelfPerspective(){
   const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
@@ -586,10 +619,10 @@ document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.que
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;
 roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0};},{capture:true,passive:true});
-roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){const step=roomFaceAngle();applyRoomCamera(Math.max(-step*.48,Math.min(step*.48,-roomShelfTap.dx*.34)),true);}},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
   if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;if(!roomShelfMode)return;
-  if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>42){e.preventDefault();e.stopPropagation();rotateRoomShelf(tap.dx<0?1:-1);}return;}
+  if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>42){e.preventDefault();e.stopPropagation();rotateRoomShelf(tap.dx<0?1:-1);}else applyRoomCamera(0,false);return;}
   // iPhone Safari can lose hit-testing on perspective-transformed rows. Resolve the
   // visible cover geometrically instead of trusting event.target.
   let chosen=null;
@@ -606,7 +639,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
 roomShelfScroller?.addEventListener('pointercancel',()=>{roomShelfTap=null},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
-const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;
+const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
 
 async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
