@@ -22,7 +22,7 @@ const ROOM_SHELF_CAPACITY=12;
 let roomShelfFace=0;
 // V2.16.0 — shared Room camera: shelf ring + background + optional device yaw.
 let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
-// V2.16.11 — one shared Room camera. Touch/settle own yaw exclusively; motion only contributes deltas when unlocked.
+// V2.16.12 — shared Room camera + offscreen shelf exit. Shelf faces stay mounted until fully beyond the viewport.
 let roomCameraInputLock=false,roomCameraSettleRaf=0,roomMotionLatestAlpha=null;
 let roomVisibleFace=0; // V2.16.5: shelf faces live at fixed world angles; null means scenery-only view.
 const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22,ROOM_VIEW_SLOT_DEG=90;
@@ -420,13 +420,16 @@ function applyRoomCamera(previewDeg=0,instant=false){
       // V2.16.9: 90° shelf spacing. Keep neighbouring shelves mounted, but give
       // the panorama a real visual gap between them. Only the shelf container moves;
       // individual covers are not transformed per frame.
-      const range=74,p=Math.min(1,dist/range),side=Math.sign(delta)||1;
-      const visible=dist<range;
-      const fade=Math.max(0,1-p);
+      // V2.16.12: never clip/fade a shelf while it is still visibly inside the room.
+      // A 90° turn carries the whole shelf past the viewport edge; only after that
+      // do we hide the persistent DOM layer for compositing performance.
+      const travel=Math.min(1.30,dist/ROOM_VIEW_SLOT_DEG),side=Math.sign(delta)||1;
+      const xPct=side*travel*118;
+      const visible=dist<112;
       layer.style.visibility=visible?'visible':'hidden';
       layer.style.pointerEvents=dist<18?'auto':'none';
-      layer.style.opacity=visible?String(Math.pow(fade,1.55)):'0';
-      layer.style.transform=`translate3d(${(side*p*76).toFixed(2)}%,0,0) scale(${(1-p*.045).toFixed(4)})`;
+      layer.style.opacity=visible?'1':'0';
+      layer.style.transform=`translate3d(${xPct.toFixed(2)}%,0,0) scale(${(1-Math.min(1,dist/112)*.025).toFixed(4)})`;
       layer.style.zIndex=String(100-Math.round(dist));
     });
     // Do not switch/rebuild the active shelf at an angular boundary. The faces are
