@@ -23,7 +23,7 @@ let roomShelfFace=0;
 // V2.16.0 — shared Room camera: shelf ring + background + optional device yaw.
 let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
 // V2.16.12 — shared Room camera + offscreen shelf exit. Shelf faces stay mounted until fully beyond the viewport.
-let roomCameraInputLock=false,roomCameraSettleRaf=0,roomMotionLatestAlpha=null;
+let roomCameraInputLock=false,roomCameraSettleRaf=0,roomMotionLatestAlpha=null,roomMotionRenderRaf=0;
 let roomVisibleFace=0; // V2.16.5: shelf faces live at fixed world angles; null means scenery-only view.
 const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22,ROOM_VIEW_SLOT_DEG=90;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
@@ -400,42 +400,41 @@ function renderRoomShelfFace(face,keepScroll=false){
 }
 function applyRoomCamera(previewDeg=0,instant=false){
   if(roomId!=='fantasy')return;
-  roomCameraPreview=previewDeg;const yaw=roomCameraYaw+previewDeg;store.style.setProperty('--room-yaw',`${yaw.toFixed(2)}deg`);
-  // True 2:1 panorama: one full image width equals 360 degrees. The DOM layer is
-  // deliberately oversized and repeat-x, so yaw remains continuous across the seam.
-  const bg=document.querySelector('#roomBgLayer');if(bg){
-    const panoW=Math.max(store.clientHeight*2,window.innerWidth*2);const phase=wrapDeg(yaw)/360;
-    bg.style.transition='none';bg.style.backgroundSize=`${panoW.toFixed(1)}px 100%`;
-    bg.style.transform=`translate3d(${(-phase*panoW).toFixed(1)}px,0,0)`;
+  roomCameraPreview=previewDeg;const yaw=roomCameraYaw+previewDeg;
+  // V2.16.14: take layout measurements BEFORE any style writes. Reading clientHeight
+  // after changing CSS forced Safari to synchronously relayout the shelf every camera frame.
+  const panoW=Math.max(store.clientHeight*2,window.innerWidth*2);
+  const bg=document.querySelector('#roomBgLayer'),grid=document.querySelector('#roomShelfGrid');
+  store.style.setProperty('--room-yaw',`${yaw}deg`);
+  if(bg){
+    const phase=wrapDeg(yaw)/360;
+    bg.style.transition='none';bg.style.backgroundSize=`${panoW}px 100%`;
+    bg.style.transform=`translate3d(${-phase*panoW}px,0,0)`;
   }
-  // Shelves are objects placed at fixed world angles. Between them, leave the view open
-  // to the fantasy room instead of pretending two shelves fill the whole 360° circle.
-  const near=nearestShelfForYaw(yaw),grid=document.querySelector('#roomShelfGrid');
+  // Shelf overview is deliberately a flat composited plane. Keep every cover/board static
+  // inside it and move only this one parent layer with a sub-pixel translate3d.
+  const near=nearestShelfForYaw(yaw);
   if(grid){
-    const faces=roomShelfFaces();
+    const travelPx=Math.max(window.innerWidth,grid.clientWidth)*1.18;
     grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
       const face=Number(layer.dataset.face)||0,delta=wrapDeg(shelfWorldAngle(face)-yaw),dist=Math.abs(delta);
-      // Page-turn feel: the current and next shelf already coexist. Keep every shelf front-on;
-      // only screen position/scale/opacity change as the shared camera turns.
-      // V2.16.9: 90° shelf spacing. Keep neighbouring shelves mounted, but give
-      // the panorama a real visual gap between them. Only the shelf container moves;
-      // individual covers are not transformed per frame.
-      // V2.16.12: never clip/fade a shelf while it is still visibly inside the room.
-      // A 90° turn carries the whole shelf past the viewport edge; only after that
-      // do we hide the persistent DOM layer for compositing performance.
       const travel=Math.min(1.30,dist/ROOM_VIEW_SLOT_DEG),side=Math.sign(delta)||1;
-      const xPct=side*travel*118;
+      const xPx=side*travel*travelPx;
       const visible=dist<112;
       layer.style.visibility=visible?'visible':'hidden';
       layer.style.pointerEvents=dist<18?'auto':'none';
       layer.style.opacity=visible?'1':'0';
-      layer.style.transform=`translate3d(${xPct.toFixed(2)}%,0,0) scale(${(1-Math.min(1,dist/112)*.025).toFixed(4)})`;
+      // No per-frame scale: scaling a shelf full of 3D book descendants made WebKit
+      // repeatedly re-rasterize them. Translation alone stays on the compositor.
+      layer.style.transform=`translate3d(${xPx}px,0,0)`;
       layer.style.zIndex=String(100-Math.round(dist));
     });
-    // Do not switch/rebuild the active shelf at an angular boundary. The faces are
-    // persistent world objects; update the label only once a shelf is genuinely front-on.
     if(roomVisibleFace!==near.face&&near.dist<8){renderRoomShelfFace(near.face,true);}
   }
+}
+function scheduleRoomMotionRender(){
+  if(roomMotionRenderRaf)return;
+  roomMotionRenderRaf=requestAnimationFrame(()=>{roomMotionRenderRaf=0;applyRoomCamera(0,true);});
 }
 // V2.16.9 — four stable 90° viewing slots. Shelf 1 is at 0°, shelf 2 at 90°.
 // The empty quarter-turns are intentional scenery gaps. Every completed horizontal swipe
@@ -456,7 +455,7 @@ function onRoomOrientation(e){
   if(roomCameraInputLock||roomShelfTap||roomCameraSettleRaf){roomMotionLastAlpha=a;return;}
   if(roomMotionLastAlpha==null){roomMotionBaseAlpha=a;roomMotionLastAlpha=a;return;}
   let d=a-roomMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;roomMotionLastAlpha=a;
-  roomCameraYaw-=d*.72;roomCameraPreview=0;applyRoomCamera(0,true);
+  roomCameraYaw-=d*.72;roomCameraPreview=0;scheduleRoomMotionRender();
 }
 function rebaseRoomMotion(){
   if(!roomMotionOn)return;

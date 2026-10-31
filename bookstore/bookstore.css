@@ -194,3 +194,22 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
   .store.room-fantasy .room-shelf-scroll{left:-110%;right:-110%;padding-left:0;padding-right:0;}
   .store.room-fantasy #roomShelfGrid{width:29.4118%;}
 }
+
+
+/* V2.16.14 — Safari shelf compositor pass.
+   The moving unit is one flat shelf face. Avoid per-book 3D compositing/filter work while
+   the room camera is moving; visual depth is kept by the static cover/page styling. */
+.store.room-fantasy .room-shelf-face{
+  will-change:transform;
+  transform-style:flat;
+  -webkit-transform-style:flat;
+}
+.store.room-fantasy .room-shelf-book{
+  filter:none;
+  transform-style:flat;
+  -webkit-transform-style:flat;
+}
+.store.room-fantasy .room-shelf-book .book-shell{
+  transform-style:flat;
+  -webkit-transform-style:flat;
+}
