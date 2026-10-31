@@ -381,7 +381,7 @@ function renderRoomShelf(){
 }
 function roomFaceAngle(){const n=Math.max(1,roomShelfFaces().length);return 360/n;}
 function wrapDeg(v){return ((v%360)+540)%360-180;}
-function shelfWorldAngle(face){return face*roomFaceAngle();}
+function shelfWorldAngle(face){return face*ROOM_VIEW_SLOT_DEG;}
 function nearestShelfForYaw(yaw){
   const faces=roomShelfFaces();let best=0,bestDist=Infinity;
   for(let i=0;i<faces.length;i++){const d=Math.abs(wrapDeg(shelfWorldAngle(i)-yaw));if(d<bestDist){best=i;bestDist=d;}}
@@ -427,7 +427,7 @@ function applyRoomCamera(previewDeg=0,instant=false){
     }
   }
 }
-// V2.16.6 — the room has eight stable 45° viewing slots. Shelves occupy some
+// V2.16.7 — the room has eight stable 45° viewing slots. Shelf 1 is at 0°, shelf 2 at 45°. Shelves occupy some
 // slots today; empty slots remain scenery and can receive future shelf faces without
 // changing the camera grammar. Every completed horizontal swipe settles to a slot.
 function nearestRoomViewSlot(yaw){return Math.round(yaw/ROOM_VIEW_SLOT_DEG)*ROOM_VIEW_SLOT_DEG;}
@@ -654,11 +654,11 @@ async function enableMotion(){
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;
-roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0};},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0,startYaw:nearestRoomViewSlot(roomCameraYaw)};},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){applyRoomCamera(-roomShelfTap.dx*ROOM_SWIPE_DEG_PER_PX,true);}},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
   if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;if(!roomShelfMode)return;
-  if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>18){e.preventDefault();e.stopPropagation();roomCameraYaw+=roomCameraPreview;roomCameraPreview=0;settleRoomYaw();}else applyRoomCamera(0,false);return;}
+  if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>18){e.preventDefault();e.stopPropagation();const dir=tap.dx<0?1:-1;roomCameraYaw=tap.startYaw;roomCameraPreview=0;const target=tap.startYaw+dir*ROOM_VIEW_SLOT_DEG;const from=tap.startYaw,start=performance.now(),dur=280;function tickRoomSlot(now){const t=Math.min(1,(now-start)/dur),ease=1-Math.pow(1-t,3);roomCameraYaw=from+(target-from)*ease;applyRoomCamera(0,true);if(t<1)requestAnimationFrame(tickRoomSlot);else{roomCameraYaw=target;applyRoomCamera(0,true);}}requestAnimationFrame(tickRoomSlot);}else{roomCameraYaw=tap.startYaw;roomCameraPreview=0;applyRoomCamera(0,false);}return;}
   // iPhone Safari can lose hit-testing on perspective-transformed rows. Resolve the
   // visible cover geometrically instead of trusting event.target.
   let chosen=null;
