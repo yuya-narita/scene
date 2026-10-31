@@ -444,7 +444,8 @@ function settleRoomYaw(){
 }
 function rotateRoomShelf(delta){roomCameraYaw=nearestRoomViewSlot(roomCameraYaw)+delta*ROOM_VIEW_SLOT_DEG;roomCameraPreview=0;settleRoomYaw();}
 function onRoomOrientation(e){
-  if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||typeof e.alpha!=='number')return;const a=e.alpha;
+  // V2.16.10: while a finger owns the Room camera, device motion must not fight it.
+  if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||roomShelfTap||typeof e.alpha!=='number')return;const a=e.alpha;
   if(roomMotionBaseAlpha==null){roomMotionBaseAlpha=a;roomMotionLastAlpha=a;return;}
   let d=a-roomMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;roomMotionLastAlpha=a;roomCameraYaw-=d*.72;applyRoomCamera(0,true);
 }
@@ -659,10 +660,17 @@ async function enableMotion(){
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;
-roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0,startYaw:nearestRoomViewSlot(roomCameraYaw)};},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;
+  // Finger takes exclusive ownership of yaw. Freeze motion at the exact current view.
+  const currentYaw=roomCameraYaw+roomCameraPreview;roomCameraYaw=currentYaw;roomCameraPreview=0;
+  roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0,startYaw:currentYaw};
+},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){applyRoomCamera(-roomShelfTap.dx*ROOM_SWIPE_DEG_PER_PX,true);}},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
-  if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;if(!roomShelfMode)return;
+  if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;
+  // Rebase device orientation after touch release so motion resumes from this view with no jump.
+  if(roomMotionOn){roomMotionBaseAlpha=null;roomMotionLastAlpha=null;}
+  if(!roomShelfMode)return;
   if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>18){e.preventDefault();e.stopPropagation();const dir=tap.dx<0?1:-1;roomCameraYaw=tap.startYaw;roomCameraPreview=0;const target=tap.startYaw+dir*ROOM_VIEW_SLOT_DEG;const from=tap.startYaw,start=performance.now(),dur=280;function tickRoomSlot(now){const t=Math.min(1,(now-start)/dur),ease=1-Math.pow(1-t,3);roomCameraYaw=from+(target-from)*ease;applyRoomCamera(0,true);if(t<1)requestAnimationFrame(tickRoomSlot);else{roomCameraYaw=target;applyRoomCamera(0,true);}}requestAnimationFrame(tickRoomSlot);}else{roomCameraYaw=tap.startYaw;roomCameraPreview=0;applyRoomCamera(0,false);}return;}
   // iPhone Safari can lose hit-testing on perspective-transformed rows. Resolve the
   // visible cover geometrically instead of trusting event.target.
@@ -677,7 +685,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
   }
   if(chosen){e.preventDefault();e.stopPropagation();openShelfRow(chosen.start,chosen.offset);}
 },{capture:true,passive:false});
-roomShelfScroller?.addEventListener('pointercancel',()=>{roomShelfTap=null},{capture:true});
+roomShelfScroller?.addEventListener('pointercancel',()=>{roomShelfTap=null;if(roomMotionOn){roomMotionBaseAlpha=null;roomMotionLastAlpha=null;}},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});document.querySelector('#motionStart').onclick=enableMotion;document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
