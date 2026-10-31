@@ -375,11 +375,14 @@ function updateRoomShelfPerspective(){
   });
 }
 async function openShelfRow(start,focusOffset=0){
-  const selected=roomShelfAllBooks.slice(start,start+4);if(!selected.length)return;
-  roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=selected;index=Math.max(0,Math.min(selected.length-1,Number(focusOffset)||0));dragUnits=0;stage.hidden=false;
+  // V2.14.0 — the ring now represents the whole Room shelf, not only one 4-book row.
+  // A tapped thumbnail still becomes the front/center book when the circular view opens.
+  const selected=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();if(!selected.length)return;
+  const tappedIndex=Math.max(0,Math.min(selected.length-1,(Number(start)||0)+(Number(focusOffset)||0)));
+  roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=selected;index=tappedIndex;dragUnits=0;stage.hidden=false;
   stage.classList.add('room-shelf-ring');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
-  document.querySelector('#hint').textContent='左右にスワイプ　／　上スワイプで棚へ戻る';
+  document.querySelector('#hint').textContent='左右にスワイプして棚の本を見る　／　上スワイプで棚へ戻る';
   document.querySelector('.sign').classList.add('shelf-back-sign');
   stage.innerHTML='';await preloadFirstViewCovers();renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
   const startTime=performance.now(),dur=1450;
