@@ -160,7 +160,7 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
    the same shared camera yaw through transform instead of background-position. */
 .room-bg-layer{position:absolute;z-index:0;top:0;bottom:0;left:-30%;width:160%;display:none;pointer-events:none;background-position:center center;background-size:cover;background-repeat:no-repeat;will-change:transform;transform:translate3d(0,0,0) scale(1.02);transform-origin:50% 50%;backface-visibility:hidden;-webkit-backface-visibility:hidden;}
 .store.room-fantasy{background-image:none!important;background:#0b1009!important;}
-.store.room-fantasy .room-bg-layer{display:block;background-image:linear-gradient(rgba(5,12,6,.20),rgba(4,8,5,.32)),url('./bookstore-path-fantasy-v2113.png');}
+.store.room-fantasy .room-bg-layer{display:block;background-image:linear-gradient(rgba(5,12,6,.12),rgba(4,8,5,.24)),url('./fantasy-room-360-v2165.png');background-repeat:repeat-x;background-position:center center;background-size:auto 100%;}
 .store.room-fantasy>.ambient{z-index:1;opacity:1!important;background:linear-gradient(90deg,#0006,transparent 18% 82%,#0006),linear-gradient(rgba(0,0,0,.04),rgba(0,0,0,.16));}
 .store.room-fantasy>.sign,.store.room-fantasy>.stage,.store.room-fantasy>.room-shelf,.store.room-fantasy>.book-path,.store.room-fantasy>.nav,.store.room-fantasy>.focus-panel,.store.room-fantasy>.hint{position:absolute;}
 
@@ -169,3 +169,8 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 .room-shelf-grid.shelf-turn-left,.room-shelf-grid.shelf-turn-right{animation:none!important}
 @keyframes shelfTurnLeft{0%,100%{transform:none}}
 @keyframes shelfTurnRight{0%,100%{transform:none}}
+
+/* V2.16.5 — true panorama room + stable shelf compositing */
+.room-bg-layer{left:-200%;width:500%;top:0;bottom:0;transform:translate3d(0,0,0);contain:paint;will-change:transform;}
+.room-shelf-grid{backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:translate3d(0,0,0);contain:layout paint;}
+.room-shelf-row,.room-shelf-book,.room-shelf-book .book-shell{backface-visibility:hidden;-webkit-backface-visibility:hidden;}

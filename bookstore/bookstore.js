@@ -22,6 +22,8 @@ const ROOM_SHELF_CAPACITY=12;
 let roomShelfFace=0;
 // V2.16.0 — shared Room camera: shelf ring + background + optional device yaw.
 let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
+let roomVisibleFace=0; // V2.16.5: shelf faces live at fixed world angles; null means scenery-only view.
+const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('returnTo',location.href);return player.toString();}
@@ -375,75 +377,67 @@ function renderRoomShelf(){
   wrap.dataset.shelfFace=String(roomShelfFace);
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${roomShelfFace+1} / ${faces.length}`;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
-  scroller.scrollTop=0;requestAnimationFrame(()=>{updateRoomShelfPerspective();applyRoomCamera(roomCameraPreview,true)});
+  scroller.scrollTop=0;roomVisibleFace=roomShelfFace;requestAnimationFrame(()=>{updateRoomShelfPerspective();applyRoomCamera(roomCameraPreview,true)});
 }
 function roomFaceAngle(){const n=Math.max(1,roomShelfFaces().length);return 360/n;}
+function wrapDeg(v){return ((v%360)+540)%360-180;}
+function shelfWorldAngle(face){return face*roomFaceAngle();}
+function nearestShelfForYaw(yaw){
+  const faces=roomShelfFaces();let best=0,bestDist=Infinity;
+  for(let i=0;i<faces.length;i++){const d=Math.abs(wrapDeg(shelfWorldAngle(i)-yaw));if(d<bestDist){best=i;bestDist=d;}}
+  return {face:best,dist:bestDist,delta:wrapDeg(shelfWorldAngle(best)-yaw)};
+}
+function renderRoomShelfFace(face,keepScroll=false){
+  const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll'),grid=document.querySelector('#roomShelfGrid');
+  if(!wrap||!grid)return;
+  const faces=roomShelfFaces();face=((face%faces.length)+faces.length)%faces.length;roomShelfFace=face;roomVisibleFace=face;
+  const f=faces[face],oldScroll=keepScroll?scroller.scrollTop:0;grid.innerHTML='';
+  for(let local=0;local<f.books.length;local+=4){
+    const globalStart=f.start+local,row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(globalStart);
+    const slice=f.books.slice(local,local+4);row.setAttribute('aria-label',`${Math.floor(globalStart/4)+1}段目の本を見る`);
+    row.innerHTML=`<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}</span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
+    row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book');openShelfRow(globalStart,hit?Number(hit.dataset.bookOffset):0)});
+    grid.appendChild(row);hydrateCoverLoadState(row);
+  }
+  wrap.dataset.shelfFace=String(face);const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${face+1} / ${faces.length}`;
+  scroller.scrollTop=oldScroll;requestAnimationFrame(updateRoomShelfPerspective);
+}
 function applyRoomCamera(previewDeg=0,instant=false){
   if(roomId!=='fantasy')return;
-  roomCameraPreview=previewDeg;
-  const yaw=roomCameraYaw+previewDeg;
-  store.style.setProperty('--room-yaw',`${yaw.toFixed(2)}deg`);
-
-  // V2.16.4 — one continuous yaw drives the background. The current artwork is
-  // a flat plate, so keep its travel deliberately gentle until a true 2:1 asset lands.
-  const wrapped=((yaw%360)+540)%360-180;
-  const maxShift=Math.min(window.innerWidth*.18,132);
-  const x=(wrapped/180)*maxShift;
-  const bg=document.querySelector('#roomBgLayer');
-  if(bg){
-    bg.style.transition='none';
-    bg.style.transform=`translate3d(${(-x).toFixed(1)}px,0,0) scale(1.02)`;
+  roomCameraPreview=previewDeg;const yaw=roomCameraYaw+previewDeg;store.style.setProperty('--room-yaw',`${yaw.toFixed(2)}deg`);
+  // True 2:1 panorama: one full image width equals 360 degrees. The DOM layer is
+  // deliberately oversized and repeat-x, so yaw remains continuous across the seam.
+  const bg=document.querySelector('#roomBgLayer');if(bg){
+    const panoW=Math.max(store.clientHeight*2,window.innerWidth*2);const phase=wrapDeg(yaw)/360;
+    bg.style.transition='none';bg.style.backgroundSize=`${panoW.toFixed(1)}px 100%`;
+    bg.style.transform=`translate3d(${(-phase*panoW).toFixed(1)}px,0,0)`;
   }
-
-  // Shelf faces stay front-on. During a turn they only slide horizontally;
-  // never rotate/keystone the covers.
-  const grid=document.querySelector('#roomShelfGrid');
+  // Shelves are objects placed at fixed world angles. Between them, leave the view open
+  // to the fantasy room instead of pretending two shelves fill the whole 360° circle.
+  const near=nearestShelfForYaw(yaw),grid=document.querySelector('#roomShelfGrid');
   if(grid){
-    grid.style.transition='none';
-    const step=Math.max(1,roomFaceAngle());
-    const progress=Math.max(-1,Math.min(1,previewDeg/step));
-    grid.style.transform=`translate3d(${(progress*-72).toFixed(2)}%,0,0)`;
-    grid.style.opacity=String(Math.max(.42,1-Math.abs(progress)*.48));
+    if(near.dist<=ROOM_SHELF_SHOW_DEG){
+      if(roomVisibleFace!==near.face)renderRoomShelfFace(near.face,false);
+      const p=Math.min(1,near.dist/ROOM_SHELF_SHOW_DEG),side=Math.sign(near.delta)||1;
+      grid.style.transition='none';grid.style.visibility='visible';grid.style.pointerEvents='auto';
+      grid.style.transform=`translate3d(${(side*p*30).toFixed(2)}%,0,0)`;
+      grid.style.opacity=String(Math.max(.18,1-p*.82));
+    }else{
+      grid.style.transition='none';grid.style.opacity='0';grid.style.visibility='hidden';grid.style.pointerEvents='none';
+    }
   }
 }
-function settleRoomShelf(delta){
-  if(!roomShelfMode)return;
-  const faces=roomShelfFaces();if(faces.length<2){applyRoomCamera(0,true);return;}
-  const step=roomFaceAngle(),from=roomCameraPreview,to=delta*step;
-  const start=performance.now(),dur=260;
-  function tick(now){
-    const t=Math.min(1,(now-start)/dur),e=1-Math.pow(1-t,3);
-    applyRoomCamera(from+(to-from)*e,true);
-    if(t<1){requestAnimationFrame(tick);return;}
-    // Commit the new face only after the shared camera has reached the same yaw.
-    roomShelfFace=(roomShelfFace+delta+faces.length)%faces.length;
-    roomCameraYaw+=delta*step;roomCameraPreview=0;
-    renderRoomShelf();
-    const grid=document.querySelector('#roomShelfGrid');
-    if(grid){
-      grid.style.transition='none';
-      grid.style.transform=`translate3d(${delta>0?72:-72}%,0,0)`;grid.style.opacity='.42';
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{
-        grid.style.transition='transform .22s cubic-bezier(.22,.7,.25,1),opacity .18s';
-        grid.style.transform='translate3d(0,0,0)';grid.style.opacity='1';
-      }));
-    }
-    // yaw is already at the destination: no background snap here.
-    applyRoomCamera(0,true);
-  }
+function settleRoomYaw(){
+  if(!roomShelfMode)return;const current=roomCameraYaw+roomCameraPreview,near=nearestShelfForYaw(current);
+  const snap=near.dist<=ROOM_SHELF_SNAP_DEG,target=snap?current+near.delta:current,from=current,start=performance.now(),dur=snap?220:120;
+  function tick(now){const t=Math.min(1,(now-start)/dur),e=1-Math.pow(1-t,3),v=from+(target-from)*e;roomCameraYaw=v;roomCameraPreview=0;applyRoomCamera(0,true);if(t<1)requestAnimationFrame(tick);}
   requestAnimationFrame(tick);
 }
-function rotateRoomShelf(delta){settleRoomShelf(delta);}
+function rotateRoomShelf(delta){roomCameraYaw+=delta*72;roomCameraPreview=0;settleRoomYaw();}
 function onRoomOrientation(e){
-  if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||typeof e.alpha!=='number')return;
-  const a=e.alpha;
+  if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||typeof e.alpha!=='number')return;const a=e.alpha;
   if(roomMotionBaseAlpha==null){roomMotionBaseAlpha=a;roomMotionLastAlpha=a;return;}
-  let d=a-roomMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;roomMotionLastAlpha=a;
-  // Gentle camera coupling: body turn rotates the Room; crossing half a face changes shelf.
-  roomCameraPreview+=d*.72;
-  const step=roomFaceAngle();
-  if(Math.abs(roomCameraPreview)>=step*.5){const dir=roomCameraPreview>0?1:-1;roomCameraPreview-=dir*step;roomShelfFace=(roomShelfFace+dir+roomShelfFaces().length)%roomShelfFaces().length;roomCameraYaw+=dir*step;renderRoomShelf();}
-  applyRoomCamera(roomCameraPreview,true);
+  let d=a-roomMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;roomMotionLastAlpha=a;roomCameraYaw+=d*.72;applyRoomCamera(0,true);
 }
 async function toggleRoomMotion(){
   const b=document.querySelector('#roomMotion');
@@ -657,10 +651,10 @@ document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.que
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;
 roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0};},{capture:true,passive:true});
-roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){const step=roomFaceAngle();const span=Math.max(180,roomShelfScroller.clientWidth*.78);applyRoomCamera(Math.max(-step*.72,Math.min(step*.72,(-roomShelfTap.dx/span)*step)),true);}},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;roomShelfTap.dx=e.clientX-roomShelfTap.x;roomShelfTap.dy=e.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>9)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){applyRoomCamera(-roomShelfTap.dx*ROOM_SWIPE_DEG_PER_PX,true);}},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
   if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const tap=roomShelfTap;roomShelfTap=null;if(!roomShelfMode)return;
-  if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>42){e.preventDefault();e.stopPropagation();rotateRoomShelf(tap.dx<0?1:-1);}else applyRoomCamera(0,false);return;}
+  if(tap.moved){if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>18){e.preventDefault();e.stopPropagation();roomCameraYaw+=roomCameraPreview;roomCameraPreview=0;settleRoomYaw();}else applyRoomCamera(0,false);return;}
   // iPhone Safari can lose hit-testing on perspective-transformed rows. Resolve the
   // visible cover geometrically instead of trusting event.target.
   let chosen=null;
