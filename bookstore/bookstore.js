@@ -2,7 +2,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 const stage=document.querySelector('#stage'),picked=document.querySelector('#picked'),store=document.querySelector('#store');
 let books=[],allBooks=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
-let viewMode='hall',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
+let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
 let roomId='new',routeTransitioning=false,dataReady=false;
@@ -542,53 +542,20 @@ function backToRoomShelf(){
   requestAnimationFrame(()=>{rebaseRoomMotion();applyRoomCamera(0,true);});
 }
 
-function showCentralHall(){
-  pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();
-  if(roomShelfVisualRaf){cancelAnimationFrame(roomShelfVisualRaf);roomShelfVisualRaf=0;}
-  roomCameraInputLock=false;roomCameraPreview=0;
-  roomId='hall';viewMode='hall';roomShelfMode=false;
-  document.body.classList.remove('book-path-active');
-  store.classList.remove('room-fantasy');store.classList.add('hall-mode');
-  const hall=document.querySelector('#centralHall');if(hall)hall.hidden=false;
-  const ret=document.querySelector('#hallReturn');if(ret)ret.hidden=true;
-  const path=document.querySelector('#bookPath');if(path)path.hidden=true;
-  const shelf=document.querySelector('#roomShelf');if(shelf)shelf.hidden=true;
-  stage.hidden=true;
-  document.querySelector('#motionStart').hidden=true;
-  document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;
-  document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
-}
-function enterBookPathFromHall(){
-  if(!dataReady)return;
-  store.classList.remove('hall-mode');const hall=document.querySelector('#centralHall');if(hall)hall.hidden=true;
-  roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;
-  setRoomVisual('new');document.body.classList.add('book-path-active');
-  document.querySelector('#ringMode').classList.remove('is-active');document.querySelector('#pathMode').classList.add('is-active');
-  stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;
-  document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
-  const ret=document.querySelector('#hallReturn');if(ret)ret.hidden=false;
-  renderPath();ensurePathLoop();
-}
-function syncHallReturn(){
-  const ret=document.querySelector('#hallReturn');if(!ret)return;
-  ret.hidden=(viewMode==='hall'||roomId==='hall');
-}
-
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
   await new Promise(r=>setTimeout(r,360));
   roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;
-  store.classList.remove('hall-mode');const hall=document.querySelector('#centralHall');if(hall)hall.hidden=true;setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
+  setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
   // V2.16.15R5: the path motion control is a store-level overlay, so explicitly
   // retire it when the route leaves the book path. Its ON/OFF state is preserved.
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
   path.hidden=true;path?.classList.remove('route-leaving');
-  renderRoomShelf();syncHallReturn();routeTransitioning=false;
+  renderRoomShelf();routeTransitioning=false;
 }
 function setViewMode(mode){
-  store.classList.remove('hall-mode');const hall=document.querySelector('#centralHall');if(hall)hall.hidden=true;
   const next=mode==='path'?'path':'ring';
   if(next===viewMode)return;
   if(next==='ring')syncRingFromPath();else syncPathFromRing();
@@ -839,8 +806,6 @@ if(pathMotionButton){
   pathMotionButton.addEventListener('pointercancel',(e)=>{e.stopPropagation();});
 }
 setPathMotionButton();document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
-document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);
-document.querySelector('#hallReturn')?.addEventListener('click',showCentralHall);
 
-async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.remove('is-intro-waiting');showCentralHall();}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
