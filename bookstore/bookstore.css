@@ -149,7 +149,7 @@ body.book-path-active .path-item{touch-action:none;-webkit-user-select:none;user
 @keyframes shelfTurnLeft{0%{opacity:.42;transform:translateX(11%) rotateY(-18deg) scale(.96)}100%{opacity:1;transform:none}}
 @keyframes shelfTurnRight{0%{opacity:.42;transform:translateX(-11%) rotateY(18deg) scale(.96)}100%{opacity:1;transform:none}}
 \n\n/* V2.16.0 — shared 360 Room camera prototype. */
-.store.room-fantasy{background-position:calc(50% + var(--room-bg-x,0vw)) center!important;transition:background-position .28s cubic-bezier(.22,.7,.25,1)}
+.store.room-fantasy{background-position:calc(50% + var(--room-bg-x,0px)) center!important;background-size:auto 100%!important;background-repeat:no-repeat!important;transition:background-position .28s cubic-bezier(.22,.7,.25,1)}
 .room-shelf-grid{will-change:transform,opacity;transform-style:preserve-3d}
 .room-motion{position:absolute;z-index:9;right:10px;top:9px;border:1px solid #d9e6c844;border-radius:99px;background:#071008b8;color:#fffbd6;padding:7px 10px;font-size:9px;letter-spacing:.04em;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
 .room-motion.is-on{border-color:#b9dc8a99;background:#173116d9;box-shadow:0 0 14px #8fbd6555}
