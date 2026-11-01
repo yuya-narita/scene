@@ -711,10 +711,14 @@ function showCentralHall(fromIntro=false){
   // V2.18.26: Fantasy -> Central Hall uses the same deterministic two-layer
   // crossfade as the other room/route handoffs. Capture the live Fantasy
   // background before roomId/viewMode are reset below.
+  // V2.18.30: Fantasy -> Hall is special: keep ONLY a frozen Fantasy layer
+  // above the real Hall. Then mount/render the real Hall at 180deg underneath it
+  // before fading Fantasy away. This removes the temporary synthetic Hall frame
+  // that could show 0deg before the live Hall settled to 180deg on iPhone Safari.
   const routeFade=returningFromPath
     ? startRouteCrossfade('path','hall')
     : returningFromFantasy
-      ? startRouteCrossfade('fantasy','hall')
+      ? {oldLayer:makeRouteCrossfadeLayer('fantasy','old'),newLayer:null}
       : null;
   hallShelfRing=false;pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();roomId='hall';viewMode='hall';roomShelfMode=false;introReady=false;
   store.classList.remove('intro-mode','room-fantasy');store.classList.add('hall-mode');document.body.classList.remove('book-path-active','intro-entry-active');
@@ -723,7 +727,17 @@ function showCentralHall(fromIntro=false){
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
   document.querySelector('#centralHall').hidden=false;document.querySelector('#roomBgLayer').style.display='block';document.querySelector('#roomExitNav').hidden=true;
   renderHallMyShelf();if(fromIntro){hallYaw=0;document.querySelector('#hallTutorial').hidden=false;} renderHall();
-  if(routeFade)fadeRouteLayers(routeFade);
+  // For Fantasy -> Hall, commit the REAL 180deg Hall for two paints while the
+  // frozen Fantasy layer still fully covers it, then fade that cover away.
+  // Other already-working routes keep their existing crossfade timing untouched.
+  if(routeFade){
+    if(returningFromFantasy){
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(viewMode==='hall'&&roomId==='hall'){renderHall();fadeRouteLayers(routeFade);}
+        else routeFade.oldLayer?.remove();
+      }));
+    }else fadeRouteLayers(routeFade);
+  }
 }
 function enterBookPathFromHall(){if(!dataReady)return;const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
 function returnToPathFromRoom(){const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','path'):null;roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;roomId='path';viewMode='path';books=allBooks.slice();pathProgress=Math.max(0,books.length-1);setRoomVisual('new');document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;renderPath();ensurePathLoop();if(routeFade)fadeRouteLayers(routeFade);}
