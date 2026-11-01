@@ -661,14 +661,21 @@ async function enterFantasyRoom(){
   path.hidden=true;path?.classList.remove('route-leaving');document.querySelector('#roomShelf').hidden=true;
   // V2.18.11: entering a genre uses the same visual grammar as tapping a shelf cover:
   // the Room books arrive as the spinning ring first, then an upward swipe reveals the shelf.
-  stage.hidden=false;stage.style.transform='';stage.style.opacity='';stage.classList.add('room-shelf-ring');stage.classList.remove('is-shelf-returning','is-intro-ready');
+  // V2.18.12: genre entry must never expose the previous/settled ring before its intro starts.
+  // Prepare the Fantasy camera and distant ring off-screen first, then reveal the first animated frame.
+  stage.hidden=true;stage.style.transform='';stage.style.opacity='0';stage.classList.add('room-shelf-ring');stage.classList.remove('is-shelf-returning','is-intro-ready');
   document.querySelector('.sign').classList.add('shelf-back-sign');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
   document.querySelector('#hint').textContent='左右にスワイプしてRoomの本を見る　／　上スワイプで棚へ';
   document.querySelector('#roomExitNav').hidden=false;
+  const roomBg=document.querySelector('#roomBgLayer');if(roomBg)roomBg.style.display='block';
+  roomCameraYaw=0;roomCameraPreview=0;applyRoomCamera(0,true);
   stage.innerHTML='';await preloadFirstViewCovers();
   if(roomId!=='fantasy'){routeTransitioning=false;return;}
   renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
+  // The distant pose is now ready. Reveal it only now, so the first visible state is the
+  // small ring deep in the Fantasy room rather than a stale full-size ring from the path.
+  stage.hidden=false;stage.style.opacity='1';
   const startTime=performance.now(),dur=1450;
   await new Promise(resolve=>{function frame(now){
     if(roomId!=='fantasy'){resolve();return;}
