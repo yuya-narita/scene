@@ -652,14 +652,32 @@ async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
   await new Promise(r=>setTimeout(r,360));
-  roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
+  roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
   // V2.16.15R5: the path motion control is a store-level overlay, so explicitly
   // retire it when the route leaves the book path. Its ON/OFF state is preserved.
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
-  path.hidden=true;path?.classList.remove('route-leaving');
-  renderRoomShelf();document.querySelector('#roomExitNav').hidden=false;routeTransitioning=false;
+  path.hidden=true;path?.classList.remove('route-leaving');document.querySelector('#roomShelf').hidden=true;
+  // V2.18.11: entering a genre uses the same visual grammar as tapping a shelf cover:
+  // the Room books arrive as the spinning ring first, then an upward swipe reveals the shelf.
+  stage.hidden=false;stage.style.transform='';stage.style.opacity='';stage.classList.add('room-shelf-ring');stage.classList.remove('is-shelf-returning','is-intro-ready');
+  document.querySelector('.sign').classList.add('shelf-back-sign');
+  document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
+  document.querySelector('#hint').textContent='左右にスワイプしてRoomの本を見る　／　上スワイプで棚へ';
+  document.querySelector('#roomExitNav').hidden=false;
+  stage.innerHTML='';await preloadFirstViewCovers();
+  if(roomId!=='fantasy'){routeTransitioning=false;return;}
+  renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
+  const startTime=performance.now(),dur=1450;
+  await new Promise(resolve=>{function frame(now){
+    if(roomId!=='fantasy'){resolve();return;}
+    const t=Math.min(1,(now-startTime)/dur),ease=1-Math.pow(1-t,3.4),center=index-4.2*(1-ease),depth=.12+.88*(1-Math.pow(1-t,1.8));
+    stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),depth));
+    if(t<1)requestAnimationFrame(frame);else resolve();
+  }requestAnimationFrame(frame)});
+  if(roomId==='fantasy'){stage.classList.remove('is-intro-spinning');render();updateFocusPanel();}
+  routeTransitioning=false;
 }
 function setViewMode(mode){
   const next=mode==='path'?'path':'ring';
@@ -917,7 +935,7 @@ document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion
 const hallEl=document.querySelector('#centralHall');
 hallEl?.addEventListener('pointerdown',e=>{/* V2.18.4: the large 0/90/180/270 gate cards are buttons, but they also occupy the natural swipe surface. Only the motion toggle is excluded; swiping on a gate must still allow the down-swipe back to NEW ARRIVALS. */if(e.target.closest('#hallMotion'))return;hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null};hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();});
 hallEl?.addEventListener('pointermove',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const dx=e.clientX-hallDrag.x,dy=e.clientY-hallDrag.y;if(!hallDrag.axis&&Math.hypot(dx,dy)>7)hallDrag.axis=Math.abs(dy)>Math.abs(dx)*1.12?'vertical':'horizontal';if(hallDrag.axis==='vertical'){if(dy>0)e.preventDefault();return;}if(Math.abs(dx)>2)e.preventDefault();hallDrag.lastX=e.clientX;hallPreview=-dx/Math.max(320,store.clientWidth)*135;renderHall();},{passive:false});
-hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const d=hallDrag,dx=e.clientX-d.x,dy=e.clientY-d.y,dt=Math.max(1,performance.now()-d.t),vx=dx/dt;hallDrag=null;if(d.axis==='vertical'){hallPreview=0;if(dy>58){showNewArrivalsFromHall();return;}settleHall();return;}const base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;
+hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const d=hallDrag,dx=e.clientX-d.x,dy=e.clientY-d.y,dt=Math.max(1,performance.now()-d.t),vx=dx/dt;hallDrag=null;if(d.axis==='vertical'){hallPreview=0;if(dy>58){const facingNew=Math.abs(wrapDeg(hallYaw))<42;if(facingNew){showNewArrivalsFromHall();return;}}settleHall();return;}const base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;
   // A normal deliberate swipe advances one entrance; no hard flick required.
   if(Math.abs(dx)>=34||Math.abs(vx)>=.24){const dir=dx<0?1:-1;const from=hallYaw,target=base+dir*90,start=performance.now(),dur=250;function tick(now){const t=Math.min(1,(now-start)/dur),q=1-Math.pow(1-t,3);hallYaw=from+(target-from)*q;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}else settleHall();
 });hallEl?.addEventListener('pointercancel',()=>{hallPreview=0;hallDrag=null;settleHall();});
