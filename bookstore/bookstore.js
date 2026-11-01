@@ -566,7 +566,7 @@ function hallShelfBooks(kind){
 }
 function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openHallShelfRing(kind,i);}));}
 function renderHallMyShelf(){renderHallShelf('#hallNewShelfBooks','new');renderHallShelf('#hallMyShelfBooks','mine');}
-function openHallShelfRing(kind,selectedIndex=0){
+async function openHallShelfRing(kind,selectedIndex=0){
   const selected=hallShelfBooks(kind);if(!selected.length)return;
   hallShelfRing=true;hallShelfKind=kind;hallPreview=0;hallDrag=null;rebaseHallMotion();
   document.querySelector('#centralHall').hidden=true;document.querySelector('#roomBgLayer').style.display='block';
@@ -574,7 +574,20 @@ function openHallShelfRing(kind,selectedIndex=0){
   stage.hidden=false;stage.style.transform='';stage.style.opacity='';stage.classList.add('room-shelf-ring');stage.classList.remove('is-shelf-returning','is-intro-spinning','is-intro-ready');
   document.querySelector('.sign small').textContent=kind==='mine'?'MY BOOKS':'NEW ARRIVALS';document.querySelector('.sign strong').textContent=kind==='mine'?'もっている本':'新しく入った本';document.querySelector('.sign').classList.add('shelf-back-sign');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;document.querySelector('#hint').textContent='左右で円環を見る　／　上スワイプで棚へ戻る';
-  render();updateFocusPanel();
+  // V2.18.8: Hall shelves use the exact same thumbnail -> spinning ring entrance as Fantasy Forest.
+  // Keep the tapped thumbnail as the focal book and let the ring grow out of the distant vortex before landing.
+  stage.innerHTML='';await preloadFirstViewCovers();
+  if(!hallShelfRing||roomId!=='hall-shelf-ring')return;
+  renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
+  const startTime=performance.now(),dur=1450;
+  await new Promise(resolve=>{function frame(now){
+    if(!hallShelfRing||roomId!=='hall-shelf-ring'){resolve();return;}
+    const t=Math.min(1,(now-startTime)/dur),ease=1-Math.pow(1-t,3.4),center=index-4.2*(1-ease),depth=.12+.88*(1-Math.pow(1-t,1.8));
+    stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),depth));
+    if(t<1)requestAnimationFrame(frame);else resolve();
+  }requestAnimationFrame(frame)});
+  if(!hallShelfRing||roomId!=='hall-shelf-ring')return;
+  stage.classList.remove('is-intro-spinning');render();updateFocusPanel();
 }
 function backToHallShelf(){
   if(!hallShelfRing)return;hallShelfRing=false;stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');showCentralHall(false);
