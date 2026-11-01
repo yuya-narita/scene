@@ -673,6 +673,14 @@ function makeRouteCrossfadeLayer(kind, role='old'){
       layer.style.backgroundPosition=cs.backgroundPosition;
     }
   }
+  // V2.18.29: when Fantasy returns to Hall, the destination overlay must
+  // already paint the Hall at the same 180deg camera angle as the live Hall.
+  // Otherwise the crossfade shows Hall 0deg and pops to 180deg on cleanup.
+  if(role==='new'&&kind==='hall'){
+    const w=Math.max(320,store.clientWidth||390);
+    const phase=(hallYaw+hallPreview)/360;
+    layer.style.backgroundPosition=`calc(50% + ${(-phase*w*1.85).toFixed(2)}px) center`;
+  }
   store.appendChild(layer);
   return layer;
 }
@@ -696,6 +704,10 @@ function fadeRouteLayers(pair){
 function showCentralHall(fromIntro=false){
   const returningFromPath=viewMode==='path'&&roomId==='path';
   const returningFromFantasy=roomId==='fantasy';
+  // V2.18.29: Fantasy's Hall exit lands facing the Fantasy entrance (180deg).
+  // Commit that camera BEFORE the destination crossfade layer is created, so
+  // there is no intermediate Hall 0deg frame and no post-fade camera jump.
+  if(returningFromFantasy){hallYaw=180;hallPreview=0;hallDrag=null;rebaseHallMotion();}
   // V2.18.26: Fantasy -> Central Hall uses the same deterministic two-layer
   // crossfade as the other room/route handoffs. Capture the live Fantasy
   // background before roomId/viewMode are reset below.
