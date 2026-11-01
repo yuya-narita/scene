@@ -730,7 +730,21 @@ function showCentralHall(fromIntro=false){
   stage.hidden=true;stage.classList.remove('is-intro-ready');const ih=document.querySelector('#introHint');if(ih)ih.hidden=true;
   document.querySelector('#bookPath').hidden=true;document.querySelector('#roomShelf').hidden=true;document.querySelector('#motionStart').hidden=true;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
-  document.querySelector('#centralHall').hidden=false;document.querySelector('#roomBgLayer').style.display='block';document.querySelector('#roomExitNav').hidden=true;
+  document.querySelector('#centralHall').hidden=false;
+  const hallBg=document.querySelector('#roomBgLayer');
+  if(hallBg){
+    // V2.18.32: Fantasy's shared camera writes an inline pixel background-size
+    // (panoW x 100%) onto this same layer. That inline value survived the room
+    // switch and overrode Hall's `auto 100%`, so Hall 180deg used a different
+    // physical tile width after returning from Fantasy. Reset room-owned camera
+    // styles before the first Hall paint so normal Hall and returned Hall share
+    // exactly the same yaw -> texture mapping.
+    hallBg.style.removeProperty('background-size');
+    hallBg.style.removeProperty('transition');
+    hallBg.style.transform='none';
+    hallBg.style.display='block';
+  }
+  document.querySelector('#roomExitNav').hidden=true;
   renderHallMyShelf();if(fromIntro){hallYaw=0;document.querySelector('#hallTutorial').hidden=false;} renderHall();
   // For Fantasy -> Hall, commit the REAL 180deg Hall for two paints while the
   // frozen Fantasy layer still fully covers it, then fade that cover away.
