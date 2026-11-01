@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
-<link rel="stylesheet" href="./bookstore.css?v=2.16.15r5">
+<link rel="stylesheet" href="./bookstore.css?v=2.18.0tour1">
 
 <style id="v211-bg">
 /* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
@@ -37,6 +37,19 @@
 <main>
   <section class="store" id="store" aria-label="あ箱書店">
     <div class="room-bg-layer" id="roomBgLayer" aria-hidden="true"></div>
+    <section class="central-hall" id="centralHall" hidden aria-label="中央桜ホール">
+      <div class="hall-title"><small>CENTRAL SAKURA HALL</small><strong>中央桜ホール</strong><span>左右に見回して、次の道へ。</span></div>
+      <button class="room-motion hall-motion" id="hallMotion" type="button" aria-pressed="false">◎ 360°モーション OFF</button>
+      <div class="hall-gates" aria-label="ホールの行き先">
+        <button class="hall-gate is-ready" id="hallBookPath" data-angle="0" type="button"><small>0° · NEW ARRIVALS</small><strong>本の道</strong><span>新着の本を見ながら歩く</span></button>
+        <button class="hall-gate is-ready" id="hallFantasy" data-angle="90" type="button"><small>90° · FANTASY FOREST</small><strong>ファンタジーの森</strong><span>ジャンルの本棚へ</span></button>
+        <button class="hall-gate is-locked" data-angle="180" type="button" disabled><small>180° · SECRET</small><strong>？？？</strong><span>まだ扉は開かない</span></button>
+        <button class="hall-gate is-locked" data-angle="270" type="button" disabled><small>270° · COMING SOON</small><strong>別の道</strong><span>準備中</span></button>
+      </div>
+      <div class="hall-tutorial" id="hallTutorial">左右にスワイプして入口を見る<br><span>◎ モーションでも見回せます</span></div>
+    </section>
+    <div class="intro-hint" id="introHint" hidden>↑ 円環を上にスワイプして店内へ</div>
+    <nav class="room-exit-nav" id="roomExitNav" hidden aria-label="ファンタジーの森から移動"><button id="exitHall" type="button">桜ホール</button><button id="exitPath" type="button">本の道</button><button type="button" disabled>次のジャンル</button></nav>
     <div class="ambient" aria-hidden="true"></div>
     <div class="shelf shelf-top" aria-hidden="true"></div><div class="shelf shelf-mid" aria-hidden="true"></div><div class="shelf shelf-low" aria-hidden="true"></div>
     <div class="sign"><small>NEW ARRIVALS</small><strong>新しく入った本</strong></div>
@@ -60,6 +73,6 @@
     <div class="picked-actions"><button id="saveLater" type="button">あとで読む</button><a id="readBook" href="#">ひらく</a></div>
   </article>
 </div>
-<script src="./bookstore.js?v=2.16.15r5"></script>
+<script src="./bookstore.js?v=2.18.0tour1"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@ const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 const stage=document.querySelector('#stage'),picked=document.querySelector('#picked'),store=document.querySelector('#store');
 let books=[],allBooks=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
 let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
+let introReady=false,hallYaw=0,hallPreview=0,hallDrag=null,hallMotionOn=false,hallMotionLastAlpha=null;
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
 let roomId='new',routeTransitioning=false,dataReady=false;
@@ -164,7 +165,9 @@ function playFirstViewSpin(){
       if(Math.abs(slot)>5){b.remove();return;}
       b.dataset.slot=String(slot);setBookPose(b,slot);
     });
-    stage.classList.remove('is-intro-spinning','is-intro-ready');
+    stage.classList.remove('is-intro-spinning');
+    stage.classList.add('is-intro-ready');introReady=true;roomId='intro';store.classList.add('intro-mode');
+    const ih=document.querySelector('#introHint');if(ih)ih.hidden=false;
     updateFocusPanel();
   }
   requestAnimationFrame(frame);
@@ -174,7 +177,8 @@ function move(delta){if(books.length)glideToOffset(-delta);}
 function applyDrag(units){dragUnits=units;stage.querySelectorAll('.book').forEach(b=>{const slot=Number(b.dataset.slot||0);setBookPose(b,slot+units);});}
 function beginDrag(e){if(e.button!=null&&e.button!==0)return;spinToken++;drag={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastT:performance.now(),vx:0,moved:false,axis:null};stage.classList.add('is-dragging');stage.setPointerCapture?.(e.pointerId);}
 function dragMove(e){if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.abs(dx)<5&&Math.abs(dy)<5)return;
-  if(!drag.axis)drag.axis=(roomId==='fantasy'&&!roomShelfMode&&Math.abs(dy)>Math.abs(dx)*1.15)?'shelf-return':'ring';
+  if(!drag.axis){if(roomId==='intro'&&introReady&&Math.abs(dy)>Math.abs(dx)*1.05)drag.axis='intro-enter';else drag.axis=(roomId==='fantasy'&&!roomShelfMode&&Math.abs(dy)>Math.abs(dx)*1.15)?'shelf-return':'ring';}
+  if(drag.axis==='intro-enter'){drag.moved=true;e.preventDefault();const lift=Math.min(1,Math.max(0,-dy/150));stage.style.transform=`translateX(-50%) translateY(${Math.min(0,dy*.55)}px) scale(${1-lift*.12})`;stage.style.opacity=String(1-lift*.62);return;}
   if(drag.axis==='shelf-return'){
     drag.moved=true;e.preventDefault();const lift=Math.min(1,Math.max(0,-dy/180));stage.style.setProperty('--shelf-return-y',`${Math.min(0,dy*.62)}px`);stage.style.setProperty('--shelf-return-scale',String(1-lift*.18));stage.style.opacity=String(1-lift*.48);return;
   }
@@ -197,6 +201,7 @@ async function coastAndSnap(initialUnits,velocityUnitsMs){
   commitRingSettle(-Math.round(target));
 }
 function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.classList.remove('is-dragging');
+  if(d.axis==='intro-enter'){const dy=e.clientY-d.y;stage.style.transform='';stage.style.opacity='';if(!cancel&&dy<-62){showCentralHall(true);}return;}
   if(d.axis==='shelf-return'){
     const dy=e.clientY-d.y;stage.style.opacity='';
     if(!cancel&&dy<-72){stage.classList.add('is-shelf-returning');stage.style.setProperty('--shelf-return-y','-120px');stage.style.setProperty('--shelf-return-scale','.76');setTimeout(backToRoomShelf,180)}
@@ -542,18 +547,43 @@ function backToRoomShelf(){
   requestAnimationFrame(()=>{rebaseRoomMotion();applyRoomCamera(0,true);});
 }
 
+
+function wrapDeg(v){while(v>180)v-=360;while(v<-180)v+=360;return v;}
+function hallGates(){return [...document.querySelectorAll('.hall-gate[data-angle]')];}
+function renderHall(){
+  if(viewMode!=='hall')return;
+  const yaw=hallYaw+hallPreview,w=Math.max(320,store.clientWidth||390);
+  const bg=document.querySelector('#roomBgLayer');if(bg)bg.style.transform=`translate3d(${(-yaw/360)*w*1.85}px,0,0)`;
+  hallGates().forEach(g=>{const a=Number(g.dataset.angle||0),d=wrapDeg(a-yaw),x=Math.sin(d*Math.PI/180)*w*.78,depth=Math.cos(d*Math.PI/180),scale=.72+.28*Math.max(0,depth),op=.18+.82*Math.max(0,depth);g.style.transform=`translate3d(calc(-50% + ${x.toFixed(2)}px),0,0) scale(${scale.toFixed(3)})`;g.style.opacity=String(op);g.style.zIndex=String(20+Math.round(depth*10));g.style.pointerEvents=Math.abs(d)<42?'auto':'none';});
+}
+function rebaseHallMotion(){hallMotionLastAlpha=null;}
+function onHallOrientation(e){if(!hallMotionOn||viewMode!=='hall'||hallDrag||typeof e.alpha!=='number')return;const a=e.alpha;if(hallMotionLastAlpha==null){hallMotionLastAlpha=a;return;}let d=a-hallMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;hallMotionLastAlpha=a;hallYaw-=d*.72;hallPreview=0;requestAnimationFrame(renderHall);}
+async function toggleHallMotion(){const b=document.querySelector('#hallMotion');if(hallMotionOn){hallMotionOn=false;window.removeEventListener('deviceorientation',onHallOrientation);hallMotionLastAlpha=null;b?.classList.remove('is-on');if(b){b.textContent='◎ 360°モーション OFF';b.setAttribute('aria-pressed','false');}return;}try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')return;}hallMotionOn=true;hallMotionLastAlpha=null;window.addEventListener('deviceorientation',onHallOrientation,{passive:true});b?.classList.add('is-on');if(b){b.textContent='◉ 360°モーション ON';b.setAttribute('aria-pressed','true');}}catch(_){}}
+function settleHall(){const from=hallYaw+hallPreview,target=Math.round(from/90)*90,start=performance.now(),dur=230;hallYaw=from;hallPreview=0;function tick(now){const t=Math.min(1,(now-start)/dur),e=1-Math.pow(1-t,3);hallYaw=from+(target-from)*e;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}
+function showCentralHall(fromIntro=false){
+  pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();roomId='hall';viewMode='hall';roomShelfMode=false;introReady=false;
+  store.classList.remove('intro-mode','room-fantasy');store.classList.add('hall-mode');document.body.classList.remove('book-path-active');
+  stage.hidden=true;stage.classList.remove('is-intro-ready');const ih=document.querySelector('#introHint');if(ih)ih.hidden=true;
+  document.querySelector('#bookPath').hidden=true;document.querySelector('#roomShelf').hidden=true;document.querySelector('#motionStart').hidden=true;
+  document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
+  document.querySelector('#centralHall').hidden=false;document.querySelector('#roomBgLayer').style.display='block';document.querySelector('#roomExitNav').hidden=true;
+  if(fromIntro){hallYaw=0;document.querySelector('#hallTutorial').hidden=false;} renderHall();
+}
+function enterBookPathFromHall(){if(!dataReady)return;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();}
+function returnToPathFromRoom(){roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;roomId='path';viewMode='path';books=allBooks.slice();pathProgress=Math.max(0,books.length-1);setRoomVisual('new');document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;renderPath();ensurePathLoop();}
+
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
   await new Promise(r=>setTimeout(r,360));
-  roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;
+  roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';books=fantasyBooks();index=0;dragUnits=0;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
   // V2.16.15R5: the path motion control is a store-level overlay, so explicitly
   // retire it when the route leaves the book path. Its ON/OFF state is preserved.
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
   path.hidden=true;path?.classList.remove('route-leaving');
-  renderRoomShelf();routeTransitioning=false;
+  renderRoomShelf();document.querySelector('#roomExitNav').hidden=false;routeTransitioning=false;
 }
 function setViewMode(mode){
   const next=mode==='path'?'path':'ring';
@@ -674,6 +704,7 @@ function onPathPointerMove(e){
 function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
+  if(d.moved&&d.start<=.12&&dy>58){pathVelocity=0;showCentralHall(false);return;}
   if(!d.moved&&h&&!h.moved&&Number.isFinite(h.raw)){
     const raw=h.raw,w=books[norm(raw)];
     pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w);return;
@@ -806,6 +837,8 @@ if(pathMotionButton){
   pathMotionButton.addEventListener('pointercancel',(e)=>{e.stopPropagation();});
 }
 setPathMotionButton();document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
+document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#hallFantasy')?.addEventListener('click',enterFantasyRoom);document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
+const hallEl=document.querySelector('#centralHall');hallEl?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX};hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();});hallEl?.addEventListener('pointermove',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const dx=e.clientX-hallDrag.x;if(Math.abs(dx)>2)e.preventDefault();hallPreview=-dx/Math.max(320,store.clientWidth)*105;renderHall();},{passive:false});hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;hallYaw+=hallPreview;hallPreview=0;hallDrag=null;settleHall();});hallEl?.addEventListener('pointercancel',()=>{hallPreview=0;hallDrag=null;settleHall();});
 
-async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;roomId='intro';store.classList.add('intro-mode');document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();
