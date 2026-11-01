@@ -683,6 +683,14 @@ async function enterFantasyRoom(){
   await preloadRoomBackground('fantasy');
   if(!routeTransitioning)return;
 
+  // V2.18.21: keep a lightweight copy of the path background alive during the handoff.
+  // The destination room fades in underneath while this layer fades out, so Safari never
+  // has to "replace then fade" a background in the same paint.
+  const oldRoomLayer=document.createElement('div');
+  oldRoomLayer.className='room-crossfade-old room-crossfade-old-path';
+  oldRoomLayer.setAttribute('aria-hidden','true');
+  store.appendChild(oldRoomLayer);
+
   roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
   if(roomBg){
@@ -704,7 +712,9 @@ async function enterFantasyRoom(){
   // Commit the transparent decoded background, then start the fade on a later paint.
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   if(roomId!=='fantasy'){routeTransitioning=false;return;}
+  // Start both sides of the real crossfade on the same committed frame.
   roomBg?.classList.add('is-room-visible');
+  oldRoomLayer.classList.add('is-crossfade-out');
   const fadeStarted=performance.now();
 
   // Prepare covers only after the background fade has actually started.
@@ -727,6 +737,7 @@ async function enterFantasyRoom(){
   // Let the CSS fade complete independently; cleanup only after its nominal duration.
   const fadeRemain=1220-(performance.now()-fadeStarted);if(fadeRemain>0)await new Promise(r=>setTimeout(r,fadeRemain));
   if(roomBg){roomBg.classList.remove('room-enter-fade','is-room-visible');}
+  oldRoomLayer.remove();
   routeTransitioning=false;
 }
 function setViewMode(mode){

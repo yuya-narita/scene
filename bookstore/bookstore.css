@@ -303,3 +303,13 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
 .store.room-fantasy .room-bg-layer.room-enter-fade{opacity:0!important;transition:opacity 1.18s cubic-bezier(.22,.72,.28,1)!important}
 .store.room-fantasy .room-bg-layer.room-enter-fade.is-room-visible{opacity:1!important}
 @media (prefers-reduced-motion:reduce){.store.room-fantasy .room-bg-layer.room-enter-fade{transition-duration:.18s!important}}
+
+
+/* V2.18.21 — true two-layer Room crossfade.
+   Keep the path image painted while the decoded destination panorama fades in beneath it. */
+.room-crossfade-old{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:1;will-change:opacity;transition:opacity .96s cubic-bezier(.22,.72,.28,1);backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.room-crossfade-old-path{background-image:linear-gradient(rgba(7,5,3,.10),rgba(7,5,3,.18)),url('./bookstore-path-fantasy-v2113.webp');background-size:cover;background-position:center center;background-repeat:no-repeat}
+.room-crossfade-old.is-crossfade-out{opacity:0}
+.store.room-fantasy .room-bg-layer.room-enter-fade{opacity:0!important;transition:opacity .96s cubic-bezier(.22,.72,.28,1)!important}
+.store.room-fantasy .room-bg-layer.room-enter-fade.is-room-visible{opacity:1!important}
+@media (prefers-reduced-motion:reduce){.room-crossfade-old{transition-duration:.18s!important}.store.room-fantasy .room-bg-layer.room-enter-fade{transition-duration:.18s!important}}
