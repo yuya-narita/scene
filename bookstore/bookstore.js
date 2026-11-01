@@ -101,7 +101,9 @@ function wrappedOffsetFrom(center,i){
 }
 function renderFirstViewRing(center){
   stage.innerHTML='';
-  stage.classList.add('is-intro-ready');
+  // V2.18.5: intro readiness is granted only after the opening spin fully completes.
+  // Do not expose a false ready state while the ring is still assembling.
+  stage.classList.remove('is-intro-ready');
   books.forEach((w,i)=>{
     const b=document.createElement('button');b.className='book';b.dataset.index=i;
     b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);
@@ -146,6 +148,8 @@ function playFirstViewSpin(){
   const start=index-travel;
   suppressClickUntil=Date.now()+duration+250;
   stage.classList.add('is-intro-spinning');
+  introReady=false;
+  const ih=document.querySelector('#introHint');if(ih)ih.hidden=true;
   renderFirstViewRing(start);
   const t0=performance.now();
   function frame(now){
@@ -173,7 +177,12 @@ function playFirstViewSpin(){
   requestAnimationFrame(frame);
 }
 function snapTo(i){index=norm(i);dragUnits=0;render();}
-function move(delta){if(books.length)glideToOffset(-delta);}
+function move(delta){
+  // V2.18.5: all ring navigation is locked during the opening spin.
+  // Prev/next buttons live outside .stage, so they must be guarded here too.
+  if(stage.classList.contains('is-intro-spinning'))return;
+  if(books.length)glideToOffset(-delta);
+}
 function applyDrag(units){dragUnits=units;stage.querySelectorAll('.book').forEach(b=>{const slot=Number(b.dataset.slot||0);setBookPose(b,slot+units);});}
 function beginDrag(e){if(e.button!=null&&e.button!==0)return;/* V2.18.4: while the opening NEW ARRIVALS spin is running, taps must not cancel its RAF token. Cancelling here left introReady=false forever, so the ring still scrolled horizontally but could never accept the upward enter gesture. */if(roomId==='intro'&&stage.classList.contains('is-intro-spinning'))return;spinToken++;drag={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastT:performance.now(),vx:0,moved:false,axis:null};stage.classList.add('is-dragging');stage.setPointerCapture?.(e.pointerId);}
 function dragMove(e){if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.abs(dx)<5&&Math.abs(dy)<5)return;

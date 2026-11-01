@@ -253,3 +253,8 @@ body.intro-entry-active .below{display:none!important;}
 
 /* V2.18.3 — NEW ARRIVALS is the home face of the hall; pull down from HUB to return. */
 .store.hall-mode .central-hall{touch-action:none;overscroll-behavior:none;}
+
+/* V2.18.5 — opening NEW ARRIVALS is a non-interactive cinematic state.
+   iPhone Safari must not deliver taps/pointers to covers while the RAF spin owns them. */
+body.intro-entry-active .stage.is-intro-spinning{pointer-events:none!important;touch-action:none!important;}
+body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!important;}
