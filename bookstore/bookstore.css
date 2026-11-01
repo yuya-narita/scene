@@ -258,3 +258,15 @@ body.intro-entry-active .below{display:none!important;}
    iPhone Safari must not deliver taps/pointers to covers while the RAF spin owns them. */
 body.intro-entry-active .stage.is-intro-spinning{pointer-events:none!important;touch-action:none!important;}
 body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!important;}
+
+
+/* V2.18.6 — one experimental MY BOOKS shelf in Central Sakura Hall.
+   It deliberately reuses the physical-book visual language from Room shelves,
+   but stays one row / four books so the Hall remains a HUB rather than another genre room. */
+.hall-my-shelf{position:absolute;left:50%;top:50%;width:min(82%,330px);translate:0 -50%;padding:10px 12px 15px;border-radius:18px;background:linear-gradient(180deg,rgba(21,13,8,.72),rgba(10,7,5,.58));border:1px solid rgba(231,205,166,.34);box-shadow:0 18px 42px #0008;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);will-change:transform,opacity;transform-origin:50% 55%;}
+.hall-my-shelf-label{text-align:center;margin-bottom:8px;pointer-events:none}.hall-my-shelf-label small{display:block;color:#d9ba89;font-size:7px;letter-spacing:.16em}.hall-my-shelf-label strong{display:block;margin-top:3px;color:#fff7e8;font:600 16px serif}.hall-my-shelf-label span{display:block;margin-top:2px;color:#cdbca7;font-size:7px}
+.hall-my-shelf-books{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:end;gap:8px;padding:2px 4px 7px;perspective:700px}
+.hall-my-book{position:relative;display:block;width:100%;aspect-ratio:2/3;border:0;padding:0;background:none;touch-action:manipulation;transform:translateZ(0);-webkit-tap-highlight-color:transparent}
+.hall-my-book .book-shell{position:absolute;inset:0;width:100%;height:100%;transform:none!important}.hall-my-book .book-face{position:absolute;inset:0}.hall-my-book .book-face img{width:100%;height:100%;object-fit:cover;display:block}.hall-my-book .book-spine,.hall-my-book .book-pages,.hall-my-book .book-bottom{display:none!important}
+.hall-my-shelf-board{position:absolute;left:4%;right:4%;bottom:9px;height:7px;border-radius:3px;background:linear-gradient(#8a623d,#3e2919);box-shadow:0 4px 8px #0009;pointer-events:none}
+@media(max-width:680px){.hall-my-shelf{top:52%;width:min(86%,330px);padding:9px 10px 14px}.hall-my-shelf-books{gap:6px}.hall-my-shelf-label strong{font-size:15px}}
