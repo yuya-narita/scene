@@ -287,9 +287,13 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
   #hallNewShelf .hall-my-shelf-books{gap:6px;row-gap:8px}
 }
 
-/* V2.18.13 — lightweight Book Path -> Fantasy tunnel-exit transition.
-   Pure opacity/transform/box-shadow: no animated blur or canvas work on iPhone. */
-.fantasy-tunnel-fx{position:absolute;z-index:1900;inset:0;pointer-events:none;opacity:0;transform:scale(1);background:radial-gradient(ellipse at 50% 48%,transparent 0 12%,rgba(4,3,2,.22) 30%,rgba(3,2,1,.88) 74%,#050403 100%);box-shadow:inset 0 0 0 0 #050403;transition:opacity .16s ease,transform .52s cubic-bezier(.2,.72,.2,1),box-shadow .52s cubic-bezier(.2,.72,.2,1)}
-.fantasy-tunnel-fx.is-active{opacity:1;transform:scale(1.035);box-shadow:inset 0 0 110px 72px rgba(2,2,1,.72)}
-.fantasy-tunnel-fx.is-active.is-open{opacity:0;transform:scale(1.16);box-shadow:inset 0 0 0 0 rgba(2,2,1,0);transition-duration:.62s}
-@media (prefers-reduced-motion:reduce){.fantasy-tunnel-fx{transition:opacity .16s linear!important;transform:none!important}}
+/* V2.18.14 — reusable lightweight Room Transition.
+   Same GPU-cheap opacity/scale system for every genre; only theme variables change. */
+.room-transition-fx{--room-fx-core:rgba(255,255,255,.98);--room-fx-mid:rgba(255,250,225,.84);--room-fx-edge:rgba(255,235,176,.44);--room-fx-glow:rgba(255,246,210,.92);position:absolute;z-index:1900;inset:0;pointer-events:none;opacity:0;transform:scale(.985);background:radial-gradient(ellipse at 50% 48%,var(--room-fx-core) 0 8%,var(--room-fx-mid) 27%,var(--room-fx-edge) 62%,transparent 100%);box-shadow:inset 0 0 0 0 var(--room-fx-glow);transition:opacity .22s ease,transform .64s cubic-bezier(.2,.72,.2,1),box-shadow .64s cubic-bezier(.2,.72,.2,1)}
+.room-transition-fx.theme-fantasy{--room-fx-core:rgba(255,255,250,.99);--room-fx-mid:rgba(255,249,218,.90);--room-fx-edge:rgba(255,224,143,.48);--room-fx-glow:rgba(255,245,199,.95)}
+.room-transition-fx.theme-romance{--room-fx-core:rgba(255,252,253,.99);--room-fx-mid:rgba(255,225,235,.86);--room-fx-edge:rgba(244,181,205,.44);--room-fx-glow:rgba(255,224,237,.92)}
+.room-transition-fx.theme-sf{--room-fx-core:rgba(248,254,255,.99);--room-fx-mid:rgba(205,242,255,.88);--room-fx-edge:rgba(113,204,255,.42);--room-fx-glow:rgba(196,239,255,.94)}
+.room-transition-fx.theme-horror{--room-fx-core:rgba(42,4,5,.96);--room-fx-mid:rgba(75,5,8,.82);--room-fx-edge:rgba(10,2,3,.62);--room-fx-glow:rgba(100,8,12,.72)}
+.room-transition-fx.is-active{opacity:1;transform:scale(1.025);box-shadow:inset 0 0 100px 52px var(--room-fx-glow)}
+.room-transition-fx.is-active.is-open{opacity:0;transform:scale(1.15);box-shadow:inset 0 0 0 0 transparent;transition-duration:.72s}
+@media (prefers-reduced-motion:reduce){.room-transition-fx{transition:opacity .16s linear!important;transform:none!important}}
