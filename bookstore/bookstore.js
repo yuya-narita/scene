@@ -657,10 +657,19 @@ async function enterFantasyRoom(){
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
   const oldFx=document.querySelector('#roomTransitionFx');if(oldFx)oldFx.remove();
   const roomBg=document.querySelector('#roomBgLayer');
-  if(roomBg){roomBg.classList.add('room-enter-fade');roomBg.classList.remove('is-room-visible');roomBg.style.display='block';}
 
   roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
+  // V2.18.18: establish the Fantasy CSS first, then explicitly commit opacity:0
+  // before starting the transition. In V2.18.17 the fade class was attached while
+  // the previous room CSS still owned the layer, so Safari could paint the Fantasy
+  // image at full opacity before the transition had a real starting frame.
+  if(roomBg){
+    roomBg.style.display='block';
+    roomBg.classList.remove('is-room-visible');
+    roomBg.classList.add('room-enter-fade');
+    void roomBg.offsetWidth; // commit the transparent first frame on iOS Safari
+  }
   // Own the first Fantasy frame before the road is removed, then let the room image itself emerge.
   roomCameraYaw=0;roomCameraPreview=0;applyRoomCamera(0,true);
   const fadeStarted=performance.now();

@@ -299,7 +299,7 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
 .room-transition-fx.is-active{opacity:1}
 .room-transition-fx.is-active.is-open{opacity:0;transition-duration:.46s}
 @media (prefers-reduced-motion:reduce){.room-transition-fx{transition:opacity .14s linear!important}}
-\n\n/* V2.18.17 — Room-image transition. No veil, flash, tint or zoom: the destination itself fades in. */
-.store.room-fantasy .room-bg-layer.room-enter-fade{opacity:0;transition:opacity .95s cubic-bezier(.22,.72,.28,1)}
-.store.room-fantasy .room-bg-layer.room-enter-fade.is-room-visible{opacity:1}
+\n\n/* V2.18.18 — True room-background fade. Commit a genuinely transparent first frame, then let only the destination image appear. */
+.store.room-fantasy .room-bg-layer.room-enter-fade{opacity:0!important;transition:opacity 1.18s cubic-bezier(.22,.72,.28,1)!important}
+.store.room-fantasy .room-bg-layer.room-enter-fade.is-room-visible{opacity:1!important}
 @media (prefers-reduced-motion:reduce){.store.room-fantasy .room-bg-layer.room-enter-fade{transition-duration:.18s!important}}
