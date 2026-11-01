@@ -620,6 +620,14 @@ function backToHallShelf(){
   if(!hallShelfRing)return;hallShelfRing=false;stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');showCentralHall(false);
 }
 
+// V2.18.31 — Hall background camera is normalized to the actual repeated tile width.
+// bookstore-v211-bg.webp is 1536x1024 (3:2) and Hall paints it at auto 100%,
+// so one complete 360deg turn must move exactly one rendered image tile (height * 1.5).
+function hallBackgroundOffsetPx(yaw,bgEl=document.querySelector('#roomBgLayer')){
+  const h=Math.max(1,bgEl?.clientHeight||store.clientHeight||window.innerHeight||1);
+  const tileW=h*1.5;
+  return -(yaw/360)*tileW;
+}
 function renderHall(){
   if(viewMode!=='hall')return;
   const yaw=hallYaw+hallPreview,w=Math.max(320,store.clientWidth||390);
@@ -629,9 +637,8 @@ function renderHall(){
     // V2.18.3: keep the texture coordinate continuous across ±180°.
     // The source art is not a seamless equirectangular 360 image, so its own left/right
     // content seam can still be visible, but the camera itself no longer snaps at the boundary.
-    const phase=yaw/360;
     bg.style.transform='none';
-    bg.style.backgroundPosition=`calc(50% + ${(-phase*w*1.85).toFixed(2)}px) center`;
+    bg.style.backgroundPosition=`calc(50% + ${hallBackgroundOffsetPx(yaw,bg).toFixed(2)}px) center`;
   }
   hallSpatialItems().forEach(g=>{const a=Number(g.dataset.angle||0),d=wrapDeg(a-yaw),x=Math.sin(d*Math.PI/180)*w*.78,depth=Math.cos(d*Math.PI/180),scale=.72+.28*Math.max(0,depth),op=.18+.82*Math.max(0,depth);g.style.transform=`translate3d(calc(-50% + ${x.toFixed(2)}px),0,0) scale(${scale.toFixed(3)})`;g.style.opacity=String(op);g.style.zIndex=String(20+Math.round(depth*10));g.style.pointerEvents=Math.abs(d)<42?'auto':'none';});
 }
@@ -677,9 +684,7 @@ function makeRouteCrossfadeLayer(kind, role='old'){
   // already paint the Hall at the same 180deg camera angle as the live Hall.
   // Otherwise the crossfade shows Hall 0deg and pops to 180deg on cleanup.
   if(role==='new'&&kind==='hall'){
-    const w=Math.max(320,store.clientWidth||390);
-    const phase=(hallYaw+hallPreview)/360;
-    layer.style.backgroundPosition=`calc(50% + ${(-phase*w*1.85).toFixed(2)}px) center`;
+    layer.style.backgroundPosition=`calc(50% + ${hallBackgroundOffsetPx(hallYaw+hallPreview,layer).toFixed(2)}px) center`;
   }
   store.appendChild(layer);
   return layer;
