@@ -665,12 +665,15 @@ function makeRouteCrossfadeLayer(kind, role='old'){
     const src=document.querySelector('#roomBgLayer');
     if(src){
       const cs=getComputedStyle(src);
-      layer.style.backgroundImage=cs.backgroundImage;
-      layer.style.backgroundSize=cs.backgroundSize;
+      // V2.18.25: keep only the live camera position for painted route layers.
+      // Copying the 500%-wide room layer transform into a viewport-sized overlay made
+      // Fantasy -> Path effectively disappear before Safari could paint the fade.
       layer.style.backgroundPosition=cs.backgroundPosition;
-      layer.style.backgroundRepeat=cs.backgroundRepeat;
-      layer.style.transform=cs.transform==='none'?'':cs.transform;
-      layer.style.transformOrigin=cs.transformOrigin;
+      if(kind==='hall'){
+        layer.style.backgroundImage=cs.backgroundImage;
+        layer.style.backgroundSize=cs.backgroundSize;
+        layer.style.backgroundRepeat=cs.backgroundRepeat;
+      }
     }
   }
   store.appendChild(layer);
@@ -695,7 +698,15 @@ function fadeRouteLayers(pair){
 }
 function showCentralHall(fromIntro=false){
   const returningFromPath=viewMode==='path'&&roomId==='path';
-  const routeFade=returningFromPath?startRouteCrossfade('path','hall'):null;
+  const returningFromFantasy=roomId==='fantasy';
+  // V2.18.26: Fantasy -> Central Hall uses the same deterministic two-layer
+  // crossfade as the other room/route handoffs. Capture the live Fantasy
+  // background before roomId/viewMode are reset below.
+  const routeFade=returningFromPath
+    ? startRouteCrossfade('path','hall')
+    : returningFromFantasy
+      ? startRouteCrossfade('fantasy','hall')
+      : null;
   hallShelfRing=false;pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();roomId='hall';viewMode='hall';roomShelfMode=false;introReady=false;
   store.classList.remove('intro-mode','room-fantasy');store.classList.add('hall-mode');document.body.classList.remove('book-path-active','intro-entry-active');
   stage.hidden=true;stage.classList.remove('is-intro-ready');const ih=document.querySelector('#introHint');if(ih)ih.hidden=true;
