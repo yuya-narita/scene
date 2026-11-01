@@ -32,6 +32,26 @@ let roomShelfVisualYaw=null,roomShelfVisualTargetYaw=0,roomShelfVisualRaf=0,room
 let roomVisibleFace=0; // V2.16.5: shelf faces live at fixed world angles; null means scenery-only view.
 const ROOM_SHELF_SNAP_DEG=24,ROOM_SHELF_SHOW_DEG=58,ROOM_SWIPE_DEG_PER_PX=.22,ROOM_VIEW_SLOT_DEG=90;
 const shelves=[{id:'new',label:'新しく入った本'},{id:'fantasy',label:'ファンタジーの本棚'}];
+// V2.18.19 — Room Preloader. Decode the next room background before entry so the
+// CSS fade always owns a real, paintable image and can never be outrun by the ring.
+const ROOM_BG_ASSETS={fantasy:'./fantasy-room-360-v2165.webp'};
+const roomBgPreloadJobs=new Map();
+function preloadRoomBackground(id){
+  const src=ROOM_BG_ASSETS[id];if(!src)return Promise.resolve();
+  if(roomBgPreloadJobs.has(id))return roomBgPreloadJobs.get(id);
+  const job=new Promise(resolve=>{
+    const img=new Image();let done=false;
+    const finish=()=>{if(done)return;done=true;resolve();};
+    img.decoding='async';
+    img.onload=async()=>{try{if(img.decode)await img.decode();}catch(_){}finish();};
+    img.onerror=finish;img.src=src;
+    if(img.complete&&img.naturalWidth>0){Promise.resolve(img.decode?.()).catch(()=>{}).finally(finish);}
+    // Never deadlock room entry on a broken/very slow asset.
+    setTimeout(finish,6000);
+  });
+  roomBgPreloadJobs.set(id,job);return job;
+}
+function primeNextRoomBackground(id){preloadRoomBackground(id).catch(()=>{});}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('returnTo',location.href);return player.toString();}
 function norm(n){return books.length?((n%books.length)+books.length)%books.length:0;}
@@ -645,35 +665,33 @@ function showCentralHall(fromIntro=false){
   document.querySelector('#centralHall').hidden=false;document.querySelector('#roomBgLayer').style.display='block';document.querySelector('#roomExitNav').hidden=true;
   renderHallMyShelf();if(fromIntro){hallYaw=0;document.querySelector('#hallTutorial').hidden=false;} renderHall();
 }
-function enterBookPathFromHall(){if(!dataReady)return;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();}
+function enterBookPathFromHall(){if(!dataReady)return;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');}
 function returnToPathFromRoom(){roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;roomId='path';viewMode='path';books=allBooks.slice();pathProgress=Math.max(0,books.length-1);setRoomVisual('new');document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;renderPath();ensurePathLoop();}
 
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
-  // V2.18.17: the room itself is the transition. Retire every previous ring first,
-  // then fade the Fantasy background in from transparent while its ring starts deep away.
+  // V2.18.19: strict room-entry order:
+  // 1) decode background, 2) mount it transparent, 3) start background fade,
+  // 4) only then prepare/start the ring. This makes the fade deterministic on iPhone Safari.
   spinToken++;drag=null;hallShelfRing=false;stage.hidden=true;stage.style.opacity='0';stage.innerHTML='';
   stage.classList.remove('is-intro-ready','is-intro-spinning','room-shelf-ring','is-shelf-returning');
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
   const oldFx=document.querySelector('#roomTransitionFx');if(oldFx)oldFx.remove();
   const roomBg=document.querySelector('#roomBgLayer');
 
+  // Wait for the actual room image to be loaded + decoded before changing visual ownership.
+  await preloadRoomBackground('fantasy');
+  if(!routeTransitioning)return;
+
   roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
-  // V2.18.18: establish the Fantasy CSS first, then explicitly commit opacity:0
-  // before starting the transition. In V2.18.17 the fade class was attached while
-  // the previous room CSS still owned the layer, so Safari could paint the Fantasy
-  // image at full opacity before the transition had a real starting frame.
   if(roomBg){
     roomBg.style.display='block';
     roomBg.classList.remove('is-room-visible');
     roomBg.classList.add('room-enter-fade');
-    void roomBg.offsetWidth; // commit the transparent first frame on iOS Safari
+    void roomBg.offsetWidth;
   }
-  // Own the first Fantasy frame before the road is removed, then let the room image itself emerge.
   roomCameraYaw=0;roomCameraPreview=0;applyRoomCamera(0,true);
-  const fadeStarted=performance.now();
-  requestAnimationFrame(()=>requestAnimationFrame(()=>roomBg?.classList.add('is-room-visible')));
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
   path.hidden=true;path?.classList.remove('route-leaving');document.querySelector('#roomShelf').hidden=true;
@@ -682,11 +700,20 @@ async function enterFantasyRoom(){
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
   document.querySelector('#hint').textContent='左右にスワイプしてRoomの本を見る　／　上スワイプで棚へ';
   document.querySelector('#roomExitNav').hidden=false;
-  stage.innerHTML='';await preloadFirstViewCovers();
+
+  // Commit the transparent decoded background, then start the fade on a later paint.
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   if(roomId!=='fantasy'){routeTransitioning=false;return;}
-  // Give the background a quiet head start. Cover preloading happens inside that time,
-  // so this does not add a fixed delay on slower devices.
-  const headStart=250-(performance.now()-fadeStarted);if(headStart>0)await new Promise(r=>setTimeout(r,headStart));
+  roomBg?.classList.add('is-room-visible');
+  const fadeStarted=performance.now();
+
+  // Prepare covers only after the background fade has actually started.
+  stage.innerHTML='';
+  const coverJob=preloadFirstViewCovers();
+  const minHeadStart=new Promise(r=>setTimeout(r,300));
+  await Promise.all([coverJob,minHeadStart]);
+  if(roomId!=='fantasy'){routeTransitioning=false;return;}
+
   renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
   stage.hidden=false;stage.style.opacity='1';
   const startTime=performance.now(),dur=1450;
@@ -697,7 +724,8 @@ async function enterFantasyRoom(){
     if(t<1)requestAnimationFrame(frame);else resolve();
   }requestAnimationFrame(frame)});
   if(roomId==='fantasy'){stage.classList.remove('is-intro-spinning');render();updateFocusPanel();}
-  // Keep the background fully opaque after entry; remove only the temporary transition state.
+  // Let the CSS fade complete independently; cleanup only after its nominal duration.
+  const fadeRemain=1220-(performance.now()-fadeStarted);if(fadeRemain>0)await new Promise(r=>setTimeout(r,fadeRemain));
   if(roomBg){roomBg.classList.remove('room-enter-fade','is-room-visible');}
   routeTransitioning=false;
 }
