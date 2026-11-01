@@ -650,10 +650,20 @@ function returnToPathFromRoom(){roomMotionOn&&toggleRoomMotion();roomShelfMode=f
 
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
+  // V2.18.13: retire every previous ring before the route transition starts.
+  // This prevents a one-frame Central Hall/NEW ARRIVALS ring flash on iPhone Safari.
+  spinToken++;drag=null;hallShelfRing=false;stage.hidden=true;stage.style.opacity='0';stage.innerHTML='';
+  stage.classList.remove('is-intro-ready','is-intro-spinning','room-shelf-ring','is-shelf-returning');
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
-  await new Promise(r=>setTimeout(r,360));
+  // Lightweight tunnel-exit cue: dark aperture closes around the road, then opens into Fantasy.
+  let tunnel=document.querySelector('#fantasyTunnelFx');
+  if(!tunnel){tunnel=document.createElement('div');tunnel.id='fantasyTunnelFx';tunnel.className='fantasy-tunnel-fx';store.appendChild(tunnel);}
+  tunnel.classList.remove('is-open');tunnel.classList.add('is-active');
+  await new Promise(r=>setTimeout(r,300));
   roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
+  // Open the aperture only after the Fantasy background/camera owns the frame.
+  requestAnimationFrame(()=>requestAnimationFrame(()=>tunnel?.classList.add('is-open')));
   // V2.16.15R5: the path motion control is a store-level overlay, so explicitly
   // retire it when the route leaves the book path. Its ON/OFF state is preserved.
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
@@ -684,6 +694,7 @@ async function enterFantasyRoom(){
     if(t<1)requestAnimationFrame(frame);else resolve();
   }requestAnimationFrame(frame)});
   if(roomId==='fantasy'){stage.classList.remove('is-intro-spinning');render();updateFocusPanel();}
+  setTimeout(()=>{tunnel?.classList.remove('is-active','is-open');},260);
   routeTransitioning=false;
 }
 function setViewMode(mode){

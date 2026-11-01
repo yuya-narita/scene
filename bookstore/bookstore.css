@@ -286,3 +286,10 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
   #hallNewShelf{top:52%;width:min(88%,342px)}
   #hallNewShelf .hall-my-shelf-books{gap:6px;row-gap:8px}
 }
+
+/* V2.18.13 — lightweight Book Path -> Fantasy tunnel-exit transition.
+   Pure opacity/transform/box-shadow: no animated blur or canvas work on iPhone. */
+.fantasy-tunnel-fx{position:absolute;z-index:1900;inset:0;pointer-events:none;opacity:0;transform:scale(1);background:radial-gradient(ellipse at 50% 48%,transparent 0 12%,rgba(4,3,2,.22) 30%,rgba(3,2,1,.88) 74%,#050403 100%);box-shadow:inset 0 0 0 0 #050403;transition:opacity .16s ease,transform .52s cubic-bezier(.2,.72,.2,1),box-shadow .52s cubic-bezier(.2,.72,.2,1)}
+.fantasy-tunnel-fx.is-active{opacity:1;transform:scale(1.035);box-shadow:inset 0 0 110px 72px rgba(2,2,1,.72)}
+.fantasy-tunnel-fx.is-active.is-open{opacity:0;transform:scale(1.16);box-shadow:inset 0 0 0 0 rgba(2,2,1,0);transition-duration:.62s}
+@media (prefers-reduced-motion:reduce){.fantasy-tunnel-fx{transition:opacity .16s linear!important;transform:none!important}}
