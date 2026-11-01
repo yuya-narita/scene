@@ -553,7 +553,13 @@ function hallGates(){return [...document.querySelectorAll('.hall-gate[data-angle
 function renderHall(){
   if(viewMode!=='hall')return;
   const yaw=hallYaw+hallPreview,w=Math.max(320,store.clientWidth||390);
-  const bg=document.querySelector('#roomBgLayer');if(bg)bg.style.transform=`translate3d(${(-yaw/360)*w*1.85}px,0,0)`;
+  const bg=document.querySelector('#roomBgLayer');if(bg){
+    // V2.18.2: keep the hall background layer fixed and loop the texture itself.
+    // Moving the oversized layer eventually exposed its edge as a black wall.
+    const phase=wrapDeg(yaw)/360;
+    bg.style.transform='none';
+    bg.style.backgroundPosition=`calc(50% + ${(-phase*w*1.85).toFixed(2)}px) center`;
+  }
   hallGates().forEach(g=>{const a=Number(g.dataset.angle||0),d=wrapDeg(a-yaw),x=Math.sin(d*Math.PI/180)*w*.78,depth=Math.cos(d*Math.PI/180),scale=.72+.28*Math.max(0,depth),op=.18+.82*Math.max(0,depth);g.style.transform=`translate3d(calc(-50% + ${x.toFixed(2)}px),0,0) scale(${scale.toFixed(3)})`;g.style.opacity=String(op);g.style.zIndex=String(20+Math.round(depth*10));g.style.pointerEvents=Math.abs(d)<42?'auto':'none';});
 }
 function rebaseHallMotion(){hallMotionLastAlpha=null;}
@@ -838,7 +844,10 @@ if(pathMotionButton){
 }
 setPathMotionButton();document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
 document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#hallFantasy')?.addEventListener('click',enterFantasyRoom);document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
-const hallEl=document.querySelector('#centralHall');hallEl?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX};hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();});hallEl?.addEventListener('pointermove',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const dx=e.clientX-hallDrag.x;if(Math.abs(dx)>2)e.preventDefault();hallPreview=-dx/Math.max(320,store.clientWidth)*105;renderHall();},{passive:false});hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;hallYaw+=hallPreview;hallPreview=0;hallDrag=null;settleHall();});hallEl?.addEventListener('pointercancel',()=>{hallPreview=0;hallDrag=null;settleHall();});
+const hallEl=document.querySelector('#centralHall');hallEl?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now()};hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();});hallEl?.addEventListener('pointermove',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const dx=e.clientX-hallDrag.x;if(Math.abs(dx)>2)e.preventDefault();hallDrag.lastX=e.clientX;hallPreview=-dx/Math.max(320,store.clientWidth)*135;renderHall();},{passive:false});hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const d=hallDrag,dx=e.clientX-d.x,dt=Math.max(1,performance.now()-d.t),vx=dx/dt,base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;hallDrag=null;
+  // V2.18.2: a normal deliberate swipe should advance one entrance; no hard flick required.
+  if(Math.abs(dx)>=34||Math.abs(vx)>=.24){const dir=dx<0?1:-1;const from=hallYaw,target=base+dir*90,start=performance.now(),dur=250;function tick(now){const t=Math.min(1,(now-start)/dur),q=1-Math.pow(1-t,3);hallYaw=from+(target-from)*q;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}else settleHall();
+});hallEl?.addEventListener('pointercancel',()=>{hallPreview=0;hallDrag=null;settleHall();});
 
 async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();dataReady=true;roomId='intro';store.classList.add('intro-mode');document.body.classList.add('intro-entry-active');window.scrollTo(0,0);document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 init();

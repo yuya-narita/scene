@@ -245,3 +245,8 @@ body.intro-entry-active main{height:100dvh;max-height:100dvh;overflow:hidden!imp
 body.intro-entry-active .store{height:100dvh;max-height:100dvh;min-height:100dvh;overflow:hidden!important;touch-action:none!important;overscroll-behavior:none;}
 body.intro-entry-active .stage{touch-action:none!important;overscroll-behavior:none;-webkit-user-select:none;user-select:none;}
 body.intro-entry-active .below{display:none!important;}
+
+/* V2.18.2 — hall loop + room route UI spacing */
+.store.hall-mode .room-bg-layer{left:0!important;right:0!important;width:auto!important;transform:none!important;background-repeat:repeat-x!important;}
+.store.room-fantasy .room-exit-nav{top:21.5%!important;}
+@media(max-width:680px){.store.room-fantasy .room-exit-nav{top:21.5%!important}.store.room-fantasy .room-shelf{top:25%!important}}
