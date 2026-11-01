@@ -515,7 +515,14 @@ function animateRoomYaw(from,target,dur=280){
 }
 async function toggleRoomMotion(){
   const b=document.querySelector('#roomMotion');
-  if(roomMotionOn){roomMotionOn=false;window.removeEventListener('deviceorientation',onRoomOrientation);roomMotionBaseAlpha=roomMotionLastAlpha=roomMotionLatestAlpha=null;roomCameraPreview=0;applyRoomCamera(0,false);if(b){b.classList.remove('is-on');b.textContent='◎ 360°モーション OFF';}return;}
+  if(roomMotionOn){
+    // V2.18.10: turning motion OFF is a deliberate landing action.
+    // Never leave the reader stranded between physical shelf faces: glide to the nearest real shelf.
+    const current=roomCameraYaw+roomCameraPreview,near=nearestShelfForYaw(current),target=current+near.delta;
+    roomMotionOn=false;window.removeEventListener('deviceorientation',onRoomOrientation);roomMotionBaseAlpha=roomMotionLastAlpha=roomMotionLatestAlpha=null;roomCameraPreview=0;
+    if(b){b.classList.remove('is-on');b.textContent='◎ 360°モーション OFF';}
+    animateRoomYaw(current,target,260);return;
+  }
   try{
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted')throw new Error('denied');}
     roomMotionOn=true;roomMotionBaseAlpha=roomMotionLastAlpha=roomMotionLatestAlpha=null;window.addEventListener('deviceorientation',onRoomOrientation,{passive:true});if(b){b.classList.add('is-on');b.textContent='◉ 360°モーション ON';}
@@ -610,7 +617,9 @@ function renderHall(){
 }
 function rebaseHallMotion(){hallMotionLastAlpha=null;}
 function onHallOrientation(e){if(!hallMotionOn||viewMode!=='hall'||hallDrag||typeof e.alpha!=='number')return;const a=e.alpha;if(hallMotionLastAlpha==null){hallMotionLastAlpha=a;return;}let d=a-hallMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;hallMotionLastAlpha=a;hallYaw-=d*.72;hallPreview=0;requestAnimationFrame(renderHall);}
-async function toggleHallMotion(){const b=document.querySelector('#hallMotion');if(hallMotionOn){hallMotionOn=false;window.removeEventListener('deviceorientation',onHallOrientation);hallMotionLastAlpha=null;b?.classList.remove('is-on');if(b){b.textContent='◎ 360°モーション OFF';b.setAttribute('aria-pressed','false');}return;}try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')return;}hallMotionOn=true;hallMotionLastAlpha=null;window.addEventListener('deviceorientation',onHallOrientation,{passive:true});b?.classList.add('is-on');if(b){b.textContent='◉ 360°モーション ON';b.setAttribute('aria-pressed','true');}}catch(_){}}
+async function toggleHallMotion(){const b=document.querySelector('#hallMotion');if(hallMotionOn){hallMotionOn=false;window.removeEventListener('deviceorientation',onHallOrientation);hallMotionLastAlpha=null;b?.classList.remove('is-on');if(b){b.textContent='◎ 360°モーション OFF';b.setAttribute('aria-pressed','false');}
+  // V2.18.10: Hall uses the same landing rule — OFF settles to the nearest 0/90/180/270 storefront.
+  hallPreview=0;settleHall();return;}try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')return;}hallMotionOn=true;hallMotionLastAlpha=null;window.addEventListener('deviceorientation',onHallOrientation,{passive:true});b?.classList.add('is-on');if(b){b.textContent='◉ 360°モーション ON';b.setAttribute('aria-pressed','true');}}catch(_){}}
 function settleHall(){const from=hallYaw+hallPreview,target=Math.round(from/90)*90,start=performance.now(),dur=230;hallYaw=from;hallPreview=0;function tick(now){const t=Math.min(1,(now-start)/dur),e=1-Math.pow(1-t,3);hallYaw=from+(target-from)*e;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}
 function showNewArrivalsFromHall(){
   // NEW ARRIVALS is the home face of Central Sakura Hall, not a separate page.
