@@ -3,7 +3,7 @@ const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
 const stage=document.querySelector('#stage'),picked=document.querySelector('#picked'),store=document.querySelector('#store');
 let books=[],allBooks=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
 let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
-let introReady=false,hallYaw=0,hallPreview=0,hallDrag=null,hallMotionOn=false,hallMotionLastAlpha=null;
+let introReady=false,hallYaw=0,hallPreview=0,hallDrag=null,hallMotionOn=false,hallMotionLastAlpha=null,hallShelfRing=false,hallShelfKind='new';
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
 let roomId='new',routeTransitioning=false,dataReady=false;
@@ -186,7 +186,7 @@ function move(delta){
 function applyDrag(units){dragUnits=units;stage.querySelectorAll('.book').forEach(b=>{const slot=Number(b.dataset.slot||0);setBookPose(b,slot+units);});}
 function beginDrag(e){if(e.button!=null&&e.button!==0)return;/* V2.18.4: while the opening NEW ARRIVALS spin is running, taps must not cancel its RAF token. Cancelling here left introReady=false forever, so the ring still scrolled horizontally but could never accept the upward enter gesture. */if(roomId==='intro'&&stage.classList.contains('is-intro-spinning'))return;spinToken++;drag={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastT:performance.now(),vx:0,moved:false,axis:null};stage.classList.add('is-dragging');stage.setPointerCapture?.(e.pointerId);}
 function dragMove(e){if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!drag.moved&&Math.abs(dx)<5&&Math.abs(dy)<5)return;
-  if(!drag.axis){if(roomId==='intro'&&introReady&&Math.abs(dy)>Math.abs(dx)*1.05)drag.axis='intro-enter';else drag.axis=(roomId==='fantasy'&&!roomShelfMode&&Math.abs(dy)>Math.abs(dx)*1.15)?'shelf-return':'ring';}
+  if(!drag.axis){if(roomId==='intro'&&introReady&&Math.abs(dy)>Math.abs(dx)*1.05)drag.axis='intro-enter';else drag.axis=(((roomId==='fantasy'&&!roomShelfMode)||hallShelfRing)&&Math.abs(dy)>Math.abs(dx)*1.15)?'shelf-return':'ring';}
   if(drag.axis==='intro-enter'){drag.moved=true;e.preventDefault();const lift=Math.min(1,Math.max(0,-dy/150));stage.style.transform=`translateX(-50%) translateY(${Math.min(0,dy*.55)}px) scale(${1-lift*.12})`;stage.style.opacity=String(1-lift*.62);return;}
   if(drag.axis==='shelf-return'){
     drag.moved=true;e.preventDefault();const lift=Math.min(1,Math.max(0,-dy/180));stage.style.setProperty('--shelf-return-y',`${Math.min(0,dy*.62)}px`);stage.style.setProperty('--shelf-return-scale',String(1-lift*.18));stage.style.opacity=String(1-lift*.48);return;
@@ -213,7 +213,7 @@ function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.cl
   if(d.axis==='intro-enter'){const dy=e.clientY-d.y;stage.style.transform='';stage.style.opacity='';if(!cancel&&dy<-62){showCentralHall(true);}return;}
   if(d.axis==='shelf-return'){
     const dy=e.clientY-d.y;stage.style.opacity='';
-    if(!cancel&&dy<-72){stage.classList.add('is-shelf-returning');stage.style.setProperty('--shelf-return-y','-120px');stage.style.setProperty('--shelf-return-scale','.76');setTimeout(backToRoomShelf,180)}
+    if(!cancel&&dy<-72){stage.classList.add('is-shelf-returning');stage.style.setProperty('--shelf-return-y','-120px');stage.style.setProperty('--shelf-return-scale','.76');setTimeout(()=>hallShelfRing?backToHallShelf():backToRoomShelf(),180)}
     else{stage.style.setProperty('--shelf-return-y','0px');stage.style.setProperty('--shelf-return-scale','1')}
     return;
   }
@@ -560,7 +560,26 @@ function backToRoomShelf(){
 function wrapDeg(v){while(v>180)v-=360;while(v<-180)v+=360;return v;}
 function hallGates(){return [...document.querySelectorAll('.hall-gate[data-angle]')];}
 function hallSpatialItems(){return [...document.querySelectorAll('.hall-gate[data-angle],.hall-my-shelf[data-angle]')];}
-function renderHallMyShelf(){const root=document.querySelector('#hallMyShelfBooks');if(!root||!allBooks.length)return;const sample=allBooks.slice(0,4);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.stopPropagation();const w=sample[i];if(w)pick(w);}));}
+function hallShelfBooks(kind){
+  // Trial: both shelves use live public-book data. MY BOOKS can be swapped to owned-copy data later.
+  return (kind==='mine'?allBooks.slice(4,8):allBooks.slice(0,4)).filter(Boolean);
+}
+function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openHallShelfRing(kind,i);}));}
+function renderHallMyShelf(){renderHallShelf('#hallNewShelfBooks','new');renderHallShelf('#hallMyShelfBooks','mine');}
+function openHallShelfRing(kind,selectedIndex=0){
+  const selected=hallShelfBooks(kind);if(!selected.length)return;
+  hallShelfRing=true;hallShelfKind=kind;hallPreview=0;hallDrag=null;rebaseHallMotion();
+  document.querySelector('#centralHall').hidden=true;document.querySelector('#roomBgLayer').style.display='block';
+  store.classList.remove('hall-mode','intro-mode');roomId='hall-shelf-ring';viewMode='ring';roomShelfMode=false;books=selected;index=norm(selectedIndex);dragUnits=0;
+  stage.hidden=false;stage.style.transform='';stage.style.opacity='';stage.classList.add('room-shelf-ring');stage.classList.remove('is-shelf-returning','is-intro-spinning','is-intro-ready');
+  document.querySelector('.sign small').textContent=kind==='mine'?'MY BOOKS':'NEW ARRIVALS';document.querySelector('.sign strong').textContent=kind==='mine'?'もっている本':'新しく入った本';document.querySelector('.sign').classList.add('shelf-back-sign');
+  document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;document.querySelector('#hint').textContent='左右で円環を見る　／　上スワイプで棚へ戻る';
+  render();updateFocusPanel();
+}
+function backToHallShelf(){
+  if(!hallShelfRing)return;hallShelfRing=false;stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');showCentralHall(false);
+}
+
 function renderHall(){
   if(viewMode!=='hall')return;
   const yaw=hallYaw+hallPreview,w=Math.max(320,store.clientWidth||390);
@@ -596,7 +615,7 @@ function showNewArrivalsFromHall(){
   render();updateFocusPanel();window.scrollTo(0,0);
 }
 function showCentralHall(fromIntro=false){
-  pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();roomId='hall';viewMode='hall';roomShelfMode=false;introReady=false;
+  hallShelfRing=false;pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();roomId='hall';viewMode='hall';roomShelfMode=false;introReady=false;
   store.classList.remove('intro-mode','room-fantasy');store.classList.add('hall-mode');document.body.classList.remove('book-path-active','intro-entry-active');
   stage.hidden=true;stage.classList.remove('is-intro-ready');const ih=document.querySelector('#introHint');if(ih)ih.hidden=true;
   document.querySelector('#bookPath').hidden=true;document.querySelector('#roomShelf').hidden=true;document.querySelector('#motionStart').hidden=true;
