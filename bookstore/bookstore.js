@@ -661,7 +661,7 @@ function makeRouteCrossfadeLayer(kind, role='old'){
   layer.className=`route-crossfade-layer route-crossfade-${kind} route-crossfade-${role}`;
   layer.setAttribute('aria-hidden','true');
   // Keep the Hall panorama aligned with the current Hall camera when possible.
-  if(kind==='hall'){
+  if(kind==='hall'||kind==='fantasy'){
     const src=document.querySelector('#roomBgLayer');
     if(src){
       const cs=getComputedStyle(src);
@@ -706,7 +706,7 @@ function showCentralHall(fromIntro=false){
   if(routeFade)fadeRouteLayers(routeFade);
 }
 function enterBookPathFromHall(){if(!dataReady)return;const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
-function returnToPathFromRoom(){roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;roomId='path';viewMode='path';books=allBooks.slice();pathProgress=Math.max(0,books.length-1);setRoomVisual('new');document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;renderPath();ensurePathLoop();}
+function returnToPathFromRoom(){const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','path'):null;roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;roomId='path';viewMode='path';books=allBooks.slice();pathProgress=Math.max(0,books.length-1);setRoomVisual('new');document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;renderPath();ensurePathLoop();if(routeFade)fadeRouteLayers(routeFade);}
 
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
