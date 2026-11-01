@@ -556,7 +556,10 @@ function renderHall(){
   const bg=document.querySelector('#roomBgLayer');if(bg){
     // V2.18.2: keep the hall background layer fixed and loop the texture itself.
     // Moving the oversized layer eventually exposed its edge as a black wall.
-    const phase=wrapDeg(yaw)/360;
+    // V2.18.3: keep the texture coordinate continuous across ±180°.
+    // The source art is not a seamless equirectangular 360 image, so its own left/right
+    // content seam can still be visible, but the camera itself no longer snaps at the boundary.
+    const phase=yaw/360;
     bg.style.transform='none';
     bg.style.backgroundPosition=`calc(50% + ${(-phase*w*1.85).toFixed(2)}px) center`;
   }
@@ -566,6 +569,21 @@ function rebaseHallMotion(){hallMotionLastAlpha=null;}
 function onHallOrientation(e){if(!hallMotionOn||viewMode!=='hall'||hallDrag||typeof e.alpha!=='number')return;const a=e.alpha;if(hallMotionLastAlpha==null){hallMotionLastAlpha=a;return;}let d=a-hallMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;hallMotionLastAlpha=a;hallYaw-=d*.72;hallPreview=0;requestAnimationFrame(renderHall);}
 async function toggleHallMotion(){const b=document.querySelector('#hallMotion');if(hallMotionOn){hallMotionOn=false;window.removeEventListener('deviceorientation',onHallOrientation);hallMotionLastAlpha=null;b?.classList.remove('is-on');if(b){b.textContent='◎ 360°モーション OFF';b.setAttribute('aria-pressed','false');}return;}try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')return;}hallMotionOn=true;hallMotionLastAlpha=null;window.addEventListener('deviceorientation',onHallOrientation,{passive:true});b?.classList.add('is-on');if(b){b.textContent='◉ 360°モーション ON';b.setAttribute('aria-pressed','true');}}catch(_){}}
 function settleHall(){const from=hallYaw+hallPreview,target=Math.round(from/90)*90,start=performance.now(),dur=230;hallYaw=from;hallPreview=0;function tick(now){const t=Math.min(1,(now-start)/dur),e=1-Math.pow(1-t,3);hallYaw=from+(target-from)*e;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}
+function showNewArrivalsFromHall(){
+  // NEW ARRIVALS is the home face of Central Sakura Hall, not a separate page.
+  hallPreview=0;hallDrag=null;rebaseHallMotion();
+  document.querySelector('#centralHall').hidden=true;
+  store.classList.remove('hall-mode','room-fantasy');store.classList.add('intro-mode');
+  document.body.classList.remove('book-path-active');document.body.classList.add('intro-entry-active');
+  document.querySelector('#roomBgLayer').style.display='none';document.querySelector('#roomExitNav').hidden=true;
+  document.querySelector('#bookPath').hidden=true;document.querySelector('#roomShelf').hidden=true;document.querySelector('#motionStart').hidden=true;
+  roomId='intro';viewMode='ring';roomShelfMode=false;books=allBooks.slice();introReady=true;
+  stage.hidden=false;stage.style.transform='';stage.style.opacity='';stage.classList.remove('room-shelf-ring','is-shelf-returning','is-intro-spinning');stage.classList.add('is-intro-ready');
+  document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
+  document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
+  const ih=document.querySelector('#introHint');if(ih){ih.hidden=false;ih.textContent='↑ 上にスワイプして中央ホールへ';}
+  render();updateFocusPanel();window.scrollTo(0,0);
+}
 function showCentralHall(fromIntro=false){
   pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();roomId='hall';viewMode='hall';roomShelfMode=false;introReady=false;
   store.classList.remove('intro-mode','room-fantasy');store.classList.add('hall-mode');document.body.classList.remove('book-path-active','intro-entry-active');
@@ -844,8 +862,11 @@ if(pathMotionButton){
 }
 setPathMotionButton();document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
 document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#hallFantasy')?.addEventListener('click',enterFantasyRoom);document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
-const hallEl=document.querySelector('#centralHall');hallEl?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now()};hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();});hallEl?.addEventListener('pointermove',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const dx=e.clientX-hallDrag.x;if(Math.abs(dx)>2)e.preventDefault();hallDrag.lastX=e.clientX;hallPreview=-dx/Math.max(320,store.clientWidth)*135;renderHall();},{passive:false});hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const d=hallDrag,dx=e.clientX-d.x,dt=Math.max(1,performance.now()-d.t),vx=dx/dt,base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;hallDrag=null;
-  // V2.18.2: a normal deliberate swipe should advance one entrance; no hard flick required.
+const hallEl=document.querySelector('#centralHall');
+hallEl?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null};hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();});
+hallEl?.addEventListener('pointermove',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const dx=e.clientX-hallDrag.x,dy=e.clientY-hallDrag.y;if(!hallDrag.axis&&Math.hypot(dx,dy)>7)hallDrag.axis=Math.abs(dy)>Math.abs(dx)*1.12?'vertical':'horizontal';if(hallDrag.axis==='vertical'){if(dy>0)e.preventDefault();return;}if(Math.abs(dx)>2)e.preventDefault();hallDrag.lastX=e.clientX;hallPreview=-dx/Math.max(320,store.clientWidth)*135;renderHall();},{passive:false});
+hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const d=hallDrag,dx=e.clientX-d.x,dy=e.clientY-d.y,dt=Math.max(1,performance.now()-d.t),vx=dx/dt;hallDrag=null;if(d.axis==='vertical'){hallPreview=0;if(dy>58){showNewArrivalsFromHall();return;}settleHall();return;}const base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;
+  // A normal deliberate swipe advances one entrance; no hard flick required.
   if(Math.abs(dx)>=34||Math.abs(vx)>=.24){const dir=dx<0?1:-1;const from=hallYaw,target=base+dir*90,start=performance.now(),dur=250;function tick(now){const t=Math.min(1,(now-start)/dur),q=1-Math.pow(1-t,3);hallYaw=from+(target-from)*q;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}else settleHall();
 });hallEl?.addEventListener('pointercancel',()=>{hallPreview=0;hallDrag=null;settleHall();});
 

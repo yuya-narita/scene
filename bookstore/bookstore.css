@@ -250,3 +250,6 @@ body.intro-entry-active .below{display:none!important;}
 .store.hall-mode .room-bg-layer{left:0!important;right:0!important;width:auto!important;transform:none!important;background-repeat:repeat-x!important;}
 .store.room-fantasy .room-exit-nav{top:21.5%!important;}
 @media(max-width:680px){.store.room-fantasy .room-exit-nav{top:21.5%!important}.store.room-fantasy .room-shelf{top:25%!important}}
+
+/* V2.18.3 — NEW ARRIVALS is the home face of the hall; pull down from HUB to return. */
+.store.hall-mode .central-hall{touch-action:none;overscroll-behavior:none;}
