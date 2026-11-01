@@ -650,43 +650,35 @@ function returnToPathFromRoom(){roomMotionOn&&toggleRoomMotion();roomShelfMode=f
 
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
-  // V2.18.13: retire every previous ring before the route transition starts.
-  // This prevents a one-frame Central Hall/NEW ARRIVALS ring flash on iPhone Safari.
+  // V2.18.17: the room itself is the transition. Retire every previous ring first,
+  // then fade the Fantasy background in from transparent while its ring starts deep away.
   spinToken++;drag=null;hallShelfRing=false;stage.hidden=true;stage.style.opacity='0';stage.innerHTML='';
   stage.classList.remove('is-intro-ready','is-intro-spinning','room-shelf-ring','is-shelf-returning');
   const path=document.querySelector('#bookPath');path?.classList.add('route-leaving');
-  // V2.18.16: shared Room Transition is now a restrained exposure lift/crossfade.
-  // Future genre rooms reuse this element and only swap a very subtle theme tint.
-  let tunnel=document.querySelector('#roomTransitionFx');
-  if(!tunnel){tunnel=document.createElement('div');tunnel.id='roomTransitionFx';store.appendChild(tunnel);}
-  tunnel.className='room-transition-fx theme-fantasy';
-  tunnel.classList.add('is-active');
-  await new Promise(r=>setTimeout(r,180));
+  const oldFx=document.querySelector('#roomTransitionFx');if(oldFx)oldFx.remove();
+  const roomBg=document.querySelector('#roomBgLayer');
+  if(roomBg){roomBg.classList.add('room-enter-fade');roomBg.classList.remove('is-room-visible');roomBg.style.display='block';}
+
   roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
-  // Fade the subtle exposure veil away only after the Fantasy background/camera owns the frame.
-  requestAnimationFrame(()=>requestAnimationFrame(()=>tunnel?.classList.add('is-open')));
-  // V2.16.15R5: the path motion control is a store-level overlay, so explicitly
-  // retire it when the route leaves the book path. Its ON/OFF state is preserved.
+  // Own the first Fantasy frame before the road is removed, then let the room image itself emerge.
+  roomCameraYaw=0;roomCameraPreview=0;applyRoomCamera(0,true);
+  const fadeStarted=performance.now();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>roomBg?.classList.add('is-room-visible')));
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
   path.hidden=true;path?.classList.remove('route-leaving');document.querySelector('#roomShelf').hidden=true;
-  // V2.18.11: entering a genre uses the same visual grammar as tapping a shelf cover:
-  // the Room books arrive as the spinning ring first, then an upward swipe reveals the shelf.
-  // V2.18.12: genre entry must never expose the previous/settled ring before its intro starts.
-  // Prepare the Fantasy camera and distant ring off-screen first, then reveal the first animated frame.
   stage.hidden=true;stage.style.transform='';stage.style.opacity='0';stage.classList.add('room-shelf-ring');stage.classList.remove('is-shelf-returning','is-intro-ready');
   document.querySelector('.sign').classList.add('shelf-back-sign');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
   document.querySelector('#hint').textContent='左右にスワイプしてRoomの本を見る　／　上スワイプで棚へ';
   document.querySelector('#roomExitNav').hidden=false;
-  const roomBg=document.querySelector('#roomBgLayer');if(roomBg)roomBg.style.display='block';
-  roomCameraYaw=0;roomCameraPreview=0;applyRoomCamera(0,true);
   stage.innerHTML='';await preloadFirstViewCovers();
   if(roomId!=='fantasy'){routeTransitioning=false;return;}
+  // Give the background a quiet head start. Cover preloading happens inside that time,
+  // so this does not add a fixed delay on slower devices.
+  const headStart=250-(performance.now()-fadeStarted);if(headStart>0)await new Promise(r=>setTimeout(r,headStart));
   renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
-  // The distant pose is now ready. Reveal it only now, so the first visible state is the
-  // small ring deep in the Fantasy room rather than a stale full-size ring from the path.
   stage.hidden=false;stage.style.opacity='1';
   const startTime=performance.now(),dur=1450;
   await new Promise(resolve=>{function frame(now){
@@ -696,7 +688,8 @@ async function enterFantasyRoom(){
     if(t<1)requestAnimationFrame(frame);else resolve();
   }requestAnimationFrame(frame)});
   if(roomId==='fantasy'){stage.classList.remove('is-intro-spinning');render();updateFocusPanel();}
-  setTimeout(()=>{tunnel?.classList.remove('is-active','is-open');},260);
+  // Keep the background fully opaque after entry; remove only the temporary transition state.
+  if(roomBg){roomBg.classList.remove('room-enter-fade','is-room-visible');}
   routeTransitioning=false;
 }
 function setViewMode(mode){
