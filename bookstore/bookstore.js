@@ -656,10 +656,11 @@ function showNewArrivalsFromHall(){
   const ih=document.querySelector('#introHint');if(ih){ih.hidden=false;ih.textContent='↑ 上にスワイプして中央ホールへ';}
   render();updateFocusPanel();window.scrollTo(0,0);
 }
-function makeRouteCrossfadeLayer(kind){
+function makeRouteCrossfadeLayer(kind, role='old'){
   const layer=document.createElement('div');
-  layer.className=`route-crossfade-layer route-crossfade-${kind}`;
+  layer.className=`route-crossfade-layer route-crossfade-${kind} route-crossfade-${role}`;
   layer.setAttribute('aria-hidden','true');
+  // Keep the Hall panorama aligned with the current Hall camera when possible.
   if(kind==='hall'){
     const src=document.querySelector('#roomBgLayer');
     if(src){
@@ -675,14 +676,26 @@ function makeRouteCrossfadeLayer(kind){
   store.appendChild(layer);
   return layer;
 }
-function fadeRouteLayerOut(layer){
-  if(!layer)return;
-  requestAnimationFrame(()=>requestAnimationFrame(()=>layer.classList.add('is-crossfade-out')));
-  setTimeout(()=>layer.remove(),1100);
+function startRouteCrossfade(fromKind,toKind){
+  // V2.18.23: true route crossfade. Two temporary painted layers own the
+  // transition, rather than relying on the destination DOM becoming visible
+  // underneath one fading layer. This is deterministic on iPhone Safari.
+  const oldLayer=makeRouteCrossfadeLayer(fromKind,'old');
+  const newLayer=makeRouteCrossfadeLayer(toKind,'new');
+  return {oldLayer,newLayer};
+}
+function fadeRouteLayers(pair){
+  if(!pair)return;
+  const {oldLayer,newLayer}=pair;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    oldLayer?.classList.add('is-crossfade-out');
+    newLayer?.classList.add('is-crossfade-in');
+  }));
+  setTimeout(()=>{oldLayer?.remove();newLayer?.remove();},1100);
 }
 function showCentralHall(fromIntro=false){
   const returningFromPath=viewMode==='path'&&roomId==='path';
-  const routeFade=returningFromPath?makeRouteCrossfadeLayer('path'):null;
+  const routeFade=returningFromPath?startRouteCrossfade('path','hall'):null;
   hallShelfRing=false;pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();roomId='hall';viewMode='hall';roomShelfMode=false;introReady=false;
   store.classList.remove('intro-mode','room-fantasy');store.classList.add('hall-mode');document.body.classList.remove('book-path-active','intro-entry-active');
   stage.hidden=true;stage.classList.remove('is-intro-ready');const ih=document.querySelector('#introHint');if(ih)ih.hidden=true;
@@ -690,9 +703,9 @@ function showCentralHall(fromIntro=false){
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
   document.querySelector('#centralHall').hidden=false;document.querySelector('#roomBgLayer').style.display='block';document.querySelector('#roomExitNav').hidden=true;
   renderHallMyShelf();if(fromIntro){hallYaw=0;document.querySelector('#hallTutorial').hidden=false;} renderHall();
-  if(routeFade)fadeRouteLayerOut(routeFade);
+  if(routeFade)fadeRouteLayers(routeFade);
 }
-function enterBookPathFromHall(){if(!dataReady)return;const routeFade=makeRouteCrossfadeLayer('hall');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayerOut(routeFade);}
+function enterBookPathFromHall(){if(!dataReady)return;const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
 function returnToPathFromRoom(){roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;roomId='path';viewMode='path';books=allBooks.slice();pathProgress=Math.max(0,books.length-1);setRoomVisual('new');document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;renderPath();ensurePathLoop();}
 
 async function enterFantasyRoom(){
