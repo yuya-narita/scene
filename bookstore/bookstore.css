@@ -313,3 +313,12 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
 .store.room-fantasy .room-bg-layer.room-enter-fade{opacity:0!important;transition:opacity .96s cubic-bezier(.22,.72,.28,1)!important}
 .store.room-fantasy .room-bg-layer.room-enter-fade.is-room-visible{opacity:1!important}
 @media (prefers-reduced-motion:reduce){.room-crossfade-old{transition-duration:.18s!important}.store.room-fantasy .room-bg-layer.room-enter-fade{transition-duration:.18s!important}}
+
+/* V2.18.22 — Hall <-> Book Path uses the same real two-layer crossfade language
+   as Book Path -> Fantasy. The old space stays painted above the destination
+   for one committed frame, then dissolves away. */
+.route-crossfade-layer{position:absolute;inset:0;z-index:1800;pointer-events:none;opacity:1;will-change:opacity;transition:opacity .96s cubic-bezier(.22,.72,.28,1);backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.route-crossfade-layer.is-crossfade-out{opacity:0}
+.route-crossfade-path{background-image:linear-gradient(rgba(7,5,3,.10),rgba(7,5,3,.18)),url('./bookstore-path-fantasy-v2113.webp');background-size:cover;background-position:center center;background-repeat:no-repeat}
+.route-crossfade-hall{background-image:linear-gradient(rgba(7,4,2,.08),rgba(7,4,2,.28)),url('./bookstore-v211-bg.webp');background-size:auto 100%;background-position:center center;background-repeat:repeat-x}
+@media (prefers-reduced-motion:reduce){.route-crossfade-layer{transition-duration:.18s!important}}
