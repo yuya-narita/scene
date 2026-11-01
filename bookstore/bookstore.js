@@ -562,7 +562,7 @@ function hallGates(){return [...document.querySelectorAll('.hall-gate[data-angle
 function hallSpatialItems(){return [...document.querySelectorAll('.hall-gate[data-angle],.hall-my-shelf[data-angle]')];}
 function hallShelfBooks(kind){
   // Trial: both shelves use live public-book data. MY BOOKS can be swapped to owned-copy data later.
-  return (kind==='mine'?allBooks.slice(4,8):allBooks.slice(0,4)).filter(Boolean);
+  return (kind==='mine'?allBooks.slice(4,8):allBooks.slice(0,8)).filter(Boolean);
 }
 function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openHallShelfRing(kind,i);}));}
 function renderHallMyShelf(){renderHallShelf('#hallNewShelfBooks','new');renderHallShelf('#hallMyShelfBooks','mine');}
