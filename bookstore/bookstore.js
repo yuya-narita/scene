@@ -660,20 +660,17 @@ function makeRouteCrossfadeLayer(kind, role='old'){
   const layer=document.createElement('div');
   layer.className=`route-crossfade-layer route-crossfade-${kind} route-crossfade-${role}`;
   layer.setAttribute('aria-hidden','true');
-  // Keep the Hall panorama aligned with the current Hall camera when possible.
-  if(kind==='hall'||kind==='fantasy'){
+  // Preserve the live 360 camera only for the OLD room being painted out.
+  // Never copy #roomBgLayer into a NEW destination layer: during Fantasy -> Hall
+  // #roomBgLayer still contains Fantasy, which made the new Hall overlay paint Fantasy
+  // over Fantasy and then pop to Hall after cleanup instead of visibly crossfading.
+  if(role==='old'&&(kind==='hall'||kind==='fantasy')){
     const src=document.querySelector('#roomBgLayer');
     if(src){
       const cs=getComputedStyle(src);
-      // V2.18.25: keep only the live camera position for painted route layers.
-      // Copying the 500%-wide room layer transform into a viewport-sized overlay made
-      // Fantasy -> Path effectively disappear before Safari could paint the fade.
+      // Keep only the live camera position for viewport-sized overlays.
+      // The CSS class owns the correct room image/size/repeat.
       layer.style.backgroundPosition=cs.backgroundPosition;
-      if(kind==='hall'){
-        layer.style.backgroundImage=cs.backgroundImage;
-        layer.style.backgroundSize=cs.backgroundSize;
-        layer.style.backgroundRepeat=cs.backgroundRepeat;
-      }
     }
   }
   store.appendChild(layer);
