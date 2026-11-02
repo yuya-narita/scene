@@ -29,6 +29,9 @@ const PATH_ZONES=[
 ];
 const PATH_ZONE_COUNT=PATH_ZONES.length;
 let pathZoneId='',pathZoneBgFront='a',pathZoneEntryProgress=0,pathZoneSignTimer=0;
+const pathZonePreloadJobs=new Map();let pathZonePaintToken=0;
+function preloadPathZone(src){if(pathZonePreloadJobs.has(src))return pathZonePreloadJobs.get(src);const job=new Promise(resolve=>{const img=new Image();let done=false;const finish=()=>{if(done)return;done=true;resolve();};img.decoding='async';img.onload=async()=>{try{if(img.decode)await img.decode();}catch(_){}finish();};img.onerror=finish;img.src=src;if(img.complete&&img.naturalWidth>0){Promise.resolve(img.decode?.()).catch(()=>{}).finally(finish);}setTimeout(finish,5000);});pathZonePreloadJobs.set(src,job);return job;}
+PATH_ZONES.forEach(z=>preloadPathZone(z.bg));
 const PATH_GATE_REVEAL_PAD=.12;
 const FOREST_TRAVEL=5.5; // straight approach distance; percentage is only a route-progress indicator
 const FOREST_APPROACH_BOOKS=4; // let a finite set of covers pass, then leave a clear view before the entrance card
@@ -801,7 +804,7 @@ function showCentralHall(fromIntro=false){
     }else fadeRouteLayers(routeFade);
   }
 }
-function enterBookPathFromHall(){if(!dataReady)return;const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
+function enterBookPathFromHall(){if(!dataReady)return;document.querySelector('#bookPath')?.classList.remove('genre-approach');const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
 function returnToPathFromRoom(){
   // V2.19.8: the room's "本の道" exit means the OUTER circular Book Path,
   // not the private straight approach used to enter the room.
@@ -931,13 +934,17 @@ function renderPath(){
     // a screen edge, grow slightly, blur and fade: a visual "rush past" rather than a cut.
     const spread=Math.min(178,50+future*19);
     const exit=Math.min(innerWidth*.72,passed*(innerWidth*.34+70));
-    const x=side*(spread+exit)-pathYaw*1.25;
+    // V2.20.1: on the circular outer road, distant covers enter from the left-hand
+    // bend and gently straighten into the existing two-lane presentation. The
+    // straight Fantasy approach intentionally keeps the old geometry.
+    const curvePull=roomId==='path'?Math.min(innerWidth*.30,Math.pow(Math.min(future,6)/6,.72)*innerWidth*.30):0;
+    const x=side*(spread+exit)-curvePull-pathYaw*1.25;
     const y=future*13-passed*7;
     const z=-future*145+70+passed*245;
     const scale=passed>0?Math.min(1.34,1+passed*.18):Math.max(.28,1-future*.105);
     const opacity=passed>0?Math.max(0,1-passed*.58):Math.max(.16,1-future*.095);
     const blur=passed>0?Math.min(8,passed*3.2):0;
-    const rot=side*(-14-passed*9);
+    const rot=side*(-14-passed*9)+(roomId==='path'?Math.min(16,future*2.4):0);
     el.style.transform=`translate3d(calc(-50% + ${x}px),calc(-50% + ${y}px),${z}px) rotateY(${rot}deg) scale(${scale})`;
     el.style.opacity=opacity;el.style.filter=`blur(${blur}px)`;el.style.zIndex=String(1000-Math.round(phase*30));
     el.dataset.raw=String(raw);
@@ -995,9 +1002,20 @@ function updatePathZone(){
   if(!zoneChanged)return;pathZoneId=zone.id;
   // V2.19.5: branch sign stays compact; no expand/shrink animation on zone entry.
   if(label){clearTimeout(pathZoneSignTimer);label.classList.remove('is-expanded');}
-  const nextKey=pathZoneBgFront==='a'?'b':'a',next=document.querySelector(nextKey==='a'?'#pathZoneBgA':'#pathZoneBgB'),old=document.querySelector(pathZoneBgFront==='a'?'#pathZoneBgA':'#pathZoneBgB');
-  if(next){next.style.backgroundImage=`linear-gradient(rgba(7,5,3,.08),rgba(7,5,3,.16)),url('${zone.bg}')`;next.style.backgroundPosition=zone.pos;next.classList.add('is-visible');}
-  if(old)old.classList.remove('is-visible');pathZoneBgFront=nextKey;
+  // V2.20.1: never expose an unpainted/intermediate route layer. Decode the new
+  // zone first, paint it while hidden, then crossfade on the following frames.
+  // A token prevents a late decode from an already-passed zone winning the race.
+  const token=++pathZonePaintToken;
+  preloadPathZone(zone.bg).then(()=>{
+    if(token!==pathZonePaintToken||roomId!=='path'||pathZoneId!==zone.id)return;
+    const nextKey=pathZoneBgFront==='a'?'b':'a',next=document.querySelector(nextKey==='a'?'#pathZoneBgA':'#pathZoneBgB'),old=document.querySelector(pathZoneBgFront==='a'?'#pathZoneBgA':'#pathZoneBgB');
+    if(!next)return;
+    next.style.backgroundImage=`linear-gradient(rgba(7,5,3,.08),rgba(7,5,3,.16)),url('${zone.bg}')`;next.style.backgroundPosition=zone.pos;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      if(token!==pathZonePaintToken)return;
+      next.classList.add('is-visible');if(old)old.classList.remove('is-visible');pathZoneBgFront=nextKey;
+    }));
+  });
 }
 function renderPathFrame(now){
   if(!pathLastFrame)pathLastFrame=now;

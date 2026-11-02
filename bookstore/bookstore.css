@@ -446,3 +446,20 @@ body.book-path-active .path-zone-bg{inset:0!important;background-size:cover!impo
 /* Keep path UI below the fixed header now that the road starts at viewport top. */
 body.book-path-active .book-path:not(.genre-approach) .path-zone-label{top:112px!important;}
 @media(max-width:680px){body.book-path-active .book-path:not(.genre-approach) .path-zone-label{top:112px!important;}}
+
+
+/* V2.20.1 — Book Road polish.
+   The old Ring/Path mode switch belongs to the pre-Hall navigation and must not
+   float over the full-screen Book Road. Keep the genre sign at its established
+   position even though the road background now owns the whole viewport. */
+body.book-path-active .view-switch{display:none!important;}
+body.book-path-active .book-path:not(.genre-approach) .path-zone-label,
+body.book-path-active .book-path:not(.genre-approach) .path-zone-label.is-expanded{
+  top:96px!important;
+}
+@media(max-width:680px){
+  body.book-path-active .book-path:not(.genre-approach) .path-zone-label,
+  body.book-path-active .book-path:not(.genre-approach) .path-zone-label.is-expanded{
+    top:104px!important;
+  }
+}
