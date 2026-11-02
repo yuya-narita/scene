@@ -335,3 +335,12 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
 .route-crossfade-layer.route-crossfade-new.is-crossfade-in{opacity:1}
 .route-crossfade-layer.route-crossfade-old.is-crossfade-out{opacity:0}
 @media (prefers-reduced-motion:reduce){.route-crossfade-layer{transition-duration:.18s!important}}
+/* V2.19 — circular Book Road / section prototype */
+.book-path{background-image:none!important;background:#120b07!important}
+.path-zone-bg{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity .72s ease;will-change:opacity;pointer-events:none}
+.path-zone-bg.is-visible{opacity:1}
+.path-floor,.path-books,.route-gate,.path-status{z-index:2}
+.path-zone-label{position:absolute;z-index:4;left:18px;top:16px;display:flex;flex-direction:column;gap:2px;padding:9px 12px;border:1px solid #e5b27a55;border-radius:12px;background:#130b07b8;backdrop-filter:blur(7px);pointer-events:none;text-shadow:0 2px 7px #000}
+.path-zone-label small{font:600 8px/1.2 sans-serif;letter-spacing:.18em;color:#e6c49e}.path-zone-label strong{font:600 13px/1.3 serif}.path-zone-label span{font:500 9px/1.3 sans-serif;color:#e8d8c5;margin-top:2px}
+.book-path .route-gate{right:12px;left:auto;top:50%;transform:translateY(-50%);width:min(42vw,190px)}
+@media(max-width:680px){.path-zone-label{top:48px;left:8px}.book-path .route-gate{right:8px}}
