@@ -927,7 +927,8 @@ function updatePathZone(){
   // branch sign is the only genre cue; the large card is reserved for the straight approach.
   if(gate)gate.hidden=true;
   if(!zoneChanged)return;pathZoneId=zone.id;
-  if(label){clearTimeout(pathZoneSignTimer);label.classList.remove('is-expanded');void label.offsetWidth;label.classList.add('is-expanded');pathZoneSignTimer=setTimeout(()=>label.classList.remove('is-expanded'),1150);}
+  // V2.19.5: branch sign stays compact; no expand/shrink animation on zone entry.
+  if(label){clearTimeout(pathZoneSignTimer);label.classList.remove('is-expanded');}
   const nextKey=pathZoneBgFront==='a'?'b':'a',next=document.querySelector(nextKey==='a'?'#pathZoneBgA':'#pathZoneBgB'),old=document.querySelector(pathZoneBgFront==='a'?'#pathZoneBgA':'#pathZoneBgB');
   if(next){next.style.backgroundImage=`linear-gradient(rgba(7,5,3,.08),rgba(7,5,3,.16)),url('${zone.bg}')`;next.style.backgroundPosition=zone.pos;next.classList.add('is-visible');}
   if(old)old.classList.remove('is-visible');pathZoneBgFront=nextKey;
