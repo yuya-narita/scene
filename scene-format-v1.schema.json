@@ -129,6 +129,19 @@
         },
         "description": {
           "type": "string"
+        },
+        "genre": {
+          "type": "string",
+          "enum": [
+            "fantasy",
+            "romance",
+            "horror",
+            "mystery",
+            "sf",
+            "everyday",
+            "essay",
+            "other"
+          ]
         }
       },
       "additionalProperties": true
@@ -559,9 +572,25 @@
           "minimum": 100,
           "maximum": 900
         },
-        "fontStyle": {"enum": ["normal", "italic"]},
-        "angle": {"type": "number", "minimum": -180, "maximum": 180},
-        "flip": {"enum": ["none", "horizontal", "vertical", "both"]},
+        "fontStyle": {
+          "enum": [
+            "normal",
+            "italic"
+          ]
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "flip": {
+          "enum": [
+            "none",
+            "horizontal",
+            "vertical",
+            "both"
+          ]
+        },
         "position": {
           "type": "object",
           "properties": {
@@ -1934,11 +1963,23 @@
           "type": "string"
         },
         "projection": {
-          "enum": ["flat", "panorama", "360"]
+          "enum": [
+            "flat",
+            "panorama",
+            "360"
+          ]
         },
-        "homeYaw": {"type":"number"},
-        "homePitch": {"type":"number","minimum":-35,"maximum":35},
-        "motionSensor": {"type":"boolean"},
+        "homeYaw": {
+          "type": "number"
+        },
+        "homePitch": {
+          "type": "number",
+          "minimum": -35,
+          "maximum": 35
+        },
+        "motionSensor": {
+          "type": "boolean"
+        },
         "fit": {
           "enum": [
             "cover",

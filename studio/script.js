@@ -90,6 +90,7 @@
   const episodeNumberInput = $('#episodeNumberInput');
   const episodeTitleInput = $('#episodeTitleInput');
   const descriptionInput = $('#descriptionInput');
+  const genreInput = $('#genreInput');
   const ownCopyEnabledInput = $('#ownCopyEnabled');
   const commerceOwnCopyPolicy = $('#commerceOwnCopyPolicy');
   const commerceSupportPolicy = $('#commerceSupportPolicy');
@@ -1540,7 +1541,7 @@
     return {
       id:currentDraftId,updatedAt:Date.now(),title:draftTitle(),body:bodyInput.value,richSource:cloneRichSource(),
       easySourceDirty,protectedResplitPending,selectedSceneIndex,
-      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',seriesId:activeSeriesId(),episode:episodeInput?.value||'',episodeNumber:episodeNumberInput?.value||'',episodeTitle:episodeTitleInput?.value||'',description:descriptionInput?.value||'',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
+      easy:{author:authorInput.value,subtitle:subtitleInput?.value||'',series:seriesTitleInput?.value||'',seriesId:activeSeriesId(),episode:episodeInput?.value||'',episodeNumber:episodeNumberInput?.value||'',episodeTitle:episodeTitleInput?.value||'',description:descriptionInput?.value||'',genre:genreInput?.value||'other',language:languageInput?.value||'auto',density:densitySelect?.value||'normal'},
       document:workingDocument?clone(workingDocument):null,
       publication:{
         workId:workingDocument?.studio?.identity?.workId||'',
@@ -1623,6 +1624,7 @@
     if(episodeInput)episodeInput.value=row.easy?.episode||'';
     if(episodeTitleInput)episodeTitleInput.value=row.easy?.episodeTitle||row.document?.metadata?.episodeTitle||'';
     if(descriptionInput)descriptionInput.value=row.easy?.description||row.document?.metadata?.description||'';
+    if(genreInput)genreInput.value=row.easy?.genre||row.document?.metadata?.genre||'other';
     if(languageInput)languageInput.value=row.easy?.language||'auto';
     renderAuthorSeriesOptions({preferred:String(row.easy?.seriesId||row.document?.metadata?.seriesId||'')});
     if(densitySelect)densitySelect.value='normal';
@@ -2148,7 +2150,7 @@
     // "New work" must be genuinely blank. Remembered work identity is useful
     // when restoring a draft/session, but applying it here resurrected the
     // previous title/subtitle/author immediately after the user chose New Work.
-    if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(seriesLinkSelect)seriesLinkSelect.value='';if(episodeInput)episodeInput.value='';if(episodeNumberInput)episodeNumberInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';renderAuthorSeriesOptions();
+    if(subtitleInput)subtitleInput.value='';if(seriesTitleInput)seriesTitleInput.value='';if(seriesLinkSelect)seriesLinkSelect.value='';if(episodeInput)episodeInput.value='';if(episodeNumberInput)episodeNumberInput.value='';if(episodeTitleInput)episodeTitleInput.value='';if(descriptionInput)descriptionInput.value='';if(genreInput)genreInput.value='other';renderAuthorSeriesOptions();
     coverImageUrl='';coverImageFileName='';coverLogoUrl='';coverLogoFileName='';
     if(endingLabelInput)endingLabelInput.value=''; if(endingSeEnabled)endingSeEnabled.checked=false; setAssetField('endingSeInput','',''); if(endingSeFields)endingSeFields.hidden=true; endingLinkInputs.forEach(pair=>{if(pair.kicker)pair.kicker.value='';if(pair.label)pair.label.value='';if(pair.url)pair.url.value='';});
     updateCount();updateCoverPreview();updateEndingPreview();updateEasyFileActions();updateAutoRecStartLabel();
@@ -2876,7 +2878,8 @@
       episode: episodeInput?.value.trim() || '',
       episodeNumber: Number(episodeNumberInput?.value||0)||0,
       episodeTitle: episodeTitleInput?.value.trim() || '',
-      description: descriptionInput?.value.trim() || ''
+      description: descriptionInput?.value.trim() || '',
+      genre: genreInput?.value || 'other'
     };
   }
 
@@ -3280,7 +3283,8 @@
         episode:episodeInput?.value.trim() || '',
         episodeNumber:Number(episodeNumberInput?.value||0)||0,
         episodeTitle:episodeTitleInput?.value.trim() || '',
-        description:descriptionInput?.value.trim() || ''
+        description:descriptionInput?.value.trim() || '',
+        genre:genreInput?.value || 'other'
       },
       theme:selectedTheme,
       appearance:{
@@ -3749,6 +3753,7 @@
     delete workingDocument.metadata.episodeNumber;
     workingDocument.metadata.episodeTitle=episodeTitleInput?.value.trim() || '';
     workingDocument.metadata.description=descriptionInput?.value.trim() || '';
+    workingDocument.metadata.genre=genreInput?.value || 'other';
     workingDocument.theme=selectedTheme;
     workingDocument.appearance ||= {};
     workingDocument.appearance.typography ||= {};
@@ -5535,6 +5540,7 @@ return flowCommentCard;}
     if(episodeInput)episodeInput.value=doc.metadata?.episode||'';
     if(episodeTitleInput)episodeTitleInput.value=doc.metadata?.episodeTitle||'';
     if(descriptionInput)descriptionInput.value=doc.metadata?.description||'';
+    if(genreInput)genreInput.value=doc.metadata?.genre||'other';
     coverImageUrl=doc.cover?.src||'';coverImageFileName=doc.cover?._editorFileName||'';setCoverPositionFromValue(doc.cover?.position||'center center',doc.cover?.positions);
     coverLogoUrl=doc.cover?.logo?.src||'';coverLogoFileName=doc.cover?.logo?._editorFileName||'';
     coverFontFamily=['serif','sans','mono'].includes(doc.cover?.fontFamily)?doc.cover.fontFamily:'serif';

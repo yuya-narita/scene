@@ -346,8 +346,13 @@ function syncPathFromRing(){
   pathProgress=Math.max(0,candidate);
 }
 function fantasyBooks(){
+  // Genre V1: published metadata is canonical. Keyword inference remains only
+  // for legacy works published before metadata.genre existed.
+  const tagged=allBooks.filter(w=>w?.genre==='fantasy');
+  if(tagged.length)return tagged;
+  const legacy=allBooks.filter(w=>!w?.genre);
   const keys=['ファンタジ','異世界','魔法','魔王','勇者','冒険','剣','ドラゴン','fantasy','magic','rpg'];
-  const hit=allBooks.filter(w=>keys.some(k=>`${w.title||''} ${w.subtitle||''} ${w.description||''} ${w.episodeLabel||''} ${w.episodeTitle||''}`.toLowerCase().includes(k)));
+  const hit=legacy.filter(w=>keys.some(k=>`${w.title||''} ${w.subtitle||''} ${w.description||''} ${w.episodeLabel||''} ${w.episodeTitle||''}`.toLowerCase().includes(k)));
   return hit.length?hit:allBooks;
 }
 function setRoomVisual(id){
