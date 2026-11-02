@@ -16,7 +16,7 @@ const PATH_EXIT_PAD=1.0;
 const PATH_ZONE_COUNT=3;
 const PATH_ZONES=[
  {id:'arrival',label:'NEW ARRIVALS',jp:'新しく入った本',bg:'./bookstore-path-fantasy-v2113.webp',pos:'50% 50%'},
- {id:'fantasy',label:'FANTASY AREA',jp:'ファンタジー区画',bg:'./bookstore-path-fantasy-v2113.webp',pos:'38% 50%',gate:'ファンタジーの森'},
+ {id:'fantasy',label:'FANTASY AREA',jp:'ファンタジー区画',bg:'./book-road-left-curve-fantasy.webp',pos:'50% 50%',gate:'ファンタジーの森'},
  {id:'next',label:'NEXT AREA',jp:'次の区画',bg:'./bookstore-path-fantasy-v2113.webp',pos:'64% 50%'}
 ];
 let pathZoneId='',pathZoneBgFront='a';
@@ -387,7 +387,7 @@ function updateFantasyGate(){
 async function enterForest(){
   if(routeTransitioning||!dataReady)return;
   roomHistory.push({id:'path',progress:pathProgress});
-  roomId='forest';books=fantasyBooks();pathProgress=0;pathYaw=0;
+  roomId='forest';books=fantasyBooks();pathProgress=0;pathYaw=0;document.querySelector('#bookPath')?.classList.add('genre-approach');
   setRoomVisual('fantasy');hideFantasyGate();
   document.querySelector('#motionStart').hidden=true;
   document.querySelector('#pathStatus').textContent='ファンタジーの森　0%';
@@ -766,7 +766,7 @@ function showCentralHall(fromIntro=false){
   }
 }
 function enterBookPathFromHall(){if(!dataReady)return;const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
-function returnToPathFromRoom(){const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','path'):null;roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;roomId='path';viewMode='path';books=allBooks.slice();pathProgress=Math.max(0,books.length-1);setRoomVisual('new');document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;renderPath();ensurePathLoop();if(routeFade)fadeRouteLayers(routeFade);}
+function returnToPathFromRoom(){const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','path'):null;roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;roomId='path';viewMode='path';books=allBooks.slice();pathProgress=Math.max(0,books.length-1);document.querySelector('#bookPath')?.classList.remove('genre-approach');setRoomVisual('new');document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;renderPath();ensurePathLoop();if(routeFade)fadeRouteLayers(routeFade);}
 
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
@@ -791,7 +791,7 @@ async function enterFantasyRoom(){
   oldRoomLayer.setAttribute('aria-hidden','true');
   store.appendChild(oldRoomLayer);
 
-  roomHistory.push({id:'path',progress:pathProgress});roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
+  roomHistory.push({id:'path',progress:pathProgress});document.querySelector('#bookPath')?.classList.remove('genre-approach');roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
   if(roomBg){
     roomBg.style.display='block';
@@ -896,9 +896,10 @@ function renderPath(){
   }
   if(roomId==='forest'){
     const pct=Math.min(100,Math.round(pathProgress/FOREST_TRAVEL*100));
-    document.querySelector('#pathStatus').textContent=pathProgress>=FOREST_TRAVEL-.08?'森の奥に本棚が見える':`ファンタジーの森　${pct}%`;
-    document.querySelector('#pathSub').textContent=pathProgress>=FOREST_TRAVEL-.08?'タップすると本棚へ':'上スワイプ＝前進 ／ 下スワイプ＝後退';
-    document.querySelector('#fantasyGate').hidden=true;
+    const gate=document.querySelector('#fantasyGate');
+    document.querySelector('#pathStatus').textContent=pathProgress>=FOREST_TRAVEL-.08?'ファンタジーの森・入口':`ファンタジーへの道　${pct}%`;
+    document.querySelector('#pathSub').textContent=pathProgress>=FOREST_TRAVEL-.08?'入口をタップ':'上＝前進 ／ 下＝後退';
+    if(gate){gate.hidden=pathProgress<FOREST_TRAVEL-.72;gate.querySelector('small').textContent='FANTASY FOREST';gate.querySelector('strong').textContent='ファンタジーの森';gate.querySelector('span').textContent='入口をタップ';}
   }else{
     const n=(Math.floor(pathProgress)%books.length+books.length)%books.length+1;
     document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
@@ -918,8 +919,8 @@ function currentPathZone(){
 }
 function updatePathZone(){
   if(roomId!=='path')return;const zone=currentPathZone();if(!zone)return;
-  const label=document.querySelector('#pathZoneLabel');if(label)label.innerHTML=`<small>${zone.label}</small><strong>${zone.jp}</strong>${zone.gate?'<span>← 横スワイプで売場へ</span>':''}`;
-  const gate=document.querySelector('#fantasyGate');if(gate){gate.hidden=zone.id!=='fantasy';if(zone.id==='fantasy'){gate.querySelector('small').textContent='FANTASY FOREST';gate.querySelector('strong').textContent='ファンタジーの森';gate.querySelector('span').textContent='横スワイプでも入れます';}}
+  const label=document.querySelector('#pathZoneLabel');if(label)label.innerHTML=`<small>${zone.label}</small><strong>${zone.jp}</strong>${zone.gate?'<span>→ 右スワイプで売場への道へ</span>':''}`;
+  const gate=document.querySelector('#fantasyGate');if(gate){gate.hidden=zone.id!=='fantasy';if(zone.id==='fantasy'){gate.querySelector('small').textContent='FANTASY FOREST';gate.querySelector('strong').textContent='ファンタジーの森';gate.querySelector('span').textContent='→ 右スワイプでも入れます';}}
   if(pathZoneId===zone.id)return;pathZoneId=zone.id;
   const nextKey=pathZoneBgFront==='a'?'b':'a',next=document.querySelector(nextKey==='a'?'#pathZoneBgA':'#pathZoneBgB'),old=document.querySelector(pathZoneBgFront==='a'?'#pathZoneBgA':'#pathZoneBgB');
   if(next){next.style.backgroundImage=`linear-gradient(rgba(7,5,3,.08),rgba(7,5,3,.16)),url('${zone.bg}')`;next.style.backgroundPosition=zone.pos;next.classList.add('is-visible');}
@@ -957,7 +958,7 @@ function findPathBookAt(x,y){
 function onPathPointerDown(e){
   if(!dataReady||!books.length||routeTransitioning)return;
   if(e.target.closest('#motionStart'))return;
-  if(e.target.closest('#fantasyGate')){enterFantasyRoom();return;}
+  if(e.target.closest('#fantasyGate')){roomId==='forest'?enterFantasyRoom():enterForest();return;}
   if(roomId==='forest'&&pathProgress>=FOREST_TRAVEL-.08){enterFantasyRoom();return;}
   pathVelocity=0;
   const hit=findPathBookAt(e.clientX,e.clientY);
@@ -977,7 +978,7 @@ function onPathPointerMove(e){
 function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
-  if(d.moved&&Math.abs(dx)>Math.abs(dy)*1.15&&Math.abs(dx)>54&&currentPathZone()?.id==='fantasy'){pathVelocity=0;enterFantasyRoom();return;}
+  if(d.moved&&dx>54&&Math.abs(dx)>Math.abs(dy)*1.15&&currentPathZone()?.id==='fantasy'){pathVelocity=0;enterForest();return;}
   if(!d.moved&&h&&!h.moved&&Number.isFinite(h.raw)){
     const raw=h.raw,w=books[norm(raw)];
     pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w);return;
