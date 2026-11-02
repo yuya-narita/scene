@@ -436,3 +436,13 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
    The destination card must remain absent until the final approach. */
 .book-path.genre-approach .route-gate[hidden]{display:none!important;}
 .book-path.genre-approach .route-gate:not([hidden]){display:block!important;}
+
+
+/* V2.20.0 — Book Road owns the full viewport while active.
+   Previously top:18% exposed the room/hall layer above the road and visually cropped
+   the 16:9 background. The fixed shop header remains above it via z-index. */
+body.book-path-active .book-path{top:0!important;bottom:0!important;}
+body.book-path-active .path-zone-bg{inset:0!important;background-size:cover!important;background-position:center center!important;}
+/* Keep path UI below the fixed header now that the road starts at viewport top. */
+body.book-path-active .book-path:not(.genre-approach) .path-zone-label{top:112px!important;}
+@media(max-width:680px){body.book-path-active .book-path:not(.genre-approach) .path-zone-label{top:112px!important;}}

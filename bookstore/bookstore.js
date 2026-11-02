@@ -15,12 +15,19 @@ const roomHistory=[];
 const PATH_DRAG_PX_PER_BOOK=150;
 const PATH_MAX_VELOCITY=.008;
 const PATH_EXIT_PAD=1.0;
-const PATH_ZONE_COUNT=3;
+// V2.20.0 — eight continuous genre sections around the circular Book Road.
+// Backgrounds are independent WebP assets; labels/branch guidance stay in HTML/UI.
 const PATH_ZONES=[
- {id:'arrival',label:'NEW ARRIVALS',jp:'新しく入った本',bg:'./bookstore-path-fantasy-v2113.webp',pos:'50% 50%'},
- {id:'fantasy',label:'FANTASY AREA',jp:'ファンタジー区画',bg:'./book-road-left-curve-fantasy.webp',pos:'50% 50%',gate:'ファンタジーの森'},
- {id:'next',label:'NEXT AREA',jp:'次の区画',bg:'./bookstore-path-fantasy-v2113.webp',pos:'64% 50%'}
+ {id:'fantasy',label:'FANTASY',jp:'ファンタジー',bg:'./book-road-01-fantasy.webp',pos:'50% 50%',gate:'ファンタジー'},
+ {id:'romance',label:'ROMANCE',jp:'恋愛',bg:'./book-road-02-romance.webp',pos:'50% 50%',gate:'恋愛'},
+ {id:'horror',label:'HORROR',jp:'ホラー',bg:'./book-road-03-horror.webp',pos:'50% 50%',gate:'ホラー'},
+ {id:'mystery',label:'MYSTERY',jp:'ミステリ',bg:'./book-road-04-mystery.webp',pos:'50% 50%',gate:'ミステリ'},
+ {id:'sf',label:'SF',jp:'SF',bg:'./book-road-05-sf.webp',pos:'50% 50%',gate:'SF'},
+ {id:'everyday',label:'EVERYDAY',jp:'日常',bg:'./book-road-06-everyday.webp',pos:'50% 50%',gate:'日常'},
+ {id:'essay',label:'ESSAY',jp:'エッセイ',bg:'./book-road-07-essay.webp',pos:'50% 50%',gate:'エッセイ'},
+ {id:'other',label:'OTHER',jp:'その他',bg:'./book-road-08-other.webp',pos:'50% 50%',gate:'その他'}
 ];
+const PATH_ZONE_COUNT=PATH_ZONES.length;
 let pathZoneId='',pathZoneBgFront='a',pathZoneEntryProgress=0,pathZoneSignTimer=0;
 const PATH_GATE_REVEAL_PAD=.12;
 const FOREST_TRAVEL=5.5; // straight approach distance; percentage is only a route-progress indicator
@@ -976,9 +983,9 @@ function updatePathZone(){
   // so pointerup cannot synthesize the click. Refresh the sign only when the zone changes.
   if(label){
     if(zoneChanged){
-      label.innerHTML=`<small>${zone.label}</small><strong>${zone.jp}</strong>${zone.gate?'<span>タップで売場への道へ</span>':''}`;
+      label.innerHTML=`<small>${zone.label}</small><strong>${zone.jp}</strong>${zone.id==='fantasy'?'<span>タップで売場への道へ</span>':''}`;
     }
-    label.classList.toggle('has-branch',!!zone.gate);
+    label.classList.toggle('has-branch',zone.id==='fantasy');
   }
   if(zoneChanged)pathZoneEntryProgress=pathProgress;
   const gate=document.querySelector('#fantasyGate');
