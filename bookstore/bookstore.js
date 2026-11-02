@@ -19,7 +19,7 @@ const PATH_ZONES=[
  {id:'fantasy',label:'FANTASY AREA',jp:'ファンタジー区画',bg:'./book-road-left-curve-fantasy.webp',pos:'50% 50%',gate:'ファンタジーの森'},
  {id:'next',label:'NEXT AREA',jp:'次の区画',bg:'./bookstore-path-fantasy-v2113.webp',pos:'64% 50%'}
 ];
-let pathZoneId='',pathZoneBgFront='a',pathZoneEntryProgress=0;
+let pathZoneId='',pathZoneBgFront='a',pathZoneEntryProgress=0,pathZoneSignTimer=0;
 const PATH_GATE_REVEAL_PAD=.12;
 const FOREST_TRAVEL=5.5; // reserved for future side-branch routes with % progress
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
@@ -919,21 +919,15 @@ function currentPathZone(){
 }
 function updatePathZone(){
   if(roomId!=='path')return;const zone=currentPathZone();if(!zone)return;
-  const label=document.querySelector('#pathZoneLabel');if(label)label.innerHTML=`<small>${zone.label}</small><strong>${zone.jp}</strong>${zone.gate?'<span>→ 右スワイプで売場への道へ</span>':''}`;
+  const label=document.querySelector('#pathZoneLabel');if(label){label.innerHTML=`<small>${zone.label}</small><strong>${zone.jp}</strong>${zone.gate?'<span>タップで売場への道へ</span>':''}`;label.classList.toggle('has-branch',!!zone.gate);}
   const zoneChanged=pathZoneId!==zone.id;
   if(zoneChanged)pathZoneEntryProgress=pathProgress;
   const gate=document.querySelector('#fantasyGate');
-  if(gate){
-    const entryDistance=Math.abs(pathProgress-pathZoneEntryProgress);
-    const showEntryGate=zone.id==='fantasy'&&entryDistance<.72;
-    gate.hidden=!showEntryGate;
-    if(zone.id==='fantasy'){
-      gate.querySelector('small').textContent='FANTASY FOREST';
-      gate.querySelector('strong').textContent='ファンタジーの森';
-      gate.querySelector('span').textContent='→ 右スワイプでも入れます';
-    }
-  }
+  // Curved outer-road sections never use the large center card. The right-side
+  // branch sign is the only genre cue; the large card is reserved for the straight approach.
+  if(gate)gate.hidden=true;
   if(!zoneChanged)return;pathZoneId=zone.id;
+  if(label){clearTimeout(pathZoneSignTimer);label.classList.remove('is-expanded');void label.offsetWidth;label.classList.add('is-expanded');pathZoneSignTimer=setTimeout(()=>label.classList.remove('is-expanded'),1150);}
   const nextKey=pathZoneBgFront==='a'?'b':'a',next=document.querySelector(nextKey==='a'?'#pathZoneBgA':'#pathZoneBgB'),old=document.querySelector(pathZoneBgFront==='a'?'#pathZoneBgA':'#pathZoneBgB');
   if(next){next.style.backgroundImage=`linear-gradient(rgba(7,5,3,.08),rgba(7,5,3,.16)),url('${zone.bg}')`;next.style.backgroundPosition=zone.pos;next.classList.add('is-visible');}
   if(old)old.classList.remove('is-visible');pathZoneBgFront=nextKey;
@@ -990,7 +984,16 @@ function onPathPointerMove(e){
 function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
-  if(d.moved&&dx>54&&Math.abs(dx)>Math.abs(dy)*1.15&&currentPathZone()?.id==='fantasy'){pathVelocity=0;enterForest();return;}
+  if(d.moved&&dx>54&&Math.abs(dx)>Math.abs(dy)*1.15&&roomId==='path'){
+    // The curved outer road always peels inward to Central Sakura Hall on a right swipe.
+    pathVelocity=0;showCentralHall(false);return;
+  }
+  if(roomId==='forest'&&d.moved&&dy>54&&Math.abs(dy)>Math.abs(dx)*1.05&&d.start<.22){
+    // Back out of the straight genre approach to the exact outer-road branch point.
+    const prev=[...roomHistory].reverse().find(x=>x.id==='path');
+    roomId='path';books=allBooks.slice();pathProgress=prev?.progress??0;pathYaw=0;pathVelocity=0;
+    document.querySelector('#bookPath')?.classList.remove('genre-approach');setRoomVisual('new');document.querySelector('#motionStart').hidden=false;pathZoneId='';renderPath();return;
+  }
   if(!d.moved&&h&&!h.moved&&Number.isFinite(h.raw)){
     const raw=h.raw,w=books[norm(raw)];
     pathVelocity=0;pathProgress=Math.max(0,raw);index=norm(raw);renderPath();pick(w);return;
@@ -1048,6 +1051,7 @@ async function togglePathMotion(){
     const sub=document.querySelector('#pathSub');if(sub)sub.textContent='モーション＝前進のみ ／ 上スワイプ＝前進 ／ 下スワイプ＝後退';
   }catch(_){disableMotion();const sub=document.querySelector('#pathSub');if(sub)sub.textContent='モーションを許可できませんでした。スワイプで移動できます';}
 }
+document.querySelector('#pathZoneLabel')?.addEventListener('click',()=>{if(roomId==='path'&&currentPathZone()?.id==='fantasy')enterForest();});
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;

@@ -377,3 +377,17 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
 @media(max-width:680px){
   .book-path:not(.genre-approach) .path-zone-label{right:8px!important;top:104px!important;max-width:46vw}
 }
+\n/* V2.19.4 — curved-road branch sign replaces the center genre card. */
+.book-path:not(.genre-approach) .route-gate{display:none!important}
+.book-path:not(.genre-approach) .path-zone-label{
+  display:flex!important;left:auto!important;right:10px!important;top:112px!important;
+  width:138px;max-width:calc(100vw - 86px);min-height:54px;padding:10px 12px!important;
+  text-align:right!important;align-items:flex-end;overflow:hidden;
+  pointer-events:none;transform-origin:100% 50%;
+  transition:width .38s cubic-bezier(.2,.8,.2,1),transform .38s cubic-bezier(.2,.8,.2,1),background-color .38s ease;
+}
+.book-path:not(.genre-approach) .path-zone-label.has-branch{pointer-events:auto;cursor:pointer}
+.book-path:not(.genre-approach) .path-zone-label.is-expanded{width:218px;transform:scale(1.035);background:#1b1009e8}
+.book-path:not(.genre-approach) .path-zone-label span{white-space:nowrap;opacity:.82}
+.book-path.genre-approach .route-gate{display:block!important}
+@media(max-width:680px){.book-path:not(.genre-approach) .path-zone-label{right:8px!important;top:116px!important;width:126px}.book-path:not(.genre-approach) .path-zone-label.is-expanded{width:194px}}
