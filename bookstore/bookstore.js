@@ -17,6 +17,7 @@ const PATH_MAX_VELOCITY=.008;
 const PATH_EXIT_PAD=1.0;
 // V2.20.0 — eight continuous genre sections around the circular Book Road.
 // Backgrounds are independent WebP assets; labels/branch guidance stay in HTML/UI.
+const PATH_BOOKS_PER_ZONE_TEST=8; // V2.20.2 TEST: hold each genre background for 8 book positions
 const PATH_ZONES=[
  {id:'fantasy',label:'FANTASY',jp:'ファンタジー',bg:'./book-road-01-fantasy.webp',pos:'50% 50%',gate:'ファンタジー'},
  {id:'romance',label:'ROMANCE',jp:'恋愛',bg:'./book-road-02-romance.webp',pos:'50% 50%',gate:'恋愛'},
@@ -698,7 +699,8 @@ function showNewArrivalsFromHall(){
 }
 function makeRouteCrossfadeLayer(kind, role='old'){
   const layer=document.createElement('div');
-  layer.className=`route-crossfade-layer route-crossfade-${kind} route-crossfade-${role}`;
+  const paintKind=kind==='outerpath'?'path':kind;
+  layer.className=`route-crossfade-layer route-crossfade-${paintKind} route-crossfade-${role}`;
   layer.setAttribute('aria-hidden','true');
   // Preserve the live 360 camera only for the OLD room being painted out.
   // Never copy #roomBgLayer into a NEW destination layer: during Fantasy -> Hall
@@ -728,6 +730,17 @@ function makeRouteCrossfadeLayer(kind, role='old'){
   // V2.18.29: when Fantasy returns to Hall, the destination overlay must
   // already paint the Hall at the same 180deg camera angle as the live Hall.
   // Otherwise the crossfade shows Hall 0deg and pops to 180deg on cleanup.
+  // V2.20.2: Hall/genre-room -> OUTER Book Road must never use the generic
+  // .route-crossfade-path image (that image is the straight Fantasy approach).
+  // Paint the exact current outer-road genre background before the fade begins.
+  if(role==='new'&&kind==='outerpath'){
+    const span=Math.max(1,allBooks.length||books.length||1);
+    const lap=((lastOuterPathProgress%span)+span)%span;
+    const zi=Math.min(PATH_ZONE_COUNT-1,Math.floor(lap/PATH_BOOKS_PER_ZONE_TEST));
+    const z=PATH_ZONES[zi]||PATH_ZONES[0];
+    layer.style.backgroundImage=`linear-gradient(rgba(7,5,3,.06),rgba(7,5,3,.13)),url('${z.bg}')`;
+    layer.style.backgroundSize='cover';layer.style.backgroundPosition=z.pos||'50% 50%';layer.style.backgroundRepeat='no-repeat';
+  }
   if(role==='new'&&kind==='hall'){
     layer.style.backgroundPosition=`calc(50% + ${hallBackgroundOffsetPx(hallYaw+hallPreview,layer).toFixed(2)}px) center`;
   }
@@ -804,11 +817,11 @@ function showCentralHall(fromIntro=false){
     }else fadeRouteLayers(routeFade);
   }
 }
-function enterBookPathFromHall(){if(!dataReady)return;document.querySelector('#bookPath')?.classList.remove('genre-approach');const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
+function enterBookPathFromHall(){if(!dataReady)return;document.querySelector('#bookPath')?.classList.remove('genre-approach');const routeFade=startRouteCrossfade('hall','outerpath');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
 function returnToPathFromRoom(){
   // V2.19.8: the room's "本の道" exit means the OUTER circular Book Path,
   // not the private straight approach used to enter the room.
-  const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','path'):null;
+  const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','outerpath'):null;
   roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');
   document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;
   viewMode='path';document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;
@@ -978,7 +991,7 @@ function clampPath(v){
 }
 function currentPathZone(){
   const span=Math.max(1,books.length),lap=((pathProgress%span)+span)%span;
-  const idx=Math.min(PATH_ZONE_COUNT-1,Math.floor(lap/(span/PATH_ZONE_COUNT)));
+  const idx=Math.min(PATH_ZONE_COUNT-1,Math.floor(lap/PATH_BOOKS_PER_ZONE_TEST));
   return PATH_ZONES[idx];
 }
 function updatePathZone(){
@@ -1138,7 +1151,15 @@ async function togglePathMotion(){
     const sub=document.querySelector('#pathSub');if(sub)sub.textContent='モーション＝前進のみ ／ 上スワイプ＝前進 ／ 下スワイプ＝後退';
   }catch(_){disableMotion();const sub=document.querySelector('#pathSub');if(sub)sub.textContent='モーションを許可できませんでした。スワイプで移動できます';}
 }
-document.querySelector('#pathZoneLabel')?.addEventListener('click',()=>{if(roomId==='path'&&currentPathZone()?.id==='fantasy')enterForest();});
+const pathZoneLabel=document.querySelector('#pathZoneLabel');
+// V2.20.2: live DeviceMotion can cancel Safari's synthesized click. Treat the
+// branch sign like the motion toggle: own pointerup and stop the path surface.
+if(pathZoneLabel){
+  pathZoneLabel.addEventListener('pointerdown',(e)=>{if(pathZoneLabel.classList.contains('has-branch'))e.stopPropagation();});
+  pathZoneLabel.addEventListener('pointerup',(e)=>{if(roomId==='path'&&currentPathZone()?.id==='fantasy'){e.preventDefault();e.stopPropagation();enterForest();}});
+  pathZoneLabel.addEventListener('click',(e)=>{if(roomId==='path'&&currentPathZone()?.id==='fantasy'){e.preventDefault();e.stopPropagation();}});
+}
+
 document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;

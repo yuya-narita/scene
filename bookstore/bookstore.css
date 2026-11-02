@@ -463,3 +463,11 @@ body.book-path-active .book-path:not(.genre-approach) .path-zone-label.is-expand
     top:104px!important;
   }
 }
+
+
+/* V2.20.2 — iPhone path UI spacing + 8-books-per-zone test.
+   Keep the motion control farther from the incoming cover stream without moving
+   the established genre sign. */
+@media(max-width:680px){
+  body.book-path-active .store > #motionStart.path-motion{top:calc(18% + 4px)!important;right:7px!important;}
+}
