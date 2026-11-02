@@ -471,3 +471,17 @@ body.book-path-active .book-path:not(.genre-approach) .path-zone-label.is-expand
 @media(max-width:680px){
   body.book-path-active .store > #motionStart.path-motion{top:calc(18% + 4px)!important;right:7px!important;}
 }
+
+
+/* V2.20.3 — iPhone spacing + 12-books-per-zone test.
+   On narrow portrait screens the genre sign and motion toggle occupied the same
+   right-side lane. Keep desktop geometry untouched; move only the iPhone path
+   motion control to the upper-left clear lane so it cannot cover the genre sign
+   and remains well away from the incoming covers. */
+@media(max-width:680px){
+  body.book-path-active .store > #motionStart.path-motion{
+    left:8px!important;
+    right:auto!important;
+    top:calc(18% + 4px)!important;
+  }
+}

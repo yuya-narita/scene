@@ -17,7 +17,7 @@ const PATH_MAX_VELOCITY=.008;
 const PATH_EXIT_PAD=1.0;
 // V2.20.0 — eight continuous genre sections around the circular Book Road.
 // Backgrounds are independent WebP assets; labels/branch guidance stay in HTML/UI.
-const PATH_BOOKS_PER_ZONE_TEST=8; // V2.20.2 TEST: hold each genre background for 8 book positions
+const PATH_BOOKS_PER_ZONE_TEST=12; // V2.20.3 TEST: hold each genre background for 12 book positions
 const PATH_ZONES=[
  {id:'fantasy',label:'FANTASY',jp:'ファンタジー',bg:'./book-road-01-fantasy.webp',pos:'50% 50%',gate:'ファンタジー'},
  {id:'romance',label:'ROMANCE',jp:'恋愛',bg:'./book-road-02-romance.webp',pos:'50% 50%',gate:'恋愛'},
