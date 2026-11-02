@@ -355,3 +355,25 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
 .book-path.genre-approach .route-gate{left:50%!important;right:auto!important;top:43%!important;transform:translate(-50%,-50%)!important;width:min(72vw,330px)!important;text-align:center;padding:24px 18px 22px;border-radius:22px;background:#152013dc}
 .book-path.genre-approach .route-gate small{font-size:9px;letter-spacing:.24em}.book-path.genre-approach .route-gate strong{font-size:25px;margin-top:9px}.book-path.genre-approach .route-gate span{font-size:11px;margin-top:11px}
 @media(max-width:680px){.book-path:not(.genre-approach) .path-zone-label{top:48px;right:8px}.book-path:not(.genre-approach) .route-gate{right:8px!important}}
+
+
+/* V2.19.3 — genre-zone guidance lifecycle.
+   The large genre card is an arrival cue: centered on entry, then it gets out
+   of the way as soon as the reader advances. The small branch sign stays on
+   the right, below the motion control. */
+.book-path:not(.genre-approach) .route-gate{
+  left:50%!important;right:auto!important;top:48%!important;
+  transform:translate(-50%,-50%)!important;
+  width:min(68vw,310px)!important;text-align:center!important;
+}
+.book-path:not(.genre-approach) .path-zone-label{
+  left:auto!important;right:10px!important;top:96px!important;text-align:right!important;
+  max-width:min(48vw,210px);
+}
+.book-path.genre-approach .route-gate{
+  left:50%!important;right:auto!important;top:48%!important;
+  transform:translate(-50%,-50%)!important;
+}
+@media(max-width:680px){
+  .book-path:not(.genre-approach) .path-zone-label{right:8px!important;top:104px!important;max-width:46vw}
+}

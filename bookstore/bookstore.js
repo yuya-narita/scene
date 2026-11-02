@@ -19,7 +19,7 @@ const PATH_ZONES=[
  {id:'fantasy',label:'FANTASY AREA',jp:'ファンタジー区画',bg:'./book-road-left-curve-fantasy.webp',pos:'50% 50%',gate:'ファンタジーの森'},
  {id:'next',label:'NEXT AREA',jp:'次の区画',bg:'./bookstore-path-fantasy-v2113.webp',pos:'64% 50%'}
 ];
-let pathZoneId='',pathZoneBgFront='a';
+let pathZoneId='',pathZoneBgFront='a',pathZoneEntryProgress=0;
 const PATH_GATE_REVEAL_PAD=.12;
 const FOREST_TRAVEL=5.5; // reserved for future side-branch routes with % progress
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
@@ -920,8 +920,20 @@ function currentPathZone(){
 function updatePathZone(){
   if(roomId!=='path')return;const zone=currentPathZone();if(!zone)return;
   const label=document.querySelector('#pathZoneLabel');if(label)label.innerHTML=`<small>${zone.label}</small><strong>${zone.jp}</strong>${zone.gate?'<span>→ 右スワイプで売場への道へ</span>':''}`;
-  const gate=document.querySelector('#fantasyGate');if(gate){gate.hidden=zone.id!=='fantasy';if(zone.id==='fantasy'){gate.querySelector('small').textContent='FANTASY FOREST';gate.querySelector('strong').textContent='ファンタジーの森';gate.querySelector('span').textContent='→ 右スワイプでも入れます';}}
-  if(pathZoneId===zone.id)return;pathZoneId=zone.id;
+  const zoneChanged=pathZoneId!==zone.id;
+  if(zoneChanged)pathZoneEntryProgress=pathProgress;
+  const gate=document.querySelector('#fantasyGate');
+  if(gate){
+    const entryDistance=Math.abs(pathProgress-pathZoneEntryProgress);
+    const showEntryGate=zone.id==='fantasy'&&entryDistance<.72;
+    gate.hidden=!showEntryGate;
+    if(zone.id==='fantasy'){
+      gate.querySelector('small').textContent='FANTASY FOREST';
+      gate.querySelector('strong').textContent='ファンタジーの森';
+      gate.querySelector('span').textContent='→ 右スワイプでも入れます';
+    }
+  }
+  if(!zoneChanged)return;pathZoneId=zone.id;
   const nextKey=pathZoneBgFront==='a'?'b':'a',next=document.querySelector(nextKey==='a'?'#pathZoneBgA':'#pathZoneBgB'),old=document.querySelector(pathZoneBgFront==='a'?'#pathZoneBgA':'#pathZoneBgB');
   if(next){next.style.backgroundImage=`linear-gradient(rgba(7,5,3,.08),rgba(7,5,3,.16)),url('${zone.bg}')`;next.style.backgroundPosition=zone.pos;next.classList.add('is-visible');}
   if(old)old.classList.remove('is-visible');pathZoneBgFront=nextKey;
