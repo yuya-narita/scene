@@ -6,6 +6,8 @@ let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAc
 let introReady=false,hallYaw=0,hallPreview=0,hallDrag=null,hallMotionOn=false,hallMotionLastAlpha=null,hallShelfRing=false,hallShelfKind='new';
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
+// V2.19.7 — remember both the outer circular road and the straight genre approach.
+let lastOuterPathProgress=0,lastForestPathProgress=0,lastFantasyEntryRoute='path';
 let roomId='new',routeTransitioning=false,dataReady=false;
 let roomShelfMode=false,roomShelfAllBooks=[],roomShelfScrollRaf=0;
 let fantasyGateTimer=0,fantasyGateVisible=false;
@@ -386,8 +388,9 @@ function updateFantasyGate(){
 // set roomId='forest' and use FOREST_TRAVEL / percentage progress before reaching a shelf.
 async function enterForest(){
   if(routeTransitioning||!dataReady)return;
+  lastOuterPathProgress=pathProgress;
   roomHistory.push({id:'path',progress:pathProgress});
-  roomId='forest';books=fantasyBooks();pathProgress=0;pathYaw=0;document.querySelector('#bookPath')?.classList.add('genre-approach');
+  roomId='forest';books=fantasyBooks();pathProgress=lastForestPathProgress;pathYaw=0;document.querySelector('#bookPath')?.classList.add('genre-approach');
   setRoomVisual('fantasy');hideFantasyGate();
   document.querySelector('#motionStart').hidden=true;
   document.querySelector('#pathStatus').textContent='ファンタジーの森　0%';
@@ -715,6 +718,7 @@ function fadeRouteLayers(pair){
 }
 function showCentralHall(fromIntro=false){
   const returningFromPath=viewMode==='path'&&roomId==='path';
+  if(returningFromPath)lastOuterPathProgress=pathProgress;
   const returningFromFantasy=roomId==='fantasy';
   // V2.18.29: Fantasy's Hall exit lands facing the Fantasy entrance (180deg).
   // Commit that camera BEFORE the destination crossfade layer is created, so
@@ -765,11 +769,30 @@ function showCentralHall(fromIntro=false){
     }else fadeRouteLayers(routeFade);
   }
 }
-function enterBookPathFromHall(){if(!dataReady)return;const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=0;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
-function returnToPathFromRoom(){const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','path'):null;roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;roomId='path';viewMode='path';books=allBooks.slice();pathProgress=Math.max(0,books.length-1);document.querySelector('#bookPath')?.classList.remove('genre-approach');setRoomVisual('new');document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;renderPath();ensurePathLoop();if(routeFade)fadeRouteLayers(routeFade);}
+function enterBookPathFromHall(){if(!dataReady)return;const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
+function returnToPathFromRoom(){
+  const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','path'):null;
+  roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');
+  document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;
+  viewMode='path';document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;
+  if(lastFantasyEntryRoute==='forest'){
+    roomId='forest';books=fantasyBooks();pathProgress=lastForestPathProgress;
+    document.querySelector('#bookPath')?.classList.add('genre-approach');setRoomVisual('fantasy');
+    document.querySelector('#motionStart').hidden=true;
+  }else{
+    roomId='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;
+    document.querySelector('#bookPath')?.classList.remove('genre-approach');setRoomVisual('new');
+    document.querySelector('#motionStart').hidden=false;
+  }
+  pathYaw=0;pathVelocity=0;renderPath();ensurePathLoop();if(routeFade)fadeRouteLayers(routeFade);
+}
 
 async function enterFantasyRoom(){
-  if(routeTransitioning||!dataReady)return;routeTransitioning=true;pathVelocity=0;
+  if(routeTransitioning||!dataReady)return;
+  lastFantasyEntryRoute=roomId;
+  if(roomId==='forest')lastForestPathProgress=pathProgress;
+  else if(roomId==='path')lastOuterPathProgress=pathProgress;
+  routeTransitioning=true;pathVelocity=0;
   // V2.18.19: strict room-entry order:
   // 1) decode background, 2) mount it transparent, 3) start background fade,
   // 4) only then prepare/start the ring. This makes the fade deterministic on iPhone Safari.
@@ -791,7 +814,7 @@ async function enterFantasyRoom(){
   oldRoomLayer.setAttribute('aria-hidden','true');
   store.appendChild(oldRoomLayer);
 
-  roomHistory.push({id:'path',progress:pathProgress});document.querySelector('#bookPath')?.classList.remove('genre-approach');roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
+  roomHistory.push({id:lastFantasyEntryRoute,progress:pathProgress});document.querySelector('#bookPath')?.classList.remove('genre-approach');roomId='fantasy';roomShelfAllBooks=fantasyBooks();books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
   setRoomVisual('fantasy');viewMode='ring';document.body.classList.remove('book-path-active');
   if(roomBg){
     roomBg.style.display='block';
@@ -992,7 +1015,7 @@ function onPathPointerEnd(e){
   if(roomId==='forest'&&d.moved&&dy>54&&Math.abs(dy)>Math.abs(dx)*1.05&&d.start<.22){
     // Back out of the straight genre approach to the exact outer-road branch point.
     const prev=[...roomHistory].reverse().find(x=>x.id==='path');
-    roomId='path';books=allBooks.slice();pathProgress=prev?.progress??0;pathYaw=0;pathVelocity=0;
+    lastForestPathProgress=0;roomId='path';books=allBooks.slice();pathProgress=prev?.progress??lastOuterPathProgress;lastOuterPathProgress=pathProgress;pathYaw=0;pathVelocity=0;
     document.querySelector('#bookPath')?.classList.remove('genre-approach');setRoomVisual('new');document.querySelector('#motionStart').hidden=false;pathZoneId='';renderPath();return;
   }
   if(!d.moved&&h&&!h.moved&&Number.isFinite(h.raw)){

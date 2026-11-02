@@ -430,3 +430,9 @@ body.intro-entry-active .stage.is-intro-spinning~.nav{pointer-events:none!import
     max-width:calc(100vw - 92px)!important;
   }
 }
+
+
+/* V2.19.7 — straight-approach gate lifecycle.
+   The destination card must remain absent until the final approach. */
+.book-path.genre-approach .route-gate[hidden]{display:none!important;}
+.book-path.genre-approach .route-gate:not([hidden]){display:block!important;}
