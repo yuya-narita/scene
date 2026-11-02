@@ -6,7 +6,7 @@ let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAc
 let introReady=false,hallYaw=0,hallPreview=0,hallDrag=null,hallMotionOn=false,hallMotionLastAlpha=null,hallShelfRing=false,hallShelfKind='new';
 let pathVelocity=0,pathRaf=0,pathLastFrame=0,pathMotionEnergy=0,pathMotionLast=0;
 let pathBookHold=null;
-// V2.19.7 — remember both the outer circular road and the straight genre approach.
+// V2.19.8 — remember both the outer circular road and the straight genre approach.
 let lastOuterPathProgress=0,lastForestPathProgress=0,lastFantasyEntryRoute='path';
 let roomId='new',routeTransitioning=false,dataReady=false;
 let roomShelfMode=false,roomShelfAllBooks=[],roomShelfScrollRaf=0;
@@ -388,9 +388,12 @@ function updateFantasyGate(){
 // set roomId='forest' and use FOREST_TRAVEL / percentage progress before reaching a shelf.
 async function enterForest(){
   if(routeTransitioning||!dataReady)return;
+  // V2.19.8: every NEW branch entry starts at the mouth of the straight approach.
+  // The outer circular-road position is remembered independently.
   lastOuterPathProgress=pathProgress;
   roomHistory.push({id:'path',progress:pathProgress});
-  roomId='forest';books=fantasyBooks();pathProgress=lastForestPathProgress;pathYaw=0;document.querySelector('#bookPath')?.classList.add('genre-approach');
+  lastForestPathProgress=0;
+  roomId='forest';books=fantasyBooks();pathProgress=0;pathYaw=0;document.querySelector('#bookPath')?.classList.add('genre-approach');
   setRoomVisual('fantasy');hideFantasyGate();
   document.querySelector('#motionStart').hidden=true;
   document.querySelector('#pathStatus').textContent='ファンタジーの森　0%';
@@ -771,20 +774,16 @@ function showCentralHall(fromIntro=false){
 }
 function enterBookPathFromHall(){if(!dataReady)return;const routeFade=startRouteCrossfade('hall','path');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
 function returnToPathFromRoom(){
+  // V2.19.8: the room's "本の道" exit means the OUTER circular Book Path,
+  // not the private straight approach used to enter the room.
   const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','path'):null;
   roomMotionOn&&toggleRoomMotion();roomShelfMode=false;store.classList.remove('room-fantasy');
   document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;
   viewMode='path';document.body.classList.add('book-path-active');document.querySelector('#bookPath').hidden=false;
-  if(lastFantasyEntryRoute==='forest'){
-    roomId='forest';books=fantasyBooks();pathProgress=lastForestPathProgress;
-    document.querySelector('#bookPath')?.classList.add('genre-approach');setRoomVisual('fantasy');
-    document.querySelector('#motionStart').hidden=true;
-  }else{
-    roomId='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;
-    document.querySelector('#bookPath')?.classList.remove('genre-approach');setRoomVisual('new');
-    document.querySelector('#motionStart').hidden=false;
-  }
-  pathYaw=0;pathVelocity=0;renderPath();ensurePathLoop();if(routeFade)fadeRouteLayers(routeFade);
+  roomId='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;
+  document.querySelector('#bookPath')?.classList.remove('genre-approach');setRoomVisual('new');
+  document.querySelector('#motionStart').hidden=false;
+  pathYaw=0;pathVelocity=0;pathZoneId='';hideFantasyGate();renderPath();ensurePathLoop();if(routeFade)fadeRouteLayers(routeFade);
 }
 
 async function enterFantasyRoom(){
@@ -988,12 +987,13 @@ function findPathBookAt(x,y){
 function onPathPointerDown(e){
   if(!dataReady||!books.length||routeTransitioning)return;
   if(e.target.closest('#motionStart'))return;
-  if(e.target.closest('#fantasyGate')){roomId==='forest'?enterFantasyRoom():enterForest();return;}
-  if(roomId==='forest'&&pathProgress>=FOREST_TRAVEL-.08){enterFantasyRoom();return;}
+  // V2.19.8: the center gate must not consume pointerdown. Let a downward
+  // swipe move away from the endpoint; only a stationary tap enters the room.
+  const gateTap=!!e.target.closest('#fantasyGate');
   pathVelocity=0;
   const hit=findPathBookAt(e.clientX,e.clientY);
   pathBookHold=hit?{raw:Number(hit.dataset.raw),x:e.clientX,y:e.clientY,moved:false}:null;
-  pathDrag={id:e.pointerId,y:e.clientY,x:e.clientX,start:pathProgress,lastY:e.clientY,lastT:performance.now(),vy:0,moved:false};
+  pathDrag={id:e.pointerId,y:e.clientY,x:e.clientX,start:pathProgress,lastY:e.clientY,lastT:performance.now(),vy:0,moved:false,gateTap};
   e.currentTarget.setPointerCapture?.(e.pointerId)
 }
 function onPathPointerMove(e){
@@ -1008,6 +1008,7 @@ function onPathPointerMove(e){
 function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
+  if(!d.moved&&d.gateTap&&roomId==='forest'){enterFantasyRoom();return;}
   if(d.moved&&dx>54&&Math.abs(dx)>Math.abs(dy)*1.15&&roomId==='path'){
     // The curved outer road always peels inward to Central Sakura Hall on a right swipe.
     pathVelocity=0;showCentralHall(false);return;
