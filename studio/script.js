@@ -6175,7 +6175,23 @@ return flowCommentCard;}
   function syncPublishConfirmationAvailability(){
     const rights=$('#publishRightsConfirm');
     const button=$('#publishConfirmButton');
-    if(button)button.disabled=!(rights?.checked&&signedInAuthor?.authorId&&authorSessionToken);
+    const publishGenre=$('#publishGenreSelect');
+    if(button)button.disabled=!(rights?.checked&&signedInAuthor?.authorId&&authorSessionToken&&publishGenre?.value);
+  }
+  function syncPublishGenreFromDocument(){
+    const publishGenre=$('#publishGenreSelect');
+    if(!publishGenre)return;
+    const current=workingDocument?.metadata?.genre || genreInput?.value || 'other';
+    publishGenre.value=current;
+  }
+  function commitPublishGenre(){
+    const publishGenre=$('#publishGenreSelect');
+    if(!publishGenre?.value)return;
+    if(genreInput)genreInput.value=publishGenre.value;
+    if(workingDocument){
+      workingDocument.metadata=workingDocument.metadata||{};
+      workingDocument.metadata.genre=publishGenre.value;
+    }
   }
   function syncAuthorAccountUI(){
     const signedOut=$('#publishAuthorSignedOut'),signedIn=$('#publishAuthorSignedIn');
@@ -6734,6 +6750,7 @@ return flowCommentCard;}
     syncPublishCopyForStatus();
 
     resetPublishRightsConfirmation();
+    syncPublishGenreFromDocument();
     if(status==='published'){
       const localRevision=Math.max(0,Number(workingDocument?.studio?.identity?.revision)||0);
       if(staleRestoreRemoteRevision>localRevision){
@@ -6831,6 +6848,7 @@ return flowCommentCard;}
     if(!workingDocument?.scenes?.length)return;
     if(!validateCommerceSettings({focus:true})){closePublishDialog();return;}
     syncEasyShellToWorkingDocument();
+    commitPublishGenre();
     if(!authorSessionToken||!signedInAuthor?.authorId){openAuthorAuthDialog();return;}
     ensureMasterIdentity(workingDocument);
     const rights=$('#publishRightsConfirm');
@@ -9397,6 +9415,7 @@ return flowCommentCard;}
   $('#easyPublishButton')?.addEventListener('click',(event)=>{event.preventDefault();openPublishDialogFromEasy();});
   $('#publishDialogClose')?.addEventListener('click',closePublishDialog);
   $('#publishRightsConfirm')?.addEventListener('change',syncPublishConfirmationAvailability);
+  $('#publishGenreSelect')?.addEventListener('change',()=>{commitPublishGenre();syncPublishConfirmationAvailability();});
   $('#publishAuthorLoginButton')?.addEventListener('click',openAuthorAuthDialog);
   $('#studioAuthorStatusButton')?.addEventListener('click',()=>{
     if(signedInAuthor?.authorId&&authorSessionToken){openAuthorAccountDialog();return;}

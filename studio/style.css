@@ -14443,3 +14443,9 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .ahako-bg-subtabs button{border:0;border-radius:9px;padding:9px 12px;background:transparent;font-weight:700;cursor:pointer}
 .ahako-bg-subtabs button.is-active{background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.12)}
 .ahako-360-toggle{display:inline-flex;gap:8px;align-items:center;padding:6px 9px;border:0;border-radius:8px;margin:6px 0 12px;font-weight:600;font-size:12px;cursor:pointer;background:#f6f7f8}.ahako-360-toggle input{width:16px;height:16px;margin:0;accent-color:#111}.ahako-360-toggle span{white-space:nowrap}
+
+/* Genre Pipeline V1.1 — publish-time genre selector */
+.publish-genre-field{display:grid;gap:7px;width:100%;box-sizing:border-box;text-align:left;margin:14px 0 4px;padding:12px 13px;border:1px solid #e1ddd3;border-radius:13px;background:#f8f5ed}
+.publish-genre-field>span{font-size:11px;font-weight:800;color:#34373d}
+.publish-genre-field select{width:100%;min-height:42px;padding:0 12px;border:1px solid #d9d3c7;border-radius:10px;background:#fff;color:#202226;font:inherit}
+.publish-genre-field small{font-size:10px;line-height:1.45;color:#8f897f}
