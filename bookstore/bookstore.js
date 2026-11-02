@@ -23,7 +23,8 @@ const PATH_ZONES=[
 ];
 let pathZoneId='',pathZoneBgFront='a',pathZoneEntryProgress=0,pathZoneSignTimer=0;
 const PATH_GATE_REVEAL_PAD=.12;
-const FOREST_TRAVEL=5.5; // reserved for future side-branch routes with % progress
+const FOREST_TRAVEL=5.5; // straight approach distance; percentage is only a route-progress indicator
+const FOREST_APPROACH_BOOKS=4; // let a finite set of covers pass, then leave a clear view before the entrance card
 // V2.3: shelf is now an explicit axis. Today there is one public shelf; future genres can be added here.
 let shelfIndex=0;
 // V2.15.0 — each Room is a circular ring of tall shelf faces.
@@ -388,7 +389,10 @@ function updateFantasyGate(){
 // set roomId='forest' and use FOREST_TRAVEL / percentage progress before reaching a shelf.
 async function enterForest(){
   if(routeTransitioning||!dataReady)return;
-  // V2.19.8: every NEW branch entry starts at the mouth of the straight approach.
+  // V2.19.9: outer curve -> straight genre approach uses the same crossfade grammar
+  // as the other room/route handoffs. The old layer captures the live curved zone.
+  const routeFade=startRouteCrossfade('path','path');
+  // Every NEW branch entry starts at the mouth of the straight approach.
   // The outer circular-road position is remembered independently.
   lastOuterPathProgress=pathProgress;
   roomHistory.push({id:'path',progress:pathProgress});
@@ -396,9 +400,10 @@ async function enterForest(){
   roomId='forest';books=fantasyBooks();pathProgress=0;pathYaw=0;document.querySelector('#bookPath')?.classList.add('genre-approach');
   setRoomVisual('fantasy');hideFantasyGate();
   document.querySelector('#motionStart').hidden=true;
-  document.querySelector('#pathStatus').textContent='ファンタジーの森　0%';
-  document.querySelector('#pathSub').textContent='上スワイプ＝前進 ／ 下スワイプ＝後退';
+  document.querySelector('#pathStatus').textContent='ファンタジーへの道';
+  document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退';
   renderPath();
+  fadeRouteLayers(routeFade);
 }
 
 
@@ -684,6 +689,18 @@ function makeRouteCrossfadeLayer(kind, role='old'){
   // Never copy #roomBgLayer into a NEW destination layer: during Fantasy -> Hall
   // #roomBgLayer still contains Fantasy, which made the new Hall overlay paint Fantasy
   // over Fantasy and then pop to Hall after cleanup instead of visibly crossfading.
+  if(role==='old'&&kind==='path'){
+    // V2.19.9: capture the currently visible curved-road section before switching
+    // the live path DOM to the straight approach background.
+    const src=document.querySelector('#pathZoneBg');
+    if(src){
+      const cs=getComputedStyle(src);
+      layer.style.backgroundImage=cs.backgroundImage;
+      layer.style.backgroundSize=cs.backgroundSize;
+      layer.style.backgroundPosition=cs.backgroundPosition;
+      layer.style.backgroundRepeat=cs.backgroundRepeat;
+    }
+  }
   if(role==='old'&&(kind==='hall'||kind==='fantasy')){
     const src=document.querySelector('#roomBgLayer');
     if(src){
@@ -890,6 +907,9 @@ function renderPath(){
   const base=Math.floor(pathProgress),from=-3,to=10;
   for(let k=from;k<=to;k++){
     const raw=base+k;
+    // V2.19.9: the straight approach is finite. Do not wrap new covers in forever;
+    // after the last approach cover passes, the background is allowed to clear.
+    if(roomId==='forest'&&(raw<0||raw>=Math.min(FOREST_APPROACH_BOOKS,books.length)))continue;
     const w=books[norm(raw)],phase=raw-pathProgress;
     if(phase<-2.35||phase>9.5)continue;
     const el=document.createElement('button');el.className='path-item';el.type='button';el.setAttribute('aria-label',w.title||'本');el.innerHTML=bookMarkup(w);
@@ -919,9 +939,12 @@ function renderPath(){
   if(roomId==='forest'){
     const pct=Math.min(100,Math.round(pathProgress/FOREST_TRAVEL*100));
     const gate=document.querySelector('#fantasyGate');
-    document.querySelector('#pathStatus').textContent=pathProgress>=FOREST_TRAVEL-.08?'ファンタジーの森・入口':`ファンタジーへの道　${pct}%`;
-    document.querySelector('#pathSub').textContent=pathProgress>=FOREST_TRAVEL-.08?'入口をタップ':'上＝前進 ／ 下＝後退';
-    if(gate){gate.hidden=pathProgress<FOREST_TRAVEL-.72;gate.querySelector('small').textContent='FANTASY FOREST';gate.querySelector('strong').textContent='ファンタジーの森';gate.querySelector('span').textContent='入口をタップ';}
+    const atEntrance=pathProgress>=FOREST_TRAVEL-.08;
+    document.querySelector('#pathStatus').textContent=atEntrance?'ファンタジーの森・入口':`ファンタジーへの道　${pct}%`;
+    document.querySelector('#pathSub').textContent=atEntrance?'入口をタップ':'上＝前進 ／ 下＝後退';
+    // V2.19.9: reveal only at the true endpoint, after all finite approach covers
+    // have already flowed out and the background has become visually clear.
+    if(gate){gate.hidden=!atEntrance;gate.querySelector('small').textContent='FANTASY FOREST';gate.querySelector('strong').textContent='ファンタジーの森';gate.querySelector('span').textContent='入口をタップ';}
   }else{
     const n=(Math.floor(pathProgress)%books.length+books.length)%books.length+1;
     document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
