@@ -969,8 +969,17 @@ function currentPathZone(){
 }
 function updatePathZone(){
   if(roomId!=='path')return;const zone=currentPathZone();if(!zone)return;
-  const label=document.querySelector('#pathZoneLabel');if(label){label.innerHTML=`<small>${zone.label}</small><strong>${zone.jp}</strong>${zone.gate?'<span>タップで売場への道へ</span>':''}`;label.classList.toggle('has-branch',!!zone.gate);}
+  const label=document.querySelector('#pathZoneLabel');
   const zoneChanged=pathZoneId!==zone.id;
+  // V2.19.10: keep the branch sign DOM stable while live motion is repainting the path.
+  // Replacing its children every motion frame destroys the original pointer target on iOS,
+  // so pointerup cannot synthesize the click. Refresh the sign only when the zone changes.
+  if(label){
+    if(zoneChanged){
+      label.innerHTML=`<small>${zone.label}</small><strong>${zone.jp}</strong>${zone.gate?'<span>タップで売場への道へ</span>':''}`;
+    }
+    label.classList.toggle('has-branch',!!zone.gate);
+  }
   if(zoneChanged)pathZoneEntryProgress=pathProgress;
   const gate=document.querySelector('#fantasyGate');
   // Curved outer-road sections never use the large center card. The right-side
