@@ -684,3 +684,37 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
   /* Mobile shelf geometry stays as-is; only separate route buttons from the title. */
   .store.room-fantasy .room-exit-nav{top:24%!important;}
 }
+
+/* V2.23.0 — desktop Genre Room shelf = flat NEW ARRIVALS-style display.
+   No perspective row tilt and no horizontal shelf carousel on desktop. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf{
+    top:30%!important;left:50%!important;right:auto!important;bottom:auto!important;
+    width:min(330px,30vw)!important;height:auto!important;min-height:250px!important;max-height:48vh!important;
+    transform:translateX(-50%)!important;
+    padding:10px 12px 15px!important;
+    border-radius:18px!important;
+    background:linear-gradient(180deg,rgba(21,13,8,.76),rgba(10,7,5,.64))!important;
+    border:1px solid rgba(231,205,166,.34)!important;
+    box-shadow:0 18px 42px #0008!important;
+    backdrop-filter:blur(5px)!important;-webkit-backdrop-filter:blur(5px)!important;
+    overflow:hidden!important;
+  }
+  .store.room-fantasy .room-shelf-scroll{
+    position:relative!important;inset:auto!important;left:auto!important;right:auto!important;
+    max-height:calc(48vh - 28px)!important;padding:24px 4px 34px!important;
+    overflow-y:auto!important;overflow-x:hidden!important;touch-action:pan-y!important;
+  }
+  .store.room-fantasy #roomShelfGrid{width:100%!important;min-height:0!important;margin:0!important;display:block!important;}
+  .store.room-fantasy .room-shelf-face{position:relative!important;inset:auto!important;display:flex!important;flex-direction:column!important;gap:9px!important;transform:none!important;}
+  .store.room-fantasy .room-shelf-face:not(:first-child){display:none!important;}
+  .store.room-fantasy .room-shelf-row{height:auto!important;min-height:0!important;flex-basis:auto!important;padding:0!important;transform:none!important;opacity:1!important;}
+  .store.room-fantasy .room-shelf-books{height:auto!important;display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:8px!important;align-items:end!important;}
+  .store.room-fantasy .room-shelf-book{height:auto!important;aspect-ratio:2/3!important;filter:none!important;}
+  .store.room-fantasy .room-shelf-book .book-shell{position:absolute!important;inset:0!important;left:0!important;bottom:0!important;width:100%!important;height:100%!important;transform:none!important;filter:drop-shadow(0 6px 8px #0008)!important;}
+  .store.room-fantasy .room-shelf-book .book-face{position:absolute!important;inset:0!important;transform:none!important;border-radius:2px!important;}
+  .store.room-fantasy .room-shelf-book .book-face img{width:100%!important;height:100%!important;object-fit:cover!important;}
+  .store.room-fantasy .room-shelf-book .book-spine,.store.room-fantasy .room-shelf-book .book-pages,.store.room-fantasy .room-shelf-book .book-bottom,.store.room-fantasy .room-shelf-board{display:none!important;}
+  .store.room-fantasy .room-shelf-counter{top:8px!important;right:8px!important;transform:none!important;}
+  .store.room-fantasy .room-shelf-hint{bottom:7px!important;font-size:9px!important;}
+}

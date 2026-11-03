@@ -520,6 +520,10 @@ function renderRoomShelfFace(face,keepScroll=false){
 }
 function paintRoomShelfAtYaw(yaw){
   const grid=document.querySelector('#roomShelfGrid');if(!grid)return;
+  if(window.matchMedia('(min-width:681px)').matches){
+    grid.querySelectorAll('.room-shelf-face').forEach((layer,i)=>{layer.style.visibility=i===roomShelfFace?'visible':'hidden';layer.style.pointerEvents=i===roomShelfFace?'auto':'none';layer.style.opacity=i===roomShelfFace?'1':'0';layer.style.transform='none';layer.style.zIndex=i===roomShelfFace?'1':'0';});
+    return;
+  }
   const near=nearestShelfForYaw(yaw);
   const travelPx=Math.max(window.innerWidth,grid.clientWidth)*1.18;
   grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
@@ -629,6 +633,12 @@ async function toggleRoomMotion(){
 }
 function updateRoomShelfPerspective(){
   const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
+  // V2.23.0: desktop Genre Room is a flat display shelf, matching NEW ARRIVALS.
+  // The old upper-row tilt deformed covers and fought horizontal shelf rotation.
+  if(window.matchMedia('(min-width:681px)').matches){
+    scroller.querySelectorAll('.room-shelf-row').forEach(row=>{row.style.setProperty('--shelf-tilt','0deg');row.style.setProperty('--shelf-scale','1');row.style.setProperty('--shelf-z','0px');row.style.opacity='1';row.style.zIndex='1';});
+    return;
+  }
   const h=Math.max(1,scroller.clientHeight),scrollTop=scroller.scrollTop;
   scroller.querySelectorAll('.room-shelf-row').forEach(row=>{
     const cy=row.offsetTop-scrollTop+row.offsetHeight/2,rel=cy/h;
@@ -741,6 +751,10 @@ function showNewArrivalsFromHall(){
   document.querySelector('#roomBgLayer').style.display='none';document.querySelector('#roomExitNav').hidden=true;
   document.querySelector('#bookPath').hidden=true;document.querySelector('#roomShelf').hidden=true;document.querySelector('#motionStart').hidden=true;
   roomId='intro';viewMode='ring';roomShelfMode=false;books=allBooks.slice();introReady=true;
+  // V2.23.0: NEW ARRIVALS owns the shared ring sign. A previous MY BOOKS ring
+  // could leave its label behind because Hall itself hides this sign.
+  const sharedSign=document.querySelector('.sign');
+  if(sharedSign){sharedSign.querySelector('small').textContent='NEW ARRIVALS';sharedSign.querySelector('strong').textContent='新しく入った本';sharedSign.classList.remove('shelf-back-sign');}
   stage.hidden=false;stage.style.transform='';stage.style.opacity='';stage.classList.remove('room-shelf-ring','is-shelf-returning','is-intro-spinning');stage.classList.add('is-intro-ready');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
   document.querySelector('#ringMode')?.classList.add('is-active');document.querySelector('#pathMode')?.classList.remove('is-active');
@@ -1252,7 +1266,7 @@ roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;
   const currentYaw=roomCameraYaw+roomCameraPreview;roomCameraYaw=currentYaw;roomCameraPreview=0;rebaseRoomMotion();
   roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0,startYaw:currentYaw};
 },{capture:true,passive:true});
-roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;const samples=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():null,last=samples&&samples.length?samples[samples.length-1]:e;roomShelfTap.dx=last.clientX-roomShelfTap.x;roomShelfTap.dy=last.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>5)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){queueRoomShelfPreview(-roomShelfTap.dx*ROOM_SWIPE_DEG_PER_PX);}},{capture:true,passive:true});
+roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;if(window.matchMedia('(min-width:681px)').matches)return;const samples=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():null,last=samples&&samples.length?samples[samples.length-1]:e;roomShelfTap.dx=last.clientX-roomShelfTap.x;roomShelfTap.dy=last.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>5)roomShelfTap.moved=true;if(roomShelfTap.moved&&Math.abs(roomShelfTap.dx)>Math.abs(roomShelfTap.dy)*1.05){queueRoomShelfPreview(-roomShelfTap.dx*ROOM_SWIPE_DEG_PER_PX);}},{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
   if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;flushRoomShelfPreview();const tap=roomShelfTap;roomShelfTap=null;
   if(!roomShelfMode){roomCameraInputLock=false;rebaseRoomMotion();return;}
