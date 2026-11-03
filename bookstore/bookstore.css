@@ -536,3 +536,16 @@ body.book-path-active .book-path:not(.genre-approach) .path-zone-label.is-expand
   .focus-panel strong{font-size:17px!important}
 }
 
+
+
+/* V2.22.2 — contextual work HUD on Book Path / approach + iPhone detail spacing. */
+body.book-path-active .focus-panel{
+  display:block!important;z-index:16!important;
+  bottom:max(86px,calc(env(safe-area-inset-bottom) + 78px))!important;
+}
+body.book-path-active .focus-panel small{color:#e8b57d!important}
+@media(max-width:680px){
+  /* Keep the context/title safely below the cover on shorter iPhones (e.g. iPhone 12). */
+  .detail-card>.detail-copy{top:51%!important}
+  body.book-path-active .focus-panel{left:18px!important;right:18px!important;bottom:max(92px,calc(env(safe-area-inset-bottom) + 84px))!important}
+}

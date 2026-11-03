@@ -311,13 +311,13 @@ function detailTargetFromDrag(dx,dy){const horizontal=Math.abs(dx)>=Math.abs(dy)
 function canMoveShelf(delta){return shelfIndex+delta>=0&&shelfIndex+delta<shelves.length;}
 function ensureDetailPreview(delta,horizontal){if(!horizontal&&!canMoveShelf(delta))return null;const target=horizontal?books[norm(index+delta)]:books[index];if(detailPreview&&Number(detailPreview.dataset.delta)===delta&&detailPreview.dataset.axis===(horizontal?'x':'y'))return detailPreview;removeDetailPreview();detailPreview=document.createElement('article');detailPreview.className='detail-card detail-preview';detailPreview.dataset.delta=delta;detailPreview.dataset.axis=horizontal?'x':'y';detailPreview.innerHTML=detailCardMarkup(target);picked.appendChild(detailPreview);return detailPreview;}
 function applyDetailDrag(dx,dy){const card=document.querySelector('.detail-card:not(.detail-preview)');const t=detailTargetFromDrag(dx,dy),size=t.horizontal?Math.max(1,picked.clientWidth):Math.max(1,picked.clientHeight);if(!t.horizontal&&!canMoveShelf(t.delta)){// One shelf today: keep vertical axis alive with rubber-band feedback.
-  const rubber=t.amount*.18;card.style.transform=`translate3d(0,${rubber}px,0) scale(.995)`;card.style.opacity='1';document.querySelector('#axisHint').textContent='上下は棚を移動（ジャンル棚は準備中）';return;
+  const rubber=t.amount*.18;card.style.transform=`translate3d(0,${rubber}px,0) scale(.995)`;card.style.opacity='1';document.querySelector('#axisHint').textContent='左右：同じ棚の本';return;
  }
  const progress=Math.min(1,Math.abs(t.amount)/size),preview=ensureDetailPreview(t.delta,t.horizontal),start=t.amount<0?size:-size;if(!preview)return;
  if(t.horizontal){card.style.transform=`translate3d(${t.amount}px,0,0) scale(${1-progress*.025})`;preview.style.transform=`translate3d(${start+t.amount}px,0,0) scale(${.975+progress*.025})`;}else{card.style.transform=`translate3d(0,${t.amount}px,0) scale(${1-progress*.025})`;preview.style.transform=`translate3d(0,${start+t.amount}px,0) scale(${.975+progress*.025})`;}
  card.style.opacity=String(1-progress*.18);preview.style.opacity=String(.82+progress*.18);
 }
-function resetDetailDrag(animate=true){const card=document.querySelector('.detail-card:not(.detail-preview)');if(card){if(animate)card.classList.add('detail-settling');card.style.transform='';card.style.opacity='';setTimeout(()=>card.classList.remove('detail-settling'),260);}if(detailPreview){if(animate){detailPreview.classList.add('detail-settling');detailPreview.style.opacity='0';}setTimeout(removeDetailPreview,animate?250:0);}document.querySelector('#axisHint').textContent='左右：同じ棚の本　／　上下：棚を移動';}
+function resetDetailDrag(animate=true){const card=document.querySelector('.detail-card:not(.detail-preview)');if(card){if(animate)card.classList.add('detail-settling');card.style.transform='';card.style.opacity='';setTimeout(()=>card.classList.remove('detail-settling'),260);}if(detailPreview){if(animate){detailPreview.classList.add('detail-settling');detailPreview.style.opacity='0';}setTimeout(removeDetailPreview,animate?250:0);}document.querySelector('#axisHint').textContent='左右：同じ棚の本';}
 function commitDetailHorizontal(delta,dx,dy){const card=document.querySelector('.detail-card:not(.detail-preview)'),preview=detailPreview;if(!preview){resetDetailDrag();return;}const horizontal=Math.abs(dx)>=Math.abs(dy),size=horizontal?picked.clientWidth:picked.clientHeight,sign=(horizontal?dx:dy)<0?-1:1;card.classList.add('detail-settling');preview.classList.add('detail-settling');if(horizontal){card.style.transform=`translate3d(${sign*size}px,0,0) scale(.97)`;preview.style.transform='translate3d(0,0,0) scale(1)';}else{card.style.transform=`translate3d(0,${sign*size}px,0) scale(.97)`;preview.style.transform='translate3d(0,0,0) scale(1)';}card.style.opacity='0';preview.style.opacity='1';setTimeout(()=>{index=norm(index+delta);render();fillPicked(books[index]);card.style.transform='';card.style.opacity='';card.classList.remove('detail-settling');removeDetailPreview();},245);}
 function closePick(){
   picked.hidden=true;currentPicked=null;detailDrag=null;removeDetailPreview();
@@ -856,7 +856,7 @@ function showCentralHall(fromIntro=false){
     }else fadeRouteLayers(routeFade);
   }
 }
-function enterBookPathFromHall(){if(!dataReady)return;document.querySelector('#bookPath')?.classList.remove('genre-approach');const routeFade=startRouteCrossfade('hall','outerpath');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
+function enterBookPathFromHall(){if(!dataReady)return;document.querySelector('#bookPath')?.classList.remove('genre-approach');const routeFade=startRouteCrossfade('hall','outerpath');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
 function returnToPathFromRoom(){
   // V2.19.8: the room's "本の道" exit means the OUTER circular Book Path,
   // not the private straight approach used to enter the room.
@@ -966,6 +966,20 @@ function setViewMode(mode){
     renderPath();
   }else render();
 }
+function updatePathFocusPanel(){
+  if(!books.length)return;
+  let i;
+  if(roomId==='forest')i=Math.max(0,Math.min(books.length-1,Math.round(pathProgress)));
+  else i=((Math.round(pathProgress)%books.length)+books.length)%books.length;
+  index=i;
+  const w=books[i],a=w.author||{};
+  const shelf=document.querySelector('#focusShelf'),title=document.querySelector('#focusTitle'),metaEl=document.querySelector('#focusMeta'),author=document.querySelector('#focusAuthor');
+  const zone=roomId==='path'?currentPathZone():null;
+  if(shelf)shelf.textContent=roomId==='forest'?'FANTASY APPROACH':(zone?.label||'BOOK PATH');
+  if(title)title.textContent=w.title||'Untitled';
+  if(metaEl){const meta=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ');metaEl.textContent=meta;metaEl.hidden=!meta;}
+  if(author)author.textContent=a.displayName||'作者';
+}
 function renderPath(){
   const root=document.querySelector('#pathBooks');if(!root)return;root.innerHTML='';
   if(!dataReady||!books.length){document.querySelector('#fantasyGate').hidden=true;return;}
@@ -1022,6 +1036,8 @@ function renderPath(){
     document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退 ／ ジャンル区画では横＝売場へ';
     updatePathZone();
   }
+  updatePathFocusPanel();
+  const fp=document.querySelector('#focusPanel');if(fp)fp.hidden=false;
 }
 function clampPath(v){
   if(roomId==='forest')return Math.max(0,Math.min(pathEnd(),v));
