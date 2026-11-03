@@ -521,12 +521,9 @@ const phoneShelfScrollPositions=new Map();
 function syncPhoneShelfOffsets(){
   const scroller=document.querySelector('#roomShelfScroll');
   if(!scroller||!window.matchMedia('(max-width:680px)').matches)return;
-  const current=scroller.scrollTop;
-  phoneShelfScrollPositions.set(roomShelfFace,current);
-  scroller.querySelectorAll('.room-shelf-face').forEach(layer=>{
-    const face=Number(layer.dataset.face)||0;
-    layer.style.top=`${current-(phoneShelfScrollPositions.get(face)||0)}px`;
-  });
+  // The scroll container owns vertical movement. Moving the absolutely positioned
+  // faces as well doubles the scroll distance and sends the whole shelf away.
+  phoneShelfScrollPositions.set(roomShelfFace,scroller.scrollTop);
 }
 function layoutPhoneShelfViewport(){
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll');
@@ -736,7 +733,7 @@ function updateRoomShelfPerspective(){
   const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
   if(window.matchMedia('(max-width:680px)').matches){
     scroller.querySelectorAll('.room-shelf-face').forEach(layer=>{
-      const scroll=phoneShelfScrollPositions.get(Number(layer.dataset.face)||0)||0;
+      const scroll=Number(layer.dataset.face)===roomShelfFace?scroller.scrollTop:(phoneShelfScrollPositions.get(Number(layer.dataset.face)||0)||0);
       layer.querySelectorAll('.room-shelf-row').forEach(row=>{
         // Start face-on; tilt only as the row crosses the upper viewing edge.
         const top=Math.max(0,Math.min(1,(scroll-row.offsetTop-(Number(scroller.dataset.phoneStartGap)||0))/Math.max(1,row.offsetHeight)));
