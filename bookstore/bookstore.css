@@ -1023,3 +1023,17 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
     transform:none!important;
   }
 }
+
+/* V2.23.9 — Genre Room: preserve artwork proportions inside the 2:3 book face.
+   V2.23.8 used object-fit:fill, which stretched landscape artwork vertically.
+   Keep the compact 2:3 cover slot, remove letterboxing, and crop only the excess
+   edges exactly like a normal cover thumbnail. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf-book .book-face img{
+    width:100%!important;
+    height:100%!important;
+    object-fit:cover!important;
+    object-position:center center!important;
+    transform:none!important;
+  }
+}
