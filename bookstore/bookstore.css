@@ -1085,3 +1085,11 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
   }
   .store.room-fantasy .room-shelf-row::before,.store.room-fantasy .room-shelf-board{display:none!important;}
 }
+
+/* V2.24.2 — all four fixed Genre Room faces must be mountable on desktop.
+   V2.23.0 hid every face except the first with :not(:first-child), which made
+   90/180/270 degree views empty even though their book data existed. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf-face:not(:first-child){display:flex!important;}
+  .store.room-fantasy .room-shelf-face[style*="visibility: hidden"]{display:flex!important;}
+}

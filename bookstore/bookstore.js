@@ -1323,6 +1323,23 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
 },{capture:true,passive:false});
 roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
+// V2.24.2 — desktop mouse wheel rotates the fixed four-face Genre Room.
+// One deliberate wheel gesture advances exactly one 90° shelf face; a short
+// lock prevents trackpads / high-resolution wheels from skipping multiple faces.
+let roomShelfWheelLock=false;
+roomShelfScroller?.addEventListener('wheel',e=>{
+  if(!roomShelfMode||roomId!=='fantasy'||!window.matchMedia('(min-width:681px)').matches)return;
+  const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
+  if(Math.abs(delta)<4)return;
+  e.preventDefault();
+  if(roomShelfWheelLock)return;
+  roomShelfWheelLock=true;
+  const faces=roomShelfFaces();
+  roomShelfFace=((roomShelfFace+(delta>0?1:-1))%faces.length+faces.length)%faces.length;
+  roomCameraYaw=roomShelfFace*ROOM_VIEW_SLOT_DEG;roomCameraPreview=0;
+  renderRoomShelfFace(roomShelfFace,true);rebaseRoomMotion();applyRoomCamera(0,true);
+  setTimeout(()=>{roomShelfWheelLock=false;},260);
+},{passive:false});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});const pathMotionButton=document.querySelector('#motionStart');
 // R3: iPhone Safari can cancel the synthetic click while live DeviceMotion keeps the
