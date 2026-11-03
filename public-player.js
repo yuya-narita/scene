@@ -106,6 +106,12 @@
       const isSameSiteAuthor=url.origin===location.origin&&/\/author$/.test(path);
       const isProductionBookshelf=url.hostname==='yuya-narita.github.io'&&path==='/scene/bookshelf';
       const isSameSiteBookshelf=url.origin===location.origin&&/\/bookshelf$/.test(path);
+      const isProductionBookstore=url.hostname==='yuya-narita.github.io'&&path==='/scene/bookstore';
+      const isSameSiteBookstore=url.origin===location.origin&&/\/bookstore$/.test(path);
+      if(isProductionBookstore||isSameSiteBookstore){
+        url.hash='';
+        return {url:url.toString(),label:'← あ箱書店へ'};
+      }
       if(isProductionBookshelf||isSameSiteBookshelf){
         url.hash='';
         return {url:url.toString(),label:'← あ箱の本へ'};
