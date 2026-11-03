@@ -75,3 +75,9 @@ body.book-detail-open .store-side-nav{visibility:hidden}
 .store-auth-buttons{display:flex;gap:8px;flex-wrap:wrap}.store-auth-buttons button{flex:1;white-space:nowrap}
 #storeAuthCode{letter-spacing:.24em;font-size:20px!important}
 .store-account-dialog{width:365px}
+/* Reader navigation and announcements. */
+.store-nav-item{position:relative}.store-side-nav .store-nav-item>span:not(.store-notice-dot){font-size:9px;white-space:nowrap}
+.store-notice-dot{position:absolute;top:10px;right:11px;width:6px;height:6px;border-radius:50%;background:#e5ab6d;box-shadow:0 0 9px #e5ab6d77}.store-notice-dot[hidden]{display:none}.store-menu-nav .store-notice-dot{top:21px;right:16px}
+.store-notice-read-all{display:block;margin:0 0 14px auto;border:1px solid #ffffff26;border-radius:8px;padding:8px 11px;background:#ffffff06;color:#cdbfae;font-size:11px;cursor:pointer}
+.store-notice-item{border-top:1px solid #e0c9aa22;padding:5px 0}.store-notice-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;width:100%;text-align:left;padding:14px 0;background:none;border:0;color:#e7dbcc;cursor:pointer}.store-notice-title small{width:100%;color:#aa967b;font-size:10px;letter-spacing:.06em}.store-notice-title strong{flex:1;font-size:14px;font-weight:500;line-height:1.6}.store-notice-new{font-size:8px;letter-spacing:.1em;color:#efc18b}.store-notice-body{padding:0 0 18px;color:#c2b5a3;font-size:12px;line-height:1.9}.store-notice-body p{white-space:pre-wrap;margin-top:0}.store-notice-body a{display:inline-block;color:#bddbfa;text-underline-offset:4px}
+#storeAuthProfileForm{padding:12px 0}.store-auth #storeAuthProfileForm>button{align-self:flex-start;padding:9px 14px}

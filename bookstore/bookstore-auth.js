@@ -9,7 +9,7 @@
  const guestIcon=avatars[0].innerHTML;
  profile.insertAdjacentHTML('afterend',`<div class="store-auth" id="storeAuth">
  <p id="storeAuthStatus" class="store-auth-status" role="status" aria-live="polite"></p>
- <div id="storeAuthMember" hidden><p class="store-auth-note">本棚・Studioと共通のあ箱アカウントです。</p><div class="store-auth-buttons"><button type="button" id="storeAuthRefresh">ログイン状態を確認</button><button type="button" id="storeAuthLogout">ログアウト</button></div></div>
+ <div id="storeAuthMember" hidden><p class="store-auth-note">本棚・Studioと共通のあ箱アカウントです。</p><form id="storeAuthProfileForm"><label>表示名<input id="storeAuthProfileName" maxlength="80" autocomplete="nickname" required></label><button type="submit" class="store-auth-primary">表示名を保存</button></form><p class="store-auth-note">本棚・Studioでもこの名前を使います。画像アイコンとメールアドレスの変更は、現在準備中です。</p><div class="store-auth-buttons"><button type="button" id="storeAuthRefresh">ログイン状態を確認</button><button type="button" id="storeAuthLogout">ログアウト</button></div></div>
  <div id="storeAuthGuest" hidden><p class="store-auth-note">本棚・Studioで使っているメールアドレスでログインできます。</p>
  <form id="storeAuthEmailForm"><label>メールアドレス<input id="storeAuthEmail" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com"></label><label>表示名 <span>初めて登録する方</span><input id="storeAuthName" autocomplete="nickname" maxlength="80" placeholder="本棚・Studioで使う名前"></label><button class="store-auth-primary" type="submit">認証コードを送る</button><p class="store-auth-note">初回は共通アカウントを登録します。<a href="../terms/" target="_blank" rel="noopener">利用規約</a>・<a href="../privacy/" target="_blank" rel="noopener">プライバシーポリシー</a></p></form>
  <form id="storeAuthCodeForm" hidden><p class="store-auth-note" id="storeAuthEmailHint"></p><label>6桁の認証コード<input id="storeAuthCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="000000"></label><label id="storeAuthNewNameLabel" hidden>初回登録の表示名<input id="storeAuthNewName" maxlength="80" autocomplete="nickname"></label><button class="store-auth-primary" type="submit">ログインする</button><div class="store-auth-buttons"><button id="storeAuthResend" type="button">コードを再送</button><button id="storeAuthChangeEmail" type="button">メールを変更</button></div></form>
@@ -29,9 +29,12 @@
    profileState.textContent=state==='checking'?'ログイン状態を確認中…':state==='verified'?'ログイン中':state==='offline'?'ログイン状態を確認できません':'ログインしていません';
    $('storeAuthMember').hidden=!token;$('storeAuthGuest').hidden=!!token||state==='checking';
    $('storeAuthEmailForm').hidden=!!pending;$('storeAuthCodeForm').hidden=!pending;
+   if(!busy&&document.activeElement!==$('storeAuthProfileName'))$('storeAuthProfileName').value=author?.displayName||'';
    if(pending)$('storeAuthEmailHint').textContent=`${pending.email} に届いたコードを入力してください。`;
    root.querySelectorAll('.store-auth button').forEach(b=>{b.disabled=busy||state==='checking';});
    root.querySelectorAll('.store-auth input').forEach(i=>{i.disabled=busy;});
+   $('storeAuthProfileName').disabled=busy||state!=='verified';
+   $('storeAuthProfileForm').querySelector('button').disabled=busy||state!=='verified';
  }
  async function request(path,{method='GET',body,authToken}={}){
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
@@ -89,6 +92,24 @@
      status(e.code==='DISPLAY_NAME_REQUIRED'?'初めての登録です。表示名を入力して、もう一度ログインを押してください。':e.message,true);
    }finally{busy=false;paint();}
  }
+ async function saveProfile(){
+   if(busy||state!=='verified'||!token)return;
+   const displayName=$('storeAuthProfileName').value.trim();if(!displayName){status('表示名を入力してください。',true);return;}
+   const id=++revision,oldToken=token;busy=true;status('表示名を保存しています…');paint();
+   try{
+     // /profile also updates bookshelfLead. Read the latest profile first and
+     // carry its existing author-shelf values through a name-only edit.
+     const latest=await request('/author-auth/me',{authToken:oldToken});
+     if(id!==revision||currentToken()!==oldToken)return;
+     if(!latest.author?.authorId)throw new Error('現在のプロフィールを確認できませんでした。');
+     const data=await request('/author-auth/profile',{method:'POST',authToken:oldToken,body:{displayName,bookshelfLead:latest.author?.bookshelfLead||'',slug:latest.author?.slug||''}});
+     if(id!==revision||currentToken()!==oldToken)return;
+     if(!data.author?.authorId)throw new Error('プロフィールを確認できませんでした。');
+     author=data.author;saveSession({token,author});$('storeAuthProfileName').value=author.displayName||'';status('表示名を保存しました。');
+   }catch(e){status(e.message,true);}
+   finally{busy=false;paint();}
+ }
+ $('storeAuthProfileForm').addEventListener('submit',e=>{e.preventDefault();saveProfile();});
  async function logout(){
    if(busy)return;
    const oldToken=token,id=++revision;busy=true;status('ログアウトしています…');paint();
