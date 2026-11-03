@@ -554,6 +554,7 @@ function renderRoomShelf(){
   if(!wrap||!grid)return;
   wrap.classList.toggle('phone-original',window.matchMedia('(max-width:680px)').matches);
   roomShelfMode=true;roomShelfAllBooks=fantasyBooks();
+  if(window.matchMedia('(max-width:680px)').matches&&roomMotionOn){roomMotionOn=false;window.removeEventListener('deviceorientation',onRoomOrientation);roomMotionBaseAlpha=roomMotionLastAlpha=roomMotionLatestAlpha=null;}
   // Defensive lifecycle guard: a room shelf must never inherit the path-only overlay.
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   const faces=roomShelfFaces();roomShelfFace=((roomShelfFace%faces.length)+faces.length)%faces.length;
@@ -610,19 +611,17 @@ function paintRoomShelfAtYaw(yaw){
   // Do not hard-swap faces: neighbouring physical shelves travel through the
   // viewport continuously while the finger turns the shared Room camera.
   if(window.matchMedia('(max-width:680px)').matches){
-    const travelPx=Math.max(window.innerWidth,grid.clientWidth)*1.18;
+    // iPhone genre room is a stationary shelf: only the selected wall is painted.
+    // Horizontal navigation changes walls discretely; it never translates the room.
     grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
-      const face=Number(layer.dataset.face)||0,delta=wrapDeg(shelfWorldAngle(face)-yaw),dist=Math.abs(delta);
-      const travel=Math.min(1.30,dist/ROOM_VIEW_SLOT_DEG),side=Math.sign(delta)||1;
-      const xPx=side*travel*travelPx;
-      const visible=dist<112;
-      layer.style.visibility=visible?'visible':'hidden';
-      layer.style.pointerEvents=dist<18?'auto':'none';
-      layer.style.opacity=visible?'1':'0';
-      layer.style.setProperty('transform',`translate3d(${xPx}px,0,0)`,'important');
-      layer.style.zIndex=String(100-Math.round(dist));
+      const active=Number(layer.dataset.face)===roomShelfFace;
+      layer.style.visibility=active?'visible':'hidden';
+      layer.style.pointerEvents=active?'auto':'none';
+      layer.style.opacity='1';
+      layer.style.setProperty('transform','none','important');
+      layer.style.zIndex=active?'2':'0';
     });
-    if(roomVisibleFace!==near.face&&near.dist<8)renderRoomShelfFace(near.face,true);
+    roomVisibleFace=roomShelfFace;
     return;
   }
   // Desktop keeps the current framed-page implementation.
@@ -677,7 +676,7 @@ function applyRoomCamera(previewDeg=0,instant=false){
       bg.style.transform='translate3d(0,0,0)';
     }else{
       const phase=wrapDeg(yaw)/360;
-      bg.style.transform=`translate3d(${-phase*panoW}px,0,0)`;
+      bg.style.transform='translate3d(0,0,0)';
     }
   }
   // Shelf-only visual smoothing. `instant` means input is current, not that the shelf should bypass smoothing.
@@ -742,16 +741,11 @@ async function toggleRoomMotion(){
 function updateRoomShelfPerspective(){
   const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
   if(window.matchMedia('(max-width:680px)').matches){
-    scroller.querySelectorAll('.room-shelf-face').forEach(layer=>{
-      const scroll=Number(layer.dataset.face)===roomShelfFace?scroller.scrollTop:(phoneShelfScrollPositions.get(Number(layer.dataset.face)||0)||0);
-      layer.querySelectorAll('.room-shelf-row').forEach(row=>{
-        // Start face-on; tilt only as the row crosses the upper viewing edge.
-        const top=Math.max(0,Math.min(1,(scroll-row.offsetTop-(Number(scroller.dataset.phoneStartGap)||0))/Math.max(1,row.offsetHeight)));
-        row.style.setProperty('--shelf-tilt',`${(top*58).toFixed(1)}deg`);
-        row.style.setProperty('--shelf-scale',(1-top*.16).toFixed(3));
-        row.style.setProperty('--shelf-z',`${(-top*120).toFixed(0)}px`);
-        row.style.opacity=String(1-top*.20);row.style.zIndex=String(100-Math.round(top*20));
-      });
+    scroller.querySelectorAll('.room-shelf-row').forEach(row=>{
+      row.style.setProperty('--shelf-tilt','0deg');
+      row.style.setProperty('--shelf-scale','1');
+      row.style.setProperty('--shelf-z','0px');
+      row.style.transform='none';row.style.opacity='1';row.style.zIndex='1';
     });
     return;
   }
@@ -1381,10 +1375,11 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
   if(tap.moved){
     if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>18){
       e.preventDefault();e.stopPropagation();const dir=tap.dx<0?1:-1;
-      // Commit the exact dragged view first, then animate from there to the next 90° slot.
-      const draggedYaw=tap.startYaw-tap.dx*ROOM_SWIPE_DEG_PER_PX;
-      roomCameraYaw=draggedYaw;roomCameraPreview=0;applyRoomCamera(0,true);
-      const target=nearestRoomViewSlot(tap.startYaw)+dir*ROOM_VIEW_SLOT_DEG;animateRoomYaw(draggedYaw,target,280);
+      const faces=roomShelfFaces();
+      const next=((roomShelfFace+dir)%faces.length+faces.length)%faces.length;
+      roomCameraYaw=next*ROOM_VIEW_SLOT_DEG;roomCameraPreview=0;
+      renderRoomShelfFace(next,true);paintRoomShelfAtYaw(roomCameraYaw);
+      roomCameraInputLock=false;rebaseRoomMotion();
     }else{
       roomCameraYaw=tap.startYaw;roomCameraPreview=0;applyRoomCamera(0,false);rebaseRoomMotion();roomCameraInputLock=false;
     }
