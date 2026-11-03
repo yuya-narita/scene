@@ -839,6 +839,11 @@ async function openShelfRow(start,focusOffset=0){
   // Thumbnail -> whole Room book ring. The tapped thumbnail is still the front book.
   const selected=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();if(!selected.length)return;
   const tappedIndex=Math.max(0,Math.min(selected.length-1,(Number(start)||0)+(Number(focusOffset)||0)));
+  // PC opens the existing detail overlay over the unchanged shelf.
+  if(window.matchMedia('(min-width:681px)').matches){
+    books=selected;index=tappedIndex;dragUnits=0;
+    pick(selected[tappedIndex]);return;
+  }
   roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=selected;index=tappedIndex;dragUnits=0;stage.hidden=false;
   stage.classList.add('room-shelf-ring');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
