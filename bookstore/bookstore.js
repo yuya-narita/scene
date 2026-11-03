@@ -1336,6 +1336,23 @@ window.addEventListener('keydown',e=>{
   // Detail owns left/right browsing; vertical keys intentionally do nothing there.
   if(!picked.hidden){if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();commitDetailHorizontal(e.key==='ArrowRight'?1:-1,e.key==='ArrowRight'?-picked.clientWidth:picked.clientWidth,0);}return;}
   if(viewMode==='hall'&&roomId==='hall'){e.preventDefault();if(e.key==='ArrowLeft')keyboardHallStep(-1);else if(e.key==='ArrowRight')keyboardHallStep(1);else keyboardHallVertical(e.key==='ArrowUp'?-1:1);return;}
+  // V2.23.1: the Genre Room shelf also uses viewMode='ring', so it must own
+  // keyboard input BEFORE the generic ring handler. Previously Arrow keys were
+  // sent to the hidden cover ring behind the shelf and appeared to do nothing.
+  if(roomId==='fantasy'&&roomShelfMode){
+    e.preventDefault();
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+      const faces=roomShelfFaces();
+      if(faces.length>1){
+        roomShelfFace=((roomShelfFace+(e.key==='ArrowRight'?1:-1))%faces.length+faces.length)%faces.length;
+        roomCameraYaw=roomShelfFace*ROOM_VIEW_SLOT_DEG;roomCameraPreview=0;
+        renderRoomShelfFace(roomShelfFace,true);rebaseRoomMotion();applyRoomCamera(0,true);
+      }
+    }else if(roomShelfScroller){
+      roomShelfScroller.scrollBy({top:e.key==='ArrowDown'?Math.max(180,innerHeight*.45):-Math.max(180,innerHeight*.45),behavior:'smooth'});
+    }
+    return;
+  }
   if(viewMode==='ring'){
     e.preventDefault();
     if(e.key==='ArrowLeft')move(-1);else if(e.key==='ArrowRight')move(1);
@@ -1347,11 +1364,6 @@ window.addEventListener('keydown',e=>{
     if(e.key==='ArrowUp')pathProgress+=.72;else if(e.key==='ArrowDown')pathProgress-=.72;else if(e.key==='ArrowLeft')pathYaw-=18;else if(e.key==='ArrowRight')pathYaw+=18;
     if(roomId==='forest')pathProgress=Math.max(0,Math.min(Math.max(0,Math.min(FOREST_APPROACH_BOOKS,books.length)-1),pathProgress));
     renderPath();return;
-  }
-  if(roomId==='fantasy'&&roomShelfMode){
-    e.preventDefault();
-    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){roomCameraYaw+=e.key==='ArrowRight'?90:-90;roomCameraPreview=0;rebaseRoomMotion();applyRoomCamera(0,true);}
-    else if(roomShelfScroller)roomShelfScroller.scrollBy({top:e.key==='ArrowDown'?Math.max(180,innerHeight*.45):-Math.max(180,innerHeight*.45),behavior:'smooth'});
   }
 });
 document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#hallFantasy')?.addEventListener('click',enterFantasyRoom);document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);

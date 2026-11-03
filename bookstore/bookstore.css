@@ -718,3 +718,38 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
   .store.room-fantasy .room-shelf-counter{top:8px!important;right:8px!important;transform:none!important;}
   .store.room-fantasy .room-shelf-hint{bottom:7px!important;font-size:9px!important;}
 }
+
+/* V2.23.1 — desktop Genre Room shelf: adaptive NEW ARRIVALS-sized covers.
+   A one-book genre must not look like one tiny cell in an empty 4-column grid. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf{
+    width:min(520px,42vw)!important;
+    min-height:300px!important;
+    max-height:52vh!important;
+  }
+  .store.room-fantasy .room-shelf-scroll{
+    max-height:calc(52vh - 28px)!important;
+    padding:38px 28px 42px!important;
+  }
+  .store.room-fantasy .room-shelf-books{
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:14px!important;
+    justify-items:center!important;
+  }
+  /* One incomplete row: center its books and give them the same visual weight
+     as the Hall's NEW ARRIVALS covers instead of stretching or miniaturising. */
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-books{
+    display:flex!important;
+    justify-content:center!important;
+    align-items:center!important;
+    flex-wrap:wrap!important;
+    gap:18px!important;
+    min-height:210px!important;
+  }
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-book{
+    flex:0 0 clamp(104px,9vw,142px)!important;
+    width:clamp(104px,9vw,142px)!important;
+    height:auto!important;
+    aspect-ratio:2/3!important;
+  }
+}
