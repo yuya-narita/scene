@@ -753,3 +753,21 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
     aspect-ratio:2/3!important;
   }
 }
+
+/* V2.23.2 — desktop Genre Room: never crop the actual cover artwork.
+   Keep the larger shelf slot from V2.23.1, but fit the complete cover inside it. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf-book .book-face{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    overflow:visible!important;
+    background:transparent!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-face img{
+    width:100%!important;
+    height:100%!important;
+    object-fit:contain!important;
+    object-position:center center!important;
+  }
+}
