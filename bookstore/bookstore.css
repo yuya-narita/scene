@@ -2602,3 +2602,12 @@ nn/* V2.19.5 — static branch sign + approach gate visibility fix.\n   hidden m
    The destination card must remain absent until the final approach. */
 .book-path.genre-approach .route-gate[hidden]:where(#roomShelf.phone-original, #roomShelf.phone-original *){display:none!important;}
 .book-path.genre-approach .route-gate:not([hidden]):where(#roomShelf.phone-original, #roomShelf.phone-original *){display:block!important;}
+
+/* V2.27.5 — damp iPhone shelf end bounce */
+@media(max-width:680px){
+  #roomShelf.phone-original #roomShelfScroll{
+    overscroll-behavior-y:none!important;
+    -webkit-overflow-scrolling:auto!important;
+    scroll-behavior:smooth;
+  }
+}
