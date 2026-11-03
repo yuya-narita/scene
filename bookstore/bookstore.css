@@ -853,3 +853,42 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
     padding-bottom:34px!important;
   }
 }
+
+/* V2.23.5 — Genre Room: no letterbox bars.
+   Desktop shelf cards follow the artwork's real ratio. This keeps the complete
+   thumbnail visible without cropping, stretching, or black bands. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-book,
+  .store.room-fantasy .room-shelf-book{
+    flex:0 0 auto!important;
+    width:auto!important;
+    height:auto!important;
+    aspect-ratio:auto!important;
+    overflow:visible!important;
+    background:transparent!important;
+    border-radius:0!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-shell,
+  .store.room-fantasy .room-shelf-book .book-face{
+    position:relative!important;
+    inset:auto!important;
+    width:auto!important;
+    height:auto!important;
+    aspect-ratio:auto!important;
+    overflow:visible!important;
+    background:transparent!important;
+    border-radius:3px!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-face img{
+    position:relative!important;
+    inset:auto!important;
+    width:auto!important;
+    height:auto!important;
+    max-width:112px!important;
+    max-height:168px!important;
+    object-fit:contain!important;
+    display:block!important;
+    margin:auto!important;
+    border-radius:3px!important;
+  }
+}
