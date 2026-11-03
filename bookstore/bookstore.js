@@ -506,12 +506,9 @@ function buildRoomShelfFaceLayer(face,f){
     const row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(globalStart);
     row.setAttribute('aria-label',`${Math.floor(local/cols)+1}段目の本を見る`);
     const mobileShelf=window.matchMedia('(max-width:680px)').matches;
-    // V2.26.4: mobile uses the actual legacy Room-shelf book DOM again.
-    // Do not invent a separate phone cover renderer: the original shelf paired
-    // bookMarkup(w) and the wooden board inside every row. Desktop keeps the
-    // newer information card layout.
+    // Original phone shelf markup; retain v2267 desktop cards and book indices.
     row.innerHTML=mobileShelf
-      ? `<span class="legacy-shelf-books">${slice.map((w,offset)=>`<span class="legacy-shelf-card" data-book-offset="${offset}" data-book-index="${indexSlice[offset]??globalStart+offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${w.coverUrl?`<img class="legacy-shelf-cover" src="${esc(w.coverUrl)}" alt="" decoding="async">`:`<span class="legacy-shelf-fallback">あ□</span>`}</span>`).join('')}</span><span class="legacy-shelf-board" aria-hidden="true"></span>`
+      ? `<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" data-book-index="${indexSlice[offset]??globalStart+offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}</span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`
       : `<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" data-book-index="${indexSlice[offset]??globalStart+offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}<span class="room-book-info"><strong>${esc(w.title||'無題')}</strong><small class="room-book-episode">${esc([w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ')||'')}</small><small class="room-book-author">${esc(w.author?.displayName||w.authorName||w.byline||'')}</small></span></span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
     row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book, .legacy-shelf-card');if(!hit)return;openShelfRow(Number(hit.dataset.bookIndex)||0,0)});
     row.addEventListener('keydown',e=>{const hit=e.target.closest('.room-shelf-book, .legacy-shelf-card');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openShelfRow(Number(hit.dataset.bookIndex)||0,0)}});
@@ -523,6 +520,7 @@ function renderRoomShelf(){
   roomShelfVisualYaw=null;roomShelfVisualTargetYaw=roomCameraYaw+roomCameraPreview;roomShelfVisualLastTs=0;if(roomShelfVisualRaf){cancelAnimationFrame(roomShelfVisualRaf);roomShelfVisualRaf=0;}
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll'),grid=document.querySelector('#roomShelfGrid');
   if(!wrap||!grid)return;
+  wrap.classList.toggle('phone-original',window.matchMedia('(max-width:680px)').matches);
   roomShelfMode=true;roomShelfAllBooks=fantasyBooks();
   // Defensive lifecycle guard: a room shelf must never inherit the path-only overlay.
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
@@ -701,6 +699,20 @@ async function toggleRoomMotion(){
 }
 function updateRoomShelfPerspective(){
   const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
+  if(window.matchMedia('(max-width:680px)').matches){
+  const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
+  const h=Math.max(1,scroller.clientHeight),scrollTop=scroller.scrollTop;
+  scroller.querySelectorAll('.room-shelf-row').forEach(row=>{
+    const cy=row.offsetTop-scrollTop+row.offsetHeight/2,rel=cy/h;
+    const top=Math.max(0,Math.min(1,(.42-rel)/.42));
+    const bottom=Math.max(0,Math.min(1,(rel-.78)/.22));
+    // V2.16.15R1: keep the tall-shelf perspective, but do not make the upper row look disabled.
+    const tilt=top*58-bottom*8,scale=1-top*.16-bottom*.05,z=-top*120;
+    row.style.setProperty('--shelf-tilt',`${tilt.toFixed(1)}deg`);row.style.setProperty('--shelf-scale',scale.toFixed(3));row.style.setProperty('--shelf-z',`${z.toFixed(0)}px`);row.style.opacity=String(Math.max(.76,1-top*.20-bottom*.16));
+    row.style.zIndex=String(100-Math.round(top*20+bottom*5));
+  });
+    return;
+  }
   // V2.24.9: all Genre Room shelf pages stay flat on desktop and iPhone.
   scroller.querySelectorAll('.room-shelf-row').forEach(row=>{row.style.setProperty('--shelf-tilt','0deg');row.style.setProperty('--shelf-scale','1');row.style.setProperty('--shelf-z','0px');row.style.opacity='1';row.style.zIndex='1';});
 }
