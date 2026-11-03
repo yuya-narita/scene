@@ -1037,3 +1037,51 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
     transform:none!important;
   }
 }
+
+/* V2.24.1 — fixed four-face Genre Room shelf.
+   A face is a real 4 x 3 bookshelf, not a tiled wallpaper. Keep every cover as
+   its own 2:3 card with breathing room; extra 48-book tiers extend downward. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf-scroll{
+    left:0!important;right:0!important;
+    padding:34px 34px 46px!important;
+    overflow-x:hidden!important;overflow-y:auto!important;
+  }
+  .store.room-fantasy #roomShelfGrid{
+    width:100%!important;max-width:720px!important;margin:0 auto!important;
+    min-height:0!important;display:block!important;
+  }
+  .store.room-fantasy .room-shelf-face{
+    position:relative!important;inset:auto!important;
+    display:flex!important;flex-direction:column!important;gap:16px!important;
+    width:100%!important;min-height:0!important;transform:none!important;
+  }
+  .store.room-fantasy .room-shelf-face[style*="visibility: hidden"]{position:absolute!important;inset:0!important;}
+  .store.room-fantasy .room-shelf-row{
+    display:block!important;width:100%!important;height:auto!important;min-height:0!important;
+    flex:0 0 auto!important;padding:0!important;margin:0!important;
+    overflow:visible!important;transform:none!important;opacity:1!important;
+  }
+  .store.room-fantasy .room-shelf-books{
+    display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:18px!important;align-items:end!important;width:100%!important;height:auto!important;
+  }
+  .store.room-fantasy .room-shelf-book,
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-book{
+    position:relative!important;display:block!important;width:100%!important;max-width:112px!important;
+    height:auto!important;aspect-ratio:2/3!important;justify-self:center!important;
+    overflow:hidden!important;background:transparent!important;border-radius:3px!important;
+    filter:drop-shadow(0 6px 8px rgba(0,0,0,.55))!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-shell,
+  .store.room-fantasy .room-shelf-book .book-face{
+    position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+    aspect-ratio:2/3!important;overflow:hidden!important;background:transparent!important;
+    border-radius:3px!important;transform:none!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-face img{
+    position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+    object-fit:cover!important;object-position:center center!important;transform:none!important;
+  }
+  .store.room-fantasy .room-shelf-row::before,.store.room-fantasy .room-shelf-board{display:none!important;}
+}
