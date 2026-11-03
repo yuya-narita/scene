@@ -35,7 +35,8 @@
    const query=document.querySelector('#storeSearchInput').value;
    searchBooks=allBooks.filter(w=>matchesBook(w,query));
    const results=document.querySelector('#storeSearchResults');results.replaceChildren();
-   document.querySelector('#storeSearchCount').textContent=`${searchBooks.length}冊`;
+   document.querySelector('#storeSearchCount').textContent=`${searchBooks.length}冊${catalogue.hasMore?'（読み込み済みの作品から検索）':''}`;
+   const more=catalogueMoreButton();results.append(more);paintCatalogueControls();
    if(!searchBooks.length){const p=document.createElement('p');p.className='store-empty-message';p.textContent=dataReady?'見つかりませんでした。別の言葉で探してみてください。':'本を読み込んでいます。少し待ってから検索してください。';results.append(p);return;}
    searchBooks.forEach((w,i)=>{
      const b=document.createElement('button');b.type='button';b.className='store-search-book';b.dataset.result=String(i);
@@ -60,6 +61,7 @@
  document.querySelector('#storeSearchInput').addEventListener('input',renderSearch);
  document.querySelector('#storeSearchForm').addEventListener('submit',e=>{e.preventDefault();renderSearch();});
  document.querySelector('#storeSearchResults').addEventListener('click',e=>{const b=e.target.closest('[data-result]');if(b)selectResult(Number(b.dataset.result));});
+ window.addEventListener('bookstore-catalogue-updated',()=>{if(document.querySelector('#storeSearchDialog').open)renderSearch();});
  function openSearch(){openDialog('#storeSearchDialog');renderSearch();document.querySelector('#storeSearchInput').focus();}
  function setActive(action){document.querySelectorAll('.store-nav-item').forEach(b=>{const active=b.dataset.storeAction===action;b.classList.toggle('is-active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});}
  const NOTICE_READ_KEY='ahako:bookstore-notices-read:v1';

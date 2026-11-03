@@ -140,6 +140,7 @@ function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)
 // look like it briefly "tightens" even when the numeric scale is unchanged.
 function commitRingSettle(step){
   index=norm(index+step);dragUnits=0;
+  requestNextCataloguePage();
   const live=new Map();
   stage.querySelectorAll('.book').forEach(b=>{
     const i=Number(b.dataset.index),slot=signedOffset(i);
@@ -1103,6 +1104,8 @@ function returnToPathFromRoom(){
 
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;
+  routeTransitioning=true;
+  try{await ensureCatalogueGenre('fantasy');}catch(error){routeTransitioning=false;alert(error.message);return;}
   lastFantasyEntryRoute=roomId;
   if(roomId==='forest')lastForestPathProgress=pathProgress;
   else if(roomId==='path')lastOuterPathProgress=pathProgress;
@@ -1633,7 +1636,63 @@ hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id
   if(Math.abs(dx)>=34||Math.abs(vx)>=.24){const dir=dx<0?1:-1;const from=hallYaw,target=base+dir*90,start=performance.now(),dur=250;function tick(now){const t=Math.min(1,(now-start)/dur),q=1-Math.pow(1-t,3);hallYaw=from+(target-from)*q;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}else settleHall();
 });hallEl?.addEventListener('pointercancel',()=>{hallPreview=0;hallDrag=null;settleHall();});
 
-async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();await syncOwnedBooks();dataReady=true;roomId='intro';store.classList.add('intro-mode');document.body.classList.add('intro-entry-active');window.scrollTo(0,0);document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+// One page on entry; subsequent pages require navigation or an explicit request.
+const catalogue={cursor:null,hasMore:true,total:null,pending:null,seen:new Set(),error:''};
+function paintCatalogueControls(){
+  const count=document.querySelector('#bookCount');
+  if(count)count.textContent=Number.isInteger(catalogue.total)?`${catalogue.total}冊が店内にあります`:`${allBooks.length}冊を読み込みました`;
+  document.querySelectorAll('[data-catalogue-more]').forEach(b=>{
+    b.hidden=!catalogue.hasMore&&!catalogue.error;b.disabled=!!catalogue.pending;
+    b.textContent=catalogue.pending?'読み込み中…':catalogue.error?'続きを再試行する':`次の60作品を読み込む（現在${allBooks.length}作品）`;
+  });
+}
+const catalogueGenres=new Set();
+async function ensureCatalogueGenre(genre){
+  if(catalogueGenres.has(genre))return;
+  const url=new URL(`${API}/discover`);url.searchParams.set('limit','60');url.searchParams.set('genre',genre);
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+  let response,data;try{response=await fetch(url,{cache:'no-store',signal:controller.signal});data=await response.json();}finally{clearTimeout(timer);}
+  if(!response.ok||!data?.ok||!Array.isArray(data.works))throw new Error(data?.error||'ジャンルの本を読み込めませんでした。');
+  const ids=new Set(allBooks.map(w=>w.publicationId));
+  data.works.forEach(w=>{if(w?.publicationId&&!ids.has(w.publicationId)){ids.add(w.publicationId);allBooks.push(w);}});
+  catalogueGenres.add(genre);window.dispatchEvent(new Event('bookstore-catalogue-updated'));paintCatalogueControls();
+}
+function catalogueMoreButton(){
+  const button=document.createElement('button');button.type='button';button.dataset.catalogueMore='';button.className='store-catalogue-more';
+  button.addEventListener('click',()=>loadBookstorePublicBooks().catch(()=>{}));return button;
+}
+function loadBookstorePublicBooks(){
+  if(catalogue.pending)return catalogue.pending;
+  if(!catalogue.hasMore)return Promise.resolve(allBooks);
+  catalogue.error='';
+  const task=(async()=>{
+    const url=new URL(`${API}/discover`);url.searchParams.set('limit','60');
+    if(catalogue.cursor)url.searchParams.set('cursor',catalogue.cursor);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+    let response,data;try{response=await fetch(url,{cache:'no-store',signal:controller.signal});data=await response.json();}finally{clearTimeout(timer);}
+    if(!response.ok||!data?.ok||!Array.isArray(data.works))throw new Error(data?.error||'本を読み込めませんでした。');
+    const cursor=data.nextCursor||null;
+    if(cursor&&(typeof cursor!=='string'||catalogue.seen.has(cursor)))throw new Error('公開一覧の続きが取得できませんでした。');
+    if(!cursor&&data.hasMore===true)throw new Error('公開一覧の続きが取得できませんでした。');
+    const ids=new Set(allBooks.map(w=>w.publicationId)),added=[];
+    data.works.forEach(w=>{if(w?.publicationId&&!ids.has(w.publicationId)){ids.add(w.publicationId);added.push(w);}});
+    // Extend the new-arrivals collection only; a selected genre/search/detail stays intact.
+    const extendRing=dataReady&&roomId==='intro'&&!hallShelfRing&&!currentPicked;
+    allBooks.push(...added);if(extendRing)books.push(...added);
+    catalogue.cursor=cursor;catalogue.hasMore=!!cursor;catalogue.total=Number.isInteger(data.total)?data.total:null;
+    if(cursor)catalogue.seen.add(cursor);
+    window.dispatchEvent(new Event('bookstore-catalogue-updated'));
+    return allBooks;
+  })();
+  catalogue.pending=task;paintCatalogueControls();
+  return task.catch(error=>{catalogue.error=error.message;throw error;}).finally(()=>{catalogue.pending=null;paintCatalogueControls();});
+}
+function requestNextCataloguePage(){
+  if(dataReady&&roomId==='intro'&&!hallShelfRing&&!currentPicked&&catalogue.hasMore&&!catalogue.pending&&index>=books.length-6)
+    loadBookstorePublicBooks().catch(()=>{});
+}
+
+async function init(){try{books=await loadBookstorePublicBooks();allBooks=books.slice();await syncOwnedBooks();dataReady=true;roomId='intro';store.classList.add('intro-mode');document.body.classList.add('intro-entry-active');window.scrollTo(0,0);document.querySelector('#bookCount').after(catalogueMoreButton());paintCatalogueControls();if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
 // Keep Central Hall in sync when Bookshelf changes in another tab or after returning from Player.
 window.addEventListener('storage',e=>{if(e.key===OWNED_ORDER_KEY||e.key===OWNED_ARCHIVE_KEY){syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});}});
 window.addEventListener('pageshow',()=>{if(dataReady)syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});});
