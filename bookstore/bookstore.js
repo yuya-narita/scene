@@ -119,7 +119,19 @@ function setBookPose(b,pos,introDepth=1){
   b.style.zIndex=String(1000-Math.round(depth*100));
   b.classList.toggle('is-far',Math.abs(angle)>105);
 }
-function updateFocusPanel(){if(!books.length)return;const w=books[index],a=w.author||{};document.querySelector('#focusTitle').textContent=w.title||'Untitled';document.querySelector('#focusAuthor').textContent=a.displayName||'作者';document.querySelector('#focusShelf').textContent=shelves[shelfIndex]?.label||'';}
+function updateFocusPanel(){
+  if(!books.length)return;
+  const w=books[index],a=w.author||{};
+  const label=hallShelfRing
+    ? (hallShelfKind==='mine'?'MY COPY':hallShelfKind==='later'?'READ LATER':'NEW ARRIVALS')
+    : (roomId==='fantasy'?'FANTASY FOREST':'NEW ARRIVALS');
+  const meta=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ');
+  const title=document.querySelector('#focusTitle'),author=document.querySelector('#focusAuthor'),shelf=document.querySelector('#focusShelf'),metaEl=document.querySelector('#focusMeta');
+  if(title)title.textContent=w.title||'Untitled';
+  if(author)author.textContent=a.displayName||'作者';
+  if(shelf)shelf.textContent=label;
+  if(metaEl){metaEl.textContent=meta;metaEl.hidden=!meta;}
+}
 function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)=>{const slot=signedOffset(i);if(Math.abs(slot)>5)return;const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot+dragUnits);b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};stage.appendChild(b);});hydrateCoverLoadState(stage);updateFocusPanel();}
 // V2.11.3: commit a settled ring without rebuilding the visible cover DOM.
 // Recreating the centered image at the exact landing frame can make its rasterized transform
