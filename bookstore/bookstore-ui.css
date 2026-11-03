@@ -62,3 +62,16 @@ body.book-detail-open .store-side-nav{visibility:hidden}
 @media(max-width:900px){.store-account-button>span:last-child{display:none}.shop-head .store-head-actions{gap:9px}.store-side-nav{left:10px;width:60px}}
 @media(max-width:680px){.store-side-nav{display:none}.shop-head .store-head-actions{gap:6px}.store-icon-button{width:30px;height:30px}.store-icon-button svg{width:18px;height:18px}.store-avatar{width:29px;height:29px}.store-ui-dialog{padding:20px;max-height:calc(100dvh - 96px)}.store-menu-dialog,.store-account-dialog{inset:76px 12px auto auto;width:min(330px,calc(100vw - 24px));border-radius:20px}.store-search-dialog{margin:76px auto auto;width:calc(100vw - 24px);border-radius:20px}.store-dialog-heading h2{font-size:22px}.store-search-results{grid-template-columns:1fr;max-height:55dvh}.store-search-book{padding:10px}.store-search-caption{margin-top:16px}.store-search-field{gap:7px;padding:8px}.store-search-field input{font-size:16px}.store-search-field button{padding:8px 10px}.store-avatar-large{width:50px;height:50px}}
 @media(prefers-reduced-motion:reduce){.store-ui-dialog[open]{animation:none}}
+/* Shared Bookshelf / Studio account. */
+.store-avatar.has-initial{font:500 16px/1 serif;letter-spacing:0}
+.store-avatar-large.has-initial{font-size:26px}
+.store-auth{padding-top:12px}.store-auth-status{font-size:12px;line-height:1.8;color:#afcbb7;overflow-wrap:anywhere;margin:0 0 10px}.store-auth-status:empty{display:none}.store-auth-status.is-error{color:#f0bdac}
+.store-auth-note{font-size:11px;line-height:1.9;color:#b0a391;margin:7px 0 14px;overflow-wrap:anywhere}.store-auth-note a{color:#d1b891;text-underline-offset:3px}
+.store-auth form{display:flex;flex-direction:column;gap:14px}.store-auth form[hidden],.store-auth [hidden]{display:none!important}
+.store-auth label{display:flex;flex-direction:column;gap:7px;color:#e4d8c6;font-size:12px}.store-auth label>span{font-size:10px;color:#9d907e}
+.store-auth input{box-sizing:border-box;width:100%;border:1px solid #dbc6a638;border-radius:10px;background:#08070566;color:#fff;padding:11px 12px;font-size:16px!important;min-width:0}.store-auth input:focus{outline:2px solid #8ec2fa88;outline-offset:1px}
+.store-auth button{border:1px solid #c6b3903d;border-radius:10px;padding:10px 12px;background:#ffffff08;color:#e8dfd1;cursor:pointer;font-size:12px!important}.store-auth button:hover{background:#ffffff14}.store-auth button:disabled{opacity:.5;cursor:wait}
+.store-auth .store-auth-primary{background:linear-gradient(135deg,#396b9b,#294a70);border-color:#95c1ed75;padding:12px}.store-auth .store-auth-primary:hover{background:#396b9b}
+.store-auth-buttons{display:flex;gap:8px;flex-wrap:wrap}.store-auth-buttons button{flex:1;white-space:nowrap}
+#storeAuthCode{letter-spacing:.24em;font-size:20px!important}
+.store-account-dialog{width:365px}
