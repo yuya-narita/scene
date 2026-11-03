@@ -304,7 +304,7 @@ function closePick(){
   document.body.style.overflow=viewMode==='path'?'hidden':'';
   resetDetailDrag(false);
 }
-document.querySelector('#detailDismiss').onclick=closePick;document.querySelector('#saveLater').onclick=toggleLater;document.querySelector('#focusPick').onclick=()=>books.length&&pick(books[index]);
+document.querySelector('#detailDismiss').onclick=closePick;document.querySelector('#saveLater').onclick=toggleLater;document.querySelector('#focusPick')?.addEventListener('click',()=>books.length&&pick(books[index]));
 const readBookButton=document.querySelector('#readBook');if(readBookButton)readBookButton.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const url=currentPicked&&detailReadUrl(currentPicked);if(!url||url==='#')return;location.assign(url);});
 document.querySelector('#hallOwnedTab')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();hallLibraryKind='mine';renderHallMyShelf();});
 document.querySelector('#hallLaterTab')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();hallLibraryKind='later';renderHallMyShelf();});
@@ -639,7 +639,7 @@ function wrapDeg(v){while(v>180)v-=360;while(v<-180)v+=360;return v;}
 function hallGates(){return [...document.querySelectorAll('.hall-gate[data-angle]')];}
 function hallSpatialItems(){return [...document.querySelectorAll('.hall-gate[data-angle],.hall-my-shelf[data-angle]')];}
 function hallShelfBooks(kind){return (kind==='mine'?ownedBooks:kind==='later'?readLaterBooks():allBooks.slice(0,8)).filter(Boolean);}
-function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const w=sample[i];if(w)pick(w);}));}
+function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind).slice(0,8);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const w=sample[i];if(w)pick(w);}));}
 function renderHallMyShelf(){renderHallShelf('#hallNewShelfBooks','new');renderHallShelf('#hallMyShelfBooks',hallLibraryKind);const later=readLaterBooks(),mine=ownedBooks;const title=document.querySelector('#hallLibraryTitle'),count=document.querySelector('#hallLibraryCount'),ownedTab=document.querySelector('#hallOwnedTab'),laterTab=document.querySelector('#hallLaterTab');if(title)title.textContent=hallLibraryKind==='later'?'あとで読む':'もっている本';if(count)count.textContent=hallLibraryKind==='later'?(later.length?`${later.length}冊`:'まだ保存した本がありません'):(mine.length?`${mine.length}冊`:'まだ本がありません');ownedTab?.classList.toggle('is-active',hallLibraryKind==='mine');laterTab?.classList.toggle('is-active',hallLibraryKind==='later');ownedTab?.setAttribute('aria-selected',hallLibraryKind==='mine'?'true':'false');laterTab?.setAttribute('aria-selected',hallLibraryKind==='later'?'true':'false');}
 async function openHallShelfRing(kind,selectedIndex=0){
   const selected=hallShelfBooks(kind);if(!selected.length)return;
@@ -707,7 +707,7 @@ function showNewArrivalsFromHall(){
   roomId='intro';viewMode='ring';roomShelfMode=false;books=allBooks.slice();introReady=true;
   stage.hidden=false;stage.style.transform='';stage.style.opacity='';stage.classList.remove('room-shelf-ring','is-shelf-returning','is-intro-spinning');stage.classList.add('is-intro-ready');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
-  document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
+  document.querySelector('#ringMode')?.classList.add('is-active');document.querySelector('#pathMode')?.classList.remove('is-active');
   const ih=document.querySelector('#introHint');if(ih){ih.hidden=false;ih.textContent='↑ 上にスワイプして中央ホールへ';}
   render();updateFocusPanel();window.scrollTo(0,0);
 }
@@ -882,7 +882,7 @@ async function enterFantasyRoom(){
   }
   roomCameraYaw=0;roomCameraPreview=0;applyRoomCamera(0,true);
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
-  document.querySelector('#ringMode').classList.add('is-active');document.querySelector('#pathMode').classList.remove('is-active');
+  document.querySelector('#ringMode')?.classList.add('is-active');document.querySelector('#pathMode')?.classList.remove('is-active');
   path.hidden=true;path?.classList.remove('route-leaving');document.querySelector('#roomShelf').hidden=true;
   stage.hidden=true;stage.style.transform='';stage.style.opacity='0';stage.classList.add('room-shelf-ring');stage.classList.remove('is-shelf-returning','is-intro-ready');
   document.querySelector('.sign').classList.add('shelf-back-sign');
@@ -929,8 +929,8 @@ function setViewMode(mode){
   if(next==='path'&&roomId==='new')roomId='path';else if(next==='ring'&&roomId==='path')roomId='new';
   setRoomVisual(roomId==='fantasy'?'fantasy':'new');
   document.body.classList.toggle('book-path-active',viewMode==='path');
-  document.querySelector('#ringMode').classList.toggle('is-active',viewMode==='ring');
-  document.querySelector('#pathMode').classList.toggle('is-active',viewMode==='path');
+  document.querySelector('#ringMode')?.classList.toggle('is-active',viewMode==='ring');
+  document.querySelector('#pathMode')?.classList.toggle('is-active',viewMode==='path');
   stage.hidden=viewMode!=='ring';
   document.querySelector('#bookPath').hidden=viewMode!=='path';
   document.querySelector('#motionStart').hidden=viewMode!=='path';
@@ -1174,7 +1174,7 @@ if(pathZoneLabel){
   pathZoneLabel.addEventListener('click',(e)=>{if(roomId==='path'&&currentPathZone()?.id==='fantasy'){e.preventDefault();e.stopPropagation();}});
 }
 
-document.querySelector('#ringMode').onclick=()=>setViewMode('ring');document.querySelector('#pathMode').onclick=()=>setViewMode('path');
+document.querySelector('#ringMode')?.addEventListener('click',()=>setViewMode('ring'));document.querySelector('#pathMode')?.addEventListener('click',()=>setViewMode('path'));
 const roomShelfScroller=document.querySelector('#roomShelfScroll');
 let roomShelfTap=null;
 // V2.16.13 — low-speed drag is rendered once per animation frame from the latest pointer sample.
@@ -1258,7 +1258,7 @@ hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id
   if(Math.abs(dx)>=34||Math.abs(vx)>=.24){const dir=dx<0?1:-1;const from=hallYaw,target=base+dir*90,start=performance.now(),dur=250;function tick(now){const t=Math.min(1,(now-start)/dur),q=1-Math.pow(1-t,3);hallYaw=from+(target-from)*q;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}else settleHall();
 });hallEl?.addEventListener('pointercancel',()=>{hallPreview=0;hallDrag=null;settleHall();});
 
-async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();await syncOwnedBooks();dataReady=true;roomId='intro';store.classList.add('intro-mode');document.body.classList.add('intro-entry-active');window.scrollTo(0,0);document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+async function init(){try{const r=await fetch(`${API}/discover`,{cache:'no-store'}),data=await r.json();if(!r.ok||!data?.ok)throw new Error(data?.error||'本を読み込めませんでした。');books=Array.isArray(data.works)?data.works.filter(w=>w?.publicationId):[];allBooks=books.slice();await syncOwnedBooks();dataReady=true;window.scrollTo(0,0);document.querySelector('#bookCount').textContent=`${books.length}冊が店内にあります`;/* V2.21.5: bookstore now opens directly in Central Sakura Hall. The old opening ring/large Hall guidance remains available only as an internal route, not the storefront entry experience. */hallYaw=0;hallPreview=0;showCentralHall(false);if(!books.length){renderHallMyShelf();}}catch(e){document.querySelector('#bookCount').textContent='棚を読み込めませんでした';showCentralHall(false);}}
 // Keep Central Hall in sync when Bookshelf changes in another tab or after returning from Player.
 window.addEventListener('storage',e=>{if(e.key===OWNED_ORDER_KEY||e.key===OWNED_ARCHIVE_KEY){syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});}});
 window.addEventListener('pageshow',()=>{if(dataReady)syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});});
