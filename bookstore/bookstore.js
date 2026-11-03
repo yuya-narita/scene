@@ -471,30 +471,49 @@ async function enterForest(){
 // V2.15.0 — Room shelf ring. A Room is surrounded by tall shelf faces.
 // Each face contains 4 columns x 3 rows for now; horizontal swipes rotate the
 // shelf ring, while vertical scrolling remains available inside a taller face later.
+// V2.24.0 — Genre Room skeleton is permanently four physical shelf directions.
+// 0° / 90° / 180° / 270° always exist, even while some faces are empty.
+// Each direction receives one 12-book block. When the collection grows past 48,
+// the next 12-book block returns to 0° as an additional vertical shelf block,
+// so no books disappear and the four-direction room geometry never changes.
 function roomShelfFaces(){
   const all=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();
-  const out=[];for(let i=0;i<all.length;i+=ROOM_SHELF_CAPACITY)out.push({start:i,books:all.slice(i,i+ROOM_SHELF_CAPACITY)});
-  return out.length?out:[{start:0,books:[]}];
+  const out=Array.from({length:4},(_,face)=>({face,groups:[]}));
+  for(let start=0,block=0;start<all.length;start+=ROOM_SHELF_CAPACITY,block++){
+    out[block%4].groups.push({start,books:all.slice(start,start+ROOM_SHELF_CAPACITY)});
+  }
+  return out;
 }
 function buildRoomShelfFaceLayer(face,f){
   const layer=document.createElement('div');layer.className='room-shelf-face';layer.dataset.face=String(face);
-  for(let local=0;local<f.books.length;local+=4){
-    const globalStart=f.start+local;
-    const row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(globalStart);
-    const slice=f.books.slice(local,local+4);
-    row.setAttribute('aria-label',`${Math.floor(globalStart/4)+1}段目の本を見る`);
-    row.innerHTML=`<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}</span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
-    row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book');openShelfRow(globalStart,hit?Number(hit.dataset.bookOffset):0)});
-    row.addEventListener('keydown',e=>{const hit=e.target.closest('.room-shelf-book');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openShelfRow(globalStart,Number(hit.dataset.bookOffset)||0)}});
-    layer.appendChild(row);hydrateCoverLoadState(row);
-  }
+  const groups=f.groups||[];
+  groups.forEach(group=>{
+    for(let local=0;local<group.books.length;local+=4){
+      const globalStart=group.start+local;
+      const row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(globalStart);
+      const slice=group.books.slice(local,local+4);
+      row.setAttribute('aria-label',`${Math.floor(globalStart/4)+1}段目の本を見る`);
+      row.innerHTML=`<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}</span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
+      row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book');openShelfRow(globalStart,hit?Number(hit.dataset.bookOffset):0)});
+      row.addEventListener('keydown',e=>{const hit=e.target.closest('.room-shelf-book');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openShelfRow(globalStart,Number(hit.dataset.bookOffset)||0)}});
+      layer.appendChild(row);hydrateCoverLoadState(row);
+    }
+  });
   return layer;
 }
 function renderRoomShelf(){
   roomShelfVisualYaw=null;roomShelfVisualTargetYaw=roomCameraYaw+roomCameraPreview;roomShelfVisualLastTs=0;if(roomShelfVisualRaf){cancelAnimationFrame(roomShelfVisualRaf);roomShelfVisualRaf=0;}
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll'),grid=document.querySelector('#roomShelfGrid');
   if(!wrap||!grid)return;
-  roomShelfMode=true;roomShelfAllBooks=fantasyBooks();
+  roomShelfMode=true;
+  // V2.24.0-DUMMY: temporary 48-book Genre Room population test.
+  // Repeat the real fantasy works only inside the Genre Room so all four fixed
+  // shelf directions (0/90/180/270) can be inspected. Remove this block by
+  // returning to the clean V2.24.0 build after the layout check.
+  const realFantasy=fantasyBooks();
+  roomShelfAllBooks=realFantasy.length
+    ? Array.from({length:48},(_,i)=>({...realFantasy[i%realFantasy.length],__dummyShelfIndex:i}))
+    : [];
   // Defensive lifecycle guard: a room shelf must never inherit the path-only overlay.
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   const faces=roomShelfFaces();roomShelfFace=((roomShelfFace%faces.length)+faces.length)%faces.length;
@@ -521,6 +540,10 @@ function renderRoomShelfFace(face,keepScroll=false){
 function paintRoomShelfAtYaw(yaw){
   const grid=document.querySelector('#roomShelfGrid');if(!grid)return;
   if(window.matchMedia('(min-width:681px)').matches){
+    // Desktop still presents a flat front shelf, but the selected face is derived
+    // from the same 0/90/180/270° camera as mobile so keyboard/controls cannot drift.
+    const near=nearestShelfForYaw(yaw);
+    if(roomShelfFace!==near.face&&near.dist<46)renderRoomShelfFace(near.face,true);
     grid.querySelectorAll('.room-shelf-face').forEach((layer,i)=>{layer.style.visibility=i===roomShelfFace?'visible':'hidden';layer.style.pointerEvents=i===roomShelfFace?'auto':'none';layer.style.opacity=i===roomShelfFace?'1':'0';layer.style.transform='none';layer.style.zIndex=i===roomShelfFace?'1':'0';});
     return;
   }
