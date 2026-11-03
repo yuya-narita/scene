@@ -604,48 +604,70 @@ function renderRoomShelfFace(face,keepScroll=false){
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${face+1} / ${faces.length}`;
   updateRoomShelfPerspective();
 }
-// V2.28.2: horizontal-only wall transitions keep each wall at its saved height.
+// V2.28.4: drag the neighbouring wall with the finger, preserving both heights.
 let phoneShelfSlide=null;
-function finishPhoneShelfSlide(){
+function finishPhoneShelfSlide(commit=true){
   const slide=phoneShelfSlide;if(!slide)return;
   cancelAnimationFrame(slide.raf);phoneShelfSlide=null;
-  roomCameraYaw=slide.targetYaw;roomCameraPreview=0;
-  renderRoomShelfFace(slide.next,true);
+  roomCameraYaw=commit?slide.targetYaw:slide.fromYaw;roomCameraPreview=0;
+  if(commit)renderRoomShelfFace(slide.next,true);
   paintRoomShelfAtYaw(roomCameraYaw);
   syncPhoneShelfOffsets();applyRoomCamera(0,true);rebaseRoomMotion();
 }
-function slidePhoneShelf(dir){
-  finishPhoneShelfSlide();
+function beginPhoneShelfSlide(dir){
   const scroller=document.querySelector('#roomShelfScroll');
   const faces=roomShelfFaces(),next=((roomShelfFace+dir)%faces.length+faces.length)%faces.length;
-  if(!scroller||next===roomShelfFace)return;
+  if(!scroller||next===roomShelfFace)return null;
   syncPhoneShelfOffsets();
   const outgoing=scroller.querySelector(`.room-shelf-face[data-face="${roomShelfFace}"]`);
   const incoming=scroller.querySelector(`.room-shelf-face[data-face="${next}"]`);
-  if(!outgoing||!incoming)return;
+  if(!outgoing||!incoming)return null;
   const width=Math.max(window.innerWidth,document.querySelector('#roomShelfGrid').clientWidth)*1.18;
-  // The shared viewport stays at the outgoing scroll position until landing.
-  // Compensate the incoming wall by a constant Y offset so it never rises/falls.
   const incomingY=scroller.scrollTop-(phoneShelfScrollPositions.get(next)||0);
   const fromYaw=roomCameraYaw+roomCameraPreview;
   const targetYaw=fromYaw+wrapDeg(next*ROOM_VIEW_SLOT_DEG-fromYaw);
-  const slide=phoneShelfSlide={next,targetYaw,raf:0,start:performance.now()};
-  incoming.style.visibility='visible';incoming.style.pointerEvents='none';incoming.style.opacity='1';
-  outgoing.style.pointerEvents='none';
-  const paint=t=>{
-    const eased=1-Math.pow(1-t,3);
-    roomCameraYaw=fromYaw+(targetYaw-fromYaw)*eased;roomCameraPreview=0;applyRoomCamera(0,true);
-    outgoing.style.setProperty('transform',`translate3d(${-dir*width*eased}px,0,0)`,'important');
-    incoming.style.setProperty('transform',`translate3d(${dir*width*(1-eased)}px,${incomingY}px,0)`,'important');
+  const startX=roomMotionOn?wrapDeg(roomShelfFace*ROOM_VIEW_SLOT_DEG-fromYaw)/ROOM_VIEW_SLOT_DEG*width:0;
+  const travel=Math.max(1,width+dir*startX);
+  const slide=phoneShelfSlide={next,dir,width,travel,fromYaw,targetYaw,progress:0,raf:0};
+  // Hide other gyro-visible walls before this two-wall gesture takes ownership.
+  scroller.querySelectorAll('.room-shelf-face').forEach(layer=>{
+    layer.style.visibility=layer===outgoing||layer===incoming?'visible':'hidden';
+    layer.style.pointerEvents='none';
+  });
+  incoming.style.opacity='1';outgoing.style.opacity='1';
+  slide.paint=progress=>{
+    slide.progress=progress;
+    roomCameraYaw=fromYaw+(targetYaw-fromYaw)*progress;roomCameraPreview=0;applyRoomCamera(0,true);
+    outgoing.style.setProperty('transform',`translate3d(${startX-dir*travel*progress}px,0,0)`,'important');
+    incoming.style.setProperty('transform',`translate3d(${dir*travel*(1-progress)}px,${incomingY}px,0)`,'important');
   };
-  paint(0);
-  if(window.matchMedia('(prefers-reduced-motion:reduce)').matches){finishPhoneShelfSlide();return;}
+  slide.paint(0);return slide;
+}
+function previewPhoneShelfDrag(dx){
+  const dir=dx<0?1:-1;
+  if(phoneShelfSlide&&phoneShelfSlide.dir!==dir)finishPhoneShelfSlide(false);
+  const slide=phoneShelfSlide||beginPhoneShelfSlide(dir);if(!slide)return;
+  // Pixel-for-pixel horizontal response; the shared vertical viewport stays put.
+  slide.paint(Math.min(1,Math.abs(dx)/slide.travel));
+}
+function settlePhoneShelfSlide(commit){
+  const slide=phoneShelfSlide;if(!slide)return;
+  cancelAnimationFrame(slide.raf);
+  if(window.matchMedia('(prefers-reduced-motion:reduce)').matches){finishPhoneShelfSlide(commit);return;}
+  const from=slide.progress,to=commit?1:0,start=performance.now();
+  const duration=Math.max(120,280*Math.abs(to-from));
   const tick=now=>{
     if(phoneShelfSlide!==slide)return;
-    const t=Math.min(1,(now-slide.start)/280);paint(t);
-    if(t<1)slide.raf=requestAnimationFrame(tick);else finishPhoneShelfSlide();
+    const t=Math.min(1,(now-start)/duration),ease=1-Math.pow(1-t,3);
+    slide.paint(from+(to-from)*ease);
+    if(t<1)slide.raf=requestAnimationFrame(tick);else finishPhoneShelfSlide(commit);
   };
   slide.raf=requestAnimationFrame(tick);
+}
+function slidePhoneShelf(dir){
+  if(phoneShelfSlide&&phoneShelfSlide.dir!==dir)finishPhoneShelfSlide(false);
+  if(!phoneShelfSlide)beginPhoneShelfSlide(dir);
+  settlePhoneShelfSlide(true);
 }
 function paintRoomShelfAtYaw(yaw){
   const grid=document.querySelector('#roomShelfGrid');if(!grid)return;
@@ -1430,18 +1452,27 @@ roomShelfScroller?.addEventListener('pointerdown',e=>{if(!roomShelfMode)return;
   const currentYaw=roomCameraYaw+roomCameraPreview;roomCameraYaw=currentYaw;roomCameraPreview=0;rebaseRoomMotion();
   roomShelfTap={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,dx:0,dy:0,startYaw:currentYaw};
 },{capture:true,passive:true});
-roomShelfScroller?.addEventListener('pointermove',e=>{if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;if(window.matchMedia('(min-width:681px)').matches)return;const samples=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():null,last=samples&&samples.length?samples[samples.length-1]:e;roomShelfTap.dx=last.clientX-roomShelfTap.x;roomShelfTap.dy=last.clientY-roomShelfTap.y;if(Math.hypot(roomShelfTap.dx,roomShelfTap.dy)>5)roomShelfTap.moved=true;// Horizontal wall motion starts on release; vertical browsing never previews the camera.
+roomShelfScroller?.addEventListener('pointermove',e=>{
+  const tap=roomShelfTap;if(!tap||e.pointerId!==tap.id||window.matchMedia('(min-width:681px)').matches)return;
+  const samples=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():null;
+  const last=samples?.length?samples[samples.length-1]:e;
+  tap.dx=last.clientX-tap.x;tap.dy=last.clientY-tap.y;
+  if(Math.hypot(tap.dx,tap.dy)>5)tap.moved=true;
+  if(!tap.axis&&Math.hypot(tap.dx,tap.dy)>8)tap.axis=Math.abs(tap.dx)>Math.abs(tap.dy)*1.15?'horizontal':'vertical';
+  if(tap.axis==='horizontal')previewPhoneShelfDrag(tap.dx);
 },{capture:true,passive:true});
 roomShelfScroller?.addEventListener('pointerup',e=>{
   if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;flushRoomShelfPreview();const tap=roomShelfTap;roomShelfTap=null;
   if(!roomShelfMode){roomCameraInputLock=false;rebaseRoomMotion();return;}
   if(tap.moved){
-    if(Math.abs(tap.dx)>Math.abs(tap.dy)*1.15&&Math.abs(tap.dx)>18){
+    if(tap.axis==='horizontal'&&Math.abs(tap.dx)>18){
       e.preventDefault();e.stopPropagation();const dir=tap.dx<0?1:-1;
       slidePhoneShelf(dir);
       roomCameraInputLock=false;rebaseRoomMotion();
     }else{
-      roomCameraYaw=tap.startYaw;roomCameraPreview=0;applyRoomCamera(0,false);rebaseRoomMotion();roomCameraInputLock=false;
+      if(phoneShelfSlide)settlePhoneShelfSlide(false);
+      else{roomCameraYaw=tap.startYaw;roomCameraPreview=0;applyRoomCamera(0,false);}
+      rebaseRoomMotion();roomCameraInputLock=false;
     }
     return;
   }
@@ -1464,7 +1495,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
     openShelfRow(chosen.start,chosen.offset);
   }
 },{capture:true,passive:false});
-roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
+roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;if(phoneShelfSlide)settlePhoneShelfSlide(false);roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;syncPhoneShelfOffsets();updateRoomShelfPerspective();if(roomMotionOn&&window.matchMedia('(max-width:680px)').matches)paintRoomShelfAtYaw(roomCameraYaw)})},{passive:true});
 roomShelfScroller?.addEventListener('scrollend',()=>{if(!window.matchMedia('(max-width:680px)').matches)return;const max=Number(roomShelfScroller.dataset.phoneMaxScroll)||0;roomShelfScroller.scrollTop=Math.max(0,Math.min(max,roomShelfScroller.scrollTop));},{passive:true});
 // V2.24.3 — desktop wheel ownership follows the pointer.
