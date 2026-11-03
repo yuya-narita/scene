@@ -1,0 +1,64 @@
+/* V2.28.6 — glass navigation surrounding the existing bookstore. */
+.shop-head .store-head-actions{justify-self:end;display:flex;align-items:center;gap:12px}
+.store-head-actions button,.store-side-nav button,.store-ui-dialog button,.store-ui-dialog input{font:inherit;color:inherit}
+.store-icon-button{display:inline-grid;place-items:center;flex:none;width:40px;height:40px;border:1px solid #f0dfc733;border-radius:50%;background:#130f0bc4;color:#f7f2e9;cursor:pointer;transition:background .18s,border-color .18s}
+.store-icon-button svg,.store-account-button svg{width:20px;height:20px}
+.store-icon-button:hover{background:#30271fe8;border-color:#f0dfc777}
+.store-head-actions #storeMenuToggle{border:0;background:transparent}
+.store-account-button{display:flex;align-items:center;gap:9px;border:0;background:none;padding:0;color:#fff;cursor:pointer;font-size:12px!important}
+.store-account-button>span:last-child{max-width:85px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.store-avatar{display:inline-grid;place-items:center;flex:none;width:34px;height:34px;border:1px solid #e9d5b870;border-radius:50%;color:#e8d6bb;background:linear-gradient(140deg,#79634f,#30251e);box-shadow:0 2px 10px #0005}
+.store-avatar svg{width:20px;height:20px}
+.store-side-nav{position:fixed;z-index:55;left:18px;top:112px;width:68px;display:flex;flex-direction:column;gap:3px;padding:10px 5px;border:1px solid #e4d1b329;border-radius:28px;background:linear-gradient(150deg,#27231cd9,#100e0beb);box-shadow:0 12px 30px #0005;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.store-nav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:66px;padding:8px 4px;border:1px solid transparent;border-radius:16px;background:transparent;color:#bdb5a8;cursor:pointer;text-decoration:none;font-size:10px!important;transition:background .18s,color .18s}
+.store-nav-item svg{width:22px;height:22px}
+.store-nav-item:hover{background:#ffffff0b;color:#fff}
+.store-nav-item.is-active{color:#e5f5ff;border-color:#91caff45;background:linear-gradient(120deg,#3d77b559,#24539c45);box-shadow:inset 3px 0 #8fcaff,0 0 20px #649fff12}
+body.book-detail-open .store-side-nav{visibility:hidden}
+.store-ui-dialog{color:#f4eee5;background:linear-gradient(145deg,#29241ff5,#15120ffb);border:1px solid #dbc6a63d;border-radius:24px;padding:26px;box-shadow:0 24px 90px #0009;max-width:calc(100vw - 28px);max-height:calc(100dvh - 110px);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;color-scheme:dark;overflow:auto}
+.store-ui-dialog::backdrop{background:#07060580;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.store-ui-dialog[open]{animation:storeDialogAppear .2s ease-out}
+.store-ui-dialog [hidden]{display:none!important}
+.store-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:22px}
+.store-dialog-heading small{font-size:9px;letter-spacing:.18em;color:#c5ad87}
+.store-dialog-heading h2{margin:6px 0 0;font:500 25px/1.3 serif;letter-spacing:.08em}
+.store-dialog-heading .store-icon-button{width:32px;height:32px;background:#ffffff06}
+.store-menu-dialog{position:fixed;inset:88px 20px auto auto;margin:0;width:310px}
+.store-menu-nav{display:flex;flex-direction:column;gap:5px}
+.store-menu-nav .store-nav-item{flex-direction:row;justify-content:flex-start;gap:16px;padding:12px 16px;min-height:48px;border-radius:12px;font-size:13px!important}
+.store-menu-links{display:flex;flex-direction:column;gap:2px;padding-top:17px;margin-top:17px;border-top:1px solid #ffffff14}
+.store-menu-links a{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 6px;text-decoration:none;color:#d9cbb8;font-size:12px}
+.store-menu-links a:hover{color:#fff}
+.store-menu-links svg{width:15px;height:15px;opacity:.5}
+.store-menu-footnote{margin:24px 0 0;color:#8e8273;font:12px serif;letter-spacing:.12em}
+.store-search-dialog{width:700px;margin:108px auto auto}
+.store-search-field{display:flex;align-items:center;gap:12px;border:1px solid #a6c4e76b;border-radius:14px;background:#07070760;padding:10px 12px;box-shadow:0 0 0 3px #7bb8ff09}
+.store-search-field>svg{width:20px;height:20px;color:#abbed2;flex:none}
+.store-search-field input{width:100%;min-width:0;border:0;background:none;outline:none;font-size:15px;padding:4px;color:#fff}
+.store-search-field:focus-within{border-color:#b1d6ff}
+.store-search-field button,.store-setting-row button{border:1px solid #adcfff4a;border-radius:9px;padding:8px 14px;background:#3b648b5c;cursor:pointer;font-size:12px;white-space:nowrap}
+.store-search-caption{display:flex;justify-content:space-between;gap:12px;margin:20px 0 14px;font-size:10px;color:#b1a696}
+.store-search-caption>span:first-child{color:#e0d5c6}
+.store-search-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:50dvh;overflow:auto;padding:0 5px 4px 0;scrollbar-width:thin}
+.store-search-book{display:flex;align-items:center;gap:15px;padding:12px;text-align:left;border:1px solid #dfd0b815;border-radius:13px;background:#ffffff03;cursor:pointer;min-width:0;transition:border-color .18s,background .18s}
+.store-search-book:hover{background:#ffffff09;border-color:#d5ba8c65}
+.store-search-cover{flex:none;display:grid;place-items:center;width:58px;aspect-ratio:2/3;background:linear-gradient(135deg,#635036,#211910);border-radius:2px 5px 5px 2px;overflow:hidden;box-shadow:0 5px 12px #0006;font:16px serif;color:#d7bf97}
+.store-search-cover img{width:100%;height:100%;object-fit:cover}
+.store-search-copy{display:flex;flex-direction:column;gap:6px;min-width:0}
+.store-search-copy small{font-size:9px;color:#c4a982}
+.store-search-copy strong{font-size:12px;font-weight:500;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.store-search-copy>span{font-size:10px;color:#a59b8e}
+.store-empty-message{grid-column:1/-1;padding:24px 5px;text-align:center;font-size:13px;line-height:1.9;color:#d2c5b4}
+.store-empty-message span{display:block;color:#978d80;font-size:12px}
+.store-account-dialog{position:fixed;inset:88px 20px auto auto;margin:0;width:330px}
+.store-profile{display:flex;align-items:center;gap:16px;padding:7px 0}
+.store-avatar-large{width:58px;height:58px}.store-avatar-large svg{width:30px;height:30px}
+.store-profile>div{display:flex;flex-direction:column;gap:7px}.store-profile strong{font-size:16px;font-weight:500}.store-profile>div>span{font-size:11px;color:#a99c89}
+.store-small-dialog{width:430px;margin:auto}
+.store-setting-row{display:flex;gap:20px;align-items:center;padding:10px 0}
+.store-setting-row strong{font-weight:500;font-size:14px}.store-setting-row p,.store-muted{font-size:12px;line-height:1.8;color:#a99c89}
+.store-ui-dialog button:focus-visible,.store-ui-dialog a:focus-visible,.store-head-actions button:focus-visible,.store-side-nav button:focus-visible{outline:2px solid #9acaff;outline-offset:4px}
+@keyframes storeDialogAppear{from{opacity:0;translate:0 7px}to{opacity:1;translate:0 0}}
+@media(max-width:900px){.store-account-button>span:last-child{display:none}.shop-head .store-head-actions{gap:9px}.store-side-nav{left:10px;width:60px}}
+@media(max-width:680px){.store-side-nav{display:none}.shop-head .store-head-actions{gap:6px}.store-icon-button{width:30px;height:30px}.store-icon-button svg{width:18px;height:18px}.store-avatar{width:29px;height:29px}.store-ui-dialog{padding:20px;max-height:calc(100dvh - 96px)}.store-menu-dialog,.store-account-dialog{inset:76px 12px auto auto;width:min(330px,calc(100vw - 24px));border-radius:20px}.store-search-dialog{margin:76px auto auto;width:calc(100vw - 24px);border-radius:20px}.store-dialog-heading h2{font-size:22px}.store-search-results{grid-template-columns:1fr;max-height:55dvh}.store-search-book{padding:10px}.store-search-caption{margin-top:16px}.store-search-field{gap:7px;padding:8px}.store-search-field input{font-size:16px}.store-search-field button{padding:8px 10px}.store-avatar-large{width:50px;height:50px}}
+@media(prefers-reduced-motion:reduce){.store-ui-dialog[open]{animation:none}}
