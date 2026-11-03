@@ -387,12 +387,75 @@ async function runPaymentAudit(){
 }
 
 // v63.35.1 — one admin, four workspaces
+// V2.29.0 — Admin-authenticated notices with separate draft/public snapshots.
+const noticeAdmin={rows:[],id:'',revision:0,current:null,dirty:false,busy:false,loading:false};
+const noticeFields={title:$('#noticeTitle'),body:$('#noticeBody'),date:$('#noticeDate'),href:$('#noticeHref'),linkLabel:$('#noticeLinkLabel')};
+function noticeDraftValue(){return Object.fromEntries(Object.entries(noticeFields).map(([key,el])=>[key,el.value.trim()]));}
+function previewAdminNotice(){
+  const draft=noticeDraftValue();$('#noticePreviewDate').textContent=draft.date;$('#noticePreviewTitle').textContent=draft.title||'タイトル';$('#noticePreviewBody').textContent=draft.body;
+  const link=$('#noticePreviewLink');let href='';try{const u=new URL(draft.href);if(['http:','https:'].includes(u.protocol)&&!u.username&&!u.password)href=u.href;}catch(_){}
+  link.hidden=!href;link.href=href||'#';link.textContent=draft.linkLabel||'詳しく見る';
+}
+function noticeStateText(n){return n?.status==='published'?'公開中':n?.status==='ended'?'掲載終了':'下書き';}
+function setNoticeEditor(n=null){
+  noticeAdmin.current=n;noticeAdmin.id=n?.id||`notice_${crypto.randomUUID().replaceAll('-','')}`;noticeAdmin.revision=n?.revision||0;noticeAdmin.dirty=false;
+  const empty={title:'',body:'',href:'',linkLabel:'',date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())};
+  const draft=n?.draft||empty;Object.entries(noticeFields).forEach(([key,el])=>{el.value=draft[key]||'';});
+  $('#noticeSaveStatus').textContent='';$('#noticeEditState').textContent=n?`${noticeStateText(n)} ／ 最終保存 ${formatJstDate(n.updatedAt)}`:'新しいお知らせ';
+  $('#noticePublish').textContent=n?.status==='published'?'変更を公開する':'公開する';
+  lockNoticeAdmin(false);previewAdminNotice();renderAdminNoticeList();
+}
+function lockNoticeAdmin(busy){
+  noticeAdmin.busy=busy;
+  document.querySelectorAll('[data-admin-panel="notices"] input,[data-admin-panel="notices"] textarea,[data-admin-panel="notices"] button').forEach(el=>{el.disabled=busy;});
+  $('#noticeEnd').disabled=busy||noticeAdmin.current?.status!=='published';
+}
+function renderAdminNoticeList(){
+  const list=$('#noticeAdminList');if(!list)return;
+  if(!noticeAdmin.rows.length){list.innerHTML='<p class="empty">保存したお知らせはまだありません。</p>';return;}
+  list.innerHTML=noticeAdmin.rows.map(n=>{
+    const pending=n.status==='published'&&n.publication&&['title','body','date','href','linkLabel'].some(k=>(n.draft?.[k]||'')!==(n.publication[k]||''));
+    return `<button type="button" class="notice-admin-item${n.id===noticeAdmin.id?' is-current':''}" data-notice-edit="${escapeHtml(n.id)}"${noticeAdmin.busy?' disabled':''}><span class="notice-status notice-status-${escapeHtml(n.status)}">${noticeStateText(n)}${pending?'・下書きに変更あり':''}</span><strong>${escapeHtml(n.draft?.title||'無題')}</strong><small>${escapeHtml(formatJstDate(n.updatedAt))}</small></button>`;
+  }).join('');
+}
+async function loadAdminNotices(){
+  if(noticeAdmin.loading||noticeAdmin.busy)return;noticeAdmin.loading=true;$('#noticeListStatus').textContent='お知らせを読み込んでいます…';
+  try{const data=await apiWithTimeout('/admin/notices');noticeAdmin.rows=Array.isArray(data.notices)?data.notices:[];renderAdminNoticeList();$('#noticeListStatus').textContent=`${noticeAdmin.rows.length}件 ／ 公開中 ${noticeAdmin.rows.filter(n=>n.status==='published').length}件`;}
+  catch(e){$('#noticeListStatus').textContent=`取得できませんでした：${e.message}`;}
+  finally{noticeAdmin.loading=false;}
+}
+async function discardNoticeEdits(){return !noticeAdmin.dirty||await AhakoDialog.confirm('保存していない入力があります。入力を破棄して切り替えますか？',{title:'編集中のお知らせ',confirmLabel:'切り替える'});}
+async function saveAdminNotice(action){
+  if(noticeAdmin.busy||!$('#noticeAdminForm').reportValidity())return;
+  const draft=noticeDraftValue();if(action==='publish'&&!draft.body){$('#noticeSaveStatus').textContent='公開する本文を入力してください。';return;}
+  lockNoticeAdmin(true);
+  try{
+    if(action==='publish'&&!await AhakoDialog.confirm(`「${draft.title}」を読者向けに公開します。書店のお知らせ欄と未読マークに反映されます。`,{title:'お知らせを公開',confirmLabel:'公開する'}))return;
+    if(action==='end'&&!await AhakoDialog.confirm('このお知らせの掲載を終了します。下書きと履歴は運営画面に残ります。',{title:'掲載終了',confirmLabel:'掲載を終了する'}))return;
+    $('#noticeSaveStatus').textContent='保存しています…';
+    const data=await apiWithTimeout('/admin/notices',{method:'POST',body:JSON.stringify({action,id:noticeAdmin.id,expectedRevision:noticeAdmin.revision,draft})});
+    const notice=data.notice;noticeAdmin.rows=[notice,...noticeAdmin.rows.filter(n=>n.id!==notice.id)];setNoticeEditor(notice);
+    $('#noticeSaveStatus').textContent=action==='saveDraft'?'下書きを保存しました。公開中の内容は変わりません。':action==='publish'?'公開しました。書店のお知らせを開くと最新内容が表示されます。':'掲載を終了しました。';
+    $('#noticeListStatus').textContent=`${noticeAdmin.rows.length}件 ／ 公開中 ${noticeAdmin.rows.filter(n=>n.status==='published').length}件`;
+  }catch(e){$('#noticeSaveStatus').textContent=`保存できませんでした：${e.message} 入力内容はこの画面に残っています。`;}
+  finally{lockNoticeAdmin(false);}
+}
+$('#noticeAdminForm').addEventListener('input',()=>{noticeAdmin.dirty=true;previewAdminNotice();});
+$('#noticeAdminForm').addEventListener('submit',e=>{e.preventDefault();saveAdminNotice('saveDraft');});
+$('#noticePublish').onclick=()=>saveAdminNotice('publish');$('#noticeEnd').onclick=()=>saveAdminNotice('end');
+$('#noticeReload').onclick=loadAdminNotices;
+$('#noticeNew').onclick=async()=>{if(!noticeAdmin.busy&&await discardNoticeEdits())setNoticeEditor();};
+$('#noticeAdminList').addEventListener('click',async e=>{const button=e.target.closest('[data-notice-edit]');if(!button||noticeAdmin.busy||!await discardNoticeEdits())return;const notice=noticeAdmin.rows.find(n=>n.id===button.dataset.noticeEdit);if(notice)setNoticeEditor(notice);});
+window.addEventListener('beforeunload',e=>{if(noticeAdmin.dirty){e.preventDefault();e.returnValue='';}});
+setNoticeEditor();
+
 function setAdminTab(name,{remember=true}={}){
-  const valid=['status','selection','reports','contacts','authors','audit','maintenance'];
+  const valid=['status','selection','reports','contacts','authors','audit','notices','maintenance'];
   if(!valid.includes(name))name='status';
   document.querySelectorAll('[data-admin-tab]').forEach(b=>{const on=b.dataset.adminTab===name;b.classList.toggle('is-active',on);b.setAttribute('aria-selected',on?'true':'false');});
   document.querySelectorAll('[data-admin-panel]').forEach(p=>p.classList.toggle('is-active',p.dataset.adminPanel===name));
   if(remember)sessionStorage.setItem('ahako-admin-tab',name);
+  if(name==='notices'&&token)loadAdminNotices();
   if(name==='selection'&&token)loadOfficialShelfAdmin();
   if(name==='reports'&&token)loadReports();
   if(name==='contacts'&&token)loadContacts();
@@ -759,7 +822,7 @@ async function loadPreviews(){
     els.previewList.innerHTML=`<div class="empty">Preview一覧を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
   }
 }
-async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadContacts(),loadAuthors(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation(),loadRelayAnalytics(),loadPreviews()]);}
+async function loadDashboard(){await Promise.all([loadStats(),loadReports(),loadContacts(),loadAuthors(),loadAnalytics(),loadReaderAnalytics(),loadDistributionObservation(),loadRelayAnalytics(),loadPreviews(),loadAdminNotices()]);}
 
 async function loadReports(){const status=els.filter.value;els.list.innerHTML='<div class="empty">読み込み中…</div>';try{const [shown,open]=await Promise.all([api(`/admin/reports?status=${encodeURIComponent(status)}`),api('/admin/reports?status=open')]);els.openCount.textContent=open.count;els.shownCount.textContent=shown.count;renderReports(shown.reports);}catch(e){els.list.innerHTML=`<div class="empty">読み込めませんでした: ${escapeHtml(e.message)}</div>`;}}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}

@@ -89,7 +89,7 @@
  async function loadNotices(){
    if(noticeLoading)return;noticeLoading=true;noticeError='';if(document.querySelector('#storeInfoDialog').open)renderNotices();
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
-   try{const r=await fetch('./bookstore-notices.json',{cache:'no-store',signal:controller.signal});if(!r.ok)throw new Error();const rows=await r.json();if(!Array.isArray(rows))throw new Error();const ids=new Set();notices=rows.filter(n=>{if(!n||typeof n.id!=='string'||!n.id||typeof n.title!=='string'||ids.has(n.id))return false;ids.add(n.id);return true;}).map(n=>({id:n.id,title:n.title,date:String(n.date||''),body:String(n.body||''),href:typeof n.href==='string'?n.href:'',linkLabel:String(n.linkLabel||'')}));}
+   try{const r=await fetch(`${API}/notices`,{cache:'no-store',signal:controller.signal});if(!r.ok)throw new Error();const payload=await r.json();const rows=payload?.notices;if(!payload?.ok||!Array.isArray(rows))throw new Error();const ids=new Set();notices=rows.filter(n=>{if(!n||typeof n.id!=='string'||!n.id||typeof n.title!=='string'||ids.has(n.id))return false;ids.add(n.id);return true;}).map(n=>({id:n.id,title:n.title,date:String(n.date||''),body:String(n.body||''),href:typeof n.href==='string'?n.href:'',linkLabel:String(n.linkLabel||'')}));}
    catch(_){noticeError='お知らせを読み込めませんでした。時間をおいてお試しください。';}
    finally{clearTimeout(timer);noticeLoading=false;updateNoticeBadges();if(document.querySelector('#storeInfoDialog').open)renderNotices();}
  }

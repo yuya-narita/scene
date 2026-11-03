@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>あ箱 運営</title>
-  <link rel="stylesheet" href="./admin.css?v=20261023-preview-list-v1">
+  <link rel="stylesheet" href="./admin.css?v=2.29.0">
+  <link rel="stylesheet" href="./admin-notices.css?v=2.29.0">
   <link rel="stylesheet" href="./ios-input-guard.css?v=70.4">
 </head>
 <body>
@@ -32,6 +33,7 @@
         <button class="admin-tab" type="button" data-admin-tab="contacts">お問い合わせ <span id="contactTabBadge" class="tab-badge" hidden>0</span></button>
         <button class="admin-tab" type="button" data-admin-tab="authors">作者</button>
         <button class="admin-tab" type="button" data-admin-tab="audit">決済監査 <span id="auditTabBadge" class="tab-badge" hidden>0</span></button>
+        <button class="admin-tab" type="button" data-admin-tab="notices">お知らせ</button>
         <button class="admin-tab" type="button" data-admin-tab="maintenance">保守</button>
       </nav>
 
@@ -191,6 +193,29 @@
       </section>
       </div>
 
+      <div class="admin-tab-panel" data-admin-panel="notices">
+        <section class="panel">
+          <div class="section-head"><div><small>BOOKSTORE NOTICES</small><h2>お知らせ管理</h2></div><div class="row"><button id="noticeReload" type="button">一覧を更新</button><button id="noticeNew" type="button" class="primary">新しく作る</button></div></div>
+          <p>書店のお知らせ欄へ掲載します。文章だけでも、公開済み.sceneへのリンク付きでも発信できます。</p>
+          <p id="noticeListStatus" class="status" role="status"></p>
+          <div class="notice-admin-layout">
+            <div id="noticeAdminList" class="notice-admin-list" aria-label="保存したお知らせ"></div>
+            <form id="noticeAdminForm" class="notice-admin-editor">
+              <p id="noticeEditState" class="notice-edit-state"></p>
+              <label>タイトル <span>必須・120文字まで</span><input id="noticeTitle" maxlength="120" required></label>
+              <label>表示日<input id="noticeDate" type="date" required></label>
+              <label>本文 <span>公開時必須・12000文字まで</span><textarea id="noticeBody" rows="9" maxlength="12000"></textarea></label>
+              <label>リンク先URL <span>任意・公開済み.sceneの読書URLなど</span><input id="noticeHref" type="url" maxlength="2048" placeholder="https://…"></label>
+              <label>リンクの表示名 <span>任意</span><input id="noticeLinkLabel" maxlength="40" placeholder="体験する / 詳しく見る"></label>
+              <details class="notice-admin-preview"><summary>読者向け表示を確認</summary><small id="noticePreviewDate"></small><h3 id="noticePreviewTitle"></h3><p id="noticePreviewBody"></p><a id="noticePreviewLink" target="_blank" rel="noopener" hidden></a></details>
+              <p class="muted-note">「下書き保存」では読者向けの内容は変わりません。「公開する」で現在の入力を反映し、未読のお知らせとして表示します。</p>
+              <div class="notice-admin-actions"><button type="submit">下書き保存</button><button id="noticePublish" type="button" class="primary">公開する</button><button id="noticeEnd" type="button">掲載終了</button></div>
+              <p id="noticeSaveStatus" class="status" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+        </section>
+      </div>
+
       <div class="admin-tab-panel" data-admin-panel="maintenance">
       <section class="panel">
         <div class="section-head"><div><small>STORAGE</small><h2>R2ストレージ</h2></div><small class="muted-note">24時間未満の未参照素材は保護</small></div>
@@ -227,6 +252,6 @@
     </div>
   </main>
   <script src="./ahako-dialog.js?v=70.3"></script>
-  <script src="./admin.js?v=20261023-preview-stop-v1-9"></script>
+  <script src="./admin.js?v=2.29.0"></script>
 </body>
 </html>
