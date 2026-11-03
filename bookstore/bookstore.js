@@ -289,14 +289,23 @@ function readLaterBooks(){return readLaterItems().map(normalizeReadLater);}
 function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{publicationId:w.publicationId,title:w.title||'Untitled',coverUrl:w.coverUrl||'',detail:[w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' '),authorName:a.displayName||'作者',authorId:a.authorId||'',authorSlug:a.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
 function syncLater(){const b=document.querySelector('#saveLater');if(!currentPicked||!b)return;if(currentPicked._ownedCopy){b.classList.add('is-saved');b.textContent='✓ もっている本';b.setAttribute('aria-pressed','true');b.disabled=true;return;}b.disabled=false;const saved=readLaterItems().some(x=>x.publicationId===currentPicked.publicationId);b.classList.toggle('is-saved',saved);b.textContent=saved?'✓ 保存済み':'あとで読む';b.setAttribute('aria-pressed',saved?'true':'false');}
 function toggleLater(){if(!currentPicked||currentPicked._ownedCopy)return;const items=readLaterItems(),i=items.findIndex(x=>x.publicationId===currentPicked.publicationId);if(i>=0)items.splice(i,1);else items.unshift(readLaterRecord(currentPicked));try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));syncLater();renderHallMyShelf();}catch(_){}}
-function fillPicked(w){currentPicked=w;document.querySelector('#pickedCover').innerHTML=bookMarkup(w);hydrateCoverLoadState(document.querySelector('#pickedCover'));document.querySelector('#pickedTitle').textContent=w.title||'Untitled';document.querySelector('#pickedContext').textContent=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK';document.querySelector('#pickedDetail').textContent=w.description||w.subtitle||'';document.querySelector('#pickedAuthor').textContent=w.author?.displayName?`著者　${w.author.displayName}`:'';document.querySelector('#readBook').href=detailReadUrl(w);document.querySelector('#pickedContext').textContent=w._ownedCopy?'MY COPY':([w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK');syncLater();}
+function genreLabel(w){
+  const raw=String(w?.genre||w?.metadata?.genre||'').trim().toLowerCase();
+  const labels={fantasy:'ファンタジー',romance:'恋愛',horror:'ホラー',mystery:'ミステリ',sf:'SF',everyday:'日常',essay:'エッセイ',other:'その他'};
+  return labels[raw]||raw||'';
+}
+function detailContext(w){
+  const genre=genreLabel(w), episode=[w?.episodeLabel,w?.episodeTitle].filter(Boolean).join(' ・ ');
+  return [genre,episode].filter(Boolean).join('　／　')||(w?._ownedCopy?'MY COPY':'PUBLIC BOOK');
+}
+function fillPicked(w){currentPicked=w;document.querySelector('#pickedCover').innerHTML=bookMarkup(w);hydrateCoverLoadState(document.querySelector('#pickedCover'));document.querySelector('#pickedTitle').textContent=w.title||'Untitled';document.querySelector('#pickedContext').textContent=detailContext(w);document.querySelector('#pickedDetail').textContent=w.description||w.subtitle||'';document.querySelector('#pickedAuthor').textContent=w.author?.displayName?`著者　${w.author.displayName}`:'';document.querySelector('#readBook').href=detailReadUrl(w);document.querySelector('#pickedContext').textContent=detailContext(w);syncLater();}
 function pick(w){
   // V2.10.2: opening detail is a modal state. Motion/path animation must not keep
   // mutating the passage underneath while the user is trying to dismiss the detail.
   pathVelocity=0;pathBookHold=null;pathDrag=null;
   fillPicked(w);picked.hidden=false;document.body.classList.add('book-detail-open');document.body.style.overflow='hidden';
 }
-function detailCardMarkup(w){const a=w.author||{};return `<div class="detail-book">${bookMarkup(w)}</div><div class="detail-copy"><small>${esc([w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ')||'PUBLIC BOOK')}</small><h1>${esc(w.title||'Untitled')}</h1><p>${esc(w.description||w.subtitle||'')}</p><p class="author">${a.displayName?`著者　${esc(a.displayName)}`:''}</p></div><div class="picked-actions detail-actions-placeholder" aria-hidden="true"><span>あとで読む</span><span>ひらく</span></div>`;}
+function detailCardMarkup(w){const a=w.author||{};return `<div class="detail-book">${bookMarkup(w)}</div><div class="detail-copy"><small>${esc(detailContext(w))}</small><h1>${esc(w.title||'Untitled')}</h1><p>${esc(w.description||w.subtitle||'')}</p><p class="author">${a.displayName?`著者　${esc(a.displayName)}`:''}</p></div><div class="picked-actions detail-actions-placeholder" aria-hidden="true"><span>あとで読む</span><span>ひらく</span></div>`;}
 function removeDetailPreview(){if(detailPreview){detailPreview.remove();detailPreview=null;}}
 function detailTargetFromDrag(dx,dy){const horizontal=Math.abs(dx)>=Math.abs(dy);const amount=horizontal?dx:dy;return{horizontal,amount,delta:amount<0?1:-1};}
 function canMoveShelf(delta){return shelfIndex+delta>=0&&shelfIndex+delta<shelves.length;}
