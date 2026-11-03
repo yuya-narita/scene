@@ -1290,9 +1290,48 @@ if(pathMotionButton){
   pathMotionButton.addEventListener('pointercancel',(e)=>{e.stopPropagation();});
 }
 setPathMotionButton();document.querySelector('#roomMotion')?.addEventListener('click',toggleRoomMotion);
+// V2.22.3 — desktop keyboard navigation. Arrow keys mirror the spatial gestures
+// without changing the touch model: left/right browse/rotate, up/down enter/return/walk.
+function keyboardHallStep(dir){hallPreview=0;hallYaw=Math.round(hallYaw/90)*90+dir*90;rebaseHallMotion();renderHall();settleHall();}
+function keyboardHallVertical(dir){
+  if(dir<0){ // Up = enter the currently facing Hall destination/shelf.
+    const yaw=((Math.round(hallYaw/90)*90)%360+360)%360;
+    if(yaw===0){showNewArrivalsFromHall();return;}
+    if(yaw===90){enterBookPathFromHall();return;}
+    if(yaw===180){enterFantasyRoom();return;}
+    if(yaw===270&&hallShelfBooks(hallLibraryKind).length){openHallShelfRing(hallLibraryKind,0);return;}
+  }else{ // Down = NEW ARRIVALS ring, matching the Hall's return gesture.
+    showNewArrivalsFromHall();
+  }
+}
+window.addEventListener('keydown',e=>{
+  if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;
+  if(e.metaKey||e.ctrlKey||e.altKey||e.shiftKey)return;
+  if(e.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+  // Detail owns left/right browsing; vertical keys intentionally do nothing there.
+  if(!picked.hidden){if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();commitDetailHorizontal(e.key==='ArrowRight'?1:-1,e.key==='ArrowRight'?-picked.clientWidth:picked.clientWidth,0);}return;}
+  if(viewMode==='hall'&&roomId==='hall'){e.preventDefault();if(e.key==='ArrowLeft')keyboardHallStep(-1);else if(e.key==='ArrowRight')keyboardHallStep(1);else keyboardHallVertical(e.key==='ArrowUp'?-1:1);return;}
+  if(viewMode==='ring'){
+    e.preventDefault();
+    if(e.key==='ArrowLeft')move(-1);else if(e.key==='ArrowRight')move(1);
+    else if(e.key==='ArrowUp'){if(hallShelfRing)backToHallShelf();else if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();else if(roomId==='intro')showCentralHall(true);}
+    return;
+  }
+  if(viewMode==='path'&&(roomId==='path'||roomId==='forest')){
+    e.preventDefault();
+    if(e.key==='ArrowUp')pathProgress+=.72;else if(e.key==='ArrowDown')pathProgress-=.72;else if(e.key==='ArrowLeft')pathYaw-=18;else if(e.key==='ArrowRight')pathYaw+=18;
+    if(roomId==='forest')pathProgress=Math.max(0,Math.min(Math.max(0,Math.min(FOREST_APPROACH_BOOKS,books.length)-1),pathProgress));
+    renderPath();return;
+  }
+  if(roomId==='fantasy'&&roomShelfMode){
+    e.preventDefault();
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){roomCameraYaw+=e.key==='ArrowRight'?90:-90;roomCameraPreview=0;rebaseRoomMotion();applyRoomCamera(0,true);}
+    else if(roomShelfScroller)roomShelfScroller.scrollBy({top:e.key==='ArrowDown'?Math.max(180,innerHeight*.45):-Math.max(180,innerHeight*.45),behavior:'smooth'});
+  }
+});
 document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#hallFantasy')?.addEventListener('click',enterFantasyRoom);document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
 const hallEl=document.querySelector('#centralHall');
-hallEl?.addEventListener('pointerdown',e=>{/* V2.18.4: the large 0/90/180/270 gate cards are buttons, but they also occupy the natural swipe surface. Only the motion toggle is excluded; swiping on a gate must still allow the down-swipe back to NEW ARRIVALS. */if(e.target.closest('#hallMotion'))return;hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null};hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();});
+hallEl?.addEventListener('pointerdown',e=>{/* V2.22.3: real shelf covers/tabs must keep native click ownership on desktop. The Hall camera may capture empty shelf/gate space, but never a book cover or library tab. */if(e.target.closest('#hallMotion,.hall-my-book,.hall-library-tabs'))return;hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null};hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();});
 hallEl?.addEventListener('pointermove',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const dx=e.clientX-hallDrag.x,dy=e.clientY-hallDrag.y;if(!hallDrag.axis&&Math.hypot(dx,dy)>7)hallDrag.axis=Math.abs(dy)>Math.abs(dx)*1.12?'vertical':'horizontal';if(hallDrag.axis==='vertical'){if(dy>0)e.preventDefault();return;}if(Math.abs(dx)>2)e.preventDefault();hallDrag.lastX=e.clientX;hallPreview=-dx/Math.max(320,store.clientWidth)*135;renderHall();},{passive:false});
 hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const d=hallDrag,dx=e.clientX-d.x,dy=e.clientY-d.y,dt=Math.max(1,performance.now()-d.t),vx=dx/dt;hallDrag=null;if(d.axis==='vertical'){hallPreview=0;if(dy>58){const facingNew=Math.abs(wrapDeg(hallYaw))<42;if(facingNew){showNewArrivalsFromHall();return;}/* V2.21.2: MY LIBRARY gets the same shelf <-> ring vertical route as NEW ARRIVALS. The 270deg hall face can show either owned books or Read Later; open the currently visible collection. */const facingLibrary=Math.abs(wrapDeg(hallYaw-270))<42;if(facingLibrary&&hallShelfBooks(hallLibraryKind).length){openHallShelfRing(hallLibraryKind,0);return;}}settleHall();return;}const base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;
   // A normal deliberate swipe advances one entrance; no hard flick required.

@@ -549,3 +549,8 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
   .detail-card>.detail-copy{top:51%!important}
   body.book-path-active .focus-panel{left:18px!important;right:18px!important;bottom:max(92px,calc(env(safe-area-inset-bottom) + 84px))!important}
 }
+
+
+/* V2.22.3 — mobile storefront no longer needs the legacy below-the-fold copy.
+   The live work HUD now carries that role. Desktop keeps it while its future role is evaluated. */
+@media(max-width:680px){.below{display:none!important}}
