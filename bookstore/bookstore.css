@@ -571,3 +571,13 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
 /* Mobile uses the live work HUD, desktop keeps the legacy lower information band.
    intro-entry-active used to hide it for NEW ARRIVALS on every viewport. */
 @media(min-width:681px){body.intro-entry-active .below{display:flex!important}}
+
+
+/* V2.22.5 — desktop opening NEW ARRIVALS keeps the lower black information band.
+   Mobile still treats the opening ring as a sealed full-screen gesture surface. */
+@media(min-width:681px){
+  body.intro-entry-active{height:auto!important;max-height:none!important;overflow-x:hidden!important;overflow-y:auto!important;}
+  body.intro-entry-active main{height:auto!important;max-height:none!important;overflow:visible!important;}
+  body.intro-entry-active .store{height:min(820px,100svh)!important;min-height:600px!important;max-height:none!important;}
+  body.intro-entry-active .below{display:flex!important;}
+}

@@ -332,7 +332,14 @@ document.querySelector('#hallLaterTab')?.addEventListener('click',e=>{e.preventD
 const detailCard=document.querySelector('.detail-card');
 detailCard.addEventListener('pointerdown',e=>{if(e.target.closest('a,button'))return;detailDrag={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,lastT:performance.now(),vx:0,vy:0,moved:false};detailCard.setPointerCapture?.(e.pointerId);});
 detailCard.addEventListener('pointermove',e=>{if(!detailDrag||e.pointerId!==detailDrag.id)return;const dx=e.clientX-detailDrag.x,dy=e.clientY-detailDrag.y;if(!detailDrag.moved&&Math.max(Math.abs(dx),Math.abs(dy))<5)return;detailDrag.moved=true;e.preventDefault();const now=performance.now(),dt=Math.max(1,now-detailDrag.lastT);detailDrag.vx=(e.clientX-detailDrag.lastX)/dt;detailDrag.vy=(e.clientY-detailDrag.lastY)/dt;detailDrag.lastX=e.clientX;detailDrag.lastY=e.clientY;detailDrag.lastT=now;applyDetailDrag(dx,dy);},{passive:false});
-detailCard.addEventListener('pointerup',e=>{if(!detailDrag||e.pointerId!==detailDrag.id)return;const d=detailDrag,dx=e.clientX-d.x,dy=e.clientY-d.y;detailDrag=null;if(!d.moved){resetDetailDrag();return;}const t=detailTargetFromDrag(dx,dy),speed=t.horizontal?Math.abs(d.vx):Math.abs(d.vy),size=t.horizontal?picked.clientWidth:picked.clientHeight;if(!t.horizontal&&!canMoveShelf(t.delta)){resetDetailDrag();return;}if(Math.abs(t.amount)>size*.20||speed>.52){if(t.horizontal)commitDetailHorizontal(t.delta,dx,dy);else resetDetailDrag();}else resetDetailDrag();});
+detailCard.addEventListener('pointerup',e=>{if(!detailDrag||e.pointerId!==detailDrag.id)return;const d=detailDrag,dx=e.clientX-d.x,dy=e.clientY-d.y;detailDrag=null;if(!d.moved){resetDetailDrag();return;}const t=detailTargetFromDrag(dx,dy),speed=t.horizontal?Math.abs(d.vx):Math.abs(d.vy),size=t.horizontal?picked.clientWidth:picked.clientHeight;
+  // V2.22.5: detail is one level deeper than the ring. An upward swipe always
+  // returns to the exact ring that opened it; it must not be interpreted as a
+  // future vertical shelf-navigation gesture.
+  if(!t.horizontal&&dy<0&&(Math.abs(dy)>Math.max(58,size*.10)||Math.abs(d.vy)>.42)){resetDetailDrag(false);closePick();return;}
+  if(!t.horizontal){resetDetailDrag();return;}
+  if(Math.abs(t.amount)>size*.20||speed>.52)commitDetailHorizontal(t.delta,dx,dy);else resetDetailDrag();
+});
 detailCard.addEventListener('pointercancel',()=>{detailDrag=null;resetDetailDrag();});
 document.querySelector('#prev').onclick=()=>move(-1);document.querySelector('#next').onclick=()=>move(1);
 stage.addEventListener('pointerdown',beginDrag);stage.addEventListener('pointermove',dragMove,{passive:false});stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',e=>endDrag(e,true));
