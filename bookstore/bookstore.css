@@ -2612,5 +2612,8 @@ nn/* V2.19.5 — static branch sign + approach gate visibility fix.\n   hidden m
   }
 }
 
-@keyframes phoneShelfFallIn{from{opacity:.2;filter:blur(2px)}60%{opacity:1;filter:blur(0)}to{opacity:1;filter:none}}
-@media(max-width:680px){#roomShelf.phone-original .room-shelf-face.phone-face-arriving .room-shelf-row{animation:phoneShelfFallIn .48s cubic-bezier(.18,.72,.3,1) both}#roomShelf.phone-original .room-shelf-face.phone-face-arriving .room-shelf-row:nth-child(2){animation-delay:.045s}#roomShelf.phone-original .room-shelf-face.phone-face-arriving .room-shelf-row:nth-child(3){animation-delay:.09s}#roomShelf.phone-original .room-shelf-face.phone-face-arriving .room-shelf-row:nth-child(4){animation-delay:.135s}#roomShelf.phone-original .room-shelf-face.phone-face-arriving .room-shelf-row:nth-child(5){animation-delay:.18s}#roomShelf.phone-original .room-shelf-face.phone-face-arriving .room-shelf-row:nth-child(6){animation-delay:.225s}}
+
+/* V2.28.0: direct browsing; restoring a wall position never animates. */
+@media(max-width:680px){
+ #roomShelf.phone-original #roomShelfScroll{scroll-behavior:auto!important;overscroll-behavior:none!important;}
+}

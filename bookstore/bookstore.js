@@ -598,8 +598,6 @@ function renderRoomShelfFace(face,keepScroll=false){
     // the incoming wall's position under the outgoing wall's index.
     roomShelfFace=face;roomVisibleFace=face;
     scroller.scrollTop=phoneShelfScrollPositions.get(face)||0;
-    const incoming=document.querySelector(`.room-shelf-face[data-face="${face}"]`);
-    if(incoming){incoming.classList.remove('phone-face-arriving');void incoming.offsetWidth;incoming.classList.add('phone-face-arriving');setTimeout(()=>incoming.classList.remove('phone-face-arriving'),520);}
   }else{roomShelfFace=face;roomVisibleFace=face;}
   const wrap=document.querySelector('#roomShelf');if(wrap)wrap.dataset.shelfFace=String(face);
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${face+1} / ${faces.length}`;
