@@ -980,3 +980,46 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
     background:transparent!important;
   }
 }
+
+/* V2.23.8 — Genre Room cover slot is authoritative.
+   The room shelf is a portrait BOOK display, not an image-aspect preview.
+   Fill the complete 2:3 book face itself: no contain letterboxing, no cover crop,
+   and no natural-ratio landscape band. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-book,
+  .store.room-fantasy .room-shelf-book{
+    flex:0 0 clamp(92px,7.8vw,120px)!important;
+    width:clamp(92px,7.8vw,120px)!important;
+    height:auto!important;
+    aspect-ratio:2/3!important;
+    overflow:hidden!important;
+    background:transparent!important;
+    border-radius:3px!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-shell,
+  .store.room-fantasy .room-shelf-book .book-face{
+    position:absolute!important;
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+    aspect-ratio:2/3!important;
+    overflow:hidden!important;
+    background:transparent!important;
+    border-radius:3px!important;
+    transform:none!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-face img{
+    position:absolute!important;
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+    max-width:none!important;
+    max-height:none!important;
+    display:block!important;
+    margin:0!important;
+    object-fit:fill!important;
+    object-position:center center!important;
+    border-radius:3px!important;
+    transform:none!important;
+  }
+}
