@@ -518,45 +518,17 @@ function buildRoomShelfFaceLayer(face,f){
 }
 // Phone walls retain independent vertical browsing positions.
 const phoneShelfScrollPositions=new Map();
-// Use a bounded finger drag on phones; native momentum and JS clamping must
-// not compete at either end of the shelf.
-let phoneShelfFinger=null;
-function phoneShelfTouchEnabled(){return roomShelfMode&&window.matchMedia('(max-width:680px)').matches;}
-document.querySelector('#roomShelfScroll')?.addEventListener('touchstart',e=>{
-  if(!phoneShelfTouchEnabled()||e.touches.length!==1)return;
-  syncPhoneShelfOffsets();
-  const t=e.touches[0],scroller=e.currentTarget;
-  phoneShelfFinger={x:t.clientX,y:t.clientY,scroll:scroller.scrollTop,axis:null};
-},{passive:true});
-document.querySelector('#roomShelfScroll')?.addEventListener('touchmove',e=>{
-  if(!phoneShelfTouchEnabled()||!phoneShelfFinger||e.touches.length!==1)return;
-  const t=e.touches[0],d=phoneShelfFinger,dx=t.clientX-d.x,dy=t.clientY-d.y;
-  if(!d.axis&&Math.hypot(dx,dy)>5)d.axis=Math.abs(dy)>Math.abs(dx)?'y':'x';
-  if(e.cancelable)e.preventDefault();
-  if(d.axis==='y'){
-    const scroller=e.currentTarget,max=Number(scroller.dataset.phoneMaxScroll)||0;
-    scroller.scrollTop=Math.max(0,Math.min(max,d.scroll-dy));
-    syncPhoneShelfOffsets();updateRoomShelfPerspective();
-  }
-},{passive:false});
-document.querySelector('#roomShelfScroll')?.addEventListener('touchend',()=>{phoneShelfFinger=null;},{passive:true});
-document.querySelector('#roomShelfScroll')?.addEventListener('touchcancel',()=>{phoneShelfFinger=null;},{passive:true});
-
 function syncPhoneShelfOffsets(){
   const scroller=document.querySelector('#roomShelfScroll');
   if(!scroller||!window.matchMedia('(max-width:680px)').matches)return;
-  // Bound browsing by THIS wall's actual rows, not the tallest of all four walls.
+  phoneShelfScrollPositions.set(roomShelfFace,scroller.scrollTop);
   const layer=scroller.querySelector(`.room-shelf-face[data-face="${roomShelfFace}"]`);
   const rows=layer?[...layer.querySelectorAll('.room-shelf-row')]:[];
   const last=rows[rows.length-1];
-  const paddingTop=parseFloat(getComputedStyle(scroller).paddingTop)||0;
+  const top=parseFloat(getComputedStyle(scroller).paddingTop)||0;
   const bottom=Number(scroller.dataset.phoneClipBottom)||0;
-  const contentEnd=last?paddingTop+last.offsetTop+last.offsetHeight:0;
-  const maxScroll=Math.max(0,contentEnd-(scroller.clientHeight-bottom));
-  scroller.dataset.phoneMaxScroll=String(maxScroll);
-  const bounded=Math.max(0,Math.min(maxScroll,scroller.scrollTop));
-  if(Math.abs(scroller.scrollTop-bounded)>.5)scroller.scrollTop=bounded;
-  phoneShelfScrollPositions.set(roomShelfFace,bounded);
+  const end=last?top+last.offsetTop+last.offsetHeight:0;
+  scroller.dataset.phoneMaxScroll=String(Math.max(0,end-(scroller.clientHeight-bottom)));
 }
 function layoutPhoneShelfViewport(){
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll');
@@ -646,7 +618,7 @@ function paintRoomShelfAtYaw(yaw){
       layer.style.setProperty('transform',`translate3d(${xPx}px,0,0)`,'important');
       layer.style.zIndex=String(100-Math.round(dist));
     });
-    if(roomVisibleFace!==near.face&&near.dist<45)renderRoomShelfFace(near.face,true);
+    if(roomVisibleFace!==near.face&&near.dist<8)renderRoomShelfFace(near.face,true);
     return;
   }
   // Desktop keeps the current framed-page implementation.
@@ -1435,6 +1407,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
 },{capture:true,passive:false});
 roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;syncPhoneShelfOffsets();updateRoomShelfPerspective()})},{passive:true});
+roomShelfScroller?.addEventListener('scrollend',()=>{if(!window.matchMedia('(max-width:680px)').matches)return;const max=Number(roomShelfScroller.dataset.phoneMaxScroll)||0;roomShelfScroller.scrollTop=Math.max(0,Math.min(max,roomShelfScroller.scrollTop));},{passive:true});
 // V2.24.3 — desktop wheel ownership follows the pointer.
 // Over the shelf panel, the wheel belongs to the shelf and scrolls vertically
 // through its rows. Over the Genre Room background, the same wheel rotates the

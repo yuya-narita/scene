@@ -2611,7 +2611,3 @@ nn/* V2.19.5 — static branch sign + approach gate visibility fix.\n   hidden m
     scroll-behavior:smooth;
   }
 }
-
-@media(max-width:680px){
- #roomShelf.phone-original #roomShelfScroll{touch-action:none!important;scroll-behavior:auto!important;overscroll-behavior:none!important;}
-}
