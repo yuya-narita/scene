@@ -516,6 +516,35 @@ function buildRoomShelfFaceLayer(face,f){
   }
   return layer;
 }
+// Phone walls retain independent vertical browsing positions.
+const phoneShelfScrollPositions=new Map();
+function syncPhoneShelfOffsets(){
+  const scroller=document.querySelector('#roomShelfScroll');
+  if(!scroller||!window.matchMedia('(max-width:680px)').matches)return;
+  const current=scroller.scrollTop;
+  phoneShelfScrollPositions.set(roomShelfFace,current);
+  scroller.querySelectorAll('.room-shelf-face').forEach(layer=>{
+    const face=Number(layer.dataset.face)||0;
+    layer.style.top=`${current-(phoneShelfScrollPositions.get(face)||0)}px`;
+  });
+}
+function layoutPhoneShelfViewport(){
+  const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll');
+  if(!wrap?.classList.contains('phone-original')||wrap.hidden||!scroller)return;
+  const rect=scroller.getBoundingClientRect();
+  const controls=['#roomExitNav','#roomMotion'].map(q=>document.querySelector(q)).filter(el=>el&&!el.hidden);
+  const top=Math.max(0,...controls.map(el=>el.getBoundingClientRect().bottom-rect.top+12));
+  const hint=wrap.querySelector('.room-shelf-hint');
+  const bottom=Math.max(0,hint?rect.bottom-hint.getBoundingClientRect().top+12:32);
+  scroller.style.clipPath=`inset(${top}px 0 ${bottom}px 0)`;
+  // Leave the upper clipping edge fixed; add breathing room before the first row.
+  const startGap=Math.max(44,Math.min(68,window.innerHeight*.067));
+  scroller.dataset.phoneStartGap=String(startGap);
+  scroller.style.paddingTop=`${top+startGap}px`;
+  scroller.style.paddingBottom=`${bottom+12}px`;
+  syncPhoneShelfOffsets();updateRoomShelfPerspective();
+}
+window.addEventListener('resize',()=>requestAnimationFrame(layoutPhoneShelfViewport));
 function renderRoomShelf(){
   roomShelfVisualYaw=null;roomShelfVisualTargetYaw=roomCameraYaw+roomCameraPreview;roomShelfVisualLastTs=0;if(roomShelfVisualRaf){cancelAnimationFrame(roomShelfVisualRaf);roomShelfVisualRaf=0;}
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll'),grid=document.querySelector('#roomShelfGrid');
@@ -545,7 +574,7 @@ function renderRoomShelf(){
   wrap.hidden=false;stage.hidden=true;wrap.dataset.shelfFace=String(roomShelfFace);
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${roomShelfFace+1} / ${faces.length}`;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
-  scroller.scrollTop=0;roomVisibleFace=roomShelfFace;requestAnimationFrame(()=>{updateRoomShelfPerspective();applyRoomCamera(roomCameraPreview,true)});
+  scroller.scrollTop=window.matchMedia('(max-width:680px)').matches?(phoneShelfScrollPositions.get(roomShelfFace)||0):0;roomVisibleFace=roomShelfFace;requestAnimationFrame(()=>{layoutPhoneShelfViewport();updateRoomShelfPerspective();applyRoomCamera(roomCameraPreview,true)});
 }
 function roomFaceAngle(){const n=Math.max(1,roomShelfFaces().length);return 360/n;}
 function wrapDeg(v){return ((v%360)+540)%360-180;}
@@ -557,7 +586,13 @@ function nearestShelfForYaw(yaw){
 }
 // V2.16.8: shelf faces are persistent world objects. Never rebuild a face while turning.
 function renderRoomShelfFace(face,keepScroll=false){
-  const faces=roomShelfFaces();face=((face%faces.length)+faces.length)%faces.length;roomShelfFace=face;roomVisibleFace=face;
+  const faces=roomShelfFaces();face=((face%faces.length)+faces.length)%faces.length;
+  if(window.matchMedia('(max-width:680px)').matches&&face!==roomShelfFace){
+    const scroller=document.querySelector('#roomShelfScroll');
+    if(scroller){phoneShelfScrollPositions.set(roomShelfFace,scroller.scrollTop);scroller.scrollTop=phoneShelfScrollPositions.get(face)||0;}
+  }
+  roomShelfFace=face;roomVisibleFace=face;
+  syncPhoneShelfOffsets();updateRoomShelfPerspective();
   const wrap=document.querySelector('#roomShelf');if(wrap)wrap.dataset.shelfFace=String(face);
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${face+1} / ${faces.length}`;
 }
@@ -580,7 +615,7 @@ function paintRoomShelfAtYaw(yaw){
       layer.style.setProperty('transform',`translate3d(${xPx}px,0,0)`,'important');
       layer.style.zIndex=String(100-Math.round(dist));
     });
-    if(roomVisibleFace!==near.face&&near.dist<8)renderRoomShelfFace(near.face,true);
+    if(roomVisibleFace!==near.face&&near.dist<45)renderRoomShelfFace(near.face,true);
     return;
   }
   // Desktop keeps the current framed-page implementation.
@@ -700,17 +735,17 @@ async function toggleRoomMotion(){
 function updateRoomShelfPerspective(){
   const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
   if(window.matchMedia('(max-width:680px)').matches){
-  const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
-  const h=Math.max(1,scroller.clientHeight),scrollTop=scroller.scrollTop;
-  scroller.querySelectorAll('.room-shelf-row').forEach(row=>{
-    const cy=row.offsetTop-scrollTop+row.offsetHeight/2,rel=cy/h;
-    const top=Math.max(0,Math.min(1,(.42-rel)/.42));
-    const bottom=Math.max(0,Math.min(1,(rel-.78)/.22));
-    // V2.16.15R1: keep the tall-shelf perspective, but do not make the upper row look disabled.
-    const tilt=top*58-bottom*8,scale=1-top*.16-bottom*.05,z=-top*120;
-    row.style.setProperty('--shelf-tilt',`${tilt.toFixed(1)}deg`);row.style.setProperty('--shelf-scale',scale.toFixed(3));row.style.setProperty('--shelf-z',`${z.toFixed(0)}px`);row.style.opacity=String(Math.max(.76,1-top*.20-bottom*.16));
-    row.style.zIndex=String(100-Math.round(top*20+bottom*5));
-  });
+    scroller.querySelectorAll('.room-shelf-face').forEach(layer=>{
+      const scroll=phoneShelfScrollPositions.get(Number(layer.dataset.face)||0)||0;
+      layer.querySelectorAll('.room-shelf-row').forEach(row=>{
+        // Start face-on; tilt only as the row crosses the upper viewing edge.
+        const top=Math.max(0,Math.min(1,(scroll-row.offsetTop-(Number(scroller.dataset.phoneStartGap)||0))/Math.max(1,row.offsetHeight)));
+        row.style.setProperty('--shelf-tilt',`${(top*58).toFixed(1)}deg`);
+        row.style.setProperty('--shelf-scale',(1-top*.16).toFixed(3));
+        row.style.setProperty('--shelf-z',`${(-top*120).toFixed(0)}px`);
+        row.style.opacity=String(1-top*.20);row.style.zIndex=String(100-Math.round(top*20));
+      });
+    });
     return;
   }
   // V2.24.9: all Genre Room shelf pages stay flat on desktop and iPhone.
@@ -1368,7 +1403,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
   }
 },{capture:true,passive:false});
 roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
-roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
+roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;syncPhoneShelfOffsets();updateRoomShelfPerspective()})},{passive:true});
 // V2.24.3 — desktop wheel ownership follows the pointer.
 // Over the shelf panel, the wheel belongs to the shelf and scrolls vertically
 // through its rows. Over the Genre Room background, the same wheel rotates the
