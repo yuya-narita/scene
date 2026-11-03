@@ -802,3 +802,54 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
     object-position:center center!important;
   }
 }
+
+/* V2.23.4 — Genre Room thumbnail fit pass.
+   The shelf slot, not the source image, owns the geometry. Keep a compact 2:3
+   cover card and fit the complete artwork inside it so landscape/odd source
+   ratios can neither crop nor reshape the shelf. The smaller card also leaves
+   enough vertical breathing room for keyboard up/down scrolling. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-books{
+    min-height:178px!important;
+    gap:14px!important;
+  }
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-book,
+  .store.room-fantasy .room-shelf-book{
+    flex:0 0 clamp(86px,7.2vw,112px)!important;
+    width:clamp(86px,7.2vw,112px)!important;
+    height:auto!important;
+    aspect-ratio:2/3!important;
+    overflow:hidden!important;
+    border-radius:3px!important;
+    background:#0c0b09!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-shell,
+  .store.room-fantasy .room-shelf-book .book-face{
+    position:absolute!important;
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+    min-width:0!important;
+    min-height:0!important;
+    transform:none!important;
+    overflow:hidden!important;
+    border-radius:3px!important;
+    background:#0c0b09!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-face img{
+    position:absolute!important;
+    inset:0!important;
+    display:block!important;
+    width:100%!important;
+    height:100%!important;
+    max-width:100%!important;
+    max-height:100%!important;
+    object-fit:contain!important;
+    object-position:center center!important;
+    transform:none!important;
+  }
+  .store.room-fantasy .room-shelf-scroll{
+    padding-top:30px!important;
+    padding-bottom:34px!important;
+  }
+}
