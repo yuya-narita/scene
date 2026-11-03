@@ -771,3 +771,34 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
     object-position:center center!important;
   }
 }
+
+/* V2.23.3 — stable desktop first-view panorama + clean fixed cover slots.
+   Keep NEW ARRIVALS on one immutable desktop background geometry while its data/covers load.
+   Genre-room covers use the same 2:3 visual slot as the main ring: artwork fills the slot
+   without stretching, so arbitrary source aspect ratios cannot reshape the shelf. */
+@media(min-width:681px){
+  .store.intro-mode{
+    background-size:auto 100%!important;
+    background-position:50% 50%!important;
+    background-repeat:repeat-x!important;
+    transition:none!important;
+  }
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-book{
+    flex:0 0 clamp(104px,9vw,142px)!important;
+    width:clamp(104px,9vw,142px)!important;
+    height:auto!important;
+    aspect-ratio:2/3!important;
+    overflow:hidden!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-shell,
+  .store.room-fantasy .room-shelf-book .book-face{
+    width:100%!important;height:100%!important;
+    inset:0!important;overflow:hidden!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-face img{
+    display:block!important;
+    width:100%!important;height:100%!important;
+    object-fit:cover!important;
+    object-position:center center!important;
+  }
+}
