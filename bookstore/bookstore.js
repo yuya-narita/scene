@@ -518,6 +518,30 @@ function buildRoomShelfFaceLayer(face,f){
 }
 // Phone walls retain independent vertical browsing positions.
 const phoneShelfScrollPositions=new Map();
+// Use a bounded finger drag on phones; native momentum and JS clamping must
+// not compete at either end of the shelf.
+let phoneShelfFinger=null;
+function phoneShelfTouchEnabled(){return roomShelfMode&&window.matchMedia('(max-width:680px)').matches;}
+document.querySelector('#roomShelfScroll')?.addEventListener('touchstart',e=>{
+  if(!phoneShelfTouchEnabled()||e.touches.length!==1)return;
+  syncPhoneShelfOffsets();
+  const t=e.touches[0],scroller=e.currentTarget;
+  phoneShelfFinger={x:t.clientX,y:t.clientY,scroll:scroller.scrollTop,axis:null};
+},{passive:true});
+document.querySelector('#roomShelfScroll')?.addEventListener('touchmove',e=>{
+  if(!phoneShelfTouchEnabled()||!phoneShelfFinger||e.touches.length!==1)return;
+  const t=e.touches[0],d=phoneShelfFinger,dx=t.clientX-d.x,dy=t.clientY-d.y;
+  if(!d.axis&&Math.hypot(dx,dy)>5)d.axis=Math.abs(dy)>Math.abs(dx)?'y':'x';
+  if(e.cancelable)e.preventDefault();
+  if(d.axis==='y'){
+    const scroller=e.currentTarget,max=Number(scroller.dataset.phoneMaxScroll)||0;
+    scroller.scrollTop=Math.max(0,Math.min(max,d.scroll-dy));
+    syncPhoneShelfOffsets();updateRoomShelfPerspective();
+  }
+},{passive:false});
+document.querySelector('#roomShelfScroll')?.addEventListener('touchend',()=>{phoneShelfFinger=null;},{passive:true});
+document.querySelector('#roomShelfScroll')?.addEventListener('touchcancel',()=>{phoneShelfFinger=null;},{passive:true});
+
 function syncPhoneShelfOffsets(){
   const scroller=document.querySelector('#roomShelfScroll');
   if(!scroller||!window.matchMedia('(max-width:680px)').matches)return;
@@ -529,6 +553,7 @@ function syncPhoneShelfOffsets(){
   const bottom=Number(scroller.dataset.phoneClipBottom)||0;
   const contentEnd=last?paddingTop+last.offsetTop+last.offsetHeight:0;
   const maxScroll=Math.max(0,contentEnd-(scroller.clientHeight-bottom));
+  scroller.dataset.phoneMaxScroll=String(maxScroll);
   const bounded=Math.max(0,Math.min(maxScroll,scroller.scrollTop));
   if(Math.abs(scroller.scrollTop-bounded)>.5)scroller.scrollTop=bounded;
   phoneShelfScrollPositions.set(roomShelfFace,bounded);
