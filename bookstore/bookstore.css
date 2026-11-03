@@ -2622,5 +2622,4 @@ nn/* V2.19.5 — static branch sign + approach gate visibility fix.\n   hidden m
 @media(max-width:680px){
  #roomShelf.phone-original .room-shelf-row{transform:none!important;transition:none!important;animation:none!important;}
  #roomShelf.phone-original .room-shelf-face{transition:none!important;animation:none!important;}
- #roomShelf.phone-original .room-motion{display:none!important;}
 }
