@@ -505,9 +505,16 @@ function buildRoomShelfFaceLayer(face,f){
     const globalStart=indexSlice[0]??0;
     const row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(globalStart);
     row.setAttribute('aria-label',`${Math.floor(local/cols)+1}段目の本を見る`);
-    row.innerHTML=`<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" data-book-index="${indexSlice[offset]??globalStart+offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}<span class="room-book-info"><strong>${esc(w.title||'無題')}</strong><small class="room-book-episode">${esc([w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ')||'')}</small><small class="room-book-author">${esc(w.author?.displayName||w.authorName||w.byline||'')}</small></span></span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
-    row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book');if(!hit)return;openShelfRow(Number(hit.dataset.bookIndex)||0,0)});
-    row.addEventListener('keydown',e=>{const hit=e.target.closest('.room-shelf-book');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openShelfRow(Number(hit.dataset.bookIndex)||0,0)}});
+    const mobileShelf=window.matchMedia('(max-width:680px)').matches;
+    // V2.26.4: mobile uses the actual legacy Room-shelf book DOM again.
+    // Do not invent a separate phone cover renderer: the original shelf paired
+    // bookMarkup(w) and the wooden board inside every row. Desktop keeps the
+    // newer information card layout.
+    row.innerHTML=mobileShelf
+      ? `<span class="legacy-shelf-books">${slice.map((w,offset)=>`<span class="legacy-shelf-card" data-book-offset="${offset}" data-book-index="${indexSlice[offset]??globalStart+offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${w.coverUrl?`<img class="legacy-shelf-cover" src="${esc(w.coverUrl)}" alt="" decoding="async">`:`<span class="legacy-shelf-fallback">あ□</span>`}</span>`).join('')}</span><span class="legacy-shelf-board" aria-hidden="true"></span>`
+      : `<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" data-book-index="${indexSlice[offset]??globalStart+offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}<span class="room-book-info"><strong>${esc(w.title||'無題')}</strong><small class="room-book-episode">${esc([w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ')||'')}</small><small class="room-book-author">${esc(w.author?.displayName||w.authorName||w.byline||'')}</small></span></span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
+    row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book, .legacy-shelf-card');if(!hit)return;openShelfRow(Number(hit.dataset.bookIndex)||0,0)});
+    row.addEventListener('keydown',e=>{const hit=e.target.closest('.room-shelf-book, .legacy-shelf-card');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openShelfRow(Number(hit.dataset.bookIndex)||0,0)}});
     layer.appendChild(row);hydrateCoverLoadState(row);
   }
   return layer;
@@ -558,35 +565,29 @@ function renderRoomShelfFace(face,keepScroll=false){
 }
 function paintRoomShelfAtYaw(yaw){
   const grid=document.querySelector('#roomShelfGrid');if(!grid)return;
-  // V2.25.8: iPhone uses the original frameless shelf presentation. During the
-  // desktop shelf experiments the wide page compositor could translate every
-  // phone face out of view. On phone, keep the nearest physical wall centred;
-  // horizontal room turning is handled by the room camera, not by a PC-sized page.
+  const near=nearestShelfForYaw(yaw);
+  // V2.26.5 — iPhone uses the original V2.16 persistent-world shelf motion.
+  // Do not hard-swap faces: neighbouring physical shelves travel through the
+  // viewport continuously while the finger turns the shared Room camera.
   if(window.matchMedia('(max-width:680px)').matches){
-    const near=nearestShelfForYaw(yaw);
+    const travelPx=Math.max(window.innerWidth,grid.clientWidth)*1.18;
     grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
-      const face=Number(layer.dataset.face)||0,active=face===near.face;
-      layer.style.visibility=active?'visible':'hidden';
-      layer.style.pointerEvents=active?'auto':'none';
-      layer.style.opacity=active?'1':'0';
-      layer.style.transform='translate3d(0,0,0)';
-      layer.style.zIndex=active?'2':'1';
+      const face=Number(layer.dataset.face)||0,delta=wrapDeg(shelfWorldAngle(face)-yaw),dist=Math.abs(delta);
+      const travel=Math.min(1.30,dist/ROOM_VIEW_SLOT_DEG),side=Math.sign(delta)||1;
+      const xPx=side*travel*travelPx;
+      const visible=dist<112;
+      layer.style.visibility=visible?'visible':'hidden';
+      layer.style.pointerEvents=dist<18?'auto':'none';
+      layer.style.opacity=visible?'1':'0';
+      layer.style.setProperty('transform',`translate3d(${xPx}px,0,0)`,'important');
+      layer.style.zIndex=String(100-Math.round(dist));
     });
-    if(roomVisibleFace!==near.face)renderRoomShelfFace(near.face,true);
+    if(roomVisibleFace!==near.face&&near.dist<8)renderRoomShelfFace(near.face,true);
     return;
   }
-  // V2.24.4: every fixed wall stays mounted while the room turns. Desktop used
-  // to hard-swap visibility here, which made 1/4 -> 2/4 pop instantly. Use the
-  // same world-space slide on desktop and mobile so the neighbouring shelf
-  // visibly enters from the side.
-  const near=nearestShelfForYaw(yaw);
+  // Desktop keeps the current framed-page implementation.
   const viewport=document.querySelector('#roomShelfScroll');
-  // V2.24.8: slide one complete framed shelf page across the shelf viewport.
-  // Using the viewport width (not window width) makes the next frame enter exactly
-  // from the neighbouring page instead of making only the covers drift inside it.
-  const mobileShelf=window.matchMedia('(max-width:680px)').matches;
-  const shelfWrap=document.querySelector('#roomShelf');
-  const travelPx=Math.max(1,mobileShelf?(shelfWrap?.clientWidth||grid.clientWidth||window.innerWidth):(viewport?.clientWidth||grid.clientWidth||window.innerWidth));
+  const travelPx=Math.max(1,viewport?.clientWidth||grid.clientWidth||window.innerWidth);
   grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
     const face=Number(layer.dataset.face)||0,delta=wrapDeg(shelfWorldAngle(face)-yaw),dist=Math.abs(delta);
     const travel=Math.min(1.30,dist/ROOM_VIEW_SLOT_DEG),side=Math.sign(delta)||1;
@@ -1339,7 +1340,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
   // visible cover geometrically instead of trusting event.target.
   let chosen=null;
   for(const row of roomShelfScroller.querySelectorAll('.room-shelf-row')){
-    const booksInRow=[...row.querySelectorAll('.room-shelf-book')];
+    const booksInRow=[...row.querySelectorAll('.room-shelf-book, .legacy-shelf-card')];
     for(let offset=0;offset<booksInRow.length;offset++){
       const r=booksInRow[offset].getBoundingClientRect();
       if(e.clientX>=r.left-5&&e.clientX<=r.right+5&&e.clientY>=r.top-5&&e.clientY<=r.bottom+5){chosen={start:Number(row.dataset.start)||0,offset};break;}
