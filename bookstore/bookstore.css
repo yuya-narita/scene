@@ -892,3 +892,46 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
     border-radius:3px!important;
   }
 }
+
+/* V2.23.6 — Genre Room desktop cover geometry.
+   Use the portrait proportion shown in the Room's normal book presentation.
+   No letterbox bars: the artwork fills a fixed 2:3 thumbnail and is cropped only
+   as needed, while the card itself stays compact enough for a growing shelf. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-book,
+  .store.room-fantasy .room-shelf-book{
+    flex:0 0 clamp(92px,7.8vw,120px)!important;
+    width:clamp(92px,7.8vw,120px)!important;
+    height:auto!important;
+    aspect-ratio:2/3!important;
+    overflow:hidden!important;
+    background:transparent!important;
+    border-radius:3px!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-shell,
+  .store.room-fantasy .room-shelf-book .book-face{
+    position:absolute!important;
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+    aspect-ratio:2/3!important;
+    overflow:hidden!important;
+    background:transparent!important;
+    border-radius:3px!important;
+    transform:none!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-face img{
+    position:absolute!important;
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+    max-width:none!important;
+    max-height:none!important;
+    object-fit:cover!important;
+    object-position:center center!important;
+    display:block!important;
+    margin:0!important;
+    border-radius:3px!important;
+    transform:none!important;
+  }
+}
