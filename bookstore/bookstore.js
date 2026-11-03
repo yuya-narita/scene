@@ -41,6 +41,8 @@ let shelfIndex=0;
 // V2.15.0 — each Room is a circular ring of tall shelf faces.
 // Only the front shelf is rendered at full detail; horizontal swipes rotate shelves.
 const ROOM_SHELF_CAPACITY=12;
+function roomShelfColumns(){return 4;}
+function roomShelfCapacity(){return roomShelfColumns()*6;}
 let roomShelfFace=0;
 // V2.16.0 — shared Room camera: shelf ring + background + optional device yaw.
 let roomCameraYaw=0,roomCameraPreview=0,roomMotionOn=false,roomMotionBaseAlpha=null,roomMotionLastAlpha=null;
@@ -414,7 +416,7 @@ function fantasyBooksReal(){
 function fantasyBooks(){
   const real=fantasyBooksReal();
   if(!real.length)return real;
-  return Array.from({length:48},(_,i)=>({...real[i%real.length],title:`${real[i%real.length].title||'Fantasy'} [DUMMY ${i+1}]`}));
+  return Array.from({length:60},(_,i)=>({...real[i%real.length],title:`${real[i%real.length].title||'Fantasy'} [DUMMY ${i+1}]`}));
 }
 
 function setRoomVisual(id){
@@ -479,16 +481,17 @@ async function enterForest(){
 // shelf ring, while vertical scrolling remains available inside a taller face later.
 // V2.24.1 — Genre Room geometry is permanently four-sided.
 // 0° / 90° / 180° / 270° always exist, even when some faces are empty.
-// Each 48-book tier contributes 12 books to each face; books beyond 48 continue
-// vertically on the same four physical faces instead of creating a fifth face.
+// Each physical face owns 24 books (4 columns x 6 rows). The room always keeps
+// the fixed 0° / 90° / 180° / 270° four-face skeleton; capacity is 96 books per tier.
 function roomShelfFaces(){
   const all=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();
-  const faces=Array.from({length:4},(_,face)=>({face,start:face*ROOM_SHELF_CAPACITY,books:[],indices:[]}));
-  for(let tier=0;tier*ROOM_SHELF_CAPACITY*4<all.length;tier++){
-    const tierBase=tier*ROOM_SHELF_CAPACITY*4;
+  const capacity=roomShelfCapacity();
+  const faces=Array.from({length:4},(_,face)=>({face,start:face*capacity,books:[],indices:[]}));
+  for(let tier=0;tier*capacity*4<all.length;tier++){
+    const tierBase=tier*capacity*4;
     for(let face=0;face<4;face++){
-      const start=tierBase+face*ROOM_SHELF_CAPACITY;
-      const end=Math.min(start+ROOM_SHELF_CAPACITY,all.length);
+      const start=tierBase+face*capacity;
+      const end=Math.min(start+capacity,all.length);
       for(let i=start;i<end;i++){faces[face].books.push(all[i]);faces[face].indices.push(i);}
     }
   }
@@ -496,12 +499,13 @@ function roomShelfFaces(){
 }
 function buildRoomShelfFaceLayer(face,f){
   const layer=document.createElement('div');layer.className='room-shelf-face';layer.dataset.face=String(face);
-  for(let local=0;local<f.books.length;local+=4){
-    const slice=f.books.slice(local,local+4),indexSlice=f.indices.slice(local,local+4);
+  const cols=roomShelfColumns();
+  for(let local=0;local<f.books.length;local+=cols){
+    const slice=f.books.slice(local,local+cols),indexSlice=f.indices.slice(local,local+cols);
     const globalStart=indexSlice[0]??0;
     const row=document.createElement('button');row.type='button';row.className='room-shelf-row';row.dataset.start=String(globalStart);
-    row.setAttribute('aria-label',`${Math.floor(local/4)+1}段目の本を見る`);
-    row.innerHTML=`<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" data-book-index="${indexSlice[offset]??globalStart+offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}</span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
+    row.setAttribute('aria-label',`${Math.floor(local/cols)+1}段目の本を見る`);
+    row.innerHTML=`<span class="room-shelf-books">${slice.map((w,offset)=>`<span class="room-shelf-book" data-book-offset="${offset}" data-book-index="${indexSlice[offset]??globalStart+offset}" role="button" tabindex="0" aria-label="${esc(w.title||'この本')}を中心に見る">${bookMarkup(w)}<span class="room-book-info"><strong>${esc(w.title||'無題')}</strong><small class="room-book-episode">${esc([w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ')||'')}</small><small class="room-book-author">${esc(w.author?.displayName||w.authorName||w.byline||'')}</small></span></span>`).join('')}</span><span class="room-shelf-board" aria-hidden="true"></span>`;
     row.addEventListener('click',e=>{const hit=e.target.closest('.room-shelf-book');if(!hit)return;openShelfRow(Number(hit.dataset.bookIndex)||0,0)});
     row.addEventListener('keydown',e=>{const hit=e.target.closest('.room-shelf-book');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openShelfRow(Number(hit.dataset.bookIndex)||0,0)}});
     layer.appendChild(row);hydrateCoverLoadState(row);
@@ -517,6 +521,17 @@ function renderRoomShelf(){
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   const faces=roomShelfFaces();roomShelfFace=((roomShelfFace%faces.length)+faces.length)%faces.length;
   grid.innerHTML='';faces.forEach((f,i)=>grid.appendChild(buildRoomShelfFaceLayer(i,f)));
+  // V2.24.5: all four walls occupy the SAME physical shelf plane.  They must
+  // never participate in normal document flow together (that stacked all 48
+  // dummy covers into one wall). Give the shared grid only the height needed
+  // by the longest physical wall so vertical wheel browsing still works.
+  const cols=roomShelfColumns();
+  const maxRows=Math.max(1,...faces.map(f=>Math.ceil(f.books.length/cols)));
+  grid.style.setProperty('--room-shelf-rows',String(maxRows));
+  // V2.25.0: each of the four physical shelf pages owns its own vertical scroll.
+  // The shared page stage must stay exactly viewport-sized; making the shared grid
+  // as tall as every row was what broke cover geometry on PC/iPhone.
+  grid.style.height='100%';
   wrap.hidden=false;stage.hidden=true;wrap.dataset.shelfFace=String(roomShelfFace);
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${roomShelfFace+1} / ${faces.length}`;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
@@ -538,23 +553,25 @@ function renderRoomShelfFace(face,keepScroll=false){
 }
 function paintRoomShelfAtYaw(yaw){
   const grid=document.querySelector('#roomShelfGrid');if(!grid)return;
-  if(window.matchMedia('(min-width:681px)').matches){
-    const near=nearestShelfForYaw(yaw);
-    if(roomShelfFace!==near.face&&near.dist<46)renderRoomShelfFace(near.face,true);
-    grid.querySelectorAll('.room-shelf-face').forEach((layer,i)=>{const active=i===roomShelfFace;layer.style.visibility=active?'visible':'hidden';layer.style.pointerEvents=active?'auto':'none';layer.style.opacity=active?'1':'0';layer.style.transform='none';layer.style.zIndex=active?'1':'0';});
-    return;
-  }
+  // V2.24.4: every fixed wall stays mounted while the room turns. Desktop used
+  // to hard-swap visibility here, which made 1/4 -> 2/4 pop instantly. Use the
+  // same world-space slide on desktop and mobile so the neighbouring shelf
+  // visibly enters from the side.
   const near=nearestShelfForYaw(yaw);
-  const travelPx=Math.max(window.innerWidth,grid.clientWidth)*1.18;
+  const viewport=document.querySelector('#roomShelfScroll');
+  // V2.24.8: slide one complete framed shelf page across the shelf viewport.
+  // Using the viewport width (not window width) makes the next frame enter exactly
+  // from the neighbouring page instead of making only the covers drift inside it.
+  const travelPx=Math.max(1,viewport?.clientWidth||grid.clientWidth||window.innerWidth);
   grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
     const face=Number(layer.dataset.face)||0,delta=wrapDeg(shelfWorldAngle(face)-yaw),dist=Math.abs(delta);
     const travel=Math.min(1.30,dist/ROOM_VIEW_SLOT_DEG),side=Math.sign(delta)||1;
     const xPx=side*travel*travelPx;
-    const visible=dist<112;
+    const visible=dist<89.9;
     layer.style.visibility=visible?'visible':'hidden';
     layer.style.pointerEvents=dist<18?'auto':'none';
     layer.style.opacity=visible?'1':'0';
-    layer.style.transform=`translate3d(${xPx}px,0,0)`;
+    layer.style.setProperty('transform',`translate3d(${xPx}px,0,0)`,'important');
     layer.style.zIndex=String(100-Math.round(dist));
   });
   if(roomVisibleFace!==near.face&&near.dist<8)renderRoomShelfFace(near.face,true);
@@ -588,9 +605,15 @@ function applyRoomCamera(previewDeg=0,instant=false){
   const bg=document.querySelector('#roomBgLayer');
   store.style.setProperty('--room-yaw',`${yaw}deg`);
   if(bg){
-    const phase=wrapDeg(yaw)/360;
     bg.style.transition='none';bg.style.backgroundSize=`${panoW}px 100%`;
-    bg.style.transform=`translate3d(${-phase*panoW}px,0,0)`;
+    if(window.matchMedia('(min-width:681px)').matches){
+      // V2.24.6: desktop room scenery is a fixed architectural backdrop.
+      // Only the shelf wall slides when changing 0/90/180/270 faces.
+      bg.style.transform='translate3d(0,0,0)';
+    }else{
+      const phase=wrapDeg(yaw)/360;
+      bg.style.transform=`translate3d(${-phase*panoW}px,0,0)`;
+    }
   }
   // Shelf-only visual smoothing. `instant` means input is current, not that the shelf should bypass smoothing.
   // Force only the first paint so entering the room never animates from an old session angle.
@@ -653,22 +676,8 @@ async function toggleRoomMotion(){
 }
 function updateRoomShelfPerspective(){
   const scroller=document.querySelector('#roomShelfScroll');if(!roomShelfMode||!scroller)return;
-  // V2.23.0: desktop Genre Room is a flat display shelf, matching NEW ARRIVALS.
-  // The old upper-row tilt deformed covers and fought horizontal shelf rotation.
-  if(window.matchMedia('(min-width:681px)').matches){
-    scroller.querySelectorAll('.room-shelf-row').forEach(row=>{row.style.setProperty('--shelf-tilt','0deg');row.style.setProperty('--shelf-scale','1');row.style.setProperty('--shelf-z','0px');row.style.opacity='1';row.style.zIndex='1';});
-    return;
-  }
-  const h=Math.max(1,scroller.clientHeight),scrollTop=scroller.scrollTop;
-  scroller.querySelectorAll('.room-shelf-row').forEach(row=>{
-    const cy=row.offsetTop-scrollTop+row.offsetHeight/2,rel=cy/h;
-    const top=Math.max(0,Math.min(1,(.42-rel)/.42));
-    const bottom=Math.max(0,Math.min(1,(rel-.78)/.22));
-    // V2.16.15R1: keep the tall-shelf perspective, but do not make the upper row look disabled.
-    const tilt=top*58-bottom*8,scale=1-top*.16-bottom*.05,z=-top*120;
-    row.style.setProperty('--shelf-tilt',`${tilt.toFixed(1)}deg`);row.style.setProperty('--shelf-scale',scale.toFixed(3));row.style.setProperty('--shelf-z',`${z.toFixed(0)}px`);row.style.opacity=String(Math.max(.76,1-top*.20-bottom*.16));
-    row.style.zIndex=String(100-Math.round(top*20+bottom*5));
-  });
+  // V2.24.9: all Genre Room shelf pages stay flat on desktop and iPhone.
+  scroller.querySelectorAll('.room-shelf-row').forEach(row=>{row.style.setProperty('--shelf-tilt','0deg');row.style.setProperty('--shelf-scale','1');row.style.setProperty('--shelf-z','0px');row.style.opacity='1';row.style.zIndex='1';});
 }
 async function openShelfRow(start,focusOffset=0){
   // Thumbnail -> whole Room book ring. The tapped thumbnail is still the front book.
@@ -1323,22 +1332,39 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
 },{capture:true,passive:false});
 roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;updateRoomShelfPerspective()})},{passive:true});
-// V2.24.2 — desktop mouse wheel rotates the fixed four-face Genre Room.
-// One deliberate wheel gesture advances exactly one 90° shelf face; a short
-// lock prevents trackpads / high-resolution wheels from skipping multiple faces.
+// V2.24.3 — desktop wheel ownership follows the pointer.
+// Over the shelf panel, the wheel belongs to the shelf and scrolls vertically
+// through its rows. Over the Genre Room background, the same wheel rotates the
+// room horizontally by one fixed 90° face. This mirrors the spatial controls:
+// inside = browse the current shelf, outside = turn to the next wall.
 let roomShelfWheelLock=false;
-roomShelfScroller?.addEventListener('wheel',e=>{
+store?.addEventListener('wheel',e=>{
   if(!roomShelfMode||roomId!=='fantasy'||!window.matchMedia('(min-width:681px)').matches)return;
+  if(e.target instanceof Element && e.target.closest('#roomShelf')){
+    // V2.24.4: the panel itself is not the scrolling element, so relying on the
+    // browser's native wheel routing was unreliable. Explicitly give the wheel
+    // to the shelf scroller while the pointer is anywhere inside the dark panel.
+    if(!roomShelfScroller)return;
+    const dy=Math.abs(e.deltaY)>=Math.abs(e.deltaX)?e.deltaY:e.deltaX;
+    if(Math.abs(dy)<1)return;
+    e.preventDefault();e.stopPropagation();
+    const activeFace=roomShelfScroller.querySelector(`.room-shelf-face[data-face="${roomShelfFace}"]`);if(activeFace)activeFace.scrollTop+=dy;
+    return;
+  }
   const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
   if(Math.abs(delta)<4)return;
   e.preventDefault();
   if(roomShelfWheelLock)return;
   roomShelfWheelLock=true;
   const faces=roomShelfFaces();
-  roomShelfFace=((roomShelfFace+(delta>0?1:-1))%faces.length+faces.length)%faces.length;
-  roomCameraYaw=roomShelfFace*ROOM_VIEW_SLOT_DEG;roomCameraPreview=0;
-  renderRoomShelfFace(roomShelfFace,true);rebaseRoomMotion();applyRoomCamera(0,true);
-  setTimeout(()=>{roomShelfWheelLock=false;},260);
+  const nextFace=((roomShelfFace+(delta>0?1:-1))%faces.length+faces.length)%faces.length;
+  const from=roomCameraYaw+roomCameraPreview,target=nextFace*ROOM_VIEW_SLOT_DEG;
+  roomCameraPreview=0;roomCameraInputLock=true;rebaseRoomMotion();
+  // V2.24.5: background-wheel turns are real camera turns, not hard swaps.
+  // animateRoomYaw drives paintRoomShelfAtYaw every frame so the neighbouring
+  // wall visibly travels in from the side.
+  animateRoomYaw(from,target,360);
+  setTimeout(()=>{roomShelfWheelLock=false;},390);
 },{passive:false});
 document.querySelector('.sign')?.addEventListener('click',()=>{if(roomId==='fantasy'&&!roomShelfMode)backToRoomShelf();});
 const pathEl=document.querySelector('#bookPath');pathEl.addEventListener('pointerdown',onPathPointerDown);pathEl.addEventListener('pointermove',onPathPointerMove,{passive:false});pathEl.addEventListener('pointerup',onPathPointerEnd);pathEl.addEventListener('pointercancel',()=>{pathDrag=null;pathBookHold=null});pathEl.addEventListener('wheel',onPathWheel,{passive:false});const pathMotionButton=document.querySelector('#motionStart');
@@ -1381,9 +1407,9 @@ window.addEventListener('keydown',e=>{
     if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
       const faces=roomShelfFaces();
       if(faces.length>1){
-        roomShelfFace=((roomShelfFace+(e.key==='ArrowRight'?1:-1))%faces.length+faces.length)%faces.length;
-        roomCameraYaw=roomShelfFace*ROOM_VIEW_SLOT_DEG;roomCameraPreview=0;
-        renderRoomShelfFace(roomShelfFace,true);rebaseRoomMotion();applyRoomCamera(0,true);
+        const nextFace=((roomShelfFace+(e.key==='ArrowRight'?1:-1))%faces.length+faces.length)%faces.length;
+        const from=roomCameraYaw+roomCameraPreview,target=nextFace*ROOM_VIEW_SLOT_DEG;
+        roomCameraPreview=0;roomCameraInputLock=true;rebaseRoomMotion();animateRoomYaw(from,target,360);
       }
     }else if(roomShelfScroller){
       roomShelfScroller.scrollBy({top:e.key==='ArrowDown'?Math.max(180,innerHeight*.45):-Math.max(180,innerHeight*.45),behavior:'smooth'});
