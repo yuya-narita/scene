@@ -521,9 +521,17 @@ const phoneShelfScrollPositions=new Map();
 function syncPhoneShelfOffsets(){
   const scroller=document.querySelector('#roomShelfScroll');
   if(!scroller||!window.matchMedia('(max-width:680px)').matches)return;
-  // The scroll container owns vertical movement. Moving the absolutely positioned
-  // faces as well doubles the scroll distance and sends the whole shelf away.
-  phoneShelfScrollPositions.set(roomShelfFace,scroller.scrollTop);
+  // Bound browsing by THIS wall's actual rows, not the tallest of all four walls.
+  const layer=scroller.querySelector(`.room-shelf-face[data-face="${roomShelfFace}"]`);
+  const rows=layer?[...layer.querySelectorAll('.room-shelf-row')]:[];
+  const last=rows[rows.length-1];
+  const paddingTop=parseFloat(getComputedStyle(scroller).paddingTop)||0;
+  const bottom=Number(scroller.dataset.phoneClipBottom)||0;
+  const contentEnd=last?paddingTop+last.offsetTop+last.offsetHeight:0;
+  const maxScroll=Math.max(0,contentEnd-(scroller.clientHeight-bottom));
+  const bounded=Math.max(0,Math.min(maxScroll,scroller.scrollTop));
+  if(Math.abs(scroller.scrollTop-bounded)>.5)scroller.scrollTop=bounded;
+  phoneShelfScrollPositions.set(roomShelfFace,bounded);
 }
 function layoutPhoneShelfViewport(){
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll');
@@ -533,6 +541,7 @@ function layoutPhoneShelfViewport(){
   const top=Math.max(0,...controls.map(el=>el.getBoundingClientRect().bottom-rect.top+12));
   const hint=wrap.querySelector('.room-shelf-hint');
   const bottom=Math.max(0,hint?rect.bottom-hint.getBoundingClientRect().top+12:32);
+  scroller.dataset.phoneClipBottom=String(bottom);
   scroller.style.clipPath=`inset(${top}px 0 ${bottom}px 0)`;
   // Leave the upper clipping edge fixed; add breathing room before the first row.
   const startGap=Math.max(44,Math.min(68,window.innerHeight*.067));
