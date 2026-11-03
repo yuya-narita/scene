@@ -497,6 +497,22 @@ function roomShelfFaces(){
   }
   return faces;
 }
+// Only the currently visible wall can supply a clicked book. Hidden walls can
+// have identical bounding boxes even though Safari/Chrome do not paint them.
+function roomShelfBookAtPoint(target,x,y){
+  const scroller=document.querySelector('#roomShelfScroll');
+  const layer=scroller?.querySelector(`.room-shelf-face[data-face="${roomShelfFace}"]`);
+  if(!layer)return null;
+  const style=getComputedStyle(layer);
+  if(style.visibility==='hidden'||style.display==='none'||style.pointerEvents==='none')return null;
+  const direct=target?.closest?.('.room-shelf-book, .legacy-shelf-card');
+  const candidates=direct&&layer.contains(direct)?[direct]:[...layer.querySelectorAll('.room-shelf-book, .legacy-shelf-card')];
+  for(const book of candidates){
+    const r=book.getBoundingClientRect(),index=Number(book.dataset.bookIndex);
+    if(r.width>0&&r.height>0&&Number.isInteger(index)&&index>=0&&book.dataset.bookIndex!==undefined&&x>=r.left-5&&x<=r.right+5&&y>=r.top-5&&y<=r.bottom+5)return index;
+  }
+  return null;
+}
 function buildRoomShelfFaceLayer(face,f){
   const layer=document.createElement('div');layer.className='room-shelf-face';layer.dataset.face=String(face);
   const cols=roomShelfColumns();
@@ -1481,23 +1497,14 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
     }
     return;
   }
-  // iPhone Safari can lose hit-testing on perspective-transformed rows. Resolve the
-  // visible cover geometrically instead of trusting event.target.
-  let chosen=null;
-  for(const row of roomShelfScroller.querySelectorAll('.room-shelf-row')){
-    const booksInRow=[...row.querySelectorAll('.room-shelf-book, .legacy-shelf-card')];
-    for(let offset=0;offset<booksInRow.length;offset++){
-      const r=booksInRow[offset].getBoundingClientRect();
-      if(e.clientX>=r.left-5&&e.clientX<=r.right+5&&e.clientY>=r.top-5&&e.clientY<=r.bottom+5){chosen={start:Number(row.dataset.start)||0,offset};break;}
-    }
-    if(chosen)break;
-  }
-  if(chosen){
+  // Preserve Safari's geometric fallback, scoped to the active wall.
+  const chosen=roomShelfBookAtPoint(e.target,e.clientX,e.clientY);
+  if(chosen!==null){
     e.preventDefault();e.stopPropagation();
     // V2.16.15R1: opening the ring must release touch ownership. Otherwise the
     // 360° sensor remains logically ON but its camera writes stay locked after returning.
     roomCameraInputLock=false;roomCameraPreview=0;rebaseRoomMotion();
-    openShelfRow(chosen.start,chosen.offset);
+    openShelfRow(chosen,0);
   }
 },{capture:true,passive:false});
 roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;if(phoneShelfSlide)settlePhoneShelfSlide(false);roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
