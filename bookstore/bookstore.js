@@ -665,8 +665,12 @@ function renderHallMyShelf(){renderHallShelf('#hallNewShelfBooks','new');renderH
 async function openHallShelfRing(kind,selectedIndex=0,openDetailAfterSpin=false){
   const selected=hallShelfBooks(kind);if(!selected.length)return;
   hallShelfRing=true;hallShelfKind=kind;hallPreview=0;hallDrag=null;rebaseHallMotion();
-  document.querySelector('#centralHall').hidden=true;document.querySelector('#roomBgLayer').style.display='block';
-  store.classList.remove('hall-mode','intro-mode');roomId='hall-shelf-ring';viewMode='ring';roomShelfMode=false;books=selected;index=norm(selectedIndex);dragUnits=0;
+  const hallBg=document.querySelector('#roomBgLayer');
+  document.querySelector('#centralHall').hidden=true;if(hallBg){hallBg.style.display='block';hallBg.style.removeProperty('background-size');hallBg.style.backgroundPosition=`calc(50% + ${hallBackgroundOffsetPx(hallYaw,hallBg).toFixed(2)}px) center`;}
+  // V2.22.4: Hall shelf/ring keeps the exact Hall panorama geometry. Removing
+  // hall-mode used to fall back to generic background-size:cover on desktop,
+  // which looked like the room suddenly zoomed when a shelf became a ring.
+  store.classList.remove('hall-mode','intro-mode');store.classList.add('hall-ring-mode');roomId='hall-shelf-ring';viewMode='ring';roomShelfMode=false;books=selected;index=norm(selectedIndex);dragUnits=0;
   stage.hidden=false;stage.style.transform='';stage.style.opacity='';stage.classList.add('room-shelf-ring');stage.classList.remove('is-shelf-returning','is-intro-spinning','is-intro-ready');
   document.querySelector('.sign small').textContent=kind==='mine'?'MY BOOKS':kind==='later'?'READ LATER':'NEW ARRIVALS';document.querySelector('.sign strong').textContent=kind==='mine'?'もっている本':kind==='later'?'あとで読む':'新しく入った本';document.querySelector('.sign').classList.add('shelf-back-sign');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;document.querySelector('#hint').textContent='左右で円環を見る　／　上スワイプで棚へ戻る';
@@ -690,7 +694,7 @@ async function openHallShelfRing(kind,selectedIndex=0,openDetailAfterSpin=false)
   // aligned so detail left/right follows the same shelf order.
 }
 function backToHallShelf(){
-  if(!hallShelfRing)return;hallShelfRing=false;stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');showCentralHall(false);
+  if(!hallShelfRing)return;hallShelfRing=false;store.classList.remove('hall-ring-mode');stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');showCentralHall(false);
 }
 
 // V2.18.31 — Hall background camera is normalized to the actual repeated tile width.
@@ -824,7 +828,7 @@ function showCentralHall(fromIntro=false){
       ? {oldLayer:makeRouteCrossfadeLayer('fantasy','old'),newLayer:null}
       : null;
   hallShelfRing=false;pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();roomId='hall';viewMode='hall';roomShelfMode=false;introReady=false;
-  store.classList.remove('intro-mode','room-fantasy');store.classList.add('hall-mode');document.body.classList.remove('book-path-active','intro-entry-active');
+  store.classList.remove('intro-mode','room-fantasy','hall-ring-mode');store.classList.add('hall-mode');document.body.classList.remove('book-path-active','intro-entry-active');
   stage.hidden=true;stage.classList.remove('is-intro-ready');const ih=document.querySelector('#introHint');if(ih)ih.hidden=true;
   document.querySelector('#bookPath').hidden=true;document.querySelector('#roomShelf').hidden=true;document.querySelector('#motionStart').hidden=true;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
@@ -1331,9 +1335,26 @@ window.addEventListener('keydown',e=>{
 });
 document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#hallFantasy')?.addEventListener('click',enterFantasyRoom);document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
 const hallEl=document.querySelector('#centralHall');
-hallEl?.addEventListener('pointerdown',e=>{/* V2.22.3: real shelf covers/tabs must keep native click ownership on desktop. The Hall camera may capture empty shelf/gate space, but never a book cover or library tab. */if(e.target.closest('#hallMotion,.hall-my-book,.hall-library-tabs'))return;hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null};hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();});
+hallEl?.addEventListener('pointerdown',e=>{
+  /* V2.22.4: mouse clicks on covers stay native, but touch starting on a cover
+     must still own the Hall swipe. V2.22.3 excluded covers for every pointer type,
+     which fixed desktop click but created a dead swipe zone on iPhone. */
+  if(e.target.closest('#hallMotion,.hall-library-tabs'))return;
+  const cover=e.target.closest('.hall-my-book');
+  if(cover&&e.pointerType==='mouse')return;
+  hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null,cover};
+  hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();
+});
 hallEl?.addEventListener('pointermove',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const dx=e.clientX-hallDrag.x,dy=e.clientY-hallDrag.y;if(!hallDrag.axis&&Math.hypot(dx,dy)>7)hallDrag.axis=Math.abs(dy)>Math.abs(dx)*1.12?'vertical':'horizontal';if(hallDrag.axis==='vertical'){if(dy>0)e.preventDefault();return;}if(Math.abs(dx)>2)e.preventDefault();hallDrag.lastX=e.clientX;hallPreview=-dx/Math.max(320,store.clientWidth)*135;renderHall();},{passive:false});
-hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const d=hallDrag,dx=e.clientX-d.x,dy=e.clientY-d.y,dt=Math.max(1,performance.now()-d.t),vx=dx/dt;hallDrag=null;if(d.axis==='vertical'){hallPreview=0;if(dy>58){const facingNew=Math.abs(wrapDeg(hallYaw))<42;if(facingNew){showNewArrivalsFromHall();return;}/* V2.21.2: MY LIBRARY gets the same shelf <-> ring vertical route as NEW ARRIVALS. The 270deg hall face can show either owned books or Read Later; open the currently visible collection. */const facingLibrary=Math.abs(wrapDeg(hallYaw-270))<42;if(facingLibrary&&hallShelfBooks(hallLibraryKind).length){openHallShelfRing(hallLibraryKind,0);return;}}settleHall();return;}const base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;
+hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const d=hallDrag,dx=e.clientX-d.x,dy=e.clientY-d.y,dt=Math.max(1,performance.now()-d.t),vx=dx/dt;hallDrag=null;
+  // A touch tap on a shelf cover still opens that cover; a drag from the same
+  // pixels remains a Hall swipe. This keeps both gestures without competition.
+  if(d.cover&&!d.axis&&Math.hypot(dx,dy)<9){
+    const idx=Number(d.cover.dataset.hallBook)||0;
+    const kind=d.cover.closest('#hallNewShelfBooks')?'new':hallLibraryKind;
+    openHallShelfRing(kind,idx,false);return;
+  }
+  if(d.axis==='vertical'){hallPreview=0;if(dy>58){const facingNew=Math.abs(wrapDeg(hallYaw))<42;if(facingNew){showNewArrivalsFromHall();return;}/* V2.21.2: MY LIBRARY gets the same shelf <-> ring vertical route as NEW ARRIVALS. The 270deg hall face can show either owned books or Read Later; open the currently visible collection. */const facingLibrary=Math.abs(wrapDeg(hallYaw-270))<42;if(facingLibrary&&hallShelfBooks(hallLibraryKind).length){openHallShelfRing(hallLibraryKind,0);return;}}settleHall();return;}const base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;
   // A normal deliberate swipe advances one entrance; no hard flick required.
   if(Math.abs(dx)>=34||Math.abs(vx)>=.24){const dir=dx<0?1:-1;const from=hallYaw,target=base+dir*90,start=performance.now(),dur=250;function tick(now){const t=Math.min(1,(now-start)/dur),q=1-Math.pow(1-t,3);hallYaw=from+(target-from)*q;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}else settleHall();
 });hallEl?.addEventListener('pointercancel',()=>{hallPreview=0;hallDrag=null;settleHall();});
