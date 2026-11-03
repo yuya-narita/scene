@@ -581,3 +581,11 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
   body.intro-entry-active .store{height:min(820px,100svh)!important;min-height:600px!important;max-height:none!important;}
   body.intro-entry-active .below{display:flex!important;}
 }
+
+/* V2.22.6 — Desktop has no device-motion navigation.
+   Keep motion controls available on touch/mobile, hide them on PC for all rooms. */
+@media (min-width: 681px) and (hover: hover) and (pointer: fine){
+  #hallMotion,
+  #roomMotion,
+  #motionStart{display:none!important;}
+}
