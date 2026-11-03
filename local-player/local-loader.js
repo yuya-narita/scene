@@ -42,14 +42,26 @@
   let currentOfficialShelfId='';
   let currentIssueId='';
   function bookshelfHomeUrl(){return new URL('../bookshelf/',LOCAL_PLAYER_BASE).href;}
+  function requestedReturnUrl(){
+    try{
+      const raw=String(new URL(location.href).searchParams.get('returnTo')||'').trim();
+      if(!raw)return '';
+      const target=new URL(raw,location.href);
+      // returnTo is navigation only. Keep it on this deployment so a crafted
+      // book URL cannot turn the Player return control into an external link.
+      return target.origin===location.origin?target.href:'';
+    }catch(_){return '';}
+  }
   function hideShelfReturn(){if(shelfReturnLink)shelfReturnLink.hidden=true;}
   function showShelfReturnForSource(){
     if(!shelfReturnLink)return false;
+    const returnUrl=requestedReturnUrl();
     let label='';
-    if(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master')label='← 自分の本棚へ';
+    if(returnUrl&&(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master'))label='← あ箱書店へ';
+    else if(currentSourceMode==='bookshelf'||currentSourceMode==='bookshelf-master')label='← 自分の本棚へ';
     else if(currentSourceMode==='official-shelf')label='← あ箱の本へ';
     if(!label){hideShelfReturn();return false;}
-    shelfReturnLink.href=bookshelfHomeUrl();
+    shelfReturnLink.href=returnUrl||bookshelfHomeUrl();
     shelfReturnLink.textContent=label;
     shelfReturnLink.hidden=false;
     shelfReturnLink.classList.remove('is-reading');
