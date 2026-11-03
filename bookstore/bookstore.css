@@ -491,3 +491,9 @@ body.book-path-active .book-path:not(.genre-approach) .path-zone-label.is-expand
 .hall-library-tabs button{appearance:none;border:1px solid rgba(231,205,166,.28);background:rgba(12,8,5,.48);color:#d8c7b2;border-radius:999px;padding:5px 10px;font:600 9px/1 sans-serif;letter-spacing:.02em}
 .hall-library-tabs button.is-active{background:rgba(214,151,78,.24);border-color:rgba(239,196,139,.62);color:#fff7e8}
 @media(max-width:680px){.hall-library-tabs{gap:5px;margin-bottom:6px}.hall-library-tabs button{padding:5px 9px;font-size:8px}}
+
+/* V2.21.2 — Detail actions must own their taps. The card shell intentionally
+   ignores pointer events for drag composition, but the real action row must not
+   fall through to the full-screen dismiss button behind it. */
+.detail-card>.picked-actions{pointer-events:auto!important;}
+.detail-card>.picked-actions button,.detail-card>.picked-actions a{pointer-events:auto!important;touch-action:manipulation;}
