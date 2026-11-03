@@ -531,7 +531,12 @@ function renderRoomShelf(){
   // V2.25.0: each of the four physical shelf pages owns its own vertical scroll.
   // The shared page stage must stay exactly viewport-sized; making the shared grid
   // as tall as every row was what broke cover geometry on PC/iPhone.
-  grid.style.height='100%';
+  // V2.25.7: desktop keeps a viewport-sized stage; iPhone restores the original tall, frameless shelf plane.
+  if(window.matchMedia('(max-width:680px)').matches){
+    grid.style.height=`calc(${maxRows} * 125px)`;
+  }else{
+    grid.style.height='100%';
+  }
   wrap.hidden=false;stage.hidden=true;wrap.dataset.shelfFace=String(roomShelfFace);
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${roomShelfFace+1} / ${faces.length}`;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
@@ -553,6 +558,23 @@ function renderRoomShelfFace(face,keepScroll=false){
 }
 function paintRoomShelfAtYaw(yaw){
   const grid=document.querySelector('#roomShelfGrid');if(!grid)return;
+  // V2.25.8: iPhone uses the original frameless shelf presentation. During the
+  // desktop shelf experiments the wide page compositor could translate every
+  // phone face out of view. On phone, keep the nearest physical wall centred;
+  // horizontal room turning is handled by the room camera, not by a PC-sized page.
+  if(window.matchMedia('(max-width:680px)').matches){
+    const near=nearestShelfForYaw(yaw);
+    grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
+      const face=Number(layer.dataset.face)||0,active=face===near.face;
+      layer.style.visibility=active?'visible':'hidden';
+      layer.style.pointerEvents=active?'auto':'none';
+      layer.style.opacity=active?'1':'0';
+      layer.style.transform='translate3d(0,0,0)';
+      layer.style.zIndex=active?'2':'1';
+    });
+    if(roomVisibleFace!==near.face)renderRoomShelfFace(near.face,true);
+    return;
+  }
   // V2.24.4: every fixed wall stays mounted while the room turns. Desktop used
   // to hard-swap visibility here, which made 1/4 -> 2/4 pop instantly. Use the
   // same world-space slide on desktop and mobile so the neighbouring shelf
@@ -562,7 +584,9 @@ function paintRoomShelfAtYaw(yaw){
   // V2.24.8: slide one complete framed shelf page across the shelf viewport.
   // Using the viewport width (not window width) makes the next frame enter exactly
   // from the neighbouring page instead of making only the covers drift inside it.
-  const travelPx=Math.max(1,viewport?.clientWidth||grid.clientWidth||window.innerWidth);
+  const mobileShelf=window.matchMedia('(max-width:680px)').matches;
+  const shelfWrap=document.querySelector('#roomShelf');
+  const travelPx=Math.max(1,mobileShelf?(shelfWrap?.clientWidth||grid.clientWidth||window.innerWidth):(viewport?.clientWidth||grid.clientWidth||window.innerWidth));
   grid.querySelectorAll('.room-shelf-face').forEach(layer=>{
     const face=Number(layer.dataset.face)||0,delta=wrapDeg(shelfWorldAngle(face)-yaw),dist=Math.abs(delta);
     const travel=Math.min(1.30,dist/ROOM_VIEW_SLOT_DEG),side=Math.sign(delta)||1;
