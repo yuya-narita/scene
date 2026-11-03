@@ -935,3 +935,48 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
     transform:none!important;
   }
 }
+
+/* V2.23.7 — Genre Room desktop: give the portrait cover enough vertical room.
+   Keep the 2:3 thumbnail from V2.23.6, but enlarge the dark shelf panel/scroll
+   viewport so the complete cover can sit inside it without being clipped by the
+   shelf viewport. The artwork itself is fitted whole; no artificial black card
+   is painted behind it. Mobile remains unchanged. */
+@media(min-width:681px){
+  .store.room-fantasy .room-shelf{
+    min-height:340px!important;
+    height:min(360px,54vh)!important;
+    max-height:54vh!important;
+  }
+  .store.room-fantasy .room-shelf-scroll{
+    height:100%!important;
+    max-height:none!important;
+    box-sizing:border-box!important;
+    padding:38px 28px 46px!important;
+  }
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-books{
+    min-height:224px!important;
+    align-items:center!important;
+  }
+  .store.room-fantasy .room-shelf-row:only-child,
+  .store.room-fantasy .room-shelf-row{
+    overflow:visible!important;
+  }
+  .store.room-fantasy .room-shelf-row:only-child .room-shelf-book,
+  .store.room-fantasy .room-shelf-book{
+    flex:0 0 clamp(92px,7.8vw,120px)!important;
+    width:clamp(92px,7.8vw,120px)!important;
+    aspect-ratio:2/3!important;
+    overflow:visible!important;
+    background:transparent!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-shell,
+  .store.room-fantasy .room-shelf-book .book-face{
+    overflow:hidden!important;
+    background:transparent!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-face img{
+    object-fit:contain!important;
+    object-position:center center!important;
+    background:transparent!important;
+  }
+}
