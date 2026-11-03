@@ -560,7 +560,7 @@ function applyRoomCamera(previewDeg=0,instant=false){
   if(roomId!=='fantasy')return;
   roomCameraPreview=previewDeg;const yaw=roomCameraYaw+previewDeg;
   // Keep the panoramic background directly attached to the true shared camera.
-  const panoW=Math.max(store.clientHeight*2,window.innerWidth*2);
+  const panoW=Math.max(2,store.clientHeight*2);
   const bg=document.querySelector('#roomBgLayer');
   store.style.setProperty('--room-yaw',`${yaw}deg`);
   if(bg){

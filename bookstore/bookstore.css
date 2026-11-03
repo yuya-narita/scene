@@ -618,3 +618,69 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
 @media(max-width:680px){
   .store.room-fantasy .room-exit-nav{top:calc(21.5% + 12px)!important;}
 }
+
+
+/* V2.22.9 — panorama sharpness + stable Hall opening + desktop Room shelf panel.
+   The Fantasy source is a 2:1 equirectangular panorama. Its physical tile width is
+   therefore exactly 2x the rendered room height; JS now follows that ratio instead
+   of stretching the 1774px source to 2x the desktop viewport width. */
+
+/* NEW ARRIVALS opening ring uses the same panorama geometry as Central Hall.
+   Previously intro-mode fell back to .store background-size:cover, which looked
+   like the Hall suddenly zoomed when switching shelf/ring. */
+.store.intro-mode{
+  background-image:linear-gradient(rgba(7,4,2,.08),rgba(7,4,2,.28)),url('./bookstore-v211-bg.webp')!important;
+  background-size:auto 100%!important;
+  background-position:center center!important;
+  background-repeat:repeat-x!important;
+}
+
+@media(min-width:681px){
+  /* Genre Room desktop shelf: use the same readable, centered display grammar as
+     the Hall's NEW ARRIVALS shelf instead of stretching a miniature shelf sideways. */
+  .store.room-fantasy .room-shelf{
+    left:50%!important;right:auto!important;
+    top:27%!important;bottom:auto!important;
+    width:min(34vw,540px)!important;height:min(58vh,500px)!important;
+    transform:translateX(-50%)!important;
+    overflow:hidden!important;
+    border:1px solid rgba(231,205,166,.34)!important;
+    border-radius:18px!important;
+    background:linear-gradient(160deg,rgba(28,18,11,.82),rgba(11,9,7,.72))!important;
+    box-shadow:0 18px 42px rgba(0,0,0,.55)!important;
+    backdrop-filter:blur(8px)!important;-webkit-backdrop-filter:blur(8px)!important;
+    mask-image:none!important;-webkit-mask-image:none!important;
+  }
+  .store.room-fantasy .room-shelf-scroll{
+    inset:0!important;left:0!important;right:0!important;
+    padding:42px 26px 54px!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+  }
+  .store.room-fantasy #roomShelfGrid{
+    width:100%!important;min-height:390px!important;margin:0!important;
+  }
+  .store.room-fantasy .room-shelf-face{gap:14px!important;}
+  .store.room-fantasy .room-shelf-face .room-shelf-row,
+  .store.room-fantasy .room-shelf-row{
+    height:132px!important;flex-basis:132px!important;
+    padding:0 4px 8px!important;
+  }
+  .store.room-fantasy .room-shelf-books{
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:12px!important;
+  }
+  .store.room-fantasy .room-shelf-book .book-shell{
+    width:min(100%,82px)!important;height:118px!important;
+  }
+  .store.room-fantasy .room-shelf-row::before{display:none!important;}
+  .store.room-fantasy .room-shelf-board{display:none!important;}
+  .store.room-fantasy .room-shelf-counter{right:10px!important;top:14px!important;transform:none!important;}
+  .store.room-fantasy .room-shelf-hint{bottom:10px!important;}
+
+  /* Keep the route controls clearly below the green Room title board. */
+  .store.room-fantasy .room-exit-nav{top:25%!important;}
+}
+@media(max-width:680px){
+  /* Mobile shelf geometry stays as-is; only separate route buttons from the title. */
+  .store.room-fantasy .room-exit-nav{top:24%!important;}
+}
