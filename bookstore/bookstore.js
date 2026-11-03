@@ -639,9 +639,9 @@ function wrapDeg(v){while(v>180)v-=360;while(v<-180)v+=360;return v;}
 function hallGates(){return [...document.querySelectorAll('.hall-gate[data-angle]')];}
 function hallSpatialItems(){return [...document.querySelectorAll('.hall-gate[data-angle],.hall-my-shelf[data-angle]')];}
 function hallShelfBooks(kind){return (kind==='mine'?ownedBooks:kind==='later'?readLaterBooks():allBooks.slice(0,8)).filter(Boolean);}
-function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind).slice(0,8);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const w=sample[i];if(w)pick(w);}));}
+function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind).slice(0,8);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const w=sample[i];if(w)openHallShelfRing(kind,i,true);}));}
 function renderHallMyShelf(){renderHallShelf('#hallNewShelfBooks','new');renderHallShelf('#hallMyShelfBooks',hallLibraryKind);const later=readLaterBooks(),mine=ownedBooks;const title=document.querySelector('#hallLibraryTitle'),count=document.querySelector('#hallLibraryCount'),ownedTab=document.querySelector('#hallOwnedTab'),laterTab=document.querySelector('#hallLaterTab');if(title)title.textContent=hallLibraryKind==='later'?'あとで読む':'もっている本';if(count)count.textContent=hallLibraryKind==='later'?(later.length?`${later.length}冊`:'まだ保存した本がありません'):(mine.length?`${mine.length}冊`:'まだ本がありません');ownedTab?.classList.toggle('is-active',hallLibraryKind==='mine');laterTab?.classList.toggle('is-active',hallLibraryKind==='later');ownedTab?.setAttribute('aria-selected',hallLibraryKind==='mine'?'true':'false');laterTab?.setAttribute('aria-selected',hallLibraryKind==='later'?'true':'false');}
-async function openHallShelfRing(kind,selectedIndex=0){
+async function openHallShelfRing(kind,selectedIndex=0,openDetailAfterSpin=false){
   const selected=hallShelfBooks(kind);if(!selected.length)return;
   hallShelfRing=true;hallShelfKind=kind;hallPreview=0;hallDrag=null;rebaseHallMotion();
   document.querySelector('#centralHall').hidden=true;document.querySelector('#roomBgLayer').style.display='block';
@@ -663,6 +663,13 @@ async function openHallShelfRing(kind,selectedIndex=0){
   }requestAnimationFrame(frame)});
   if(!hallShelfRing||roomId!=='hall-shelf-ring')return;
   stage.classList.remove('is-intro-spinning');render();updateFocusPanel();
+  // V2.21.7: a shelf-cover tap uses the same spatial hand-off as a genre room:
+  // shelf -> ring spin -> land on the tapped cover -> detail. Keeping `books` and
+  // `index` on this exact collection also makes detail left/right follow the ring order.
+  if(openDetailAfterSpin&&hallShelfRing&&roomId==='hall-shelf-ring'){
+    const landed=books[index];
+    if(landed)requestAnimationFrame(()=>pick(landed));
+  }
 }
 function backToHallShelf(){
   if(!hallShelfRing)return;hallShelfRing=false;stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');showCentralHall(false);
