@@ -589,3 +589,32 @@ body.book-path-active .focus-panel small{color:#e8b57d!important}
   #roomMotion,
   #motionStart{display:none!important;}
 }
+
+/* V2.22.7 — desktop Fantasy shelf readability + route-nav spacing.
+   Mobile shelf sizing stays unchanged. Desktop has more physical screen area,
+   so use it for larger covers instead of leaving the shelf miniaturised. */
+@media (min-width:681px){
+  /* Desktop has no device-motion input, regardless of hover/pointer reporting. */
+  #hallMotion,#roomMotion,#motionStart{display:none!important;}
+
+  .store.room-fantasy .room-shelf{
+    left:2%!important;right:2%!important;top:22%!important;bottom:4%!important;
+  }
+  .store.room-fantasy .room-shelf-scroll{
+    padding:11% 7% 20%!important;
+  }
+  .store.room-fantasy .room-shelf-grid{gap:18px!important;}
+  .store.room-fantasy .room-shelf-row{
+    height:176px!important;padding-left:5%!important;padding-right:5%!important;padding-bottom:15px!important;
+  }
+  .store.room-fantasy .room-shelf-books{gap:18px!important;}
+  .store.room-fantasy .room-shelf-book .book-shell{
+    width:min(100%,108px)!important;
+  }
+}
+
+/* Route buttons: give the room title a little more breathing room above them. */
+.store.room-fantasy .room-exit-nav{top:calc(21.5% + 16px)!important;}
+@media(max-width:680px){
+  .store.room-fantasy .room-exit-nav{top:calc(21.5% + 12px)!important;}
+}
