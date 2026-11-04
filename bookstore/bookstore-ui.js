@@ -98,6 +98,26 @@
  function openNotices(){document.querySelector('#storeInfoEyebrow').textContent='INFORMATION';document.querySelector('#storeInfoTitle').textContent='お知らせ';openDialog('#storeInfoDialog');renderNotices();loadNotices();}
  window.addEventListener('storage',e=>{if(e.key===NOTICE_READ_KEY||e.key===null){updateNoticeBadges();if(document.querySelector('#storeInfoDialog').open)renderNotices();}});
  loadNotices();
+ // Own touch activation while sensor-driven path repainting is paused.
+ let headPress=null,headActivation=null;
+ head.addEventListener('pointerdown',e=>{
+   const button=e.target.closest('[data-store-action]');
+   if(!button||!['touch','pen'].includes(e.pointerType))return;
+   headPress={id:e.pointerId,button,x:e.clientX,y:e.clientY};
+   pathUiInteracting=true;pathVelocity=0;pathMotionEnergy=0;lastAccelMag=0;
+   button.setPointerCapture?.(e.pointerId);
+ });
+ head.addEventListener('pointerup',e=>{
+   if(!headPress||headPress.id!==e.pointerId)return;
+   const press=headPress;headPress=null;
+   if(Math.hypot(e.clientX-press.x,e.clientY-press.y)<12){e.preventDefault();headActivation={button:press.button,until:performance.now()+700};press.button.click();}
+   pathUiInteracting=false;
+ });
+ head.addEventListener('click',e=>{if(e.isTrusted&&e.detail>0&&headActivation&&performance.now()<headActivation.until&&e.target.closest('[data-store-action]')===headActivation.button){e.preventDefault();e.stopImmediatePropagation();}},{capture:true});
+ const cancelHeadPress=()=>{headPress=null;pathUiInteracting=false;};
+ head.addEventListener('pointercancel',cancelHeadPress);
+ head.addEventListener('lostpointercapture',cancelHeadPress);
+ window.addEventListener('blur',cancelHeadPress);
  document.addEventListener('click',e=>{
    const b=e.target.closest('[data-store-action]');if(!b)return;
    switch(b.dataset.storeAction){

@@ -129,10 +129,10 @@ function updateFocusPanel(){
     : (roomId==='fantasy'?'FANTASY FOREST':'NEW ARRIVALS');
   const meta=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ');
   const title=document.querySelector('#focusTitle'),author=document.querySelector('#focusAuthor'),shelf=document.querySelector('#focusShelf'),metaEl=document.querySelector('#focusMeta');
-  if(title)title.textContent=w.title||'Untitled';
-  if(author)author.textContent=a.displayName||'作者';
-  if(shelf)shelf.textContent=label;
-  if(metaEl){metaEl.textContent=meta;metaEl.hidden=!meta;}
+  if(title&&title.textContent!==(w.title||'Untitled'))title.textContent=w.title||'Untitled';
+  if(author&&author.textContent!==(a.displayName||'作者'))author.textContent=a.displayName||'作者';
+  if(shelf&&shelf.textContent!==label)shelf.textContent=label;
+  if(metaEl){if(metaEl.textContent!==meta)metaEl.textContent=meta;metaEl.hidden=!meta;}
 }
 function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)=>{const slot=signedOffset(i);if(Math.abs(slot)>5)return;const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot+dragUnits);b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};stage.appendChild(b);});hydrateCoverLoadState(stage);updateFocusPanel();}
 // V2.11.3: commit a settled ring without rebuilding the visible cover DOM.
@@ -467,9 +467,10 @@ async function enterForest(){
   lastOuterPathProgress=pathProgress;
   roomHistory.push({id:'path',progress:pathProgress});
   lastForestPathProgress=0;
+  pathVelocity=0;pathMotionEnergy=0;lastAccelMag=0;pathMotionLast=0;
   roomId='forest';books=fantasyBooks();pathProgress=0;pathYaw=0;document.querySelector('#bookPath')?.classList.add('genre-approach');
   setRoomVisual('fantasy');hideFantasyGate();
-  document.querySelector('#motionStart').hidden=true;
+  document.querySelector('#motionStart').hidden=false;setPathMotionButton();
   document.querySelector('#pathStatus').textContent='ファンタジーへの道';
   document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退';
   renderPath();
@@ -1215,9 +1216,9 @@ function updatePathFocusPanel(){
   const shelf=document.querySelector('#focusShelf'),title=document.querySelector('#focusTitle'),metaEl=document.querySelector('#focusMeta'),author=document.querySelector('#focusAuthor');
   const zone=roomId==='path'?currentPathZone():null;
   if(shelf)shelf.textContent=roomId==='forest'?'FANTASY APPROACH':(zone?.label||'BOOK PATH');
-  if(title)title.textContent=w.title||'Untitled';
+  if(title&&title.textContent!==(w.title||'Untitled'))title.textContent=w.title||'Untitled';
   if(metaEl){const meta=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ');metaEl.textContent=meta;metaEl.hidden=!meta;}
-  if(author)author.textContent=a.displayName||'作者';
+  if(author&&author.textContent!==(a.displayName||'作者'))author.textContent=a.displayName||'作者';
 }
 function renderPath(){
   const root=document.querySelector('#pathBooks');if(!root)return;root.innerHTML='';
@@ -1327,7 +1328,7 @@ function updatePathZone(){
 function renderPathFrame(now){
   if(!pathLastFrame)pathLastFrame=now;
   const dt=Math.min(34,Math.max(1,now-pathLastFrame));pathLastFrame=now;
-  if(pathBookHold||!picked.hidden){pathRaf=requestAnimationFrame(renderPathFrame);return;}
+  if(pathMotionBlocked()||pathBookHold||!picked.hidden){pathRaf=requestAnimationFrame(renderPathFrame);return;}
   if(Math.abs(pathVelocity)>.00005){
     pathProgress=clampPath(pathProgress+pathVelocity*dt);
     // circular road intentionally has no end-stop
@@ -1396,11 +1397,15 @@ function onPathPointerEnd(e){
   const launch=Math.max(-PATH_MAX_VELOCITY,Math.min(PATH_MAX_VELOCITY,dir*d.vy/PATH_DRAG_PX_PER_BOOK*.82));
   addPathVelocity(launch)
 }
-function onOrientation(e){if(!motionOn||viewMode!=='path'||pathDrag||!picked.hidden||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
+let pathUiInteracting=false;
+function pathMotionBlocked(){return pathUiInteracting||!!document.querySelector('dialog[open]');}
+function onOrientation(e){if(pathMotionBlocked()||!motionOn||viewMode!=='path'||pathDrag||!picked.hidden||typeof e.gamma!=='number')return;const next=Math.max(-75,Math.min(75,e.gamma));pathYaw+=(next-pathYaw)*.18;renderPath()}
 function onMotion(e){
-  if(!motionOn||viewMode!=='path'||roomId==='forest'||pathDrag||!picked.hidden)return;
+  if(pathMotionBlocked()||!motionOn||viewMode!=='path'||pathDrag||!picked.hidden)return;
   const g=e.accelerationIncludingGravity||e.acceleration;if(!g)return;
-  const mag=Math.sqrt((g.x||0)**2+(g.y||0)**2+(g.z||0)**2),delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;
+  const mag=Math.sqrt((g.x||0)**2+(g.y||0)**2+(g.z||0)**2);
+  if(!lastAccelMag){lastAccelMag=mag;return;}
+  const delta=Math.abs(mag-lastAccelMag);lastAccelMag=mag;
   const now=performance.now();
   // Forward-only motion. V2.9 fore/aft estimation was intentionally removed: iPhone
   // acceleration cannot reliably distinguish walking backward and could reverse while
