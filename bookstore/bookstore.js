@@ -1600,7 +1600,7 @@ function keyboardHallVertical(dir){
     const yaw=((Math.round(hallYaw/90)*90)%360+360)%360;
     if(yaw===0){showNewArrivalsFromHall();return;}
     if(yaw===90){enterBookPathFromHall();return;}
-    if(yaw===180){enterFantasyRoom();return;}
+    if(yaw===180){document.querySelector('#hallGenreGrid button')?.focus();return;}
     if(yaw===270&&hallShelfBooks(hallLibraryKind).length){openHallShelfRing(hallLibraryKind,0);return;}
   }else{ // Down = NEW ARRIVALS ring, matching the Hall's return gesture.
     showNewArrivalsFromHall();
@@ -1644,20 +1644,40 @@ window.addEventListener('keydown',e=>{
     renderPath();return;
   }
 });
-document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#hallFantasy')?.addEventListener('click',()=>{activeGenreId='fantasy';enterFantasyRoom();});document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
+document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
+// One board uses the same genre configuration and room entry as the Book Road.
+function openHallGenre(id){
+  if(viewMode!=='hall'||routeTransitioning||!PATH_ZONES.some(z=>z.id===id))return;
+  activeGenreId=id;lastOuterPathProgress=PATH_ZONES.findIndex(z=>z.id===id)*PATH_BOOKS_PER_ZONE_TEST;enterFantasyRoom();
+}
+const hallGenreGrid=document.querySelector('#hallGenreGrid');
+if(hallGenreGrid){
+  const colors=['#bdd59e','#efb0c5','#d48989','#adc3e4','#8bd8e4','#c2d5a3','#dfbc86','#c5a9e5'];
+  PATH_ZONES.forEach((zone,i)=>{
+    const button=document.createElement('button');button.type='button';button.dataset.hallGenre=zone.id;
+    button.style.setProperty('--genre-accent',colors[i]);button.setAttribute('aria-label',zone.jp+'の本棚へ');
+    button.innerHTML=`<small>${esc(zone.label)}</small><strong>${esc(zone.jp)}</strong>`;
+    button.addEventListener('click',e=>{e.stopPropagation();if(Date.now()<suppressClickUntil)return;openHallGenre(zone.id);});
+    hallGenreGrid.appendChild(button);
+  });
+}
 const hallEl=document.querySelector('#centralHall');
 hallEl?.addEventListener('pointerdown',e=>{
   /* V2.22.4: mouse clicks on covers stay native, but touch starting on a cover
      must still own the Hall swipe. V2.22.3 excluded covers for every pointer type,
      which fixed desktop click but created a dead swipe zone on iPhone. */
   if(e.target.closest('#hallMotion,.hall-library-tabs'))return;
-  const cover=e.target.closest('.hall-my-book');
-  if(cover&&e.pointerType==='mouse')return;
-  hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null,cover};
+  const cover=e.target.closest('.hall-my-book'),genre=e.target.closest('[data-hall-genre]');
+  if((cover||genre)&&e.pointerType==='mouse')return;
+  hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null,cover,genre};
   hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();
 });
 hallEl?.addEventListener('pointermove',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const dx=e.clientX-hallDrag.x,dy=e.clientY-hallDrag.y;if(!hallDrag.axis&&Math.hypot(dx,dy)>7)hallDrag.axis=Math.abs(dy)>Math.abs(dx)*1.12?'vertical':'horizontal';if(hallDrag.axis==='vertical'){if(dy>0)e.preventDefault();return;}if(Math.abs(dx)>2)e.preventDefault();hallDrag.lastX=e.clientX;hallPreview=-dx/Math.max(320,store.clientWidth)*135;renderHall();},{passive:false});
 hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id)return;const d=hallDrag,dx=e.clientX-d.x,dy=e.clientY-d.y,dt=Math.max(1,performance.now()-d.t),vx=dx/dt;hallDrag=null;
+  if(d.genre){
+    if(!d.axis&&Math.hypot(dx,dy)<9){e.preventDefault();openHallGenre(d.genre.dataset.hallGenre);return;}
+    suppressClickUntil=Date.now()+450;
+  }
   // A touch tap on a shelf cover still opens that cover; a drag from the same
   // pixels remains a Hall swipe. This keeps both gestures without competition.
   if(d.cover&&!d.axis&&Math.hypot(dx,dy)<9){
