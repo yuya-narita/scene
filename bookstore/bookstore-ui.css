@@ -113,3 +113,45 @@ body.book-detail-open .store-side-nav{visibility:hidden}
 /* Remove native button padding so the glyph stays centered even at 30px. */
 .store-icon-button{box-sizing:border-box;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:0;min-height:0;-webkit-appearance:none;appearance:none}
 .store-icon-button>svg{display:block;flex:0 0 auto;margin:0;pointer-events:none}
+
+
+/* V2.30.3 — shared genre approach and room templates. */
+#store #bookPath.genre-approach .path-zone-bg{background-image:linear-gradient(rgba(7,5,3,.06),rgba(7,5,3,.13)),var(--approach-bg)!important;background-position:center center!important;background-size:cover!important;background-repeat:no-repeat!important}
+#store #bookPath .path-zone-label[data-genre="romance"]{border-color:#eaa8ba88;background:#24121bd9}
+#store #bookPath .path-zone-label[data-genre="horror"]{border-color:#ba5b6088;background:#210b0bd9}
+#store #bookPath .path-zone-label[data-genre="mystery"]{border-color:#8aabd788;background:#101522dc}
+#store #bookPath .path-zone-label[data-genre="sf"]{border-color:#6cced688;background:#071b22dc}
+#store #bookPath .path-zone-label[data-genre="everyday"]{border-color:#a9c78a88;background:#142014dc}
+#store #bookPath .path-zone-label[data-genre="essay"]{border-color:#d8a75e88;background:#21170bdc}
+#store #bookPath .path-zone-label[data-genre="other"]{border-color:#b79be988;background:#1b1126dc}
+#store #bookPath[data-genre="romance"] .route-gate{border-color:#ed9fb9aa!important;background:linear-gradient(145deg,#3a1c2bdc,#1d1118ed)!important}
+#store #bookPath[data-genre="horror"] .route-gate{border-color:#c5535aaa!important;background:linear-gradient(145deg,#321010e8,#120808ed)!important}
+#store #bookPath[data-genre="mystery"] .route-gate{border-color:#8aa8d7aa!important;background:linear-gradient(145deg,#17233bdc,#0b101bed)!important}
+#store #bookPath[data-genre="sf"] .route-gate{border-color:#65cbd7aa!important;background:linear-gradient(145deg,#10313bdc,#07151bed)!important}
+#store #bookPath[data-genre="everyday"] .route-gate{border-color:#a7c783aa!important;background:linear-gradient(145deg,#20321adc,#0b150bed)!important}
+#store #bookPath[data-genre="essay"] .route-gate{border-color:#d2a25eaa!important;background:linear-gradient(145deg,#3a2916dc,#191107ed)!important}
+#store #bookPath[data-genre="other"] .route-gate{border-color:#b394e8aa!important;background:linear-gradient(145deg,#2a1b3edc,#130d1bed)!important}
+#store #bookPath[data-genre="romance"] .route-gate small{color:#f4bfd0!important}
+#store #bookPath[data-genre="horror"] .route-gate small{color:#e78c8c!important}
+#store #bookPath[data-genre="mystery"] .route-gate small{color:#b8c9ed!important}
+#store #bookPath[data-genre="sf"] .route-gate small{color:#8de2eb!important}
+#store #bookPath[data-genre="everyday"] .route-gate small{color:#c2dda6!important}
+#store #bookPath[data-genre="essay"] .route-gate small{color:#edc78e!important}
+#store #bookPath[data-genre="other"] .route-gate small{color:#d0bafa!important}
+#store.room-fantasy[data-active-genre="romance"] .sign{border-color:#ed9fb9aa!important;background:#291722e8!important;box-shadow:0 0 22px #d888a044!important}
+#store.room-fantasy[data-active-genre="horror"] .sign{border-color:#c5535aaa!important;background:#250d0de8!important;box-shadow:0 0 22px #b6434344!important}
+#store.room-fantasy[data-active-genre="mystery"] .sign{border-color:#8aa8d7aa!important;background:#111a2ae8!important;box-shadow:0 0 22px #7198d044!important}
+#store.room-fantasy[data-active-genre="sf"] .sign{border-color:#65cbd7aa!important;background:#0a2027e8!important;box-shadow:0 0 22px #55c8d844!important}
+#store.room-fantasy[data-active-genre="everyday"] .sign{border-color:#a7c783aa!important;background:#152116e8!important;box-shadow:0 0 22px #8fbd6544!important}
+#store.room-fantasy[data-active-genre="essay"] .sign{border-color:#d2a25eaa!important;background:#281c0fe8!important;box-shadow:0 0 22px #d49c4c44!important}
+#store.room-fantasy[data-active-genre="other"] .sign{border-color:#b394e8aa!important;background:#20162fe8!important;box-shadow:0 0 22px #9d7bd744!important}
+#store.room-fantasy[data-active-genre="romance"] .sign small{color:#f4bfd0!important}
+#store.room-fantasy[data-active-genre="horror"] .sign small{color:#e78c8c!important}
+#store.room-fantasy[data-active-genre="mystery"] .sign small{color:#b8c9ed!important}
+#store.room-fantasy[data-active-genre="sf"] .sign small{color:#8de2eb!important}
+#store.room-fantasy[data-active-genre="everyday"] .sign small{color:#c2dda6!important}
+#store.room-fantasy[data-active-genre="essay"] .sign small{color:#edc78e!important}
+#store.room-fantasy[data-active-genre="other"] .sign small{color:#d0bafa!important}
+.room-shelf-empty{position:absolute;z-index:7;left:10%;right:10%;top:47%;transform:translateY(-50%);padding:17px 14px;border:1px solid #ead0a744;border-radius:16px;background:#0d0b0bbd;color:#f3e9dc;text-align:center;font:500 14px/1.6 serif;letter-spacing:.04em;backdrop-filter:blur(8px);pointer-events:none}
+.room-shelf-empty[hidden]{display:none!important}
+@media(max-width:680px){.room-shelf-empty{top:47%;left:9%;right:9%;font-size:13px}}

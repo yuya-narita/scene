@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
-<link rel="stylesheet" href="./bookstore.css?v=2.30.2">
-<link rel="stylesheet" href="./bookstore-ui.css?v=2.30.2">
+<link rel="stylesheet" href="./bookstore.css?v=2.30.3">
+<link rel="stylesheet" href="./bookstore-ui.css?v=2.30.3">
 
 <style id="v211-bg">
 /* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
@@ -28,7 +28,7 @@
 .book-path{background-image:linear-gradient(rgba(7,5,3,.10),rgba(7,5,3,.18)),url('./bookstore-path-fantasy-v2113.webp')!important;background-size:cover!important;background-position:center center!important;background-repeat:no-repeat!important;}
 .book-path .path-floor{opacity:.10!important;}
 </style>
-<link rel="stylesheet" href="./bookstore-mobile-layout.css?v=2.30.2">
+<link rel="stylesheet" href="./bookstore-mobile-layout.css?v=2.30.3">
 </head>
 <body class="intro-entry-active">
 <header class="shop-head">
@@ -60,12 +60,12 @@
       <div class="hall-tutorial" id="hallTutorial">左右にスワイプして棚と入口を見る<br><span>表紙をタップ ／ ↓ 新着円環へ戻る</span></div>
     </section>
     <div class="intro-hint" id="introHint">↑ 円環を上にスワイプして店内へ</div>
-    <nav class="room-exit-nav" id="roomExitNav" hidden aria-label="ファンタジーの森から移動"><button id="exitHall" type="button">桜ホール</button><button id="exitPath" type="button">本の道</button><button type="button" disabled>次のジャンル</button></nav>
+    <nav class="room-exit-nav" id="roomExitNav" hidden aria-label="ジャンルの部屋から移動"><button id="exitHall" type="button">桜ホール</button><button id="exitPath" type="button">本の道</button><button type="button" disabled>ジャンルを選ぶ</button></nav>
     <div class="ambient" aria-hidden="true"></div>
     <div class="shelf shelf-top" aria-hidden="true"></div><div class="shelf shelf-mid" aria-hidden="true"></div><div class="shelf shelf-low" aria-hidden="true"></div>
     <div class="sign"><small>NEW ARRIVALS</small><strong>新しく入った本</strong></div>
     <button class="nav prev" id="prev" aria-label="前の本">‹</button>
-    <div class="stage" id="stage" aria-live="polite"></div><div class="room-shelf" id="roomShelf" hidden aria-label="ファンタジーの本棚一覧"><div class="room-shelf-scroll" id="roomShelfScroll"><div class="room-shelf-grid" id="roomShelfGrid"></div></div><button class="room-motion" id="roomMotion" type="button">◎ 360°モーション OFF</button><div class="room-shelf-counter" id="roomShelfCounter">1 / 1</div><div class="room-shelf-hint">上下で棚を見る　／　左右で棚を回す　／　表紙をタップ</div></div>
+    <div class="stage" id="stage" aria-live="polite"></div><div class="room-shelf" id="roomShelf" hidden aria-label="ジャンルの本棚一覧"><div class="room-shelf-scroll" id="roomShelfScroll"><div class="room-shelf-grid" id="roomShelfGrid"></div></div><div class="room-shelf-empty" id="roomShelfEmpty" hidden>このジャンルの本は、これから並びます</div><button class="room-motion" id="roomMotion" type="button">◎ 360°モーション OFF</button><div class="room-shelf-counter" id="roomShelfCounter">1 / 1</div><div class="room-shelf-hint">上下で棚を見る　／　左右で棚を回す　／　表紙をタップ</div></div>
     <div class="book-path" id="bookPath" hidden aria-label="本の道"><div class="path-zone-bg path-zone-bg-a" id="pathZoneBgA" aria-hidden="true"></div><div class="path-zone-bg path-zone-bg-b" id="pathZoneBgB" aria-hidden="true"></div><div class="path-floor" aria-hidden="true"></div><div class="path-zone-label" id="pathZoneLabel" aria-live="polite"></div><div class="path-books" id="pathBooks"></div><div class="route-gate" id="fantasyGate" hidden><small>FANTASY FOREST</small><strong>ファンタジーの森</strong><span>入口をタップ</span></div><div class="path-status"><strong id="pathStatus">指で進む</strong><span id="pathSub">下へスワイプすると、本の道を歩けます</span></div></div><button class="room-motion path-motion" id="motionStart" type="button" aria-pressed="false" hidden>◎ モーション OFF</button>
     <button class="nav next" id="next" aria-label="次の本">›</button>
     <div class="focus-panel" id="focusPanel"><div><small id="focusShelf">NEW ARRIVALS</small><strong id="focusTitle">読み込み中…</strong><span id="focusMeta"></span><span id="focusAuthor"></span></div></div><div class="hint" id="hint">左右にスワイプして、棚を眺める</div>
@@ -83,9 +83,9 @@
     <div class="picked-actions"><button id="saveLater" type="button">あとで読む</button><a id="readBook" href="#">ひらく</a></div>
   </article>
 </div>
-<script src="./bookstore.js?v=2.30.2"></script>
-<script src="./bookstore-ui.js?v=2.30.2"></script>
-<script src="./bookstore-auth.js?v=2.30.2"></script>
-<script src="./bookstore-mobile-layout.js?v=2.30.2"></script>
+<script src="./bookstore.js?v=2.30.3"></script>
+<script src="./bookstore-ui.js?v=2.30.3"></script>
+<script src="./bookstore-auth.js?v=2.30.3"></script>
+<script src="./bookstore-mobile-layout.js?v=2.30.3"></script>
 </body>
 </html>
