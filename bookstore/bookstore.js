@@ -990,7 +990,7 @@ function renderHall(){
   hallSpatialItems().forEach(g=>{const a=Number(g.dataset.angle||0),d=wrapDeg(a-yaw),x=Math.sin(d*Math.PI/180)*w*.78,depth=Math.cos(d*Math.PI/180),scale=.72+.28*Math.max(0,depth),op=.18+.82*Math.max(0,depth);g.style.transform=`translate3d(calc(-50% + ${x.toFixed(2)}px),0,0) scale(${scale.toFixed(3)})`;g.style.opacity=String(op);g.style.zIndex=String(20+Math.round(depth*10));g.style.pointerEvents=Math.abs(d)<42?'auto':'none';});
 }
 function rebaseHallMotion(){hallMotionLastAlpha=null;}
-function onHallOrientation(e){if(!hallMotionOn||viewMode!=='hall'||hallDrag||typeof e.alpha!=='number')return;const a=e.alpha;if(hallMotionLastAlpha==null){hallMotionLastAlpha=a;return;}let d=a-hallMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;hallMotionLastAlpha=a;hallYaw-=d*.72;hallPreview=0;requestAnimationFrame(renderHall);}
+function onHallOrientation(e){if(!hallMotionOn||viewMode!=='hall'||hallDrag||routeTransitioning||typeof e.alpha!=='number')return;const a=e.alpha;if(hallMotionLastAlpha==null){hallMotionLastAlpha=a;return;}let d=a-hallMotionLastAlpha;if(d>180)d-=360;if(d<-180)d+=360;hallMotionLastAlpha=a;hallYaw-=d*.72;hallPreview=0;requestAnimationFrame(renderHall);}
 async function toggleHallMotion(){const b=document.querySelector('#hallMotion');if(hallMotionOn){hallMotionOn=false;window.removeEventListener('deviceorientation',onHallOrientation);hallMotionLastAlpha=null;b?.classList.remove('is-on');if(b){b.textContent='◎ 360°モーション OFF';b.setAttribute('aria-pressed','false');}
   // V2.18.10: Hall uses the same landing rule — OFF settles to the nearest 0/90/180/270 storefront.
   hallPreview=0;settleHall();return;}try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')return;}hallMotionOn=true;hallMotionLastAlpha=null;window.addEventListener('deviceorientation',onHallOrientation,{passive:true});b?.classList.add('is-on');if(b){b.textContent='◉ 360°モーション ON';b.setAttribute('aria-pressed','true');}}catch(_){}}
@@ -1151,6 +1151,7 @@ function returnToPathFromRoom(){
 async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;
   routeTransitioning=true;
+  const backgroundReady=preloadRoomBackground(activeGenreId);
   try{await ensureCatalogueGenre(activeGenreId);}catch(error){routeTransitioning=false;alert(error.message);return;}
   approachOriginRoom=null;
   lastFantasyEntryRoute=roomId;
@@ -1167,7 +1168,7 @@ async function enterFantasyRoom(){
   const roomBg=document.querySelector('#roomBgLayer');
 
   // Wait for the actual room image to be loaded + decoded before changing visual ownership.
-  await preloadRoomBackground(activeGenreId);
+  await backgroundReady;
   if(!routeTransitioning)return;
 
   // V2.18.21: keep a lightweight copy of the path background alive during the handoff.
@@ -1645,7 +1646,7 @@ window.addEventListener('keydown',e=>{
   if(e.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return;
   // Detail owns left/right browsing; vertical keys intentionally do nothing there.
   if(!picked.hidden){if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();commitDetailHorizontal(e.key==='ArrowRight'?1:-1,e.key==='ArrowRight'?-picked.clientWidth:picked.clientWidth,0);}return;}
-  if(viewMode==='hall'&&roomId==='hall'){e.preventDefault();if(e.key==='ArrowLeft')keyboardHallStep(-1);else if(e.key==='ArrowRight')keyboardHallStep(1);else keyboardHallVertical(e.key==='ArrowUp'?-1:1);return;}
+  if(viewMode==='hall'&&roomId==='hall'){e.preventDefault();if(routeTransitioning)return;if(e.key==='ArrowLeft')keyboardHallStep(-1);else if(e.key==='ArrowRight')keyboardHallStep(1);else keyboardHallVertical(e.key==='ArrowUp'?-1:1);return;}
   // V2.23.1: the Genre Room shelf also uses viewMode='ring', so it must own
   // keyboard input BEFORE the generic ring handler. Previously Arrow keys were
   // sent to the hidden cover ring behind the shelf and appeared to do nothing.
@@ -1681,9 +1682,15 @@ window.addEventListener('keydown',e=>{
 });
 document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
 // One board uses the same genre configuration and room entry as the Book Road.
-function openHallGenre(id){
+async function openHallGenre(id){
   if(viewMode!=='hall'||routeTransitioning||!PATH_ZONES.some(z=>z.id===id))return;
-  activeGenreId=id;lastOuterPathProgress=PATH_ZONES.findIndex(z=>z.id===id)*PATH_BOOKS_PER_ZONE_TEST;enterFantasyRoom();
+  const board=document.querySelector('#hallGenreBoard'),heading=board.querySelector('.hall-genre-heading');
+  const zone=PATH_ZONES.find(z=>z.id===id);
+  board.setAttribute('aria-busy','true');board.classList.add('is-entering');heading.textContent=zone.jp+'の本棚へ移動しています…';
+  board.querySelectorAll('[data-hall-genre]').forEach(button=>button.classList.toggle('is-entering',button.dataset.hallGenre===id));
+  activeGenreId=id;lastOuterPathProgress=PATH_ZONES.findIndex(z=>z.id===id)*PATH_BOOKS_PER_ZONE_TEST;
+  try{await enterFantasyRoom();}
+  finally{board.removeAttribute('aria-busy');board.classList.remove('is-entering');heading.textContent='ジャンルの入口';board.querySelectorAll('[data-hall-genre]').forEach(button=>button.classList.remove('is-entering'));}
 }
 function buildGenreSigns(root,onChoose,currentId=''){
   root.innerHTML='';const colors=['#bdd59e','#efb0c5','#d48989','#adc3e4','#8bd8e4','#c2d5a3','#dfbc86','#c5a9e5'];
@@ -1691,6 +1698,9 @@ function buildGenreSigns(root,onChoose,currentId=''){
     const button=document.createElement('button');button.type='button';button.dataset.hallGenre=zone.id;
     button.style.setProperty('--genre-accent',colors[i]);button.setAttribute('aria-label',zone.jp+'の本棚へ');button.disabled=zone.id===currentId;
     button.innerHTML=`<small>${esc(zone.label)}</small><strong>${esc(zone.jp)}</strong>${button.disabled?'<span class="genre-current">現在地</span>':''}`;
+    button.addEventListener('pointerenter',()=>primeNextRoomBackground(zone.id));
+    button.addEventListener('focus',()=>primeNextRoomBackground(zone.id));
+    button.addEventListener('pointerdown',()=>{if(!button.disabled&&!routeTransitioning){primeNextRoomBackground(zone.id);ensureCatalogueGenre(zone.id).catch(()=>{});}});
     button.addEventListener('click',e=>{e.stopPropagation();if(Date.now()<suppressClickUntil)return;onChoose(zone.id);});root.appendChild(button);
   });
 }
@@ -1706,6 +1716,7 @@ genreDialog.querySelector('[data-genre-close]').addEventListener('click',()=>gen
 genreDialog.addEventListener('click',e=>{if(e.target===genreDialog)genreDialog.close();});
 const hallEl=document.querySelector('#centralHall');
 hallEl?.addEventListener('pointerdown',e=>{
+  if(routeTransitioning)return;
   /* V2.22.4: mouse clicks on covers stay native, but touch starting on a cover
      must still own the Hall swipe. V2.22.3 excluded covers for every pointer type,
      which fixed desktop click but created a dead swipe zone on iPhone. */
@@ -1770,14 +1781,19 @@ async function fetchPublicCatalogue(url,onRetry=()=>{}){
     await new Promise(resolve=>setTimeout(resolve,attempt===1?450:1200));
   }
 }
-const catalogueGenres=new Set();
-async function ensureCatalogueGenre(genre){
-  if(catalogueGenres.has(genre))return;
+const catalogueGenres=new Set(),catalogueGenreRequests=new Map();
+function ensureCatalogueGenre(genre){
+  if(catalogueGenres.has(genre))return Promise.resolve();
+  if(dataReady&&!catalogue.hasMore){catalogueGenres.add(genre);return Promise.resolve();}
+  if(catalogueGenreRequests.has(genre))return catalogueGenreRequests.get(genre);
+  const job=(async()=>{
   const url=new URL(`${API}/discover`);url.searchParams.set('limit','60');url.searchParams.set('genre',genre);
   const data=await fetchPublicCatalogue(url);
   const ids=new Set(allBooks.map(w=>w.publicationId));
   data.works.forEach(w=>{if(w?.publicationId&&!ids.has(w.publicationId)){ids.add(w.publicationId);allBooks.push(w);}});
   catalogueGenres.add(genre);window.dispatchEvent(new Event('bookstore-catalogue-updated'));paintCatalogueControls();
+  })();
+  const pending=job.finally(()=>catalogueGenreRequests.delete(genre));catalogueGenreRequests.set(genre,pending);return pending;
 }
 function catalogueMoreButton(){
   const button=document.createElement('button');button.type='button';button.dataset.catalogueMore='';button.className='store-catalogue-more';
