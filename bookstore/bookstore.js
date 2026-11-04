@@ -22,14 +22,14 @@ const PATH_BOOKS_PER_ZONE_TEST=12; // V2.20.3 TEST: hold each genre background f
 const SHARED_GENRE_APPROACH_BG='./bookstore-path-fantasy-v2113.webp';
 const SHARED_GENRE_ROOM_BG='./fantasy-room-360-v2165.webp';
 const PATH_ZONES=[
- {id:'fantasy',label:'FANTASY',jp:'ファンタジー',bg:'./book-road-01-fantasy.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'ファンタジー'},
- {id:'romance',label:'ROMANCE',jp:'恋愛',bg:'./book-road-02-romance.webp',approachBg:'./genre-approach-romance-v2314.webp',roomBg:'./genre-room-romance-v2312.webp',pos:'50% 50%',gate:'恋愛'},
- {id:'horror',label:'HORROR',jp:'ホラー',bg:'./book-road-03-horror.webp',approachBg:'./genre-approach-horror-v2314.webp',roomBg:'./genre-room-horror-v2312.webp',pos:'50% 50%',gate:'ホラー'},
- {id:'mystery',label:'MYSTERY',jp:'ミステリ',bg:'./book-road-04-mystery.webp',approachBg:'./genre-approach-mystery-v2314.webp',roomBg:'./genre-room-mystery-v2312.webp',pos:'50% 50%',gate:'ミステリ'},
- {id:'sf',label:'SF',jp:'SF',bg:'./book-road-05-sf.webp',approachBg:'./genre-approach-sf-v2314.webp',roomBg:'./genre-room-sf-v2312.webp',pos:'50% 50%',gate:'SF'},
- {id:'everyday',label:'EVERYDAY',jp:'日常',bg:'./book-road-06-everyday.webp',approachBg:'./genre-approach-everyday-v2314.webp',roomBg:'./genre-room-everyday-v2312.webp',pos:'50% 50%',gate:'日常'},
- {id:'essay',label:'ESSAY',jp:'エッセイ',bg:'./book-road-07-essay.webp',approachBg:'./genre-approach-essay-v2314.webp',roomBg:'./genre-room-essay-v2312.webp',pos:'50% 50%',gate:'エッセイ'},
- {id:'other',label:'OTHER',jp:'その他',bg:'./book-road-08-other.webp',approachBg:'./genre-approach-other-v2314.webp',roomBg:'./genre-room-other-v2312.webp',pos:'50% 50%',gate:'その他'}
+ {id:'fantasy',label:'FANTASY',jp:'ファンタジー',bg:'./book-road-straight-01-fantasy-v2315.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'ファンタジー'},
+ {id:'romance',label:'ROMANCE',jp:'恋愛',bg:'./book-road-straight-02-romance-v2315.webp',approachBg:'./genre-approach-romance-v2314.webp',roomBg:'./genre-room-romance-v2312.webp',pos:'50% 50%',gate:'恋愛'},
+ {id:'horror',label:'HORROR',jp:'ホラー',bg:'./book-road-straight-03-horror-v2315.webp',approachBg:'./genre-approach-horror-v2314.webp',roomBg:'./genre-room-horror-v2312.webp',pos:'50% 50%',gate:'ホラー'},
+ {id:'mystery',label:'MYSTERY',jp:'ミステリ',bg:'./book-road-straight-04-mystery-v2315.webp',approachBg:'./genre-approach-mystery-v2314.webp',roomBg:'./genre-room-mystery-v2312.webp',pos:'50% 50%',gate:'ミステリ'},
+ {id:'sf',label:'SF',jp:'SF',bg:'./book-road-straight-05-sf-v2315.webp',approachBg:'./genre-approach-sf-v2314.webp',roomBg:'./genre-room-sf-v2312.webp',pos:'50% 50%',gate:'SF'},
+ {id:'everyday',label:'EVERYDAY',jp:'日常',bg:'./book-road-straight-06-everyday-v2315.webp',approachBg:'./genre-approach-everyday-v2314.webp',roomBg:'./genre-room-everyday-v2312.webp',pos:'50% 50%',gate:'日常'},
+ {id:'essay',label:'ESSAY',jp:'エッセイ',bg:'./book-road-straight-07-essay-v2315.webp',approachBg:'./genre-approach-essay-v2314.webp',roomBg:'./genre-room-essay-v2312.webp',pos:'50% 50%',gate:'エッセイ'},
+ {id:'other',label:'OTHER',jp:'その他',bg:'./book-road-straight-08-other-v2315.webp',approachBg:'./genre-approach-other-v2314.webp',roomBg:'./genre-room-other-v2312.webp',pos:'50% 50%',gate:'その他'}
 ];
 const PATH_ZONE_COUNT=PATH_ZONES.length;
 function outerPathLength(){return PATH_BOOKS_PER_ZONE_TEST*PATH_ZONE_COUNT;}
@@ -1363,7 +1363,7 @@ function updatePathZone(){
   }
   if(zoneChanged)pathZoneEntryProgress=pathProgress;
   const gate=document.querySelector('#fantasyGate');
-  // Curved outer-road sections never use the large center card. The right-side
+  // Outer-road sections never use the large center card. The right-side
   // branch sign is the only genre cue; the large card is reserved for the straight approach.
   if(gate)gate.hidden=true;
   if(!zoneChanged)return;pathZoneId=zone.id;
@@ -1439,7 +1439,7 @@ function onPathPointerEnd(e){
   const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
   if(!d.moved&&d.gateTap&&roomId==='forest'){enterFantasyRoom();return;}
   if(d.moved&&dx>54&&Math.abs(dx)>Math.abs(dy)*1.15&&roomId==='path'){
-    // The curved outer road always peels inward to Central Sakura Hall on a right swipe.
+    // The straight balcony road returns inward to Central Sakura Hall on a right swipe.
     pathVelocity=0;showCentralHall(false);return;
   }
   if(roomId==='forest'&&d.moved&&dy>54&&Math.abs(dy)>Math.abs(dx)*1.05&&d.start<.22){
