@@ -166,3 +166,12 @@ body.book-detail-open .store-side-nav{visibility:hidden}
 #hallGenreBoard button:focus-visible{outline:2px solid var(--genre-accent);outline-offset:2px}
 @media(hover:hover){#hallGenreBoard button:hover{background:#ffffff18;border-color:var(--genre-accent)}}
 @media(max-width:360px){#store #hallGenreBoard{padding:12px!important}#hallGenreBoard button{min-height:48px}#hallGenreBoard button strong{font-size:14px}}
+
+/* V2.30.5 — every desktop genre shelf uses the same cover-and-information grid,
+   including a single incomplete row. Override legacy :only-child flex centering. */
+@media(min-width:681px){
+ #store #roomShelf .room-shelf-books{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:22px!important;justify-content:stretch!important;justify-items:stretch!important;align-items:start!important;min-height:0!important;flex-wrap:nowrap!important}
+ #store #roomShelf .room-shelf-book{display:grid!important;position:relative!important;grid-template-columns:104px minmax(0,1fr)!important;column-gap:12px!important;align-items:start!important;width:100%!important;max-width:none!important;min-width:0!important;height:188px!important;aspect-ratio:auto!important;justify-self:stretch!important}
+ #store #roomShelf .room-shelf-book>.book-shell{position:relative!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;width:104px!important;height:156px!important;min-height:156px!important;margin:0!important;transform:none!important}
+ #store #roomShelf .room-book-info{display:flex!important;flex-direction:column!important;justify-content:center!important;width:auto!important;min-width:0!important;height:156px!important;min-height:0!important;margin:0!important;padding:4px 0!important;box-sizing:border-box!important;text-align:left!important}
+}
