@@ -111,5 +111,5 @@ body.book-detail-open .store-side-nav{visibility:hidden}
 }
 
 /* Remove native button padding so the glyph stays centered even at 30px. */
-.shop-head .store-icon-button{box-sizing:border-box;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:0;min-height:0;-webkit-appearance:none;appearance:none}
-.shop-head .store-icon-button>svg{display:block;flex:0 0 auto;margin:0;pointer-events:none}
+.store-icon-button{box-sizing:border-box;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:0;min-height:0;-webkit-appearance:none;appearance:none}
+.store-icon-button>svg{display:block;flex:0 0 auto;margin:0;pointer-events:none}
