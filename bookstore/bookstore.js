@@ -408,23 +408,7 @@ function syncPathFromRing(){
   while(pathProgress-candidate>span/2)candidate+=span;
   pathProgress=clampPath(candidate);
 }
-function fantasyBooksReal(){
-  // Genre V1: published metadata is canonical. Keyword inference remains only
-  // for legacy works published before metadata.genre existed.
-  const tagged=allBooks.filter(w=>w?.genre==='fantasy');
-  if(tagged.length)return tagged;
-  const legacy=allBooks.filter(w=>!w?.genre);
-  const keys=['ファンタジ','異世界','魔法','魔王','勇者','冒険','剣','ドラゴン','fantasy','magic','rpg'];
-  const hit=legacy.filter(w=>keys.some(k=>`${w.title||''} ${w.subtitle||''} ${w.description||''} ${w.episodeLabel||''} ${w.episodeTitle||''}`.toLowerCase().includes(k)));
-  return hit.length?hit:allBooks;
-}
-function fantasyBooks(){
-  const real=fantasyBooksReal();
-  if(!real.length)return real;
-  return Array.from({length:60},(_,i)=>({...real[i%real.length],title:`${real[i%real.length].title||'Fantasy'} [DUMMY ${i+1}]`}));
-}
 function genreBooks(id=activeGenreId){
-  if(id==='fantasy')return fantasyBooks();
   return allBooks.filter(w=>w&&String(w.genre||'').toLowerCase()===id);
 }
 function currentGenre(){return PATH_ZONES.find(z=>z.id===activeGenreId)||PATH_ZONES[0];}
