@@ -1302,17 +1302,14 @@ function renderPath(){
     // a screen edge, grow slightly, blur and fade: a visual "rush past" rather than a cut.
     const spread=Math.min(178,50+future*19);
     const exit=Math.min(innerWidth*.72,passed*(innerWidth*.34+70));
-    // V2.20.1: on the circular outer road, distant covers enter from the left-hand
-    // bend and gently straighten into the existing two-lane presentation. The
-    // straight Fantasy approach intentionally keeps the old geometry.
-    const curvePull=roomId==='path'?Math.min(innerWidth*.30,Math.pow(Math.min(future,6)/6,.72)*innerWidth*.30):0;
-    const x=side*(spread+exit)-curvePull-pathYaw*1.25;
+    // V2.31.3: road and genre approaches share the same straight cover trajectory.
+    const x=side*(spread+exit)-pathYaw*1.25;
     const y=future*13-passed*7;
     const z=-future*145+70+passed*245;
     const scale=passed>0?Math.min(1.34,1+passed*.18):Math.max(.28,1-future*.105);
     const opacity=passed>0?Math.max(0,1-passed*.58):Math.max(.16,1-future*.095);
     const blur=passed>0?Math.min(8,passed*3.2):0;
-    const rot=side*(-14-passed*9)+(roomId==='path'?Math.min(16,future*2.4):0);
+    const rot=side*(-14-passed*9);
     el.style.transform=`translate3d(calc(-50% + ${x}px),calc(-50% + ${y}px),${z}px) rotateY(${rot}deg) scale(${scale})`;
     el.style.opacity=opacity;el.style.filter=`blur(${blur}px)`;el.style.zIndex=String(1000-Math.round(phase*30));
     el.dataset.raw=String(raw);
