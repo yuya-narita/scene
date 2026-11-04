@@ -211,3 +211,6 @@ body.book-path-active #store>:is(#prev,#next,#hint,#introHint,#stage){display:no
 #hallGenreBoard.is-entering .genre-sign-grid button{opacity:.45;transition:opacity .16s ease,background-color .16s ease}
 #hallGenreBoard.is-entering .genre-sign-grid button.is-entering{opacity:1;border-color:var(--genre-accent);background:#ffffff20;box-shadow:inset 0 0 0 1px var(--genre-accent)}
 #hallGenreBoard .hall-genre-heading{min-height:1.3em}
+
+/* V2.31.2: one shared room renderer, genre-specific panoramic asset. */
+#store.room-fantasy #roomBgLayer{background-image:linear-gradient(rgba(5,12,6,.12),rgba(4,8,5,.24)),var(--genre-room-bg)!important;}

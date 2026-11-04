@@ -23,13 +23,13 @@ const SHARED_GENRE_APPROACH_BG='./bookstore-path-fantasy-v2113.webp';
 const SHARED_GENRE_ROOM_BG='./fantasy-room-360-v2165.webp';
 const PATH_ZONES=[
  {id:'fantasy',label:'FANTASY',jp:'ファンタジー',bg:'./book-road-01-fantasy.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'ファンタジー'},
- {id:'romance',label:'ROMANCE',jp:'恋愛',bg:'./book-road-02-romance.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'恋愛'},
- {id:'horror',label:'HORROR',jp:'ホラー',bg:'./book-road-03-horror.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'ホラー'},
- {id:'mystery',label:'MYSTERY',jp:'ミステリ',bg:'./book-road-04-mystery.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'ミステリ'},
- {id:'sf',label:'SF',jp:'SF',bg:'./book-road-05-sf.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'SF'},
- {id:'everyday',label:'EVERYDAY',jp:'日常',bg:'./book-road-06-everyday.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'日常'},
- {id:'essay',label:'ESSAY',jp:'エッセイ',bg:'./book-road-07-essay.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'エッセイ'},
- {id:'other',label:'OTHER',jp:'その他',bg:'./book-road-08-other.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'その他'}
+ {id:'romance',label:'ROMANCE',jp:'恋愛',bg:'./book-road-02-romance.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-romance-v2312.webp',pos:'50% 50%',gate:'恋愛'},
+ {id:'horror',label:'HORROR',jp:'ホラー',bg:'./book-road-03-horror.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-horror-v2312.webp',pos:'50% 50%',gate:'ホラー'},
+ {id:'mystery',label:'MYSTERY',jp:'ミステリ',bg:'./book-road-04-mystery.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-mystery-v2312.webp',pos:'50% 50%',gate:'ミステリ'},
+ {id:'sf',label:'SF',jp:'SF',bg:'./book-road-05-sf.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-sf-v2312.webp',pos:'50% 50%',gate:'SF'},
+ {id:'everyday',label:'EVERYDAY',jp:'日常',bg:'./book-road-06-everyday.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-everyday-v2312.webp',pos:'50% 50%',gate:'日常'},
+ {id:'essay',label:'ESSAY',jp:'エッセイ',bg:'./book-road-07-essay.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-essay-v2312.webp',pos:'50% 50%',gate:'エッセイ'},
+ {id:'other',label:'OTHER',jp:'その他',bg:'./book-road-08-other.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-other-v2312.webp',pos:'50% 50%',gate:'その他'}
 ];
 const PATH_ZONE_COUNT=PATH_ZONES.length;
 function outerPathLength(){return PATH_BOOKS_PER_ZONE_TEST*PATH_ZONE_COUNT;}
@@ -419,6 +419,7 @@ function setRoomVisual(id){
   const fantasy=id==='fantasy',zone=currentGenre();
   store.classList.toggle('room-fantasy',fantasy);
   store.dataset.activeGenre=fantasy?zone.id:'';
+  if(fantasy)store.style.setProperty('--genre-room-bg',`url('${zone.roomBg}')`);
   document.querySelector('.sign small').textContent=fantasy?zone.label+' ROOM':'NEW ARRIVALS';
   document.querySelector('.sign strong').textContent=fantasy?zone.jp+'の本棚':'新しく入った本';
   shelfIndex=fantasy?1:0;
@@ -494,8 +495,9 @@ function beginRoomGenreApproach(id){
 }
 function restoreApproachOriginRoom(){
   const origin=approachOriginRoom;if(!origin)return;approachOriginRoom=null;
+  activeGenreId=origin.genre;
   const fade=startRouteCrossfade('path','fantasy');
-  activeGenreId=origin.genre;roomId='fantasy';viewMode='ring';pathVelocity=0;lastOuterPathProgress=origin.outer;spinToken++;
+  roomId='fantasy';viewMode='ring';pathVelocity=0;lastOuterPathProgress=origin.outer;spinToken++;
   document.body.classList.remove('book-path-active');document.querySelector('#bookPath').hidden=true;clearGenreApproachTheme();
   document.querySelector('#motionStart').hidden=true;document.querySelector('#roomExitNav').hidden=false;
   books=origin.books;index=origin.index;roomShelfAllBooks=genreBooks();roomShelfFace=origin.face;roomCameraYaw=origin.yaw;roomCameraPreview=origin.preview;
@@ -1038,8 +1040,9 @@ function makeRouteCrossfadeLayer(kind, role='old'){
     const src=document.querySelector('#roomBgLayer');
     if(src){
       const cs=getComputedStyle(src);
-      // Keep only the live camera position for viewport-sized overlays.
-      // The CSS class owns the correct room image/size/repeat.
+      layer.style.backgroundImage=cs.backgroundImage;
+      layer.style.backgroundSize=cs.backgroundSize;
+      layer.style.backgroundRepeat=cs.backgroundRepeat;
       layer.style.backgroundPosition=cs.backgroundPosition;
     }
   }
@@ -1056,6 +1059,9 @@ function makeRouteCrossfadeLayer(kind, role='old'){
     const z=PATH_ZONES[zi]||PATH_ZONES[0];
     layer.style.backgroundImage=`linear-gradient(rgba(7,5,3,.06),rgba(7,5,3,.13)),url('${z.bg}')`;
     layer.style.backgroundSize='cover';layer.style.backgroundPosition=z.pos||'50% 50%';layer.style.backgroundRepeat='no-repeat';
+  }
+  if(role==='new'&&kind==='fantasy'){
+    layer.style.backgroundImage=`linear-gradient(rgba(5,12,6,.12),rgba(4,8,5,.24)),url('${currentGenre().roomBg}')`;
   }
   if(role==='new'&&kind==='hall'){
     layer.style.backgroundPosition=`calc(50% + ${hallBackgroundOffsetPx(hallYaw+hallPreview,layer).toFixed(2)}px) center`;
@@ -1177,6 +1183,8 @@ async function enterFantasyRoom(){
   const oldRoomLayer=document.createElement('div');
   oldRoomLayer.className='room-crossfade-old room-crossfade-old-path';
   oldRoomLayer.setAttribute('aria-hidden','true');
+  const outgoingBg=store.classList.contains('hall-mode')?roomBg:(document.querySelector('.path-zone-bg.is-visible')||document.querySelector('#pathZoneBgA'));
+  if(outgoingBg){const cs=getComputedStyle(outgoingBg);for(const prop of ['backgroundImage','backgroundSize','backgroundPosition','backgroundRepeat'])oldRoomLayer.style[prop]=cs[prop];}
   store.appendChild(oldRoomLayer);
 
   roomHistory.push({id:lastFantasyEntryRoute,progress:pathProgress});clearGenreApproachTheme();roomId='fantasy';roomShelfAllBooks=genreBooks(activeGenreId);books=roomShelfAllBooks.slice();index=0;dragUnits=0;roomShelfMode=false;document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode','intro-mode');
