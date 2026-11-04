@@ -16,7 +16,7 @@
  <dialog class="store-ui-dialog store-small-dialog" id="storeInfoDialog" aria-labelledby="storeInfoTitle"><div class="store-dialog-heading"><div><small id="storeInfoEyebrow"></small><h2 id="storeInfoTitle"></h2></div><button type="button" class="store-icon-button" data-store-close aria-label="閉じる">${icon('close')}</button></div><div id="storeInfoBody"></div></dialog>`);
  const dialogs=[...document.querySelectorAll('.store-ui-dialog')];
  const menu=document.querySelector('#storeMenuDialog');
- let priorFocus=null,priorOverflow='',activeDialog=null,searchBooks=[],detailContextSnapshot=null;
+ let priorFocus=null,priorOverflow='',activeDialog=null,searchBooks=[],searchVisibleCount=24,detailContextSnapshot=null;
  function restoreDialog(d){if(activeDialog!==d)return;activeDialog=null;document.body.style.overflow=priorOverflow;document.querySelector('#storeMenuToggle').setAttribute('aria-expanded','false');priorFocus?.focus({preventScroll:true});}
  function closeDialog(d){if(d.open)d.close();restoreDialog(d);}
  function closeDialogs(){dialogs.forEach(d=>{if(d.open)closeDialog(d)});}
@@ -32,23 +32,33 @@
  function normalized(value){return String(value??'').normalize('NFKC').toLocaleLowerCase().trim();}
  function matchesBook(w,query){const haystack=normalized([w.title,w.author?.displayName,w.authorName,w.genre,genreLabel(w),w.episodeLabel,w.episodeTitle].filter(Boolean).join(' '));return normalized(query).split(/\s+/).filter(Boolean).every(word=>haystack.includes(word));}
  function renderSearch(){
-   const query=document.querySelector('#storeSearchInput').value;
-   searchBooks=allBooks.filter(w=>matchesBook(w,query));
+   const query=document.querySelector('#storeSearchInput').value.trim();
+   searchBooks=query?allBooks.filter(w=>matchesBook(w,query)):[];
+   searchVisibleCount=24;
    const results=document.querySelector('#storeSearchResults');results.replaceChildren();
-   document.querySelector('#storeSearchCount').textContent=`${searchBooks.length}冊${catalogue.hasMore?'（読み込み済みの作品から検索）':''}`;
-   const more=catalogueMoreButton();results.append(more);paintCatalogueControls();
-   if(!searchBooks.length){const p=document.createElement('p');p.className='store-empty-message';p.textContent=dataReady?'見つかりませんでした。別の言葉で探してみてください。':'本を読み込んでいます。少し待ってから検索してください。';results.append(p);return;}
-   searchBooks.forEach((w,i)=>{
-     const b=document.createElement('button');b.type='button';b.className='store-search-book';b.dataset.result=String(i);
-     const cover=document.createElement('span');cover.className='store-search-cover';
-     if(w.coverUrl){const img=document.createElement('img');img.src=w.coverUrl;img.alt='';img.loading='lazy';img.addEventListener('error',()=>{img.remove();cover.textContent='あ箱';},{once:true});cover.append(img);}else cover.textContent='あ箱';
-     const copy=document.createElement('span');copy.className='store-search-copy';
-     const title=document.createElement('strong');title.textContent=w.title||'無題';
-     const author=document.createElement('span');author.textContent=w.author?.displayName||w.authorName||'作者';
-     const genre=document.createElement('small');genre.textContent=genreLabel(w)||'PUBLIC BOOK';
-     copy.append(genre,title,author);b.append(cover,copy);results.append(b);
-   });
+   const count=document.querySelector('#storeSearchCount');
+   count.textContent=query?`${searchBooks.length}冊${catalogue.hasMore?'（読み込み済みの作品から検索）':''}`:'作品名や作者名を入力してください';
+   if(!query){const prompt=document.createElement('p');prompt.className='store-empty-message';prompt.textContent='作品名・作者名・ジャンルから探せます。';results.append(prompt);if(catalogue.hasMore)results.append(catalogueMoreButton());return;}
+   if(!searchBooks.length){const p=document.createElement('p');p.className='store-empty-message';p.textContent='見つかりませんでした。別の言葉で探してみてください。';results.append(p);if(catalogue.hasMore)results.append(catalogueMoreButton());return;}
+   function appendResults(){
+     const end=Math.min(searchVisibleCount,searchBooks.length);
+     for(let i=results.querySelectorAll('[data-result]').length;i<end;i++){
+       const w=searchBooks[i];
+       const b=document.createElement('button');b.type='button';b.className='store-search-book';b.dataset.result=String(i);
+       const cover=document.createElement('span');cover.className='store-search-cover';
+       if(w.coverUrl){const img=document.createElement('img');img.src=w.coverUrl;img.alt='';img.loading='lazy';img.decoding='async';img.addEventListener('error',()=>{img.remove();cover.textContent='あ箱';},{once:true});cover.append(img);}else cover.textContent='あ箱';
+       const copy=document.createElement('span');copy.className='store-search-copy';
+       const title=document.createElement('strong');title.textContent=w.title||'無題';
+       const author=document.createElement('span');author.textContent=w.author?.displayName||w.authorName||'作者';
+       const genre=document.createElement('small');genre.textContent=genreLabel(w)||'PUBLIC BOOK';
+       copy.append(genre,title,author);b.append(cover,copy);results.append(b);
+     }
+     if(end<searchBooks.length){const more=document.createElement('button');more.type='button';more.className='store-catalogue-more';more.textContent=`検索結果をさらに表示（${end}/${searchBooks.length}）`;more.onclick=()=>{searchVisibleCount=Math.min(end+24,searchBooks.length);more.remove();appendResults()};results.append(more);}
+     else if(catalogue.hasMore)results.append(catalogueMoreButton());
+   }
+   appendResults();
  }
+
  function selectResult(i){
    const w=searchBooks[i];if(!w)return;
    closeDialogs();

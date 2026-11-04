@@ -121,6 +121,7 @@ function setBookPose(b,pos,introDepth=1){
   b.style.zIndex=String(1000-Math.round(depth*100));
   b.classList.toggle('is-far',Math.abs(angle)>105);
 }
+function setIntroHintVisible(visible){document.querySelector('#introHint')?.classList.toggle('is-visible',!!visible)}
 function updateFocusPanel(){
   if(!books.length)return;
   const w=books[index],a=w.author||{};
@@ -217,7 +218,7 @@ function playFirstViewSpin(){
   suppressClickUntil=Date.now()+duration+250;
   stage.classList.add('is-intro-spinning');
   introReady=false;
-  const ih=document.querySelector('#introHint');if(ih)ih.hidden=true;
+  setIntroHintVisible(false);
   renderFirstViewRing(start);
   const t0=performance.now();
   function frame(now){
@@ -239,7 +240,7 @@ function playFirstViewSpin(){
     });
     stage.classList.remove('is-intro-spinning');
     stage.classList.add('is-intro-ready');introReady=true;roomId='intro';store.classList.add('intro-mode');
-    const ih=document.querySelector('#introHint');if(ih)ih.hidden=false;
+    setIntroHintVisible(true);
     updateFocusPanel();
   }
   requestAnimationFrame(frame);
@@ -971,7 +972,7 @@ function showNewArrivalsFromHall(){
   stage.hidden=false;stage.style.transform='';stage.style.opacity='';stage.classList.remove('room-shelf-ring','is-shelf-returning','is-intro-spinning');stage.classList.add('is-intro-ready');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
   document.querySelector('#ringMode')?.classList.add('is-active');document.querySelector('#pathMode')?.classList.remove('is-active');
-  const ih=document.querySelector('#introHint');if(ih){ih.hidden=false;ih.textContent='↑ 上にスワイプして中央ホールへ';}
+  const ih=document.querySelector('#introHint');if(ih)ih.textContent='↑ 上にスワイプして中央ホールへ';setIntroHintVisible(true);
   render();updateFocusPanel();window.scrollTo(0,0);
 }
 function makeRouteCrossfadeLayer(kind, role='old'){
@@ -1063,7 +1064,7 @@ function showCentralHall(fromIntro=false){
       : null;
   hallShelfRing=false;pathVelocity=0;pathDrag=null;pathBookHold=null;hideFantasyGate();roomId='hall';viewMode='hall';roomShelfMode=false;introReady=false;
   store.classList.remove('intro-mode','room-fantasy','hall-ring-mode');store.classList.add('hall-mode');document.body.classList.remove('book-path-active','intro-entry-active');
-  stage.hidden=true;stage.classList.remove('is-intro-ready');const ih=document.querySelector('#introHint');if(ih)ih.hidden=true;
+  stage.hidden=true;stage.classList.remove('is-intro-ready');setIntroHintVisible(false);
   document.querySelector('#bookPath').hidden=true;document.querySelector('#roomShelf').hidden=true;document.querySelector('#motionStart').hidden=true;
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
   document.querySelector('#centralHall').hidden=false;

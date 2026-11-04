@@ -2623,3 +2623,8 @@ nn/* V2.19.5 — static branch sign + approach gate visibility fix.\n   hidden m
  #roomShelf.phone-original .room-shelf-row{transform:none!important;transition:none!important;animation:none!important;}
  #roomShelf.phone-original .room-shelf-face{transition:none!important;animation:none!important;}
 }
+
+/* The opening gesture hint reserves its fixed overlay position before it fades in. */
+#introHint{visibility:hidden;opacity:0;transition:opacity .22s ease}
+#introHint.is-visible{visibility:visible;opacity:1}
+#introHint[hidden]{display:none!important}

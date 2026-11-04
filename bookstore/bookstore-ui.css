@@ -89,3 +89,5 @@ body.book-detail-open .store-side-nav{visibility:hidden}
 #store #bookPath.genre-approach #fantasyGate[hidden]{display:none!important}
 @keyframes approachGateFade{from{opacity:0}to{opacity:.94}}
 @media(prefers-reduced-motion:reduce){#store #bookPath.genre-approach #fantasyGate{animation:none!important}}
+
+#storeSearchResults .store-empty-message{grid-column:1/-1;padding:20px 8px;color:#c2b5a3;text-align:center;font-size:13px;line-height:1.8}
