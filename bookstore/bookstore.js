@@ -458,7 +458,10 @@ async function enterForest(genreId=currentPathZone()?.id||'fantasy'){
   if(routeTransitioning||!dataReady)return;
   const selected=PATH_ZONES.find(z=>z.id===genreId);if(!selected)return;
   const fromRoom=roomId==='fantasy';
+  routeTransitioning=true;pathVelocity=0;
+  await preloadPathZone(selected.approachBg);
   activeGenreId=selected.id;
+  store.style.setProperty('--active-approach-bg',`url('${selected.approachBg}')`);
   // V2.19.9: outer curve -> straight genre approach uses the same crossfade grammar
   // as the other room/route handoffs. The old layer captures the live curved zone.
   const routeFade=startRouteCrossfade(fromRoom?'fantasy':'path','path');
@@ -482,6 +485,7 @@ async function enterForest(genreId=currentPathZone()?.id||'fantasy'){
   document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退';
   renderPath();ensurePathLoop();
   fadeRouteLayers(routeFade);
+  routeTransitioning=false;
 }
 
 function beginRoomGenreApproach(id){
@@ -1060,6 +1064,9 @@ function makeRouteCrossfadeLayer(kind, role='old'){
     layer.style.backgroundImage=`linear-gradient(rgba(7,5,3,.06),rgba(7,5,3,.13)),url('${z.bg}')`;
     layer.style.backgroundSize='cover';layer.style.backgroundPosition=z.pos||'50% 50%';layer.style.backgroundRepeat='no-repeat';
   }
+  if(role==='new'&&kind==='path'){
+    layer.style.backgroundImage=`linear-gradient(rgba(7,5,3,.06),rgba(7,5,3,.13)),url('${currentGenre().approachBg}')`;
+  }
   if(role==='new'&&kind==='fantasy'){
     layer.style.backgroundImage=`linear-gradient(rgba(5,12,6,.12),rgba(4,8,5,.24)),url('${currentGenre().roomBg}')`;
   }
@@ -1367,6 +1374,7 @@ function updatePathZone(){
   // branch sign is the only genre cue; the large card is reserved for the straight approach.
   if(gate)gate.hidden=true;
   if(!zoneChanged)return;pathZoneId=zone.id;
+  preloadPathZone(zone.approachBg);
   // V2.19.5: branch sign stays compact; no expand/shrink animation on zone entry.
   if(label){clearTimeout(pathZoneSignTimer);label.classList.remove('is-expanded');}
   // V2.20.1: never expose an unpainted/intermediate route layer. Decode the new
