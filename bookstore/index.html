@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
-<link rel="stylesheet" href="./bookstore.css?v=2.31.7">
-<link rel="stylesheet" href="./bookstore-ui.css?v=2.31.7">
+<link rel="stylesheet" href="./bookstore.css?v=2.31.9">
+<link rel="stylesheet" href="./bookstore-ui.css?v=2.31.9">
 
 <style id="v211-bg">
 /* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
@@ -28,7 +28,7 @@
 .book-path{background-image:linear-gradient(rgba(7,5,3,.10),rgba(7,5,3,.18)),url('./bookstore-path-fantasy-v2113.webp')!important;background-size:cover!important;background-position:center center!important;background-repeat:no-repeat!important;}
 .book-path .path-floor{opacity:.10!important;}
 </style>
-<link rel="stylesheet" href="./bookstore-mobile-layout.css?v=2.31.7">
+<link rel="stylesheet" href="./bookstore-mobile-layout.css?v=2.31.9">
 </head>
 <body class="intro-entry-active">
 <header class="shop-head">
@@ -52,7 +52,7 @@
           <div class="hall-my-shelf-label"><small>270° · MY LIBRARY</small><strong id="hallLibraryTitle">もっている本</strong><span id="hallLibraryCount">本棚と同期中…</span></div>
           <div class="hall-library-tabs" role="tablist" aria-label="読者の本棚"><button id="hallOwnedTab" type="button" class="is-active" role="tab" aria-selected="true">もっている本</button><button id="hallLaterTab" type="button" role="tab" aria-selected="false">あとで読む</button></div>
           <div class="hall-my-shelf-books" id="hallMyShelfBooks"></div>
-          <div class="hall-my-shelf-board" aria-hidden="true"></div>
+          <button id="enterReadingRoom" type="button">読書室へ入る →</button><div class="hall-my-shelf-board" aria-hidden="true"></div>
         </section>
         <section class="hall-gate hall-genre-board" id="hallGenreBoard" data-angle="180" aria-label="ジャンルの入口"><div class="hall-genre-heading">ジャンルの入口</div><div class="hall-genre-grid genre-sign-grid" id="hallGenreGrid"></div></section>
         <button class="hall-gate is-ready" id="hallBookPath" data-angle="90" type="button"><small>90° · BOOK PATH</small><strong>本の道</strong><span>本を見ながら歩く</span></button>
@@ -87,9 +87,10 @@
  <div class="store-dialog-heading"><div><small>GENRE ROOMS</small><h2 id="genreRoomTitle">別のジャンルへ</h2></div><button class="store-icon-button" type="button" data-genre-close aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
  <p class="genre-room-caption">行き先を選ぶと、その部屋への道へ進みます。</p><div class="genre-sign-grid" id="roomGenreGrid"></div>
 </dialog>
-<script src="./bookstore.js?v=2.31.7"></script>
-<script src="./bookstore-ui.js?v=2.31.7"></script>
-<script src="./bookstore-auth.js?v=2.31.7"></script>
-<script src="./bookstore-mobile-layout.js?v=2.31.7"></script>
+<script src="./bookstore.js?v=2.31.9"></script>
+<script src="./bookstore-ui.js?v=2.31.9"></script>
+<script src="./bookstore-auth.js?v=2.31.9"></script>
+<script src="./bookstore-mobile-layout.js?v=2.31.9"></script>
+<script src="./reading-room.js?v=2.31.9"></script>
 </body>
 </html>
