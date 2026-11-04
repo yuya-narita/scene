@@ -474,12 +474,15 @@ async function enterForest(genreId=currentPathZone()?.id||'fantasy'){
   else{lastOuterPathProgress=PATH_ZONES.findIndex(z=>z.id===selected.id)*PATH_BOOKS_PER_ZONE_TEST;spinToken++;if(roomCameraSettleRaf)cancelAnimationFrame(roomCameraSettleRaf);roomCameraSettleRaf=0;roomCameraInputLock=false;roomShelfMode=false;}
   viewMode='path';document.body.classList.add('book-path-active');stage.hidden=true;
   document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;
-  document.querySelector('#bookPath').hidden=false;
+  const path=document.querySelector('#bookPath');
+  path.classList.add('genre-approach');path.setAttribute('data-genre',activeGenreId);
+  path.style.setProperty('--approach-bg',"url('"+selected.approachBg+"')");
+  mountPathScene(selected.approachBg);
+  path.hidden=false;
   for(const id of ['prev','next','hint'])document.getElementById(id).hidden=true;
   lastForestPathProgress=0;
   pathVelocity=0;pathMotionEnergy=0;lastAccelMag=0;pathMotionLast=0;
   roomId='forest';books=genreBooks(activeGenreId);pathProgress=0;pathYaw=0;
-  const path=document.querySelector('#bookPath');path?.classList.add('genre-approach');path?.setAttribute('data-genre',activeGenreId);path?.style.setProperty('--approach-bg',`url(\"${selected.approachBg}\")`);
   setRoomVisual('fantasy');hideFantasyGate();
   const gate=document.querySelector('#fantasyGate');if(gate){gate.querySelector('small').textContent=selected.label.toUpperCase();gate.querySelector('strong').textContent=selected.jp+'の本棚へ';gate.querySelector('span').textContent='入口をタップ';}
   document.querySelector('#motionStart').hidden=false;setPathMotionButton();
@@ -985,12 +988,11 @@ function backToHallShelf(){
   if(!hallShelfRing)return;hallShelfRing=false;store.classList.remove('hall-ring-mode');stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');showCentralHall(false);
 }
 
-// V2.18.31 — Hall background camera is normalized to the actual repeated tile width.
-// bookstore-v211-bg.webp is 1536x1024 (3:2) and Hall paints it at auto 100%,
-// so one complete 360deg turn must move exactly one rendered image tile (height * 1.5).
+// V2.32.6: the current Hall panorama is 1774x887 (2:1).
+// Hall, its book ring and route snapshots share one complete image tile per 360 degrees.
 function hallBackgroundOffsetPx(yaw,bgEl=document.querySelector('#roomBgLayer')){
   const h=Math.max(1,bgEl?.clientHeight||store.clientHeight||window.innerHeight||1);
-  const tileW=h*1.5;
+  const tileW=h*2;
   return -(yaw/360)*tileW;
 }
 function renderHall(){
@@ -1351,7 +1353,7 @@ function renderPath(){
   }else{
     const span=outerPathLength(),n=((Math.floor(pathProgress)%span)+span)%span+1;
     document.querySelector('#pathStatus').textContent=`本の道　${n} / ${span}`;
-    document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退 ／ ジャンル区画では横＝売場へ';
+    document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退 ／ 左＝中央ホール';
     updatePathZone();
   }
   updatePathFocusPanel();
@@ -1367,10 +1369,26 @@ function currentPathZone(){
   const idx=Math.min(PATH_ZONE_COUNT-1,Math.floor(lap/PATH_BOOKS_PER_ZONE_TEST));
   return PATH_ZONES[idx];
 }
+// V2.32.6: route entry paints a complete live scene beneath the shared fade.
+// Both image layers and the container fallback must agree before the path is revealed.
+function mountPathScene(src,position='50% 50%'){
+  const path=document.querySelector('#bookPath');if(!path)return;
+  const token=++pathZonePaintToken;
+  const image="linear-gradient(rgba(7,5,3,.06),rgba(7,5,3,.13)),url('"+src+"')";
+  path.style.setProperty('--path-scene-bg',"url('"+src+"')");
+  const layers=['#pathZoneBgA','#pathZoneBgB'].map(id=>document.querySelector(id)).filter(Boolean);
+  layers.forEach((layer,i)=>{
+    layer.style.transition='none';layer.style.backgroundImage=image;
+    layer.style.backgroundPosition=position;layer.style.backgroundSize='cover';layer.style.backgroundRepeat='no-repeat';
+    layer.classList.toggle('is-visible',i===0);
+  });
+  pathZoneBgFront='a';
+  requestAnimationFrame(()=>{if(token===pathZonePaintToken)layers.forEach(layer=>layer.style.removeProperty('transition'));});
+}
 function updatePathZone(){
   if(roomId!=='path')return;const zone=currentPathZone();if(!zone)return;
   const label=document.querySelector('#pathZoneLabel');
-  const zoneChanged=pathZoneId!==zone.id;
+  const firstPaint=!pathZoneId,zoneChanged=pathZoneId!==zone.id;
   // V2.19.10: keep the branch sign DOM stable while live motion is repainting the path.
   // Replacing its children every motion frame destroys the original pointer target on iOS,
   // so pointerup cannot synthesize the click. Refresh the sign only when the zone changes.
@@ -1387,6 +1405,7 @@ function updatePathZone(){
   if(gate)gate.hidden=true;
   if(!zoneChanged)return;pathZoneId=zone.id;
   preloadPathZone(zone.approachBg);
+  if(firstPaint){mountPathScene(zone.bg,zone.pos);return;}
   // V2.19.5: branch sign stays compact; no expand/shrink animation on zone entry.
   if(label){clearTimeout(pathZoneSignTimer);label.classList.remove('is-expanded');}
   // V2.20.1: never expose an unpainted/intermediate route layer. Decode the new
@@ -1399,7 +1418,8 @@ function updatePathZone(){
     if(!next)return;
     next.style.backgroundImage=`linear-gradient(rgba(7,5,3,.08),rgba(7,5,3,.16)),url('${zone.bg}')`;next.style.backgroundPosition=zone.pos;
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      if(token!==pathZonePaintToken)return;
+      if(token!==pathZonePaintToken||roomId!=='path'||pathZoneId!==zone.id)return;
+      document.querySelector('#bookPath').style.setProperty('--path-scene-bg',"url('"+zone.bg+"')");
       next.classList.add('is-visible');if(old)old.classList.remove('is-visible');pathZoneBgFront=nextKey;
     }));
   });
@@ -1458,8 +1478,8 @@ function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
   if(!d.moved&&d.gateTap&&roomId==='forest'){enterFantasyRoom();return;}
-  if(d.moved&&dx>54&&Math.abs(dx)>Math.abs(dy)*1.15&&roomId==='path'){
-    // The straight balcony road returns inward to Central Sakura Hall on a right swipe.
+  if(d.moved&&dx<-54&&Math.abs(dx)>Math.abs(dy)*1.15&&roomId==='path'){
+    // The Book Road returns to Central Sakura Hall on a left swipe.
     pathVelocity=0;showCentralHall(false);return;
   }
   if(roomId==='forest'&&d.moved&&dy>54&&Math.abs(dy)>Math.abs(dx)*1.05&&d.start<.22){
