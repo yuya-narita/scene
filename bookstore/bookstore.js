@@ -1135,6 +1135,7 @@ function showCentralHall(fromIntro=false){
 }
 function enterBookPathFromHall(){if(!dataReady)return;clearGenreApproachTheme();const routeFade=startRouteCrossfade('hall','outerpath');document.querySelector('#centralHall').hidden=true;store.classList.remove('hall-mode');roomId='path';viewMode='path';books=allBooks.slice();pathProgress=lastOuterPathProgress;pathYaw=0;pathVelocity=0;pathZoneId='';setRoomVisual('new');document.body.classList.add('book-path-active');stage.hidden=true;document.querySelector('#bookPath').hidden=false;document.querySelector('#motionStart').hidden=false;document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=true;document.querySelector('#roomExitNav').hidden=true;renderPath();ensurePathLoop();primeNextRoomBackground('fantasy');fadeRouteLayers(routeFade);}
 function returnToPathFromRoom(){
+  spinToken++;hideRingUiForPath();
   // V2.19.8: the room's "本の道" exit means the OUTER circular Book Path,
   // not the private straight approach used to enter the room.
   const routeFade=roomId==='fantasy'?startRouteCrossfade('fantasy','outerpath'):null;
@@ -1265,7 +1266,13 @@ function updatePathFocusPanel(){
   if(metaEl){const meta=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ');metaEl.textContent=meta;metaEl.hidden=!meta;}
   if(author&&author.textContent!==(a.displayName||'作者'))author.textContent=a.displayName||'作者';
 }
+function hideRingUiForPath(){
+  stage.hidden=true;
+  for(const id of ['prev','next','hint']){const el=document.getElementById(id);if(el)el.hidden=true;}
+  setIntroHintVisible(false);
+}
 function renderPath(){
+  if(viewMode==='path')hideRingUiForPath();
   const root=document.querySelector('#pathBooks');if(!root)return;root.innerHTML='';
   if(!dataReady){document.querySelector('#fantasyGate').hidden=true;return;}
   // V2.8: the road is genuinely bidirectional. Keep a few already-passed books alive

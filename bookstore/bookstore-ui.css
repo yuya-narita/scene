@@ -202,3 +202,6 @@ body.book-detail-open .store-side-nav{visibility:hidden}
  #picked .detail-card>.detail-copy{grid-area:copy;position:relative!important;inset:auto!important;width:auto!important;height:auto!important;min-height:0!important;display:flex!important;flex-direction:column;justify-content:center;gap:18px;padding:6px 0!important;overflow:auto!important;pointer-events:auto}
  #picked .detail-card>.picked-actions{grid-area:actions;position:relative!important;inset:auto!important;width:auto!important;height:54px!important;min-height:0!important;margin:0!important;display:flex!important;gap:10px!important;align-self:stretch!important;transform:none!important}
 }
+
+/* V2.31.0 — ring-only controls never belong to passages or genre approaches. */
+body.book-path-active #store>:is(#prev,#next,#hint,#introHint,#stage){display:none!important;pointer-events:none!important}
