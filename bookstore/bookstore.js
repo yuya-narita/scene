@@ -12,6 +12,7 @@ let roomId='new',routeTransitioning=false,dataReady=false,activeGenreId='fantasy
 let approachOriginRoom=null;
 let roomShelfMode=false,roomShelfAllBooks=[],roomShelfScrollRaf=0;
 let privateReadingRoom=false,privateLaterOffset=0;
+const PRIVATE_READING_BG='./reading-room-v2319.webp';
 let fantasyGateTimer=0,fantasyGateVisible=false;
 const roomHistory=[];
 const PATH_DRAG_PX_PER_BOOK=150;
@@ -81,7 +82,7 @@ function preloadRoomBackground(id){
 }
 function primeNextRoomBackground(id){preloadRoomBackground(id).catch(()=>{});}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('returnTo',location.href);return player.toString();}
+function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);const returnUrl=new URL(location.href);if(privateReadingRoom)returnUrl.hash=roomShelfFace===3?'reading-room-later':'reading-room';player.searchParams.set('returnTo',returnUrl.href);return player.toString();}
 // V2.21.0 — Bookstore and Bookshelf share the same reader-copy IndexedDB.
 // The bookstore never duplicates MY COPY data; it only presents the existing shelf rows.
 const BOOKSHELF_DB_NAME='ahako-local-bookshelf',BOOKSHELF_DB_VERSION=3,BOOKSHELF_READER_STORE='readerBooks';
@@ -90,7 +91,7 @@ function readLocalIdList(key){try{const v=JSON.parse(localStorage.getItem(key)||
 function openBookshelfDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(BOOKSHELF_DB_NAME,BOOKSHELF_DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(BOOKSHELF_READER_STORE))db.createObjectStore(BOOKSHELF_READER_STORE,{keyPath:'copyId'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function getOwnedReaderRows(){const db=await openBookshelfDb();try{return await new Promise((resolve,reject)=>{const r=db.transaction(BOOKSHELF_READER_STORE,'readonly').objectStore(BOOKSHELF_READER_STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});}finally{db.close();}}
 function ownedCoverBlob(w){const value=w?.coverBytes;if(value instanceof ArrayBuffer||ArrayBuffer.isView(value))return new Blob([value],{type:w.coverMime||'application/octet-stream'});return w?.coverBlob instanceof Blob?w.coverBlob:null;}
-function ownedPlayerUrl(w){const q=new URLSearchParams({bookshelfCopy:w.copyId});const returnUrl=new URL(location.href);if(viewMode==='reading-room')returnUrl.hash='reading-room';q.set('returnTo',returnUrl.href);return `../local-player/?${q.toString()}`;}
+function ownedPlayerUrl(w){const q=new URLSearchParams({bookshelfCopy:w.copyId});const returnUrl=new URL(location.href);if(privateReadingRoom)returnUrl.hash=roomShelfFace===3?'reading-room-later':'reading-room';q.set('returnTo',returnUrl.href);return `../local-player/?${q.toString()}`;}
 function normalizeOwnedBook(w){const blob=ownedCoverBlob(w);let coverUrl=w.coverUrl||'';if(blob){coverUrl=URL.createObjectURL(blob);ownedCoverUrls.push(coverUrl);}const authorName=w.author?.displayName||w.authorName||w.byline||w.creator||'';return {...w,_ownedCopy:true,publicationId:w.publicationId||`owned:${w.copyId}`,coverUrl,author:{...(w.author||{}),displayName:authorName||'作者'}};}
 async function syncOwnedBooks(){try{ownedCoverUrls.forEach(u=>URL.revokeObjectURL(u));ownedCoverUrls=[];const rows=await getOwnedReaderRows(),archived=new Set(readLocalIdList(OWNED_ARCHIVE_KEY)),order=readLocalIdList(OWNED_ORDER_KEY),rank=new Map(order.map((id,i)=>[id,i]));ownedBooks=rows.filter(w=>w?.copyId&&!archived.has(String(w.copyId))).sort((a,b)=>(rank.get(String(a.copyId))??999999)-(rank.get(String(b.copyId))??999999)||String(b.updatedAt||b.addedAt||'').localeCompare(String(a.updatedAt||a.addedAt||''))).map(normalizeOwnedBook);const label=document.querySelector('#hallMyShelf .hall-my-shelf-label span');if(label)label.textContent=ownedBooks.length?`${ownedBooks.length}冊`:'まだ本がありません';return ownedBooks;}catch(e){console.warn('MY BOOKS sync failed',e);ownedBooks=[];return ownedBooks;}}
 function detailReadUrl(w){if(!w)return '#';if(w._ownedCopy)return ownedPlayerUrl(w);return playerUrl(w);}
@@ -132,7 +133,7 @@ function updateFocusPanel(){
   const w=books[index],a=w.author||{};
   const label=hallShelfRing
     ? (hallShelfKind==='mine'?'MY COPY':hallShelfKind==='later'?'READ LATER':'NEW ARRIVALS')
-    : (roomId==='fantasy'?'FANTASY FOREST':'NEW ARRIVALS');
+    : (privateReadingRoom?(roomShelfFace===3?'READ LATER':'MY COPY'):roomId==='fantasy'?'FANTASY FOREST':'NEW ARRIVALS');
   const meta=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ');
   const title=document.querySelector('#focusTitle'),author=document.querySelector('#focusAuthor'),shelf=document.querySelector('#focusShelf'),metaEl=document.querySelector('#focusMeta');
   if(title&&title.textContent!==(w.title||'Untitled'))title.textContent=w.title||'Untitled';
@@ -420,7 +421,7 @@ function setRoomVisual(id){
   const fantasy=id==='fantasy',zone=currentGenre();
   store.classList.toggle('room-fantasy',fantasy);
   store.dataset.activeGenre=fantasy?zone.id:'';
-  if(fantasy)store.style.setProperty('--genre-room-bg',`url('${zone.roomBg}')`);
+  if(fantasy)store.style.setProperty('--genre-room-bg',"url('"+(privateReadingRoom?PRIVATE_READING_BG:zone.roomBg)+"')");
   document.querySelector('.sign small').textContent=fantasy?zone.label+' ROOM':'NEW ARRIVALS';
   document.querySelector('.sign strong').textContent=fantasy?zone.jp+'の本棚':'新しく入った本';
   shelfIndex=fantasy?1:0;
@@ -811,7 +812,7 @@ function applyRoomCamera(previewDeg=0,instant=false){
   if(roomId!=='fantasy')return;
   roomCameraPreview=previewDeg;const yaw=roomCameraYaw+previewDeg;
   // Keep the panoramic background directly attached to the true shared camera.
-  const panoW=Math.max(2,store.clientHeight*2);
+  const panoW=Math.max(2,store.clientHeight*(privateReadingRoom?1864/844:2));
   const bg=document.querySelector('#roomBgLayer');
   store.style.setProperty('--room-yaw',`${yaw}deg`);
   if(bg){
@@ -944,7 +945,7 @@ function wrapDeg(v){while(v>180)v-=360;while(v<-180)v+=360;return v;}
 function hallGates(){return [...document.querySelectorAll('.hall-gate[data-angle]')];}
 function hallSpatialItems(){return [...document.querySelectorAll('.hall-gate[data-angle],.hall-my-shelf[data-angle]')];}
 function hallShelfBooks(kind){return (kind==='mine'?ownedBooks:kind==='later'?readLaterBooks():allBooks.slice(0,8)).filter(Boolean);}
-function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind).slice(0,8);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const w=sample[i];if(w){if(kind==='mine')openHallShelfRing(kind,i,false,()=>window.openReadingRoom(i));else openHallShelfRing(kind,i,false);}}));}
+function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind).slice(0,8);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const w=sample[i];if(w){if(kind==='mine'||kind==='later')window.openReadingRoom(kind,i);else openHallShelfRing(kind,i,false);}}));}
 function renderHallMyShelf(){renderHallShelf('#hallNewShelfBooks','new');renderHallShelf('#hallMyShelfBooks',hallLibraryKind);const later=readLaterBooks(),mine=ownedBooks;const title=document.querySelector('#hallLibraryTitle'),count=document.querySelector('#hallLibraryCount'),ownedTab=document.querySelector('#hallOwnedTab'),laterTab=document.querySelector('#hallLaterTab');if(title)title.textContent=hallLibraryKind==='later'?'あとで読む':'もっている本';if(count)count.textContent=hallLibraryKind==='later'?(later.length?`${later.length}冊`:'まだ保存した本がありません'):(mine.length?`${mine.length}冊`:'まだ本がありません');ownedTab?.classList.toggle('is-active',hallLibraryKind==='mine');laterTab?.classList.toggle('is-active',hallLibraryKind==='later');ownedTab?.setAttribute('aria-selected',hallLibraryKind==='mine'?'true':'false');laterTab?.setAttribute('aria-selected',hallLibraryKind==='later'?'true':'false');}
 async function openHallShelfRing(kind,selectedIndex=0,openDetailAfterSpin=false,afterSpin=null){
   const selected=hallShelfBooks(kind);if(!selected.length)return;
@@ -1109,7 +1110,7 @@ function showCentralHall(fromIntro=false){
   // V2.18.29: Fantasy's Hall exit lands facing the Fantasy entrance (180deg).
   // Commit that camera BEFORE the destination crossfade layer is created, so
   // there is no intermediate Hall 0deg frame and no post-fade camera jump.
-  if(returningFromFantasy){hallYaw=180;hallPreview=0;hallDrag=null;rebaseHallMotion();}
+  if(returningFromFantasy){hallYaw=privateReadingRoom?270:180;hallPreview=0;hallDrag=null;rebaseHallMotion();}
   // V2.18.26: Fantasy -> Central Hall uses the same deterministic two-layer
   // crossfade as the other room/route handoffs. Capture the live Fantasy
   // background before roomId/viewMode are reset below.
@@ -1656,7 +1657,7 @@ function keyboardHallVertical(dir){
     if(yaw===0){showNewArrivalsFromHall();return;}
     if(yaw===90){enterBookPathFromHall();return;}
     if(yaw===180){document.querySelector('#hallGenreGrid button')?.focus();return;}
-    if(yaw===270&&hallShelfBooks(hallLibraryKind).length){openHallShelfRing(hallLibraryKind,0);return;}
+    if(yaw===270&&hallShelfBooks(hallLibraryKind).length){window.openReadingRoom(hallLibraryKind,0);return;}
   }else{ // Down = NEW ARRIVALS ring, matching the Hall's return gesture.
     showNewArrivalsFromHall();
   }
@@ -1702,7 +1703,7 @@ window.addEventListener('keydown',e=>{
     renderPath();return;
   }
 });
-document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#exitHall')?.addEventListener('click',()=>showCentralHall(false));document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
+document.querySelector('#hallMotion')?.addEventListener('click',toggleHallMotion);document.querySelector('#hallBookPath')?.addEventListener('click',enterBookPathFromHall);document.querySelector('#exitHall')?.addEventListener('click',()=>{if(privateReadingRoom||window.readingRoomIsOpen?.())window.closeReadingRoom();else showCentralHall(false);});document.querySelector('#exitPath')?.addEventListener('click',returnToPathFromRoom);
 // One board uses the same genre configuration and room entry as the Book Road.
 async function openHallGenre(id){
   if(viewMode!=='hall'||routeTransitioning||!PATH_ZONES.some(z=>z.id===id))return;
@@ -1759,9 +1760,9 @@ hallEl?.addEventListener('pointerup',e=>{if(!hallDrag||e.pointerId!==hallDrag.id
   if(d.cover&&!d.axis&&Math.hypot(dx,dy)<9){
     const idx=Number(d.cover.dataset.hallBook)||0;
     const kind=d.cover.closest('#hallNewShelfBooks')?'new':hallLibraryKind;
-    if(kind==='mine')openHallShelfRing(kind,idx,false,()=>window.openReadingRoom());else openHallShelfRing(kind,idx,false);return;
+    if(kind==='mine'||kind==='later')window.openReadingRoom(kind,idx);else openHallShelfRing(kind,idx,false);return;
   }
-  if(d.axis==='vertical'){hallPreview=0;if(dy>58){const facingNew=Math.abs(wrapDeg(hallYaw))<42;if(facingNew){showNewArrivalsFromHall();return;}/* V2.21.2: MY LIBRARY gets the same shelf <-> ring vertical route as NEW ARRIVALS. The 270deg hall face can show either owned books or Read Later; open the currently visible collection. */const facingLibrary=Math.abs(wrapDeg(hallYaw-270))<42;if(facingLibrary&&hallShelfBooks(hallLibraryKind).length){openHallShelfRing(hallLibraryKind,0);return;}}settleHall();return;}const base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;
+  if(d.axis==='vertical'){hallPreview=0;if(dy>58){const facingNew=Math.abs(wrapDeg(hallYaw))<42;if(facingNew){showNewArrivalsFromHall();return;}/* V2.21.2: MY LIBRARY gets the same shelf <-> ring vertical route as NEW ARRIVALS. The 270deg hall face can show either owned books or Read Later; open the currently visible collection. */const facingLibrary=Math.abs(wrapDeg(hallYaw-270))<42;if(facingLibrary&&hallShelfBooks(hallLibraryKind).length){window.openReadingRoom(hallLibraryKind,0);return;}}settleHall();return;}const base=Math.round(d.start/90)*90;hallYaw=d.start+hallPreview;hallPreview=0;
   // A normal deliberate swipe advances one entrance; no hard flick required.
   if(Math.abs(dx)>=34||Math.abs(vx)>=.24){const dir=dx<0?1:-1;const from=hallYaw,target=base+dir*90,start=performance.now(),dur=250;function tick(now){const t=Math.min(1,(now-start)/dur),q=1-Math.pow(1-t,3);hallYaw=from+(target-from)*q;renderHall();if(t<1)requestAnimationFrame(tick);else{hallYaw=target;rebaseHallMotion();renderHall();}}requestAnimationFrame(tick);}else settleHall();
 });hallEl?.addEventListener('pointercancel',()=>{hallPreview=0;hallDrag=null;settleHall();});
@@ -1876,71 +1877,130 @@ async function init(){
   }finally{initialCatalogueLoading=false;}
 }
 // Keep Central Hall in sync when Bookshelf changes in another tab or after returning from Player.
-window.addEventListener('storage',e=>{if(e.key===OWNED_ORDER_KEY||e.key===OWNED_ARCHIVE_KEY){syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});}});
-window.addEventListener('pageshow',()=>{if(dataReady)syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});});
+window.addEventListener('storage',e=>{if(e.key===OWNED_ORDER_KEY||e.key===OWNED_ARCHIVE_KEY||e.key===READ_LATER_STORAGE_KEY){syncOwnedBooks().then(()=>{renderHallMyShelf();if(privateReadingRoom)window.refreshPrivateReadingRoom?.();else if(viewMode==='hall')renderHall();});}});
+window.addEventListener('pageshow',()=>{if(dataReady)syncOwnedBooks().then(()=>{renderHallMyShelf();if(privateReadingRoom)window.refreshPrivateReadingRoom?.();else if(viewMode==='hall')renderHall();});});
 init();
 
-// V2.32.2: the Hall's owned-cover ring is the reading-room entrance; the interior
-// reuses the shared four-wall Room shelf renderer and its 360-degree camera.
+// V2.32.4: switch to the decoded private-room scenery and start the ring on one frame.
 (()=>{
  let opening=false,epoch=0;
+ const backgroundReady=preloadPathZone(PRIVATE_READING_BG);
+ const entryLayers=new Set();
  function updatePrivateRoomTitle(face=roomShelfFace){
   if(!privateReadingRoom)return;
   const sign=document.querySelector('.sign');if(!sign)return;
-  sign.querySelector('small').textContent=face===3?'270° · READ LATER':`${face*90}° · MY BOOKS`;
+  sign.querySelector('small').textContent=face===3?'270° · READ LATER':(face*90)+'° · MY BOOKS';
   sign.querySelector('strong').textContent=face===3?'あとで読む':'もっている本';
-  sign.classList.add('shelf-back-sign');
-  const faces=roomShelfFaces(),empty=document.querySelector('#roomShelfEmpty');
+  sign.classList.toggle('shelf-back-sign',!roomShelfMode);
+  const empty=document.querySelector('#roomShelfEmpty'),faces=roomShelfFaces();
   if(empty){empty.hidden=!!faces[face]?.books.length;empty.textContent=face===3?'あとで読む本はまだありません':'もっている本はまだありません';}
  }
- async function enterPrivateRoom(){
-  if(privateReadingRoom)return;opening=true;const token=++epoch;
-  await preloadRoomBackground('fantasy');if(token!==epoch){opening=false;return;}
-  const fromKind=(viewMode==='hall'||hallShelfRing||roomId==='hall')?'hall':'fantasy';
-  const routeFade=startRouteCrossfade(fromKind,'fantasy');
-  spinToken++;closePick();pathVelocity=0;pathDrag=null;hallDrag=null;hallShelfRing=false;
-  privateReadingRoom=true;activeGenreId='fantasy';
-  const owned=ownedBooks.slice(),later=readLaterBooks();privateLaterOffset=owned.length;roomShelfAllBooks=owned.concat(later);books=roomShelfAllBooks.slice();index=0;
-  roomId='fantasy';viewMode='ring';roomShelfMode=false;roomShelfFace=0;roomVisibleFace=0;roomCameraYaw=0;roomCameraPreview=0;roomCameraInputLock=false;
+ function updatePrivateCollection(){
+  privateLaterOffset=ownedBooks.length;
+  roomShelfAllBooks=ownedBooks.concat(readLaterBooks());
+ }
+ function refreshPrivateRoom(){
+  if(!privateReadingRoom)return;
+  const selected=books[index],wasShelf=roomShelfMode;
+  updatePrivateCollection();
+  if(wasShelf){books=roomShelfAllBooks.slice();renderRoomShelf();}
+  else{
+   books=(roomShelfFace===3?roomShelfAllBooks.slice(privateLaterOffset):roomShelfAllBooks.slice(0,privateLaterOffset));
+   const found=books.findIndex(w=>selected&&(w.copyId||w.publicationId)===(selected.copyId||selected.publicationId));
+   index=found<0?0:found;
+   if(!stage.classList.contains('is-intro-spinning'))render();
+  }
+  updatePrivateRoomTitle(roomShelfFace);
+ }
+ async function enterPrivateRoom(kind='mine',selectedIndex=0){
+  if(opening||privateReadingRoom)return;
+  opening=true;const token=++epoch;
+  window.setStoreNavigationActive?.('shelf');
+  // Warm the room at page load, then preserve the current view until it is decoded.
+  await backgroundReady;
+  if(token!==epoch){return;}
+  const oldKind=viewMode==='path'?'path':(viewMode==='hall'||hallShelfRing?'hall':'fantasy');
+  const oldLayer=makeRouteCrossfadeLayer(oldKind,'old');entryLayers.add(oldLayer);
+  // Fade scenery behind the live books, so the ring never waits behind an opaque overlay.
+  oldLayer.style.setProperty('z-index','2','important');
+  spinToken++;closePick();drag=null;pathVelocity=0;pathDrag=null;hallDrag=null;hallShelfRing=false;
+  finishPhoneShelfSlide(false);
+  if(roomCameraSettleRaf)cancelAnimationFrame(roomCameraSettleRaf);
+  roomCameraSettleRaf=0;
+  privateReadingRoom=true;
+  updatePrivateCollection();
+  roomId='fantasy';viewMode='ring';roomShelfMode=false;
+  roomShelfFace=kind==='later'?3:0;roomVisibleFace=roomShelfFace;
+  roomCameraYaw=roomShelfFace*90;roomCameraPreview=0;roomCameraInputLock=false;roomShelfVisualYaw=null;
+  phoneShelfScrollPositions.clear();
   store.classList.add('private-reading-room');store.classList.remove('hall-mode','hall-ring-mode','intro-mode');
-  setRoomVisual('fantasy');document.querySelector('#centralHall').hidden=true;document.querySelector('#centralHall').inert=true;
+  setRoomVisual('fantasy');
+  const bg=document.querySelector('#roomBgLayer');
+  bg.style.display='block';bg.style.backgroundPosition='center center';
+  bg.classList.remove('room-enter-fade','is-room-visible');
+  document.querySelector('#centralHall').hidden=true;document.querySelector('#centralHall').inert=true;
   document.querySelector('#bookPath').hidden=true;document.querySelector('#motionStart').hidden=true;
+  setIntroHintVisible(false);document.body.classList.remove('book-path-active','intro-entry-active');
   document.querySelector('#roomExitNav').hidden=false;
   document.querySelector('#exitHall').textContent='中央ホールへ戻る';
   document.querySelector('#exitPath').hidden=true;document.querySelector('#chooseRoomGenre').hidden=true;
-  stage.hidden=true;stage.classList.remove('is-intro-spinning','is-shelf-returning');stage.classList.add('room-shelf-ring');
-  document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
-  roomCameraYaw=0;roomCameraPreview=0;roomShelfVisualYaw=null;rebaseRoomMotion();
-  renderRoomShelf();updatePrivateRoomTitle(0);applyRoomCamera(0,true);
-  document.body.classList.remove('book-path-active','intro-entry-active');
-  fadeRouteLayers(routeFade);primeNextRoomBackground('fantasy');opening=false;
-  requestAnimationFrame(()=>{if(token===epoch)document.querySelector('#exitHall')?.focus({preventScroll:true});});
+  // Prepare the same four walls, but land in the chosen wall's live ring.
+  renderRoomShelf();updatePrivateRoomTitle(roomShelfFace);
+  const face=roomShelfFaces()[roomShelfFace];books=face.books.slice();
+  index=books.length?Math.max(0,Math.min(books.length-1,Number(selectedIndex)||0)):0;dragUnits=0;
+  stage.style.transform='';stage.style.opacity='';
+  stage.classList.remove('is-intro-ready','is-shelf-returning');stage.classList.add('room-shelf-ring');
+  rebaseRoomMotion();applyRoomCamera(0,true);
+  if(books.length){
+   roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;stage.hidden=false;
+   for(const id of ['prev','next','focusPanel','hint'])document.getElementById(id).hidden=false;
+   document.querySelector('#hint').textContent='左右にスワイプしてこの棚の本を見る　／　上スワイプで棚へ戻る';
+   updatePrivateRoomTitle(roomShelfFace);renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
+  }else{books=roomShelfAllBooks.slice();stage.innerHTML='';}
+  const animationToken=++spinToken;
+  void oldLayer.offsetWidth;
+  requestAnimationFrame(now=>{
+   if(token!==epoch||!privateReadingRoom){oldLayer.remove();entryLayers.delete(oldLayer);return;}
+   // These start in the same browser frame: scenery fade and ring movement.
+   oldLayer.classList.add('is-crossfade-out');
+   setTimeout(()=>{oldLayer.remove();entryLayers.delete(oldLayer);},1100);
+   const start=now,duration=1450;
+   function frame(time){
+    if(token!==epoch||!privateReadingRoom)return;
+    if(animationToken!==spinToken||roomShelfMode){stage.classList.remove('is-intro-spinning');opening=false;return;}
+    const t=Math.min(1,(time-start)/duration),ease=1-Math.pow(1-t,3.4);
+    const center=index-4.2*(1-ease),depth=.12+.88*(1-Math.pow(1-t,1.8));
+    stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),depth));
+    if(t<1)requestAnimationFrame(frame);
+    else{stage.classList.remove('is-intro-spinning');render();opening=false;}
+   }
+   if(books.length&&!roomShelfMode)frame(now);else opening=false;
+  });
  }
- window.readingRoomIsOpen=()=>privateReadingRoom;
- window.openReadingRoom=()=>{
-  if(privateReadingRoom||opening)return;
-  window.setStoreNavigationActive?.('shelf');
-  enterPrivateRoom();
-  syncOwnedBooks().then(()=>{if(privateReadingRoom){privateLaterOffset=ownedBooks.length;roomShelfAllBooks=ownedBooks.concat(readLaterBooks());books=roomShelfAllBooks.slice();renderRoomShelf();updatePrivateRoomTitle(roomShelfFace);}});
- };
+ window.readingRoomIsOpen=()=>privateReadingRoom||opening;
+ window.openReadingRoom=(kind='mine',selectedIndex=0)=>enterPrivateRoom(kind,selectedIndex);
  window.closeReadingRoom=()=>{
-  if(!privateReadingRoom)return;
-  ++epoch;opening=false;privateReadingRoom=false;closePick();roomShelfMode=false;
+  if(!privateReadingRoom&&!opening)return;
+  ++epoch;opening=false;spinToken++;
+  entryLayers.forEach(layer=>layer.remove());entryLayers.clear();
+  closePick();stage.classList.remove('is-intro-spinning');
+  if(privateReadingRoom){
+   // Keep private ownership until Hall captures the outgoing small-room background.
+   showCentralHall(false);
+   privateReadingRoom=false;
+  }
   window.setStoreNavigationActive?.('home');
   document.querySelector('#centralHall').inert=false;store.classList.remove('private-reading-room');
   document.querySelector('#exitPath').hidden=false;document.querySelector('#chooseRoomGenre').hidden=false;
   document.querySelector('#exitHall').textContent='桜ホール';
-  const sign=document.querySelector('.sign');sign.classList.remove('shelf-back-sign');
-  document.querySelector('#roomShelf').hidden=true;books=allBooks.slice();showCentralHall(false);
+  document.querySelector('.sign').classList.remove('shelf-back-sign');
+  books=allBooks.slice();
  };
- document.querySelector('#exitHall')?.addEventListener('click',window.closeReadingRoom);
  window.updatePrivateRoomTitle=updatePrivateRoomTitle;
+ window.refreshPrivateReadingRoom=refreshPrivateRoom;
  window.addEventListener('keydown',e=>{if(privateReadingRoom&&e.key==='Escape'&&picked.hidden)window.closeReadingRoom();});
- window.addEventListener('pageshow',()=>{if(privateReadingRoom)syncOwnedBooks().then(()=>{privateLaterOffset=ownedBooks.length;roomShelfAllBooks=ownedBooks.concat(readLaterBooks());books=roomShelfAllBooks.slice();renderRoomShelf();updatePrivateRoomTitle(roomShelfFace);});});
  document.addEventListener('click',e=>{const link=e.target.closest('a[href="../bookshelf/"]');if(!link||link.classList.contains('brand'))return;e.preventDefault();document.querySelectorAll('dialog[open]').forEach(d=>d.close());document.body.style.overflow='';window.openReadingRoom();});
- function resumeReadingRoom(){if(location.hash==='#reading-room'&&dataReady){window.openReadingRoom();history.replaceState(null,'',location.pathname+location.search);}}
+ function resumeReadingRoom(){if((location.hash==='#reading-room'||location.hash==='#reading-room-later')&&dataReady){window.openReadingRoom(location.hash.endsWith('-later')?'later':'mine');history.replaceState(null,'',location.pathname+location.search);}}
  new MutationObserver(resumeReadingRoom).observe(document.getElementById('bookCount'),{childList:true,subtree:true});
  window.addEventListener('pageshow',resumeReadingRoom);resumeReadingRoom();
- // Private state is set before the shared shelf renderer creates its four walls.
- window.addEventListener('storage',e=>{if(privateReadingRoom&&(e.key===READ_LATER_STORAGE_KEY||e.key===OWNED_ORDER_KEY||e.key===OWNED_ARCHIVE_KEY))syncOwnedBooks().then(()=>{privateLaterOffset=ownedBooks.length;roomShelfAllBooks=ownedBooks.concat(readLaterBooks());books=roomShelfAllBooks.slice();renderRoomShelf();updatePrivateRoomTitle(roomShelfFace);});});
 })();
