@@ -1700,13 +1700,38 @@ function paintCatalogueControls(){
     b.textContent=catalogue.pending?'読み込み中…':catalogue.error?'続きを再試行する':`次の60作品を読み込む（現在${allBooks.length}作品）`;
   });
 }
+// Retry transient catalogue failures without changing the requested page/cursor.
+async function fetchPublicCatalogue(url,onRetry=()=>{}){
+  for(let attempt=1;attempt<=3;attempt++){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+    let retryable=false,code='INVALID_RESPONSE';
+    try{
+      const response=await fetch(url,{cache:'no-store',signal:controller.signal});
+      if(!response.ok){
+        code=`HTTP_${response.status}`;retryable=response.status===408||response.status===429||response.status>=500;
+        throw new Error(`公開一覧を取得できませんでした。（HTTP ${response.status}）`);
+      }
+      const data=await response.json();
+      if(!data?.ok||!Array.isArray(data.works))throw new Error('公開一覧の応答を読み取れませんでした。');
+      return data;
+    }catch(cause){
+      if(cause.name==='AbortError'){retryable=true;code='TIMEOUT';}
+      else if(cause instanceof TypeError){retryable=true;code='NETWORK';}
+      console.warn('Bookstore catalogue request failed',{code,attempt,genre:url.searchParams.get('genre')||'all'});
+      if(!retryable||attempt===3){
+        const message=code==='TIMEOUT'?'公開一覧の取得に時間がかかっています。少し待って再試行してください。（時間切れ）':code==='NETWORK'?'公開一覧に接続できませんでした。少し待って再試行してください。（通信接続）':code==='INVALID_RESPONSE'?'公開一覧の応答を読み取れませんでした。':cause.message;
+        const error=new Error(message);error.code=code;error.cause=cause;throw error;
+      }
+    }finally{clearTimeout(timer);}
+    onRetry(attempt+1);
+    await new Promise(resolve=>setTimeout(resolve,attempt===1?450:1200));
+  }
+}
 const catalogueGenres=new Set();
 async function ensureCatalogueGenre(genre){
   if(catalogueGenres.has(genre))return;
   const url=new URL(`${API}/discover`);url.searchParams.set('limit','60');url.searchParams.set('genre',genre);
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
-  let response,data;try{response=await fetch(url,{cache:'no-store',signal:controller.signal});data=await response.json();}finally{clearTimeout(timer);}
-  if(!response.ok||!data?.ok||!Array.isArray(data.works))throw new Error(data?.error||'ジャンルの本を読み込めませんでした。');
+  const data=await fetchPublicCatalogue(url);
   const ids=new Set(allBooks.map(w=>w.publicationId));
   data.works.forEach(w=>{if(w?.publicationId&&!ids.has(w.publicationId)){ids.add(w.publicationId);allBooks.push(w);}});
   catalogueGenres.add(genre);window.dispatchEvent(new Event('bookstore-catalogue-updated'));paintCatalogueControls();
@@ -1722,9 +1747,10 @@ function loadBookstorePublicBooks(){
   const task=(async()=>{
     const url=new URL(`${API}/discover`);url.searchParams.set('limit','60');
     if(catalogue.cursor)url.searchParams.set('cursor',catalogue.cursor);
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
-    let response,data;try{response=await fetch(url,{cache:'no-store',signal:controller.signal});data=await response.json();}finally{clearTimeout(timer);}
-    if(!response.ok||!data?.ok||!Array.isArray(data.works))throw new Error(data?.error||'本を読み込めませんでした。');
+    const data=await fetchPublicCatalogue(url,attempt=>{
+      const status=document.querySelector('#catalogueLoadStatus');
+      if(status)status.textContent=`公開一覧を再取得しています…（${attempt} / 3）`;
+    });
     const cursor=data.nextCursor||null;
     if(cursor&&(typeof cursor!=='string'||catalogue.seen.has(cursor)))throw new Error('公開一覧の続きが取得できませんでした。');
     if(!cursor&&data.hasMore===true)throw new Error('公開一覧の続きが取得できませんでした。');
@@ -1746,7 +1772,28 @@ function requestNextCataloguePage(){
     loadBookstorePublicBooks().catch(()=>{});
 }
 
-async function init(){try{books=await loadBookstorePublicBooks();allBooks=books.slice();await syncOwnedBooks();dataReady=true;roomId='intro';store.classList.add('intro-mode');document.body.classList.add('intro-entry-active');window.scrollTo(0,0);document.querySelector('#bookCount').after(catalogueMoreButton());paintCatalogueControls();if(!books.length){stage.innerHTML='<p style="text-align:center;margin-top:30%;color:#bbb">まだ本がありません。</p>';return;}/* V2.11.7: do not render the resting shelf before preload. Keep only the bookstore visible, then reveal the already-spinning distant ring once the focal covers are decoded. */stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));}catch(e){stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';stage.innerHTML=`<p style="text-align:center;margin-top:30%;color:#bbb">${esc(e.message)}</p>`;}}
+let initialCatalogueLoading=false;
+async function init(){
+  if(initialCatalogueLoading)return;initialCatalogueLoading=true;
+  stage.classList.remove('is-intro-waiting');
+  stage.innerHTML='<div class="catalogue-load-state" role="status"><p id="catalogueLoadStatus">本を読み込んでいます…</p></div>';
+  for(const id of ['prev','next','focusPanel','hint'])document.getElementById(id).hidden=true;
+  try{
+    books=await loadBookstorePublicBooks();allBooks=books.slice();await syncOwnedBooks();dataReady=true;
+    roomId='intro';store.classList.add('intro-mode');document.body.classList.add('intro-entry-active');window.scrollTo(0,0);
+    const count=document.querySelector('#bookCount');if(!count.parentElement.querySelector('[data-catalogue-more]'))count.after(catalogueMoreButton());paintCatalogueControls();
+    if(!books.length){stage.innerHTML='<div class="catalogue-load-state"><p>まだ本がありません。</p></div>';return;}
+    for(const id of ['prev','next','focusPanel','hint'])document.getElementById(id).hidden=false;
+    stage.innerHTML='';stage.classList.add('is-intro-waiting');updateFocusPanel();await preloadFirstViewCovers();
+    stage.classList.remove('is-intro-waiting');requestAnimationFrame(()=>requestAnimationFrame(playFirstViewSpin));
+  }catch(error){
+    stage.classList.remove('is-intro-waiting');document.querySelector('#bookCount').textContent='棚を読み込めませんでした';
+    stage.innerHTML=`<div class="catalogue-load-state" role="alert"><strong>本を読み込めませんでした</strong><p>${esc(error.message)}</p><button type="button" id="retryCatalogue">もう一度読み込む</button></div>`;
+    const retry=document.querySelector('#retryCatalogue');
+    retry?.addEventListener('pointerdown',event=>event.stopPropagation());
+    retry?.addEventListener('click',event=>{event.stopPropagation();init();});
+  }finally{initialCatalogueLoading=false;}
+}
 // Keep Central Hall in sync when Bookshelf changes in another tab or after returning from Player.
 window.addEventListener('storage',e=>{if(e.key===OWNED_ORDER_KEY||e.key===OWNED_ARCHIVE_KEY){syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});}});
 window.addEventListener('pageshow',()=>{if(dataReady)syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});});
