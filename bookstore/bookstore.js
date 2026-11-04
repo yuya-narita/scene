@@ -29,6 +29,7 @@ const PATH_ZONES=[
  {id:'other',label:'OTHER',jp:'その他',bg:'./book-road-08-other.webp',pos:'50% 50%',gate:'その他'}
 ];
 const PATH_ZONE_COUNT=PATH_ZONES.length;
+function outerPathLength(){return PATH_BOOKS_PER_ZONE_TEST*PATH_ZONE_COUNT;}
 let pathZoneId='',pathZoneBgFront='a',pathZoneEntryProgress=0,pathZoneSignTimer=0;
 const pathZonePreloadJobs=new Map();let pathZonePaintToken=0;
 function preloadPathZone(src){if(pathZonePreloadJobs.has(src))return pathZonePreloadJobs.get(src);const job=new Promise(resolve=>{const img=new Image();let done=false;const finish=()=>{if(done)return;done=true;resolve();};img.decoding='async';img.onload=async()=>{try{if(img.decode)await img.decode();}catch(_){}finish();};img.onerror=finish;img.src=src;if(img.complete&&img.naturalWidth>0){Promise.resolve(img.decode?.()).catch(()=>{}).finally(finish);}setTimeout(finish,5000);});pathZonePreloadJobs.set(src,job);return job;}
@@ -403,7 +404,7 @@ function syncPathFromRing(){
   const span=Math.max(1,books.length);
   while(candidate-pathProgress>span/2)candidate-=span;
   while(pathProgress-candidate>span/2)candidate+=span;
-  pathProgress=Math.max(0,candidate);
+  pathProgress=clampPath(candidate);
 }
 function fantasyBooksReal(){
   // Genre V1: published metadata is canonical. Keyword inference remains only
@@ -431,7 +432,7 @@ function setRoomVisual(id){
 function pathEnd(){
   if(!dataReady||!books.length)return 0;
   if(roomId==='forest')return FOREST_TRAVEL; // future side branch
-  return Math.max(1,books.length); // circular road: one lap equals the current book count
+  return outerPathLength(); // Eight genre sections, independent of available book count.
 }
 function atFantasyGate(){return dataReady&&books.length>0&&roomId==='path'&&pathProgress>=books.length-1+PATH_GATE_REVEAL_PAD}
 function hideFantasyGate(){
@@ -1012,7 +1013,7 @@ function makeRouteCrossfadeLayer(kind, role='old'){
   // .route-crossfade-path image (that image is the straight Fantasy approach).
   // Paint the exact current outer-road genre background before the fade begins.
   if(role==='new'&&kind==='outerpath'){
-    const span=Math.max(1,allBooks.length||books.length||1);
+    const span=outerPathLength();
     const lap=((lastOuterPathProgress%span)+span)%span;
     const zi=Math.min(PATH_ZONE_COUNT-1,Math.floor(lap/PATH_BOOKS_PER_ZONE_TEST));
     const z=PATH_ZONES[zi]||PATH_ZONES[0];
@@ -1272,8 +1273,8 @@ function renderPath(){
     // have already flowed out and the background has become visually clear.
     if(gate){gate.hidden=!atEntrance;gate.querySelector('small').textContent='FANTASY FOREST';gate.querySelector('strong').textContent='ファンタジーの森';gate.querySelector('span').textContent='入口をタップ';}
   }else{
-    const n=(Math.floor(pathProgress)%books.length+books.length)%books.length+1;
-    document.querySelector('#pathStatus').textContent=`本の道　${n} / ${books.length}`;
+    const span=outerPathLength(),n=((Math.floor(pathProgress)%span)+span)%span+1;
+    document.querySelector('#pathStatus').textContent=`本の道　${n} / ${span}`;
     document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退 ／ ジャンル区画では横＝売場へ';
     updatePathZone();
   }
@@ -1282,11 +1283,11 @@ function renderPath(){
 }
 function clampPath(v){
   if(roomId==='forest')return Math.max(0,Math.min(pathEnd(),v));
-  const span=Math.max(1,books.length);
+  const span=outerPathLength();
   return ((v%span)+span)%span;
 }
 function currentPathZone(){
-  const span=Math.max(1,books.length),lap=((pathProgress%span)+span)%span;
+  const span=outerPathLength(),lap=((pathProgress%span)+span)%span;
   const idx=Math.min(PATH_ZONE_COUNT-1,Math.floor(lap/PATH_BOOKS_PER_ZONE_TEST));
   return PATH_ZONES[idx];
 }
@@ -1618,6 +1619,7 @@ window.addEventListener('keydown',e=>{
     e.preventDefault();
     if(e.key==='ArrowUp')pathProgress+=.72;else if(e.key==='ArrowDown')pathProgress-=.72;else if(e.key==='ArrowLeft')pathYaw-=18;else if(e.key==='ArrowRight')pathYaw+=18;
     if(roomId==='forest')pathProgress=Math.max(0,Math.min(Math.max(0,Math.min(FOREST_APPROACH_BOOKS,books.length)-1),pathProgress));
+    else pathProgress=clampPath(pathProgress);
     renderPath();return;
   }
 });
