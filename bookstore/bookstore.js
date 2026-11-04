@@ -852,8 +852,12 @@ function updateRoomShelfPerspective(){
   // V2.24.9: all Genre Room shelf pages stay flat on desktop and iPhone.
   scroller.querySelectorAll('.room-shelf-row').forEach(row=>{row.style.setProperty('--shelf-tilt','0deg');row.style.setProperty('--shelf-scale','1');row.style.setProperty('--shelf-z','0px');row.style.opacity='1';row.style.zIndex='1';});
 }
+function roomShelfRingSelection(tappedIndex){
+  const face=roomShelfFaces().find(face=>face.indices.includes(tappedIndex));
+  return face?{books:face.books.slice(),index:face.indices.indexOf(tappedIndex)}:null;
+}
 async function openShelfRow(start,focusOffset=0){
-  // Thumbnail -> whole Room book ring. The tapped thumbnail is still the front book.
+  // Mobile opens only the tapped physical wall, preserving its book order.
   const selected=roomShelfAllBooks.length?roomShelfAllBooks:fantasyBooks();if(!selected.length)return;
   const tappedIndex=Math.max(0,Math.min(selected.length-1,(Number(start)||0)+(Number(focusOffset)||0)));
   // PC opens the existing detail overlay over the unchanged shelf.
@@ -861,10 +865,11 @@ async function openShelfRow(start,focusOffset=0){
     books=selected;index=tappedIndex;dragUnits=0;
     pick(selected[tappedIndex]);return;
   }
-  roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=selected;index=tappedIndex;dragUnits=0;stage.hidden=false;
+  const ring=roomShelfRingSelection(tappedIndex);if(!ring?.books.length)return;
+  roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=ring.books;index=ring.index;dragUnits=0;stage.hidden=false;
   stage.classList.add('room-shelf-ring');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
-  document.querySelector('#hint').textContent='左右にスワイプしてRoomの本を見る　／　上スワイプで棚へ戻る';
+  document.querySelector('#hint').textContent='左右にスワイプしてこの棚の本を見る　／　上スワイプで棚へ戻る';
   document.querySelector('.sign').classList.add('shelf-back-sign');
   stage.innerHTML='';await preloadFirstViewCovers();renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
   const startTime=performance.now(),dur=1450;
