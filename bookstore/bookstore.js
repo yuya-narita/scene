@@ -858,28 +858,37 @@ function roomShelfRingSelection(tappedIndex){
   const face=roomShelfFaces().find(face=>face.indices.includes(tappedIndex));
   return face?{books:face.books.slice(),index:face.indices.indexOf(tappedIndex)}:null;
 }
-async function openShelfRow(start,focusOffset=0){
+async function openShelfRow(start,focusOffset=0,forceRing=false){
   // Mobile opens only the tapped physical wall, preserving its book order.
   const selected=roomShelfAllBooks;if(!selected.length)return;
   const tappedIndex=Math.max(0,Math.min(selected.length-1,(Number(start)||0)+(Number(focusOffset)||0)));
   // PC opens the existing detail overlay over the unchanged shelf.
-  if(window.matchMedia('(min-width:681px)').matches){
+  if(!forceRing&&window.matchMedia('(min-width:681px)').matches){
     books=selected;index=tappedIndex;dragUnits=0;
     pick(selected[tappedIndex]);return;
   }
   const ring=roomShelfRingSelection(tappedIndex);if(!ring?.books.length)return;
+  const token=++spinToken;
   roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;books=ring.books;index=ring.index;dragUnits=0;stage.hidden=false;
   stage.classList.add('room-shelf-ring');
   document.querySelector('#prev').hidden=false;document.querySelector('#next').hidden=false;document.querySelector('#focusPanel').hidden=false;document.querySelector('#hint').hidden=false;
   document.querySelector('#hint').textContent='左右にスワイプしてこの棚の本を見る　／　上スワイプで棚へ戻る';
   document.querySelector('.sign').classList.add('shelf-back-sign');
-  stage.innerHTML='';await preloadFirstViewCovers();renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
+  stage.innerHTML='';await preloadFirstViewCovers();if(token!==spinToken||roomShelfMode||roomId!=='fantasy')return;renderFirstViewRing(index-4.2);stage.classList.add('is-intro-spinning');
   const startTime=performance.now(),dur=1450;
-  await new Promise(resolve=>{function frame(now){const t=Math.min(1,(now-startTime)/dur),ease=1-Math.pow(1-t,3.4),center=index-4.2*(1-ease),depth=.12+.88*(1-Math.pow(1-t,1.8));stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),depth));if(t<1)requestAnimationFrame(frame);else resolve()}requestAnimationFrame(frame)});
+  await new Promise(resolve=>{function frame(now){if(token!==spinToken||roomShelfMode||roomId!=='fantasy'){resolve();return;}const t=Math.min(1,(now-startTime)/dur),ease=1-Math.pow(1-t,3.4),center=index-4.2*(1-ease),depth=.12+.88*(1-Math.pow(1-t,1.8));stage.querySelectorAll('.book').forEach(b=>setBookPose(b,wrappedOffsetFrom(center,Number(b.dataset.index)),depth));if(t<1)requestAnimationFrame(frame);else resolve()}requestAnimationFrame(frame)});
+  if(token!==spinToken||roomShelfMode||roomId!=='fantasy')return;
   stage.classList.remove('is-intro-spinning');render();updateFocusPanel();
+}
+function openActiveShelfRing(){
+  const face=roomShelfFaces()[roomShelfFace];if(!face?.books.length)return;
+  const focused=document.activeElement?.closest?.('[data-book-index]');
+  const selected=focused?Number(focused.dataset.bookIndex):NaN;
+  openShelfRow(face.indices.includes(selected)?selected:face.indices[0],0,true);
 }
 function backToRoomShelf(){
   if(roomId!=='fantasy'||roomShelfMode)return;
+  spinToken++;stage.classList.remove('is-intro-spinning');
   // V2.16.15R1: always hand the shared camera back to motion when the shelf returns.
   roomShelfTap=null;roomCameraInputLock=false;roomCameraPreview=0;rebaseRoomMotion();
   books=roomShelfAllBooks;stage.classList.remove('room-shelf-ring','is-shelf-returning');stage.style.removeProperty('--shelf-return-y');stage.style.removeProperty('--shelf-return-scale');document.querySelector('.sign').classList.remove('shelf-back-sign');renderRoomShelf();
@@ -1609,8 +1618,10 @@ window.addEventListener('keydown',e=>{
         const from=roomCameraYaw+roomCameraPreview,target=nextFace*ROOM_VIEW_SLOT_DEG;
         roomCameraPreview=0;roomCameraInputLock=true;rebaseRoomMotion();animateRoomYaw(from,target,360);
       }
+    }else if(e.key==='ArrowDown'){
+      if(!e.repeat)openActiveShelfRing();
     }else if(roomShelfScroller){
-      roomShelfScroller.scrollBy({top:e.key==='ArrowDown'?Math.max(180,innerHeight*.45):-Math.max(180,innerHeight*.45),behavior:'smooth'});
+      roomShelfScroller.scrollBy({top:-Math.max(180,innerHeight*.45),behavior:'smooth'});
     }
     return;
   }
@@ -1652,7 +1663,7 @@ hallEl?.addEventListener('pointerdown',e=>{
      which fixed desktop click but created a dead swipe zone on iPhone. */
   if(e.target.closest('#hallMotion,.hall-library-tabs'))return;
   const cover=e.target.closest('.hall-my-book'),genre=e.target.closest('[data-hall-genre]');
-  if((cover||genre)&&e.pointerType==='mouse')return;
+  if((cover||genre||e.target.closest('#hallBookPath'))&&e.pointerType==='mouse')return;
   hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null,cover,genre};
   hallEl.setPointerCapture?.(e.pointerId);rebaseHallMotion();
 });
