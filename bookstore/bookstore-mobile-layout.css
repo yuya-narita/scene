@@ -11,13 +11,13 @@
  #store #introHint,#store #hint{bottom:20px!important;max-width:calc(100% - 36px);white-space:normal;text-align:center}
  #store #bookPath .path-status{bottom:12px!important;width:calc(100% - 36px);max-width:420px}
  /* Flow layout replaces percentage-positioned text over the cover. */
- #picked .detail-card:not(.detail-preview){position:absolute!important;top:max(48px,env(safe-area-inset-top))!important;bottom:max(20px,env(safe-area-inset-bottom))!important;left:18px!important;right:18px!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;display:grid!important;grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,43%) minmax(0,1fr) 52px!important;grid-template-areas:'cover' 'copy' 'actions'!important;gap:14px!important;overflow:hidden!important}
- #picked .detail-card:not(.detail-preview)>.detail-book{position:relative!important;grid-area:cover;left:auto!important;top:auto!important;bottom:auto!important;margin:0 auto!important;width:auto!important;height:100%!important;max-width:60vw!important;aspect-ratio:2/3;transform:perspective(900px) rotateY(-5deg)!important;align-self:center!important}
- #picked .detail-card:not(.detail-preview)>.detail-copy{position:relative!important;grid-area:copy;inset:auto!important;min-height:0!important;width:auto!important;height:auto!important;display:flex!important;flex-direction:column;gap:10px;padding:0 2px!important;overflow:auto!important;overscroll-behavior:contain;pointer-events:auto}
+ #picked .detail-card{position:absolute!important;top:max(48px,env(safe-area-inset-top))!important;bottom:max(20px,env(safe-area-inset-bottom))!important;left:18px!important;right:18px!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;display:grid!important;grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,43%) minmax(0,1fr) 52px!important;grid-template-areas:'cover' 'copy' 'actions'!important;gap:14px!important;overflow:hidden!important}
+ #picked .detail-card>.detail-book{position:relative!important;grid-area:cover;left:auto!important;top:auto!important;bottom:auto!important;margin:0 auto!important;width:auto!important;height:100%!important;max-width:60vw!important;aspect-ratio:2/3;transform:perspective(900px) rotateY(-5deg)!important;align-self:center!important}
+ #picked .detail-card>.detail-copy{position:relative!important;grid-area:copy;inset:auto!important;min-height:0!important;width:auto!important;height:auto!important;display:flex!important;flex-direction:column;gap:10px;padding:0 2px!important;overflow:auto!important;overscroll-behavior:contain;pointer-events:auto}
  #picked .detail-copy>#pickedContext,#picked .detail-copy>#pickedTitle,#picked .detail-copy>#pickedDetail,#picked .detail-copy>#pickedAuthor{position:static!important;inset:auto!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0!important;flex-shrink:0;overflow:visible!important;white-space:normal!important;overflow-wrap:anywhere;transform:none!important}
  #picked #pickedTitle{font-size:clamp(23px,6vw,32px)!important;line-height:1.25!important}
  #picked #pickedDetail,#picked #pickedAuthor{font-size:13px!important;line-height:1.6!important}
- #picked .detail-card:not(.detail-preview)>.picked-actions{position:relative!important;grid-area:actions;inset:auto!important;width:auto!important;margin:0!important;height:52px!important;min-height:52px!important;display:flex!important;gap:10px!important}
+ #picked .detail-card>.picked-actions{position:relative!important;grid-area:actions;inset:auto!important;width:auto!important;margin:0!important;height:52px!important;min-height:52px!important;display:flex!important;gap:10px!important}
  #picked #axisHint{top:16px!important;bottom:auto!important}
 }
 
@@ -26,4 +26,12 @@
  body.book-path-active #store #focusPanel{height:112px!important;min-height:112px!important;overflow:hidden!important}
  body.book-path-active #store #focusPanel>div{height:100%!important;min-height:0!important;overflow:hidden!important}
  body.book-path-active #store #focusTitle{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:2!important;overflow:hidden!important;line-height:1.25!important}
+}
+
+/* V2.30.9 — incoming detail cards use exactly the same text and action geometry. */
+@media(max-width:680px){
+ #picked .detail-copy>h1{font-size:clamp(23px,6vw,32px)!important;line-height:1.25!important}
+ #picked .detail-copy>p{font-size:13px!important;line-height:1.6!important}
+ #picked .detail-copy>small{line-height:1.6!important;letter-spacing:.18em}
+ #picked .detail-card>.picked-actions{flex-wrap:nowrap!important;overflow:visible!important}
 }

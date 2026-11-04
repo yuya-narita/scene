@@ -9,6 +9,7 @@ let pathBookHold=null;
 // V2.19.8 — remember both the outer circular road and the straight genre approach.
 let lastOuterPathProgress=0,lastForestPathProgress=0,lastFantasyEntryRoute='path';
 let roomId='new',routeTransitioning=false,dataReady=false,activeGenreId='fantasy';
+let approachOriginRoom=null;
 let roomShelfMode=false,roomShelfAllBooks=[],roomShelfScrollRaf=0;
 let fantasyGateTimer=0,fantasyGateVisible=false;
 const roomHistory=[];
@@ -312,7 +313,7 @@ function pick(w){
   pathVelocity=0;pathBookHold=null;pathDrag=null;
   fillPicked(w);picked.hidden=false;document.body.classList.add('book-detail-open');document.body.style.overflow='hidden';
 }
-function detailCardMarkup(w){const a=w.author||{};return `<div class="detail-book">${bookMarkup(w)}</div><div class="detail-copy"><small>${esc(detailContext(w))}</small><h1>${esc(w.title||'Untitled')}</h1><p>${esc(w.description||w.subtitle||'')}</p><p class="author">${a.displayName?`著者　${esc(a.displayName)}`:''}</p></div><div class="picked-actions detail-actions-placeholder" aria-hidden="true"><span>あとで読む</span><span>ひらく</span></div>`;}
+function detailCardMarkup(w){const a=w.author||{},saved=w._ownedCopy||readLaterItems().some(x=>x.publicationId===w.publicationId);return `<div class="detail-book">${bookMarkup(w)}</div><div class="detail-copy"><small>${esc(detailContext(w))}</small><h1>${esc(w.title||'Untitled')}</h1><p>${esc(w.description||w.subtitle||'')}</p><p class="author">${a.displayName?`著者　${esc(a.displayName)}`:''}</p></div><div class="picked-actions detail-actions-placeholder" aria-hidden="true"><span class="${saved?'is-saved':''}">${w._ownedCopy?'✓ もっている本':saved?'✓ 保存済み':'あとで読む'}</span><span>ひらく</span></div>`;}
 function removeDetailPreview(){if(detailPreview){detailPreview.remove();detailPreview=null;}}
 function detailTargetFromDrag(dx,dy){const horizontal=Math.abs(dx)>=Math.abs(dy);const amount=horizontal?dx:dy;return{horizontal,amount,delta:amount<0?1:-1};}
 function canMoveShelf(delta){return shelfIndex+delta>=0&&shelfIndex+delta<shelves.length;}
@@ -455,15 +456,20 @@ function updateFantasyGate(){
 async function enterForest(genreId=currentPathZone()?.id||'fantasy'){
   if(routeTransitioning||!dataReady)return;
   const selected=PATH_ZONES.find(z=>z.id===genreId);if(!selected)return;
+  const fromRoom=roomId==='fantasy';
   activeGenreId=selected.id;
   // V2.19.9: outer curve -> straight genre approach uses the same crossfade grammar
   // as the other room/route handoffs. The old layer captures the live curved zone.
-  const routeFade=startRouteCrossfade('path','path');
+  const routeFade=startRouteCrossfade(fromRoom?'fantasy':'path','path');
   routeFade?.newLayer?.style.setProperty('background-image',`linear-gradient(rgba(7,5,3,.06),rgba(7,5,3,.13)),url('${selected.approachBg}')`);
   // Every NEW branch entry starts at the mouth of the straight approach.
   // The outer circular-road position is remembered independently.
-  lastOuterPathProgress=pathProgress;
-  roomHistory.push({id:'path',progress:pathProgress});
+  if(!fromRoom){approachOriginRoom=null;lastOuterPathProgress=pathProgress;roomHistory.push({id:'path',progress:pathProgress});}
+  else{lastOuterPathProgress=PATH_ZONES.findIndex(z=>z.id===selected.id)*PATH_BOOKS_PER_ZONE_TEST;spinToken++;if(roomCameraSettleRaf)cancelAnimationFrame(roomCameraSettleRaf);roomCameraSettleRaf=0;roomCameraInputLock=false;roomShelfMode=false;}
+  viewMode='path';document.body.classList.add('book-path-active');stage.hidden=true;
+  document.querySelector('#roomShelf').hidden=true;document.querySelector('#roomExitNav').hidden=true;
+  document.querySelector('#bookPath').hidden=false;
+  for(const id of ['prev','next','hint'])document.getElementById(id).hidden=true;
   lastForestPathProgress=0;
   pathVelocity=0;pathMotionEnergy=0;lastAccelMag=0;pathMotionLast=0;
   roomId='forest';books=genreBooks(activeGenreId);pathProgress=0;pathYaw=0;
@@ -473,10 +479,34 @@ async function enterForest(genreId=currentPathZone()?.id||'fantasy'){
   document.querySelector('#motionStart').hidden=false;setPathMotionButton();
   document.querySelector('#pathStatus').textContent=selected.jp+'への道';
   document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退';
-  renderPath();
+  renderPath();ensurePathLoop();
   fadeRouteLayers(routeFade);
 }
 
+function beginRoomGenreApproach(id){
+  if(roomId!=='fantasy'||routeTransitioning||id===activeGenreId)return;
+  finishPhoneShelfSlide();
+  const scroller=document.querySelector('#roomShelfScroll');
+  if(roomShelfMode&&matchMedia('(max-width:680px)').matches)phoneShelfScrollPositions.set(roomShelfFace,scroller.scrollTop);
+  const face=scroller.querySelector(`.room-shelf-face[data-face="${roomShelfFace}"]`);
+  approachOriginRoom={genre:activeGenreId,books:books.slice(),index,shelf:roomShelfMode,face:roomShelfFace,yaw:roomCameraYaw,preview:roomCameraPreview,positions:[...phoneShelfScrollPositions],desktopScroll:face?.scrollTop||0,outer:lastOuterPathProgress};
+  enterForest(id);
+}
+function restoreApproachOriginRoom(){
+  const origin=approachOriginRoom;if(!origin)return;approachOriginRoom=null;
+  const fade=startRouteCrossfade('path','fantasy');
+  activeGenreId=origin.genre;roomId='fantasy';viewMode='ring';pathVelocity=0;lastOuterPathProgress=origin.outer;spinToken++;
+  document.body.classList.remove('book-path-active');document.querySelector('#bookPath').hidden=true;clearGenreApproachTheme();
+  document.querySelector('#motionStart').hidden=true;document.querySelector('#roomExitNav').hidden=false;
+  books=origin.books;index=origin.index;roomShelfAllBooks=genreBooks();roomShelfFace=origin.face;roomCameraYaw=origin.yaw;roomCameraPreview=origin.preview;
+  phoneShelfScrollPositions.clear();origin.positions.forEach(([face,top])=>phoneShelfScrollPositions.set(face,top));
+  setRoomVisual('fantasy');document.querySelector('#roomBgLayer').style.display='block';
+  stage.classList.remove('is-intro-spinning');stage.style.opacity='1';stage.style.transform='';
+  document.querySelector('.sign').classList.toggle('shelf-back-sign',!origin.shelf);
+  if(origin.shelf){renderRoomShelf();requestAnimationFrame(()=>{const face=document.querySelector(`#roomShelfScroll .room-shelf-face[data-face="${origin.face}"]`);if(face)face.scrollTop=origin.desktopScroll;});}
+  else{roomShelfMode=false;document.querySelector('#roomShelf').hidden=true;stage.hidden=false;for(const id of ['prev','next','focusPanel','hint'])document.getElementById(id).hidden=false;document.querySelector('#hint').textContent='左右にスワイプしてこの棚の本を見る　／　上スワイプで棚へ戻る';render();}
+  rebaseRoomMotion();applyRoomCamera(origin.preview,true);fadeRouteLayers(fade);
+}
 
 // V2.15.0 — Room shelf ring. A Room is surrounded by tall shelf faces.
 // Each face contains 4 columns x 3 rows for now; horizontal swipes rotate the
@@ -801,7 +831,7 @@ function settleRoomYaw(){
 }
 function rotateRoomShelf(delta){roomCameraYaw=nearestRoomViewSlot(roomCameraYaw)+delta*ROOM_VIEW_SLOT_DEG;roomCameraPreview=0;settleRoomYaw();}
 function onRoomOrientation(e){
-  if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||typeof e.alpha!=='number')return;
+  if(!roomMotionOn||!roomShelfMode||roomId!=='fantasy'||document.querySelector('#genreRoomDialog[open]')||typeof e.alpha!=='number')return;
   const a=e.alpha;roomMotionLatestAlpha=a;
   // While touch or snap animation owns the camera, only remember the newest sensor angle.
   // Never write yaw here: this prevents the sensor and finger/RAF from pulling the same camera back and forth.
@@ -1121,6 +1151,7 @@ async function enterFantasyRoom(){
   if(routeTransitioning||!dataReady)return;
   routeTransitioning=true;
   try{await ensureCatalogueGenre(activeGenreId);}catch(error){routeTransitioning=false;alert(error.message);return;}
+  approachOriginRoom=null;
   lastFantasyEntryRoute=roomId;
   if(roomId==='forest')lastForestPathProgress=pathProgress;
   else if(roomId==='path')lastOuterPathProgress=pathProgress;
@@ -1154,7 +1185,7 @@ async function enterFantasyRoom(){
     roomBg.classList.add('room-enter-fade');
     void roomBg.offsetWidth;
   }
-  roomCameraYaw=0;roomCameraPreview=0;applyRoomCamera(0,true);
+  roomCameraYaw=0;roomCameraPreview=0;rebaseRoomMotion();applyRoomCamera(0,true);
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   document.querySelector('#ringMode')?.classList.add('is-active');document.querySelector('#pathMode')?.classList.remove('is-active');
   path.hidden=true;path?.classList.remove('route-leaving');document.querySelector('#roomShelf').hidden=true;
@@ -1399,6 +1430,7 @@ function onPathPointerEnd(e){
     pathVelocity=0;showCentralHall(false);return;
   }
   if(roomId==='forest'&&d.moved&&dy>54&&Math.abs(dy)>Math.abs(dx)*1.05&&d.start<.22){
+    if(approachOriginRoom){restoreApproachOriginRoom();return;}
     // Back out of the straight genre approach to the exact outer-road branch point.
     const prev=[...roomHistory].reverse().find(x=>x.id==='path');
     lastForestPathProgress=0;roomId='path';books=allBooks.slice();pathProgress=prev?.progress??lastOuterPathProgress;lastOuterPathProgress=pathProgress;pathYaw=0;pathVelocity=0;
@@ -1602,6 +1634,7 @@ function keyboardHallVertical(dir){
 window.addEventListener('keydown',e=>{
   if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;
   if(e.metaKey||e.ctrlKey||e.altKey||e.shiftKey)return;
+  if(document.querySelector('dialog[open]'))return;
   if(e.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return;
   // Detail owns left/right browsing; vertical keys intentionally do nothing there.
   if(!picked.hidden){if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();commitDetailHorizontal(e.key==='ArrowRight'?1:-1,e.key==='ArrowRight'?-picked.clientWidth:picked.clientWidth,0);}return;}
@@ -1645,17 +1678,25 @@ function openHallGenre(id){
   if(viewMode!=='hall'||routeTransitioning||!PATH_ZONES.some(z=>z.id===id))return;
   activeGenreId=id;lastOuterPathProgress=PATH_ZONES.findIndex(z=>z.id===id)*PATH_BOOKS_PER_ZONE_TEST;enterFantasyRoom();
 }
-const hallGenreGrid=document.querySelector('#hallGenreGrid');
-if(hallGenreGrid){
-  const colors=['#bdd59e','#efb0c5','#d48989','#adc3e4','#8bd8e4','#c2d5a3','#dfbc86','#c5a9e5'];
+function buildGenreSigns(root,onChoose,currentId=''){
+  root.innerHTML='';const colors=['#bdd59e','#efb0c5','#d48989','#adc3e4','#8bd8e4','#c2d5a3','#dfbc86','#c5a9e5'];
   PATH_ZONES.forEach((zone,i)=>{
     const button=document.createElement('button');button.type='button';button.dataset.hallGenre=zone.id;
-    button.style.setProperty('--genre-accent',colors[i]);button.setAttribute('aria-label',zone.jp+'の本棚へ');
-    button.innerHTML=`<small>${esc(zone.label)}</small><strong>${esc(zone.jp)}</strong>`;
-    button.addEventListener('click',e=>{e.stopPropagation();if(Date.now()<suppressClickUntil)return;openHallGenre(zone.id);});
-    hallGenreGrid.appendChild(button);
+    button.style.setProperty('--genre-accent',colors[i]);button.setAttribute('aria-label',zone.jp+'の本棚へ');button.disabled=zone.id===currentId;
+    button.innerHTML=`<small>${esc(zone.label)}</small><strong>${esc(zone.jp)}</strong>${button.disabled?'<span class="genre-current">現在地</span>':''}`;
+    button.addEventListener('click',e=>{e.stopPropagation();if(Date.now()<suppressClickUntil)return;onChoose(zone.id);});root.appendChild(button);
   });
 }
+const hallGenreGrid=document.querySelector('#hallGenreGrid');if(hallGenreGrid)buildGenreSigns(hallGenreGrid,openHallGenre);
+const genreDialog=document.querySelector('#genreRoomDialog');let genrePriorOverflow='';
+document.querySelector('#chooseRoomGenre')?.addEventListener('click',()=>{
+  if(roomId!=='fantasy'||routeTransitioning||genreDialog.open)return;
+  buildGenreSigns(document.querySelector('#roomGenreGrid'),id=>{genreDialog.close();beginRoomGenreApproach(id);},activeGenreId);
+  genrePriorOverflow=document.body.style.overflow;document.body.style.overflow='hidden';genreDialog.showModal();
+});
+genreDialog.addEventListener('close',()=>{document.body.style.overflow=genrePriorOverflow;});
+genreDialog.querySelector('[data-genre-close]').addEventListener('click',()=>genreDialog.close());
+genreDialog.addEventListener('click',e=>{if(e.target===genreDialog)genreDialog.close();});
 const hallEl=document.querySelector('#centralHall');
 hallEl?.addEventListener('pointerdown',e=>{
   /* V2.22.4: mouse clicks on covers stay native, but touch starting on a cover

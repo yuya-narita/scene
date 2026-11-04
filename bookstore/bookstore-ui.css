@@ -159,13 +159,13 @@ body.book-detail-open .store-side-nav{visibility:hidden}
 /* V2.30.4 — eight compact signs on the Hall's existing 180-degree face. */
 #store #hallGenreBoard{top:55%!important;width:min(84%,390px)!important;padding:14px!important;border-radius:18px!important;background:linear-gradient(150deg,#241b13ed,#100d0bea)!important;box-shadow:0 15px 40px #0008!important;box-sizing:border-box}
 #hallGenreBoard .hall-genre-heading{font:600 14px/1.3 serif;letter-spacing:.12em;color:#f0dfbf;margin:0 0 12px;text-align:center}
-#hallGenreBoard .hall-genre-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-#hallGenreBoard button{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;min-width:0;min-height:52px;margin:0;padding:8px 4px;border:1px solid #cfb78c44;border-left:3px solid var(--genre-accent);border-radius:9px;color:#fff4e4;background:linear-gradient(135deg,#ffffff0d,#00000032);font:inherit;cursor:pointer;-webkit-appearance:none;appearance:none;touch-action:none}
-#hallGenreBoard button small{display:block;margin:0;font:600 7px/1.2 sans-serif;letter-spacing:.16em;color:var(--genre-accent)}
-#hallGenreBoard button strong{display:block;margin:0;font:600 16px/1.3 serif;color:#fff5e8;white-space:nowrap}
-#hallGenreBoard button:focus-visible{outline:2px solid var(--genre-accent);outline-offset:2px}
-@media(hover:hover){#hallGenreBoard button:hover{background:#ffffff18;border-color:var(--genre-accent)}}
-@media(max-width:360px){#store #hallGenreBoard{padding:12px!important}#hallGenreBoard button{min-height:48px}#hallGenreBoard button strong{font-size:14px}}
+.genre-sign-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+:is(#hallGenreBoard,#genreRoomDialog) .genre-sign-grid button{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;min-width:0;min-height:52px;margin:0;padding:8px 4px;border:1px solid #cfb78c44;border-left:3px solid var(--genre-accent);border-radius:9px;color:#fff4e4;background:linear-gradient(135deg,#ffffff0d,#00000032);font:inherit;cursor:pointer;-webkit-appearance:none;appearance:none;touch-action:none}
+:is(#hallGenreBoard,#genreRoomDialog) .genre-sign-grid button small{display:block;margin:0;font:600 7px/1.2 sans-serif;letter-spacing:.16em;color:var(--genre-accent)}
+:is(#hallGenreBoard,#genreRoomDialog) .genre-sign-grid button strong{display:block;margin:0;font:600 16px/1.3 serif;color:#fff5e8;white-space:nowrap}
+:is(#hallGenreBoard,#genreRoomDialog) .genre-sign-grid button:focus-visible{outline:2px solid var(--genre-accent);outline-offset:2px}
+@media(hover:hover){:is(#hallGenreBoard,#genreRoomDialog) .genre-sign-grid button:hover{background:#ffffff18;border-color:var(--genre-accent)}}
+@media(max-width:360px){#store #hallGenreBoard{padding:12px!important}:is(#hallGenreBoard,#genreRoomDialog) .genre-sign-grid button{min-height:48px}:is(#hallGenreBoard,#genreRoomDialog) .genre-sign-grid button strong{font-size:14px}}
 
 /* V2.30.5 — every desktop genre shelf uses the same cover-and-information grid,
    including a single incomplete row. Override legacy :only-child flex centering. */
@@ -181,3 +181,24 @@ body.book-detail-open .store-side-nav{visibility:hidden}
 .catalogue-load-state p{max-width:420px;margin:0;overflow-wrap:anywhere}
 .catalogue-load-state strong{font:600 20px/1.5 serif}
 .catalogue-load-state button{padding:11px 22px;border:1px solid #e3bf88aa;border-radius:99px;background:#25190de6;color:#fff4df;font:inherit;cursor:pointer;pointer-events:auto}
+
+/* V2.30.9 — room destinations share the Hall's sign grid. */
+#genreRoomDialog{width:min(420px,calc(100vw - 32px));box-sizing:border-box}
+#genreRoomDialog h2{font-size:24px}
+.genre-room-caption{font-size:12px;line-height:1.7;color:#d9cbbb;margin:0 0 18px}
+#genreRoomDialog .genre-sign-grid button{min-height:64px}
+#genreRoomDialog .genre-sign-grid button:disabled{opacity:.7;cursor:default;background:#ffffff12}
+#genreRoomDialog .genre-current{font-size:10px;line-height:1.2;color:var(--genre-accent)}
+/* Keep both the real card and its incoming swipe preview inside the viewport. */
+#picked{height:100dvh!important;max-height:100dvh!important;min-height:0!important;box-sizing:border-box!important;padding:0!important;overflow:hidden!important}
+#picked .detail-copy>*{position:static!important;inset:auto!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0!important;transform:none!important;flex-shrink:0;white-space:normal!important;overflow-wrap:anywhere}
+#picked .detail-actions-placeholder{opacity:1!important;visibility:visible!important}
+#picked .picked-actions>*{box-sizing:border-box;display:flex!important;align-items:center;justify-content:center;min-width:0!important;flex:1;height:100%!important;padding:10px 12px!important;border:1px solid #ffffff55!important;border-radius:99px;background:#140e0bbb!important;color:#fff!important;text-decoration:none;text-align:center;font:inherit;line-height:1.3!important;transition:none!important;-webkit-tap-highlight-color:transparent}
+#picked .picked-actions>:last-child{background:#b86b2b!important;border-color:#f0ad70!important}
+#picked .picked-actions>.is-saved{background:#ffffff22!important;border-color:#fff9!important}
+@media(min-width:681px){
+ #picked .detail-card{position:absolute!important;left:max(24px,calc((100% - 940px)/2))!important;right:max(24px,calc((100% - 940px)/2))!important;top:max(54px,env(safe-area-inset-top))!important;bottom:max(28px,env(safe-area-inset-bottom))!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0!important;display:grid!important;grid-template-columns:minmax(0,.8fr) minmax(0,1.3fr)!important;grid-template-rows:minmax(0,1fr) 54px!important;grid-template-areas:'cover copy' '. actions'!important;gap:24px 42px!important;align-items:stretch!important;overflow:hidden!important}
+ #picked .detail-card>.detail-book{grid-area:cover;position:relative!important;inset:auto!important;justify-self:end;align-self:center;width:auto!important;height:100%!important;max-height:420px!important;max-width:100%!important;aspect-ratio:2/3!important;margin:0!important;transform:perspective(900px) rotateY(-5deg)!important}
+ #picked .detail-card>.detail-copy{grid-area:copy;position:relative!important;inset:auto!important;width:auto!important;height:auto!important;min-height:0!important;display:flex!important;flex-direction:column;justify-content:center;gap:18px;padding:6px 0!important;overflow:auto!important;pointer-events:auto}
+ #picked .detail-card>.picked-actions{grid-area:actions;position:relative!important;inset:auto!important;width:auto!important;height:54px!important;min-height:0!important;margin:0!important;display:flex!important;gap:10px!important;align-self:stretch!important;transform:none!important}
+}
