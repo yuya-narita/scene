@@ -23,13 +23,13 @@ const SHARED_GENRE_APPROACH_BG='./bookstore-path-fantasy-v2113.webp';
 const SHARED_GENRE_ROOM_BG='./fantasy-room-360-v2165.webp';
 const PATH_ZONES=[
  {id:'fantasy',label:'FANTASY',jp:'ファンタジー',bg:'./book-road-01-fantasy.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:SHARED_GENRE_ROOM_BG,pos:'50% 50%',gate:'ファンタジー'},
- {id:'romance',label:'ROMANCE',jp:'恋愛',bg:'./book-road-02-romance.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-romance-v2312.webp',pos:'50% 50%',gate:'恋愛'},
- {id:'horror',label:'HORROR',jp:'ホラー',bg:'./book-road-03-horror.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-horror-v2312.webp',pos:'50% 50%',gate:'ホラー'},
- {id:'mystery',label:'MYSTERY',jp:'ミステリ',bg:'./book-road-04-mystery.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-mystery-v2312.webp',pos:'50% 50%',gate:'ミステリ'},
- {id:'sf',label:'SF',jp:'SF',bg:'./book-road-05-sf.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-sf-v2312.webp',pos:'50% 50%',gate:'SF'},
- {id:'everyday',label:'EVERYDAY',jp:'日常',bg:'./book-road-06-everyday.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-everyday-v2312.webp',pos:'50% 50%',gate:'日常'},
- {id:'essay',label:'ESSAY',jp:'エッセイ',bg:'./book-road-07-essay.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-essay-v2312.webp',pos:'50% 50%',gate:'エッセイ'},
- {id:'other',label:'OTHER',jp:'その他',bg:'./book-road-08-other.webp',approachBg:SHARED_GENRE_APPROACH_BG,roomBg:'./genre-room-other-v2312.webp',pos:'50% 50%',gate:'その他'}
+ {id:'romance',label:'ROMANCE',jp:'恋愛',bg:'./book-road-02-romance.webp',approachBg:'./genre-approach-romance-v2314.webp',roomBg:'./genre-room-romance-v2312.webp',pos:'50% 50%',gate:'恋愛'},
+ {id:'horror',label:'HORROR',jp:'ホラー',bg:'./book-road-03-horror.webp',approachBg:'./genre-approach-horror-v2314.webp',roomBg:'./genre-room-horror-v2312.webp',pos:'50% 50%',gate:'ホラー'},
+ {id:'mystery',label:'MYSTERY',jp:'ミステリ',bg:'./book-road-04-mystery.webp',approachBg:'./genre-approach-mystery-v2314.webp',roomBg:'./genre-room-mystery-v2312.webp',pos:'50% 50%',gate:'ミステリ'},
+ {id:'sf',label:'SF',jp:'SF',bg:'./book-road-05-sf.webp',approachBg:'./genre-approach-sf-v2314.webp',roomBg:'./genre-room-sf-v2312.webp',pos:'50% 50%',gate:'SF'},
+ {id:'everyday',label:'EVERYDAY',jp:'日常',bg:'./book-road-06-everyday.webp',approachBg:'./genre-approach-everyday-v2314.webp',roomBg:'./genre-room-everyday-v2312.webp',pos:'50% 50%',gate:'日常'},
+ {id:'essay',label:'ESSAY',jp:'エッセイ',bg:'./book-road-07-essay.webp',approachBg:'./genre-approach-essay-v2314.webp',roomBg:'./genre-room-essay-v2312.webp',pos:'50% 50%',gate:'エッセイ'},
+ {id:'other',label:'OTHER',jp:'その他',bg:'./book-road-08-other.webp',approachBg:'./genre-approach-other-v2314.webp',roomBg:'./genre-room-other-v2312.webp',pos:'50% 50%',gate:'その他'}
 ];
 const PATH_ZONE_COUNT=PATH_ZONES.length;
 function outerPathLength(){return PATH_BOOKS_PER_ZONE_TEST*PATH_ZONE_COUNT;}
