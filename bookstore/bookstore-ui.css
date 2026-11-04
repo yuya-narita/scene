@@ -91,3 +91,21 @@ body.book-detail-open .store-side-nav{visibility:hidden}
 @media(prefers-reduced-motion:reduce){#store #bookPath.genre-approach #fantasyGate{animation:none!important}}
 
 #storeSearchResults .store-empty-message{grid-column:1/-1;padding:20px 8px;color:#c2b5a3;text-align:center;font-size:13px;line-height:1.8}
+
+/* Account identity/status must stay in its own column on narrow phones. */
+.store-profile{display:flex;align-items:center;gap:16px;min-width:0}
+.store-profile>.store-avatar{flex:0 0 58px;width:58px;height:58px;overflow:hidden}
+.store-profile>div{flex:1 1 auto;min-width:0;max-width:calc(100% - 74px)}
+.store-profile>div>strong,.store-profile>div>span{display:block;min-width:0;overflow-wrap:anywhere}
+.store-profile>div>span{line-height:1.5}
+.store-account-dialog #storeAuthStatus{overflow-wrap:anywhere}
+.store-account-dialog #storeAuthGuest[hidden],.store-account-dialog #storeAuthMember[hidden]{display:none!important}
+@media(max-width:680px){
+ .shop-head .shop-title{display:none!important}
+ .shop-head{grid-template-columns:minmax(0,1fr) auto!important}
+ .shop-head .brand{justify-self:start}
+ .shop-head .store-head-actions{grid-column:2;min-width:0}
+ .store-profile>.store-avatar{flex-basis:58px;width:58px;height:58px}
+ .store-profile>div>strong{font-size:15px;line-height:1.35;overflow-wrap:anywhere}
+ .store-profile>div>span{font-size:11px;line-height:1.5;white-space:normal}
+}
