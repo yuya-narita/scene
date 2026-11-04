@@ -89,7 +89,7 @@ function readLocalIdList(key){try{const v=JSON.parse(localStorage.getItem(key)||
 function openBookshelfDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(BOOKSHELF_DB_NAME,BOOKSHELF_DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(BOOKSHELF_READER_STORE))db.createObjectStore(BOOKSHELF_READER_STORE,{keyPath:'copyId'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function getOwnedReaderRows(){const db=await openBookshelfDb();try{return await new Promise((resolve,reject)=>{const r=db.transaction(BOOKSHELF_READER_STORE,'readonly').objectStore(BOOKSHELF_READER_STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});}finally{db.close();}}
 function ownedCoverBlob(w){const value=w?.coverBytes;if(value instanceof ArrayBuffer||ArrayBuffer.isView(value))return new Blob([value],{type:w.coverMime||'application/octet-stream'});return w?.coverBlob instanceof Blob?w.coverBlob:null;}
-function ownedPlayerUrl(w){const q=new URLSearchParams({bookshelfCopy:w.copyId});q.set('returnTo',location.href);return `../local-player/?${q.toString()}`;}
+function ownedPlayerUrl(w){const q=new URLSearchParams({bookshelfCopy:w.copyId});const returnUrl=new URL(location.href);if(viewMode==='reading-room')returnUrl.hash='reading-room';q.set('returnTo',returnUrl.href);return `../local-player/?${q.toString()}`;}
 function normalizeOwnedBook(w){const blob=ownedCoverBlob(w);let coverUrl=w.coverUrl||'';if(blob){coverUrl=URL.createObjectURL(blob);ownedCoverUrls.push(coverUrl);}const authorName=w.author?.displayName||w.authorName||w.byline||w.creator||'';return {...w,_ownedCopy:true,publicationId:w.publicationId||`owned:${w.copyId}`,coverUrl,author:{...(w.author||{}),displayName:authorName||'作者'}};}
 async function syncOwnedBooks(){try{ownedCoverUrls.forEach(u=>URL.revokeObjectURL(u));ownedCoverUrls=[];const rows=await getOwnedReaderRows(),archived=new Set(readLocalIdList(OWNED_ARCHIVE_KEY)),order=readLocalIdList(OWNED_ORDER_KEY),rank=new Map(order.map((id,i)=>[id,i]));ownedBooks=rows.filter(w=>w?.copyId&&!archived.has(String(w.copyId))).sort((a,b)=>(rank.get(String(a.copyId))??999999)-(rank.get(String(b.copyId))??999999)||String(b.updatedAt||b.addedAt||'').localeCompare(String(a.updatedAt||a.addedAt||''))).map(normalizeOwnedBook);const label=document.querySelector('#hallMyShelf .hall-my-shelf-label span');if(label)label.textContent=ownedBooks.length?`${ownedBooks.length}冊`:'まだ本がありません';return ownedBooks;}catch(e){console.warn('MY BOOKS sync failed',e);ownedBooks=[];return ownedBooks;}}
 function detailReadUrl(w){if(!w)return '#';if(w._ownedCopy)return ownedPlayerUrl(w);return playerUrl(w);}
@@ -1733,7 +1733,7 @@ hallEl?.addEventListener('pointerdown',e=>{
   /* V2.22.4: mouse clicks on covers stay native, but touch starting on a cover
      must still own the Hall swipe. V2.22.3 excluded covers for every pointer type,
      which fixed desktop click but created a dead swipe zone on iPhone. */
-  if(e.target.closest('#hallMotion,.hall-library-tabs'))return;
+  if(e.target.closest('#hallMotion,.hall-library-tabs,#enterReadingRoom'))return;
   const cover=e.target.closest('.hall-my-book'),genre=e.target.closest('[data-hall-genre]');
   if((cover||genre||e.target.closest('#hallBookPath'))&&e.pointerType==='mouse')return;
   hallDrag={id:e.pointerId,x:e.clientX,y:e.clientY,start:hallYaw,lastX:e.clientX,t:performance.now(),axis:null,cover,genre};
@@ -1870,3 +1870,41 @@ async function init(){
 window.addEventListener('storage',e=>{if(e.key===OWNED_ORDER_KEY||e.key===OWNED_ARCHIVE_KEY){syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});}});
 window.addEventListener('pageshow',()=>{if(dataReady)syncOwnedBooks().then(()=>{renderHallMyShelf();if(viewMode==='hall')renderHall();});});
 init();
+
+// V2.32.0: reading room ships with the core, avoiding a missing optional script.
+(()=>{
+ const room=document.createElement('section');room.id='readingRoom';room.hidden=true;room.setAttribute('aria-label','自分の読書室');
+ room.innerHTML='<div class="reading-room-heading"><small>MY READING ROOM</small><h1>自分の読書室</h1><p>もっている本</p><button type="button" id="leaveReadingRoom">中央ホールへ戻る</button></div><div id="readingRoomBooks" aria-live="polite"></div>';
+ store.append(room);let opening=false,epoch=0;
+ function renderOwnedRoom(){
+  const grid=room.querySelector('#readingRoomBooks');books=ownedBooks.slice();index=0;
+  grid.innerHTML=books.length?books.map((w,i)=>`<button type="button" class="reading-room-book" data-reading-index="${i}" aria-label="${esc(w.title||'本')}"><span class="reading-room-cover">${bookMarkup(w)}</span><span class="reading-room-info"><strong>${esc(w.title||'Untitled')}</strong><small>${esc(w.author?.displayName||'')}</small></span></button>`).join(''):'<p class="reading-room-empty">まだ本がありません。<br>受け取った本や購入した本が、ここに並びます。</p>';
+  hydrateCoverLoadState(grid);
+ }
+ window.readingRoomIsOpen=()=>!room.hidden;
+ window.openReadingRoom=async()=>{
+  if(opening||!room.hidden)return;opening=true;const token=++epoch;
+  closePick();spinToken++;pathVelocity=0;pathDrag=null;hallDrag=null;viewMode='reading-room';roomId='reading-room';hallShelfRing=false;
+  renderOwnedRoom();room.hidden=false;store.classList.add('reading-room-active');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{if(token===epoch)room.classList.add('is-visible');}));opening=false;
+  // Refresh after showing cached books, so a pending IDB request cannot swallow entry.
+  syncOwnedBooks().then(()=>{if(token===epoch&&!room.hidden)renderOwnedRoom();}).catch(error=>console.warn('Reading room refresh failed',error));
+  preloadPathZone('./reading-room-v2319.webp');
+  room.querySelector('#leaveReadingRoom').focus({preventScroll:true});
+ };
+ window.closeReadingRoom=()=>{
+  ++epoch;opening=false;closePick();books=allBooks.slice();showCentralHall(false);store.classList.remove('reading-room-active');room.classList.remove('is-visible');
+  setTimeout(()=>{if(!room.classList.contains('is-visible'))room.hidden=true;},960);
+ };
+ room.querySelector('#leaveReadingRoom').addEventListener('click',window.closeReadingRoom);
+ room.addEventListener('click',e=>{const hit=e.target.closest('[data-reading-index]');if(hit){index=Number(hit.dataset.readingIndex);pick(books[index]);}});
+ for(const type of ['pointerdown','pointermove','pointerup','touchstart','touchmove','touchend'])room.addEventListener(type,e=>e.stopPropagation());
+ document.getElementById('enterReadingRoom')?.addEventListener('pointerdown',e=>e.stopPropagation());
+ document.getElementById('enterReadingRoom')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();window.openReadingRoom();});
+ document.addEventListener('click',e=>{const link=e.target.closest('a[href="../bookshelf/"]');if(!link||link.classList.contains('brand'))return;e.preventDefault();document.querySelectorAll('dialog[open]').forEach(d=>d.close());document.body.style.overflow='';window.openReadingRoom();});
+ window.addEventListener('keydown',e=>{if(!room.hidden&&e.key==='Escape'&&picked.hidden)window.closeReadingRoom();});
+ window.addEventListener('pageshow',()=>{if(!room.hidden)syncOwnedBooks().then(renderOwnedRoom);});
+ function resumeReadingRoom(){if(location.hash==='#reading-room'&&dataReady){window.openReadingRoom();history.replaceState(null,'',location.pathname+location.search);}}
+ new MutationObserver(resumeReadingRoom).observe(document.getElementById('bookCount'),{childList:true,subtree:true});
+ window.addEventListener('pageshow',resumeReadingRoom);resumeReadingRoom();
+})();

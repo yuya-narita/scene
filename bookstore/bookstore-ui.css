@@ -236,3 +236,6 @@ body.book-path-active #store>:is(#prev,#next,#hint,#introHint,#stage){display:no
 @media(prefers-reduced-motion:reduce){#readingRoom{transition-duration:.18s}}
 
 #store.reading-room-active>:is(.sign,.stage,.room-shelf,.book-path,.nav,.focus-panel,.hint,.room-exit-nav,.view-switch){visibility:hidden!important;pointer-events:none!important}
+
+#store #enterReadingRoom{pointer-events:auto!important;touch-action:manipulation;position:relative;z-index:10}
+#store.reading-room-active #centralHall{pointer-events:none}
