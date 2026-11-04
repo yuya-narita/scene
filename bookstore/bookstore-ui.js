@@ -74,6 +74,7 @@
  window.addEventListener('bookstore-catalogue-updated',()=>{if(document.querySelector('#storeSearchDialog').open)renderSearch();});
  function openSearch(){openDialog('#storeSearchDialog');renderSearch();document.querySelector('#storeSearchInput').focus();}
  function setActive(action){document.querySelectorAll('.store-nav-item').forEach(b=>{const active=b.dataset.storeAction===action;b.classList.toggle('is-active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});}
+ window.setStoreNavigationActive=setActive;
  const NOTICE_READ_KEY='ahako:bookstore-notices-read:v1';
  let notices=[],noticeError='',noticeLoading=false;
  function readNoticeIds(){try{const ids=JSON.parse(localStorage.getItem(NOTICE_READ_KEY)||'[]');return new Set(Array.isArray(ids)?ids.map(String):[]);}catch(_){return new Set();}}
