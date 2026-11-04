@@ -4,7 +4,7 @@
  const SESSION_KEY='ahako-author-session-v1',PENDING_KEY='ahako:bookstore-login-pending:v1';
  const root=document.querySelector('#storeAccountDialog');if(!root)return;
  const header=document.querySelector('.store-account-button'),headerName=document.querySelector('#storeAccountName');
- const profile=root.querySelector('.store-profile'),profileName=profile.querySelector('strong'),profileState=profile.querySelector('div>span');
+ const profile=root.querySelector('.store-profile'),profileName=profile.querySelector('#storeProfileName'),profileState=profile.querySelector('#storeProfileState');
  const avatars=[header.querySelector('.store-avatar'),profile.querySelector('.store-avatar')];
  const guestIcon=avatars[0].innerHTML;
  profile.insertAdjacentHTML('afterend',`<div class="store-auth" id="storeAuth">
