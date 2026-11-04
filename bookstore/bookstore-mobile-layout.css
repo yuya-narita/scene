@@ -6,7 +6,7 @@
  #store #focusMeta,#store #focusAuthor{font-size:11px!important;overflow-wrap:anywhere}
  #store #stage{top:var(--mobile-ring-top,210px)!important;height:var(--mobile-ring-height,240px)!important}
  #store #stage .book{width:min(43vw,176px,var(--mobile-ring-width,150px))!important}
- #store #bookPath #pathBooks{top:var(--mobile-path-top,180px)!important;bottom:var(--mobile-path-bottom,220px)!important;clip-path:inset(-50px 0 0);}
+ #store #bookPath #pathBooks{top:var(--mobile-path-top,180px)!important;bottom:var(--mobile-path-bottom,220px)!important;clip-path:none;}
  #store #bookPath .path-item{width:min(31vw,138px,var(--mobile-path-width,120px))!important}
  #store #introHint,#store #hint{bottom:20px!important;max-width:calc(100% - 36px);white-space:normal;text-align:center}
  #store #bookPath .path-status{bottom:12px!important;width:calc(100% - 36px);max-width:420px}
@@ -35,3 +35,6 @@
  #picked .detail-copy>small{line-height:1.6!important;letter-spacing:.18em}
  #picked .detail-card>.picked-actions{flex-wrap:nowrap!important;overflow:visible!important}
 }
+
+/* V2.31.6: clipping on a preserve-3d container flattens its children.
+   Keep depth projection; #bookPath already clips at the outer viewport. */
