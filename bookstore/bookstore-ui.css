@@ -239,3 +239,7 @@ body.book-path-active #store>:is(#prev,#next,#hint,#introHint,#stage){display:no
 
 #store #enterReadingRoom{pointer-events:auto!important;touch-action:manipulation;position:relative;z-index:10}
 #store.reading-room-active #centralHall{pointer-events:none}
+
+/* V2.32.1: the hall cannot paint or receive gestures inside the private room. */
+#store.reading-room-active #centralHall{display:none!important;visibility:hidden!important;pointer-events:none!important}
+#store.reading-room-active>:is(#introHint,#motionStart,#roomExitNav){display:none!important;pointer-events:none!important}

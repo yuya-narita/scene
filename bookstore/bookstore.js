@@ -1885,7 +1885,9 @@ init();
  window.openReadingRoom=async()=>{
   if(opening||!room.hidden)return;opening=true;const token=++epoch;
   closePick();spinToken++;pathVelocity=0;pathDrag=null;hallDrag=null;viewMode='reading-room';roomId='reading-room';hallShelfRing=false;
-  renderOwnedRoom();room.hidden=false;store.classList.add('reading-room-active');
+  renderOwnedRoom();
+  const hall=document.getElementById('centralHall');hall.hidden=true;hall.inert=true;
+  room.hidden=false;store.classList.add('reading-room-active');
   requestAnimationFrame(()=>requestAnimationFrame(()=>{if(token===epoch)room.classList.add('is-visible');}));opening=false;
   // Refresh after showing cached books, so a pending IDB request cannot swallow entry.
   syncOwnedBooks().then(()=>{if(token===epoch&&!room.hidden)renderOwnedRoom();}).catch(error=>console.warn('Reading room refresh failed',error));
@@ -1893,7 +1895,7 @@ init();
   room.querySelector('#leaveReadingRoom').focus({preventScroll:true});
  };
  window.closeReadingRoom=()=>{
-  ++epoch;opening=false;closePick();books=allBooks.slice();showCentralHall(false);store.classList.remove('reading-room-active');room.classList.remove('is-visible');
+  ++epoch;opening=false;closePick();books=allBooks.slice();document.getElementById('centralHall').inert=false;showCentralHall(false);store.classList.remove('reading-room-active');room.classList.remove('is-visible');
   setTimeout(()=>{if(!room.classList.contains('is-visible'))room.hidden=true;},960);
  };
  room.querySelector('#leaveReadingRoom').addEventListener('click',window.closeReadingRoom);
