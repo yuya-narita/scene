@@ -529,7 +529,9 @@ function roomShelfFaces(){
   const faces=Array.from({length:4},(_,face)=>({face,start:face*capacity,books:[],indices:[]}));
   if(privateReadingRoom){
     const ownedEnd=Math.min(privateLaterOffset,all.length);
-    for(let face=0;face<3;face++)for(let i=0;i<ownedEnd;i++){faces[face].books.push(all[i]);faces[face].indices.push(i);}
+    // Each owned copy occupies one wall; continue vertically after all three walls fill.
+    for(let i=0;i<ownedEnd;i++){const face=Math.floor(i/capacity)%3;faces[face].books.push(all[i]);faces[face].indices.push(i);}
+    faces[3].start=ownedEnd;
     for(let i=ownedEnd;i<all.length;i++){faces[3].books.push(all[i]);faces[3].indices.push(i);}
     return faces;
   }
@@ -1882,6 +1884,7 @@ window.addEventListener('pageshow',()=>{if(dataReady)syncOwnedBooks().then(()=>{
 init();
 
 // V2.32.4: switch to the decoded private-room scenery and start the ring on one frame.
+// V2.32.5: partition owned copies across three walls without repeating the collection.
 (()=>{
  let opening=false,epoch=0;
  const backgroundReady=preloadPathZone(PRIVATE_READING_BG);
@@ -1905,10 +1908,11 @@ init();
   updatePrivateCollection();
   if(wasShelf){books=roomShelfAllBooks.slice();renderRoomShelf();}
   else{
-   books=(roomShelfFace===3?roomShelfAllBooks.slice(privateLaterOffset):roomShelfAllBooks.slice(0,privateLaterOffset));
+   books=roomShelfFaces()[roomShelfFace].books.slice();
    const found=books.findIndex(w=>selected&&(w.copyId||w.publicationId)===(selected.copyId||selected.publicationId));
    index=found<0?0:found;
-   if(!stage.classList.contains('is-intro-spinning'))render();
+   if(!books.length){books=roomShelfAllBooks.slice();renderRoomShelf();}
+   else if(!stage.classList.contains('is-intro-spinning'))render();
   }
   updatePrivateRoomTitle(roomShelfFace);
  }
@@ -1930,7 +1934,10 @@ init();
   privateReadingRoom=true;
   updatePrivateCollection();
   roomId='fantasy';viewMode='ring';roomShelfMode=false;
-  roomShelfFace=kind==='later'?3:0;roomVisibleFace=roomShelfFace;
+  const count=kind==='later'?roomShelfAllBooks.length-privateLaterOffset:privateLaterOffset;
+  const localIndex=Math.max(0,Math.min(count-1,Math.trunc(Number(selectedIndex)||0)));
+  const targetIndex=localIndex+(kind==='later'?privateLaterOffset:0);
+  roomShelfFace=kind==='later'?3:(roomShelfFaces().slice(0,3).find(face=>face.indices.includes(targetIndex))?.face??0);roomVisibleFace=roomShelfFace;
   roomCameraYaw=roomShelfFace*90;roomCameraPreview=0;roomCameraInputLock=false;roomShelfVisualYaw=null;
   phoneShelfScrollPositions.clear();
   store.classList.add('private-reading-room');store.classList.remove('hall-mode','hall-ring-mode','intro-mode');
@@ -1947,7 +1954,7 @@ init();
   // Prepare the same four walls, but land in the chosen wall's live ring.
   renderRoomShelf();updatePrivateRoomTitle(roomShelfFace);
   const face=roomShelfFaces()[roomShelfFace];books=face.books.slice();
-  index=books.length?Math.max(0,Math.min(books.length-1,Number(selectedIndex)||0)):0;dragUnits=0;
+  index=Math.max(0,face.indices.indexOf(targetIndex));dragUnits=0;
   stage.style.transform='';stage.style.opacity='';
   stage.classList.remove('is-intro-ready','is-shelf-returning');stage.classList.add('room-shelf-ring');
   rebaseRoomMotion();applyRoomCamera(0,true);
