@@ -698,18 +698,6 @@ const phoneShelfScrollPositions=new Map();
 function syncPhoneShelfOffsets(){
   const scroller=document.querySelector('#roomShelfScroll');
   if(!scroller||!window.matchMedia('(max-width:680px)').matches)return;
-  // The menu is taller than a book row. Include its measured height in the
-  // shared scroll plane so Safari can reach the final card above the fixed hint.
-  if(privateReadingRoom){
-    const grid=document.querySelector('#roomShelfGrid'),menu=grid?.querySelector('.reading-room-menu');
-    if(grid&&menu&&menu.offsetHeight){
-      const marginBottom=parseFloat(getComputedStyle(menu).marginBottom)||0;
-      const menuEnd=menu.offsetTop+menu.offsetHeight+marginBottom;
-      const shelfHeight=Number(grid.dataset.phoneShelfHeight)||0;
-      const height=Math.ceil(Math.max(shelfHeight,menuEnd));
-      if(grid.style.height!==height+'px')grid.style.height=height+'px';
-    }
-  }
   phoneShelfScrollPositions.set(roomShelfFace,scroller.scrollTop);
   const layer=scroller.querySelector(`.room-shelf-face[data-face="${roomShelfFace}"]`);
   const rows=layer?[...layer.querySelectorAll('.room-shelf-row, .reading-room-menu')]:[];
@@ -717,8 +705,7 @@ function syncPhoneShelfOffsets(){
   const top=parseFloat(getComputedStyle(scroller).paddingTop)||0;
   const bottom=Number(scroller.dataset.phoneClipBottom)||0;
   const end=last?top+last.offsetTop+last.offsetHeight:0;
-  const bottomGap=privateReadingRoom&&roomShelfFace===2?12:0;
-  scroller.dataset.phoneMaxScroll=String(Math.max(0,end+bottomGap-(scroller.clientHeight-bottom)));
+  scroller.dataset.phoneMaxScroll=String(Math.max(0,end-(scroller.clientHeight-bottom)));
 }
 function layoutPhoneShelfViewport(){
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll');
@@ -762,7 +749,6 @@ function renderRoomShelf(){
   // as tall as every row was what broke cover geometry on PC/iPhone.
   // V2.25.7: desktop keeps a viewport-sized stage; iPhone restores the original tall, frameless shelf plane.
   if(window.matchMedia('(max-width:680px)').matches){
-    grid.dataset.phoneShelfHeight=String(maxRows*125);
     grid.style.height=`calc(${maxRows} * 125px)`;
   }else{
     grid.style.height='100%';

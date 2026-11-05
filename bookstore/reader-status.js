@@ -1,4 +1,4 @@
-/* V2.33.4 — local-first reader identity profile. */
+/* V2.33.2 — local-first reader identity profile. */
 (()=>{
  'use strict';
  const KEY='ahako:reader-status:v1';
@@ -6,7 +6,7 @@
  const card=document.getElementById('readerStatusCard');
  const editor=document.getElementById('readerStatusEditor');
  const editButton=document.getElementById('readerStatusEdit');
- const rolePreview=document.getElementById('readerRolePreview');
+ const roleInput=document.getElementById('readerRoleInput');
  const mottoInput=document.getElementById('readerMottoInput');
  const genreChoices=document.getElementById('readerGenreChoices');
  const featuredSelect=document.getElementById('readerFeaturedSelect');
@@ -23,8 +23,7 @@
   {id:'essay',jp:'エッセイ',role:'言葉を灯す思索家'},
   {id:'other',jp:'その他',role:'物語の旅人'}
  ];
- let profile=load(),pendingAvatar=profile.avatarData||'';
- const defaultAvatarMarkup=new WeakMap();
+ let profile=load(),pendingAvatar=profile.avatarData||'',defaultAvatarMarkup=null;
  function load(){try{const value=JSON.parse(localStorage.getItem(KEY)||'{}');return value&&typeof value==='object'?value:{};}catch(_){return {};}}
  function save(){try{localStorage.setItem(KEY,JSON.stringify(profile));return true;}catch(_){return false;}}
  function safeText(value){return String(value||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -45,19 +44,11 @@
   owned().forEach(book=>{const id=String(book.genre||book.metadata?.genre||'').toLowerCase();if(genres().some(g=>g.id===id))counts.set(id,(counts.get(id)||0)+1);});
   return [...counts].sort((a,b)=>b[1]-a[1]).slice(0,3).map(([id])=>id);
  }
- function ownedGenreCounts(){
-  const counts=new Map();
-  owned().forEach(book=>{const id=String(book.genre||book.metadata?.genre||'').trim().toLowerCase();if(genres().some(g=>g.id===id))counts.set(id,(counts.get(id)||0)+1);});
-  return counts;
- }
  function chosenRole(){
-  const counts=ownedGenreCounts(),preferences=selectedGenres();
-  const favorite=[...counts].sort((a,b)=>b[1]-a[1]||(preferences.indexOf(a[0])<0?999:preferences.indexOf(a[0]))-(preferences.indexOf(b[0])<0?999:preferences.indexOf(b[0])))[0]?.[0]||preferences[0];
+  const role=String(profile.role||'').trim();
+  if(role)return role;
+  const favorite=selectedGenres()[0];
   return genres().find(g=>g.id===favorite)?.role||'物語の旅人';
- }
- function gauge(label,value,max){
-  const limit=Math.max(1,max),ratio=Math.max(0,Math.min(100,Math.round(value/limit*100)));
-  return '<div class=\"reader-status-gauge\"><span class=\"reader-status-gauge-label\">'+label+'</span><span class=\"reader-status-gauge-value\">'+value+' / '+limit+'</span><span class=\"reader-status-gauge-track\" role=\"img\" aria-label=\"'+label+' '+value+' / '+limit+'\"><span class=\"reader-status-gauge-fill\" style=\"--reader-gauge:'+ratio+'%\"></span></span></div>';
  }
  function renderBook(label,book){
   if(!book)return '';
@@ -70,29 +61,21 @@
   const featured=byCopyId(profile.featuredCopyId);
   const recommendation=byPublicationId(profile.recommendPublicationId)||byCopyId(profile.recommendCopyId);
   const stats='<div class=\"reader-status-stats\"><div class=\"reader-status-stat\"><small>MY BOOKS</small><strong>'+ownedCount+'冊</strong></div><div class=\"reader-status-stat\"><small>READ LATER</small><strong>'+laterCount+' / 12冊</strong></div></div>';
-  const genreCounts=ownedGenreCounts(),dominantCount=Math.max(0,...genreCounts.values());
-  const taggedOwnedCount=[...genreCounts.values()].reduce((sum,count)=>sum+count,0);
-  const gaugeMarkup='<div class=\"reader-status-gauges\" aria-label=\"読書ステータス\">'+gauge('ジャンルの広がり',genreCounts.size,genres().length)+gauge('最多ジャンルの割合',dominantCount,taggedOwnedCount||1)+gauge('次の一冊への準備',Math.min(laterCount,12),12)+'</div><p class=\"reader-status-gauge-note\">所蔵本のジャンルと「あとで読む」の冊数から算出</p>';
   const booksMarkup=(featured||recommendation)?'<div class=\"reader-status-books\">'+renderBook('飾っている一冊',featured)+renderBook('おすすめの一冊',recommendation)+'</div>':'<p class=\"reader-status-empty\">飾る本やおすすめの本を選ぶと、ここに並びます。</p>';
   card.innerHTML='<div class=\"reader-status-identity\">'+iconMarkup('reader-status-avatar')+'<strong class=\"reader-status-name\">'+safeText(currentName())+'</strong></div>'+
    '<h3 class=\"reader-status-role\">'+safeText(chosenRole())+'</h3>'+
    (profile.motto?'<p class=\"reader-status-motto\">'+safeText(profile.motto)+'</p>':'<p class=\"reader-status-motto\">自分らしい読書のかたちを選ぶ。</p>')+
-   '<div class=\"reader-status-genres\">'+(tags.length?tags.map(tag=>'<span class=\"reader-status-genre\">'+safeText(tag)+'</span>').join(''):'<span class=\"reader-status-genre\">好きなジャンルを選ぶ</span>')+'</div>'+gaugeMarkup+stats+booksMarkup;
-  if(rolePreview)rolePreview.textContent=chosenRole();
+   '<div class=\"reader-status-genres\">'+(tags.length?tags.map(tag=>'<span class=\"reader-status-genre\">'+safeText(tag)+'</span>').join(''):'<span class=\"reader-status-genre\">好きなジャンルを選ぶ</span>')+'</div>'+stats+booksMarkup;
   updateHeaderAvatars();
  }
  function updateHeaderAvatars(){
   document.querySelectorAll('.store-avatar').forEach(el=>{
-   if(!defaultAvatarMarkup.has(el))defaultAvatarMarkup.set(el,{html:el.innerHTML,hasInitial:el.classList.contains('has-initial')});
+   if(defaultAvatarMarkup===null)defaultAvatarMarkup=el.innerHTML;
    if(profile.avatarData){
     const current=el.querySelector('img')?.getAttribute('src');
     if(current!==profile.avatarData)el.innerHTML='<img src=\"'+safeText(profile.avatarData)+'\" alt=\"\">';
     el.classList.remove('has-initial');
-   }else{
-    const original=defaultAvatarMarkup.get(el);
-    if(original&&el.innerHTML!==original.html)el.innerHTML=original.html||safeText(initial());
-    if(original?.hasInitial)el.classList.add('has-initial');else el.classList.remove('has-initial');
-   }
+   }else if(el.innerHTML!==defaultAvatarMarkup){el.innerHTML=defaultAvatarMarkup||safeText(initial());}
   });
  }
  function fillSelect(select,items,placeholder,selected,identity){
@@ -103,7 +86,7 @@
   select.value=selected||'';
  }
  function buildEditor(){
-  if(rolePreview)rolePreview.textContent=chosenRole();
+  roleInput.value=profile.role||chosenRole();
   mottoInput.value=profile.motto||'';
   pendingAvatar=profile.avatarData||'';
   avatarPreview.innerHTML=pendingAvatar?'<img src=\"'+safeText(pendingAvatar)+'\" alt=\"\">':safeText(initial());
@@ -117,13 +100,13 @@
   fillSelect(featuredSelect,owned(),'選択しない',profile.featuredCopyId,'copyId');
   const candidates=publicBooks();
   const publicSelection=candidates.some(w=>String(w.publicationId)===String(profile.recommendPublicationId));
-  if(candidates.length)fillSelect(recommendSelect,candidates,'選択しない',publicSelection?profile.recommendPublicationId:'','publicationId');
+  if(candidates.length)fillSelect(recommendSelect,candidates,'選択しない',publicSelection?profile.recommendPublicationId,'publicationId');
   else fillSelect(recommendSelect,owned().filter(w=>w.publicationId&&!String(w.publicationId).startsWith('owned:')),'選択しない',profile.recommendCopyId,'copyId');
  }
  function openEditor(){buildEditor();card.hidden=true;editButton.hidden=true;editor.hidden=false;}
  function cancelEditor(){editor.hidden=true;card.hidden=false;editButton.hidden=false;pendingAvatar=profile.avatarData||'';}
  function open(){
-  if(!dialog||!window.HTMLDialogElement||dialog.open)return;
+  if(!dialog||!window.HTMLDialogElement)return;
   render();cancelEditor();dialog.showModal();
  }
  function fileToDataUrl(file){
@@ -151,6 +134,8 @@
  genreChoices?.addEventListener('change',e=>{
   const checked=[...genreChoices.querySelectorAll('input:checked')];
   if(checked.length>3){e.target.checked=false;return;}
+  const preferred=checked.map(input=>input.value);
+  if(!roleInput.value.trim())roleInput.value=genres().find(g=>g.id===preferred[0])?.role||'物語の旅人';
  });
  fileInput?.addEventListener('change',async()=>{
   const file=fileInput.files?.[0];if(!file)return;
@@ -160,7 +145,7 @@
  document.getElementById('readerAvatarReset')?.addEventListener('click',()=>{pendingAvatar='';fileInput.value='';avatarPreview.textContent=initial();});
  editor?.addEventListener('submit',e=>{
   e.preventDefault();
-  profile={...profile,role:'',motto:mottoInput.value.trim().slice(0,100),genres:[...genreChoices.querySelectorAll('input:checked')].map(input=>input.value).slice(0,3),avatarData:pendingAvatar,featuredCopyId:featuredSelect.value||'',recommendPublicationId:publicBooks().some(w=>String(w.publicationId)===recommendSelect.value)?recommendSelect.value:'',recommendCopyId:''};
+  profile={...profile,role:roleInput.value.trim().slice(0,30)||chosenRole(),motto:mottoInput.value.trim().slice(0,100),genres:[...genreChoices.querySelectorAll('input:checked')].map(input=>input.value).slice(0,3),avatarData:pendingAvatar,featuredCopyId:featuredSelect.value||'',recommendPublicationId:publicBooks().some(w=>String(w.publicationId)===recommendSelect.value)?recommendSelect.value:'',recommendCopyId:''};
   if(!publicBooks().length){profile.recommendCopyId=recommendSelect.value||'';}
   if(!save()){window.alert?.('プロフィールを保存できませんでした。端末の保存容量を確認してください。');return;}
   render();editor.hidden=true;card.hidden=false;editButton.hidden=false;
