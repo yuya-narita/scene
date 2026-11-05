@@ -1353,7 +1353,7 @@ function renderPath(){
   }else{
     const span=outerPathLength(),n=((Math.floor(pathProgress)%span)+span)%span+1;
     document.querySelector('#pathStatus').textContent=`本の道　${n} / ${span}`;
-    document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退 ／ 左＝中央ホール';
+    document.querySelector('#pathSub').textContent='上＝前進 ／ 下＝後退 ／ 左半分←ホール・右半分→売場';
     updatePathZone();
   }
   updatePathFocusPanel();
@@ -1462,13 +1462,26 @@ function onPathPointerDown(e){
   pathVelocity=0;
   const hit=findPathBookAt(e.clientX,e.clientY);
   pathBookHold=hit?{raw:Number(hit.dataset.raw),x:e.clientX,y:e.clientY,moved:false}:null;
-  pathDrag={id:e.pointerId,y:e.clientY,x:e.clientX,start:pathProgress,lastY:e.clientY,lastT:performance.now(),vy:0,moved:false,gateTap};
+  pathDrag={id:e.pointerId,y:e.clientY,x:e.clientX,start:pathProgress,lastY:e.clientY,lastT:performance.now(),vy:0,moved:false,gateTap,axis:null,side:e.clientX<window.innerWidth/2?'left':'right',zoneId:roomId==='path'?currentPathZone()?.id:null};
   e.currentTarget.setPointerCapture?.(e.pointerId)
 }
 function onPathPointerMove(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const dy=e.clientY-pathDrag.y,dx=e.clientX-pathDrag.x;
   if(Math.hypot(dx,dy)>8){pathDrag.moved=true;if(pathBookHold)pathBookHold.moved=true}
+  // V2.32.7: the starting half owns the route. Horizontal gestures must not
+  // move along the road or cross into another genre while choosing a destination.
+  if(roomId==='path'&&pathDrag.moved){
+    if(!pathDrag.axis){
+      if(Math.abs(dx)>Math.abs(dy)*1.15)pathDrag.axis='horizontal';
+      else if(Math.abs(dy)>Math.abs(dx)*1.15)pathDrag.axis='vertical';
+    }
+    if(pathDrag.axis==='horizontal'){
+      e.preventDefault();pathDrag.vy=0;pathVelocity=0;
+      if(pathProgress!==pathDrag.start){pathProgress=pathDrag.start;renderPath();}
+      return;
+    }
+  }
   if(Math.abs(dy)>3)e.preventDefault();
   const now=performance.now(),dt=Math.max(1,now-pathDrag.lastT);pathDrag.vy=(e.clientY-pathDrag.lastY)/dt;pathDrag.lastY=e.clientY;pathDrag.lastT=now;
   const dir=-1; // all passages: up swipe = forward, down swipe = backward
@@ -1478,9 +1491,16 @@ function onPathPointerEnd(e){
   if(!pathDrag||e.pointerId!==pathDrag.id)return;
   const d=pathDrag,h=pathBookHold,dx=e.clientX-d.x,dy=e.clientY-d.y;pathDrag=null;pathBookHold=null;
   if(!d.moved&&d.gateTap&&roomId==='forest'){enterFantasyRoom();return;}
-  if(d.moved&&dx<-54&&Math.abs(dx)>Math.abs(dy)*1.15&&roomId==='path'){
-    // The Book Road returns to Central Sakura Hall on a left swipe.
-    pathVelocity=0;showCentralHall(false);return;
+  if(roomId==='path'&&d.moved&&d.axis!=='vertical'&&Math.abs(dx)>Math.abs(dy)*1.15){
+    pathVelocity=0;
+    if(d.side==='left'&&dx<-54){showCentralHall(false);return;}
+    if(d.side==='right'&&dx>54){
+      const genreId=d.zoneId||currentPathZone()?.id;
+      if(genreId)enterForest(genreId);
+      return;
+    }
+    // The opposite direction or a short horizontal swipe is not a route change.
+    return;
   }
   if(roomId==='forest'&&d.moved&&dy>54&&Math.abs(dy)>Math.abs(dx)*1.05&&d.start<.22){
     if(approachOriginRoom){restoreApproachOriginRoom();return;}
