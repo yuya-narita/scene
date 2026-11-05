@@ -233,6 +233,49 @@ body.book-path-active #store>:is(#prev,#next,#hint,#introHint,#stage){display:no
 #store.private-reading-room #roomShelf .reading-menu-copy small{font:11px/1.4 sans-serif;color:#bfb09e}
 #store.private-reading-room #roomShelf .reading-menu-arrow{flex:none;font:24px/1 serif;color:#bda37e}
 #store.private-reading-room #roomShelf .reading-room-menu button:focus-visible{outline:2px solid #ddbd87;outline-offset:2px}
+
+/* V2.33.2 — reader identity card and local profile editor. */
+.reader-status-dialog{width:min(560px,calc(100vw - 28px));margin:auto}
+.reader-status-dialog .store-dialog-heading{margin-bottom:16px}
+.reader-status-card{padding:22px;border:1px solid #d3b78b55;border-radius:18px;background:radial-gradient(ellipse at 80% 0%,#79593133,transparent 55%),linear-gradient(145deg,#1c1813ed,#100d0bea);box-shadow:inset 0 1px #ffffff0b,0 16px 40px #0005}
+.reader-status-identity{display:flex;align-items:center;gap:16px}
+.reader-status-avatar{width:62px;height:62px;display:grid;place-items:center;flex:none;overflow:hidden;border:1px solid #e9d5b870;border-radius:50%;color:#f2dfc1;background:linear-gradient(140deg,#79634f,#30251e);font:24px/1 serif;box-shadow:0 4px 18px #0006}
+.reader-status-avatar img,.reader-avatar-preview img{width:100%;height:100%;object-fit:cover}
+.reader-status-name{min-width:0;color:#bba987;font-size:12px;overflow-wrap:anywhere}
+.reader-status-role{margin:17px 0 5px;font:500 27px/1.35 serif;letter-spacing:.05em;color:#fff0d6}
+.reader-status-motto{margin:0;color:#c9bcaa;font:14px/1.8 serif}
+.reader-status-genres{display:flex;flex-wrap:wrap;gap:7px;margin:15px 0}
+.reader-status-genre{padding:6px 11px;border:1px solid #d2b38165;border-radius:999px;color:#ead7b8;background:#ffffff06;font-size:11px}
+.reader-status-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:17px}
+.reader-status-stat{padding:12px;border:1px solid #d3b78b28;border-radius:12px;background:#00000020}
+.reader-status-stat small,.reader-status-featured small{display:block;color:#ad9b80;font-size:10px;letter-spacing:.08em}
+.reader-status-stat strong{display:block;margin-top:4px;color:#f2e4ce;font:500 21px/1.3 serif}
+.reader-status-books{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:15px}
+.reader-status-book{display:flex;align-items:center;gap:10px;min-width:0;padding:9px;border:1px solid #d3b78b28;border-radius:12px;background:#00000020}
+.reader-status-cover{width:42px;aspect-ratio:2/3;display:grid;place-items:center;flex:none;overflow:hidden;border-radius:3px;background:#30271e;color:#cfb78d;font:10px serif}
+.reader-status-cover img{width:100%;height:100%;object-fit:cover}
+.reader-status-book-copy{min-width:0}.reader-status-book-copy small{display:block;color:#ad9b80;font-size:9px}.reader-status-book-copy strong{display:-webkit-box;margin-top:4px;overflow:hidden;color:#eee2d1;font-size:11px;line-height:1.5;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.reader-status-empty{margin:10px 0 0;color:#a99b88;font-size:12px;line-height:1.7}
+.reader-status-edit{display:block;width:100%;margin-top:13px;padding:12px;border:1px solid #d6b77c66;border-radius:11px;background:linear-gradient(135deg,#6a482b88,#39271888);color:#f3e3c9;font-family:inherit;font-size:13px;font-weight:500;line-height:1.3;cursor:pointer}
+.reader-status-editor{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.reader-status-editor[hidden]{display:none!important}
+.reader-status-editor>label{display:flex;flex-direction:column;gap:6px;color:#dfd2bf;font-size:12px}
+.reader-status-editor input:not([type=file]),.reader-status-editor textarea,.reader-status-editor select{box-sizing:border-box;width:100%;padding:10px 11px;border:1px solid #d3b78b38;border-radius:9px;background:#0b0907;color:#fff;font:inherit;font-size:14px;min-width:0}
+.reader-status-editor input:focus,.reader-status-editor textarea:focus,.reader-status-editor select:focus{outline:2px solid #d6b77c66;outline-offset:1px}
+.reader-avatar-picker{display:grid!important;grid-template-columns:1fr auto;align-items:center;gap:8px 12px!important;padding:12px;border:1px solid #d3b78b28;border-radius:12px;background:#00000020}
+.reader-avatar-preview{grid-column:2;grid-row:1 / span 3;width:54px;height:54px;display:grid;place-items:center;overflow:hidden;border:1px solid #e9d5b870;border-radius:50%;background:linear-gradient(140deg,#79634f,#30251e);font:22px serif;color:#f2dfc1}
+.reader-avatar-picker input{grid-column:1;max-width:100%;font-size:11px}
+.reader-avatar-picker>small{grid-column:1;color:#a99b88;font-size:10px;line-height:1.5}
+.reader-avatar-picker button,.reader-status-actions button{padding:9px 12px;border:1px solid #d3b78b38;border-radius:9px;background:#ffffff08;color:#e5d7c3;font:inherit;font-size:12px;cursor:pointer}
+.reader-avatar-picker button{justify-self:start}
+.reader-genre-picker{margin:0;padding:11px;border:1px solid #d3b78b28;border-radius:12px}
+.reader-genre-picker legend{padding:0 5px;color:#dfd2bf;font-size:12px}
+.reader-genre-picker>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.reader-genre-picker label{display:flex;align-items:center;gap:7px;padding:8px;border:1px solid #d3b78b25;border-radius:8px;color:#e6d7c1;font-size:11px;cursor:pointer}
+.reader-genre-picker input{accent-color:#c69a62}
+.reader-status-note{margin:0;color:#a99b88;font-size:10px;line-height:1.6}
+.reader-status-actions{display:flex;gap:9px}.reader-status-actions button{flex:1}.reader-status-actions .reader-status-primary{border-color:#a8c7ec75;background:linear-gradient(135deg,#396b9b,#294a70);color:#fff}
+@media(max-width:680px){.reader-status-dialog{width:calc(100vw - 24px);padding:18px}.reader-status-card{padding:16px}.reader-status-role{font-size:23px}.reader-status-avatar{width:54px;height:54px}.reader-status-books{grid-template-columns:1fr}.reader-status-stat strong{font-size:19px}}
 @media(hover:hover){#store.private-reading-room #roomShelf .reading-room-menu button:hover{background:#ffffff10;border-color:#d8b98670}}
 @media(max-width:680px){#store.private-reading-room #roomShelf .reading-room-menu{width:calc(100% - 24px);max-width:340px;padding:14px;gap:8px;margin-top:28px}#store.private-reading-room #roomShelf .reading-room-menu button{min-height:64px;padding:11px 12px;gap:11px}#store.private-reading-room #roomShelf .reading-menu-copy strong{font-size:15px}}
 

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
 <link rel="stylesheet" href="./bookstore.css?v=2.33.1">
-<link rel="stylesheet" href="./bookstore-ui.css?v=2.33.1">
+<link rel="stylesheet" href="./bookstore-ui.css?v=2.33.2">
 
 <style id="v211-bg">
 /* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
@@ -87,10 +87,26 @@
  <div class="store-dialog-heading"><div><small>GENRE ROOMS</small><h2 id="genreRoomTitle">別のジャンルへ</h2></div><button class="store-icon-button" type="button" data-genre-close aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
  <p class="genre-room-caption">行き先を選ぶと、その部屋への道へ進みます。</p><div class="genre-sign-grid" id="roomGenreGrid"></div>
 </dialog>
-<script src="./bookstore.js?v=2.33.1"></script>
+<dialog class="store-ui-dialog reader-status-dialog" id="readerStatusDialog" aria-labelledby="readerStatusTitle">
+ <div class="store-dialog-heading"><div><small>MY READER PROFILE</small><h2 id="readerStatusTitle">読者ステータス</h2></div><button class="store-icon-button" type="button" data-reader-close aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+ <section class="reader-status-card" id="readerStatusCard" aria-live="polite"></section>
+ <form class="reader-status-editor" id="readerStatusEditor" hidden>
+  <label class="reader-avatar-picker"><span>読者アイコン</span><span class="reader-avatar-preview" id="readerAvatarPreview"></span><input id="readerAvatarFile" type="file" accept="image/*"><small>画像を選ぶとアカウントアイコンにも反映されます</small><button type="button" id="readerAvatarReset">初期アイコンに戻す</button></label>
+  <label>なりたい読者の肩書き<input id="readerRoleInput" maxlength="30" placeholder="例：星を巡る司書"></label>
+  <label>ひとこと<textarea id="readerMottoInput" maxlength="100" rows="2" placeholder="物語の気配をたどり、次の一冊へ。"></textarea></label>
+  <fieldset class="reader-genre-picker"><legend>好きなジャンル（3つまで）</legend><div id="readerGenreChoices"></div></fieldset>
+  <label>飾っている一冊<select id="readerFeaturedSelect"></select></label>
+  <label>おすすめの一冊<select id="readerRecommendSelect"></select></label>
+  <p class="reader-status-note" id="readerStatusNote">設定はこの端末に保存されます。共有リンクは次の段階で追加します。</p>
+  <div class="reader-status-actions"><button type="button" data-reader-cancel>キャンセル</button><button type="submit" class="reader-status-primary">保存する</button></div>
+ </form>
+ <button class="reader-status-edit" id="readerStatusEdit" type="button">読者ステータスを整える</button>
+</dialog>
+<script src="./bookstore.js?v=2.33.2"></script>
 <script src="./bookstore-ui.js?v=2.33.1"></script>
 <script src="./bookstore-auth.js?v=2.33.1"></script>
 <script src="./bookstore-mobile-layout.js?v=2.33.1"></script>
+<script src="./reader-status.js?v=2.33.2"></script>
 
 </body>
 </html>

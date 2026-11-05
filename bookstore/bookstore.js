@@ -655,6 +655,7 @@ function buildRoomShelfFaceLayer(face,f){
     layer.classList.add('reading-menu-face');layer.setAttribute('aria-label','読書室メニュー');
     const icon=path=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+path+'</svg>';
     const entries=[
+      ['status','読者ステータス','あなたらしい読者プロフィール',icon('<circle cx="12" cy="8" r="4"/><path d="M4 21c.7-4.1 3.5-6 8-6s7.3 1.9 8 6"/>')],
       ['owned','もっている本',privateLaterOffset+'冊の蔵書へ',icon('<path d="M12 5v16M12 5C8 2 3 4 3 4v15s5-2 9 2c4-4 9-2 9-2V4s-5-2-9 1Z"/>')],
       ['later','あとで読む',(roomShelfAllBooks.length-privateLaterOffset)+' / '+READ_LATER_LIMIT+'冊の読む予定へ',icon('<path d="M6 3h12v18l-6-4-6 4Z"/>')],
       ['search','本を探す','タイトル・作者から探す',icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>')],
@@ -667,7 +668,8 @@ function buildRoomShelfFaceLayer(face,f){
       e.preventDefault();e.stopPropagation();
       if(!privateReadingRoom||!roomShelfMode||roomShelfFace!==2||Date.now()<suppressClickUntil)return;
       const action=button.dataset.readerAction;
-      if(action==='owned')window.navigateReadingRoomFace?.(0);
+      if(action==='status')window.openReaderStatus?.();
+      else if(action==='owned')window.navigateReadingRoomFace?.(0);
       else if(action==='later')window.navigateReadingRoomFace?.(3);
       else if(action==='hall')window.closeReadingRoom();
       else if(action==='search')document.querySelector('.store-head-actions [data-store-action="search"]')?.click();
