@@ -1,5 +1,7 @@
 const API='https://scene-studio-api.a-hako.workers.dev';
 const READ_LATER_STORAGE_KEY='ahako:read-later:v1';
+const READ_LATER_LIMIT=12;
+let readLaterSwap=null,readLaterDialog=null;
 const stage=document.querySelector('#stage'),picked=document.querySelector('#picked'),store=document.querySelector('#store');
 let books=[],allBooks=[],ownedBooks=[],ownedCoverUrls=[],index=0,drag=null,dragUnits=0,suppressClickUntil=0,currentPicked=null,detailDrag=null,spinToken=0,detailPreview=null;
 let viewMode='ring',pathProgress=0,pathYaw=0,pathDrag=null,motionOn=false,lastAccelMag=0;
@@ -305,12 +307,83 @@ function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.cl
     return;
   }
   if(cancel){glideToOffset(0);return;}if(d.moved){suppressClickUntil=Date.now()+360;const spacing=Math.min(210,Math.max(145,stage.clientWidth*.39));const velocity=d.vx/spacing;coastAndSnap(dragUnits,velocity*.66);}else{dragUnits=0;/* V2.11.1: desktop pointer capture can swallow the button click. Resolve the visible cover directly on pointerup. */const hit=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.book');if(hit&&stage.contains(hit)){suppressClickUntil=Date.now()+220;const i=Number(hit.dataset.index),off=signedOffset(i);if(off===0)pick(books[i]);else glideToOffset(-off);}}}
-function readLaterItems(){try{const v=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&x.publicationId).slice(0,200):[];}catch(_){return[];}}
+function readLaterItems(){try{const v=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&x.publicationId):[];}catch(_){return[];}}
 function normalizeReadLater(w){return {...w,_readLater:true,author:{displayName:w.authorName||w.author?.displayName||'作者'},description:w.description||w.detail||'',subtitle:w.subtitle||w.detail||'',readUrl:w.readUrl||w.workUrl||''};}
 function readLaterBooks(){return readLaterItems().map(normalizeReadLater);}
 function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{publicationId:w.publicationId,title:w.title||'Untitled',coverUrl:w.coverUrl||'',detail:[w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' '),authorName:a.displayName||'作者',authorId:a.authorId||'',authorSlug:a.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
 function syncLater(){const b=document.querySelector('#saveLater');if(!currentPicked||!b)return;if(currentPicked._ownedCopy){b.classList.add('is-saved');b.textContent='✓ もっている本';b.setAttribute('aria-pressed','true');b.disabled=true;return;}b.disabled=false;const saved=readLaterItems().some(x=>x.publicationId===currentPicked.publicationId);b.classList.toggle('is-saved',saved);b.textContent=saved?'✓ 保存済み':'あとで読む';b.setAttribute('aria-pressed',saved?'true':'false');}
-function toggleLater(){if(!currentPicked||currentPicked._ownedCopy)return;const items=readLaterItems(),i=items.findIndex(x=>x.publicationId===currentPicked.publicationId);if(i>=0)items.splice(i,1);else items.unshift(readLaterRecord(currentPicked));try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items.slice(0,200)));syncLater();renderHallMyShelf();}catch(_){}}
+// V2.33.0: never evict a saved book automatically, including pre-limit collections.
+function saveReadLaterItems(items){
+  try{localStorage.setItem(READ_LATER_STORAGE_KEY,JSON.stringify(items));}
+  catch(_){return false;}
+  syncLater();renderHallMyShelf();window.refreshPrivateReadingRoom?.();return true;
+}
+function ensureReadLaterDialog(){
+  if(readLaterDialog)return readLaterDialog;
+  const d=document.createElement('dialog');d.id='readLaterSwapDialog';d.className='read-later-swap-dialog';
+  d.setAttribute('aria-labelledby','readLaterSwapTitle');d.setAttribute('aria-describedby','readLaterSwapHelp');
+  d.innerHTML='<header><small>READ LATER · 12 BOOKS</small><h2 id="readLaterSwapTitle">あとで読むを入れ替える</h2><p id="readLaterSwapHelp"></p></header><div class="read-later-swap-grid" aria-label="保存中の本"></div><footer><p id="readLaterSwapStatus" role="status" aria-live="polite"></p><div class="read-later-swap-actions"><button type="button" data-later-cancel autofocus>キャンセル</button><button type="button" data-later-confirm disabled>入れ替える</button></div></footer>';
+  document.body.appendChild(d);readLaterDialog=d;
+  d.addEventListener('keydown',e=>e.stopPropagation());
+  d.addEventListener('cancel',e=>{e.preventDefault();closeReadLaterSwap();});
+  d.addEventListener('close',()=>{readLaterSwap=null;});
+  d.addEventListener('click',e=>{
+    if(e.target.closest('[data-later-cancel]')){closeReadLaterSwap();return;}
+    if(e.target.closest('[data-later-confirm]')){confirmReadLaterSwap();return;}
+    const button=e.target.closest('[data-later-choice]');if(!button||!readLaterSwap)return;
+    const n=Number(button.dataset.laterChoice),state=readLaterSwap;
+    if(!state.items[n])return;
+    if(state.selected.has(n))state.selected.delete(n);
+    else{if(state.required===1)state.selected.clear();if(state.selected.size<state.required)state.selected.add(n);}
+    updateReadLaterSwapSelection();
+  });
+  return d;
+}
+function closeReadLaterSwap(){
+  readLaterSwap=null;if(readLaterDialog?.open)readLaterDialog.close();
+}
+function renderReadLaterSwap(items,message=''){
+  const state=readLaterSwap,d=ensureReadLaterDialog();if(!state)return;
+  state.items=items;state.snapshot=JSON.stringify(items);state.selected=new Set();state.required=Math.max(0,items.length-READ_LATER_LIMIT+1);
+  d.querySelector('#readLaterSwapHelp').textContent=state.required
+    ?'あとで読むは12冊までです。「'+state.record.title+'」を追加するには、外す本を'+state.required+'冊選んでください。'
+    :'棚に空きができました。「'+state.record.title+'」を追加できます。';
+  d.querySelector('.read-later-swap-grid').innerHTML=items.map((w,i)=>'<button type="button" data-later-choice="'+i+'" aria-pressed="false"><span class="read-later-swap-cover">'+(w.coverUrl?'<img src="'+esc(w.coverUrl)+'" alt="" loading="lazy">':'<span>表紙なし</span>')+'<span class="read-later-swap-check" aria-hidden="true">✓</span></span><span class="read-later-swap-name">'+esc(w.title||'Untitled')+'</span></button>').join('');
+  updateReadLaterSwapSelection(message);
+}
+function updateReadLaterSwapSelection(message=''){
+  const state=readLaterSwap,d=readLaterDialog;if(!state||!d)return;
+  d.querySelectorAll('[data-later-choice]').forEach(b=>{const selected=state.selected.has(Number(b.dataset.laterChoice));b.setAttribute('aria-pressed',String(selected));b.classList.toggle('is-selected',selected);b.disabled=!selected&&state.selected.size>=state.required&&state.required!==1;});
+  const ready=state.selected.size===state.required,confirm=d.querySelector('[data-later-confirm]');
+  confirm.disabled=!ready;confirm.textContent=state.required?'入れ替える':'追加する';
+  const titles=[...state.selected].map(i=>'「'+state.items[i].title+'」').join('、');
+  d.querySelector('#readLaterSwapStatus').textContent=message||(ready?(state.required?titles+'をあとで読むから外して、「'+state.record.title+'」を追加します。':'「'+state.record.title+'」を追加します。'):'外す本を選んでください（'+state.selected.size+' / '+state.required+'冊）。');
+}
+function openReadLaterSwap(record,items){
+  const d=ensureReadLaterDialog();readLaterSwap={record};renderReadLaterSwap(items);if(!d.open)d.showModal();
+}
+function confirmReadLaterSwap(){
+  const state=readLaterSwap;if(!state||state.selected.size!==state.required)return;
+  const latest=readLaterItems();
+  if(latest.some(w=>w.publicationId===state.record.publicationId)){syncLater();renderHallMyShelf();window.refreshPrivateReadingRoom?.();closeReadLaterSwap();return;}
+  // Another tab may have changed the shelf while the reader was choosing.
+  if(JSON.stringify(latest)!==state.snapshot){renderReadLaterSwap(latest,'棚が更新されました。内容を確認して、もう一度選んでください。');return;}
+  const next=[state.record,...latest.filter((_,i)=>!state.selected.has(i))];
+  if(next.length>READ_LATER_LIMIT)return;
+  if(saveReadLaterItems(next))closeReadLaterSwap();
+  else updateReadLaterSwapSelection('保存できませんでした。入れ替えは行っていません。もう一度お試しください。');
+}
+function toggleLater(){
+  if(!currentPicked||currentPicked._ownedCopy||readLaterDialog?.open)return;
+  const items=readLaterItems(),i=items.findIndex(x=>x.publicationId===currentPicked.publicationId);
+  if(i>=0)items.splice(i,1);
+  else{
+    const record=readLaterRecord(currentPicked);
+    if(items.length>=READ_LATER_LIMIT){openReadLaterSwap(record,items);return;}
+    items.unshift(record);
+  }
+  if(!saveReadLaterItems(items))window.alert('保存できませんでした。あとで読むの内容は変更していません。');
+}
 function genreLabel(w){
   const raw=String(w?.genre||w?.metadata?.genre||'').trim().toLowerCase();
   const labels={fantasy:'ファンタジー',romance:'恋愛',horror:'ホラー',mystery:'ミステリ',sf:'SF',everyday:'日常',essay:'エッセイ',other:'その他'};
@@ -583,7 +656,7 @@ function buildRoomShelfFaceLayer(face,f){
     const icon=path=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+path+'</svg>';
     const entries=[
       ['owned','もっている本',privateLaterOffset+'冊の蔵書へ',icon('<path d="M12 5v16M12 5C8 2 3 4 3 4v15s5-2 9 2c4-4 9-2 9-2V4s-5-2-9 1Z"/>')],
-      ['later','あとで読む',(roomShelfAllBooks.length-privateLaterOffset)+'冊の読む予定へ',icon('<path d="M6 3h12v18l-6-4-6 4Z"/>')],
+      ['later','あとで読む',(roomShelfAllBooks.length-privateLaterOffset)+' / '+READ_LATER_LIMIT+'冊の読む予定へ',icon('<path d="M6 3h12v18l-6-4-6 4Z"/>')],
       ['search','本を探す','タイトル・作者から探す',icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>')],
       ['hall','中央ホールへ戻る','書店を見て回る',icon('<path d="m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9"/>')]
     ];
@@ -987,7 +1060,7 @@ function hallGates(){return [...document.querySelectorAll('.hall-gate[data-angle
 function hallSpatialItems(){return [...document.querySelectorAll('.hall-gate[data-angle],.hall-my-shelf[data-angle]')];}
 function hallShelfBooks(kind){return (kind==='mine'?ownedBooks:kind==='later'?readLaterBooks():allBooks.slice(0,8)).filter(Boolean);}
 function renderHallShelf(rootId,kind){const root=document.querySelector(rootId);if(!root)return;const sample=hallShelfBooks(kind).slice(0,8);root.innerHTML=sample.map((w,i)=>`<button class="hall-my-book" type="button" data-hall-book="${i}" aria-label="${esc(w.title||'本')}">${bookMarkup(w)}</button>`).join('');hydrateCoverLoadState(root);root.querySelectorAll('.hall-my-book').forEach((b,i)=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const w=sample[i];if(w){if(kind==='mine'||kind==='later')window.openReadingRoom(kind,i);else openHallShelfRing(kind,i,false);}}));}
-function renderHallMyShelf(){renderHallShelf('#hallNewShelfBooks','new');renderHallShelf('#hallMyShelfBooks',hallLibraryKind);const later=readLaterBooks(),mine=ownedBooks;const title=document.querySelector('#hallLibraryTitle'),count=document.querySelector('#hallLibraryCount'),ownedTab=document.querySelector('#hallOwnedTab'),laterTab=document.querySelector('#hallLaterTab');if(title)title.textContent=hallLibraryKind==='later'?'あとで読む':'もっている本';if(count)count.textContent=hallLibraryKind==='later'?(later.length?`${later.length}冊`:'まだ保存した本がありません'):(mine.length?`${mine.length}冊`:'まだ本がありません');ownedTab?.classList.toggle('is-active',hallLibraryKind==='mine');laterTab?.classList.toggle('is-active',hallLibraryKind==='later');ownedTab?.setAttribute('aria-selected',hallLibraryKind==='mine'?'true':'false');laterTab?.setAttribute('aria-selected',hallLibraryKind==='later'?'true':'false');}
+function renderHallMyShelf(){renderHallShelf('#hallNewShelfBooks','new');renderHallShelf('#hallMyShelfBooks',hallLibraryKind);const later=readLaterBooks(),mine=ownedBooks;const title=document.querySelector('#hallLibraryTitle'),count=document.querySelector('#hallLibraryCount'),ownedTab=document.querySelector('#hallOwnedTab'),laterTab=document.querySelector('#hallLaterTab');if(title)title.textContent=hallLibraryKind==='later'?'あとで読む':'もっている本';if(count)count.textContent=hallLibraryKind==='later'?(later.length?`${later.length} / ${READ_LATER_LIMIT}冊`:'0 / '+READ_LATER_LIMIT+'冊'):(mine.length?`${mine.length}冊`:'まだ本がありません');ownedTab?.classList.toggle('is-active',hallLibraryKind==='mine');laterTab?.classList.toggle('is-active',hallLibraryKind==='later');ownedTab?.setAttribute('aria-selected',hallLibraryKind==='mine'?'true':'false');laterTab?.setAttribute('aria-selected',hallLibraryKind==='later'?'true':'false');}
 async function openHallShelfRing(kind,selectedIndex=0,openDetailAfterSpin=false,afterSpin=null){
   const selected=hallShelfBooks(kind);if(!selected.length)return;
   hallShelfRing=true;hallShelfKind=kind;hallPreview=0;hallDrag=null;rebaseHallMotion();
