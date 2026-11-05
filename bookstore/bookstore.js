@@ -150,12 +150,12 @@ function updateFocusPanel(){
     : (privateReadingRoom?(roomShelfFace===3?'READ LATER':'MY COPY'):roomId==='fantasy'?'FANTASY FOREST':'NEW ARRIVALS');
   const meta=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ');
   const title=document.querySelector('#focusTitle'),author=document.querySelector('#focusAuthor'),shelf=document.querySelector('#focusShelf'),metaEl=document.querySelector('#focusMeta');
-  if(title&&title.textContent!==(w.title||'Untitled'))title.textContent=w.title||'Untitled';
+  if(title&&title.textContent!==(w.title||'タイトル未設定'))title.textContent=w.title||'タイトル未設定';
   if(author&&author.textContent!==(a.displayName||'作者'))author.textContent=a.displayName||'作者';
   if(shelf&&shelf.textContent!==label)shelf.textContent=label;
   if(metaEl){if(metaEl.textContent!==meta)metaEl.textContent=meta;metaEl.hidden=!meta;}
 }
-function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)=>{const slot=signedOffset(i);if(Math.abs(slot)>5)return;const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot+dragUnits);b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};stage.appendChild(b);});hydrateCoverLoadState(stage);updateFocusPanel();}
+function render(){stage.innerHTML='';if(!books.length)return;books.forEach((w,i)=>{const slot=signedOffset(i);if(Math.abs(slot)>5)return;const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;b.setAttribute('aria-label',`${w.title||'タイトル未設定'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot+dragUnits);b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};stage.appendChild(b);});hydrateCoverLoadState(stage);updateFocusPanel();}
 // V2.11.3: commit a settled ring without rebuilding the visible cover DOM.
 // Recreating the centered image at the exact landing frame can make its rasterized transform
 // look like it briefly "tightens" even when the numeric scale is unchanged.
@@ -171,7 +171,7 @@ function commitRingSettle(step){
   books.forEach((w,i)=>{
     const slot=signedOffset(i);if(Math.abs(slot)>5||live.has(i))return;
     const b=document.createElement('button');b.className='book';b.dataset.slot=slot;b.dataset.index=i;
-    b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot);
+    b.setAttribute('aria-label',`${w.title||'タイトル未設定'} ${w.author?.displayName||''}`);b.innerHTML=bookMarkup(w);setBookPose(b,slot);
     b.onclick=()=>{if(Date.now()<suppressClickUntil)return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};
     stage.appendChild(b);hydrateCoverLoadState(b);
   });
@@ -195,7 +195,7 @@ function renderFirstViewRing(center){
   stage.classList.remove('is-intro-ready');
   books.forEach((w,i)=>{
     const b=document.createElement('button');b.className='book';b.dataset.index=i;
-    b.setAttribute('aria-label',`${w.title||'Untitled'} ${w.author?.displayName||''}`);
+    b.setAttribute('aria-label',`${w.title||'タイトル未設定'} ${w.author?.displayName||''}`);
     b.innerHTML=bookMarkup(w);setBookPose(b,wrappedOffsetFrom(center,i),.10);
     b.onclick=()=>{if(Date.now()<suppressClickUntil||stage.classList.contains('is-intro-spinning'))return;const off=signedOffset(i);if(off===0)pick(w);else glideToOffset(-off);};
     stage.appendChild(b);
@@ -310,7 +310,7 @@ function endDrag(e,cancel=false){if(!drag)return;const d=drag;drag=null;stage.cl
 function readLaterItems(){try{const v=JSON.parse(localStorage.getItem(READ_LATER_STORAGE_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&x.publicationId):[];}catch(_){return[];}}
 function normalizeReadLater(w){return {...w,_readLater:true,author:{displayName:w.authorName||w.author?.displayName||'作者'},description:w.description||w.detail||'',subtitle:w.subtitle||w.detail||'',readUrl:w.readUrl||w.workUrl||''};}
 function readLaterBooks(){return readLaterItems().map(normalizeReadLater);}
-function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{publicationId:w.publicationId,title:w.title||'Untitled',coverUrl:w.coverUrl||'',detail:[w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' '),authorName:a.displayName||'作者',authorId:a.authorId||'',authorSlug:a.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
+function readLaterRecord(w){const a=w.author||{},readUrl=playerUrl(w);return{publicationId:w.publicationId,title:w.title||'タイトル未設定',coverUrl:w.coverUrl||'',detail:[w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' '),authorName:a.displayName||'作者',authorId:a.authorId||'',authorSlug:a.slug||'',workUrl:readUrl,readUrl,savedAt:Date.now()};}
 function syncLater(){const b=document.querySelector('#saveLater');if(!currentPicked||!b)return;if(currentPicked._ownedCopy){b.classList.add('is-saved');b.textContent='✓ もっている本';b.setAttribute('aria-pressed','true');b.disabled=true;return;}b.disabled=false;const saved=readLaterItems().some(x=>x.publicationId===currentPicked.publicationId);b.classList.toggle('is-saved',saved);b.textContent=saved?'✓ 保存済み':'あとで読む';b.setAttribute('aria-pressed',saved?'true':'false');}
 // V2.33.0: never evict a saved book automatically, including pre-limit collections.
 function saveReadLaterItems(items){
@@ -348,7 +348,7 @@ function renderReadLaterSwap(items,message=''){
   d.querySelector('#readLaterSwapHelp').textContent=state.required
     ?'あとで読むは12冊までです。「'+state.record.title+'」を追加するには、外す本を'+state.required+'冊選んでください。'
     :'棚に空きができました。「'+state.record.title+'」を追加できます。';
-  d.querySelector('.read-later-swap-grid').innerHTML=items.map((w,i)=>'<button type="button" data-later-choice="'+i+'" aria-pressed="false"><span class="read-later-swap-cover">'+(w.coverUrl?'<img src="'+esc(w.coverUrl)+'" alt="" loading="lazy">':'<span>表紙なし</span>')+'<span class="read-later-swap-check" aria-hidden="true">✓</span></span><span class="read-later-swap-name">'+esc(w.title||'Untitled')+'</span></button>').join('');
+  d.querySelector('.read-later-swap-grid').innerHTML=items.map((w,i)=>'<button type="button" data-later-choice="'+i+'" aria-pressed="false"><span class="read-later-swap-cover">'+(w.coverUrl?'<img src="'+esc(w.coverUrl)+'" alt="" loading="lazy">':'<span>表紙なし</span>')+'<span class="read-later-swap-check" aria-hidden="true">✓</span></span><span class="read-later-swap-name">'+esc(w.title||'タイトル未設定')+'</span></button>').join('');
   updateReadLaterSwapSelection(message);
 }
 function updateReadLaterSwapSelection(message=''){
@@ -393,14 +393,14 @@ function detailContext(w){
   const genre=genreLabel(w), episode=[w?.episodeLabel,w?.episodeTitle].filter(Boolean).join(' ・ ');
   return [genre,episode].filter(Boolean).join('　／　')||(w?._ownedCopy?'MY COPY':'PUBLIC BOOK');
 }
-function fillPicked(w){currentPicked=w;document.querySelector('#pickedCover').innerHTML=bookMarkup(w);hydrateCoverLoadState(document.querySelector('#pickedCover'));document.querySelector('#pickedTitle').textContent=w.title||'Untitled';document.querySelector('#pickedContext').textContent=detailContext(w);document.querySelector('#pickedDetail').textContent=w.description||w.subtitle||'';document.querySelector('#pickedAuthor').textContent=w.author?.displayName?`著者　${w.author.displayName}`:'';document.querySelector('#readBook').href=detailReadUrl(w);document.querySelector('#pickedContext').textContent=detailContext(w);syncLater();}
+function fillPicked(w){currentPicked=w;document.querySelector('#pickedCover').innerHTML=bookMarkup(w);hydrateCoverLoadState(document.querySelector('#pickedCover'));document.querySelector('#pickedTitle').textContent=w.title||'タイトル未設定';document.querySelector('#pickedContext').textContent=detailContext(w);document.querySelector('#pickedDetail').textContent=w.description||w.subtitle||'';document.querySelector('#pickedAuthor').textContent=w.author?.displayName?`著者　${w.author.displayName}`:'';document.querySelector('#readBook').href=detailReadUrl(w);document.querySelector('#pickedContext').textContent=detailContext(w);syncLater();}
 function pick(w){
   // V2.10.2: opening detail is a modal state. Motion/path animation must not keep
   // mutating the passage underneath while the user is trying to dismiss the detail.
   pathVelocity=0;pathBookHold=null;pathDrag=null;
   fillPicked(w);picked.hidden=false;document.body.classList.add('book-detail-open');document.body.style.overflow='hidden';
 }
-function detailCardMarkup(w){const a=w.author||{},saved=w._ownedCopy||readLaterItems().some(x=>x.publicationId===w.publicationId);return `<div class="detail-book">${bookMarkup(w)}</div><div class="detail-copy"><small>${esc(detailContext(w))}</small><h1>${esc(w.title||'Untitled')}</h1><p>${esc(w.description||w.subtitle||'')}</p><p class="author">${a.displayName?`著者　${esc(a.displayName)}`:''}</p></div><div class="picked-actions detail-actions-placeholder" aria-hidden="true"><span class="${saved?'is-saved':''}">${w._ownedCopy?'✓ もっている本':saved?'✓ 保存済み':'あとで読む'}</span><span>ひらく</span></div>`;}
+function detailCardMarkup(w){const a=w.author||{},saved=w._ownedCopy||readLaterItems().some(x=>x.publicationId===w.publicationId);return `<div class="detail-book">${bookMarkup(w)}</div><div class="detail-copy"><small>${esc(detailContext(w))}</small><h1>${esc(w.title||'タイトル未設定')}</h1><p>${esc(w.description||w.subtitle||'')}</p><p class="author">${a.displayName?`著者　${esc(a.displayName)}`:''}</p></div><div class="picked-actions detail-actions-placeholder" aria-hidden="true"><span class="${saved?'is-saved':''}">${w._ownedCopy?'✓ もっている本':saved?'✓ 保存済み':'あとで読む'}</span><span>ひらく</span></div>`;}
 function removeDetailPreview(){if(detailPreview){detailPreview.remove();detailPreview=null;}}
 function detailTargetFromDrag(dx,dy){const horizontal=Math.abs(dx)>=Math.abs(dy);const amount=horizontal?dx:dy;return{horizontal,amount,delta:amount<0?1:-1};}
 function canMoveShelf(delta){return shelfIndex+delta>=0&&shelfIndex+delta<shelves.length;}
@@ -698,6 +698,18 @@ const phoneShelfScrollPositions=new Map();
 function syncPhoneShelfOffsets(){
   const scroller=document.querySelector('#roomShelfScroll');
   if(!scroller||!window.matchMedia('(max-width:680px)').matches)return;
+  // The menu is taller than a book row. Include its measured height in the
+  // shared scroll plane so Safari can reach the final card above the fixed hint.
+  if(privateReadingRoom){
+    const grid=document.querySelector('#roomShelfGrid'),menu=grid?.querySelector('.reading-room-menu');
+    if(grid&&menu&&menu.offsetHeight){
+      const marginBottom=parseFloat(getComputedStyle(menu).marginBottom)||0;
+      const menuEnd=menu.offsetTop+menu.offsetHeight+marginBottom;
+      const shelfHeight=Number(grid.dataset.phoneShelfHeight)||0;
+      const height=Math.ceil(Math.max(shelfHeight,menuEnd));
+      if(grid.style.height!==height+'px')grid.style.height=height+'px';
+    }
+  }
   phoneShelfScrollPositions.set(roomShelfFace,scroller.scrollTop);
   const layer=scroller.querySelector(`.room-shelf-face[data-face="${roomShelfFace}"]`);
   const rows=layer?[...layer.querySelectorAll('.room-shelf-row, .reading-room-menu')]:[];
@@ -705,7 +717,8 @@ function syncPhoneShelfOffsets(){
   const top=parseFloat(getComputedStyle(scroller).paddingTop)||0;
   const bottom=Number(scroller.dataset.phoneClipBottom)||0;
   const end=last?top+last.offsetTop+last.offsetHeight:0;
-  scroller.dataset.phoneMaxScroll=String(Math.max(0,end-(scroller.clientHeight-bottom)));
+  const bottomGap=privateReadingRoom&&roomShelfFace===2?12:0;
+  scroller.dataset.phoneMaxScroll=String(Math.max(0,end+bottomGap-(scroller.clientHeight-bottom)));
 }
 function layoutPhoneShelfViewport(){
   const wrap=document.querySelector('#roomShelf'),scroller=document.querySelector('#roomShelfScroll');
@@ -749,6 +762,7 @@ function renderRoomShelf(){
   // as tall as every row was what broke cover geometry on PC/iPhone.
   // V2.25.7: desktop keeps a viewport-sized stage; iPhone restores the original tall, frameless shelf plane.
   if(window.matchMedia('(max-width:680px)').matches){
+    grid.dataset.phoneShelfHeight=String(maxRows*125);
     grid.style.height=`calc(${maxRows} * 125px)`;
   }else{
     grid.style.height='100%';
@@ -1403,7 +1417,7 @@ function updatePathFocusPanel(){
   const shelf=document.querySelector('#focusShelf'),title=document.querySelector('#focusTitle'),metaEl=document.querySelector('#focusMeta'),author=document.querySelector('#focusAuthor');
   const zone=roomId==='path'?currentPathZone():null;
   if(shelf)shelf.textContent=roomId==='forest'?currentGenre().label+' APPROACH':(zone?.label||'BOOK PATH');
-  if(title&&title.textContent!==(w.title||'Untitled'))title.textContent=w.title||'Untitled';
+  if(title&&title.textContent!==(w.title||'タイトル未設定'))title.textContent=w.title||'タイトル未設定';
   if(metaEl){const meta=[w.episodeLabel,w.episodeTitle].filter(Boolean).join(' ・ ');metaEl.textContent=meta;metaEl.hidden=!meta;}
   if(author&&author.textContent!==(a.displayName||'作者'))author.textContent=a.displayName||'作者';
 }
