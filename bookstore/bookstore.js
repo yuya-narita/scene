@@ -36,8 +36,20 @@ const PATH_ZONES=[
 const PATH_ZONE_COUNT=PATH_ZONES.length;
 function outerPathLength(){return PATH_BOOKS_PER_ZONE_TEST*PATH_ZONE_COUNT;}
 let pathZoneId='',pathZoneBgFront='a',pathZoneEntryProgress=0,pathZoneSignTimer=0;
-const pathZonePreloadJobs=new Map();let pathZonePaintToken=0;
-function preloadPathZone(src){if(pathZonePreloadJobs.has(src))return pathZonePreloadJobs.get(src);const job=new Promise(resolve=>{const img=new Image();let done=false;const finish=()=>{if(done)return;done=true;resolve();};img.decoding='async';img.onload=async()=>{try{if(img.decode)await img.decode();}catch(_){}finish();};img.onerror=finish;img.src=src;if(img.complete&&img.naturalWidth>0){Promise.resolve(img.decode?.()).catch(()=>{}).finally(finish);}setTimeout(finish,5000);});pathZonePreloadJobs.set(src,job);return job;}
+const pathZonePreloadJobs=new Map();let pathZonePaintToken=0,pathZoneFade=null;
+function preloadPathZone(src){
+  if(pathZonePreloadJobs.has(src))return pathZonePreloadJobs.get(src);
+  const job=new Promise(resolve=>{
+    const img=new Image();let done=false;
+    const finish=ok=>{if(done)return;done=true;resolve(ok);if(!ok)queueMicrotask(()=>{if(pathZonePreloadJobs.get(src)===job)pathZonePreloadJobs.delete(src);});};
+    img.decoding='async';
+    img.onload=async()=>{try{if(img.decode)await img.decode();}catch(_){}finish(img.naturalWidth>0);};
+    img.onerror=()=>finish(false);img.src=src;
+    if(img.complete&&img.naturalWidth>0)Promise.resolve(img.decode?.()).catch(()=>{}).finally(()=>finish(true));
+    setTimeout(()=>finish(false),5000);
+  });
+  pathZonePreloadJobs.set(src,job);return job;
+}
 PATH_ZONES.forEach(z=>preloadPathZone(z.bg));
 const PATH_GATE_REVEAL_PAD=.12;
 const FOREST_TRAVEL=5.5; // straight approach distance; percentage is only a route-progress indicator
@@ -477,7 +489,7 @@ async function enterForest(genreId=currentPathZone()?.id||'fantasy'){
   const path=document.querySelector('#bookPath');
   path.classList.add('genre-approach');path.setAttribute('data-genre',activeGenreId);
   path.style.setProperty('--approach-bg',"url('"+selected.approachBg+"')");
-  mountPathScene(selected.approachBg);
+  mountPathScene(selected.approachBg,'50% 50%','approach');
   path.hidden=false;
   for(const id of ['prev','next','hint'])document.getElementById(id).hidden=true;
   lastForestPathProgress=0;
@@ -1371,15 +1383,30 @@ function currentPathZone(){
 }
 // V2.32.6: route entry paints a complete live scene beneath the shared fade.
 // Both image layers and the container fallback must agree before the path is revealed.
-function mountPathScene(src,position='50% 50%'){
+// V2.32.8: keep the outgoing road fully opaque until its replacement covers it.
+function finishPathZoneFade(){
+  const fade=pathZoneFade;if(!fade)return;
+  pathZoneFade=null;clearTimeout(fade.timer);
+  fade.incoming.style.transition='none';fade.incoming.style.opacity='1';fade.incoming.style.zIndex='1';
+  fade.incoming.classList.add('is-visible');
+  fade.outgoing.style.transition='none';fade.outgoing.style.opacity='0';fade.outgoing.style.zIndex='0';
+  fade.outgoing.classList.remove('is-visible');
+  document.querySelector('#bookPath').style.setProperty('--path-scene-bg',"url('"+fade.src+"')");
+  void fade.incoming.offsetWidth;
+  fade.incoming.style.removeProperty('transition');fade.outgoing.style.removeProperty('transition');
+}
+function mountPathScene(src,position='50% 50%',scene='road'){
   const path=document.querySelector('#bookPath');if(!path)return;
+  finishPathZoneFade();
   const token=++pathZonePaintToken;
   const image="linear-gradient(rgba(7,5,3,.06),rgba(7,5,3,.13)),url('"+src+"')";
+  path.dataset.scene=scene;
   path.style.setProperty('--path-scene-bg',"url('"+src+"')");
   const layers=['#pathZoneBgA','#pathZoneBgB'].map(id=>document.querySelector(id)).filter(Boolean);
   layers.forEach((layer,i)=>{
-    layer.style.transition='none';layer.style.backgroundImage=image;
+    layer.style.transition='none';layer.style.setProperty('background-image',image,'important');
     layer.style.backgroundPosition=position;layer.style.backgroundSize='cover';layer.style.backgroundRepeat='no-repeat';
+    layer.style.opacity=i===0?'1':'0';layer.style.zIndex=i===0?'1':'0';
     layer.classList.toggle('is-visible',i===0);
   });
   pathZoneBgFront='a';
@@ -1387,6 +1414,12 @@ function mountPathScene(src,position='50% 50%'){
 }
 function updatePathZone(){
   if(roomId!=='path')return;const zone=currentPathZone();if(!zone)return;
+  const path=document.querySelector('#bookPath');
+  // Road and approach share DOM nodes, but never share a live background theme.
+  if(path.dataset.scene!=='road'||path.classList.contains('genre-approach')){
+    clearGenreApproachTheme();store.style.removeProperty('--active-approach-bg');
+    document.querySelector('#roomBgLayer').style.display='none';pathZoneId='';
+  }
   const label=document.querySelector('#pathZoneLabel');
   const firstPaint=!pathZoneId,zoneChanged=pathZoneId!==zone.id;
   // V2.19.10: keep the branch sign DOM stable while live motion is repainting the path.
@@ -1412,15 +1445,23 @@ function updatePathZone(){
   // zone first, paint it while hidden, then crossfade on the following frames.
   // A token prevents a late decode from an already-passed zone winning the race.
   const token=++pathZonePaintToken;
-  preloadPathZone(zone.bg).then(()=>{
-    if(token!==pathZonePaintToken||roomId!=='path'||pathZoneId!==zone.id)return;
+  preloadPathZone(zone.bg).then(ready=>{
+    if(ready===false||token!==pathZonePaintToken||roomId!=='path'||pathZoneId!==zone.id)return;
+    finishPathZoneFade();
     const nextKey=pathZoneBgFront==='a'?'b':'a',next=document.querySelector(nextKey==='a'?'#pathZoneBgA':'#pathZoneBgB'),old=document.querySelector(pathZoneBgFront==='a'?'#pathZoneBgA':'#pathZoneBgB');
-    if(!next)return;
-    next.style.backgroundImage=`linear-gradient(rgba(7,5,3,.08),rgba(7,5,3,.16)),url('${zone.bg}')`;next.style.backgroundPosition=zone.pos;
+    if(!next||!old)return;
+    // Hide a reused layer BEFORE changing its image, even during rapid backtracking.
+    next.style.transition='none';next.style.opacity='0';next.classList.remove('is-visible');next.style.zIndex='2';
+    next.style.setProperty('background-image',"linear-gradient(rgba(7,5,3,.06),rgba(7,5,3,.13)),url('"+zone.bg+"')",'important');
+    next.style.backgroundPosition=zone.pos;
+    old.style.transition='none';old.style.opacity='1';old.style.zIndex='1';old.classList.add('is-visible');
+    void next.offsetWidth;
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
       if(token!==pathZonePaintToken||roomId!=='path'||pathZoneId!==zone.id)return;
-      document.querySelector('#bookPath').style.setProperty('--path-scene-bg',"url('"+zone.bg+"')");
-      next.classList.add('is-visible');if(old)old.classList.remove('is-visible');pathZoneBgFront=nextKey;
+      next.style.removeProperty('transition');next.classList.add('is-visible');next.style.opacity='1';
+      pathZoneBgFront=nextKey;
+      const fade={incoming:next,outgoing:old,src:zone.bg,timer:0};pathZoneFade=fade;
+      fade.timer=setTimeout(()=>{if(pathZoneFade===fade)finishPathZoneFade();},800);
     }));
   });
 }
