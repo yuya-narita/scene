@@ -222,3 +222,16 @@ body.book-path-active #store>:is(#prev,#next,#hint,#introHint,#stage){display:no
 #store.private-reading-room .sign{z-index:18}
 #store.private-reading-room #roomShelfEmpty{max-width:min(420px,82vw)}
 #store.private-reading-room #roomShelf .room-shelf-hint{font-size:11px;letter-spacing:.02em}
+
+/* V2.32.9 — the private room's 180-degree wall is a menu, not a shelf. */
+#store.private-reading-room #roomShelf .reading-room-menu{position:relative;flex:0 0 auto;display:flex;flex-direction:column;gap:9px;width:min(420px,calc(100% - 32px));margin:clamp(24px,5svh,52px) auto 24px;padding:18px;box-sizing:border-box;border:1px solid #d3b78b52;border-radius:18px;background:linear-gradient(145deg,#251d16ed,#100d0bea);box-shadow:0 16px 38px #0006;color:#f8eddb;transform:none;pointer-events:auto}
+#store.private-reading-room #roomShelf .reading-room-menu button{display:flex;align-items:center;gap:14px;flex:none;min-width:0;width:100%;min-height:68px;margin:0;padding:13px 14px;box-sizing:border-box;border:1px solid #dcc3a02b;border-radius:11px;background:#ffffff05;color:inherit;font:inherit;text-align:left;cursor:pointer;touch-action:pan-y;-webkit-tap-highlight-color:transparent}
+#store.private-reading-room #roomShelf .reading-menu-icon{display:grid;place-items:center;width:28px;flex:none;color:#ddc39b}
+#store.private-reading-room #roomShelf .reading-menu-icon svg{display:block;width:24px;height:24px}
+#store.private-reading-room #roomShelf .reading-menu-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:5px}
+#store.private-reading-room #roomShelf .reading-menu-copy strong{font:600 16px/1.35 serif;letter-spacing:.03em}
+#store.private-reading-room #roomShelf .reading-menu-copy small{font:11px/1.4 sans-serif;color:#bfb09e}
+#store.private-reading-room #roomShelf .reading-menu-arrow{flex:none;font:24px/1 serif;color:#bda37e}
+#store.private-reading-room #roomShelf .reading-room-menu button:focus-visible{outline:2px solid #ddbd87;outline-offset:2px}
+@media(hover:hover){#store.private-reading-room #roomShelf .reading-room-menu button:hover{background:#ffffff10;border-color:#d8b98670}}
+@media(max-width:680px){#store.private-reading-room #roomShelf .reading-room-menu{width:calc(100% - 24px);max-width:340px;padding:14px;gap:8px;margin-top:28px}#store.private-reading-room #roomShelf .reading-room-menu button{min-height:64px;padding:11px 12px;gap:11px}#store.private-reading-room #roomShelf .reading-menu-copy strong{font-size:15px}}

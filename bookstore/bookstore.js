@@ -544,9 +544,9 @@ function roomShelfFaces(){
   const faces=Array.from({length:4},(_,face)=>({face,start:face*capacity,books:[],indices:[]}));
   if(privateReadingRoom){
     const ownedEnd=Math.min(privateLaterOffset,all.length);
-    // Each owned copy occupies one wall; continue vertically after all three walls fill.
-    for(let i=0;i<ownedEnd;i++){const face=Math.floor(i/capacity)%3;faces[face].books.push(all[i]);faces[face].indices.push(i);}
-    faces[3].start=ownedEnd;
+    // V2.32.9: 0/90 degrees hold books; 180 degrees is the reading-room menu.
+    for(let i=0;i<ownedEnd;i++){const face=Math.floor(i/capacity)%2;faces[face].books.push(all[i]);faces[face].indices.push(i);}
+    faces[2].kind='menu';faces[3].start=ownedEnd;
     for(let i=ownedEnd;i<all.length;i++){faces[3].books.push(all[i]);faces[3].indices.push(i);}
     return faces;
   }
@@ -578,6 +578,29 @@ function roomShelfBookAtPoint(target,x,y){
 }
 function buildRoomShelfFaceLayer(face,f){
   const layer=document.createElement('div');layer.className='room-shelf-face';layer.dataset.face=String(face);
+  if(privateReadingRoom&&face===2){
+    layer.classList.add('reading-menu-face');layer.setAttribute('aria-label','読書室メニュー');
+    const icon=path=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+path+'</svg>';
+    const entries=[
+      ['owned','もっている本',privateLaterOffset+'冊の蔵書へ',icon('<path d="M12 5v16M12 5C8 2 3 4 3 4v15s5-2 9 2c4-4 9-2 9-2V4s-5-2-9 1Z"/>')],
+      ['later','あとで読む',(roomShelfAllBooks.length-privateLaterOffset)+'冊の読む予定へ',icon('<path d="M6 3h12v18l-6-4-6 4Z"/>')],
+      ['search','本を探す','タイトル・作者から探す',icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>')],
+      ['hall','中央ホールへ戻る','書店を見て回る',icon('<path d="m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9"/>')]
+    ];
+    const menu=document.createElement('nav');menu.className='reading-room-menu';menu.setAttribute('aria-label','読書室メニュー');
+    menu.innerHTML=entries.map(([id,title,caption,svg])=>'<button type="button" data-reader-action="'+id+'"><span class="reading-menu-icon">'+svg+'</span><span class="reading-menu-copy"><strong>'+title+'</strong><small>'+caption+'</small></span><span class="reading-menu-arrow" aria-hidden="true">›</span></button>').join('');
+    menu.addEventListener('click',e=>{
+      const button=e.target.closest('[data-reader-action]');if(!button)return;
+      e.preventDefault();e.stopPropagation();
+      if(!privateReadingRoom||!roomShelfMode||roomShelfFace!==2||Date.now()<suppressClickUntil)return;
+      const action=button.dataset.readerAction;
+      if(action==='owned')window.navigateReadingRoomFace?.(0);
+      else if(action==='later')window.navigateReadingRoomFace?.(3);
+      else if(action==='hall')window.closeReadingRoom();
+      else if(action==='search')document.querySelector('.store-head-actions [data-store-action="search"]')?.click();
+    });
+    layer.appendChild(menu);return layer;
+  }
   const cols=roomShelfColumns();
   for(let local=0;local<f.books.length;local+=cols){
     const slice=f.books.slice(local,local+cols),indexSlice=f.indices.slice(local,local+cols);
@@ -602,7 +625,7 @@ function syncPhoneShelfOffsets(){
   if(!scroller||!window.matchMedia('(max-width:680px)').matches)return;
   phoneShelfScrollPositions.set(roomShelfFace,scroller.scrollTop);
   const layer=scroller.querySelector(`.room-shelf-face[data-face="${roomShelfFace}"]`);
-  const rows=layer?[...layer.querySelectorAll('.room-shelf-row')]:[];
+  const rows=layer?[...layer.querySelectorAll('.room-shelf-row, .reading-room-menu')]:[];
   const last=rows[rows.length-1];
   const top=parseFloat(getComputedStyle(scroller).paddingTop)||0;
   const bottom=Number(scroller.dataset.phoneClipBottom)||0;
@@ -634,7 +657,7 @@ function renderRoomShelf(){
   if(!wrap||!grid)return;
   wrap.classList.toggle('phone-original',window.matchMedia('(max-width:680px)').matches);
   roomShelfMode=true;if(!privateReadingRoom)roomShelfAllBooks=genreBooks(activeGenreId);
-  const empty=document.querySelector('#roomShelfEmpty');if(empty){const current=roomShelfFaces()[roomShelfFace];empty.hidden=privateReadingRoom?!!current?.books.length:roomShelfAllBooks.length>0;}
+  const empty=document.querySelector('#roomShelfEmpty');if(empty){const current=roomShelfFaces()[roomShelfFace];empty.hidden=privateReadingRoom?(current?.kind==='menu'||!!current?.books.length):roomShelfAllBooks.length>0;}
   // Defensive lifecycle guard: a room shelf must never inherit the path-only overlay.
   const pathMotion=document.querySelector('#motionStart');if(pathMotion)pathMotion.hidden=true;
   const faces=roomShelfFaces();roomShelfFace=((roomShelfFace%faces.length)+faces.length)%faces.length;
@@ -657,6 +680,7 @@ function renderRoomShelf(){
   }
   wrap.hidden=false;stage.hidden=true;wrap.dataset.shelfFace=String(roomShelfFace);
   const counter=document.querySelector('#roomShelfCounter');if(counter)counter.textContent=`${roomShelfFace+1} / ${faces.length}`;
+  if(privateReadingRoom)window.updatePrivateRoomTitle?.(roomShelfFace);
   document.querySelector('#prev').hidden=true;document.querySelector('#next').hidden=true;document.querySelector('#focusPanel').hidden=true;document.querySelector('#hint').hidden=true;
   scroller.scrollTop=window.matchMedia('(max-width:680px)').matches?(phoneShelfScrollPositions.get(roomShelfFace)||0):0;roomVisibleFace=roomShelfFace;requestAnimationFrame(()=>{layoutPhoneShelfViewport();updateRoomShelfPerspective();applyRoomCamera(roomCameraPreview,true)});
 }
@@ -1661,6 +1685,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
   if(!roomShelfTap||e.pointerId!==roomShelfTap.id)return;flushRoomShelfPreview();const tap=roomShelfTap;roomShelfTap=null;
   if(!roomShelfMode){roomCameraInputLock=false;rebaseRoomMotion();return;}
   if(tap.moved){
+    if(privateReadingRoom&&e.target.closest?.('.reading-room-menu'))suppressClickUntil=Date.now()+450;
     if(tap.axis==='horizontal'&&Math.abs(tap.dx)>18){
       e.preventDefault();e.stopPropagation();const dir=tap.dx<0?1:-1;
       slidePhoneShelf(dir);
@@ -1680,7 +1705,7 @@ roomShelfScroller?.addEventListener('pointerup',e=>{
     // 360° sensor remains logically ON but its camera writes stay locked after returning.
     roomCameraInputLock=false;roomCameraPreview=0;rebaseRoomMotion();
     openShelfRow(chosen,0);
-  }
+  }else{roomCameraInputLock=false;rebaseRoomMotion();}
 },{capture:true,passive:false});
 roomShelfScroller?.addEventListener('pointercancel',()=>{if(roomShelfDragRaf){cancelAnimationFrame(roomShelfDragRaf);roomShelfDragRaf=0;}roomShelfPendingPreview=null;roomShelfTap=null;if(phoneShelfSlide)settlePhoneShelfSlide(false);roomCameraPreview=0;rebaseRoomMotion();roomCameraInputLock=false;},{capture:true});
 roomShelfScroller?.addEventListener('scroll',()=>{if(roomShelfScrollRaf)return;roomShelfScrollRaf=requestAnimationFrame(()=>{roomShelfScrollRaf=0;syncPhoneShelfOffsets();updateRoomShelfPerspective();if(roomMotionOn&&window.matchMedia('(max-width:680px)').matches)paintRoomShelfAtYaw(roomCameraYaw)})},{passive:true});
@@ -1973,11 +1998,11 @@ init();
  function updatePrivateRoomTitle(face=roomShelfFace){
   if(!privateReadingRoom)return;
   const sign=document.querySelector('.sign');if(!sign)return;
-  sign.querySelector('small').textContent=face===3?'270° · READ LATER':(face*90)+'° · MY BOOKS';
-  sign.querySelector('strong').textContent=face===3?'あとで読む':'もっている本';
+  sign.querySelector('small').textContent=face===2?'180° · MY ROOM':face===3?'270° · READ LATER':(face*90)+'° · MY BOOKS';
+  sign.querySelector('strong').textContent=face===2?'読書室メニュー':face===3?'あとで読む':'もっている本';
   sign.classList.toggle('shelf-back-sign',!roomShelfMode);
   const empty=document.querySelector('#roomShelfEmpty'),faces=roomShelfFaces();
-  if(empty){empty.hidden=!!faces[face]?.books.length;empty.textContent=face===3?'あとで読む本はまだありません':'もっている本はまだありません';}
+  if(empty){empty.hidden=face===2||!!faces[face]?.books.length;empty.textContent=face===3?'あとで読む本はまだありません':'もっている本はまだありません';}
  }
  function updatePrivateCollection(){
   privateLaterOffset=ownedBooks.length;
@@ -2018,7 +2043,7 @@ init();
   const count=kind==='later'?roomShelfAllBooks.length-privateLaterOffset:privateLaterOffset;
   const localIndex=Math.max(0,Math.min(count-1,Math.trunc(Number(selectedIndex)||0)));
   const targetIndex=localIndex+(kind==='later'?privateLaterOffset:0);
-  roomShelfFace=kind==='later'?3:(roomShelfFaces().slice(0,3).find(face=>face.indices.includes(targetIndex))?.face??0);roomVisibleFace=roomShelfFace;
+  roomShelfFace=kind==='later'?3:(roomShelfFaces().slice(0,2).find(face=>face.indices.includes(targetIndex))?.face??0);roomVisibleFace=roomShelfFace;
   roomCameraYaw=roomShelfFace*90;roomCameraPreview=0;roomCameraInputLock=false;roomShelfVisualYaw=null;
   phoneShelfScrollPositions.clear();
   store.classList.add('private-reading-room');store.classList.remove('hall-mode','hall-ring-mode','intro-mode');
@@ -2083,6 +2108,12 @@ init();
   document.querySelector('#exitHall').textContent='桜ホール';
   document.querySelector('.sign').classList.remove('shelf-back-sign');
   books=allBooks.slice();
+ };
+ window.navigateReadingRoomFace=face=>{
+  if(!privateReadingRoom||!roomShelfMode||![0,1,2,3].includes(face))return;
+  finishPhoneShelfSlide(false);
+  const from=roomCameraYaw+roomCameraPreview,target=from+wrapDeg(face*90-from);
+  animateRoomYaw(from,target,280);
  };
  window.updatePrivateRoomTitle=updatePrivateRoomTitle;
  window.refreshPrivateReadingRoom=refreshPrivateRoom;
