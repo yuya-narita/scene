@@ -100,13 +100,13 @@
   fillSelect(featuredSelect,owned(),'選択しない',profile.featuredCopyId,'copyId');
   const candidates=publicBooks();
   const publicSelection=candidates.some(w=>String(w.publicationId)===String(profile.recommendPublicationId));
-  if(candidates.length)fillSelect(recommendSelect,candidates,'選択しない',publicSelection?profile.recommendPublicationId,'publicationId');
+  if(candidates.length)fillSelect(recommendSelect,candidates,'選択しない',publicSelection?profile.recommendPublicationId:'','publicationId');
   else fillSelect(recommendSelect,owned().filter(w=>w.publicationId&&!String(w.publicationId).startsWith('owned:')),'選択しない',profile.recommendCopyId,'copyId');
  }
  function openEditor(){buildEditor();card.hidden=true;editButton.hidden=true;editor.hidden=false;}
  function cancelEditor(){editor.hidden=true;card.hidden=false;editButton.hidden=false;pendingAvatar=profile.avatarData||'';}
  function open(){
-  if(!dialog||!window.HTMLDialogElement)return;
+  if(!dialog||!window.HTMLDialogElement||dialog.open)return;
   render();cancelEditor();dialog.showModal();
  }
  function fileToDataUrl(file){
