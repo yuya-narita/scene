@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#100b08">
 <title>あ箱書店 β</title>
 <link rel="stylesheet" href="./bookstore.css?v=2.33.1">
-<link rel="stylesheet" href="./bookstore-ui.css?v=2.33.2">
+<link rel="stylesheet" href="./bookstore-ui.css?v=2.33.4">
 
 <style id="v211-bg">
 /* V2.11 visual trial: supplied grand-library image is a single lightweight background layer. */
@@ -92,21 +92,21 @@
  <section class="reader-status-card" id="readerStatusCard" aria-live="polite"></section>
  <form class="reader-status-editor" id="readerStatusEditor" hidden>
   <label class="reader-avatar-picker"><span>読者アイコン</span><span class="reader-avatar-preview" id="readerAvatarPreview"></span><input id="readerAvatarFile" type="file" accept="image/*"><small>画像を選ぶとアカウントアイコンにも反映されます</small><button type="button" id="readerAvatarReset">初期アイコンに戻す</button></label>
-  <label>なりたい読者の肩書き<input id="readerRoleInput" maxlength="30" placeholder="例：星を巡る司書"></label>
+  <div class="reader-role-auto"><small>あ箱が判定した読者タイプ</small><strong id="readerRolePreview">物語の旅人</strong><span>所蔵本のジャンル傾向から自動判定します。</span></div>
   <label>ひとこと<textarea id="readerMottoInput" maxlength="100" rows="2" placeholder="物語の気配をたどり、次の一冊へ。"></textarea></label>
   <fieldset class="reader-genre-picker"><legend>好きなジャンル（3つまで）</legend><div id="readerGenreChoices"></div></fieldset>
-  <label>飾っている一冊<select id="readerFeaturedSelect"></select></label>
-  <label>おすすめの一冊<select id="readerRecommendSelect"></select></label>
+  <div class="reader-status-editor-book-field"><span class="reader-status-editor-label">飾っている一冊</span><select id="readerFeaturedSelect" class="reader-status-native-select" aria-hidden="true" tabindex="-1"></select><div class="reader-status-book-picker" id="readerFeaturedPicker"></div></div>
+  <div class="reader-status-editor-book-field"><span class="reader-status-editor-label">おすすめの一冊</span><select id="readerRecommendSelect" class="reader-status-native-select" aria-hidden="true" tabindex="-1"></select><div class="reader-status-book-picker" id="readerRecommendPicker"></div></div>
   <p class="reader-status-note" id="readerStatusNote">設定はこの端末に保存されます。共有リンクは次の段階で追加します。</p>
   <div class="reader-status-actions"><button type="button" data-reader-cancel>キャンセル</button><button type="submit" class="reader-status-primary">保存する</button></div>
  </form>
  <button class="reader-status-edit" id="readerStatusEdit" type="button">読者ステータスを整える</button>
 </dialog>
-<script src="./bookstore.js?v=2.33.2"></script>
+<script src="./bookstore.js?v=2.33.3"></script>
 <script src="./bookstore-ui.js?v=2.33.1"></script>
 <script src="./bookstore-auth.js?v=2.33.1"></script>
 <script src="./bookstore-mobile-layout.js?v=2.33.1"></script>
-<script src="./reader-status.js?v=2.33.2"></script>
+<script src="./reader-status.js?v=2.33.4"></script>
 
 </body>
 </html>
