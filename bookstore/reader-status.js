@@ -13,6 +13,11 @@
  const recommendSelect=document.getElementById('readerRecommendSelect');
  const featuredPicker=document.getElementById('readerFeaturedPicker');
  const recommendPicker=document.getElementById('readerRecommendPicker');
+ const bookPickerDialog=document.getElementById('readerBookPickerDialog');
+ const bookPickerTitle=document.getElementById('readerBookPickerTitle');
+ const bookPickerSearch=document.getElementById('readerBookPickerSearch');
+ const bookPickerOptions=document.getElementById('readerBookPickerOptions');
+ const bookPickerNoResults=document.getElementById('readerBookPickerNoResults');
  const fileInput=document.getElementById('readerAvatarFile');
  const avatarPreview=document.getElementById('readerAvatarPreview');
  const FALLBACK_GENRES=[
@@ -133,42 +138,34 @@
   if(!select||!container)return;
   container.replaceChildren();
   const trigger=document.createElement('button');trigger.type='button';trigger.className='reader-status-book-picker-trigger';
-  trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-expanded','false');
-  const panel=document.createElement('div');panel.className='reader-status-book-picker-panel';panel.hidden=true;
-  panel.setAttribute('role','dialog');panel.setAttribute('aria-label',placeholder+'から選ぶ');
-  const search=document.createElement('input');search.type='search';search.className='reader-status-book-picker-search';
-  search.placeholder='タイトル・話数・話タイトルで検索';search.setAttribute('aria-label','本を検索');
-  const options=document.createElement('div');options.className='reader-status-book-picker-options';options.setAttribute('role','group');
-  const noResults=document.createElement('p');noResults.className='reader-status-book-picker-no-results';noResults.textContent='該当する本がありません';noResults.hidden=true;
-  const optionButtons=[];
+  trigger.setAttribute('aria-haspopup','dialog');
   const refreshCurrent=()=>{
    trigger.replaceChildren();
    const book=items.find(item=>String(item[identity]||'')===String(select.value));
-   trigger.appendChild(pickerRow(book,placeholder));
+   trigger.appendChild(pickerRow(book,'選択しない'));
    const arrow=document.createElement('span');arrow.className='reader-status-book-picker-arrow';arrow.textContent='⌄';trigger.appendChild(arrow);
    trigger.setAttribute('aria-label',book?`${book.title||'無題'}、${pickerMeta(book)}を選択中`:`${placeholder}。本を選ぶ`);
   };
-  const close=()=>{panel.hidden=true;trigger.setAttribute('aria-expanded','false');container.classList.remove('is-open');};
-  const addOption=(book)=>{
-   const button=document.createElement('button');button.type='button';button.className='reader-status-book-picker-option';
-   button.dataset.search=[book.title,book.episodeLabel,book.episodeTitle,book.subtitle,book.author?.displayName,book.authorName,book.byline].filter(Boolean).join(' ').toLocaleLowerCase();
-   button.setAttribute('aria-pressed',String(String(book[identity]||'')===String(select.value)));
-   button.appendChild(pickerRow(book,''));
-   button.addEventListener('click',()=>{select.value=String(book[identity]||'');refreshCurrent();optionButtons.forEach(option=>option.setAttribute('aria-pressed',String(option===button)));close();trigger.focus();});
-   optionButtons.push(button);options.appendChild(button);
+  trigger.addEventListener('click',()=>openBookPicker({select,items,identity,placeholder,refreshCurrent,trigger}));
+  container.append(trigger);refreshCurrent();
+ }
+ function openBookPicker(context){
+  if(!bookPickerDialog||!bookPickerOptions)return;
+  bookPickerTitle.textContent=context.placeholder==='飾っている一冊'?'飾る一冊を選ぶ':'おすすめする一冊を選ぶ';
+  bookPickerOptions.replaceChildren();
+  const options=[];
+  const addOption=book=>{
+   const button=document.createElement('button');button.type='button';button.className='reader-status-book-picker-option';button.setAttribute('role','option');
+   button.dataset.search=[book?.title,book?.episodeLabel,book?.episodeTitle,book?.subtitle,book?.author?.displayName,book?.authorName,book?.byline].filter(Boolean).join(' ').toLocaleLowerCase();
+   button.setAttribute('aria-selected',String(String(book?.[context.identity]||'')===String(context.select.value)));
+   button.appendChild(pickerRow(book,'選択しない'));
+   button.addEventListener('click',()=>{context.select.value=String(book?.[context.identity]||'');context.refreshCurrent();bookPickerDialog.close();context.trigger.focus();});
+   options.push(button);bookPickerOptions.appendChild(button);
   };
-  const emptyButton=document.createElement('button');emptyButton.type='button';emptyButton.className='reader-status-book-picker-option reader-status-book-picker-empty';
-  emptyButton.dataset.search=placeholder.toLocaleLowerCase();emptyButton.setAttribute('aria-pressed',String(!select.value));emptyButton.appendChild(pickerRow(null,placeholder));
-  emptyButton.addEventListener('click',()=>{select.value='';refreshCurrent();optionButtons.forEach(option=>option.setAttribute('aria-pressed',String(option===emptyButton)));close();trigger.focus();});
-  optionButtons.push(emptyButton);options.appendChild(emptyButton);
-  items.forEach(addOption);
-  search.addEventListener('input',()=>{const query=search.value.trim().toLocaleLowerCase();let visible=0;optionButtons.forEach(button=>{button.hidden=!!query&&!button.dataset.search.includes(query);if(!button.hidden)visible++;});noResults.hidden=visible>0;});
-  trigger.addEventListener('click',()=>{
-   document.querySelectorAll('.reader-status-book-picker.is-open').forEach(other=>{if(other!==container){other.classList.remove('is-open');other.querySelector('.reader-status-book-picker-panel').hidden=true;other.querySelector('.reader-status-book-picker-trigger').setAttribute('aria-expanded','false');}});
-   const opening=panel.hidden;panel.hidden=!opening;trigger.setAttribute('aria-expanded',String(opening));container.classList.toggle('is-open',opening);if(opening){search.value='';search.dispatchEvent(new Event('input'));search.focus();}
-  });
-  panel.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();close();trigger.focus();}});
-  panel.append(search,options,noResults);container.append(trigger,panel);refreshCurrent();
+  addOption(null);context.items.forEach(addOption);
+  const filter=()=>{const query=bookPickerSearch.value.trim().toLocaleLowerCase();let visible=0;options.forEach(button=>{button.hidden=!!query&&!button.dataset.search.includes(query);if(!button.hidden)visible++;});bookPickerNoResults.hidden=visible>0;};
+  bookPickerSearch.value='';bookPickerSearch.oninput=filter;filter();
+  bookPickerDialog.showModal();requestAnimationFrame(()=>bookPickerSearch.focus());
  }
  function buildEditor(){
   if(rolePreview)rolePreview.textContent=chosenRole();
@@ -184,11 +181,11 @@
    label.append(input,text);genreChoices.appendChild(label);
   });
   fillSelect(featuredSelect,owned(),'選択しない',profile.featuredCopyId,'copyId');
-  buildBookPicker(featuredSelect,featuredPicker,owned(),'copyId','選択しない');
+  buildBookPicker(featuredSelect,featuredPicker,owned(),'copyId','飾っている一冊');
   const ownedCandidates=owned();
   const previousRecommendation=recommendedOwnedBook();
   fillSelect(recommendSelect,ownedCandidates,'選択しない',previousRecommendation?.copyId||'','copyId');
-  buildBookPicker(recommendSelect,recommendPicker,ownedCandidates,'copyId','選択しない');
+  buildBookPicker(recommendSelect,recommendPicker,ownedCandidates,'copyId','おすすめの一冊');
  }
  function openEditor(){buildEditor();card.hidden=true;editButton.hidden=true;editor.hidden=false;}
  function cancelEditor(){editor.hidden=true;card.hidden=false;editButton.hidden=false;pendingAvatar=profile.avatarData||'';}
@@ -217,6 +214,8 @@
  dialog?.querySelector('[data-reader-close]')?.addEventListener('click',()=>dialog.close());
  dialog?.querySelector('[data-reader-cancel]')?.addEventListener('click',cancelEditor);
  dialog?.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
+ bookPickerDialog?.querySelector('[data-book-picker-close]')?.addEventListener('click',()=>bookPickerDialog.close());
+ bookPickerDialog?.addEventListener('click',e=>{if(e.target===bookPickerDialog)bookPickerDialog.close();});
  editButton?.addEventListener('click',openEditor);
  genreChoices?.addEventListener('change',e=>{
   const checked=[...genreChoices.querySelectorAll('input:checked')];
