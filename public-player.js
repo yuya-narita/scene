@@ -137,7 +137,9 @@
 
   function configureShelfReturn(){
     if(!shelfReturnLink)return;
-    const returnTo=safeShelfReturn(params.get('returnTo'));
+    const returnTo=isOperatorGuide()
+      ?{url:new URL('./bookstore/',location.href).toString(),label:'← あ箱書店へ'}
+      :safeShelfReturn(params.get('returnTo'));
     if(!returnTo){shelfReturnLink.hidden=true;return;}
     shelfReturnLink.href=returnTo.url;
     shelfReturnLink.textContent=returnTo.label;
