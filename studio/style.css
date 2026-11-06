@@ -12020,6 +12020,8 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .rich-color-history-row{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;gap:8px}
 .rich-color-history-row>span{font:750 11px/1.2 system-ui;color:#525861}
 .rich-color-history-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-height:24px}
+.rich-color-history-chips .text-color-chip{box-sizing:border-box;width:28px;height:28px;flex:0 0 28px;padding:0;background-clip:border-box;touch-action:manipulation;position:relative;z-index:1}
+.rich-color-history-chips .text-color-chip:focus-visible{outline:2px solid #1769e0;outline-offset:2px}
 .rich-color-history-chips small{font:600 10px/1.2 system-ui;color:#8b9098}
 .rich-color-history-actions{display:flex;justify-content:flex-end;padding-top:2px;border-top:1px solid #eceef0}
 .rich-color-popover .text-color-pin{font-size:11px}

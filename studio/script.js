@@ -2577,12 +2577,11 @@
     square.addEventListener('mousemove',previewAt);
     document.addEventListener('mousemove',trackDesktopPointer,true);
     square.addEventListener('pointerdown',e=>{previewAt(e);try{square.setPointerCapture?.(e.pointerId);}catch(_){}});
-    let pickerCommittedByPointer=false;
     const commitPickerColor=e=>{previewAt(e);committed=preview;rememberTextColor(committed);trigger.style.backgroundColor=committed;if(typeof onCommit==='function')onCommit(committed);close(false);};
-    // Commit at pointerup while pointer capture still anchors the gesture to
-    // this picker. The global toolbar selection handlers ignore this surface.
-    square.addEventListener('pointerup',e=>{e.preventDefault();e.stopPropagation();pickerCommittedByPointer=true;commitPickerColor(e);});
-    square.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(pickerCommittedByPointer){pickerCommittedByPointer=false;return;}if(e.detail===0)commitPickerColor(e);});
+    // Keep the picker open while the user chooses a point. Commit only on the
+    // explicit click after previewing; pointerup is not a commit gesture.
+    square.addEventListener('pointerup',e=>{e.stopPropagation();});
+    square.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();commitPickerColor(e);});
     hue.addEventListener('input',()=>{hsv.h=Number(hue.value)||0;preview=hsvToHex(hsv.h,hsv.s,hsv.v);paint();if(typeof onPreview==='function')onPreview(preview);});
     // Hue itself is only a preview control; the saturation/value square click is the commit gesture.
     paint();
@@ -10369,7 +10368,6 @@ return flowCommentCard;}
       if(colors.length)colors.forEach(hex=>{
         const chip=document.createElement('button');chip.type='button';chip.className='text-color-chip';chip.style.backgroundColor=hex;chip.title=hex;chip.setAttribute('aria-label',`${label} ${hex}`);
         if(normalizeTextColor(currentColor)===hex)chip.classList.add('is-current');
-        let chipAppliedOnPointerDown=false;
         const applyHistoryColor=()=>{
           if(!richSelectionSnapshot?.scene)return;
           richToolbarInteracting=true;
@@ -10380,10 +10378,10 @@ return flowCommentCard;}
           applyRichSelectionAction('color',hex);
           richToolbarInteracting=false;
         };
-        // Apply before focus/selection changes can interfere with the saved
-        // preview selection. Keep click as a keyboard-accessible fallback.
-        chip.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();chipAppliedOnPointerDown=true;applyHistoryColor();});
-        chip.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(chipAppliedOnPointerDown){chipAppliedOnPointerDown=false;return;}applyHistoryColor();});chips.appendChild(chip);
+        // Prevent button focus from collapsing the selected text, but apply on
+        // click so the user can target the visible swatch before it commits.
+        chip.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();});
+        chip.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();applyHistoryColor();});chips.appendChild(chip);
       });
       else {const empty=document.createElement('small');empty.textContent=uiLanguage==='en'?'None yet':'まだなし';chips.appendChild(empty);}
       row.appendChild(chips);return row;
