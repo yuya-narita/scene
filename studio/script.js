@@ -2409,7 +2409,7 @@
     let hsv=hexToHsv(committed);let preview=committed;let open=false;
     const root=document.createElement('div');root.className='studio-color-picker'+(compact?' is-compact':'');
     const trigger=document.createElement('button');trigger.type='button';trigger.className='studio-color-trigger';trigger.style.backgroundColor=committed;trigger.setAttribute('aria-label',t('color.custom'));
-    const pop=document.createElement('div');pop.className='studio-color-popover';pop.hidden=true;
+    const pop=document.createElement('div');pop.className='studio-color-popover'+(compact?' is-compact-toolbar':'');pop.hidden=true;
     const square=document.createElement('div');square.className='studio-color-square';
     const cursor=document.createElement('span');cursor.className='studio-color-cursor';square.appendChild(cursor);
     const hue=document.createElement('input');hue.type='range';hue.min='0';hue.max='359';hue.step='1';hue.value=String(Math.round(hsv.h));hue.className='studio-color-hue';hue.setAttribute('aria-label',uiLanguage==='en'?'Hue':'色相');
@@ -2447,8 +2447,8 @@
 
       const gap=8;
       const edge=10;
-      const preferredWidth=Math.min(260,Math.max(220,vw-edge*2));
-      const estimatedHeight=Math.min(pop.scrollHeight||236,250);
+      const preferredWidth=Math.min(compact?210:260,Math.max(compact?190:220,vw-edge*2));
+      const estimatedHeight=Math.min(pop.scrollHeight||(compact?205:236),compact?220:250);
       const roomBelow=(offsetTop+vh)-r.bottom;
       const roomAbove=r.top-offsetTop;
       const openUp=roomBelow < estimatedHeight+gap && roomAbove > roomBelow;
@@ -2465,7 +2465,7 @@
       pop.style.left=`${Math.round(left)}px`;
       pop.style.right='auto';
       pop.style.transform='none';
-      pop.style.maxHeight=`${Math.max(180,Math.min(280,vh-edge*2))}px`;
+      pop.style.maxHeight=`${Math.max(150,Math.min(compact?230:280,vh-edge*2))}px`;
       pop.style.overflow='auto';
 
       if(openUp){
@@ -2495,8 +2495,8 @@
       const r=trigger.getBoundingClientRect();
       const gap=8;
       const edge=12;
-      const preferredWidth=Math.min(286,Math.max(220,vw-edge*2));
-      const estimatedHeight=Math.min(pop.scrollHeight||260,Math.max(180,vh-edge*2));
+      const preferredWidth=Math.min(compact?210:286,Math.max(compact?190:220,vw-edge*2));
+      const estimatedHeight=Math.min(pop.scrollHeight||(compact?205:260),Math.max(compact?150:180,vh-edge*2));
       const roomBelow=vh-r.bottom;
       const roomAbove=r.top;
       const openUp=roomBelow < Math.min(estimatedHeight+gap,260) && roomAbove > roomBelow;
@@ -2514,7 +2514,7 @@
       pop.style.left=`${Math.round(left)}px`;
       pop.style.right='auto';
       pop.style.transform='none';
-      pop.style.maxHeight=`${Math.max(180,Math.min(360,vh-edge*2))}px`;
+      pop.style.maxHeight=`${Math.max(compact?150:180,Math.min(compact?230:360,vh-edge*2))}px`;
       pop.style.overflow='auto';
       if(openUp){
         pop.style.top='auto';
@@ -10410,7 +10410,7 @@ return flowCommentCard;}
     const colorWrap=document.createElement('div');colorWrap.className='rich-color-control';colorWrap.title='文字色';
     richColorPicker=makeCommittedTextColorPicker('#333333',{compact:true,onCommit:hex=>{rememberTextColor(hex);if(colorToggle)colorToggle.style.setProperty('--rich-color-current',hex);applyRichSelectionAction('color',hex);}});
     richColorPicker.root.classList.add('rich-toolbar-color-picker');colorWrap.appendChild(richColorPicker.root);
-    const colorToggle=document.createElement('button');colorToggle.type='button';colorToggle.className='rich-color-palette-toggle';colorToggle.textContent='▾';colorToggle.title='最近使った色・固定色';colorToggle.setAttribute('aria-label','最近使った色・固定色');colorWrap.appendChild(colorToggle);bar.appendChild(colorWrap);
+    const colorToggle=document.createElement('button');colorToggle.type='button';colorToggle.className='rich-color-palette-toggle';colorToggle.textContent='履歴 ▾';colorToggle.title='最近使った色・固定色';colorToggle.setAttribute('aria-label','最近使った色・固定色');colorWrap.appendChild(colorToggle);bar.appendChild(colorWrap);
     dropdown('見出し','heading',[['1','見出し1'],['2','見出し2'],['3','見出し3']],'見出し');
     dropdown('リスト','list',[['bullet','・ 箇条書き'],['number','1. 番号付き']],'リスト');
     button('❝','quote','引用');
@@ -10427,7 +10427,7 @@ return flowCommentCard;}
     if(matchMedia?.('(hover:hover) and (pointer:fine)')?.matches){
       bar.querySelectorAll('.rich-dropdown').forEach(w=>{w.addEventListener('pointerenter',()=>{richToolbarInteracting=true;openMenu(w);});});
     }
-    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{if(!bar.matches(':hover'))richToolbarInteracting=false;},340);});
+    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{if(!bar.matches(':hover')&&richColorPopover?.hidden!==false)richToolbarInteracting=false;},340);});
     // V78: act on pointerdown so the first press is the action. Native <select>
     // controls were stealing focus/selection and causing the old two-press cushion.
     bar.addEventListener('pointerdown',e=>{
