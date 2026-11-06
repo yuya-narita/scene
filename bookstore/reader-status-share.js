@@ -107,7 +107,7 @@
  function render(card,data){
   if(!data||data.kind!=='ahako-reader-status'||data.version!==1)throw new Error('この共有データは表示できません。');
   const identity=node('div','reader-status-identity'),avatar=cover(data.avatar,'reader-status-avatar');if(!imageUrl(data.avatar))avatar.textContent=Array.from(text(data.name,80))[0]||'読';
-  const identityCopy=node('div','reader-share-identity-copy');identityCopy.append(node('strong','reader-status-name',text(data.name,80)||'読者'),node('h1','reader-status-role',text(data.role,80)||'物語の旅人'));identity.append(avatar,identityCopy);
+  const identityCopy=node('div','reader-share-identity-copy');identityCopy.append(node('strong','reader-status-name',text(data.name,80)||'読者'),node('h1','reader-status-role',text(data.role,80)||'物語の旅人'));const crest=new Image();crest.className='reader-status-crest';crest.src='./reader-status-crest.webp';crest.alt='あ箱の紋章';crest.width=48;crest.height=58;crest.decoding='async';identity.append(avatar,identityCopy,crest);
   card.replaceChildren(identity,node('p','reader-status-motto',text(data.motto,100)||'自分らしい読書のかたちを選ぶ。'));
   const tags=node('div','reader-status-genres');(Array.isArray(data.genres)?data.genres:[]).slice(0,3).forEach(g=>tags.append(node('span','reader-status-genre',text(g,40))));card.append(tags);
   const gauges=node('div','reader-status-gauges');gauges.title='所蔵本のジャンルと「あとで読む」の冊数から算出';gauges.setAttribute('aria-label',gauges.title);

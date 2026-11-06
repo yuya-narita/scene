@@ -80,7 +80,7 @@
   const taggedOwnedCount=[...genreCounts.values()].reduce((sum,count)=>sum+count,0);
   const gaugeMarkup='<div class=\"reader-status-gauges\" aria-label=\"読書ステータス\">'+gauge('ジャンルの広がり',genreCounts.size,genres().length)+gauge('最多ジャンルの割合',dominantCount,taggedOwnedCount||1)+gauge('次の一冊への準備',Math.min(laterCount,12),12)+'</div><p class=\"reader-status-gauge-note\">所蔵本のジャンルと「あとで読む」の冊数から算出</p>';
   const booksMarkup=(featured||recommendation)?'<div class=\"reader-status-books\">'+renderBook('飾っている一冊',featured)+renderBook('おすすめの一冊',recommendation)+'</div>':'<p class=\"reader-status-empty\">飾る本やおすすめの本を選ぶと、ここに並びます。</p>';
-  card.innerHTML='<div class=\"reader-status-identity\">'+iconMarkup('reader-status-avatar')+'<strong class=\"reader-status-name\">'+safeText(currentName())+'</strong></div>'+
+  card.innerHTML='<div class=\"reader-status-identity\">'+iconMarkup('reader-status-avatar')+'<strong class=\"reader-status-name\">'+safeText(currentName())+'</strong><img class="reader-status-crest" src="./reader-status-crest.webp" alt="あ箱の紋章" width="48" height="58" decoding="async"></div>'+
    '<h3 class=\"reader-status-role\">'+safeText(chosenRole())+'</h3>'+
    (profile.motto?'<p class=\"reader-status-motto\">'+safeText(profile.motto)+'</p>':'<p class=\"reader-status-motto\">自分らしい読書のかたちを選ぶ。</p>')+
    '<div class=\"reader-status-genres\">'+(tags.length?tags.map(tag=>'<span class=\"reader-status-genre\">'+safeText(tag)+'</span>').join(''):'<span class=\"reader-status-genre\">好きなジャンルを選ぶ</span>')+'</div>'+gaugeMarkup+stats+booksMarkup;
