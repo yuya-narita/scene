@@ -380,16 +380,59 @@ body.book-path-active #store>:is(#prev,#next,#hint,#introHint,#stage){display:no
 #readerStatusShareUrl{box-sizing:border-box;width:100%;min-height:44px;margin:7px 0;padding:10px;border:1px solid #d3b78b55;border-radius:8px;background:#100d0b;color:#f2e4ce;font-size:16px}
 #readerStatusShareResult .reader-status-actions{flex-wrap:wrap}
 #readerStatusShareResult a{align-self:center;color:#ead7b8;padding:10px}
-.reader-share-page{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#392719,#100b08 70%);color:#eee2d1;font-family:system-ui,sans-serif}
+/* V2.34.3 — a compact profile with two equipment slots. */
+.reader-share-page{margin:0;min-height:100svh;background:radial-gradient(ellipse at top,#392719,#100b08 70%);color:#eee2d1;font:13px/1.4 system-ui,sans-serif;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .reader-share-page *{box-sizing:border-box}
-.reader-share-main{max-width:560px;margin:auto;padding:32px 16px max(28px,env(safe-area-inset-bottom))}
-.reader-share-main header{margin-bottom:22px}.reader-share-main header a{color:#f3e3c9;font:24px serif;text-decoration:none}.reader-share-main header p{font-size:10px;color:#ad9b80;letter-spacing:.18em}
-.reader-share-main footer{margin-top:24px;text-align:center}.reader-share-main footer a{text-decoration:none}
-.reader-share-books{grid-template-columns:1fr}
-.reader-share-books .reader-status-book:not(.reader-share-featured){max-width:100%}
-.reader-share-featured{flex-direction:column;text-align:center;padding:22px 16px;gap:16px;background:radial-gradient(ellipse at top,#79593140,#00000020)}
-.reader-share-featured .reader-status-cover{width:clamp(130px,42vw,200px);box-shadow:0 12px 28px #0008;aspect-ratio:2/3}
-.reader-share-featured .reader-status-cover img{object-fit:contain}
-.reader-share-featured .reader-status-book-copy strong{font-size:18px;-webkit-line-clamp:unset;display:block}
-.reader-share-featured .reader-status-book-copy small{font-size:11px;letter-spacing:.1em}
-.reader-share-detail{margin:6px 0 0;font-size:12px;line-height:1.6;color:#c9bcaa;overflow-wrap:anywhere}
+.reader-share-page [hidden]{display:none!important}
+.reader-share-main{width:100%;max-width:440px;margin:auto;padding:max(12px,env(safe-area-inset-top)) 14px max(12px,env(safe-area-inset-bottom))}
+.reader-share-main header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
+.reader-share-main header a{color:#f3e3c9;font:21px/1.3 serif;text-decoration:none}
+.reader-share-main header span{font-size:9px;color:#ad9b80;letter-spacing:.13em}
+.reader-share-main #readerSharedMessage{margin:0 0 7px;font:10px/1.4 system-ui,sans-serif;color:#a99b88}
+.reader-share-page .reader-status-card{padding:14px;border-radius:16px}
+.reader-share-page .reader-status-identity{gap:11px}
+.reader-share-page .reader-status-avatar{width:43px;height:43px;font-size:22px}
+.reader-share-identity-copy{min-width:0}
+.reader-share-page .reader-status-name{display:block;font-size:10px;line-height:1.35}
+.reader-share-page .reader-status-role{margin:3px 0 0;font:500 23px/1.25 serif;letter-spacing:.03em;overflow-wrap:anywhere}
+.reader-share-page .reader-status-motto{margin:8px 0 0;font:12px/1.5 serif;overflow-wrap:anywhere}
+.reader-share-page .reader-status-genres{gap:5px;margin:8px 0 0}
+.reader-share-page .reader-status-genres:empty{display:none}
+.reader-share-page .reader-status-genre{padding:3px 8px;font-size:9px;line-height:1.4}
+.reader-share-page .reader-status-gauges{gap:6px;margin-top:10px;padding:9px 10px;border-radius:10px}
+.reader-share-page .reader-status-gauge{gap:3px 8px}
+.reader-share-page .reader-status-gauge-label{font-size:9px;line-height:1.3}
+.reader-share-page .reader-status-gauge-value{font-size:11px}
+.reader-share-page .reader-status-gauge-track{height:4px}
+.reader-share-page .reader-status-stats{margin-top:8px;gap:8px}
+.reader-share-page .reader-status-stat{padding:7px 10px;border-radius:10px}
+.reader-share-page .reader-status-stat small{font-size:8px;letter-spacing:.08em}
+.reader-share-page .reader-status-stat strong{margin-top:2px;font-size:18px;line-height:1.2}
+.reader-share-page .reader-share-books{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);align-items:end;gap:9px;margin-top:10px}
+.reader-share-page .reader-share-single{grid-template-columns:minmax(0,1fr)}
+.reader-share-page .reader-status-book{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;margin:0;padding:10px 7px 8px;border-radius:11px;color:inherit;text-decoration:none;text-align:center;background:#00000020}
+.reader-share-page .reader-share-featured{background:radial-gradient(ellipse at top,#79593140,#00000020);border-color:#d3b78b55}
+.reader-share-page .reader-share-slot{font-size:9px;line-height:1.4;color:#cdbb9d;letter-spacing:.04em}
+.reader-share-page .reader-status-cover{display:block;width:76px;height:114px;aspect-ratio:2/3;flex:none;overflow:hidden;border-radius:3px;background:#30271e;box-shadow:0 5px 14px #0006}
+.reader-share-page .reader-share-featured .reader-status-cover{width:114px;height:171px}
+.reader-share-page .reader-status-cover img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}
+.reader-share-page .reader-status-book-copy{display:block;width:100%;min-width:0}
+.reader-share-page .reader-status-book-copy strong{display:-webkit-box;margin:0;font-size:11px;line-height:1.4;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.reader-share-page .reader-share-featured .reader-status-book-copy strong{font-size:12px}
+.reader-share-detail,.reader-share-author{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden;margin:3px 0 0;font-size:9px;line-height:1.4;color:#bbae9b;overflow-wrap:anywhere}
+.reader-share-read{font-size:9px;color:#d3b78b;line-height:1.4}
+.reader-share-page a.reader-status-book:hover{border-color:#e5c992;background-color:#ffffff06}
+.reader-share-page a.reader-status-book:focus-visible{outline:2px solid #e5c992;outline-offset:3px}
+.reader-share-main footer{margin-top:8px;text-align:center}
+.reader-share-main footer a{margin:0;padding:8px;text-decoration:none;font-size:11px;line-height:1.4}
+@media(max-height:700px){
+ .reader-share-main{padding-top:max(8px,env(safe-area-inset-top))}
+ .reader-share-page .reader-status-card{padding:11px}
+ .reader-share-page .reader-status-motto{margin-top:6px;font-size:11px}
+ .reader-share-page .reader-status-gauges{margin-top:7px;gap:5px;padding:7px 9px}
+ .reader-share-page .reader-status-gauge-track{height:3px}
+ .reader-share-page .reader-status-book{padding-top:8px;gap:5px}
+ .reader-share-page .reader-status-cover{width:64px;height:96px}
+ .reader-share-page .reader-share-featured .reader-status-cover{width:96px;height:144px}
+}
+@media(max-width:350px){.reader-share-main{padding-left:10px;padding-right:10px}.reader-share-page .reader-status-role{font-size:21px}.reader-share-page .reader-status-book-copy strong{font-size:10px}.reader-share-page .reader-share-slot{font-size:8px}}

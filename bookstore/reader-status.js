@@ -239,6 +239,7 @@
    title:String(value.title||'無題').slice(0,300),
    detail:String([value.episodeLabel,value.episodeTitle].filter(Boolean).join(' ・ ')||value.subtitle||'').slice(0,400),
    author:String(value.author?.displayName||value.authorName||value.byline||'').slice(0,100),
+   publicationId:await ReaderStatusShare.resolvePublication(value),
    cover:await ReaderStatusShare.portableImage(value.coverUrl)
   }:null;
   return {version:1,kind:'ahako-reader-status',createdAt:new Date().toISOString(),

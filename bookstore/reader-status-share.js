@@ -1,4 +1,4 @@
-/* V2.34.2 — immutable public reader snapshots using the existing asset API. */
+/* V2.34.3 — immutable public reader snapshots using the existing asset API. */
 (()=>{
  'use strict';
  const BASE='https://scene-studio-api.a-hako.workers.dev';
@@ -62,30 +62,46 @@
  }
  function node(tag,className,value){const el=document.createElement(tag);el.className=className;if(value!==undefined)el.textContent=value;return el;}
  function cover(src,className){const el=node('span',className),safe=imageUrl(src);el.textContent='あ□';if(safe){const img=new Image();img.alt='';img.referrerPolicy='no-referrer';img.onload=()=>el.replaceChildren(img);img.src=safe;}return el;}
+ function publicationId(value){return typeof value==='string'&&/^[a-z0-9_-]{1,160}$/i.test(value)?value:'';}
+ function publicPlayerUrl(id){
+  if(!publicationId(id))return '';
+  const player=new URL('../',location.href),raw=new URL(BASE+'/work/'+encodeURIComponent(id));
+  raw.searchParams.set('raw','1');player.searchParams.set('src',raw.href);player.searchParams.set('returnTo',location.href);return player.href;
+ }
+ async function resolvePublication(value){
+  const known=publicationId(value?.publicationId)||publicationId(value?.publicId);if(known)return known;
+  const workId=publicationId(value?.workId);if(!workId)return '';
+  const data=await request(BASE+'/publication/'+encodeURIComponent(workId));
+  return data?.ok&&data.exists?publicationId(data.id):'';
+ }
  function book(value,featured){
   if(!value||typeof value!=='object')return null;
-  const row=node('div','reader-status-book'+(featured?' reader-share-featured':''));
+  const href=publicPlayerUrl(value.publicationId);
+  const row=node(href?'a':'div','reader-status-book '+(featured?'reader-share-featured':'reader-share-recommended'));
+  if(href){row.href=href;row.setAttribute('aria-label',(text(value.title,300)||'無題')+'を読む');}
+  row.append(node('small','reader-share-slot',featured?'飾っている一冊':'おすすめの一冊'));
   row.append(cover(value.cover,'reader-status-cover'));
-  const copy=node('span','reader-status-book-copy');copy.append(node('small','',featured?'飾っている一冊':'おすすめの一冊'),node('strong','',text(value.title,300)||'無題'));
-  if(featured&&text(value.detail))copy.append(node('p','reader-share-detail',text(value.detail)));
-  if(featured&&text(value.author))copy.append(node('p','reader-share-detail',text(value.author,100)));
-  row.append(copy);return row;
+  const copy=node('span','reader-status-book-copy');copy.append(node('strong','',text(value.title,300)||'無題'));
+  if(text(value.detail))copy.append(node('p','reader-share-detail',text(value.detail)));
+  if(text(value.author)&&value.author!=='作者')copy.append(node('p','reader-share-author',text(value.author,100)));
+  row.append(copy,node('span','reader-share-read',href?'タップして読む':'公開リンクなし'));
+  return row;
  }
  function render(card,data){
   if(!data||data.kind!=='ahako-reader-status'||data.version!==1)throw new Error('この共有データは表示できません。');
   const identity=node('div','reader-status-identity'),avatar=cover(data.avatar,'reader-status-avatar');if(!imageUrl(data.avatar))avatar.textContent=Array.from(text(data.name,80))[0]||'読';
-  identity.append(avatar,node('strong','reader-status-name',text(data.name,80)||'読者'));
-  card.replaceChildren(identity,node('h1','reader-status-role',text(data.role,80)||'物語の旅人'),node('p','reader-status-motto',text(data.motto,100)||'自分らしい読書のかたちを選ぶ。'));
+  const identityCopy=node('div','reader-share-identity-copy');identityCopy.append(node('strong','reader-status-name',text(data.name,80)||'読者'),node('h1','reader-status-role',text(data.role,80)||'物語の旅人'));identity.append(avatar,identityCopy);
+  card.replaceChildren(identity,node('p','reader-status-motto',text(data.motto,100)||'自分らしい読書のかたちを選ぶ。'));
   const tags=node('div','reader-status-genres');(Array.isArray(data.genres)?data.genres:[]).slice(0,3).forEach(g=>tags.append(node('span','reader-status-genre',text(g,40))));card.append(tags);
-  const gauges=node('div','reader-status-gauges');
+  const gauges=node('div','reader-status-gauges');gauges.title='所蔵本のジャンルと「あとで読む」の冊数から算出';gauges.setAttribute('aria-label',gauges.title);
   ['ジャンルの広がり','最多ジャンルの割合','次の一冊への準備'].forEach((label,i)=>{
    const pair=Array.isArray(data.gauges?.[i])?data.gauges[i]:[0,1];
    const max=Math.max(1,Math.min(1000000,Number(pair[1])||1)),value=Math.max(0,Math.min(max,Number(pair[0])||0));
    const row=node('div','reader-status-gauge');row.append(node('span','reader-status-gauge-label',label),node('span','reader-status-gauge-value',value+' / '+max));
    const track=node('span','reader-status-gauge-track'),fill=node('span','reader-status-gauge-fill');fill.style.setProperty('--reader-gauge',Math.round(value/max*100)+'%');track.append(fill);row.append(track);gauges.append(row);
-  });card.append(gauges,node('p','reader-status-gauge-note','所蔵本のジャンルと「あとで読む」の冊数から算出'));
+  });card.append(gauges);
   const stats=node('div','reader-status-stats');[['MY BOOKS',data.ownedCount],['READ LATER',data.laterCount]].forEach(([label,count])=>{const el=node('div','reader-status-stat');el.append(node('small','',label),node('strong','',Math.max(0,Math.min(1000000,Math.floor(Number(count)||0)))+(label==='READ LATER'?' / 12冊':'冊')));stats.append(el);});card.append(stats);
-  const books=node('div','reader-status-books reader-share-books');[book(data.featured,true),book(data.recommendation,false)].filter(Boolean).forEach(el=>books.append(el));if(books.childElementCount)card.append(books);
+  const books=node('div','reader-status-books reader-share-books');[book(data.featured,true),book(data.recommendation,false)].filter(Boolean).forEach(el=>books.append(el));if(books.childElementCount){books.classList.toggle('reader-share-single',books.childElementCount===1);card.append(books);}
  }
  let loadRevision=0;
  async function loadShared(){
@@ -98,7 +114,7 @@
    status.textContent='共有時点の読者ステータスです。';document.title=(text(data.name,80)||'読者')+'の読者ステータス｜あ箱';
   }catch(e){if(revision!==loadRevision)return;card.hidden=true;status.textContent=e.message||'共有データを読み込めませんでした。';}
  }
- window.ReaderStatusShare={portableImage,bindCreator,render};
+ window.ReaderStatusShare={portableImage,bindCreator,render,resolvePublication};
  window.addEventListener('hashchange',loadShared);
  loadShared();
 })();
