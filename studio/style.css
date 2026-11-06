@@ -12023,8 +12023,8 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .rich-color-history-chips small{font:600 10px/1.2 system-ui;color:#8b9098}
 .rich-color-history-actions{display:flex;justify-content:flex-end;padding-top:2px;border-top:1px solid #eceef0}
 .rich-color-popover .text-color-pin{font-size:11px}
-.studio-color-popover.is-compact-toolbar{padding:8px;border-radius:10px}
-.studio-color-popover.is-compact-toolbar .studio-color-square{height:112px;border-radius:7px}
+.studio-color-popover.is-compact-toolbar{width:190px!important;max-width:calc(100vw - 24px)!important;padding:7px;border-radius:10px}
+.studio-color-popover.is-compact-toolbar .studio-color-square{height:96px;border-radius:7px}
 .studio-color-popover.is-compact-toolbar .studio-color-hue{margin:7px 0 6px}
 .studio-color-popover.is-compact-toolbar .studio-color-meta{grid-template-columns:18px auto 1fr;gap:6px}
 .studio-color-popover.is-compact-toolbar .studio-color-dot{width:18px;height:18px}

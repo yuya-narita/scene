@@ -10353,6 +10353,7 @@ return flowCommentCard;}
   let richColorPopover=null;
   let richColorPaletteToggle=null;
   let richColorPicker=null;
+  let richCloseToolbarMenus=()=>{};
   function refreshRichColorPopover(currentColor=''){
     if(!richColorPopover)return;
     richColorPopover.replaceChildren();
@@ -10419,15 +10420,17 @@ return flowCommentCard;}
     button('解除','clear','選択範囲の書式を解除','rich-clear-button');
     document.body.appendChild(bar);richSelectionToolbar=bar;richColorPaletteToggle=colorToggle;
     richColorPopover=document.createElement('div');richColorPopover.className='rich-color-popover';richColorPopover.hidden=true;richColorPopover.setAttribute('role','dialog');richColorPopover.setAttribute('aria-label','最近使った色・固定色');document.body.appendChild(richColorPopover);
-    colorToggle.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();refreshRichColorPopover(color.value);richColorPopover.hidden=!richColorPopover.hidden;richToolbarInteracting=!richColorPopover.hidden;placeRichColorPopover();});
+    colorToggle.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();richCloseToolbarMenus();if(richColorPopover&&!richColorPopover.hidden){richColorPopover.hidden=true;richToolbarInteracting=false;return;}refreshRichColorPopover(richColorPicker?.value||'');richColorPopover.hidden=false;richToolbarInteracting=true;placeRichColorPopover();});
     document.addEventListener('pointerdown',e=>{if(!richColorPopover||richColorPopover.hidden)return;if(e.target.closest?.('.rich-color-popover,.rich-color-palette-toggle'))return;richColorPopover.hidden=true;richToolbarInteracting=false;},true);
     const closeMenus=(except=null)=>bar.querySelectorAll('.rich-dropdown').forEach(w=>{if(w===except)return;w.querySelector('.rich-dropdown-menu').hidden=true;w.querySelector('.rich-dropdown-trigger').setAttribute('aria-expanded','false');});
+    richCloseToolbarMenus=()=>closeMenus();
     const openMenu=wrap=>{if(!wrap)return;closeMenus(wrap);const menu=wrap.querySelector('.rich-dropdown-menu'),trigger=wrap.querySelector('.rich-dropdown-trigger');menu.hidden=false;trigger.setAttribute('aria-expanded','true');};
     // V79: note-like desktop behavior. Pointer hover previews dropdowns; touch keeps tap-to-open.
     if(matchMedia?.('(hover:hover) and (pointer:fine)')?.matches){
-      bar.querySelectorAll('.rich-dropdown').forEach(w=>{w.addEventListener('pointerenter',()=>{richToolbarInteracting=true;openMenu(w);});});
+      bar.querySelectorAll('.rich-dropdown').forEach(w=>{w.addEventListener('pointerenter',()=>{if(richColorPopover&&!richColorPopover.hidden||richColorPicker?.root?.classList.contains('is-open'))return;richToolbarInteracting=true;openMenu(w);});});
     }
-    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{if(!bar.matches(':hover')&&richColorPopover?.hidden!==false)richToolbarInteracting=false;},340);});
+    richColorPicker?.root?.querySelector('.studio-color-trigger')?.addEventListener('pointerdown',()=>{richCloseToolbarMenus();if(richColorPopover)richColorPopover.hidden=true;richToolbarInteracting=true;});
+    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{if(!bar.matches(':hover')&&richColorPopover?.hidden!==false&&!richColorPicker?.root?.classList.contains('is-open'))richToolbarInteracting=false;},340);});
     // V78: act on pointerdown so the first press is the action. Native <select>
     // controls were stealing focus/selection and causing the old two-press cushion.
     bar.addEventListener('pointerdown',e=>{
