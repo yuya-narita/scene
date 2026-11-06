@@ -120,6 +120,7 @@
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
     const u=new URL(bookshelfHomeUrl());
     u.searchParams.set('claim',String(token));
+    u.searchParams.set('afterClaim','bookstore');
     if(/^handoff_[a-f0-9]{24}$/i.test(String(handoffId||'')))u.searchParams.set('handoff',String(handoffId));
     // LINE can open this handoff URL in the device browser. Other in-app
     // browsers keep the same URL until the user chooses their native Safari/

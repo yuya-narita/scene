@@ -137,7 +137,9 @@
 
   function configureShelfReturn(){
     if(!shelfReturnLink)return;
-    const returnTo=safeShelfReturn(params.get('returnTo'));
+    const returnTo=isOperatorGuide()
+      ?{url:new URL('./bookstore/',location.href).href,label:'← あ箱書店へ'}
+      :safeShelfReturn(params.get('returnTo'));
     if(!returnTo){shelfReturnLink.hidden=true;return;}
     shelfReturnLink.href=returnTo.url;
     shelfReturnLink.textContent=returnTo.label;
@@ -653,13 +655,14 @@
       sessionStorage.setItem(`${BOOKSHELF_CLAIM_RETURN_PREFIX}${handoffId}`,location.href);
     }catch(_){}
   }
-  function publicBookshelfClaimUrl(token,{handoffId='',external=false,paidPublicationId=''}={}){
+  function publicBookshelfClaimUrl(token,{handoffId='',external=false,paidPublicationId='',returnToBookstore=false}={}){
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
     const url=new URL('./bookshelf/',location.href);
     url.searchParams.set('claim',String(token));
     if(/^handoff_[a-f0-9]{24}$/i.test(handoffId))url.searchParams.set('handoff',handoffId);
     if(external)url.searchParams.set('openExternalBrowser','1');
     if(/^[A-Za-z0-9_-]{12,80}$/.test(String(paidPublicationId||'')))url.searchParams.set('paidPublicationId',String(paidPublicationId));
+    if(returnToBookstore)url.searchParams.set('afterClaim','bookstore');
     return url.toString();
   }
   function pendingPaidClaimToken(publicationId=currentWorkId()){
@@ -766,7 +769,7 @@
       try{
         let token=pendingPaidClaimToken(publicationId);
         if(!token)token=await freshOwnedBookshelfClaim(publicationId);
-        const claimUrl=publicBookshelfClaimUrl(token,{paidPublicationId:publicationId});
+        const claimUrl=publicBookshelfClaimUrl(token,{paidPublicationId:publicationId,returnToBookstore:true});
         if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
         location.href=claimUrl;
       }catch(error){
@@ -1117,7 +1120,7 @@
     const payload=await response.json().catch(()=>null);
     if(!response.ok||!payload?.ok)throw new Error(String(payload?.error||'購入した一冊を受け取れませんでした。'));
     const token=String(payload?.bookshelfClaim?.token||'');
-    const claimUrl=publicBookshelfClaimUrl(token,{paidPublicationId:currentWorkId()});
+    const claimUrl=publicBookshelfClaimUrl(token,{paidPublicationId:currentWorkId(),returnToBookstore:true});
     if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
     forgetCommerceOrderToken(orderId);
     if(continueReading){

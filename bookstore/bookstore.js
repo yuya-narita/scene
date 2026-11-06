@@ -2059,6 +2059,19 @@ async function init(){
   for(const id of ['prev','next','focusPanel','hint'])document.getElementById(id).hidden=true;
   try{
     books=await loadBookstorePublicBooks();allBooks=books.slice();await syncOwnedBooks();dataReady=true;
+    const receivedCopy=new URL(location.href).searchParams.get('receivedCopy')||'';
+    if(/^copy_[a-f0-9]{32}$/i.test(receivedCopy)){
+      const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('receivedCopy');history.replaceState(history.state,'',cleanUrl.pathname+(cleanUrl.search||'')+(cleanUrl.hash||''));
+      const receivedIndex=ownedBooks.findIndex(book=>String(book.copyId).toLowerCase()===receivedCopy.toLowerCase());
+      hallLibraryKind='mine';hallYaw=270;
+      if(receivedIndex>=0){
+        showCentralHall(false);
+        await window.openReadingRoom('mine',receivedIndex);
+        return;
+      }
+      showCentralHall(false);
+      return;
+    }
     roomId='intro';store.classList.add('intro-mode');document.body.classList.add('intro-entry-active');window.scrollTo(0,0);
     const count=document.querySelector('#bookCount');if(!count.parentElement.querySelector('[data-catalogue-more]'))count.after(catalogueMoreButton());paintCatalogueControls();
     if(!books.length){stage.innerHTML='<div class="catalogue-load-state"><p>まだ本がありません。</p></div>';return;}
