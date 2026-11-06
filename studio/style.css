@@ -11988,7 +11988,8 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .rich-selection-toolbar .rich-dropdown-item:hover{background:rgba(255,255,255,.12)!important}
 .rich-selection-toolbar .rich-size-px-field{display:flex;align-items:center;gap:8px;padding:7px 9px;color:#fff;font:700 12px/1 system-ui;white-space:nowrap}
 .rich-selection-toolbar .rich-size-px-field input{width:68px;height:30px;border:1px solid rgba(255,255,255,.28);border-radius:7px;background:#222;color:#fff;padding:0 7px;font:700 13px/1 system-ui}
-.v58-bulk-field:has(.v58-text-size-px) .v58-bulk-row{grid-template-columns:minmax(0,1fr) 82px minmax(0,1fr)}
+.v58-bulk-field:has(.v58-text-size-px) .v58-bulk-row{grid-template-columns:minmax(0,1fr) 82px}
+.v58-bulk-field:has(.v58-text-size-px) .v58-bulk-row>.v58-bulk-scope{grid-column:1/-1}
 .v58-text-size-px{width:82px;min-width:0;box-sizing:border-box;height:36px;border:1px solid #d7d9de;border-radius:8px;background:#fff;padding:0 8px;font:600 13px/1 system-ui}
 @media(min-width:601px){.rich-selection-toolbar{width:max-content!important;max-width:calc(100vw - 16px)!important;overflow:visible!important}.rich-selection-toolbar .rich-dropdown-trigger{height:36px!important}}
 
