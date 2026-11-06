@@ -10352,6 +10352,7 @@ return flowCommentCard;}
   let richToolbarInteracting=false;
   let richColorPopover=null;
   let richColorPaletteToggle=null;
+  let richColorPicker=null;
   function refreshRichColorPopover(currentColor=''){
     if(!richColorPopover)return;
     richColorPopover.replaceChildren();
@@ -10364,7 +10365,7 @@ return flowCommentCard;}
         if(normalizeTextColor(currentColor)===hex)chip.classList.add('is-current');
         chip.addEventListener('click',()=>{
           rememberTextColor(hex);
-          const input=richSelectionToolbar?.querySelector('input[data-rich-action="color"]');if(input)input.value=hex;
+          richColorPicker?.setValue(hex);
           if(richColorPaletteToggle)richColorPaletteToggle.style.setProperty('--rich-color-current',hex);
           richColorPopover.hidden=true;richToolbarInteracting=false;
           applyRichSelectionAction('color',hex);
@@ -10375,7 +10376,7 @@ return flowCommentCard;}
     };
     const recent=readRecentTextColors(),pinned=readPinnedTextColors();
     richColorPopover.append(makeRow(uiLanguage==='en'?'Recent':'最近',recent),makeRow(uiLanguage==='en'?'Pinned':'固定',pinned));
-    const current=normalizeTextColor(currentColor)||normalizeTextColor(richSelectionToolbar?.querySelector('input[data-rich-action="color"]')?.value);
+    const current=normalizeTextColor(currentColor)||normalizeTextColor(richColorPicker?.value);
     const pin=document.createElement('button');pin.type='button';pin.className='text-color-pin';pin.disabled=!current;
     const isPinned=!!current&&pinned.includes(current);
     pin.textContent=isPinned?(uiLanguage==='en'?'★ Unpin':'★ 固定を外す'):(uiLanguage==='en'?'☆ Pin this color':'☆ この色を固定');
@@ -10407,7 +10408,8 @@ return flowCommentCard;}
     dropdown('書体','font',[['serif','明朝'],['sans','ゴシック'],['mono','等幅']],'書体');
     dropdown('サイズ','size',[['0.85','小 85%'],['1','標準 100%'],['1.2','大 120%'],['1.45','特大 145%']],'文字サイズ');
     const colorWrap=document.createElement('div');colorWrap.className='rich-color-control';colorWrap.title='文字色';
-    const color=document.createElement('input');color.type='color';color.value='#333333';color.dataset.richAction='color';color.setAttribute('aria-label','文字色');colorWrap.appendChild(color);
+    richColorPicker=makeCommittedTextColorPicker('#333333',{compact:true,onCommit:hex=>{rememberTextColor(hex);if(colorToggle)colorToggle.style.setProperty('--rich-color-current',hex);applyRichSelectionAction('color',hex);}});
+    richColorPicker.root.classList.add('rich-toolbar-color-picker');colorWrap.appendChild(richColorPicker.root);
     const colorToggle=document.createElement('button');colorToggle.type='button';colorToggle.className='rich-color-palette-toggle';colorToggle.textContent='▾';colorToggle.title='最近使った色・固定色';colorToggle.setAttribute('aria-label','最近使った色・固定色');colorWrap.appendChild(colorToggle);bar.appendChild(colorWrap);
     dropdown('見出し','heading',[['1','見出し1'],['2','見出し2'],['3','見出し3']],'見出し');
     dropdown('リスト','list',[['bullet','・ 箇条書き'],['number','1. 番号付き']],'リスト');
@@ -10436,8 +10438,6 @@ return flowCommentCard;}
       const t=e.target.closest?.('button[data-rich-action]');
       if(t){e.preventDefault();e.stopPropagation();closeMenus();if(t.dataset.richAction==='ruby'){editRichRuby();return;}applyRichSelectionAction(t.dataset.richAction);}
     });
-    color.addEventListener('input',()=>{colorToggle.style.setProperty('--rich-color-current',color.value);});
-    color.addEventListener('change',()=>{rememberTextColor(color.value);colorToggle.style.setProperty('--rich-color-current',color.value);richColorPopover.hidden=true;richToolbarInteracting=false;applyRichSelectionAction('color',color.value);});
     return bar;
   }
   function autoRubyConfig(doc=workingDocument){return doc?.studio?.autoRuby||{version:1,settings:{mode:'difficult',grade:3,repeat:'work'},dictionary:{}};}
@@ -10635,9 +10635,10 @@ return flowCommentCard;}
       if(action==='orientation')tr.textContent=({tcy:'縦中横',sideways:'横倒し',upright:'正立'})[value]||'文字向き';
       w.querySelectorAll('.rich-dropdown-item').forEach(item=>item.classList.toggle('is-current',!!value&&item.dataset.richValue===value));
     });
-    const input=bar.querySelector('input[data-rich-action="color"]');if(input&&/^#[0-9a-f]{6}$/i.test(color))input.value=color;
-    if(richColorPaletteToggle)richColorPaletteToggle.style.setProperty('--rich-color-current',input?.value||'#333333');
-    refreshRichColorPopover(color||input?.value||'');
+    if(color)richColorPicker?.setValue(color);
+    const currentColor=richColorPicker?.value||'#333333';
+    if(richColorPaletteToggle)richColorPaletteToggle.style.setProperty('--rich-color-current',currentColor);
+    refreshRichColorPopover(color||currentColor);
   }
   function showRichSelectionToolbar(){
     // Text can be selected either during direct text editing or straight from Preview.
@@ -10686,7 +10687,18 @@ return flowCommentCard;}
     else if(action==='italic'){const cur=spanCover(st=>st.italic===true);if(cur)ranges=ranges.filter(r=>r!==cur);else ranges.push({start,end,kind:'span',style:{italic:true}});}
     else if(action==='font'&&value){const cur=spanCover(st=>String(st.fontFamily||'')===String(value));ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&r?.style?.fontFamily));if(!cur)ranges.push({start,end,kind:'span',style:{fontFamily:String(value)}});}
     else if(action==='size'&&value){const num=Number(value)||1,cur=spanCover(st=>Number(st.fontScale)===num);ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&Number(r?.style?.fontScale)>0));if(!cur)ranges.push({start,end,kind:'span',style:{fontScale:num}});}
-    else if(action==='color'&&value)ranges.push({start,end,kind:'span',style:{color:String(value)}});
+    else if(action==='color'&&value){
+      const nextColor=String(value);
+      ranges=ranges.flatMap(r=>{
+        if(r?.kind!=='span'||!r?.style?.color||!overlaps(r))return [r];
+        const out=[],a=Number(r.start)||0,b=Number(r.end)||0,style={...r.style};delete style.color;
+        if(a<start)out.push({...r,end:start});
+        if(b>end)out.push({...r,start:end});
+        if(Object.keys(style).length)out.push({...r,start:Math.max(a,start),end:Math.min(b,end),style});
+        return out;
+      });
+      ranges.push({start,end,kind:'span',style:{color:nextColor}});
+    }
     else if(action==='orientation'&&['tcy','sideways','upright'].includes(String(value))){
       // Keep portions outside the selected interval and replace only its orientation.
       ranges=ranges.flatMap(r=>{
