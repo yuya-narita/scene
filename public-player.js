@@ -73,6 +73,22 @@
     observer.observe(ownCopyButton,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});
     if(ownCopyStatus)observer.observe(ownCopyStatus,{childList:true,subtree:true,characterData:true});
   }
+  function operatorGuideCopyExists(copyId){
+    return new Promise(resolve=>{
+      if(!window.indexedDB){resolve(false);return;}
+      let request;try{request=indexedDB.open('ahako-local-bookshelf',3);}catch(_){resolve(false);return;}
+      request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains('readerBooks'))db.createObjectStore('readerBooks',{keyPath:'copyId'});};
+      request.onerror=()=>resolve(false);
+      request.onsuccess=()=>{
+        const db=request.result;
+        if(!db.objectStoreNames.contains('readerBooks')){db.close();resolve(false);return;}
+        try{const row=db.transaction('readerBooks','readonly').objectStore('readerBooks').get(copyId);
+          row.onsuccess=()=>{const exists=row.result?.workId==='operator_guide_01';db.close();resolve(exists);};
+          row.onerror=()=>{db.close();resolve(false);};
+        }catch(_){db.close();resolve(false);}
+      };
+    });
+  }
   async function savedOperatorGuideCopy(){
     let id='';try{id=localStorage.getItem(OPERATOR_GUIDE_COPY_KEY)||'';}catch(_){}
     if(!/^copy_[a-f0-9]{32}$/.test(id)||!window.indexedDB)return '';
@@ -655,25 +671,32 @@
       sessionStorage.setItem(`${BOOKSHELF_CLAIM_RETURN_PREFIX}${handoffId}`,location.href);
     }catch(_){}
   }
-  function importOperatorGuideClaimInBackground(token){
+  function importOperatorGuideClaimInBackground(token,copyId){
     return new Promise((resolve,reject)=>{
       const frame=document.createElement('iframe');
       frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;
       Object.assign(frame.style,{position:'fixed',width:'1px',height:'1px',left:'-10px',bottom:'0',opacity:'0',border:'0',pointerEvents:'none'});
-      let timer=0,settled=false;
-      const cleanup=()=>{clearTimeout(timer);window.removeEventListener('message',onMessage);frame.remove();};
-      const finish=(error,copyId)=>{if(settled)return;settled=true;cleanup();error?reject(error):resolve(copyId);};
+      let timer=0,pollTimer=0,settled=false;
+      const cleanup=()=>{clearTimeout(timer);clearTimeout(pollTimer);window.removeEventListener('message',onMessage);frame.remove();};
+      const finish=(error,savedCopyId)=>{if(settled)return;settled=true;cleanup();error?reject(error):resolve(savedCopyId);};
       const onMessage=event=>{
         if(event.origin!==location.origin||event.source!==frame.contentWindow||event.data?.type!=='AHAKO_BOOKSHELF_CLAIM_COMPLETE')return;
         if(event.data.ok===true&&/^copy_[a-f0-9]{32}$/.test(String(event.data.copyId||'')))finish(null,String(event.data.copyId));
         else finish(new Error(String(event.data.error||'本棚への保存に失敗しました。')));
       };
       window.addEventListener('message',onMessage);
-      timer=setTimeout(()=>finish(new Error('本棚への保存を確認できませんでした。もう一度お試しください。')),90000);
+      const startedAt=Date.now();
+      const confirmSaved=async()=>{
+        if(settled)return;
+        if(await operatorGuideCopyExists(copyId)){finish(null,copyId);return;}
+        if(Date.now()-startedAt>=60000){finish(new Error('本棚への保存を確認できませんでした。もう一度お試しください。'));return;}
+        pollTimer=setTimeout(confirmSaved,350);
+      };
+      timer=setTimeout(()=>finish(new Error('本棚への保存を確認できませんでした。もう一度お試しください。')),65000);
       const claimUrl=publicBookshelfClaimUrl(token,{returnToBookstore:true});
       if(!claimUrl){finish(new Error('本棚への受取リンクを作れませんでした。'));return;}
       const target=new URL(claimUrl);target.searchParams.set('embeddedClaim','1');
-      frame.src=target.toString();document.body.appendChild(frame);
+      frame.src=target.toString();document.body.appendChild(frame);confirmSaved();
     });
   }
   function openOperatorGuideCopyInBookstore(copyId){
@@ -1215,7 +1238,9 @@
       const token=String(payload?.bookshelfClaim?.token||'');
       if(isOperatorGuide()){
         if(ownCopyStatus)ownCopyStatus.textContent='あ箱書店の本棚に入れています…';
-        const copyId=await importOperatorGuideClaimInBackground(token);
+        const copyId=String(payload?.distribution?.copyId||'');
+        if(!/^copy_[a-f0-9]{32}$/.test(copyId))throw new Error('説明書のコピーIDを確認できませんでした。');
+        await importOperatorGuideClaimInBackground(token,copyId);
         try{localStorage.setItem(OPERATOR_GUIDE_COPY_KEY,copyId);}catch(_){}
         openOperatorGuideCopyInBookstore(copyId);
         return;
