@@ -2059,19 +2059,6 @@ async function init(){
   for(const id of ['prev','next','focusPanel','hint'])document.getElementById(id).hidden=true;
   try{
     books=await loadBookstorePublicBooks();allBooks=books.slice();await syncOwnedBooks();dataReady=true;
-    const receivedCopy=new URL(location.href).searchParams.get('receivedCopy')||'';
-    if(/^copy_[a-f0-9]{32}$/i.test(receivedCopy)){
-      const cleanUrl=new URL(location.href);cleanUrl.searchParams.delete('receivedCopy');history.replaceState(history.state,'',cleanUrl.pathname+(cleanUrl.search||'')+(cleanUrl.hash||''));
-      const receivedIndex=ownedBooks.findIndex(book=>String(book.copyId).toLowerCase()===receivedCopy.toLowerCase());
-      hallLibraryKind='mine';hallYaw=270;
-      if(receivedIndex>=0){
-        showCentralHall(false);
-        await window.openReadingRoom('mine',receivedIndex);
-        return;
-      }
-      showCentralHall(false);
-      return;
-    }
     roomId='intro';store.classList.add('intro-mode');document.body.classList.add('intro-entry-active');window.scrollTo(0,0);
     const count=document.querySelector('#bookCount');if(!count.parentElement.querySelector('[data-catalogue-more]'))count.after(catalogueMoreButton());paintCatalogueControls();
     if(!books.length){stage.innerHTML='<div class="catalogue-load-state"><p>まだ本がありません。</p></div>';return;}
@@ -2221,7 +2208,7 @@ init();
  window.refreshPrivateReadingRoom=refreshPrivateRoom;
  window.addEventListener('keydown',e=>{if(privateReadingRoom&&e.key==='Escape'&&picked.hidden)window.closeReadingRoom();});
  document.addEventListener('click',e=>{const link=e.target.closest('a[href="../bookshelf/"]');if(!link||link.classList.contains('brand'))return;e.preventDefault();document.querySelectorAll('dialog[open]').forEach(d=>d.close());document.body.style.overflow='';window.openReadingRoom();});
- function resumeReadingRoom(){if((location.hash==='#reading-room'||location.hash==='#reading-room-later')&&dataReady){window.openReadingRoom(location.hash.endsWith('-later')?'later':'mine');history.replaceState(null,'',location.pathname+location.search);}}
+ function resumeReadingRoom(){if((location.hash==='#reading-room'||location.hash==='#reading-room-later')&&dataReady){const kind=location.hash.endsWith('-later')?'later':'mine';const requestedCopy=new URLSearchParams(location.search).get('ownedCopy')||'';const selectedIndex=kind==='mine'&&requestedCopy?Math.max(0,ownedBooks.findIndex(book=>String(book.copyId)===requestedCopy)):0;window.openReadingRoom(kind,selectedIndex);const cleanUrl=new URL(location.href);cleanUrl.hash='';cleanUrl.searchParams.delete('ownedCopy');history.replaceState(null,'',cleanUrl.pathname+cleanUrl.search);}}
  new MutationObserver(resumeReadingRoom).observe(document.getElementById('bookCount'),{childList:true,subtree:true});
  window.addEventListener('pageshow',resumeReadingRoom);resumeReadingRoom();
 })();

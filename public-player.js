@@ -655,6 +655,31 @@
       sessionStorage.setItem(`${BOOKSHELF_CLAIM_RETURN_PREFIX}${handoffId}`,location.href);
     }catch(_){}
   }
+  function importOperatorGuideClaimInBackground(token){
+    return new Promise((resolve,reject)=>{
+      const frame=document.createElement('iframe');
+      frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;
+      Object.assign(frame.style,{position:'fixed',width:'1px',height:'1px',left:'-10px',bottom:'0',opacity:'0',border:'0',pointerEvents:'none'});
+      let timer=0,settled=false;
+      const cleanup=()=>{clearTimeout(timer);window.removeEventListener('message',onMessage);frame.remove();};
+      const finish=(error,copyId)=>{if(settled)return;settled=true;cleanup();error?reject(error):resolve(copyId);};
+      const onMessage=event=>{
+        if(event.origin!==location.origin||event.source!==frame.contentWindow||event.data?.type!=='AHAKO_BOOKSHELF_CLAIM_COMPLETE')return;
+        if(event.data.ok===true&&/^copy_[a-f0-9]{32}$/.test(String(event.data.copyId||'')))finish(null,String(event.data.copyId));
+        else finish(new Error(String(event.data.error||'本棚への保存に失敗しました。')));
+      };
+      window.addEventListener('message',onMessage);
+      timer=setTimeout(()=>finish(new Error('本棚への保存を確認できませんでした。もう一度お試しください。')),90000);
+      const claimUrl=publicBookshelfClaimUrl(token,{returnToBookstore:true});
+      if(!claimUrl){finish(new Error('本棚への受取リンクを作れませんでした。'));return;}
+      const target=new URL(claimUrl);target.searchParams.set('embeddedClaim','1');
+      frame.src=target.toString();document.body.appendChild(frame);
+    });
+  }
+  function openOperatorGuideCopyInBookstore(copyId){
+    const target=new URL('./bookstore/',location.href);target.searchParams.set('ownedCopy',String(copyId));target.hash='reading-room';
+    location.replace(target.toString());
+  }
   function publicBookshelfClaimUrl(token,{handoffId='',external=false,paidPublicationId='',returnToBookstore=false}={}){
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
     const url=new URL('./bookshelf/',location.href);
@@ -797,7 +822,11 @@
         const existing=await savedOperatorGuideCopy();
         if(existing&&!ownCopyButton.disabled){
           ownCopyButton.textContent='本棚で読む';
-          ownCopyButton.onclick=()=>{location.href=`./local-player/?bookshelfCopy=${encodeURIComponent(existing)}`;};
+          ownCopyButton.onclick=()=>{
+            const target=new URL('./local-player/',location.href);target.searchParams.set('bookshelfCopy',existing);
+            const returnUrl=new URL('./bookstore/',location.href);returnUrl.searchParams.set('ownedCopy',existing);returnUrl.hash='reading-room';
+            target.searchParams.set('returnTo',returnUrl.toString());location.href=target.toString();
+          };
         }
         mirrorGuideReceive();
       }
@@ -1184,6 +1213,13 @@
       }
       if(isOperatorGuide()&&/^copy_[a-f0-9]{32}$/.test(payload?.distribution?.copyId||'')){try{localStorage.setItem(OPERATOR_GUIDE_COPY_KEY,payload.distribution.copyId);}catch(_){}}
       const token=String(payload?.bookshelfClaim?.token||'');
+      if(isOperatorGuide()){
+        if(ownCopyStatus)ownCopyStatus.textContent='あ箱書店の本棚に入れています…';
+        const copyId=await importOperatorGuideClaimInBackground(token);
+        try{localStorage.setItem(OPERATOR_GUIDE_COPY_KEY,copyId);}catch(_){}
+        openOperatorGuideCopyInBookstore(copyId);
+        return;
+      }
       const external=needsExternalSafariHandoff();
       if(external){
         const handoffId=newBookshelfHandoffId();

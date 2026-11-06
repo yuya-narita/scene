@@ -618,15 +618,23 @@ async function receivePreviewClaimFromLocation(){
   return true;
 }
 
+function notifyEmbeddedBookshelfClaimFailure(error){
+  if(window.__ahakoEmbeddedClaimInProgress&&window.parent!==window){
+    window.__ahakoEmbeddedClaimInProgress=false;
+    window.parent.postMessage({type:'AHAKO_BOOKSHELF_CLAIM_COMPLETE',ok:false,error:String(error?.message||error||'本棚への保存に失敗しました。')},location.origin);
+  }
+}
 async function importBookshelfClaimFromLocation(){
   let u;try{u=new URL(location.href);}catch(_){return false;}
   const token=String(u.searchParams.get('claim')||'').trim();
   if(!token)return false;
   const paidPublicationId=String(u.searchParams.get('paidPublicationId')||'').trim();
   const returnToBookstore=u.searchParams.get('returnToBookstore')==='1';
+  const embeddedClaim=u.searchParams.get('embeddedClaim')==='1'&&window.parent!==window;
+  if(embeddedClaim)window.__ahakoEmbeddedClaimInProgress=true;
   // Remove LINE's external-browser hint and the bearer token from visible URL
   // as soon as the page owns a copy of it in memory.
-  u.searchParams.delete('claim');u.searchParams.delete('handoff');u.searchParams.delete('openExternalBrowser');u.searchParams.delete('paidPublicationId');u.searchParams.delete('returnToBookstore');
+  u.searchParams.delete('claim');u.searchParams.delete('handoff');u.searchParams.delete('openExternalBrowser');u.searchParams.delete('paidPublicationId');u.searchParams.delete('returnToBookstore');u.searchParams.delete('embeddedClaim');
   const cleanUrl=u.pathname+(u.search||'')+(u.hash||'');
   if(!validBookshelfClaimToken(token)){history.replaceState(null,'',cleanUrl);throw new Error('本棚への受取リンクを確認できませんでした。');}
   const response=await fetch(`${API_BASE}/bookshelf-claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({token})});
@@ -653,6 +661,11 @@ async function importBookshelfClaimFromLocation(){
   try{
     fetch(`${API_BASE}/bookshelf-event`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',keepalive:true,body:JSON.stringify({event:'own_copy_saved',workId:String(payload.scene?.workId||payload.scene?.distribution?.workId||''),copyId:String(payload.scene?.distribution?.copyId||'')})}).catch(()=>{});
   }catch(_){}
+  if(embeddedClaim){
+    window.__ahakoEmbeddedClaimInProgress=false;
+    window.parent.postMessage({type:'AHAKO_BOOKSHELF_CLAIM_COMPLETE',ok:true,copyId:String(payload.scene?.distribution?.copyId||'')},location.origin);
+    return true;
+  }
   if(returnToBookstore){
     const target=new URL('../bookstore/',location.href);
     target.hash='reading-room';
@@ -2466,7 +2479,7 @@ if(previewClaimTokenFromLocation()){
       document.getElementById('xClaimHandoff')?.remove();
       let claimed=false;
       try{claimed=await importBookshelfClaimFromLocation();}
-      catch(e){console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
+      catch(e){notifyEmbeddedBookshelfClaimFailure(e);console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
       await render();
       await restoreBookshelfAuthorSession();
       if(claimed)toast('自分の一冊を本棚に受け取りました。');
@@ -2475,7 +2488,7 @@ if(previewClaimTokenFromLocation()){
   }
   let claimed=false;
   try{claimed=await importBookshelfClaimFromLocation();}
-  catch(e){console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
+  catch(e){notifyEmbeddedBookshelfClaimFailure(e);console.error(e);AhakoDialog.alert(e?.message||'本棚へ一冊を受け取れませんでした。');}
   await render();
   await restoreBookshelfAuthorSession();
   if(claimed)toast('自分の一冊を本棚に受け取りました。');
