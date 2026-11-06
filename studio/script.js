@@ -10814,7 +10814,10 @@ return flowCommentCard;}
   // The history palette is portaled to document.body, outside the toolbar.
   // Do not rebuild it during pointerup: replacing its chip before the browser's
   // click event fires silently drops the selected-color action.
-  const isRichToolbarSurface=e=>!!e.target.closest?.('.rich-selection-toolbar,.rich-color-popover');
+  // The custom color picker is portaled to document.body as .studio-color-popover.
+  // Its pointerup must not refresh the selection toolbar: updateRichToolbarState
+  // would reset the in-progress picker value before the picker commits it.
+  const isRichToolbarSurface=e=>!!e.target.closest?.('.rich-selection-toolbar,.rich-color-popover,.studio-color-popover');
   document.addEventListener('selectionchange',queueRichSelectionToolbar);
   document.addEventListener('pointerup',e=>{if(isRichToolbarSurface(e))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},true);
   document.addEventListener('mouseup',e=>{if(isRichToolbarSurface(e))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},true);
