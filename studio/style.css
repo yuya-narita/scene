@@ -12010,6 +12010,20 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 }
 .rich-selection-toolbar button.is-active,.rich-selection-toolbar .rich-dropdown-trigger.is-active{background:rgba(115,214,173,.16)!important;color:#73d6ad!important;}
 
+/* Recent and pinned text colors are available directly from the selection toolbar. */
+.rich-selection-toolbar .rich-color-control{position:relative;display:flex;align-items:center;gap:2px;flex:0 0 auto;width:auto;height:36px;padding:0 3px;border-radius:9px}
+.rich-selection-toolbar .rich-color-control input[type="color"]{flex:0 0 34px;width:34px;height:34px;padding:5px}
+.rich-selection-toolbar .rich-color-palette-toggle{position:relative;min-width:27px!important;width:27px;height:30px!important;padding:0!important;border-radius:7px;font-size:11px!important}
+.rich-selection-toolbar .rich-color-palette-toggle::before{content:'';display:inline-block;width:12px;height:12px;margin-right:2px;vertical-align:-2px;border:1px solid rgba(255,255,255,.7);border-radius:50%;background:var(--rich-color-current,#333)}
+.rich-color-popover{position:fixed;z-index:2147483647;width:min(270px,calc(100vw - 16px));display:grid;gap:10px;padding:12px;border:1px solid #d8dce0;border-radius:12px;background:#fff;color:#202329;box-shadow:0 12px 32px rgba(0,0,0,.30)}
+.rich-color-popover[hidden]{display:none!important}
+.rich-color-history-row{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;gap:8px}
+.rich-color-history-row>span{font:750 11px/1.2 system-ui;color:#525861}
+.rich-color-history-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-height:24px}
+.rich-color-history-chips small{font:600 10px/1.2 system-ui;color:#8b9098}
+.rich-color-history-actions{display:flex;justify-content:flex-end;padding-top:2px;border-top:1px solid #eceef0}
+.rich-color-popover .text-color-pin{font-size:11px}
+
 
 /* V85 — Scene image rotation authoring */
 .desktop-scene-image-preview{padding:14px}

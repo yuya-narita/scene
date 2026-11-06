@@ -10350,6 +10350,46 @@ return flowCommentCard;}
   let richSelectionToolbar=null;
   let richSelectionSnapshot=null;
   let richToolbarInteracting=false;
+  let richColorPopover=null;
+  let richColorPaletteToggle=null;
+  function refreshRichColorPopover(currentColor=''){
+    if(!richColorPopover)return;
+    richColorPopover.replaceChildren();
+    const makeRow=(label,colors)=>{
+      const row=document.createElement('div');row.className='rich-color-history-row';
+      const title=document.createElement('span');title.textContent=label;row.appendChild(title);
+      const chips=document.createElement('div');chips.className='rich-color-history-chips';
+      if(colors.length)colors.forEach(hex=>{
+        const chip=document.createElement('button');chip.type='button';chip.className='text-color-chip';chip.style.backgroundColor=hex;chip.title=hex;chip.setAttribute('aria-label',`${label} ${hex}`);
+        if(normalizeTextColor(currentColor)===hex)chip.classList.add('is-current');
+        chip.addEventListener('click',()=>{
+          rememberTextColor(hex);
+          const input=richSelectionToolbar?.querySelector('input[data-rich-action="color"]');if(input)input.value=hex;
+          if(richColorPaletteToggle)richColorPaletteToggle.style.setProperty('--rich-color-current',hex);
+          richColorPopover.hidden=true;richToolbarInteracting=false;
+          applyRichSelectionAction('color',hex);
+        });chips.appendChild(chip);
+      });
+      else {const empty=document.createElement('small');empty.textContent=uiLanguage==='en'?'None yet':'まだなし';chips.appendChild(empty);}
+      row.appendChild(chips);return row;
+    };
+    const recent=readRecentTextColors(),pinned=readPinnedTextColors();
+    richColorPopover.append(makeRow(uiLanguage==='en'?'Recent':'最近',recent),makeRow(uiLanguage==='en'?'Pinned':'固定',pinned));
+    const current=normalizeTextColor(currentColor)||normalizeTextColor(richSelectionToolbar?.querySelector('input[data-rich-action="color"]')?.value);
+    const pin=document.createElement('button');pin.type='button';pin.className='text-color-pin';pin.disabled=!current;
+    const isPinned=!!current&&pinned.includes(current);
+    pin.textContent=isPinned?(uiLanguage==='en'?'★ Unpin':'★ 固定を外す'):(uiLanguage==='en'?'☆ Pin this color':'☆ この色を固定');
+    pin.addEventListener('click',()=>{if(!current)return;togglePinnedTextColor(current);refreshRichColorPopover(current);});
+    const actions=document.createElement('div');actions.className='rich-color-history-actions';actions.appendChild(pin);richColorPopover.appendChild(actions);
+  }
+  function placeRichColorPopover(){
+    if(!richColorPopover||richColorPopover.hidden||!richColorPaletteToggle)return;
+    const anchor=richColorPaletteToggle.getBoundingClientRect(),width=richColorPopover.offsetWidth||260,height=richColorPopover.offsetHeight||120;
+    const vw=document.documentElement.clientWidth||window.innerWidth,vh=document.documentElement.clientHeight||window.innerHeight;
+    const left=Math.max(8,Math.min(vw-width-8,anchor.left));
+    const top=anchor.bottom+8+height<=vh-8?anchor.bottom+8:Math.max(8,anchor.top-height-8);
+    richColorPopover.style.left=`${Math.round(left)}px`;richColorPopover.style.top=`${Math.round(top)}px`;
+  }
   function ensureRichSelectionToolbar(){
     if(richSelectionToolbar)return richSelectionToolbar;
     const bar=document.createElement('div');bar.className='rich-selection-toolbar';bar.hidden=true;bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','選択した文字の書式');
@@ -10366,15 +10406,19 @@ return flowCommentCard;}
     };
     dropdown('書体','font',[['serif','明朝'],['sans','ゴシック'],['mono','等幅']],'書体');
     dropdown('サイズ','size',[['0.85','小 85%'],['1','標準 100%'],['1.2','大 120%'],['1.45','特大 145%']],'文字サイズ');
-    const colorWrap=document.createElement('label');colorWrap.className='rich-color-control';colorWrap.title='文字色';
-    const color=document.createElement('input');color.type='color';color.value='#333333';color.dataset.richAction='color';color.setAttribute('aria-label','文字色');colorWrap.appendChild(color);bar.appendChild(colorWrap);
+    const colorWrap=document.createElement('div');colorWrap.className='rich-color-control';colorWrap.title='文字色';
+    const color=document.createElement('input');color.type='color';color.value='#333333';color.dataset.richAction='color';color.setAttribute('aria-label','文字色');colorWrap.appendChild(color);
+    const colorToggle=document.createElement('button');colorToggle.type='button';colorToggle.className='rich-color-palette-toggle';colorToggle.textContent='▾';colorToggle.title='最近使った色・固定色';colorToggle.setAttribute('aria-label','最近使った色・固定色');colorWrap.appendChild(colorToggle);bar.appendChild(colorWrap);
     dropdown('見出し','heading',[['1','見出し1'],['2','見出し2'],['3','見出し3']],'見出し');
     dropdown('リスト','list',[['bullet','・ 箇条書き'],['number','1. 番号付き']],'リスト');
     button('❝','quote','引用');
     dropdown('文字向き','orientation',[[ 'tcy','縦中横' ],[ 'sideways','横倒し' ],[ 'upright','正立' ]],'選択した文字の縦書きでの向き');
     const sep=document.createElement('span');sep.className='rich-toolbar-separator';sep.setAttribute('aria-hidden','true');bar.appendChild(sep);
     button('解除','clear','選択範囲の書式を解除','rich-clear-button');
-    document.body.appendChild(bar);richSelectionToolbar=bar;
+    document.body.appendChild(bar);richSelectionToolbar=bar;richColorPaletteToggle=colorToggle;
+    richColorPopover=document.createElement('div');richColorPopover.className='rich-color-popover';richColorPopover.hidden=true;richColorPopover.setAttribute('role','dialog');richColorPopover.setAttribute('aria-label','最近使った色・固定色');document.body.appendChild(richColorPopover);
+    colorToggle.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();refreshRichColorPopover(color.value);richColorPopover.hidden=!richColorPopover.hidden;richToolbarInteracting=!richColorPopover.hidden;placeRichColorPopover();});
+    document.addEventListener('pointerdown',e=>{if(!richColorPopover||richColorPopover.hidden)return;if(e.target.closest?.('.rich-color-popover,.rich-color-palette-toggle'))return;richColorPopover.hidden=true;richToolbarInteracting=false;},true);
     const closeMenus=(except=null)=>bar.querySelectorAll('.rich-dropdown').forEach(w=>{if(w===except)return;w.querySelector('.rich-dropdown-menu').hidden=true;w.querySelector('.rich-dropdown-trigger').setAttribute('aria-expanded','false');});
     const openMenu=wrap=>{if(!wrap)return;closeMenus(wrap);const menu=wrap.querySelector('.rich-dropdown-menu'),trigger=wrap.querySelector('.rich-dropdown-trigger');menu.hidden=false;trigger.setAttribute('aria-expanded','true');};
     // V79: note-like desktop behavior. Pointer hover previews dropdowns; touch keeps tap-to-open.
@@ -10392,7 +10436,8 @@ return flowCommentCard;}
       const t=e.target.closest?.('button[data-rich-action]');
       if(t){e.preventDefault();e.stopPropagation();closeMenus();if(t.dataset.richAction==='ruby'){editRichRuby();return;}applyRichSelectionAction(t.dataset.richAction);}
     });
-    color.addEventListener('input',()=>{});color.addEventListener('change',()=>applyRichSelectionAction('color',color.value));
+    color.addEventListener('input',()=>{colorToggle.style.setProperty('--rich-color-current',color.value);});
+    color.addEventListener('change',()=>{rememberTextColor(color.value);colorToggle.style.setProperty('--rich-color-current',color.value);richColorPopover.hidden=true;richToolbarInteracting=false;applyRichSelectionAction('color',color.value);});
     return bar;
   }
   function autoRubyConfig(doc=workingDocument){return doc?.studio?.autoRuby||{version:1,settings:{mode:'difficult',grade:3,repeat:'work'},dictionary:{}};}
@@ -10468,7 +10513,7 @@ return flowCommentCard;}
       return [];
     });
   }
-  function hideRichSelectionToolbar(){if(richSelectionToolbar)richSelectionToolbar.hidden=true;richSelectionSnapshot=null;}
+  function hideRichSelectionToolbar(){if(richSelectionToolbar)richSelectionToolbar.hidden=true;if(richColorPopover)richColorPopover.hidden=true;richToolbarInteracting=false;richSelectionSnapshot=null;}
 
   // Route the existing rich-text toolbar to one credit field without touching Scene.text.
   function creditRichTarget(owner,node){
@@ -10591,6 +10636,8 @@ return flowCommentCard;}
       w.querySelectorAll('.rich-dropdown-item').forEach(item=>item.classList.toggle('is-current',!!value&&item.dataset.richValue===value));
     });
     const input=bar.querySelector('input[data-rich-action="color"]');if(input&&/^#[0-9a-f]{6}$/i.test(color))input.value=color;
+    if(richColorPaletteToggle)richColorPaletteToggle.style.setProperty('--rich-color-current',input?.value||'#333333');
+    refreshRichColorPopover(color||input?.value||'');
   }
   function showRichSelectionToolbar(){
     // Text can be selected either during direct text editing or straight from Preview.
