@@ -11992,7 +11992,6 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .rich-selection-toolbar .rich-size-px-inline[hidden]{display:none!important}
 .rich-selection-toolbar .rich-size-px-inline input{box-sizing:border-box;width:58px;height:25px;border:1px solid rgba(255,255,255,.28);border-radius:6px;background:#222;color:#fff;padding:0 5px;font:700 12px/1 system-ui}
 .live-empty-authoring-overlay{appearance:none!important;-webkit-appearance:none!important;box-sizing:border-box!important;display:grid!important;place-items:center!important;text-align:center!important;font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif!important}
-.live-edit-enabled .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target:not(.live-inline-editing)::before{content:none!important}
 .v58-text-size-row{grid-template-columns:minmax(0,1fr) 82px!important}
 .v58-text-size-row>.v58-bulk-scope,.v63-typeface-row>.v58-bulk-scope{grid-column:1/-1}
 .v63-typeface-row{grid-template-columns:minmax(0,1fr)!important}

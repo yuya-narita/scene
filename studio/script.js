@@ -10435,7 +10435,9 @@ return flowCommentCard;}
     const commitPx=()=>{if(pxCommitted||!pxDirty||!richPxPendingSelection)return;pxCommitted=true;pxDirty=false;const n=Math.max(8,Math.min(420,Math.round(Number(richPxSizeInput.value)||24)));applyRichSelectionAction('sizePx',n);richPxPendingSelection=null;};
     richPxSizeInput.addEventListener('input',()=>{pxDirty=true;pxCommitted=false;});
     richPxSizeInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commitPx();richPxSizeInput.blur();}else if(e.key==='Escape'){e.preventDefault();pxDirty=false;richPxPendingSelection=null;richPxSizeField.hidden=true;richPxSizeInput.blur();}});
-    richPxSizeInput.addEventListener('change',commitPx);richPxSizeInput.addEventListener('blur',commitPx);
+    // Number-input spinners can dispatch `change` for every 1px step. Commit
+    // only on Enter or when leaving the field so multi-step adjustments stay open.
+    richPxSizeInput.addEventListener('blur',commitPx);
     const colorWrap=document.createElement('div');colorWrap.className='rich-color-control';colorWrap.title='文字色';
     richColorPicker=makeCommittedTextColorPicker('#333333',{compact:true,onCommit:hex=>{if(richPickerSelectionSnapshot)richSelectionSnapshot=richPickerSelectionSnapshot;rememberTextColor(hex);if(colorToggle)colorToggle.style.setProperty('--rich-color-current',hex);applyRichSelectionAction('color',hex);richPickerSelectionSnapshot=null;}});
     richColorPicker.root.classList.add('rich-toolbar-color-picker');colorWrap.appendChild(richColorPicker.root);
@@ -10679,6 +10681,7 @@ return flowCommentCard;}
     refreshRichColorPopover(color||currentColor);
   }
   function showRichSelectionToolbar(){
+    if(richPxSizeInput&&document.activeElement===richPxSizeInput)return;
     // Text can be selected either during direct text editing or straight from Preview.
     // subText remains excluded because Rich Text belongs to scene.text in Format v1.
     if(liveInlineEditEl&&liveInlineEditField!=='text')return hideRichSelectionToolbar();
@@ -10827,6 +10830,7 @@ return flowCommentCard;}
     return snap;
   }
   function showCapturedRichSelection(snap){
+    if(richPxSizeInput&&document.activeElement===richPxSizeInput)return true;
     if(!snap)return false;
     const bar=ensureRichSelectionToolbar();
     bar.hidden=false;updateRichToolbarState(snap);
@@ -10842,6 +10846,7 @@ return flowCommentCard;}
     return !!snap;
   }
   const queueRichSelectionToolbar=()=>{
+    if(richPxSizeInput&&document.activeElement===richPxSizeInput)return;
     if(richToolbarInteracting||richSelectionToolbar?.querySelector?.('.rich-dropdown-menu:not([hidden])'))return;
     // First read immediately while the browser Selection is definitely alive.
     if(captureAndShowRichSelection())return;
@@ -10959,7 +10964,7 @@ return flowCommentCard;}
     if(!liveEditEnabled||!playerHost){removeLiveEmptyAuthoringOverlay();return;}
     const article=playerHost.querySelector('.sp-scene.is-active');
     const activeId=article?.dataset?.sceneId;
-    const scene=workingDocument?.scenes?.find(s=>String(s?.id)===String(activeId))||liveEditScene().scene;
+    const scene=workingDocument?.scenes?.find(s=>String(s?.id)===String(activeId))||player?.currentScene||liveEditScene().scene;
     if(!scene||!article){removeLiveEmptyAuthoringOverlay();return;}
 
     let text=article.querySelector('.sp-text');
@@ -10991,7 +10996,7 @@ return flowCommentCard;}
       const hit=document.createElement('button');
       hit.type='button';
       hit.className='live-empty-authoring-overlay';
-      hit.textContent=u('タップして入力','Tap to type');
+      hit.textContent='';
       hit.setAttribute('aria-label',u('この空Sceneに本文を入力','Type text in this empty Scene'));
       Object.assign(hit.style,{
         position:'fixed',
