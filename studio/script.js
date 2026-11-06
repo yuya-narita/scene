@@ -10354,6 +10354,9 @@ return flowCommentCard;}
   // visible text in the active Preview is itself the authoring gesture.
   let richSelectionToolbar=null;
   let richSelectionSnapshot=null;
+  let richPxSizeField=null;
+  let richPxSizeInput=null;
+  let richPxPendingSelection=null;
   let richToolbarInteracting=false;
   let richColorPopover=null;
   let richColorPaletteToggle=null;
@@ -10420,7 +10423,19 @@ return flowCommentCard;}
       wrap.append(trigger,menu);bar.appendChild(wrap);return wrap;
     };
     dropdown('書体','font',[['serif','明朝'],['sans','ゴシック'],['mono','等幅']],'書体');
-    dropdown('サイズ','size',[['0.85','小 85%'],['1','標準 100%'],['1.2','大 120%'],['1.45','特大 145%'],['px','px指定…']],'文字サイズ');
+    const sizeWrap=dropdown('サイズ','size',[['0.85','小 85%'],['1','標準 100%'],['1.2','大 120%'],['1.45','特大 145%'],['px','px指定…']],'文字サイズ');
+    // Keep the numeric editor beside the trigger, outside the hover dropdown.
+    // The dropdown is intentionally transient; a field nested inside it gets
+    // hidden again by hover/selection refresh before the user can type.
+    richPxSizeField=document.createElement('label');richPxSizeField.className='rich-size-px-inline';richPxSizeField.hidden=true;
+    const pxUnit=document.createElement('span');pxUnit.textContent='px';
+    richPxSizeInput=document.createElement('input');richPxSizeInput.type='number';richPxSizeInput.inputMode='numeric';richPxSizeInput.min='8';richPxSizeInput.max='420';richPxSizeInput.step='1';richPxSizeInput.setAttribute('aria-label','文字サイズ px');
+    richPxSizeField.append(pxUnit,richPxSizeInput);sizeWrap.after(richPxSizeField);
+    let pxCommitted=false,pxDirty=false;
+    const commitPx=()=>{if(pxCommitted||!pxDirty||!richPxPendingSelection)return;pxCommitted=true;pxDirty=false;const n=Math.max(8,Math.min(420,Math.round(Number(richPxSizeInput.value)||24)));applyRichSelectionAction('sizePx',n);richPxPendingSelection=null;};
+    richPxSizeInput.addEventListener('input',()=>{pxDirty=true;pxCommitted=false;});
+    richPxSizeInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commitPx();richPxSizeInput.blur();}else if(e.key==='Escape'){e.preventDefault();pxDirty=false;richPxPendingSelection=null;richPxSizeField.hidden=true;richPxSizeInput.blur();}});
+    richPxSizeInput.addEventListener('change',commitPx);richPxSizeInput.addEventListener('blur',commitPx);
     const colorWrap=document.createElement('div');colorWrap.className='rich-color-control';colorWrap.title='文字色';
     richColorPicker=makeCommittedTextColorPicker('#333333',{compact:true,onCommit:hex=>{if(richPickerSelectionSnapshot)richSelectionSnapshot=richPickerSelectionSnapshot;rememberTextColor(hex);if(colorToggle)colorToggle.style.setProperty('--rich-color-current',hex);applyRichSelectionAction('color',hex);richPickerSelectionSnapshot=null;}});
     richColorPicker.root.classList.add('rich-toolbar-color-picker');colorWrap.appendChild(richColorPicker.root);
@@ -10438,13 +10453,13 @@ return flowCommentCard;}
     const closeMenus=(except=null)=>bar.querySelectorAll('.rich-dropdown').forEach(w=>{if(w===except)return;const menu=w.querySelector('.rich-dropdown-menu');if(menu.dataset.pxInput==='true'){menu.innerHTML=menu.dataset.originalMarkup||'';delete menu.dataset.pxInput;}menu.hidden=true;w.querySelector('.rich-dropdown-trigger').setAttribute('aria-expanded','false');});
     richCloseToolbarMenus=()=>closeMenus();
     const openMenu=wrap=>{if(!wrap)return;closeMenus(wrap);const menu=wrap.querySelector('.rich-dropdown-menu'),trigger=wrap.querySelector('.rich-dropdown-trigger');menu.hidden=false;trigger.setAttribute('aria-expanded','true');};
-    document.addEventListener('pointerdown',e=>{if(bar.contains(e.target)||e.target.closest?.('.rich-color-popover,.rich-color-palette-toggle'))return;const pxInput=bar.querySelector('.rich-size-px-field input');if(pxInput&&document.activeElement===pxInput)return;closeMenus();richToolbarInteracting=false;},true);
+    document.addEventListener('pointerdown',e=>{if(bar.contains(e.target)||e.target.closest?.('.rich-color-popover,.rich-color-palette-toggle'))return;if(richPxSizeInput&&document.activeElement===richPxSizeInput)return;closeMenus();richToolbarInteracting=false;},true);
     // V79: note-like desktop behavior. Pointer hover previews dropdowns; touch keeps tap-to-open.
     if(matchMedia?.('(hover:hover) and (pointer:fine)')?.matches){
       bar.querySelectorAll('.rich-dropdown').forEach(w=>{w.addEventListener('pointerenter',()=>{if(richColorPopover&&!richColorPopover.hidden||richColorPicker?.root?.classList.contains('is-open'))return;richToolbarInteracting=true;openMenu(w);});});
     }
     richColorPicker?.root?.querySelector('.studio-color-trigger')?.addEventListener('pointerdown',()=>{richPickerSelectionSnapshot=richSelectionSnapshot?{...richSelectionSnapshot}:null;richCloseToolbarMenus();if(richColorPopover)richColorPopover.hidden=true;richToolbarInteracting=true;});
-    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{const pxInput=bar.querySelector('.rich-size-px-field input'),pxFocused=pxInput&&document.activeElement===pxInput,pxMenuOpen=!!bar.querySelector('.rich-dropdown-menu[data-px-input="true"]:not([hidden])');if(!bar.matches(':hover')&&!pxFocused&&!pxMenuOpen&&richColorPopover?.hidden!==false&&!richColorPicker?.root?.classList.contains('is-open'))richToolbarInteracting=false;},340);});
+    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{const pxFocused=richPxSizeInput&&document.activeElement===richPxSizeInput;if(!bar.matches(':hover')&&!pxFocused&&richColorPopover?.hidden!==false&&!richColorPicker?.root?.classList.contains('is-open'))richToolbarInteracting=false;},340);});
     // V78: act on pointerdown so the first press is the action. Native <select>
     // controls were stealing focus/selection and causing the old two-press cushion.
     bar.addEventListener('pointerdown',e=>{
@@ -10452,7 +10467,8 @@ return flowCommentCard;}
       if(trigger){e.preventDefault();e.stopPropagation();const wrap=trigger.closest('.rich-dropdown'),menu=wrap.querySelector('.rich-dropdown-menu'),opening=menu.hidden;closeMenus(wrap);if(!opening&&menu.dataset.pxInput==='true'){menu.innerHTML=menu.dataset.originalMarkup||'';delete menu.dataset.pxInput;}menu.hidden=!opening;trigger.setAttribute('aria-expanded',String(opening));return;}
       const item=e.target.closest?.('.rich-dropdown-item');
       if(item){e.preventDefault();e.stopPropagation();const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;
-        if(action==='size'&&value==='px'){const menu=wrap.querySelector('.rich-dropdown-menu'),trigger=wrap.querySelector('.rich-dropdown-trigger');menu.dataset.originalMarkup||=menu.innerHTML;menu.dataset.pxInput='true';menu.replaceChildren();const field=document.createElement('label');field.className='rich-size-px-field';field.textContent='px';const input=document.createElement('input');input.type='number';input.inputMode='numeric';input.min='8';input.max='420';input.step='1';const snap=richSelectionSnapshot,selectedRange=(snap?.scene?.richText?.ranges||[]).find(r=>r?.kind==='span'&&Number(r.start)<=Number(snap?.start)&&Number(r.end)>=Number(snap?.end)&&Number(r.style?.fontSizePx)>0),shownPx=Number(trigger?.textContent?.match(/(\d+(?:\.\d+)?)\s*px/i)?.[1]);input.value=String(Math.round(Number(selectedRange?.style?.fontSizePx)||shownPx||24));input.setAttribute('aria-label','文字サイズ px');field.appendChild(input);menu.appendChild(field);menu.hidden=false;trigger?.setAttribute('aria-expanded','true');richToolbarInteracting=true;let committed=false;const commit=()=>{if(committed)return;committed=true;const n=Math.max(8,Math.min(420,Math.round(Number(input.value)||24)));closeMenus();applyRichSelectionAction('sizePx',n);};input.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();commit();}});input.addEventListener('change',commit);input.addEventListener('blur',commit);requestAnimationFrame(()=>{input.focus();input.select();});return;}
+        if(action==='size'&&value==='px'){closeMenus();const snap=richSelectionSnapshot,selectedRange=(snap?.scene?.richText?.ranges||[]).find(r=>r?.kind==='span'&&Number(r.start)<=Number(snap?.start)&&Number(r.end)>=Number(snap?.end)&&Number(r.style?.fontSizePx)>0),shownPx=Number(wrap.querySelector('.rich-dropdown-trigger')?.textContent?.match(/(\d+(?:\.\d+)?)\s*px/i)?.[1]);richPxPendingSelection=snap?{scene:snap.scene,start:snap.start,end:snap.end}:null;pxCommitted=false;pxDirty=false;richPxSizeField.hidden=false;richPxSizeInput.value=String(Math.round(Number(selectedRange?.style?.fontSizePx)||shownPx||24));richToolbarInteracting=true;requestAnimationFrame(()=>{richPxSizeInput.focus();richPxSizeInput.select();});return;}
+        if(action==='size')richPxPendingSelection=null;
         closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);return;}
       const t=e.target.closest?.('button[data-rich-action]');
       if(t){e.preventDefault();e.stopPropagation();closeMenus();if(t.dataset.richAction==='ruby'){editRichRuby();return;}applyRichSelectionAction(t.dataset.richAction);}
@@ -10641,6 +10657,8 @@ return flowCommentCard;}
     const font=spanWith(st=>st.fontFamily)?.style?.fontFamily||'';
     const scale=spanWith(st=>Number(st.fontScale)>0)?.style?.fontScale;
     const pxSize=spanWith(st=>Number(st.fontSizePx)>0)?.style?.fontSizePx;
+    const pendingPx=richPxPendingSelection&&richPxPendingSelection.scene===scene&&richPxPendingSelection.start===start&&richPxPendingSelection.end===end;
+    if(richPxSizeField){richPxSizeField.hidden=!(Number(pxSize)>0||pendingPx);if(!richPxSizeInput.matches(':focus')&&richPxSizeField.hidden===false)richPxSizeInput.value=String(Math.round(Number(pxSize)||Number(richPxSizeInput.value)||24));}
     const color=spanWith(st=>st.color)?.style?.color||'';
     const setActive=(sel,on)=>{const el=bar.querySelector(sel);if(el){el.classList.toggle('is-active',!!on);el.setAttribute('aria-pressed',String(!!on));}};
     setActive('[data-rich-action="bold"]',bold);setActive('[data-rich-action="italic"]',italic);setActive('[data-rich-action="quote"]',!!quote);
@@ -10919,9 +10937,11 @@ return flowCommentCard;}
   }
 
   let liveEmptyAuthoringOverlay=null;
+  let liveEmptyAuthoringTarget=null;
   function removeLiveEmptyAuthoringOverlay(){
     liveEmptyAuthoringOverlay?.remove();
     liveEmptyAuthoringOverlay=null;
+    liveEmptyAuthoringTarget=null;
   }
   function positionLiveEmptyAuthoringOverlay(){
     if(!liveEmptyAuthoringOverlay||!liveEditEnabled||!playerHost)return;
@@ -10937,8 +10957,9 @@ return flowCommentCard;}
   }
   function ensureLiveEditEmptyTarget(){
     if(!liveEditEnabled||!playerHost){removeLiveEmptyAuthoringOverlay();return;}
-    const {scene}=liveEditScene();
     const article=playerHost.querySelector('.sp-scene.is-active');
+    const activeId=article?.dataset?.sceneId;
+    const scene=workingDocument?.scenes?.find(s=>String(s?.id)===String(activeId))||liveEditScene().scene;
     if(!scene||!article){removeLiveEmptyAuthoringOverlay();return;}
 
     let text=article.querySelector('.sp-text');
@@ -10965,6 +10986,7 @@ return flowCommentCard;}
     // still lose the first tap to navigation. This body-level overlay sits over
     // only the active Scene and turns the first tap into a trusted authoring
     // gesture before ScenePlayer can see it.
+    if(liveEmptyAuthoringOverlay&&liveEmptyAuthoringTarget!==text)removeLiveEmptyAuthoringOverlay();
     if(!liveEmptyAuthoringOverlay){
       const hit=document.createElement('button');
       hit.type='button';
@@ -10978,6 +11000,9 @@ return flowCommentCard;}
         padding:'0',
         margin:'0',
         background:'transparent',
+        display:'grid',
+        placeItems:'center',
+        textAlign:'center',
         color:'rgba(110,110,115,.38)',
         font:'600 13px/1.5 system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif',
         letterSpacing:'.04em',
@@ -11000,6 +11025,7 @@ return flowCommentCard;}
       hit.addEventListener('touchstart',begin,{capture:true,passive:false});
       document.body.appendChild(hit);
       liveEmptyAuthoringOverlay=hit;
+      liveEmptyAuthoringTarget=text;
     }
     positionLiveEmptyAuthoringOverlay();
   }
