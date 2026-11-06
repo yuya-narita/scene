@@ -10437,12 +10437,13 @@ return flowCommentCard;}
     const closeMenus=(except=null)=>bar.querySelectorAll('.rich-dropdown').forEach(w=>{if(w===except)return;const menu=w.querySelector('.rich-dropdown-menu');if(menu.dataset.pxInput==='true'){menu.innerHTML=menu.dataset.originalMarkup||'';delete menu.dataset.pxInput;}menu.hidden=true;w.querySelector('.rich-dropdown-trigger').setAttribute('aria-expanded','false');});
     richCloseToolbarMenus=()=>closeMenus();
     const openMenu=wrap=>{if(!wrap)return;closeMenus(wrap);const menu=wrap.querySelector('.rich-dropdown-menu'),trigger=wrap.querySelector('.rich-dropdown-trigger');menu.hidden=false;trigger.setAttribute('aria-expanded','true');};
+    document.addEventListener('pointerdown',e=>{if(bar.contains(e.target)||e.target.closest?.('.rich-color-popover,.rich-color-palette-toggle'))return;const pxInput=bar.querySelector('.rich-size-px-field input');if(pxInput&&document.activeElement===pxInput)return;closeMenus();richToolbarInteracting=false;},true);
     // V79: note-like desktop behavior. Pointer hover previews dropdowns; touch keeps tap-to-open.
     if(matchMedia?.('(hover:hover) and (pointer:fine)')?.matches){
       bar.querySelectorAll('.rich-dropdown').forEach(w=>{w.addEventListener('pointerenter',()=>{if(richColorPopover&&!richColorPopover.hidden||richColorPicker?.root?.classList.contains('is-open'))return;richToolbarInteracting=true;openMenu(w);});});
     }
     richColorPicker?.root?.querySelector('.studio-color-trigger')?.addEventListener('pointerdown',()=>{richPickerSelectionSnapshot=richSelectionSnapshot?{...richSelectionSnapshot}:null;richCloseToolbarMenus();if(richColorPopover)richColorPopover.hidden=true;richToolbarInteracting=true;});
-    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{if(!bar.matches(':hover')&&richColorPopover?.hidden!==false&&!richColorPicker?.root?.classList.contains('is-open'))richToolbarInteracting=false;},340);});
+    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{const pxInput=bar.querySelector('.rich-size-px-field input'),pxFocused=pxInput&&document.activeElement===pxInput;if(!bar.matches(':hover')&&!pxFocused&&richColorPopover?.hidden!==false&&!richColorPicker?.root?.classList.contains('is-open'))richToolbarInteracting=false;},340);});
     // V78: act on pointerdown so the first press is the action. Native <select>
     // controls were stealing focus/selection and causing the old two-press cushion.
     bar.addEventListener('pointerdown',e=>{
@@ -11989,7 +11990,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     v63TypefaceBulkSyncScene(scene);
     const wrap=document.createElement('div');wrap.className='desktop-text-detail-field v58-bulk-field v63-typeface-bulk-field';
     const cap=document.createElement('span');cap.textContent=label||u('書体','Typeface');
-    const row=document.createElement('div');row.className='v58-bulk-row';
+    const row=document.createElement('div');row.className='v58-bulk-row v63-typeface-row';
     const value=document.createElement('select');
     [['inherit',u('作品設定','Work setting')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
     value.value=ensurePresentation(scene).text?.fontFamily||'inherit';
