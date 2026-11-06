@@ -10419,7 +10419,7 @@ return flowCommentCard;}
       wrap.append(trigger,menu);bar.appendChild(wrap);return wrap;
     };
     dropdown('書体','font',[['serif','明朝'],['sans','ゴシック'],['mono','等幅']],'書体');
-    dropdown('サイズ','size',[['0.85','小 85%'],['1','標準 100%'],['1.2','大 120%'],['1.45','特大 145%']],'文字サイズ');
+    dropdown('サイズ','size',[['0.85','小 85%'],['1','標準 100%'],['1.2','大 120%'],['1.45','特大 145%'],['px','px指定…']],'文字サイズ');
     const colorWrap=document.createElement('div');colorWrap.className='rich-color-control';colorWrap.title='文字色';
     richColorPicker=makeCommittedTextColorPicker('#333333',{compact:true,onCommit:hex=>{if(richPickerSelectionSnapshot)richSelectionSnapshot=richPickerSelectionSnapshot;rememberTextColor(hex);if(colorToggle)colorToggle.style.setProperty('--rich-color-current',hex);applyRichSelectionAction('color',hex);richPickerSelectionSnapshot=null;}});
     richColorPicker.root.classList.add('rich-toolbar-color-picker');colorWrap.appendChild(richColorPicker.root);
@@ -10434,7 +10434,7 @@ return flowCommentCard;}
     richColorPopover=document.createElement('div');richColorPopover.className='rich-color-popover';richColorPopover.hidden=true;richColorPopover.setAttribute('role','dialog');richColorPopover.setAttribute('aria-label','最近使った色・固定色');document.body.appendChild(richColorPopover);
     colorToggle.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();richCloseToolbarMenus();if(richColorPopover&&!richColorPopover.hidden){richColorPopover.hidden=true;richToolbarInteracting=false;return;}refreshRichColorPopover(richColorPicker?.value||'');richColorPopover.hidden=false;richToolbarInteracting=true;placeRichColorPopover();});
     document.addEventListener('pointerdown',e=>{if(!richColorPopover||richColorPopover.hidden)return;if(e.target.closest?.('.rich-color-popover,.rich-color-palette-toggle'))return;richColorPopover.hidden=true;richToolbarInteracting=false;},true);
-    const closeMenus=(except=null)=>bar.querySelectorAll('.rich-dropdown').forEach(w=>{if(w===except)return;w.querySelector('.rich-dropdown-menu').hidden=true;w.querySelector('.rich-dropdown-trigger').setAttribute('aria-expanded','false');});
+    const closeMenus=(except=null)=>bar.querySelectorAll('.rich-dropdown').forEach(w=>{if(w===except)return;const menu=w.querySelector('.rich-dropdown-menu');if(menu.dataset.pxInput==='true'){menu.innerHTML=menu.dataset.originalMarkup||'';delete menu.dataset.pxInput;}menu.hidden=true;w.querySelector('.rich-dropdown-trigger').setAttribute('aria-expanded','false');});
     richCloseToolbarMenus=()=>closeMenus();
     const openMenu=wrap=>{if(!wrap)return;closeMenus(wrap);const menu=wrap.querySelector('.rich-dropdown-menu'),trigger=wrap.querySelector('.rich-dropdown-trigger');menu.hidden=false;trigger.setAttribute('aria-expanded','true');};
     // V79: note-like desktop behavior. Pointer hover previews dropdowns; touch keeps tap-to-open.
@@ -10447,9 +10447,11 @@ return flowCommentCard;}
     // controls were stealing focus/selection and causing the old two-press cushion.
     bar.addEventListener('pointerdown',e=>{
       const trigger=e.target.closest?.('.rich-dropdown-trigger');
-      if(trigger){e.preventDefault();e.stopPropagation();const wrap=trigger.closest('.rich-dropdown'),menu=wrap.querySelector('.rich-dropdown-menu'),opening=menu.hidden;closeMenus(wrap);menu.hidden=!opening;trigger.setAttribute('aria-expanded',String(opening));return;}
+      if(trigger){e.preventDefault();e.stopPropagation();const wrap=trigger.closest('.rich-dropdown'),menu=wrap.querySelector('.rich-dropdown-menu'),opening=menu.hidden;closeMenus(wrap);if(!opening&&menu.dataset.pxInput==='true'){menu.innerHTML=menu.dataset.originalMarkup||'';delete menu.dataset.pxInput;}menu.hidden=!opening;trigger.setAttribute('aria-expanded',String(opening));return;}
       const item=e.target.closest?.('.rich-dropdown-item');
-      if(item){e.preventDefault();e.stopPropagation();const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);return;}
+      if(item){e.preventDefault();e.stopPropagation();const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;
+        if(action==='size'&&value==='px'){const menu=wrap.querySelector('.rich-dropdown-menu');menu.dataset.originalMarkup||=menu.innerHTML;menu.dataset.pxInput='true';menu.replaceChildren();const field=document.createElement('label');field.className='rich-size-px-field';field.textContent='px';const input=document.createElement('input');input.type='number';input.inputMode='numeric';input.min='8';input.max='420';input.step='1';input.value='24';input.setAttribute('aria-label','文字サイズ px');field.appendChild(input);menu.appendChild(field);menu.hidden=false;richToolbarInteracting=true;input.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();const n=Math.max(8,Math.min(420,Math.round(Number(input.value)||24)));closeMenus();applyRichSelectionAction('sizePx',n);}});input.addEventListener('change',()=>{const n=Math.max(8,Math.min(420,Math.round(Number(input.value)||24)));closeMenus();applyRichSelectionAction('sizePx',n);});requestAnimationFrame(()=>{input.focus();input.select();});return;}
+        closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);return;}
       const t=e.target.closest?.('button[data-rich-action]');
       if(t){e.preventDefault();e.stopPropagation();closeMenus();if(t.dataset.richAction==='ruby'){editRichRuby();return;}applyRichSelectionAction(t.dataset.richAction);}
     });
@@ -10636,15 +10638,16 @@ return flowCommentCard;}
     const orientation=ranges.find(r=>r?.kind==='orientation'&&covers(r));
     const font=spanWith(st=>st.fontFamily)?.style?.fontFamily||'';
     const scale=spanWith(st=>Number(st.fontScale)>0)?.style?.fontScale;
+    const pxSize=spanWith(st=>Number(st.fontSizePx)>0)?.style?.fontSizePx;
     const color=spanWith(st=>st.color)?.style?.color||'';
     const setActive=(sel,on)=>{const el=bar.querySelector(sel);if(el){el.classList.toggle('is-active',!!on);el.setAttribute('aria-pressed',String(!!on));}};
     setActive('[data-rich-action="bold"]',bold);setActive('[data-rich-action="italic"]',italic);setActive('[data-rich-action="quote"]',!!quote);
     const labels={font:{serif:'明朝',sans:'ゴシック',mono:'等幅'},size:{'0.85':'小','1':'標準','1.2':'大','1.45':'特大'}};
     bar.querySelectorAll('.rich-dropdown').forEach(w=>{const action=w.dataset.richDropdown,tr=w.querySelector('.rich-dropdown-trigger');let value='';
-      if(action==='font')value=String(font||''); else if(action==='size'&&scale)value=String(Number(scale)); else if(action==='heading'&&heading)value=String(heading.level||''); else if(action==='list'&&list)value=list.ordered?'number':'bullet'; else if(action==='orientation'&&orientation)value=String(orientation.orientation||'');
+      if(action==='font')value=String(font||''); else if(action==='size'&&pxSize)value='px'; else if(action==='size'&&scale)value=String(Number(scale)); else if(action==='heading'&&heading)value=String(heading.level||''); else if(action==='list'&&list)value=list.ordered?'number':'bullet'; else if(action==='orientation'&&orientation)value=String(orientation.orientation||'');
       w.classList.toggle('is-active',!!value);tr.classList.toggle('is-active',!!value);
       if(action==='font')tr.textContent=(value?(labels.font[value]||'書体'):'書体')+' ▼';
-      if(action==='size')tr.textContent=(value?(labels.size[value]||'サイズ'):'サイズ')+' ▼';
+      if(action==='size')tr.textContent=(value?(value==='px'?`${Number(pxSize)||24}px`:(labels.size[value]||'サイズ')):'サイズ')+' ▼';
       if(action==='heading')tr.textContent=(value?`見出し${value}`:'見出し')+' ▼';
       if(action==='list')tr.textContent=(value==='number'?'番号付き':value==='bullet'?'箇条書き':'リスト')+' ▼';
       if(action==='orientation')tr.textContent=({tcy:'縦中横',sideways:'横倒し',upright:'正立'})[value]||'文字向き';
@@ -10701,7 +10704,8 @@ return flowCommentCard;}
     else if(action==='bold'){const cur=spanCover(st=>st.bold===true);if(cur)ranges=ranges.filter(r=>r!==cur);else ranges.push({start,end,kind:'span',style:{bold:true}});}
     else if(action==='italic'){const cur=spanCover(st=>st.italic===true);if(cur)ranges=ranges.filter(r=>r!==cur);else ranges.push({start,end,kind:'span',style:{italic:true}});}
     else if(action==='font'&&value){const cur=spanCover(st=>String(st.fontFamily||'')===String(value));ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&r?.style?.fontFamily));if(!cur)ranges.push({start,end,kind:'span',style:{fontFamily:String(value)}});}
-    else if(action==='size'&&value){const num=Number(value)||1,cur=spanCover(st=>Number(st.fontScale)===num);ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&Number(r?.style?.fontScale)>0));if(!cur)ranges.push({start,end,kind:'span',style:{fontScale:num}});}
+    else if(action==='sizePx'&&Number(value)>0){const num=Math.max(8,Math.min(420,Math.round(Number(value))));ranges=ranges.flatMap(r=>{if(r?.kind!=='span'||(!r?.style?.fontScale&&!r?.style?.fontSizePx)||!overlaps(r))return [r];const a=Number(r.start)||0,b=Number(r.end)||0,style={...r.style};delete style.fontScale;delete style.fontSizePx;const out=[];if(a<start)out.push({...r,end:start});if(b>end)out.push({...r,start:end});if(Object.keys(style).length)out.push({...r,start:Math.max(a,start),end:Math.min(b,end),style});return out;});ranges.push({start,end,kind:'span',style:{fontSizePx:num}});}
+    else if(action==='size'&&value){const num=Number(value)||1,cur=spanCover(st=>Number(st.fontScale)===num);ranges=ranges.filter(r=>!(r?.kind==='span'&&overlaps(r)&&(Number(r?.style?.fontScale)>0||Number(r?.style?.fontSizePx)>0)));if(!cur)ranges.push({start,end,kind:'span',style:{fontScale:num}});}
     else if(action==='color'&&value){
       const nextColor=String(value);
       ranges=ranges.flatMap(r=>{
@@ -11915,8 +11919,11 @@ function startInlineTextEdit(field='text',targetEl=null){
     const cap=document.createElement('span');cap.textContent=label||u('サイズ','Size');
     const row=document.createElement('div');row.className='v58-bulk-row';
     const value=document.createElement('select');
-    [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
-    value.value=ensurePresentation(scene).text?.size||'auto';
+    [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')],['px',u('px指定','Custom px')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;value.appendChild(o);});
+    const storedSize=ensurePresentation(scene).text?.size;
+    const storedPx=typeof storedSize==='number'&&Number.isFinite(storedSize)&&storedSize>0;
+    value.value=storedPx?'px':(storedSize||'auto');
+    const px=document.createElement('input');px.type='number';px.inputMode='numeric';px.min='8';px.max='420';px.step='1';px.className='v58-text-size-px';px.setAttribute('aria-label',u('文字サイズ px','Font size in pixels'));px.value=String(Math.round(storedPx?storedSize:24));px.hidden=!storedPx;
 
     const scope=document.createElement('select');scope.className='v58-bulk-scope';scope.dataset.historyIgnore='true';scope.setAttribute('aria-label',u('適用範囲','Apply scope'));
     [['current',u('このScene','This Scene')],['forward',u('ここから先','From here')],['all',u('全Scene','All Scenes')]].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;scope.appendChild(o);});
@@ -11938,18 +11945,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       scope.title=u('一括適用の範囲を選択','Choose bulk apply scope');
     };
 
-    // Safety rule: changing size never reads a previous bulk scope. It always changes
-    // only this Scene, then arms the one-shot bulk selector for this chosen value.
-    value.addEventListener('change',()=>{
-      if(!workingDocument?.scenes?.length)return;
-      const undoLabel=u('文字サイズの変更を元に戻せます','Undo text size change');
-      captureUndo(undoLabel);
-      const pp=ensurePresentation(scene);pp.text ||= {};pp.text.size=value.value;
-      armScope();
-      scheduleDraftSave(40);
-      refreshLivePlayer({preserveSheet:true});
-      queueMicrotask(()=>showUndo(undoLabel));
-    });
+    // The selection updates only this Scene. A wider scope is a one-shot action.
 
     // Selecting a wider scope is the explicit bulk command. The current Scene already
     // has the chosen value, but including it in the target set keeps the operation simple
@@ -11962,7 +11958,8 @@ function startInlineTextEdit(field='text',targetEl=null){
       const targets=mode==='all'?workingDocument.scenes:workingDocument.scenes.slice(index);
       const undoLabel=u('文字サイズの一括適用を元に戻せます','Undo bulk text size apply');
       captureUndo(undoLabel);
-      targets.forEach(sc=>{const pp=ensurePresentation(sc);pp.text ||= {};pp.text.size=value.value;});
+      const chosenSize=value.value==='px'?Math.max(8,Math.min(420,Math.round(Number(px.value)||24))):value.value;
+      targets.forEach(sc=>{const pp=ensurePresentation(sc);pp.text ||= {};pp.text.size=chosenSize;});
       lockScope();
       scheduleDraftSave(40);
       refreshLivePlayer({preserveSheet:true});
@@ -11970,7 +11967,11 @@ function startInlineTextEdit(field='text',targetEl=null){
       onApplied?.();
     });
 
-    row.append(value,scope);wrap.append(cap,row);return wrap;
+    const commitSize=(n)=>{if(!workingDocument?.scenes?.length)return;const pxValue=Math.max(8,Math.min(420,Math.round(Number(n)||24)));px.value=String(pxValue);captureUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));const pp=ensurePresentation(scene);pp.text ||= {};pp.text.size=pxValue;armScope();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(u('文字サイズの変更を元に戻せます','Undo text size change')));};
+    value.addEventListener('change',()=>{px.hidden=value.value!=='px';if(value.value==='px'){commitSize(px.value);px.focus();px.select();}else{if(!workingDocument?.scenes?.length)return;captureUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));const pp=ensurePresentation(scene);pp.text ||= {};pp.text.size=value.value;armScope();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(u('文字サイズの変更を元に戻せます','Undo text size change')));}});
+    px.addEventListener('change',()=>{if(value.value==='px')commitSize(px.value);});
+    px.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();px.blur();}});
+    row.append(value,px,scope);wrap.append(cap,row);return wrap;
   }
   // V63 Phase 3: typeface bulk apply follows the same V59 one-shot safety contract.
   // Choosing a typeface changes only the current Scene first. The wider scope unlocks
