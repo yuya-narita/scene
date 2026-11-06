@@ -25,7 +25,7 @@
  }
  async function request(url,options={}){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
-  try{const r=await fetch(url,{...options,signal:controller.signal});
+  try{const headers=new Headers(options.headers||{});headers.set('Accept','application/json');const r=await fetch(url,{...options,headers,signal:controller.signal});
    const raw=await r.text();if(raw.length>650000)throw new Error('共有データが大きすぎます。');
    let data;try{data=JSON.parse(raw);}catch(_){throw new Error('通信に失敗しました。時間をおいてお試しください。');}
    if(!r.ok){if(data.code==='AUTHOR_LOGIN_REQUIRED'||r.status===401)throw new Error('共有先を更新するには、アカウントからログインしてください。');if(data.code==='AUTHOR_MISMATCH')throw new Error('別のアカウントで作成された共有リンクです。');if(data.code==='READER_STATUS_SHARE_NOT_FOUND')throw new Error('共有リンクが見つかりません。あらためてリンクを作成してください。');throw new Error(data.error||'通信に失敗しました。時間をおいてお試しください。');}return data;
