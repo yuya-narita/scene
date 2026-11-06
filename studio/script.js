@@ -10357,6 +10357,7 @@ return flowCommentCard;}
   let richColorPopover=null;
   let richColorPaletteToggle=null;
   let richColorPicker=null;
+  let richPickerSelectionSnapshot=null;
   let richCloseToolbarMenus=()=>{};
   function refreshRichColorPopover(currentColor=''){
     if(!richColorPopover)return;
@@ -10420,7 +10421,7 @@ return flowCommentCard;}
     dropdown('書体','font',[['serif','明朝'],['sans','ゴシック'],['mono','等幅']],'書体');
     dropdown('サイズ','size',[['0.85','小 85%'],['1','標準 100%'],['1.2','大 120%'],['1.45','特大 145%']],'文字サイズ');
     const colorWrap=document.createElement('div');colorWrap.className='rich-color-control';colorWrap.title='文字色';
-    richColorPicker=makeCommittedTextColorPicker('#333333',{compact:true,onCommit:hex=>{rememberTextColor(hex);if(colorToggle)colorToggle.style.setProperty('--rich-color-current',hex);applyRichSelectionAction('color',hex);}});
+    richColorPicker=makeCommittedTextColorPicker('#333333',{compact:true,onCommit:hex=>{if(richPickerSelectionSnapshot)richSelectionSnapshot=richPickerSelectionSnapshot;rememberTextColor(hex);if(colorToggle)colorToggle.style.setProperty('--rich-color-current',hex);applyRichSelectionAction('color',hex);richPickerSelectionSnapshot=null;}});
     richColorPicker.root.classList.add('rich-toolbar-color-picker');colorWrap.appendChild(richColorPicker.root);
     const colorToggle=document.createElement('button');colorToggle.type='button';colorToggle.className='rich-color-palette-toggle';colorToggle.textContent='履歴 ▾';colorToggle.title='最近使った色・固定色';colorToggle.setAttribute('aria-label','最近使った色・固定色');colorWrap.appendChild(colorToggle);bar.appendChild(colorWrap);
     dropdown('見出し','heading',[['1','見出し1'],['2','見出し2'],['3','見出し3']],'見出し');
@@ -10440,7 +10441,7 @@ return flowCommentCard;}
     if(matchMedia?.('(hover:hover) and (pointer:fine)')?.matches){
       bar.querySelectorAll('.rich-dropdown').forEach(w=>{w.addEventListener('pointerenter',()=>{if(richColorPopover&&!richColorPopover.hidden||richColorPicker?.root?.classList.contains('is-open'))return;richToolbarInteracting=true;openMenu(w);});});
     }
-    richColorPicker?.root?.querySelector('.studio-color-trigger')?.addEventListener('pointerdown',()=>{richCloseToolbarMenus();if(richColorPopover)richColorPopover.hidden=true;richToolbarInteracting=true;});
+    richColorPicker?.root?.querySelector('.studio-color-trigger')?.addEventListener('pointerdown',()=>{richPickerSelectionSnapshot=richSelectionSnapshot?{...richSelectionSnapshot}:null;richCloseToolbarMenus();if(richColorPopover)richColorPopover.hidden=true;richToolbarInteracting=true;});
     const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{if(!bar.matches(':hover')&&richColorPopover?.hidden!==false&&!richColorPicker?.root?.classList.contains('is-open'))richToolbarInteracting=false;},340);});
     // V78: act on pointerdown so the first press is the action. Native <select>
     // controls were stealing focus/selection and causing the old two-press cushion.
