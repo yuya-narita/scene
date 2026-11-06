@@ -37,7 +37,7 @@
   try{const token=JSON.parse(localStorage.getItem('ahako-author-session-v1')||'null')?.token;if(token)headers.Authorization='Bearer '+token;}catch(_){}
   return headers;
  }
- function shareUrl(id){const link=new URL('./reader-status-share.html',location.href);link.hash=encodeURIComponent(id);return link.href;}
+ function shareUrl(id){if(!/^[a-f0-9]{32}$/i.test(String(id||'')))return'';return new URL('/reader-status-share/'+encodeURIComponent(id),BASE).href;}
  async function updateExisting(id,snapshot){
   if(!/^[a-f0-9]{32}$/i.test(String(id||'')))throw new Error('共有リンクの情報を確認できません。');
   const data=await snapshot(),body=JSON.stringify(data);if(body.length>600000)throw new Error('画像が大きすぎるため共有できません。');
