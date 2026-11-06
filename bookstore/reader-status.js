@@ -231,7 +231,14 @@
   e.preventDefault();
   profile={...profile,role:'',motto:mottoInput.value.trim().slice(0,100),genres:[...genreChoices.querySelectorAll('input:checked')].map(input=>input.value).slice(0,3),avatarData:pendingAvatar,featuredCopyId:featuredSelect.value||'',recommendPublicationId:'',recommendCopyId:recommendSelect.value||''};
   if(!save()){window.alert?.('プロフィールを保存できませんでした。端末の保存容量を確認してください。');return;}
-  render();cancelEditor();document.getElementById('readerStatusShareResult').hidden=true;
+  render();cancelEditor();
+  if(profile.shareId&&window.ReaderStatusShare){
+   const result=document.getElementById('readerStatusShareResult'),message=document.getElementById('readerStatusShareMessage');
+   if(result)result.hidden=false;
+   window.ReaderStatusShare.updateExisting(profile.shareId,shareSnapshot).then(()=>{
+    if(message)message.textContent='プロフィールを保存し、共有先にも反映しました。';
+   }).catch(error=>{if(message)message.textContent='プロフィールは保存しましたが、共有先を更新できませんでした。'+(error?.message?' '+error.message:'');});
+  }
  });
  async function shareSnapshot(){
   const counts=ownedGenreCounts(),laterCount=later().length;
@@ -249,7 +256,7 @@
    gauges:[[counts.size,genres().length],[Math.max(0,...counts.values()),[...counts.values()].reduce((a,b)=>a+b,0)||1],[Math.min(laterCount,12),12]],
    featured:await book(byCopyId(profile.featuredCopyId)),recommendation:await book(recommendedOwnedBook())};
  }
- ReaderStatusShare.bindCreator(shareSnapshot);
+ ReaderStatusShare.bindCreator(shareSnapshot,id=>{profile={...profile,shareId:id};if(!save())throw new Error('共有リンクを端末に保存できませんでした。');});
  window.openReaderStatus=open;
  window.addEventListener('storage',e=>{if(e.key===KEY){profile=load();render();}});
  window.addEventListener('pageshow',()=>{profile=load();render();});

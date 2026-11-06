@@ -1,4 +1,4 @@
-/* V2.34.3 — immutable public reader snapshots using the existing asset API. */
+/* V2.34.5 — stable public reader links that update when the profile is saved. */
 (()=>{
  'use strict';
  const BASE='https://scene-studio-api.a-hako.workers.dev';
@@ -28,25 +28,42 @@
   try{const r=await fetch(url,{...options,signal:controller.signal});
    const raw=await r.text();if(raw.length>650000)throw new Error('共有データが大きすぎます。');
    let data;try{data=JSON.parse(raw);}catch(_){throw new Error('通信に失敗しました。時間をおいてお試しください。');}
-   if(!r.ok){if(data.code==='AUTHOR_LOGIN_REQUIRED'||r.status===401)throw new Error('共有リンクを作るには、アカウントからログインしてください。');throw new Error('通信に失敗しました。時間をおいてお試しください。');}return data;
+   if(!r.ok){if(data.code==='AUTHOR_LOGIN_REQUIRED'||r.status===401)throw new Error('共有先を更新するには、アカウントからログインしてください。');if(data.code==='AUTHOR_MISMATCH')throw new Error('別のアカウントで作成された共有リンクです。');if(data.code==='READER_STATUS_SHARE_NOT_FOUND')throw new Error('共有リンクが見つかりません。あらためてリンクを作成してください。');throw new Error(data.error||'通信に失敗しました。時間をおいてお試しください。');}return data;
   }catch(e){if(e.name==='AbortError')throw new Error('通信がタイムアウトしました。もう一度お試しください。');throw e;}
   finally{clearTimeout(timer);}
  }
- function bindCreator(snapshot){
+ function authorHeaders(){
+  const headers={'Content-Type':'application/json'};
+  try{const token=JSON.parse(localStorage.getItem('ahako-author-session-v1')||'null')?.token;if(token)headers.Authorization='Bearer '+token;}catch(_){}
+  return headers;
+ }
+ function shareUrl(id){const link=new URL('./reader-status-share.html',location.href);link.hash=encodeURIComponent(id);return link.href;}
+ async function updateExisting(id,snapshot){
+  if(!/^[a-f0-9]{32}$/i.test(String(id||'')))throw new Error('共有リンクの情報を確認できません。');
+  const data=await snapshot(),body=JSON.stringify(data);if(body.length>600000)throw new Error('画像が大きすぎるため共有できません。');
+  const response=await request(BASE+'/reader-status-share/'+encodeURIComponent(id),{method:'PUT',headers:authorHeaders(),body});
+  if(!response.ok)throw new Error('共有先を更新できませんでした。');
+  return response;
+ }
+ function bindCreator(snapshot,rememberShare){
   const create=$('readerStatusShareCreate');if(!create)return;
   const message=$('readerStatusShareMessage'),result=$('readerStatusShareResult'),input=$('readerStatusShareUrl');
+  const open=$('readerStatusShareOpen');
+  const stored=()=>{try{return JSON.parse(localStorage.getItem('ahako:reader-status:v1')||'{}')?.shareId||'';}catch(_){return '';}};
+  const savedId=stored();
+  if(/^[a-f0-9]{32}$/i.test(savedId)){input.value=shareUrl(savedId);open.href=input.value;result.hidden=false;message.textContent='プロフィールを保存すると、この共有先にも自動で反映されます。';}
   create.addEventListener('click',async()=>{
-   create.disabled=true;result.hidden=true;message.textContent='共有リンクを作成しています…';
+   create.disabled=true;message.textContent=stored()?'共有先を更新しています…':'共有リンクを作成しています…';
    try{
-    const data=await snapshot(),body=JSON.stringify(data);if(body.length>600000)throw new Error('画像が大きすぎるため共有できません。');
-    const headers={'Content-Type':'application/json','X-File-Name':'reader-status.json'};
-    try{const token=JSON.parse(localStorage.getItem('ahako-author-session-v1')||'null')?.token;if(token)headers.Authorization='Bearer '+token;}catch(_){}
-    const response=await request(BASE+'/asset',{method:'POST',headers,body});
-    const asset=new URL(response.url||'',BASE);
-    if(!response.ok||asset.origin!==BASE||!/^\/asset\/[a-z0-9._-]+$/i.test(asset.pathname))throw new Error('共有リンクを作成できませんでした。');
-    const link=new URL('./reader-status-share.html',location.href);link.hash=encodeURIComponent(asset.pathname.slice(7));
-    input.value=link.href;$('readerStatusShareOpen').href=link.href;result.hidden=false;
-    message.textContent='作成しました。共有時点の内容が保存されます。変更後は新しいリンクを作成してください。';
+    const id=stored();
+    if(id){await updateExisting(id,snapshot);input.value=shareUrl(id);open.href=input.value;}
+    else{
+     const data=await snapshot(),body=JSON.stringify(data);if(body.length>600000)throw new Error('画像が大きすぎるため共有できません。');
+     const response=await request(BASE+'/reader-status-share',{method:'POST',headers:authorHeaders(),body});
+     if(!response.ok||!(/^[a-f0-9]{32}$/i.test(String(response.id||''))))throw new Error('共有リンクを作成できませんでした。');
+     await rememberShare(response.id);input.value=shareUrl(response.id);open.href=input.value;
+    }
+    result.hidden=false;message.textContent='共有先を更新しました。プロフィール保存時にも自動で反映されます。';
    }catch(e){message.textContent=e.message||'共有リンクを作成できませんでした。';}
    finally{create.disabled=false;}
   });
@@ -109,12 +126,12 @@
   const status=$('readerSharedMessage'),revision=++loadRevision;
   card.hidden=true;status.textContent='読者ステータスを読み込んでいます…';
   try{
-   const id=decodeURIComponent(location.hash.slice(1));if(!/^[a-z0-9][a-z0-9._-]{0,100}$/i.test(id))throw new Error('共有リンクが正しくありません。');
-   const data=await request(BASE+'/asset/'+encodeURIComponent(id));if(revision!==loadRevision)return;render(card,data);card.hidden=false;
-   status.textContent='共有時点の読者ステータスです。';document.title=(text(data.name,80)||'読者')+'の読者ステータス｜あ箱';
+   const id=decodeURIComponent(location.hash.slice(1));if(!/^(?:[a-f0-9]{32}|[a-f0-9]{16}\.[a-z0-9]{1,8})$/i.test(id))throw new Error('共有リンクが正しくありません。');
+   const data=await request(BASE+'/reader-status-share/'+encodeURIComponent(id),{cache:'no-store'});if(revision!==loadRevision)return;render(card,data);card.hidden=false;
+   status.textContent='最新の読者ステータスを表示しています。';document.title=(text(data.name,80)||'読者')+'の読者ステータス｜あ箱';
   }catch(e){if(revision!==loadRevision)return;card.hidden=true;status.textContent=e.message||'共有データを読み込めませんでした。';}
  }
- window.ReaderStatusShare={portableImage,bindCreator,render,resolvePublication};
+ window.ReaderStatusShare={portableImage,bindCreator,render,resolvePublication,updateExisting};
  window.addEventListener('hashchange',loadShared);
  loadShared();
 })();
