@@ -7132,6 +7132,11 @@ return flowCommentCard;}
     playerHost.addEventListener('sceneplayer:scenechange',(event)=>{
       syncPublishPreviewButton(false);
       syncLiveEditPreviewChrome();
+      // Keep the editor's undo anchor aligned with the Scene currently shown
+      // in the preview, so undo restores the change without jumping elsewhere.
+      if(workingDocument?.scenes?.length&&Number.isInteger(player?.index)){
+        selectedSceneIndex=Math.max(0,Math.min(player.index,workingDocument.scenes.length-1));
+      }
     });
     playerHost.addEventListener('sceneplayer:coverstart',(event)=>{
       if(autoRecActive&&autoRecAwaitingStart)beginAutoRecClock(event.detail?.at||performance.now(),Number(event.detail?.index)||0);
@@ -10528,6 +10533,35 @@ return flowCommentCard;}
     if(!rect||(!rect.width&&!rect.height)){const rs=r.getClientRects();rect=rs?.[0]||startEl.getBoundingClientRect();}
     return {start,end,rect,scene,index,el:startEl,selectedText:String(scene.text||'').slice(start,end)};
   }
+  function positionRichSelectionToolbar(bar,snap){
+    const viewportWidth=document.documentElement.clientWidth||window.innerWidth;
+    const viewportHeight=document.documentElement.clientHeight||window.innerHeight;
+    const h=bar.getBoundingClientRect().height||bar.offsetHeight||48;
+    const w=Math.min(bar.getBoundingClientRect().width||bar.scrollWidth||460,viewportWidth-16);
+    const selection=snap?.rect;
+    const text=snap?.el?.getBoundingClientRect?.();
+    const gap=12;
+    let left=Math.max(8,Math.min(viewportWidth-w-8,(selection?.left||0)+((selection?.width||0)-w)/2));
+
+    // Keep the toolbar outside the whole text block. Anchoring to the selected
+    // Range's top alone can put it directly over the unselected line above a
+    // multi-line selection.
+    const above=(text?.top??selection?.top??0)-h-gap;
+    const below=(text?.bottom??selection?.bottom??0)+gap;
+    let top;
+    if(above>=8)top=above;
+    else if(below+h<=viewportHeight-8)top=below;
+    else {
+      // If the text block fills the viewport, place it on the side of the
+      // selection with more room and keep it within the visible area.
+      const selTop=selection?.top??0,selBottom=selection?.bottom??selTop;
+      const roomAbove=selTop-8,roomBelow=viewportHeight-8-selBottom;
+      top=roomBelow>=roomAbove?selBottom+gap:selTop-h-gap;
+      top=Math.max(8,Math.min(viewportHeight-h-8,top));
+    }
+    bar.style.left=`${Math.round(left)}px`;
+    bar.style.top=`${Math.round(top)}px`;
+  }
   function updateRichToolbarState(snap){
     const bar=ensureRichSelectionToolbar(),scene=snap?.scene;if(!scene)return;
     const start=Number(snap.start)||0,end=Number(snap.end)||start,ranges=Array.isArray(scene?.richText?.ranges)?scene.richText.ranges:[];
@@ -10568,10 +10602,7 @@ return flowCommentCard;}
     // Reset transient controls so the toolbar always reads as an action palette.
     bar.querySelector('[data-rich-action="size"]')?.selectedIndex&&(bar.querySelector('[data-rich-action="size"]').selectedIndex=0);
     bar.querySelector('[data-rich-action="heading"]')?.selectedIndex&&(bar.querySelector('[data-rich-action="heading"]').selectedIndex=0);
-    const rect=snap.rect,w=Math.min(bar.scrollWidth||bar.offsetWidth||460,window.innerWidth-16),h=bar.offsetHeight||48;
-    let left=Math.max(8,Math.min(window.innerWidth-w-8,rect.left+(rect.width-w)/2));
-    let top=rect.top-h-12;if(top<8)top=Math.min(window.innerHeight-h-8,rect.bottom+12);
-    bar.style.left=`${Math.round(left)}px`;bar.style.top=`${Math.round(top)}px`;
+    positionRichSelectionToolbar(bar,snap);
   }
   function normalizeRichRanges(scene){
     if(!scene.richText)scene.richText={version:1,ranges:[]};if(!Array.isArray(scene.richText.ranges))scene.richText.ranges=[];return scene.richText.ranges;
@@ -10702,10 +10733,7 @@ return flowCommentCard;}
     const bar=ensureRichSelectionToolbar();
     bar.hidden=false;updateRichToolbarState(snap);
     if(!richToolbarInteracting){bar.querySelectorAll('.rich-dropdown-menu').forEach(m=>m.hidden=true);bar.querySelectorAll('.rich-dropdown-trigger').forEach(t=>t.setAttribute('aria-expanded','false'));}
-    const rect=snap.rect,w=Math.min(bar.scrollWidth||bar.offsetWidth||460,window.innerWidth-16),h=bar.offsetHeight||48;
-    let left=Math.max(8,Math.min(window.innerWidth-w-8,rect.left+(rect.width-w)/2));
-    let top=rect.top-h-12;if(top<8)top=Math.min(window.innerHeight-h-8,rect.bottom+12);
-    bar.style.left=`${Math.round(left)}px`;bar.style.top=`${Math.round(top)}px`;
+    positionRichSelectionToolbar(bar,snap);
     return true;
   }
   function captureAndShowRichSelection(){
@@ -18362,12 +18390,6 @@ function openDesktopTextDetail(){
   });
   playerHost.addEventListener('sceneplayer:scenechange',()=>{finishCreditsInlineEdit();finishLiveCoverInlineEdit({refresh:false});});
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
-    // Keep the Studio history anchor aligned with the Player. captureUndo()
-    // stores selectedSceneIndex, so leaving it stale makes Undo restore the
-    // edited work but navigate to a Scene selected before the latest move.
-    if(workingDocument?.scenes?.length && Number.isInteger(player?.index)){
-      selectedSceneIndex=Math.max(0,Math.min(player.index,workingDocument.scenes.length-1));
-    }
     // A Scene change is authoritative. A stale Cover class can survive a
     // preview-device resize/reflow for a frame; never let that stale shell
     // state pin the right inspector to Cover while a real Scene is visible.
