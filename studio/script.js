@@ -2577,7 +2577,12 @@
     square.addEventListener('mousemove',previewAt);
     document.addEventListener('mousemove',trackDesktopPointer,true);
     square.addEventListener('pointerdown',e=>{previewAt(e);try{square.setPointerCapture?.(e.pointerId);}catch(_){}});
-    square.addEventListener('click',e=>{previewAt(e);committed=preview;rememberTextColor(committed);trigger.style.backgroundColor=committed;if(typeof onCommit==='function')onCommit(committed);close(false);});
+    let pickerCommittedByPointer=false;
+    const commitPickerColor=e=>{previewAt(e);committed=preview;rememberTextColor(committed);trigger.style.backgroundColor=committed;if(typeof onCommit==='function')onCommit(committed);close(false);};
+    // Commit at pointerup while pointer capture still anchors the gesture to
+    // this picker. The global toolbar selection handlers ignore this surface.
+    square.addEventListener('pointerup',e=>{e.preventDefault();e.stopPropagation();pickerCommittedByPointer=true;commitPickerColor(e);});
+    square.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(pickerCommittedByPointer){pickerCommittedByPointer=false;return;}if(e.detail===0)commitPickerColor(e);});
     hue.addEventListener('input',()=>{hsv.h=Number(hue.value)||0;preview=hsvToHex(hsv.h,hsv.s,hsv.v);paint();if(typeof onPreview==='function')onPreview(preview);});
     // Hue itself is only a preview control; the saturation/value square click is the commit gesture.
     paint();
@@ -10364,13 +10369,21 @@ return flowCommentCard;}
       if(colors.length)colors.forEach(hex=>{
         const chip=document.createElement('button');chip.type='button';chip.className='text-color-chip';chip.style.backgroundColor=hex;chip.title=hex;chip.setAttribute('aria-label',`${label} ${hex}`);
         if(normalizeTextColor(currentColor)===hex)chip.classList.add('is-current');
-        chip.addEventListener('click',()=>{
+        let chipAppliedOnPointerDown=false;
+        const applyHistoryColor=()=>{
+          if(!richSelectionSnapshot?.scene)return;
+          richToolbarInteracting=true;
           rememberTextColor(hex);
           richColorPicker?.setValue(hex);
           if(richColorPaletteToggle)richColorPaletteToggle.style.setProperty('--rich-color-current',hex);
-          richColorPopover.hidden=true;richToolbarInteracting=false;
+          richColorPopover.hidden=true;
           applyRichSelectionAction('color',hex);
-        });chips.appendChild(chip);
+          richToolbarInteracting=false;
+        };
+        // Apply before focus/selection changes can interfere with the saved
+        // preview selection. Keep click as a keyboard-accessible fallback.
+        chip.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();chipAppliedOnPointerDown=true;applyHistoryColor();});
+        chip.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(chipAppliedOnPointerDown){chipAppliedOnPointerDown=false;return;}applyHistoryColor();});chips.appendChild(chip);
       });
       else {const empty=document.createElement('small');empty.textContent=uiLanguage==='en'?'None yet':'まだなし';chips.appendChild(empty);}
       row.appendChild(chips);return row;
