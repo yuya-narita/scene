@@ -18362,6 +18362,12 @@ function openDesktopTextDetail(){
   });
   playerHost.addEventListener('sceneplayer:scenechange',()=>{finishCreditsInlineEdit();finishLiveCoverInlineEdit({refresh:false});});
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
+    // Keep the Studio history anchor aligned with the Player. captureUndo()
+    // stores selectedSceneIndex, so leaving it stale makes Undo restore the
+    // edited work but navigate to a Scene selected before the latest move.
+    if(workingDocument?.scenes?.length && Number.isInteger(player?.index)){
+      selectedSceneIndex=Math.max(0,Math.min(player.index,workingDocument.scenes.length-1));
+    }
     // A Scene change is authoritative. A stale Cover class can survive a
     // preview-device resize/reflow for a frame; never let that stale shell
     // state pin the right inspector to Cover while a real Scene is visible.
