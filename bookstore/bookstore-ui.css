@@ -372,3 +372,24 @@ body.book-path-active #store>:is(#prev,#next,#hint,#introHint,#stage){display:no
 #store #readingRoomMenuViewport.is-compact button{padding:4px 10px}
 #store #readingRoomMenuViewport.is-compact .reading-menu-copy small{display:none}
 @media(max-width:680px){#store #readingRoomMenuViewport .reading-room-menu{width:min(360px,100%);padding:12px;gap:6px}#store #readingRoomMenuViewport .reading-menu-copy strong{font-size:15px}}
+
+/* V2.34.2 — sharing controls and the featured book on public snapshots. */
+.reader-status-share-controls[hidden],#readerStatusShareResult[hidden]{display:none!important}
+.reader-status-share-controls{margin-top:16px;border-top:1px solid #d3b78b28;padding-top:5px}
+#readerStatusShareResult{margin-top:14px;color:#dfd2bf;font-size:12px}
+#readerStatusShareUrl{box-sizing:border-box;width:100%;min-height:44px;margin:7px 0;padding:10px;border:1px solid #d3b78b55;border-radius:8px;background:#100d0b;color:#f2e4ce;font-size:16px}
+#readerStatusShareResult .reader-status-actions{flex-wrap:wrap}
+#readerStatusShareResult a{align-self:center;color:#ead7b8;padding:10px}
+.reader-share-page{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#392719,#100b08 70%);color:#eee2d1;font-family:system-ui,sans-serif}
+.reader-share-page *{box-sizing:border-box}
+.reader-share-main{max-width:560px;margin:auto;padding:32px 16px max(28px,env(safe-area-inset-bottom))}
+.reader-share-main header{margin-bottom:22px}.reader-share-main header a{color:#f3e3c9;font:24px serif;text-decoration:none}.reader-share-main header p{font-size:10px;color:#ad9b80;letter-spacing:.18em}
+.reader-share-main footer{margin-top:24px;text-align:center}.reader-share-main footer a{text-decoration:none}
+.reader-share-books{grid-template-columns:1fr}
+.reader-share-books .reader-status-book:not(.reader-share-featured){max-width:100%}
+.reader-share-featured{flex-direction:column;text-align:center;padding:22px 16px;gap:16px;background:radial-gradient(ellipse at top,#79593140,#00000020)}
+.reader-share-featured .reader-status-cover{width:clamp(130px,42vw,200px);box-shadow:0 12px 28px #0008;aspect-ratio:2/3}
+.reader-share-featured .reader-status-cover img{object-fit:contain}
+.reader-share-featured .reader-status-book-copy strong{font-size:18px;-webkit-line-clamp:unset;display:block}
+.reader-share-featured .reader-status-book-copy small{font-size:11px;letter-spacing:.1em}
+.reader-share-detail{margin:6px 0 0;font-size:12px;line-height:1.6;color:#c9bcaa;overflow-wrap:anywhere}

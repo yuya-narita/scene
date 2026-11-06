@@ -187,8 +187,8 @@
   fillSelect(recommendSelect,ownedCandidates,'選択しない',previousRecommendation?.copyId||'','copyId');
   buildBookPicker(recommendSelect,recommendPicker,ownedCandidates,'copyId','おすすめの一冊');
  }
- function openEditor(){buildEditor();card.hidden=true;editButton.hidden=true;editor.hidden=false;}
- function cancelEditor(){editor.hidden=true;card.hidden=false;editButton.hidden=false;pendingAvatar=profile.avatarData||'';}
+ function openEditor(){document.getElementById('readerStatusShareControls').hidden=true;buildEditor();card.hidden=true;editButton.hidden=true;editor.hidden=false;}
+ function cancelEditor(){document.getElementById('readerStatusShareControls').hidden=false;editor.hidden=true;card.hidden=false;editButton.hidden=false;pendingAvatar=profile.avatarData||'';}
  function open(){
   if(!dialog||!window.HTMLDialogElement||dialog.open)return;
   render();cancelEditor();dialog.showModal();
@@ -231,8 +231,24 @@
   e.preventDefault();
   profile={...profile,role:'',motto:mottoInput.value.trim().slice(0,100),genres:[...genreChoices.querySelectorAll('input:checked')].map(input=>input.value).slice(0,3),avatarData:pendingAvatar,featuredCopyId:featuredSelect.value||'',recommendPublicationId:'',recommendCopyId:recommendSelect.value||''};
   if(!save()){window.alert?.('プロフィールを保存できませんでした。端末の保存容量を確認してください。');return;}
-  render();editor.hidden=true;card.hidden=false;editButton.hidden=false;
+  render();cancelEditor();document.getElementById('readerStatusShareResult').hidden=true;
  });
+ async function shareSnapshot(){
+  const counts=ownedGenreCounts(),laterCount=later().length;
+  const book=async value=>value?{
+   title:String(value.title||'無題').slice(0,300),
+   detail:String([value.episodeLabel,value.episodeTitle].filter(Boolean).join(' ・ ')||value.subtitle||'').slice(0,400),
+   author:String(value.author?.displayName||value.authorName||value.byline||'').slice(0,100),
+   cover:await ReaderStatusShare.portableImage(value.coverUrl)
+  }:null;
+  return {version:1,kind:'ahako-reader-status',createdAt:new Date().toISOString(),
+   name:currentName().slice(0,80),role:chosenRole(),motto:profile.motto||'',avatar:profile.avatarData||'',
+   genres:selectedGenres().map(id=>genres().find(g=>g.id===id)?.jp).filter(Boolean),
+   ownedCount:owned().length,laterCount,
+   gauges:[[counts.size,genres().length],[Math.max(0,...counts.values()),[...counts.values()].reduce((a,b)=>a+b,0)||1],[Math.min(laterCount,12),12]],
+   featured:await book(byCopyId(profile.featuredCopyId)),recommendation:await book(recommendedOwnedBook())};
+ }
+ ReaderStatusShare.bindCreator(shareSnapshot);
  window.openReaderStatus=open;
  window.addEventListener('storage',e=>{if(e.key===KEY){profile=load();render();}});
  window.addEventListener('pageshow',()=>{profile=load();render();});

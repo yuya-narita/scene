@@ -1,0 +1,104 @@
+/* V2.34.2 — immutable public reader snapshots using the existing asset API. */
+(()=>{
+ 'use strict';
+ const BASE='https://scene-studio-api.a-hako.workers.dev';
+ const $=id=>document.getElementById(id);
+ const text=(v,max=400)=>typeof v==='string'?v.slice(0,max):'';
+ function imageUrl(v){
+  if(typeof v!=='string'||v.length>180000)return '';
+  if(/^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(v))return v;
+  try{const u=new URL(v);return u.protocol==='https:'||u.protocol==='http:'?u.href:'';}catch(_){return '';}
+ }
+ async function portableImage(src){
+  if(!src)return '';
+  if(!src.startsWith('blob:'))return imageUrl(src);
+  return new Promise((resolve,reject)=>{
+   const image=new Image(),timer=setTimeout(()=>{image.src='';reject(new Error('表紙の準備がタイムアウトしました。もう一度お試しください。'));},10000);
+   image.onload=()=>{clearTimeout(timer);try{
+    const ratio=Math.min(1,360/image.naturalWidth,540/image.naturalHeight),canvas=document.createElement('canvas');
+    canvas.width=Math.max(1,Math.round(image.naturalWidth*ratio));canvas.height=Math.max(1,Math.round(image.naturalHeight*ratio));
+    canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+    const data=canvas.toDataURL('image/jpeg',.8);if(data.length>180000)throw new Error('表紙画像が大きすぎます。');resolve(data);
+   }catch(e){reject(e);}};
+   image.onerror=()=>{clearTimeout(timer);reject(new Error('表紙を読み込めませんでした。ステータスを開き直してください。'));};image.src=src;
+  });
+ }
+ async function request(url,options={}){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+  try{const r=await fetch(url,{...options,signal:controller.signal});
+   const raw=await r.text();if(raw.length>650000)throw new Error('共有データが大きすぎます。');
+   let data;try{data=JSON.parse(raw);}catch(_){throw new Error('通信に失敗しました。時間をおいてお試しください。');}
+   if(!r.ok){if(data.code==='AUTHOR_LOGIN_REQUIRED'||r.status===401)throw new Error('共有リンクを作るには、アカウントからログインしてください。');throw new Error('通信に失敗しました。時間をおいてお試しください。');}return data;
+  }catch(e){if(e.name==='AbortError')throw new Error('通信がタイムアウトしました。もう一度お試しください。');throw e;}
+  finally{clearTimeout(timer);}
+ }
+ function bindCreator(snapshot){
+  const create=$('readerStatusShareCreate');if(!create)return;
+  const message=$('readerStatusShareMessage'),result=$('readerStatusShareResult'),input=$('readerStatusShareUrl');
+  create.addEventListener('click',async()=>{
+   create.disabled=true;result.hidden=true;message.textContent='共有リンクを作成しています…';
+   try{
+    const data=await snapshot(),body=JSON.stringify(data);if(body.length>600000)throw new Error('画像が大きすぎるため共有できません。');
+    const headers={'Content-Type':'application/json','X-File-Name':'reader-status.json'};
+    try{const token=JSON.parse(localStorage.getItem('ahako-author-session-v1')||'null')?.token;if(token)headers.Authorization='Bearer '+token;}catch(_){}
+    const response=await request(BASE+'/asset',{method:'POST',headers,body});
+    const asset=new URL(response.url||'',BASE);
+    if(!response.ok||asset.origin!==BASE||!/^\/asset\/[a-z0-9._-]+$/i.test(asset.pathname))throw new Error('共有リンクを作成できませんでした。');
+    const link=new URL('./reader-status-share.html',location.href);link.hash=encodeURIComponent(asset.pathname.slice(7));
+    input.value=link.href;$('readerStatusShareOpen').href=link.href;result.hidden=false;
+    message.textContent='作成しました。共有時点の内容が保存されます。変更後は新しいリンクを作成してください。';
+   }catch(e){message.textContent=e.message||'共有リンクを作成できませんでした。';}
+   finally{create.disabled=false;}
+  });
+  $('readerStatusShareCopy').addEventListener('click',async()=>{
+   try{await navigator.clipboard.writeText(input.value);message.textContent='リンクをコピーしました。';}
+   catch(_){input.focus();input.select();input.setSelectionRange(0,input.value.length);message.textContent='リンクを長押ししてコピーしてください。';}
+  });
+  const native=$('readerStatusShareNative');native.hidden=!navigator.share;
+  native.addEventListener('click',async()=>{
+   try{await navigator.share({title:'あ箱の読者ステータス',url:input.value});message.textContent='共有しました。';}
+   catch(e){if(e.name!=='AbortError')message.textContent='共有できませんでした。「リンクをコピー」をお使いください。';}
+  });
+ }
+ function node(tag,className,value){const el=document.createElement(tag);el.className=className;if(value!==undefined)el.textContent=value;return el;}
+ function cover(src,className){const el=node('span',className),safe=imageUrl(src);el.textContent='あ□';if(safe){const img=new Image();img.alt='';img.referrerPolicy='no-referrer';img.onload=()=>el.replaceChildren(img);img.src=safe;}return el;}
+ function book(value,featured){
+  if(!value||typeof value!=='object')return null;
+  const row=node('div','reader-status-book'+(featured?' reader-share-featured':''));
+  row.append(cover(value.cover,'reader-status-cover'));
+  const copy=node('span','reader-status-book-copy');copy.append(node('small','',featured?'飾っている一冊':'おすすめの一冊'),node('strong','',text(value.title,300)||'無題'));
+  if(featured&&text(value.detail))copy.append(node('p','reader-share-detail',text(value.detail)));
+  if(featured&&text(value.author))copy.append(node('p','reader-share-detail',text(value.author,100)));
+  row.append(copy);return row;
+ }
+ function render(card,data){
+  if(!data||data.kind!=='ahako-reader-status'||data.version!==1)throw new Error('この共有データは表示できません。');
+  const identity=node('div','reader-status-identity'),avatar=cover(data.avatar,'reader-status-avatar');if(!imageUrl(data.avatar))avatar.textContent=Array.from(text(data.name,80))[0]||'読';
+  identity.append(avatar,node('strong','reader-status-name',text(data.name,80)||'読者'));
+  card.replaceChildren(identity,node('h1','reader-status-role',text(data.role,80)||'物語の旅人'),node('p','reader-status-motto',text(data.motto,100)||'自分らしい読書のかたちを選ぶ。'));
+  const tags=node('div','reader-status-genres');(Array.isArray(data.genres)?data.genres:[]).slice(0,3).forEach(g=>tags.append(node('span','reader-status-genre',text(g,40))));card.append(tags);
+  const gauges=node('div','reader-status-gauges');
+  ['ジャンルの広がり','最多ジャンルの割合','次の一冊への準備'].forEach((label,i)=>{
+   const pair=Array.isArray(data.gauges?.[i])?data.gauges[i]:[0,1];
+   const max=Math.max(1,Math.min(1000000,Number(pair[1])||1)),value=Math.max(0,Math.min(max,Number(pair[0])||0));
+   const row=node('div','reader-status-gauge');row.append(node('span','reader-status-gauge-label',label),node('span','reader-status-gauge-value',value+' / '+max));
+   const track=node('span','reader-status-gauge-track'),fill=node('span','reader-status-gauge-fill');fill.style.setProperty('--reader-gauge',Math.round(value/max*100)+'%');track.append(fill);row.append(track);gauges.append(row);
+  });card.append(gauges,node('p','reader-status-gauge-note','所蔵本のジャンルと「あとで読む」の冊数から算出'));
+  const stats=node('div','reader-status-stats');[['MY BOOKS',data.ownedCount],['READ LATER',data.laterCount]].forEach(([label,count])=>{const el=node('div','reader-status-stat');el.append(node('small','',label),node('strong','',Math.max(0,Math.min(1000000,Math.floor(Number(count)||0)))+(label==='READ LATER'?' / 12冊':'冊')));stats.append(el);});card.append(stats);
+  const books=node('div','reader-status-books reader-share-books');[book(data.featured,true),book(data.recommendation,false)].filter(Boolean).forEach(el=>books.append(el));if(books.childElementCount)card.append(books);
+ }
+ let loadRevision=0;
+ async function loadShared(){
+  const card=$('readerSharedCard');if(!card)return;
+  const status=$('readerSharedMessage'),revision=++loadRevision;
+  card.hidden=true;status.textContent='読者ステータスを読み込んでいます…';
+  try{
+   const id=decodeURIComponent(location.hash.slice(1));if(!/^[a-z0-9][a-z0-9._-]{0,100}$/i.test(id))throw new Error('共有リンクが正しくありません。');
+   const data=await request(BASE+'/asset/'+encodeURIComponent(id));if(revision!==loadRevision)return;render(card,data);card.hidden=false;
+   status.textContent='共有時点の読者ステータスです。';document.title=(text(data.name,80)||'読者')+'の読者ステータス｜あ箱';
+  }catch(e){if(revision!==loadRevision)return;card.hidden=true;status.textContent=e.message||'共有データを読み込めませんでした。';}
+ }
+ window.ReaderStatusShare={portableImage,bindCreator,render};
+ window.addEventListener('hashchange',loadShared);
+ loadShared();
+})();
