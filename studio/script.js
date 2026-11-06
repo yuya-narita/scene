@@ -10341,8 +10341,9 @@ return flowCommentCard;}
         scene.richText.ranges=[...keep,...rebuilt].sort((a,b)=>(a.start||0)-(b.start||0));
         if(player?.currentScene?.richText) player.currentScene.richText.ranges=scene.richText.ranges.map(r=>({...r}));
       }
-      el.classList.toggle('live-edit-empty-target',value.length===0);
-      el.closest('.sp-scene')?.classList.toggle('live-edit-empty-scene',value.length===0);
+      const isEmptyText=!normalizedSceneText(value);
+      el.classList.toggle('live-edit-empty-target',isEmptyText);
+      el.closest('.sp-scene')?.classList.toggle('live-edit-empty-scene',isEmptyText);
       updateInlineAutoFit(scene,el);
     }
     scheduleDraftSave(100);
@@ -10443,7 +10444,7 @@ return flowCommentCard;}
       bar.querySelectorAll('.rich-dropdown').forEach(w=>{w.addEventListener('pointerenter',()=>{if(richColorPopover&&!richColorPopover.hidden||richColorPicker?.root?.classList.contains('is-open'))return;richToolbarInteracting=true;openMenu(w);});});
     }
     richColorPicker?.root?.querySelector('.studio-color-trigger')?.addEventListener('pointerdown',()=>{richPickerSelectionSnapshot=richSelectionSnapshot?{...richSelectionSnapshot}:null;richCloseToolbarMenus();if(richColorPopover)richColorPopover.hidden=true;richToolbarInteracting=true;});
-    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{const pxInput=bar.querySelector('.rich-size-px-field input'),pxFocused=pxInput&&document.activeElement===pxInput;if(!bar.matches(':hover')&&!pxFocused&&richColorPopover?.hidden!==false&&!richColorPicker?.root?.classList.contains('is-open'))richToolbarInteracting=false;},340);});
+    const keep=e=>e.stopPropagation();bar.addEventListener('mousedown',keep);bar.addEventListener('click',keep);bar.addEventListener('pointerenter',()=>{richToolbarInteracting=true;});bar.addEventListener('pointerleave',()=>{setTimeout(()=>{const pxInput=bar.querySelector('.rich-size-px-field input'),pxFocused=pxInput&&document.activeElement===pxInput,pxMenuOpen=!!bar.querySelector('.rich-dropdown-menu[data-px-input="true"]:not([hidden])');if(!bar.matches(':hover')&&!pxFocused&&!pxMenuOpen&&richColorPopover?.hidden!==false&&!richColorPicker?.root?.classList.contains('is-open'))richToolbarInteracting=false;},340);});
     // V78: act on pointerdown so the first press is the action. Native <select>
     // controls were stealing focus/selection and causing the old two-press cushion.
     bar.addEventListener('pointerdown',e=>{
@@ -10451,7 +10452,7 @@ return flowCommentCard;}
       if(trigger){e.preventDefault();e.stopPropagation();const wrap=trigger.closest('.rich-dropdown'),menu=wrap.querySelector('.rich-dropdown-menu'),opening=menu.hidden;closeMenus(wrap);if(!opening&&menu.dataset.pxInput==='true'){menu.innerHTML=menu.dataset.originalMarkup||'';delete menu.dataset.pxInput;}menu.hidden=!opening;trigger.setAttribute('aria-expanded',String(opening));return;}
       const item=e.target.closest?.('.rich-dropdown-item');
       if(item){e.preventDefault();e.stopPropagation();const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;
-        if(action==='size'&&value==='px'){const menu=wrap.querySelector('.rich-dropdown-menu');menu.dataset.originalMarkup||=menu.innerHTML;menu.dataset.pxInput='true';menu.replaceChildren();const field=document.createElement('label');field.className='rich-size-px-field';field.textContent='px';const input=document.createElement('input');input.type='number';input.inputMode='numeric';input.min='8';input.max='420';input.step='1';const snap=richSelectionSnapshot,selectedRange=(snap?.scene?.richText?.ranges||[]).find(r=>r?.kind==='span'&&Number(r.start)<=Number(snap?.start)&&Number(r.end)>=Number(snap?.end)&&Number(r.style?.fontSizePx)>0),shownPx=Number(wrap.querySelector('.rich-dropdown-trigger')?.textContent?.match(/(\d+(?:\.\d+)?)\s*px/i)?.[1]);input.value=String(Math.round(Number(selectedRange?.style?.fontSizePx)||shownPx||24));input.setAttribute('aria-label','文字サイズ px');field.appendChild(input);menu.appendChild(field);menu.hidden=false;richToolbarInteracting=true;let committed=false;const commit=()=>{if(committed)return;committed=true;const n=Math.max(8,Math.min(420,Math.round(Number(input.value)||24)));closeMenus();applyRichSelectionAction('sizePx',n);};input.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();commit();}});input.addEventListener('change',commit);input.addEventListener('blur',commit);requestAnimationFrame(()=>{input.focus();input.select();});return;}
+        if(action==='size'&&value==='px'){const menu=wrap.querySelector('.rich-dropdown-menu'),trigger=wrap.querySelector('.rich-dropdown-trigger');menu.dataset.originalMarkup||=menu.innerHTML;menu.dataset.pxInput='true';menu.replaceChildren();const field=document.createElement('label');field.className='rich-size-px-field';field.textContent='px';const input=document.createElement('input');input.type='number';input.inputMode='numeric';input.min='8';input.max='420';input.step='1';const snap=richSelectionSnapshot,selectedRange=(snap?.scene?.richText?.ranges||[]).find(r=>r?.kind==='span'&&Number(r.start)<=Number(snap?.start)&&Number(r.end)>=Number(snap?.end)&&Number(r.style?.fontSizePx)>0),shownPx=Number(trigger?.textContent?.match(/(\d+(?:\.\d+)?)\s*px/i)?.[1]);input.value=String(Math.round(Number(selectedRange?.style?.fontSizePx)||shownPx||24));input.setAttribute('aria-label','文字サイズ px');field.appendChild(input);menu.appendChild(field);menu.hidden=false;trigger?.setAttribute('aria-expanded','true');richToolbarInteracting=true;let committed=false;const commit=()=>{if(committed)return;committed=true;const n=Math.max(8,Math.min(420,Math.round(Number(input.value)||24)));closeMenus();applyRichSelectionAction('sizePx',n);};input.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();commit();}});input.addEventListener('change',commit);input.addEventListener('blur',commit);requestAnimationFrame(()=>{input.focus();input.select();});return;}
         closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);return;}
       const t=e.target.closest?.('button[data-rich-action]');
       if(t){e.preventDefault();e.stopPropagation();closeMenus();if(t.dataset.richAction==='ruby'){editRichRuby();return;}applyRichSelectionAction(t.dataset.richAction);}
@@ -10811,6 +10812,8 @@ return flowCommentCard;}
     if(!snap)return false;
     const bar=ensureRichSelectionToolbar();
     bar.hidden=false;updateRichToolbarState(snap);
+    const pxMenu=bar.querySelector('.rich-dropdown-menu[data-px-input="true"]:not([hidden])');
+    if(pxMenu)richToolbarInteracting=true;
     if(!richToolbarInteracting){bar.querySelectorAll('.rich-dropdown-menu').forEach(m=>m.hidden=true);bar.querySelectorAll('.rich-dropdown-trigger').forEach(t=>t.setAttribute('aria-expanded','false'));}
     positionRichSelectionToolbar(bar,snap);
     return true;
@@ -10939,7 +10942,7 @@ return flowCommentCard;}
     if(!scene||!article){removeLiveEmptyAuthoringOverlay();return;}
 
     let text=article.querySelector('.sp-text');
-    const empty=String(scene.text||'').length===0 && String(scene.subText||'').length===0;
+    const empty=!normalizedSceneText(scene.text)&&!normalizedSceneText(scene.subText);
     article.classList.toggle('live-edit-empty-scene',empty);
     if(!empty){
       text?.classList.remove('live-edit-empty-target');
@@ -17035,7 +17038,7 @@ function openDesktopTextDetail(){
     bindLiveEditSoundControl();
     observeLiveEditPreviewChrome();
     syncLiveEditPreviewChrome();
-    requestAnimationFrame(()=>{ensureLiveEditEmptyTarget();renderDesktopLivePanel();syncStudioPreviewDevice();});
+    requestAnimationFrame(()=>{renderDesktopLivePanel();syncStudioPreviewDevice();ensureLiveEditEmptyTarget();requestAnimationFrame(()=>ensureLiveEditEmptyTarget());setTimeout(()=>{if(liveEditEnabled)ensureLiveEditEmptyTarget();},120);});
     const historyHelp=playerHost.querySelector('.sp-history-help');if(historyHelp)historyHelp.textContent=u('Sceneをスクロール','Scroll Scenes');
     const historyKicker=playerHost.querySelector('.sp-history-kicker');if(historyKicker)historyKicker.textContent='SCENES';
   }
