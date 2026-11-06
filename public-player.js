@@ -108,7 +108,15 @@
       const isSameSiteBookshelf=url.origin===location.origin&&/\/bookshelf$/.test(path);
       const isProductionBookstore=url.hostname==='yuya-narita.github.io'&&path==='/scene/bookstore';
       const isSameSiteBookstore=url.origin===location.origin&&/\/bookstore$/.test(path);
-      if(isProductionBookstore||isSameSiteBookstore){
+      const isProductionReaderStatusShare=url.hostname==='yuya-narita.github.io'&&path==='/scene/bookstore/reader-status-share.html';
+      const isSameSiteReaderStatusShare=url.origin===location.origin&&/\/bookstore\/reader-status-share\.html$/.test(path);
+      if(isProductionReaderStatusShare||isSameSiteReaderStatusShare){
+        // Older share links returned to the profile document itself. Send the
+        // Player return control to the bookstore entrance, without a profile ID.
+        url=new URL('./',url);
+      }
+      if(isProductionBookstore||isSameSiteBookstore||isProductionReaderStatusShare||isSameSiteReaderStatusShare){
+        url.search='';
         url.hash='';
         return {url:url.toString(),label:'← あ箱書店へ'};
       }

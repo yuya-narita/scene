@@ -66,7 +66,7 @@
  function publicPlayerUrl(id){
   if(!publicationId(id))return '';
   const player=new URL('../',location.href),raw=new URL(BASE+'/work/'+encodeURIComponent(id));
-  raw.searchParams.set('raw','1');player.searchParams.set('src',raw.href);player.searchParams.set('returnTo',location.href);return player.href;
+  raw.searchParams.set('raw','1');player.searchParams.set('src',raw.href);player.searchParams.set('returnTo',new URL('./',location.href).href);return player.href;
  }
  async function resolvePublication(value){
   const known=publicationId(value?.publicationId)||publicationId(value?.publicId);if(known)return known;
