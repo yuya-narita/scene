@@ -623,9 +623,10 @@ async function importBookshelfClaimFromLocation(){
   const token=String(u.searchParams.get('claim')||'').trim();
   if(!token)return false;
   const paidPublicationId=String(u.searchParams.get('paidPublicationId')||'').trim();
+  const returnToBookstore=u.searchParams.get('returnToBookstore')==='1';
   // Remove LINE's external-browser hint and the bearer token from visible URL
   // as soon as the page owns a copy of it in memory.
-  u.searchParams.delete('claim');u.searchParams.delete('handoff');u.searchParams.delete('openExternalBrowser');u.searchParams.delete('paidPublicationId');
+  u.searchParams.delete('claim');u.searchParams.delete('handoff');u.searchParams.delete('openExternalBrowser');u.searchParams.delete('paidPublicationId');u.searchParams.delete('returnToBookstore');
   const cleanUrl=u.pathname+(u.search||'')+(u.hash||'');
   if(!validBookshelfClaimToken(token)){history.replaceState(null,'',cleanUrl);throw new Error('本棚への受取リンクを確認できませんでした。');}
   const response=await fetch(`${API_BASE}/bookshelf-claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({token})});
@@ -652,6 +653,11 @@ async function importBookshelfClaimFromLocation(){
   try{
     fetch(`${API_BASE}/bookshelf-event`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',keepalive:true,body:JSON.stringify({event:'own_copy_saved',workId:String(payload.scene?.workId||payload.scene?.distribution?.workId||''),copyId:String(payload.scene?.distribution?.copyId||'')})}).catch(()=>{});
   }catch(_){}
+  if(returnToBookstore){
+    const target=new URL('../bookstore/',location.href);
+    target.hash='reading-room';
+    location.replace(target.toString());
+  }
   return true;
 }
 
