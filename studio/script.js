@@ -10811,10 +10811,14 @@ return flowCommentCard;}
     requestAnimationFrame(()=>captureAndShowRichSelection());
     setTimeout(()=>captureAndShowRichSelection(),40);
   };
+  // The history palette is portaled to document.body, outside the toolbar.
+  // Do not rebuild it during pointerup: replacing its chip before the browser's
+  // click event fires silently drops the selected-color action.
+  const isRichToolbarSurface=e=>!!e.target.closest?.('.rich-selection-toolbar,.rich-color-popover');
   document.addEventListener('selectionchange',queueRichSelectionToolbar);
-  document.addEventListener('pointerup',e=>{if(e.target.closest?.('.rich-selection-toolbar'))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},true);
-  document.addEventListener('mouseup',e=>{if(e.target.closest?.('.rich-selection-toolbar'))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},true);
-  document.addEventListener('touchend',e=>{if(e.target.closest?.('.rich-selection-toolbar'))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},{capture:true,passive:true});
+  document.addEventListener('pointerup',e=>{if(isRichToolbarSurface(e))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},true);
+  document.addEventListener('mouseup',e=>{if(isRichToolbarSurface(e))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},true);
+  document.addEventListener('touchend',e=>{if(isRichToolbarSurface(e))return;captureAndShowRichSelection()||queueRichSelectionToolbar();},{capture:true,passive:true});
 
 
   // Phase 4 / V75 — diagnostic overlay removed after confirming selection capture succeeds.
