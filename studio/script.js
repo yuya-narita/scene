@@ -7870,6 +7870,31 @@ return flowCommentCard;}
   ];
   const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')],['handdrawn-rounded',u('手書き角丸枠','Hand-drawn rounded box')],['handdrawn-double',u('手書き二重枠','Hand-drawn double box')],['handdrawn-dashed',u('手書き点線枠','Hand-drawn dashed box')],['handdrawn-dark',u('黒ベタ手書き枠','Dark hand-drawn box')],['handdrawn-panel',u('半透明パネル','Translucent panel')],['handdrawn-focus-screen',u('画面いっぱいの集中線','Full-screen focus rays')]];
   const isFrameType=value=>String(value||'').startsWith('handdrawn-');
+  function buildFrameStyleControls(scene,onPreview=()=>{}){
+    const p=ensurePresentation(scene);p.frame ||= {type:'handdrawn-voice'};
+    const card=desktopCard(u('枠のサイズ・色','Frame size & color'),'desktop-live-frame-settings');
+    const grid=document.createElement('div');grid.className='desktop-live-grid desktop-live-frame-settings-grid';
+    const makeRange=(label,key)=>{
+      const wrap=document.createElement('label');wrap.className='desktop-live-frame-range';
+      const head=document.createElement('span');head.className='desktop-live-frame-range-head';
+      const name=document.createElement('strong');name.textContent=label;
+      const value=document.createElement('output');value.textContent=`+${Math.max(0,Math.round(Number(p.frame[key])||0))}px`;head.append(name,value);
+      const input=document.createElement('input');input.type='range';input.min='0';input.max='180';input.step='1';input.value=String(Math.max(0,Math.min(180,Number(p.frame[key])||0)));
+      input.addEventListener('input',()=>{p.frame[key]=Number(input.value);value.textContent=`+${input.value}px`;scheduleDraftSave(100);onPreview();});
+      wrap.append(head,input);return wrap;
+    };
+    const makeColor=(label,key,fallback)=>{
+      const wrap=document.createElement('label');wrap.className='desktop-live-frame-color';
+      const name=document.createElement('span');name.textContent=label;
+      const input=document.createElement('input');input.type='color';input.value=/^#[0-9a-f]{6}$/i.test(String(p.frame[key]||''))?p.frame[key]:fallback;
+      input.addEventListener('input',()=>{p.frame[key]=input.value.toUpperCase();scheduleDraftSave(100);onPreview();});
+      wrap.append(name,input);return wrap;
+    };
+    grid.append(makeRange(u('左右の余白','Side padding'),'extraX'),makeRange(u('上下の余白','Vertical padding'),'extraY'));
+    const colors=document.createElement('div');colors.className='desktop-live-frame-colors';colors.append(makeColor(u('塗り','Fill'),'fill','#fffdf8'),makeColor(u('線','Line'),'stroke','#171512'));
+    const note=document.createElement('small');note.className='desktop-live-frame-note';note.textContent=u('集中線では余白が文字の周りの空白に、通常の枠では内側の余白になります。','For focus rays, padding widens the clear center; for other frames it increases inner padding.');
+    card.append(grid,colors,note);return card;
+  }
   function framePositionPreset(scene){return scene?.presentation?.text?.position?.preset||scene?.presentation?.frame?.position?.preset||'auto';}
   function setFramePositionPreset(p,preset){
     p.text||={};
@@ -12914,6 +12939,8 @@ function openDesktopEffectDetail(){
       desktopDetailSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{setSceneTextFlip(scene,v);apply();})
     );
 
+    if(isFrameType(p.frame?.type))body.appendChild(buildFrameStyleControls(scene,()=>refreshLivePlayer({preserveSheet:true})));
+
     const timing=section(u('タイミング','Timing'));timing.classList.add('desktop-effect-timing-section');
     const timingGrid=two(timing);
     p.effectTiming ||= {};
@@ -15608,6 +15635,7 @@ function openDesktopTextDetail(){
       desktopMakeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);refresh();})
     );
     effectCard.append(effectGrid);
+    if(isFrameType(p.frame?.type))effectCard.appendChild(buildFrameStyleControls(scene,()=>refreshLivePlayer({preserveSheet:true})));
     effectCard.append(desktopDetail(t('detail.effect'),'effect'));
 
     let webBoardCard=null;
@@ -16663,6 +16691,7 @@ function openDesktopTextDetail(){
           textFlipField
         );
         liveEditSheetBody.append(grid);
+        if(isFrameType(p.frame?.type))liveEditSheetBody.appendChild(buildFrameStyleControls(scene,()=>refreshLivePlayer({preserveSheet:true})));
         if((p.view||'world')==='web-board'){
           initWebBoardMeta(scene,index);
           const board=document.createElement('div');board.className='live-web-board-fields';

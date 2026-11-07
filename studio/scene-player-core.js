@@ -5778,30 +5778,32 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return `${d} Z`;
     }
 
-    _mountFullScreenFocusRays(frame,scene) {
+    _mountFullScreenFocusRays(frame,scene,presentation) {
       const ns='http://www.w3.org/2000/svg';
       const svg=document.createElementNS(ns,'svg');
       svg.classList.add('sp-fullscreen-focus-rays');
       svg.setAttribute('aria-hidden','true');
       svg.setAttribute('preserveAspectRatio','none');
-      frame.prepend(svg);
       const text=frame.querySelector(':scope > .sp-text');
       const stage=this.els.stage;
       if(!stage||!text)return;
+      stage.insertBefore(svg,this.els.scenes);
+      const frameOptions=presentation?.frame||{};
+      svg.style.setProperty('--sp-frame-stroke',String(frameOptions.stroke||'#171512'));
       let lastKey='';
       const draw=()=>{
         if(!frame.isConnected||!stage.isConnected)return;
-        const sr=stage.getBoundingClientRect(),fr=frame.getBoundingClientRect(),tr=text.getBoundingClientRect();
+        const sr=stage.getBoundingClientRect(),tr=text.getBoundingClientRect();
         const width=Math.max(1,sr.width),height=Math.max(1,sr.height);
         const cx=tr.left+tr.width/2-sr.left,cy=tr.top+tr.height/2-sr.top;
         const key=[width,height,cx,cy,tr.width,tr.height].map(v=>Math.round(v*2)/2).join(':');
         if(key===lastKey)return;lastKey=key;
         svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
-        svg.style.left=`${sr.left-fr.left}px`;svg.style.top=`${sr.top-fr.top}px`;
+        svg.style.left='0px';svg.style.top='0px';
         svg.style.width=`${width}px`;svg.style.height=`${height}px`;
         while(svg.firstChild)svg.removeChild(svg.firstChild);
         const defs=document.createElementNS(ns,'defs'),clip=document.createElementNS(ns,'clipPath');
-        const clipId=`focus-rays-${this._handdrawnSeed(`${scene.id}|${scene.text}`)&65535}`;clip.id=clipId;
+        const clipId=`focus-rays-${this._handdrawnSeed(`${scene.id}|${scene.text}`)&65535}-${Math.random().toString(36).slice(2,8)}`;clip.id=clipId;
         const rect=document.createElementNS(ns,'rect');rect.setAttribute('width',String(width));rect.setAttribute('height',String(height));clip.appendChild(rect);defs.appendChild(clip);svg.appendChild(defs);
         const rays=document.createElementNS(ns,'g');rays.setAttribute('clip-path',`url(#${clipId})`);svg.appendChild(rays);
         let seed=this._handdrawnSeed(`${scene.id}|${scene.text}|focus-screen`)|0;
@@ -5819,7 +5821,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const angle=phase+(Math.PI*2*i/count)+(random()-.5)*.012;
           const dx=Math.cos(angle),dy=Math.sin(angle),endR=edgeDistance(angle);
           const halfTextW=tr.width/2,halfTextH=tr.height/2;
-          const startR=Math.abs(dx)*halfTextW+Math.abs(dy)*halfTextH+11+random()*13;
+          const extraX=Math.max(0,Math.min(180,Number(frameOptions.extraX)||0));
+          const extraY=Math.max(0,Math.min(180,Number(frameOptions.extraY)||0));
+          const startR=Math.abs(dx)*(halfTextW+extraX)+Math.abs(dy)*(halfTextH+extraY)+11+random()*13;
           if(endR<=startR+8)continue;
           const ex=cx+dx*endR,ey=cy+dy*endR;
           const nx=-dy,ny=dx;
@@ -5842,7 +5846,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         for(let i=0;i<56;i++){
           const angle=phase+(Math.PI*2*(i+.42)/56)+(random()-.5)*.025;
           const dx=Math.cos(angle),dy=Math.sin(angle),endR=edgeDistance(angle);
-          const startR=Math.abs(dx)*tr.width/2+Math.abs(dy)*tr.height/2+23+random()*25;
+          const extraX=Math.max(0,Math.min(180,Number(frameOptions.extraX)||0));
+          const extraY=Math.max(0,Math.min(180,Number(frameOptions.extraY)||0));
+          const startR=Math.abs(dx)*(tr.width/2+extraX)+Math.abs(dy)*(tr.height/2+extraY)+23+random()*25;
           const r0=startR+(endR-startR)*(.12+random()*.36),r1=Math.min(endR,r0+35+random()*150);
           if(r1<=r0)continue;
           const p=document.createElementNS(ns,'path');p.setAttribute('d',`M ${fmt(cx+dx*r0)} ${fmt(cy+dy*r0)} L ${fmt(cx+dx*r1)} ${fmt(cy+dy*r1)}`);p.classList.add('sp-focus-dry');p.style.strokeWidth=String(.35+random()*.9);p.style.opacity=String(.18+random()*.32);rays.appendChild(p);
@@ -5850,17 +5856,26 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       requestAnimationFrame(draw);
       if(typeof ResizeObserver==='function'){
-        const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();return;}draw();});
+        const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();svg.remove();return;}draw();});
         observer.observe(stage);observer.observe(frame);observer.observe(text);
       }
+      const cleanup=new MutationObserver(()=>{if(!frame.isConnected){cleanup.disconnect();svg.remove();}});
+      cleanup.observe(stage,{subtree:true,childList:true});
     }
 
     _mountHanddrawnFrame(frame,scene,presentation) {
       if(frame.dataset.frameType==='handdrawn-focus-screen'){
         frame.classList.add('sp-focus-screen-frame');
-        this._mountFullScreenFocusRays(frame,scene);
+        this._mountFullScreenFocusRays(frame,scene,presentation);
         return;
       }
+      const frameOptions=presentation?.frame||{};
+      const extraX=Math.max(0,Math.min(180,Number(frameOptions.extraX)||0));
+      const extraY=Math.max(0,Math.min(180,Number(frameOptions.extraY)||0));
+      frame.style.setProperty('--sp-frame-extra-x',`${extraX}px`);
+      frame.style.setProperty('--sp-frame-extra-y',`${extraY}px`);
+      if(frameOptions.fill)frame.style.setProperty('--sp-frame-fill',String(frameOptions.fill));
+      if(frameOptions.stroke)frame.style.setProperty('--sp-frame-stroke',String(frameOptions.stroke));
       const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
       svg.classList.add('sp-handdrawn-frame-svg');svg.setAttribute('aria-hidden','true');svg.setAttribute('preserveAspectRatio','none');
       const defs=document.createElementNS(ns,'defs'),filter=document.createElementNS(ns,'filter');
