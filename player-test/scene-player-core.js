@@ -2476,6 +2476,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _resetPresentationRuntime() {
       this._clearPresentationTimers();
       this._stopTyping(false);
+      if(this._bookstoreRingCleanups){for(const cleanup of this._bookstoreRingCleanups){try{cleanup();}catch{}}this._bookstoreRingCleanups.clear();}
     }
 
     _resetChatReadRuntime() {
@@ -6811,6 +6812,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const centerX=(sourceRect.left+sourceRect.width/2-articleRect.left)*scaleX;
       const centerY=(sourceRect.top+sourceRect.height/2-articleRect.top)*scaleY;
       const stageWidth=Math.max(1,this.els?.stage?.clientWidth||this.host?.clientWidth||global.innerWidth||360);
+      const stageHeight=Math.max(1,this.els?.stage?.clientHeight||this.host?.clientHeight||global.innerHeight||640);
+      const maxCoverWidth=Math.min(190,Math.max(128,stageWidth*.18));
+      const coverFit=Math.min(1,maxCoverWidth/width,(maxCoverWidth*1.5)/height);
+      const textFit=Math.min(1,Math.max(150,stageWidth*.48)/width,Math.max(240,stageHeight*.52)/height);
+      const fitScale=target.matches?.('.sp-scene-image-object')?coverFit:textFit;
       const radius=Math.min(430,Math.max(320,stageWidth*.52));
       const timing=scene?.presentation?.effectTiming||{};
       const duration=Math.max(600,Math.min(6000,(Number(timing.duration)||2.35)*1000));
@@ -6850,7 +6856,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const focus=Math.exp(-Math.pow(Math.abs(angle)/23,2));
           const z=-55+focus*190-depth*145-(1-introDepth)*250;
           const y=depth*14;
-          const scale=Math.max(.08,(.64+focus*.46-depth*.07)*(.22+.78*introDepth))/1.10;
+          const ringScale=Math.max(.08,(.64+focus*.46-depth*.07)*(.22+.78*introDepth))/1.10;
+          const scale=ringScale*(fitScale+(1-fitScale)*focus);
           const brightness=Math.max(.44,.74+focus*.30-depth*.11)/1.04;
           const opacity=Math.min(1,Math.max(.10,(.70+focus*.28-depth*.18)*(.30+.70*introDepth))/.98);
           keyframes.push({offset:t,opacity,filter:`brightness(${brightness.toFixed(3)})`,zIndex:String(Math.round(z+700)),transform:`translate(-50%,-50%) translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,${(z-135).toFixed(2)}px) rotateY(${(-angle*.72).toFixed(2)}deg) scale(${scale.toFixed(4)}) ${baseTransform}`});
@@ -6862,7 +6869,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         target.style.visibility=oldVisibility;
         copies.forEach(animation=>{try{animation.cancel();}catch{}});
         overlay.remove();
+        this._bookstoreRingCleanups?.delete(cleanup);
       };
+      if(!this._bookstoreRingCleanups)this._bookstoreRingCleanups=new Set();
+      this._bookstoreRingCleanups.add(cleanup);
       global.setTimeout(cleanup,duration+delay+100);
     }
 
