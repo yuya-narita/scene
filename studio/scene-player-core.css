@@ -3453,32 +3453,4 @@ html.sp-scene-image-open body{
   object-fit:contain;
 }
 
-/* Distinct, inked manga-frame treatments. Each keeps its own text-sized outline. */
-.sp-handdrawn-decor{fill:none;stroke:var(--sp-frame-stroke,#171512);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round;opacity:.92}
-.sp-handdrawn-hole{display:none;fill:var(--sp-frame-fill,#fffdf8);stroke:none}
-.sp-handdrawn-frame[data-frame-type="handdrawn-inkburst"] .sp-handdrawn-fill{fill:var(--sp-frame-stroke,#171512)}
-.sp-handdrawn-frame[data-frame-type="handdrawn-inkburst"] .sp-handdrawn-hole{display:block}
-.sp-handdrawn-frame[data-frame-type="handdrawn-voice"] .sp-handdrawn-ghost{stroke-width:1.15;opacity:.52;transform:translate(1px,1px)}
-.sp-handdrawn-frame[data-frame-type="handdrawn-soft"] .sp-handdrawn-ink{stroke-width:1.55;opacity:.76}
-.sp-handdrawn-frame[data-frame-type="handdrawn-soft"] .sp-handdrawn-ghost{stroke-width:1.15;opacity:.38;transform:translate(-1px,1px)}
-.sp-handdrawn-frame[data-frame-type="handdrawn-whisper"] .sp-handdrawn-bleed{display:none}
-.sp-handdrawn-frame[data-frame-type="handdrawn-whisper"] .sp-handdrawn-ink{stroke-width:1.55;stroke-dasharray:22 4 8 7 14 5;opacity:.74}
-.sp-handdrawn-frame[data-frame-type="handdrawn-whisper"] .sp-handdrawn-ghost{stroke-width:.65;stroke-dasharray:12 9 4 7;opacity:.32}
-.sp-handdrawn-frame[data-frame-type="handdrawn-thought"] .sp-handdrawn-ink{stroke-width:2.1}
-.sp-handdrawn-frame[data-frame-type="handdrawn-shout"] .sp-handdrawn-ink{stroke-width:2.55;stroke-linejoin:miter}
-.sp-handdrawn-frame[data-frame-type="handdrawn-shout"] .sp-handdrawn-ghost{stroke-width:1.2;opacity:.56}
-.sp-handdrawn-frame[data-frame-type="handdrawn-inkburst"] .sp-handdrawn-ink{stroke-width:1.35;opacity:.92}
-.sp-handdrawn-frame[data-frame-type="handdrawn-inkburst"] .sp-handdrawn-bleed{stroke-width:5.5;opacity:.23}
-.sp-handdrawn-frame[data-frame-type="handdrawn-impact"] .sp-handdrawn-ink{stroke-width:2.2;stroke-linejoin:bevel}
-.sp-handdrawn-frame[data-frame-type="handdrawn-impact"] .sp-handdrawn-ghost{stroke-width:1.4;opacity:.7}
-.sp-handdrawn-frame[data-frame-type="handdrawn-focus"] .sp-handdrawn-ink{stroke-width:1.25}
-.sp-handdrawn-frame[data-frame-type="handdrawn-focus"] .sp-handdrawn-ghost{stroke-width:.8;opacity:.42}
-.sp-handdrawn-frame[data-frame-type="handdrawn-sketch"] .sp-handdrawn-ink{stroke-width:1.35;opacity:.74}
-.sp-handdrawn-frame[data-frame-type="handdrawn-sketch"] .sp-handdrawn-ghost{stroke-width:1.1;opacity:.7;transform:translate(2px,-1px)}
-.sp-handdrawn-frame[data-frame-type="handdrawn-sketch"] .sp-handdrawn-scuff{stroke-width:.55;opacity:.65}
-.sp-handdrawn-frame[data-frame-type="handdrawn-paper"] .sp-handdrawn-ink{stroke-width:2.35;stroke-linejoin:bevel}
-.sp-handdrawn-frame[data-frame-type="handdrawn-paper"] .sp-handdrawn-ghost{stroke-width:.8;opacity:.38;transform:translate(2px,2px)}
-.sp-handdrawn-frame[data-frame-type="handdrawn-romance"] .sp-handdrawn-ink{stroke-width:1.4;stroke-dasharray:2 1.8;opacity:.76}
-.sp-handdrawn-frame[data-frame-type="handdrawn-romance"] .sp-handdrawn-ghost{stroke-width:.75;opacity:.34}
-.sp-handdrawn-frame[data-frame-type="handdrawn-fear"] .sp-handdrawn-ink{stroke-width:2.2;opacity:.9}
-.sp-handdrawn-frame[data-frame-type="handdrawn-fear"] .sp-handdrawn-ghost{stroke-width:1.45;opacity:.54;transform:translate(-1.5px,1px)}
+
