@@ -2376,7 +2376,7 @@
   }
   function previewCurrentSceneTextColor(value){
     const c=normalizeTextColor(value);if(!c)return;
-    const text=player?.els?.scenes?.querySelector('.sp-scene.is-active .sp-text');
+    const text=studioSelectedSceneArticle()?.querySelector('.sp-text');
     if(text)text.style.setProperty('color',c,'important');
   }
   function previewCurrentChatColor(kind,value){
@@ -4187,6 +4187,63 @@
       else {const at=seg.find(v=>String(v).startsWith('@'));if(at){platform='Mastodon';id=clean(at);}else platform=host;}
       return {platform,handle:id?`@${id}`:''};
     }catch(_){return {platform:'',handle:''};}
+  }
+
+  function simultaneousGroupBounds(index){
+    const scenes=workingDocument?.scenes||[];let start=index,end=index;const id=scenes[index]?.presentation?.simultaneousGroup;
+    if(typeof id==='string'&&id){while(start>0&&scenes[start-1]?.presentation?.simultaneousGroup===id)start--;while(end+1<scenes.length&&scenes[end+1]?.presentation?.simultaneousGroup===id)end++;}
+    return {start,end,id:end>start?id:null};
+  }
+  function buildSimultaneousGroupEditor(scene,index){
+    const scenes=workingDocument.scenes,g=simultaneousGroupBounds(index);
+    const card=desktopCard('','desktop-simultaneous-card');if(!g.id)card.classList.add('is-collapsed');
+    card.addEventListener('keydown',e=>e.stopPropagation());card.addEventListener('keyup',e=>e.stopPropagation());
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='desktop-collapsible-head';
+    const updateHead=()=>{toggle.textContent=`${u('同時表示グループ','Simultaneous group')} ${g.id?`Scene ${g.start+1}–${g.end+1}`:'OFF'} ${card.classList.contains('is-collapsed')?'▸':'▾'}`;};
+    toggle.addEventListener('click',()=>{card.classList.toggle('is-collapsed');updateHead();});card.querySelector('h3').replaceChildren(toggle);updateHead();
+    const content=document.createElement('div');content.className='desktop-collapsible-content';
+    const start=g.id?g.start:index;
+    const label=document.createElement('label');label.className='desktop-simultaneous-count';
+    const name=document.createElement('span');name.textContent=u(`Scene ${start+1}からまとめる数`,`Scenes to group from Scene ${start+1}`);
+    const count=document.createElement('input');count.type='number';count.min='2';count.max=String(Math.max(2,scenes.length-start));count.step='1';count.value=String(g.id?g.end-g.start+1:Math.min(3,scenes.length-start));label.append(name,count);content.appendChild(label);
+    const refresh=()=>{scheduleDraftSave(40);renderSceneList();refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});if(desktopLiveActive())renderDesktopLivePanel();else if(liveEditEnabled)renderLiveEditSheet('effect');else{closeDesktopEffectDetail();openDesktopEffectDetail();}};
+    const setRange=(from,to)=>{
+      if(to<=from||from<0||to>=scenes.length)return;
+      const existing=g.id;
+      if(scenes.slice(from,to+1).some((s,offset)=>{const other=simultaneousGroupBounds(from+offset);return other.id&&other.id!==existing;})){
+        appAlert(u('範囲内に別のグループがあります。先にそのグループを解除してください。','This range includes another group. Ungroup it first.'));return;
+      }
+      captureUndo(u('同時表示グループの変更を元に戻せます','Undo simultaneous group changes'));
+      if(existing)for(let i=g.start;i<=g.end;i++)delete scenes[i].presentation.simultaneousGroup;
+      const id=existing||`sim-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
+      for(let i=from;i<=to;i++){ensurePresentation(scenes[i]).simultaneousGroup=id;}
+      refresh();
+    };
+    const actions=document.createElement('div');actions.className='desktop-web-board-actions';
+    const apply=desktopAction(g.id?u('範囲を変更','Update range'):u('まとめる','Group Scenes'),()=>{
+      const n=Number(count.value);if(!Number.isInteger(n)||n<2||start+n>scenes.length){appAlert(u('2以上で、作品内に収まるScene数を入力してください。','Enter at least 2 Scenes within the document.'));return;}setRange(start,start+n-1);
+    },'is-primary');apply.disabled=scenes.length-start<2;actions.appendChild(apply);
+    if(!g.id&&index>0){
+      const prev=simultaneousGroupBounds(index-1);
+      actions.appendChild(desktopAction(u('前Sceneとまとめる','Group with previous'),()=>{
+        if(prev.id){captureUndo('同時表示グループの変更を元に戻せます');ensurePresentation(scene).simultaneousGroup=prev.id;refresh();}
+        else setRange(index-1,index);
+      }));
+    }
+    if(g.id){
+      actions.appendChild(desktopAction(u('グループを解除','Ungroup'),()=>{captureUndo('同時表示グループの変更を元に戻せます');for(let i=g.start;i<=g.end;i++)delete scenes[i].presentation.simultaneousGroup;refresh();}));
+      const members=document.createElement('div');members.className='desktop-simultaneous-members';
+      for(let i=g.start;i<=g.end;i++){
+        const button=desktopAction(`Scene ${i+1} · ${String(scenes[i].text||u('画像・音','Image / audio')).replace(/\s+/g,' ').slice(0,24)}`,()=>{
+          selectedSceneIndex=i;player?.refreshCurrent({document:getDocumentForPlayback(),index:i,preserveAudio:true});
+          if(desktopLiveActive())renderDesktopLivePanel();else if(liveEditEnabled)renderLiveEditSheet('effect');else{closeDesktopEffectDetail();openDesktopEffectDetail();}
+        });button.classList.toggle('is-selected',i===index);members.appendChild(button);
+      }
+      content.appendChild(members);
+      actions.appendChild(desktopAction(u('まとめて再生','Replay group'),()=>{if(!player)return;player.goTo(g.start);player._queueInitialOneShots(player.document.scenes[g.start]);}));
+    }
+    const note=document.createElement('p');note.className='desktop-text-detail-note';note.textContent=u('1回のタップで全員が登場。位置・角度・文字・画像・演出・SEは個別、背景・BGM・表示方法は先頭Sceneの設定を使います。配置がおまかせのSceneは中央に重なります。','One tap starts all members. Position, angle, text, image, effects and SE stay individual. Background, BGM and display mode come from the first Scene. Auto-positioned members overlap at the center.');
+    content.append(actions,note);card.appendChild(content);return card;
   }
 
   function buildFlowCommentEditor(scene,index){const p=ensurePresentation(scene);let flowCommentCard;
@@ -10199,6 +10256,10 @@ return flowCommentCard;}
     desktopBodyResizeObserver.observe(textarea);
   }
 
+  function studioSelectedSceneArticle(){
+    const scene=workingDocument?.scenes?.[player?.index??selectedSceneIndex];
+    return [...(playerHost?.querySelectorAll('.sp-scene')||[])].find(node=>node.dataset.sceneId===scene?.id)||playerHost?.querySelector('.sp-scene.is-active')||null;
+  }
   function liveEditScene(){
     const advancedActive=advancedScreen && !advancedScreen.hidden;
     const rawIndex=advancedActive ? selectedSceneIndex : (player?.index ?? selectedSceneIndex);
@@ -10535,7 +10596,7 @@ return flowCommentCard;}
     richPxSizeField.append(pxUnit,richPxSizeInput);sizeWrap.after(richPxSizeField);
     let pxSnapshot=null;
     const pxNode=()=>{
-      const article=playerHost?.querySelector('.sp-scene.is-active');
+      const article=studioSelectedSceneArticle();
       if(!article||!pxSnapshot)return null;
       if(pxSnapshot.el?.isConnected&&article.contains(pxSnapshot.el))return pxSnapshot.el;
       const scene=pxSnapshot.scene;
@@ -11104,7 +11165,7 @@ return flowCommentCard;}
   }
   function positionLiveEmptyAuthoringOverlay(){
     if(!liveEmptyAuthoringOverlay||!liveEditEnabled||!playerHost)return;
-    const article=playerHost.querySelector('.sp-scene.is-active');
+    const article=studioSelectedSceneArticle();
     if(!article){removeLiveEmptyAuthoringOverlay();return;}
     const target=article.querySelector('.sp-text.live-edit-empty-target');
     const r=(target||article).getBoundingClientRect();
@@ -11118,7 +11179,7 @@ return flowCommentCard;}
   function ensureLiveEditEmptyTarget(){
     if(!liveEditEnabled||!playerHost){removeLiveEmptyAuthoringOverlay();return;}
     if(liveInlineEditEl||playerHost.classList.contains('sp-cover-open')||player?.ended||player?.historyOpen||autoRecActive){removeLiveEmptyAuthoringOverlay();return;}
-    const article=playerHost.querySelector('.sp-scene.is-active');
+    const article=studioSelectedSceneArticle();
     const activeId=article?.dataset?.sceneId;
     const scene=workingDocument?.scenes?.find(s=>String(s?.id)===String(activeId))||player?.currentScene||liveEditScene().scene;
     if(!scene||!article){removeLiveEmptyAuthoringOverlay();return;}
@@ -11263,7 +11324,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     // placeholders before reading the edited text back into Scene data.
     finishInlineTextEdit(); closeLiveEditSheet(); setLiveToolbarVisible(true);
     const selector=field==='subText'?'.sp-subtext':'.sp-text';
-    const el=targetEl||playerHost.querySelector(`.sp-scene.is-active ${selector}`); if(!el)return;
+    const el=targetEl||studioSelectedSceneArticle()?.querySelector(selector); if(!el)return;
 
     liveInlineEditField=field==='subText'?'subText':'text';
     liveInlineEditEl=el;
@@ -12176,7 +12237,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     });
 
     const activeText=()=>{
-      const article=playerHost?.querySelector('.sp-scene.is-active');
+      const article=studioSelectedSceneArticle();
       return article&&String(article.dataset.sceneId)===String(scene.id)?article.querySelector('.sp-text'):null;
     };
     let beforeNode=null,beforeSize='',beforePriority='';
@@ -12567,7 +12628,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     ensureFramePositionEditorStyle();
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
       const stage=player?.els?.stage,scenes=player?.els?.scenes;
-      const article=playerHost?.querySelector('.sp-scene.is-active');
+      const article=studioSelectedSceneArticle();
       const frame=article?.querySelector('.sp-handdrawn-frame');
       const target=frame||article?.querySelector(':scope > .sp-text');
       if(!stage||!scenes||!article||!target){appAlert(u('配置できるテキストがありません','There is no text to position.'));return;}
@@ -12999,6 +13060,8 @@ function openDesktopEffectDetail(){
         apply();
       })
     );
+
+    body.appendChild(buildSimultaneousGroupEditor(scene,index));
 
     // Typewriter is an Entrance-specific option, so keep its controls directly
     // under Basic effects instead of showing a permanent standalone card.
@@ -14979,7 +15042,7 @@ function openDesktopTextDetail(){
     // typography/background stable and deliberately does NOT replay entrance,
     // typing, shake, blur, etc. A full Scene render happens once editing ends.
     const mirrorDesktopTextOnly=(field,value)=>{
-      const article=playerHost?.querySelector?.('.sp-scene.is-active');
+      const article=studioSelectedSceneArticle();
       if(!article)return;
       const selector=field==='subText'?'.sp-subtext':'.sp-text';
       let el=article.querySelector(selector);
@@ -16718,6 +16781,7 @@ function openDesktopTextDetail(){
           textFlipField
         );
         liveEditSheetBody.append(grid);
+        liveEditSheetBody.appendChild(buildSimultaneousGroupEditor(scene,index));
         if(isFrameType(p.frame?.type))liveEditSheetBody.appendChild(buildFrameStyleControls(scene,()=>refreshLivePlayer({preserveSheet:true})));
         if((p.view||'world')==='web-board'){
           initWebBoardMeta(scene,index);
@@ -17403,7 +17467,7 @@ function openDesktopTextDetail(){
   }
 
   function desktopSceneIsActuallyVisible(){
-    const sceneEl=playerHost?.querySelector?.('.sp-scene.is-active');
+    const sceneEl=studioSelectedSceneArticle();
     if(!sceneEl)return false;
     const cs=getComputedStyle(sceneEl);
     const r=sceneEl.getBoundingClientRect();
@@ -17725,7 +17789,7 @@ function openDesktopTextDetail(){
     if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
     removeLiveDisappearEditTarget();
     const stage=playerHost.querySelector('.sp-stage');
-    const article=playerHost.querySelector('.sp-scene.is-active');
+    const article=studioSelectedSceneArticle();
     const {scene}=liveEditScene();
     if(!stage||!article||!scene?.presentation?.disappear)return;
 
@@ -18722,7 +18786,11 @@ function openDesktopTextDetail(){
     e.preventDefault();
     e.stopImmediatePropagation();
     setLiveToolbarVisible(true);
-    startInlineTextEdit(activeSubText?'subText':'text',webText||null);
+    const target=activeSubText||activeText||webText;
+    const memberId=target.closest('.sp-scene')?.dataset.sceneId;
+    const memberIndex=workingDocument?.scenes.findIndex(s=>s.id===memberId);
+    if(memberIndex>=0){selectedSceneIndex=memberIndex;if(player)player.index=memberIndex;}
+    startInlineTextEdit(activeSubText?'subText':'text',target);
   },true);
   playerHost.addEventListener('sceneplayer:coverstart',()=>{
     // Core emits coverstart AFTER the Cover's 「はじめる」 action has rendered Scene 1.

@@ -2169,7 +2169,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const result = { bgm: null, ambient: null };
       if (!this.document) return result;
       for (let i = 0; i <= index; i += 1) {
-        const commands = this.document.scenes[i]?.audio;
+        const commands = this._simultaneousBounds(i).start===i?this.document.scenes[i]?.audio:null;
         if (!Array.isArray(commands)) continue;
         for (const cmd of commands) {
           if (!(cmd?.channel === 'bgm' || cmd?.channel === 'ambient')) continue;
@@ -3956,16 +3956,19 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _render() {
       if (!this.document) return;
+      this._simultaneousLayoutPending=false;this._simultaneousEpoch=(this._simultaneousEpoch||0)+1;
       this._resetPresentationRuntime();
       this._clearLayoutTimers();
 
       const scenes = this.document.scenes;
-      const active = scenes[this.index];
+      const active = scenes[this._simultaneousBounds(this.index).start];
       const display = this._hasCredits(active?.presentation) ? 'solo' : active?.presentation?.display || 'stack';
       const visible = this._visibleScenes(display);
       const isForwardStack = this._audioRenderMode === 'advance' && (display === 'stack' || display === 'overlay');
 
-      if (isForwardStack) {
+      if (visible.some(entry=>this._simultaneousBounds(entry.index).id)) {
+        this._renderSimultaneousVisible(visible,active,display,isForwardStack);
+      } else if (isForwardStack) {
         this._renderStackWithBreathing(visible, active);
       } else {
         // Restore/load/history jumps should be immediate and deterministic.
@@ -4031,6 +4034,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _visibleScenes(display) {
+      const grouped=this._simultaneousVisible(display);if(grouped)return grouped;
       const scenes = this.document.scenes;
       if (display === 'solo') return [{ scene: scenes[this.index], index: this.index }];
 
@@ -4120,7 +4124,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
 
       for (let i = start; i <= target; i += 1) {
-        const bg = scenes[i]?.presentation?.background;
+        const bg = this._simultaneousBounds(i).start===i?scenes[i]?.presentation?.background:null;
         if (bg && typeof bg === 'object') {
           Object.keys(bg).forEach((key) => {
             const value = bg[key];
@@ -7167,7 +7171,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Remove the trigger class afterwards so later layout changes cannot
       // restart the animation. Static effect character (whisper/tilt/loud)
       // is carried by data-effect rules and remains without animation.
-      const timing=article.dataset?.sceneId ? (this.currentScene?.presentation?.effectTiming || {}) : {};
+      const timing=this.document?.scenes.find(s=>s.id===article.dataset?.sceneId)?.presentation?.effectTiming||{};
       const customDuration=Math.max(0,asNumber(timing.duration,0))*1000;
       const customDelay=Math.max(0,asNumber(timing.delay,0))*1000;
       const cleanupAfter=Math.max(1380,customDelay+customDuration+140);
@@ -7381,3 +7385,186 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
   global.ScenePlayerCore = ScenePlayerCore;
 })(typeof window !== 'undefined' ? window : globalThis);
+
+/* Simultaneous Scene groups v1: contiguous members, one reader step. */
+(function(global){
+  'use strict';
+  const P=global.ScenePlayerCore.prototype;
+  P._simultaneousBounds=function(index=this.index){
+    const scenes=this.document?.scenes||[];let start=index,end=index;
+    const id=scenes[index]?.presentation?.simultaneousGroup;
+    if(typeof id==='string'&&id){
+      while(start>0&&scenes[start-1]?.presentation?.simultaneousGroup===id)start--;
+      while(end+1<scenes.length&&scenes[end+1]?.presentation?.simultaneousGroup===id)end++;
+    }
+    return {start,end,id:end>start?id:null};
+  };
+  P._simultaneousUnits=function(){
+    const units=[];for(let i=0;i<(this.document?.scenes.length||0);){const g=this._simultaneousBounds(i);units.push(g);i=g.end+1;}return units;
+  };
+  P._simultaneousVisible=function(display){
+    const scenes=this.document.scenes,units=this._simultaneousUnits();
+    if(!units.some(g=>g.id))return null;
+    const at=units.findIndex(g=>this.index>=g.start&&this.index<=g.end);if(at<0)return null;
+    let start=at;
+    if(display==='overlay'){
+      while(start>0&&(scenes[units[start-1].start].presentation?.display||'stack')==='overlay')start--;
+      if(start>0)start--;
+    }else if(display!=='solo'){
+      if(scenes[units[at].start].presentation?.flow==='horizontal')start=Math.max(0,at-1);
+      else {start=0;for(let i=at-1;i>=0;i--){const p=scenes[units[i].start].presentation||{};if(p.flow==='horizontal'||p.display==='solo'){start=i;break;}}}
+    }
+    start=Math.max(start,at-(this.options.maxStackVisible||4)+1);
+    const entries=[];for(let i=start;i<=at;i++)for(let j=units[i].start;j<=units[i].end;j++)entries.push({scene:scenes[j],index:j});
+    return entries;
+  };
+  P._positionSimultaneous=function(nodes,entries,display){
+    const positions=this._positionOverlayNodes(nodes,entries),units=[];
+    positions.forEach((pos,i)=>{
+      const g=this._simultaneousBounds(entries[i].index);let unit=units[units.length-1];
+      if(!unit||unit.start!==g.start){unit={...g,positions:[]};units.push(unit);}unit.positions.push(pos);
+    });
+    const stage=this.els.stage.getBoundingClientRect();
+    const box=unit=>{
+      const rects=unit.positions.map(p=>{const r=this._measureSceneGeometry(p.node,stage);return {left:p.x+r.inkLeft,right:p.x+r.inkRight,top:p.y+r.inkTop,bottom:p.y+r.inkBottom};});
+      return {left:Math.min(...rects.map(r=>r.left)),right:Math.max(...rects.map(r=>r.right)),top:Math.min(...rects.map(r=>r.top)),bottom:Math.max(...rects.map(r=>r.bottom))};
+    };
+    const move=(unit,dx,dy)=>unit.positions.forEach(p=>{p.x+=dx;p.y+=dy;});
+    for(let i=units.length-2;i>=0;i--){
+      const next=units[i+1],prev=units[i],p=this.document.scenes[next.start].presentation||{};
+      if((p.display||'stack')==='overlay')continue;
+      const a=box(prev),b=box(next),gap=this._sceneGap(this.document.scenes[prev.start],this.document.scenes[next.start]);
+      if(p.flow==='horizontal'){
+        const vertical=p.text?.writingMode==='vertical-rl';move(prev,vertical?b.right+gap-a.left:b.left-gap-a.right,0);
+      }else move(prev,0,b.top-gap-a.bottom);
+    }
+    positions.forEach(p=>p.node.style.transform=`translate3d(${Math.round(p.x)}px,${Math.round(p.y)}px,0)`);
+    return positions;
+  };
+  P._renderSimultaneousVisible=function(visible,active,display,isForward){
+    this._simultaneousLayoutPending=true;
+    const g=this._simultaneousBounds(),old=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(n=>[n.dataset.sceneId,n]));
+    if(!isForward){this.els.scenes.innerHTML='';old.clear();}
+    const nodes=[];visible.forEach(({scene,index})=>{
+      let node=old.get(scene.id);old.delete(scene.id);
+      const current=index>=g.start&&index<=g.end;
+      if(!node)node=this._sceneNode(scene,current,current?0:1);
+      node.classList.toggle('is-active',current);node.classList.add('is-visible');node.classList.remove('entering');
+      node.dataset.age=current?'0':String(Math.max(1,this._simultaneousUnits().filter(u=>u.start>index&&u.start<=g.start).length));
+      node.dataset.simultaneousMember=current?'active':'past';
+      if(current){node.style.transition='none';node.style.opacity='';}
+      this.els.scenes.appendChild(node);nodes.push(node);
+    });
+    old.forEach(node=>node.remove());
+    this._positionSimultaneous(nodes,visible,display);
+    this.maxVisitedIndex=Math.max(this.maxVisitedIndex,g.end);
+    const epoch=this._simultaneousEpoch=(this._simultaneousEpoch||0)+1;
+    // One shared paint boundary starts all members. Individual delays remain local.
+    requestAnimationFrame(()=>{
+      if(this.destroyed||this._simultaneousEpoch!==epoch||this._simultaneousBounds().start!==g.start)return;
+      this._simultaneousLayoutPending=false;
+      for(let i=0;i<nodes.length;i++)if(visible[i].index>=g.start&&visible[i].index<=g.end){
+        const member=visible[i].scene,node=nodes[i],timing=member.presentation?.effectTiming||{};
+        if(node.dataset.entryMotion!=='still'&&typeof node.animate==='function'&&!global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches){
+          const horizontal=member.presentation?.flow==='horizontal',vertical=member.presentation?.text?.writingMode==='vertical-rl';
+          const dx=horizontal?(vertical?-13:13):0,dy=horizontal?0:13;
+          const final=node.style.transform;
+          node._simultaneousEntryAnimation=node.animate([{transform:`${final} translate(${dx}px,${dy}px)`,opacity:0},{transform:final,opacity:1}],{duration:Math.max(80,(Number(timing.duration)||.8)*1000),delay:Math.max(0,Number(timing.delay)||0)*1000,fill:'backwards',easing:'cubic-bezier(.16,.72,.17,1)'});
+        }
+        this._activatePresentation(visible[i].scene,nodes[i]);
+        requestAnimationFrame(()=>{if(nodes[i].isConnected)nodes[i].style.transition='';});
+      }
+      this._scheduleAuto();
+    });
+  };
+  const originalPosition=P._positionSceneNodes;
+  P._positionSceneNodes=function(nodes,entries,gap=0){
+    if(entries.some(entry=>this._simultaneousBounds(entry.index).id))return this._positionSimultaneous(nodes,entries,this.document?.scenes[this._simultaneousBounds().start]?.presentation?.display||'stack');
+    return originalPosition.call(this,nodes,entries,gap);
+  };
+  const originalFinish=P._finishVisibleEntranceEffects;
+  P._finishVisibleEntranceEffects=function(){
+    this.els?.scenes?.querySelectorAll('.sp-scene').forEach(n=>{n._simultaneousEntryAnimation?.cancel();n._simultaneousEntryAnimation=null;});
+    return originalFinish.call(this);
+  };
+  Object.defineProperty(P,'progress',{configurable:true,get(){return this.document?(this._simultaneousBounds().end+1)/this.document.scenes.length:0;}});
+  const originalNext=P.next;
+  P.next=function(){
+    const g=this._simultaneousBounds();if(!g.id)return originalNext.call(this);
+    if(!this.document||this.ended)return false;
+    if(this._stopTyping(true)){this._scheduleAuto();return true;}
+    this._clearAutoTimer();this._finishVisibleEntranceEffects();this._clearPresentationTimers();
+    if(g.end+1>=this.document.scenes.length){this.finish();return false;}
+    this.index=g.end+1;this.maxVisitedIndex=Math.max(this.maxVisitedIndex,this.index);this._audioRenderMode='advance';this._render();
+    this.host.dispatchEvent(new CustomEvent('sceneplayer:scenechange',{detail:{index:this.index,scene:this.currentScene,direction:'next'}}));return true;
+  };
+  const originalGoTo=P.goTo;
+  P.goTo=function(target,options={}){
+    let i=typeof target==='number'?target:this.document?.scenes.findIndex(s=>s.id===target);
+    if(Number.isInteger(i)&&i>=0)i=this._simultaneousBounds(i).start;
+    return originalGoTo.call(this,i,options);
+  };
+  const originalNode=P._sceneNode;
+  P._sceneNode=function(scene,active,age){
+    const g=this._simultaneousBounds(),i=this.document?.scenes.indexOf(scene);
+    if(g.id&&i>=g.start&&i<=g.end){active=true;age=0;}
+    return originalNode.call(this,scene,active,age);
+  };
+  const originalStop=P._stopTyping,originalStart=P._startTyping;
+  P._stopTyping=function(complete=false){
+    if(this._simultaneousStartingTyping)return false;
+    let stopped=false;const states=new Set(this._simultaneousTyping?.values()||[]);if(this.typingState)states.add(this.typingState);
+    this._simultaneousTyping?.clear();
+    for(const state of states){this.typingState=state;stopped=originalStop.call(this,complete)||stopped;}
+    return stopped;
+  };
+  P._startTyping=function(scene,node,typing){
+    if(!this._simultaneousBounds().id)return originalStart.call(this,scene,node,typing);
+    this._simultaneousTyping ||= new Map();
+    const begin=()=>{
+      this._simultaneousStartingTyping=true;
+      try{originalStart.call(this,scene,node,typing);if(this.typingState)this._simultaneousTyping.set(scene.id,this.typingState);}finally{this._simultaneousStartingTyping=false;}
+    };
+    const delay=Math.max(0,Number(scene.presentation?.effectTiming?.delay)||0)*1000;
+    if(!delay){begin();return;}
+    node.style.visibility='hidden';node.classList.add('is-typing');
+    let timer;const state={node,sceneId:scene.id,pending:true,complete:()=>{node.style.visibility='';},cleanup:()=>{clearTimeout(timer);node.style.visibility='';node.classList.remove('is-typing');}};
+    timer=this._presentationTimeout(()=>{this._simultaneousTyping.delete(scene.id);node.style.visibility='';node.classList.remove('is-typing');if(node.isConnected)begin();},delay);
+    this._simultaneousTyping.set(scene.id,state);this.typingState=state;
+  };
+  const originalAuto=P._scheduleAuto;
+  P._scheduleAuto=function(){
+    if(this._simultaneousLayoutPending)return;
+    if(this._simultaneousTyping?.size){for(const [id,state] of this._simultaneousTyping)if(!state.node?.classList.contains('is-typing'))this._simultaneousTyping.delete(id);this.typingState=this._simultaneousTyping.values().next().value||null;}
+    const g=this._simultaneousBounds();if(!g.id)return originalAuto.call(this);
+    if(!this.auto||this.ended||this.typingState)return;
+    this._clearAutoTimer();const scenes=this.document.scenes;
+    const pause=Math.max(...scenes.slice(g.start,g.end+1).map(s=>Math.max(s.pause==null?this.options.autoDelay:Math.max(0,Number(s.pause)||0),((Number(s.presentation?.effectTiming?.delay)||0)+(Number(s.presentation?.effectTiming?.duration)||.8))*1000)));
+    const cue=Number(scenes[g.start].cueAt),nextCue=Number(scenes[g.end+1]?.cueAt);
+    if(!this.playbackTimelineStartedAt)this.playbackTimelineStartedAt=performance.now()-(Number.isFinite(cue)?cue:0);
+    const delay=Number.isFinite(nextCue)?Math.max(0,this.playbackTimelineStartedAt+nextCue-performance.now()):pause;
+    this.autoTimer=setTimeout(()=>{this.autoTimer=null;this.next();},delay);
+  };
+  const originalAudio=P._applySceneAudio,originalQueue=P._queueInitialOneShots;
+  P._applySceneAudio=function(scene,reconstruct=false){
+    const i=this.document?.scenes.indexOf(scene),g=this._simultaneousBounds(i);if(!g.id)return originalAudio.call(this,scene,reconstruct);
+    const head=this.document.scenes[g.start];
+    for(const cmd of head.audio||[])if(cmd.channel!=='oneshot')this._applyAudioCommand(cmd,reconstruct);
+    if(!reconstruct)for(const member of this.document.scenes.slice(g.start,g.end+1)){
+      const play=()=>{for(const cmd of member.audio||[])if(cmd.channel==='oneshot')this._applyAudioCommand(cmd,false);};
+      const delay=Math.max(0,Number(member.presentation?.effectTiming?.delay)||0)*1000;
+      if(delay)this._presentationTimeout(play,delay);else play();
+    }
+  };
+  P._queueInitialOneShots=function(scene){
+    const i=this.document?.scenes.indexOf(scene),g=this._simultaneousBounds(i);if(!g.id)return originalQueue.call(this,scene);
+    for(const member of this.document.scenes.slice(g.start,g.end+1)){
+      const delay=Math.max(0,Number(member.presentation?.effectTiming?.delay)||0)*1000;
+      const run=()=>originalQueue.call(this,member);if(delay)this._presentationTimeout(run,delay);else run();
+    }
+  };
+  const originalBackground=P._applyBackgroundForIndex;
+  P._applyBackgroundForIndex=function(index){return originalBackground.call(this,this._simultaneousBounds(index).start);};
+  const originalCore=P._applyCorePresentation;
+  P._applyCorePresentation=function(scene){const i=this.document?.scenes.indexOf(scene);return originalCore.call(this,this.document?.scenes[this._simultaneousBounds(i).start]||scene);};
+})(typeof window!=='undefined'?window:globalThis);
