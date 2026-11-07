@@ -5821,12 +5821,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
     }
 
+    _mountHanddrawnFrame(frame,scene,presentation) {
       if(frame.dataset.frameType==='handdrawn-focus-screen'){
         frame.classList.add('sp-focus-screen-frame');
         this._mountFullScreenFocusRays(frame,scene);
         return;
       }
-    _mountHanddrawnFrame(frame,scene,presentation) {
       const ns='http://www.w3.org/2000/svg';
       const svg=document.createElementNS(ns,'svg');
       svg.classList.add('sp-handdrawn-frame-svg');
