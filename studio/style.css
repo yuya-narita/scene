@@ -11996,6 +11996,10 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .v58-text-size-row>.v58-bulk-scope,.v63-typeface-row>.v58-bulk-scope{grid-column:1/-1}
 .v63-typeface-row{grid-template-columns:minmax(0,1fr)!important}
 .v58-text-size-px{width:82px;min-width:0;box-sizing:border-box;height:36px;border:1px solid #d7d9de;border-radius:8px;background:#fff;padding:0 8px;font:600 13px/1 system-ui}
+@media(max-width:899px){
+  #liveEditSheetBody .mobile-text-control>.v58-text-size-row{display:grid!important;grid-template-columns:minmax(0,1fr) 76px!important;gap:6px!important}
+  #liveEditSheetBody .mobile-text-control .v58-text-size-px{width:76px;font-size:16px}
+}
 @media(min-width:601px){.rich-selection-toolbar{width:max-content!important;max-width:calc(100vw - 16px)!important;overflow:visible!important}.rich-selection-toolbar .rich-dropdown-trigger{height:36px!important}}
 
 /* Phase 4 / V79 — note-like Rich Text state feedback + hover dropdowns. */
@@ -12669,7 +12673,7 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 }
 .live-edit-enabled .sp-scene.is-active.live-edit-empty-scene .sp-text.live-edit-empty-target:empty::before{
   content:"タップして入力";
-  color:rgba(110,110,116,.38);
+  color:var(--sp-sub,#7d7a75);
   font:650 13px/1.5 system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;
   letter-spacing:.06em;
 }

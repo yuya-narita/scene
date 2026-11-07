@@ -7040,6 +7040,7 @@ return flowCommentCard;}
   function syncLiveEditPreviewChrome(){
     if(!liveEditEnabled)return;
     const coverOpen=playerHost.classList.contains('sp-cover-open');
+    if(coverOpen||player?.ended||player?.historyOpen)removeLiveEmptyAuthoringOverlay();
     const recPanel=$('#autoRecPanel');
 
     // Cover is an entry screen, not Scene 0.
@@ -7446,14 +7447,9 @@ return flowCommentCard;}
     const playbackDoc=getDocumentForPlayback();
     p.load(playbackDoc,{startAt});
 
-    // Empty Easy -> Live Editor still passes through the real Cover first.
-    // Arm the editor here, but do NOT focus yet: at this point the Cover is open.
-    // The actual inline edit starts synchronously from sceneplayer:coverstart,
-    // i.e. from the user's 「はじめる」 gesture after Scene 1 has rendered.
-    pendingEasyEmptyInlineStart = from==='easy'
-      && playbackDoc?.scenes?.length===1
-      && !String(playbackDoc.scenes[0]?.text||'').length
-      && !String(playbackDoc.scenes[0]?.subText||'').length;
+    // Empty works show a visible tap-to-type target after Cover START.
+    // Focusing contenteditable automatically would hide that target.
+    pendingEasyEmptyInlineStart=false;
 
     requestAnimationFrame(renderDesktopLivePanel);
     setTimeout(renderDesktopLivePanel,60);
@@ -10152,6 +10148,9 @@ return flowCommentCard;}
     liveShellTextContext=null;
     if(wasOpen && liveEditEnabled && player && !playerScreen?.hidden){
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        // A newly opened inspector owns the preview now. A delayed refresh
+        // from the previous sheet must not overwrite its in-progress size.
+        if(!liveEditEnabled||playerScreen?.hidden||liveEditSheet?.hidden===false||document.activeElement?.dataset?.fontSizePreview==='true')return;
         try{
           const doc=getDocumentForPlayback();
           if(typeof player.refreshCurrent==='function')player.refreshCurrent({document:doc,index:player.index,preserveAudio:true});
@@ -10357,6 +10356,36 @@ return flowCommentCard;}
   let richPxSizeField=null;
   let richPxSizeInput=null;
   let richPxPendingSelection=null;
+  let richPxBaseRichText=null;
+  // Numeric size fields preview on every input. Native number spinners emit
+  // change repeatedly, so only Enter/blur ends this editing transaction.
+  function bindFontSizePreview(input,{begin=()=>{},preview,commit,cancel=()=>{}}){
+    let editing=false,dirty=false,initialValue='';
+    const start=()=>{if(editing)return;editing=true;initialValue=input.value;begin();};
+    const update=()=>{
+      start();
+      if(input.value.trim()===''||!Number.isFinite(Number(input.value)))return;
+      dirty=true;preview(Math.max(8,Math.min(420,Math.round(Number(input.value)))));
+    };
+    const finish=()=>{
+      if(!editing)return;
+      editing=false;
+      if(!dirty)return;
+      dirty=false;
+      const n=Math.max(8,Math.min(420,Math.round(Number(input.value)||24)));
+      input.value=String(n);commit(n);
+    };
+    input.dataset.fontSizePreview='true';
+    if(!input.title)input.title=u('変更中はプレビュー・Enterで確定・Escで取消','Live preview · Enter to confirm · Esc to cancel');
+    input.addEventListener('focus',start);
+    input.addEventListener('input',update);
+    input.addEventListener('blur',finish);
+    input.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();finish();input.blur();}
+      else if(e.key==='Escape'){e.preventDefault();editing=false;dirty=false;input.value=initialValue;cancel();input.blur();}
+    });
+    return {preview:update,commit:finish};
+  }
   let richToolbarInteracting=false;
   let richColorPopover=null;
   let richColorPaletteToggle=null;
@@ -10431,13 +10460,54 @@ return flowCommentCard;}
     const pxUnit=document.createElement('span');pxUnit.textContent='px';
     richPxSizeInput=document.createElement('input');richPxSizeInput.type='number';richPxSizeInput.inputMode='numeric';richPxSizeInput.min='8';richPxSizeInput.max='420';richPxSizeInput.step='1';richPxSizeInput.setAttribute('aria-label','文字サイズ px');
     richPxSizeField.append(pxUnit,richPxSizeInput);sizeWrap.after(richPxSizeField);
-    let pxCommitted=false,pxDirty=false;
-    const commitPx=()=>{if(pxCommitted||!pxDirty||!richPxPendingSelection)return;pxCommitted=true;pxDirty=false;const n=Math.max(8,Math.min(420,Math.round(Number(richPxSizeInput.value)||24)));applyRichSelectionAction('sizePx',n);richPxPendingSelection=null;};
-    richPxSizeInput.addEventListener('input',()=>{pxDirty=true;pxCommitted=false;});
-    richPxSizeInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commitPx();richPxSizeInput.blur();}else if(e.key==='Escape'){e.preventDefault();pxDirty=false;richPxPendingSelection=null;richPxSizeField.hidden=true;richPxSizeInput.blur();}});
-    // Number-input spinners can dispatch `change` for every 1px step. Commit
-    // only on Enter or when leaving the field so multi-step adjustments stay open.
-    richPxSizeInput.addEventListener('blur',commitPx);
+    let pxSnapshot=null;
+    const pxNode=()=>{
+      const article=playerHost?.querySelector('.sp-scene.is-active');
+      if(!article||!pxSnapshot)return null;
+      if(pxSnapshot.el?.isConnected&&article.contains(pxSnapshot.el))return pxSnapshot.el;
+      const scene=pxSnapshot.scene;
+      if(scene.creditOwner)return null;
+      return article.querySelector('.sp-text');
+    };
+    const paintPx=(richText)=>{
+      const node=pxNode();
+      if(node&&pxSnapshot)player?._renderRichText?.(node,{...pxSnapshot.scene,richText});
+    };
+    bindFontSizePreview(richPxSizeInput,{
+      begin:()=>{
+        pxSnapshot=richSelectionSnapshot?{...richSelectionSnapshot}:null;
+        richPxPendingSelection=pxSnapshot?{scene:pxSnapshot.scene,start:pxSnapshot.start,end:pxSnapshot.end}:null;
+        richPxBaseRichText=clone(pxSnapshot?.scene?.richText||{version:1,ranges:[]});
+        richToolbarInteracting=true;
+      },
+      preview:n=>{
+        if(!pxSnapshot||!richPxBaseRichText)return;
+        const a=pxSnapshot.start,b=pxSnapshot.end;
+        const ranges=clone(richPxBaseRichText.ranges||[]).flatMap(r=>{
+          if(r?.kind!=='span'||(!r.style?.fontScale&&!r.style?.fontSizePx)||r.end<=a||r.start>=b)return [r];
+          const style={...r.style};delete style.fontScale;delete style.fontSizePx;
+          const out=[];
+          if(r.start<a)out.push({...r,end:a});
+          if(r.end>b)out.push({...r,start:b});
+          if(Object.keys(style).length)out.push({...r,start:Math.max(r.start,a),end:Math.min(r.end,b),style});
+          return out;
+        });
+        ranges.push({start:a,end:b,kind:'span',style:{fontSizePx:n}});
+        paintPx({...richPxBaseRichText,ranges});
+        sizeWrap.querySelector('.rich-dropdown-trigger').textContent=`${n}px ▼`;
+      },
+      commit:n=>{
+        if(!pxSnapshot)return;
+        richSelectionSnapshot=pxSnapshot;
+        applyRichSelectionAction('sizePx',n);
+        richPxPendingSelection=null;richPxBaseRichText=null;pxSnapshot=null;
+      },
+      cancel:()=>{
+        paintPx(richPxBaseRichText);
+        richPxPendingSelection=null;richPxBaseRichText=null;pxSnapshot=null;
+        if(richSelectionSnapshot)updateRichToolbarState(richSelectionSnapshot);
+      }
+    });
     const colorWrap=document.createElement('div');colorWrap.className='rich-color-control';colorWrap.title='文字色';
     richColorPicker=makeCommittedTextColorPicker('#333333',{compact:true,onCommit:hex=>{if(richPickerSelectionSnapshot)richSelectionSnapshot=richPickerSelectionSnapshot;rememberTextColor(hex);if(colorToggle)colorToggle.style.setProperty('--rich-color-current',hex);applyRichSelectionAction('color',hex);richPickerSelectionSnapshot=null;}});
     richColorPicker.root.classList.add('rich-toolbar-color-picker');colorWrap.appendChild(richColorPicker.root);
@@ -10469,7 +10539,18 @@ return flowCommentCard;}
       if(trigger){e.preventDefault();e.stopPropagation();const wrap=trigger.closest('.rich-dropdown'),menu=wrap.querySelector('.rich-dropdown-menu'),opening=menu.hidden;closeMenus(wrap);if(!opening&&menu.dataset.pxInput==='true'){menu.innerHTML=menu.dataset.originalMarkup||'';delete menu.dataset.pxInput;}menu.hidden=!opening;trigger.setAttribute('aria-expanded',String(opening));return;}
       const item=e.target.closest?.('.rich-dropdown-item');
       if(item){e.preventDefault();e.stopPropagation();const wrap=item.closest('.rich-dropdown'),action=wrap.dataset.richDropdown,value=item.dataset.richValue;
-        if(action==='size'&&value==='px'){closeMenus();const snap=richSelectionSnapshot,selectedRange=(snap?.scene?.richText?.ranges||[]).find(r=>r?.kind==='span'&&Number(r.start)<=Number(snap?.start)&&Number(r.end)>=Number(snap?.end)&&Number(r.style?.fontSizePx)>0),shownPx=Number(wrap.querySelector('.rich-dropdown-trigger')?.textContent?.match(/(\d+(?:\.\d+)?)\s*px/i)?.[1]);richPxPendingSelection=snap?{scene:snap.scene,start:snap.start,end:snap.end}:null;pxCommitted=false;pxDirty=false;richPxSizeField.hidden=false;richPxSizeInput.value=String(Math.round(Number(selectedRange?.style?.fontSizePx)||shownPx||24));richToolbarInteracting=true;requestAnimationFrame(()=>{richPxSizeInput.focus();richPxSizeInput.select();});return;}
+        if(action==='size'&&value==='px'){
+          closeMenus();
+          const snap=richSelectionSnapshot;
+          richPxPendingSelection=snap?{scene:snap.scene,start:snap.start,end:snap.end}:null;
+          const selectedRange=(snap?.scene?.richText?.ranges||[]).find(r=>r?.kind==='span'&&r.start<=snap.start&&r.end>=snap.end&&Number(r.style?.fontSizePx)>0);
+          const shownPx=Number(wrap.querySelector('.rich-dropdown-trigger')?.textContent?.match(/(\d+(?:\.\d+)?)\s*px/i)?.[1]);
+          richPxSizeField.hidden=false;
+          richPxSizeInput.value=String(Math.round(Number(selectedRange?.style?.fontSizePx)||shownPx||24));
+          richToolbarInteracting=true;
+          requestAnimationFrame(()=>{richPxSizeInput.focus();richPxSizeInput.select();});
+          return;
+        }
         if(action==='size')richPxPendingSelection=null;
         closeMenus();applyRichSelectionAction(action==='list'?value:action,action==='list'?'':value);return;}
       const t=e.target.closest?.('button[data-rich-action]');
@@ -10686,7 +10767,7 @@ return flowCommentCard;}
     // subText remains excluded because Rich Text belongs to scene.text in Format v1.
     if(liveInlineEditEl&&liveInlineEditField!=='text')return hideRichSelectionToolbar();
     const snap=previewRichSelection();if(!snap)return hideRichSelectionToolbar();
-    richSelectionSnapshot={start:snap.start,end:snap.end,scene:snap.scene,index:snap.index,selectedText:snap.selectedText};
+    richSelectionSnapshot={start:snap.start,end:snap.end,scene:snap.scene,index:snap.index,el:snap.el,selectedText:snap.selectedText};
     const bar=ensureRichSelectionToolbar();bar.hidden=false;updateRichToolbarState(snap);
     // Reset transient controls so the toolbar always reads as an action palette.
     bar.querySelector('[data-rich-action="size"]')?.selectedIndex&&(bar.querySelector('[data-rich-action="size"]').selectedIndex=0);
@@ -10826,7 +10907,7 @@ return flowCommentCard;}
   function captureRichSelectionNow(){
     const snap=previewRichSelection();
     if(!snap)return null;
-    richSelectionSnapshot={start:snap.start,end:snap.end,scene:snap.scene,index:snap.index,rect:snap.rect,selectedText:snap.selectedText};
+    richSelectionSnapshot={start:snap.start,end:snap.end,scene:snap.scene,index:snap.index,rect:snap.rect,el:snap.el,selectedText:snap.selectedText};
     return snap;
   }
   function showCapturedRichSelection(snap){
@@ -10952,7 +11033,8 @@ return flowCommentCard;}
     if(!liveEmptyAuthoringOverlay||!liveEditEnabled||!playerHost)return;
     const article=playerHost.querySelector('.sp-scene.is-active');
     if(!article){removeLiveEmptyAuthoringOverlay();return;}
-    const r=article.getBoundingClientRect();
+    const target=article.querySelector('.sp-text.live-edit-empty-target');
+    const r=(target||article).getBoundingClientRect();
     Object.assign(liveEmptyAuthoringOverlay.style,{
       left:`${Math.round(r.left)}px`,
       top:`${Math.round(r.top)}px`,
@@ -10962,6 +11044,7 @@ return flowCommentCard;}
   }
   function ensureLiveEditEmptyTarget(){
     if(!liveEditEnabled||!playerHost){removeLiveEmptyAuthoringOverlay();return;}
+    if(liveInlineEditEl||playerHost.classList.contains('sp-cover-open')||player?.ended||player?.historyOpen||autoRecActive){removeLiveEmptyAuthoringOverlay();return;}
     const article=playerHost.querySelector('.sp-scene.is-active');
     const activeId=article?.dataset?.sceneId;
     const scene=workingDocument?.scenes?.find(s=>String(s?.id)===String(activeId))||player?.currentScene||liveEditScene().scene;
@@ -11000,7 +11083,7 @@ return flowCommentCard;}
       hit.setAttribute('aria-label',u('この空Sceneに本文を入力','Type text in this empty Scene'));
       Object.assign(hit.style,{
         position:'fixed',
-        zIndex:'2147482500',
+        zIndex:'2147483050',
         border:'0',
         padding:'0',
         margin:'0',
@@ -11025,6 +11108,7 @@ return flowCommentCard;}
         // preserving iPhone software-keyboard activation as well as PC editing.
         startInlineTextEdit('text',text);
       };
+      hit.addEventListener('click',begin,true);
       hit.addEventListener('pointerdown',begin,true);
       hit.addEventListener('mousedown',begin,true);
       hit.addEventListener('touchstart',begin,{capture:true,passive:false});
@@ -12002,10 +12086,41 @@ function startInlineTextEdit(field='text',targetEl=null){
       onApplied?.();
     });
 
-    const commitSize=(n)=>{if(!workingDocument?.scenes?.length)return;const pxValue=Math.max(8,Math.min(420,Math.round(Number(n)||24)));px.value=String(pxValue);captureUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));const pp=ensurePresentation(scene);pp.text ||= {};pp.text.size=pxValue;armScope();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(u('文字サイズの変更を元に戻せます','Undo text size change')));};
-    value.addEventListener('change',()=>{px.hidden=value.value!=='px';if(value.value==='px'){commitSize(px.value);px.focus();px.select();}else{if(!workingDocument?.scenes?.length)return;captureUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));const pp=ensurePresentation(scene);pp.text ||= {};pp.text.size=value.value;armScope();scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(u('文字サイズの変更を元に戻せます','Undo text size change')));}});
-    px.addEventListener('change',()=>{if(value.value==='px')commitSize(px.value);});
-    px.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();px.blur();}});
+    const activeText=()=>{
+      const article=playerHost?.querySelector('.sp-scene.is-active');
+      return article&&String(article.dataset.sceneId)===String(scene.id)?article.querySelector('.sp-text'):null;
+    };
+    let beforeNode=null,beforeSize='',beforePriority='';
+    const restoreSize=()=>{if(beforeNode?.isConnected){if(beforeSize)beforeNode.style.setProperty('font-size',beforeSize,beforePriority);else beforeNode.style.removeProperty('font-size');}};
+    const commitSize=n=>{
+      if(!workingDocument?.scenes?.includes(scene))return;
+      restoreSize();
+      captureUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));
+      const pp=ensurePresentation(scene);pp.text ||= {};pp.text.size=n;
+      armScope();scheduleDraftSave(40);
+      refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});
+      showUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));
+    };
+    const pxEditing=bindFontSizePreview(px,{
+      begin:()=>{beforeNode=activeText();beforeSize=beforeNode?.style.getPropertyValue('font-size')||'';beforePriority=beforeNode?.style.getPropertyPriority('font-size')||'';},
+      preview:n=>activeText()?.style.setProperty('font-size',`${n}px`,'important'),
+      commit:commitSize,cancel:restoreSize
+    });
+    value.dataset.historyIgnore='true';
+    value.addEventListener('change',()=>{
+      px.hidden=value.value!=='px';
+      if(value.value==='px'){
+        px.value=String(Math.round(parseFloat(activeText()&&getComputedStyle(activeText()).fontSize)||Number(px.value)||24));
+        pxEditing.preview();px.focus();px.select();
+      }else{
+        if(!workingDocument?.scenes?.length)return;
+        captureUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));
+        const pp=ensurePresentation(scene);pp.text ||= {};pp.text.size=value.value;
+        armScope();scheduleDraftSave(40);
+        refreshLivePlayer({preserveSheet:true,preserveDesktopEditor:true});
+        showUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));
+      }
+    });
     row.append(value,px,scope);wrap.append(cap,row);return wrap;
   }
   // V63 Phase 3: typeface bulk apply follows the same V59 one-shot safety contract.
@@ -12481,6 +12596,7 @@ function startInlineTextEdit(field='text',targetEl=null){
         };
         input.addEventListener('focus',()=>{requestAnimationFrame(()=>{try{input.select();}catch{}});});
         input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();commit();input.blur();}});
+        input.addEventListener('input',()=>{if(input.value.trim()!==''&&Number.isFinite(Number(input.value))){const raw=input.value;apply(Math.max(min,Math.min(max,Number(raw))));input.value=raw;}});
         input.addEventListener('change',commit);input.addEventListener('blur',commit);
       };
       bindPreviewRange(sizeControl.range,8,420,1,setSizeValue);
@@ -14319,7 +14435,7 @@ function openDesktopTextDetail(){
 
   let desktopCoverStyleTarget='title';
 
-  function shellStyleControls(store,onApply){
+  function shellStyleControls(store,onApply,{previewSize=()=>{},readSize=()=>24}={}){
     const wrap=document.createElement('div');wrap.className='desktop-live-grid';
     const initial=store();
 
@@ -14349,9 +14465,12 @@ function openDesktopTextDetail(){
         Object.assign(row.style,{display:'grid',gridTemplateColumns:select.value==='px'?'minmax(0,1fr) 86px':'minmax(0,1fr)',gap:'8px',alignItems:'center'});
         select.style.minWidth='0';px.style.width='100%';px.style.minWidth='0';px.style.boxSizing='border-box';
         const paintRow=()=>{row.style.gridTemplateColumns=select.value==='px'?'minmax(0,1fr) 86px':'minmax(0,1fr)';px.hidden=select.value!=='px';};
-        const commitPx=()=>{const value=Math.max(8,Math.min(420,Math.round(Number(px.value)||24)));px.value=String(value);const st=store();st.size=value;onApply(st);};
-        select.addEventListener('change',()=>{paintRow();if(select.value==='px'){commitPx();px.focus();px.select();}else{const st=store();st.size=select.value;onApply(st);}});
-        px.addEventListener('input',commitPx);
+        const pxEditing=bindFontSizePreview(px,{
+          preview:n=>previewSize({...store(),size:n}),
+          commit:n=>{captureUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));const st=store();st.size=n;onApply(st);showUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));},
+          cancel:()=>previewSize(store())
+        });
+        select.addEventListener('change',()=>{paintRow();if(select.value==='px'){px.value=String(Math.round(Number(readSize())||Number(px.value)||24));pxEditing.preview();px.focus();px.select();}else{const st=store();st.size=select.value;onApply(st);}});
         row.append(select,px);field.append(cap,row);paintRow();return field;
       })()
     );
@@ -14552,7 +14671,7 @@ function openDesktopTextDetail(){
       workingDocument.cover||={};workingDocument.cover.styles||={};workingDocument.cover.styles[desktopCoverStyleTarget]=clone(st);
       applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]);refreshLivePlayerDocumentChrome();
       requestAnimationFrame(()=>applyCoverStyleToLiveElement(desktopCoverStyleTarget,workingDocument.cover.styles[desktopCoverStyleTarget]));updateCoverPreview();syncEasyPublishButton();scheduleDraftSave(70);
-    }));
+    },{previewSize:st=>applyCoverStyleToLiveElement(desktopCoverStyleTarget,st),readSize:()=>{const node=liveCoverTextElement(desktopCoverStyleTarget);return node?parseFloat(getComputedStyle(node).fontSize):24;}}));
 
     const imageCard=desktopCard(u('表紙画像','Cover image'));
     const imageOps=document.createElement('div');imageOps.className='desktop-live-scene-ops desktop-cover-image-ops';
@@ -14594,7 +14713,7 @@ function openDesktopTextDetail(){
     if(desktopV2Prev)desktopV2Prev.disabled=false;if(desktopV2Next)desktopV2Next.disabled=true;if(desktopV2Add)desktopV2Add.disabled=true;
     if(desktopTimingButton){desktopTimingButton.disabled=true;desktopTimingButton.classList.remove('is-active');}
     const textCard=desktopCard(u('中央の文','Center text'));const ta=document.createElement('textarea');ta.className='desktop-live-ending-text';ta.value=endingLabelInput?.value||'';ta.placeholder=u('読了','Finished');ta.addEventListener('input',()=>setEndingTextValue(ta.value,{refresh:true}));textCard.appendChild(ta);
-    const styleCard=desktopCard(uiLanguage==='en'?'Text':'文字');styleCard.append(shellStyleControls(()=>ensureEndingStyleStore(),()=>{const st=ensureEndingStyleStore();if(['serif','sans','mono'].includes(st.fontFamily))syncEndingFontFamily(st.fontFamily,{syncStyle:true});refreshLivePlayerDocumentChrome();updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);}));
+    const styleCard=desktopCard(uiLanguage==='en'?'Text':'文字');styleCard.append(shellStyleControls(()=>ensureEndingStyleStore(),()=>{const st=ensureEndingStyleStore();if(['serif','sans','mono'].includes(st.fontFamily))syncEndingFontFamily(st.fontFamily,{syncStyle:true});refreshLivePlayerDocumentChrome();applyEndingStyleToLiveElement(st);updateEndingPreview();syncEasyPublishButton();scheduleDraftSave(70);requestAnimationFrame(prepareLiveEndingEditor);},{previewSize:applyEndingStyleToLiveElement,readSize:()=>{const node=playerHost.querySelector('.sp-ending-title');return node?parseFloat(getComputedStyle(node).fontSize):24;}}));
     const seCard=desktopCard(u('読了SE','Ending SE'));
     const seCmd=endingSeCommand(workingDocument);
     const seInfo=document.createElement('div');seInfo.className='desktop-ending-se-sheet';
@@ -16042,6 +16161,8 @@ function openDesktopTextDetail(){
           syncEasyPublishButton();
           scheduleDraftSave(70);
         },
+        previewSize(n){applyCoverStyleToLiveElement(target,n===null?style:{...style,size:n});},
+        readSize(){const node=liveCoverTextElement(target);return node?parseFloat(getComputedStyle(node).fontSize):24;},
         previewColor(c){
           applyCoverStyleToLiveElement(target,{...style,color:c});
         }
@@ -16065,12 +16186,35 @@ function openDesktopTextDetail(){
           scheduleDraftSave(70);
           requestAnimationFrame(prepareLiveEndingEditor);
         },
+        previewSize(n){applyEndingStyleToLiveElement(n===null?style:{...style,size:n});},
+        readSize(){const node=playerHost.querySelector('.sp-ending-title');return node?parseFloat(getComputedStyle(node).fontSize):24;},
         previewColor(c){
           applyEndingStyleToLiveElement({...style,color:c});
         }
       };
     }
     return null;
+  }
+
+  function makeShellTextSizeField(ctx,className){
+    const field=document.createElement('label');field.className=className;
+    field.dataset.mobileUiDecorated='1';
+    const cap=document.createElement('span');cap.textContent=u('サイズ','Size');
+    const row=document.createElement('div');row.className='desktop-shell-size-row';
+    const select=document.createElement('select');
+    [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')],['px',u('px指定','Custom px')]].forEach(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);});
+    const px=document.createElement('input');px.type='number';px.inputMode='numeric';px.min='8';px.max='420';px.step='1';px.className='desktop-shell-size-px';px.setAttribute('aria-label',u('文字サイズ px','Font size in pixels'));
+    const stored=ctx.style.size,numeric=typeof stored==='number'&&stored>0;
+    select.value=numeric?'px':(stored||'auto');px.value=String(numeric?stored:24);
+    Object.assign(px.style,{minWidth:'0',width:'100%',boxSizing:'border-box',fontSize:'16px'});select.style.minWidth='0';
+    const paint=()=>{px.hidden=select.value!=='px';Object.assign(row.style,{display:'grid',gridTemplateColumns:px.hidden?'minmax(0,1fr)':'minmax(0,1fr) 76px',gap:'6px'});};
+    const editing=bindFontSizePreview(px,{
+      preview:n=>ctx.previewSize(n),
+      commit:n=>{captureUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));ctx.style.size=n;ctx.apply();showUndo(u('文字サイズの変更を元に戻せます','Undo text size change'));},
+      cancel:()=>ctx.previewSize(null)
+    });
+    select.addEventListener('change',()=>{paint();if(select.value==='px'){px.value=String(Math.round(ctx.readSize()||24));editing.preview();px.focus();px.select();}else{ctx.style.size=select.value;ctx.apply();}});
+    row.append(select,px);field.append(cap,row);paint();return field;
   }
 
   function renderShellTextDetail(){
@@ -16117,11 +16261,7 @@ function openDesktopTextDetail(){
         st.fontFamily||'inherit',
         v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;apply();}
       ),
-      desktopDetailSelect(u('サイズ','Size'),
-        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],
-        st.size||'auto',
-        v=>{st.size=v;apply();}
-      ),
+      makeShellTextSizeField(ctx,'desktop-text-detail-field'),
       desktopDetailSelect(u('文字色','Text color'),
         [['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],
         !st.color?'auto':(String(st.color).toLowerCase()==='#ffffff'?'white':(String(st.color).toLowerCase()==='#000000'?'black':'custom')),
@@ -16189,7 +16329,6 @@ function openDesktopTextDetail(){
     const head=liveEditSheet.querySelector('.live-edit-sheet-head');
     if(head)head.hidden=false;
     liveEditSheetTitle.textContent=uiLanguage==='en'?'Text':'文字';
-    liveEditSheetBody.append(makeAutoRubyBodyControl(scene));
     liveEditSheetBody.innerHTML='';
 
     const st=ctx.style;
@@ -16236,11 +16375,7 @@ function openDesktopTextDetail(){
         st.fontFamily||'inherit',
         v=>{if(v==='inherit')delete st.fontFamily;else st.fontFamily=v;rerender();}
       ),
-      makeSelect(u('サイズ','Size'),
-        [['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],
-        st.size||'auto',
-        v=>{st.size=v;rerender();}
-      ),
+      makeShellTextSizeField(ctx,'live-edit-field'),
       colorField
     );
 
@@ -16300,7 +16435,7 @@ function openDesktopTextDetail(){
     grid.append(
       selectControl({label:u('種類','Type'),icon:'type',values:[['text',u('テキスト','Text')],['dialogue',u('セリフ','Dialogue')],['sound',u('音だけ','Sound only')]],current:scene.type||'text',onchange:v=>{scene.type=v;rerender();}}),
       selectControl({label:u('書体','Typeface'),icon:'text',values:[['inherit',t('font.inherit')],['serif',t('font.serif')],['sans',t('font.sans')],['mono',t('font.mono')]],current:p.text.fontFamily||'inherit',onchange:v=>{if(v==='inherit')delete p.text.fontFamily;else p.text.fontFamily=v;rerender();}}),
-      selectControl({label:u('サイズ','Size'),icon:'size',values:[['auto',t('size.auto')],['small',t('size.small')],['normal',t('size.normal')],['large',t('size.large')],['xl',t('size.xl')],['xxl',u('超特大','XXL')],['fullscreen',u('全画面','Fullscreen')],['giant',u('超巨大','Giant')],['breakout',u('画面突破','Breakout')]],current:p.text.size||'auto',onchange:v=>{p.text.size=v;rerender();}}),
+      (()=>{const field=v58MakeTextSizeBulkControl(scene);field.classList.add('mobile-text-control');field.querySelector('.v58-bulk-scope')?.remove();return field;})(),
       selectControl({label:u('書字方向','Writing direction'),icon:'writing',values:[['horizontal-tb',u('横書き','Horizontal')],['vertical-rl',u('縦書き（右から左）','Vertical (right to left)')]],current:p.text.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb',onchange:v=>{if(v==='vertical-rl')p.text.writingMode=v;else delete p.text.writingMode;rerender();renderLiveEditSheet('text');}}),
       selectControl({label:u('文字の太さ','Font weight'),icon:'text',values:[['0',u('おまかせ','Auto')],['300',u('細い','Light')],['400',u('標準','Regular')],['500',u('やや太い','Medium')],['700',u('太い','Bold')],['900',u('極太','Black')]],current:String(p.text?.fontWeight||0),onchange:v=>{if(Number(v))p.text.fontWeight=Number(v);else delete p.text.fontWeight;rerender();}}),
       selectControl({label:u('テキスト位置','Text position'),icon:'position',values:FRAME_POSITION_OPTIONS,current:framePositionPreset(scene),onchange:v=>{captureUndo(u('テキスト位置の変更を元に戻せます','Undo text position change'));v66SetSceneTextPosition(scene,v);scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});queueMicrotask(()=>showUndo(u('テキスト位置の変更を元に戻せます','Undo text position change')));}})
@@ -17988,12 +18123,15 @@ function openDesktopTextDetail(){
     workingDocument.cover.styles[target] ||= {};
     return workingDocument.cover.styles[target];
   }
-  function applyCoverStyleToLiveElement(target,style){
+  function liveCoverTextElement(target){
     const selector={
       title:'.sp-cover-title',subtitle:'.sp-cover-subtitle',author:'.sp-cover-author',
       episode:'.sp-cover-episode',episodeTitle:'.sp-cover-episode-title'
     }[target];
-    const el=selector?playerHost.querySelector(selector):null;
+    return selector?playerHost.querySelector(selector):null;
+  }
+  function applyCoverStyleToLiveElement(target,style){
+    const el=liveCoverTextElement(target);
     if(!el)return;
     const sizeScale={small:.78,normal:1,large:1.28,xl:1.6};
     const fontMap={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};
@@ -18491,19 +18629,11 @@ function openDesktopTextDetail(){
     closeLiveEditSheet();
     setLiveToolbarVisible(desktopLiveActive());
 
-    if(pendingEasyEmptyInlineStart){
-      pendingEasyEmptyInlineStart=false;
-      const {scene}=liveEditScene();
-      if(scene && !String(scene.text||'').length && !String(scene.subText||'').length){
-        // Cover START has already rendered Scene 1. Build the empty text target
-        // without re-rendering the Player, then enter the exact same inline
-        // editor used by the top-bar + action. Studio Core no longer steals
-        // focus back to the reader stage while Live Edit is enabled.
-        ensureLiveEditEmptyTarget();
-        startInlineTextEdit('text');
-      }
-    }
-    requestAnimationFrame(()=>requestAnimationFrame(renderDesktopLivePanel));
+    // An empty first Scene must advertise its input target before editing.
+    // Auto-focusing it here hid the placeholder immediately on Cover START.
+    pendingEasyEmptyInlineStart=false;
+    ensureLiveEditEmptyTarget();
+    requestAnimationFrame(()=>{ensureLiveEditEmptyTarget();requestAnimationFrame(()=>{ensureLiveEditEmptyTarget();renderDesktopLivePanel();});});
   });
   playerHost.addEventListener('sceneplayer:scenechange',()=>{finishCreditsInlineEdit();finishLiveCoverInlineEdit({refresh:false});});
   playerHost.addEventListener('sceneplayer:scenechange',()=>{
