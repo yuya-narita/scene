@@ -7878,9 +7878,11 @@ return flowCommentCard;}
       const wrap=document.createElement('label');wrap.className='desktop-live-frame-range';
       const head=document.createElement('span');head.className='desktop-live-frame-range-head';
       const name=document.createElement('strong');name.textContent=label;
-      const value=document.createElement('output');value.textContent=`+${Math.max(0,Math.round(Number(p.frame[key])||0))}px`;head.append(name,value);
-      const input=document.createElement('input');input.type='range';input.min='0';input.max='180';input.step='1';input.value=String(Math.max(0,Math.min(180,Number(p.frame[key])||0)));
-      input.addEventListener('input',()=>{p.frame[key]=Number(input.value);value.textContent=`+${input.value}px`;scheduleDraftSave(100);onPreview();});
+      const format=n=>`${n>0?'+':''}${n}px`;
+      const initial=Math.max(-80,Math.min(180,Math.round(Number(p.frame[key])||0)));
+      const value=document.createElement('output');value.textContent=format(initial);head.append(name,value);
+      const input=document.createElement('input');input.type='range';input.min='-80';input.max='180';input.step='1';input.value=String(initial);
+      input.addEventListener('input',()=>{p.frame[key]=Number(input.value);value.textContent=format(Number(input.value));scheduleDraftSave(100);onPreview();});
       wrap.append(head,input);return wrap;
     };
     const darkTheme=selectedTheme==='dark'||(selectedTheme==='cinema'&&cinemaTone==='dark');
@@ -7900,6 +7902,30 @@ return flowCommentCard;}
     const note=document.createElement('small');note.className='desktop-live-frame-note';note.textContent=u('集中線では余白が文字の周りの空白に、通常の枠では内側の余白になります。','For focus rays, padding widens the clear center; for other frames it increases inner padding.');
     card.append(grid,colors,note);return card;
   }
+  function buildTextOutlineControls(scene,onPreview=()=>{}){
+    const p=ensurePresentation(scene);p.text ||= {};
+    const card=desktopCard(u('文字の縁取り','Text outline'),'desktop-live-text-outline-card');
+    const grid=document.createElement('div');grid.className='desktop-live-grid desktop-live-text-outline-grid';
+    const rangeWrap=document.createElement('label');rangeWrap.className='desktop-live-frame-range';
+    const head=document.createElement('span');head.className='desktop-live-frame-range-head';
+    const title=document.createElement('strong');title.textContent=u('太さ','Width');
+    const initial=Math.max(0,Math.min(12,Number(p.text.outlineWidth)||0));
+    const output=document.createElement('output');output.textContent=`${initial}px`;head.append(title,output);
+    const range=document.createElement('input');range.type='range';range.min='0';range.max='12';range.step='.25';range.value=String(initial);
+    range.addEventListener('pointerdown',()=>captureUndo('文字の縁取りを元に戻せます'));
+    range.addEventListener('input',()=>{const width=Number(range.value);if(width>0)p.text.outlineWidth=width;else delete p.text.outlineWidth;output.textContent=`${width}px`;scheduleDraftSave(80);onPreview();});
+    rangeWrap.append(head,range);
+    const darkTheme=selectedTheme==='dark'||(selectedTheme==='cinema'&&cinemaTone==='dark');
+    const colorWrap=document.createElement('label');colorWrap.className='desktop-live-frame-color';
+    const colorLabel=document.createElement('span');colorLabel.textContent=u('縁取り色','Outline color');
+    const color=document.createElement('input');color.type='color';color.value=/^#[0-9a-f]{6}$/i.test(String(p.text.outlineColor||''))?p.text.outlineColor:(darkTheme?'#000000':'#FFFFFF');
+    color.addEventListener('pointerdown',()=>captureUndo('文字の縁取りを元に戻せます'));
+    color.addEventListener('input',()=>{p.text.outlineColor=color.value.toUpperCase();scheduleDraftSave(80);onPreview();});
+    colorWrap.append(colorLabel,color);grid.append(rangeWrap,colorWrap);card.appendChild(grid);
+    const note=document.createElement('small');note.className='desktop-live-frame-note';note.textContent=u('0pxで縁取りなし。太さと色はプレビューにすぐ反映されます。','Set width to 0px for no outline. Width and color preview immediately.');card.appendChild(note);
+    return card;
+  }
+
   function framePositionPreset(scene){return scene?.presentation?.text?.position?.preset||scene?.presentation?.frame?.position?.preset||'auto';}
   function setFramePositionPreset(p,preset){
     p.text||={};
@@ -14325,6 +14351,7 @@ function openDesktopTextDetail(){
     const colorPalette=makeTextColorPalette(p.text.color,hex=>{p.text.color=hex;colorCode.textContent=hex;v60ColorScopeCtl.arm(hex);apply();});colorPalette.classList.add('v61-color-palette');colorCard.appendChild(colorPalette);
     const v60ColorScopeField=document.createElement('label');v60ColorScopeField.className='desktop-text-detail-field v60-color-scope-field v61-color-scope';const v60ColorScopeLabel=document.createElement('span');v60ColorScopeLabel.textContent=u('適用範囲','Apply scope');v60ColorScopeField.append(v60ColorScopeLabel,v60ColorScopeCtl.scope);colorCard.appendChild(v60ColorScopeField);
     typography.appendChild(colorCard);
+    typography.appendChild(buildTextOutlineControls(scene,()=>refreshLivePlayer({preserveSheet:true})));
 
     const layout=section(u('レイアウト','Layout'));
     const dragButton=makeFramePositionDragButton(scene);dragButton.classList.add('v61-position-drag');layout.appendChild(dragButton);
@@ -15126,7 +15153,7 @@ function openDesktopTextDetail(){
     );
     const textDetailButton=desktopDetail(t('detail.text'),'text');
     textDetailButton.classList.add('desktop-text-primary-detail');
-    textCard.append(textGrid,textDetailButton);
+    textCard.append(textGrid,buildTextOutlineControls(scene,()=>refreshLivePlayer({preserveSheet:true})),textDetailButton);
 
     const effectCard=desktopCard(uiLanguage==='en'?'Effects (✦)':'演出（✦）');
 
@@ -16525,7 +16552,7 @@ function openDesktopTextDetail(){
       selectControl({label:u('色','Color'),icon:'color',values:[['auto',t('effect.auto')],['white',t('color.white')],['black',t('color.black')],['custom',t('color.custom')]],current:colorValue,onchange:v=>{if(v==='white')p.text.color='#ffffff';else if(v==='black')p.text.color='#000000';else if(v==='custom'){if(!p.text.color||['#ffffff','#000000'].includes(String(p.text.color).toLowerCase()))p.text.color='#4a4a4a';}else delete p.text.color;rerender();renderLiveEditSheet('text');}}),
       selectControl({label:p.text.writingMode==='vertical-rl'?u('列の揃え方','Column alignment'):u('行揃え','Line alignment'),icon:'align',values:p.text.writingMode==='vertical-rl'?[['auto',u('中央（おまかせ）','Center (automatic)')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]]:[['auto',u('Sceneに合わせる','Match Scene')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],current:p.text.align||'auto',onchange:v=>{if(v==='auto')delete p.text.align;else p.text.align=v;rerender();}})
     );
-    liveEditSheetBody.append(grid);
+    liveEditSheetBody.append(grid,buildTextOutlineControls(scene,()=>refreshLivePlayer({preserveSheet:true})));
     const alignmentHelp=document.createElement('p');alignmentHelp.className='mobile-text-help';alignmentHelp.textContent=u('行揃えは文字の揃い方を決めます。文字の出現方向は演出タブで独立して選べます。','Line alignment controls text justification. Choose its entrance direction independently in Effects.');liveEditSheetBody.appendChild(alignmentHelp);
 
     const drag=makeFramePositionDragButton(scene);drag.classList.add('mobile-text-drag-action');drag.prepend(mobileUiSvgIcon('move'));liveEditSheetBody.append(drag);

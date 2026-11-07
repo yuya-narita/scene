@@ -14512,3 +14512,5 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .desktop-live-frame-color input[type=color]{width:40px;height:30px;padding:2px;border:1px solid #cbd5e1;border-radius:7px;background:#fff}
 .desktop-live-frame-note{display:block;margin:8px 2px 0;color:#64748b;font-size:10px;line-height:1.5}
 @media(max-width:600px){.desktop-live-frame-settings-grid{gap:8px}.desktop-live-frame-color{min-height:40px}}
+
+.desktop-live-text-outline-grid{grid-template-columns:1fr 1fr;gap:10px;margin:0 2px 10px}.desktop-live-text-outline-card{margin-top:10px}.desktop-live-text-outline-card .desktop-live-frame-color{min-height:38px}

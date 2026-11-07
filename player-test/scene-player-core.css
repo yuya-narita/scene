@@ -338,7 +338,7 @@
   60%{transform:translate(-.5%,.2%) scale(1.02);filter:contrast(1.1)}
   100%{transform:scale(1.001);filter:none}
 }
-@keyframes sp-texture-glitch{0%,100%{transform:none}50%{transform:translateX(1.5%) skewX(-2deg)}}
+@keyframes sp-texture-glitch{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translateX(1.5%) skewX(-2deg)}}
 @keyframes sp-grain-shift{0%{transform:translate(0,0)}25%{transform:translate(2%,-1%)}50%{transform:translate(-1%,2%)}75%{transform:translate(1%,1%)}100%{transform:translate(-2%,-1%)}}
 @keyframes sp-bg-slowzoom{from{transform:scale(var(--sp-bg-scale-from,1))}to{transform:scale(var(--sp-bg-scale-to,1.08))}}
 @keyframes sp-bg-breath{from{transform:scale(var(--sp-bg-scale-from,1))}to{transform:scale(var(--sp-bg-scale-to,1.035))}}
@@ -356,7 +356,7 @@
   .sp-bg-layer,.sp-bg-textures::after{animation:none!important;transform:none!important}
 }
 .sp-bg-textures.has-texture-glitch::before{animation:sp-texture-glitch-loop 2.4s steps(1,end) infinite}
-@keyframes sp-texture-glitch-loop{0%,86%,100%{transform:none}88%{transform:translateX(calc(var(--sp-texture-glitch) * 2%))}90%{transform:translateX(calc(var(--sp-texture-glitch) * -1.4%))}92%{transform:none}}
+@keyframes sp-texture-glitch-loop{0%,86%,100%{transform:translate3d(0,0,0) scale(1)}88%{transform:translateX(calc(var(--sp-texture-glitch) * 2%))}90%{transform:translateX(calc(var(--sp-texture-glitch) * -1.4%))}92%{transform:none}}
 
 /* Mobile gesture containment v1.3
    Prevent iOS page rubber-band from stealing Scene Player swipes. */
@@ -397,6 +397,50 @@
   touch-action:none;
 }
 .sp-history[hidden]{display:none}
+
+/* PAST v28: vertical prose travels horizontally, with older Scenes to the right. */
+.sp-history-list{position:relative}
+.sp-history.is-horizontal .sp-history-scroll{
+  overflow-x:auto;overflow-y:hidden;touch-action:pan-x;direction:ltr;
+}
+.sp-history.is-horizontal .sp-history-list{
+  width:max-content;max-width:none;height:100%;box-sizing:border-box;
+  margin:0;padding:18px 27.5cqw;flex-direction:row;align-items:center;
+  gap:clamp(8px,1.3cqw,16px);
+}
+.sp-history.is-horizontal .sp-history-item{
+  flex:0 0 auto;width:min(55cqw,560px);height:100%;min-height:0;
+  box-sizing:border-box;padding:14px 0;
+  grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);
+  align-items:stretch;gap:10px;
+  transform:perspective(700px) rotateY(calc(var(--sp-history-depth) * -7deg))
+    scale(calc(.91 + (1 - var(--sp-history-depth)) * .09));
+}
+.sp-history.is-horizontal .sp-history-number{text-align:center;padding:0}
+.sp-history.is-horizontal .sp-history-body{
+  min-height:0;max-height:100%;overflow:auto;align-items:center;
+}
+.sp-history.is-horizontal .sp-history-text[data-writing-mode="vertical-rl"],
+.sp-history.is-horizontal .sp-history-subtext[data-writing-mode="vertical-rl"]{
+  flex-shrink:0;max-height:100%;max-width:100%;
+}
+
+/* In a phone held sideways, size each past Scene from the available height.
+   Width-based sizing makes the cards span the whole landscape screen and
+   compresses vertical Japanese into a crowded cluster. */
+@media (orientation:landscape) and (max-height:600px){
+  .sp-history.is-horizontal .sp-history-list{
+    padding:8px clamp(88px,25vh,150px);
+    gap:clamp(6px,1.4vh,12px);
+  }
+  .sp-history.is-horizontal .sp-history-item{
+    width:min(50vh,340px);
+    padding:5px 0;
+    gap:4px;
+  }
+  .sp-history.is-horizontal .sp-history-body{overflow:auto;}
+}
+
 .sp-no-header .sp-history{top:env(safe-area-inset-top)}
 .sp-no-footer .sp-history{bottom:env(safe-area-inset-bottom)}
 
@@ -1885,7 +1929,7 @@ html.sp-scene-image-open body{
   0%{opacity:0;transform:translateY(-42px) scale(1.55);filter:blur(2px)}
   58%{opacity:1;transform:translateY(5px) scale(.96);filter:blur(0)}
   76%{transform:translateY(-2px) scale(1.025)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 @keyframes spFxBurst{
   0%{opacity:0;transform:scale(.12);filter:blur(8px)}
@@ -1900,13 +1944,13 @@ html.sp-scene-image-open body{
   36%{transform:translate(-7px,2px) skewX(-5deg)}
   54%{transform:translate(5px,-1px) skewX(3deg)}
   72%{transform:translate(-2px,0) skewX(-1deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 @keyframes spFxRush{
   0%{opacity:0;transform:translateX(-32vw) skewX(-12deg);filter:blur(5px)}
   62%{opacity:1;transform:translateX(12px) skewX(2deg);filter:blur(0)}
   80%{transform:translateX(-4px) skewX(-1deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 .sp-scene.sp-fx-play[data-effect="slam"] .sp-text{animation:spFxSlam var(--sp-effect-duration,.52s) cubic-bezier(.12,.82,.18,1) 1}
 .sp-scene.sp-fx-play[data-effect="burst"] .sp-text{animation:spFxBurst var(--sp-effect-duration,.62s) cubic-bezier(.12,.84,.16,1) 1}
@@ -1940,7 +1984,7 @@ html.sp-scene-image-open body{
   52%{opacity:1;transform:perspective(700px) translate3d(0,16px,0) rotateX(0) scale(1.08,.72);filter:blur(0)}
   62%{transform:perspective(700px) translate3d(0,-8px,0) scale(.96,1.10)}
   76%{transform:translate3d(0,3px,0) scale(1.025,.97)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 @keyframes spFxBurstV2{
   0%{opacity:0;transform:scale(.04) rotate(-7deg);filter:blur(14px)}
@@ -1958,13 +2002,13 @@ html.sp-scene-image-open body{
   66%{transform:translateX(14vw) scale(1.18) skewX(12deg)}
   80%{transform:translateX(-6vw) scale(1.08) skewX(-5deg)}
   90%{transform:translateX(6vw) scale(1.04) skewX(5deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 @keyframes spFxRushV2{
   0%{opacity:0;transform:perspective(700px) translate3d(-110vw,0,340px) scale(3.2) skewX(-24deg);filter:blur(10px)}
   58%{opacity:1;transform:translate3d(26px,0,0) scale(1.12) skewX(5deg);filter:blur(0)}
   76%{transform:translate3d(-9px,0,0) scale(.98) skewX(-2deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 .sp-scene.sp-fx-play[data-effect="slam"] .sp-text{transform-origin:50% 100%;animation-name:spFxSlamV2!important;animation-timing-function:cubic-bezier(.08,.78,.13,1)!important}
 .sp-scene.sp-fx-play[data-effect="burst"] .sp-text{animation-name:spFxBurstV2!important;animation-timing-function:cubic-bezier(.1,.8,.14,1)!important}
@@ -1979,7 +2023,7 @@ html.sp-scene-image-open body{
   66%{transform:translateX(-14vw) scale(1.18) skewX(-12deg)}
   80%{transform:translateX(6vw) scale(1.08) skewX(5deg)}
   90%{transform:translateX(-6vw) scale(1.04) skewX(-5deg)}
-  100%{opacity:1;transform:none;filter:none}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
 }
 .sp-scene.sp-fx-play[data-effect="glitchHitRight"] .sp-text{animation:spFxGlitchHitRightV2 var(--sp-effect-duration,.46s) steps(8,end) 1!important}
 
@@ -2181,6 +2225,28 @@ html.sp-scene-image-open body{
 .sp-scene-image-viewer.is-object-closing .sp-scene-image-viewer-shade{animation:spSceneObjectShadeOut 360ms cubic-bezier(.22,.74,.18,1) both!important;}
 @keyframes spSceneObjectShadeIn{from{opacity:0}to{opacity:1}}
 @keyframes spSceneObjectShadeOut{from{opacity:1}to{opacity:0}}
+
+/* V139 — VIEW POINT geometry parity with Studio Preview (V108/V116 baseline). */
+.sp-scene-image.is-view-rec{cursor:pointer;}
+.sp-scene-image-viewer-frame.is-view-rec-playing{cursor:default!important;touch-action:none!important;}
+.sp-scene-image-viewer-frame.is-view-rec-playing .sp-scene-image-viewer-img{pointer-events:none!important;transition:none!important;}
+.sp-scene.is-active .sp-scene-image.is-zoomable,
+.sp-scene.is-active .sp-scene-image.is-view-rec{pointer-events:auto;-webkit-tap-highlight-color:transparent;}
+.sp-scene-image-viewer-frame.is-image-bounded{
+  inset:50% auto auto 50%!important;
+  width:var(--sp-image-frame-w)!important;
+  height:var(--sp-image-frame-h)!important;
+  transform:translate(-50%,-50%)!important;
+  padding:0!important;
+  overflow:hidden!important;
+}
+.sp-scene-image-viewer-frame.is-image-bounded .sp-scene-image-viewer-img{
+  width:100%!important;
+  height:100%!important;
+  max-width:none!important;
+  max-height:none!important;
+  object-fit:contain!important;
+}
 /* Web Expression v0.1 — anonymous board */
 .sp-scene[data-view="web-board"]{align-items:flex-start;text-align:left;font-family:Arial,"Noto Sans JP",sans-serif}
 .sp-web-board-post{width:min(94%,760px);margin:0 auto;padding:12px 14px;background:#f0f0f0;color:#111;border:1px solid #d5d5d5;border-radius:2px;box-sizing:border-box}
@@ -2345,6 +2411,94 @@ html.sp-scene-image-open body{
 .sp-comment-preset.is-leaf{background:linear-gradient(135deg,#526d4d,#83a57b)}
 .sp-comment-preset.is-night{background:linear-gradient(135deg,#252b39,#586276)}
 
+
+/* Web SNS v0.1 */
+.sp-web-sns-scene{width:100%;max-width:760px;margin-inline:auto}
+.sp-web-sns-row{display:flex;gap:11px;width:100%;box-sizing:border-box;padding:15px 14px;border-bottom:1px solid rgba(127,127,127,.2);text-align:left}
+.sp-web-sns-avatar{width:40px;height:40px;flex:0 0 40px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.16);font-size:13px;font-weight:700;text-decoration:none;color:inherit}
+.sp-web-sns-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-web-sns-content{min-width:0;flex:1}
+.sp-web-sns-head{display:flex;align-items:baseline;gap:7px;min-width:0;font-size:13px}
+.sp-web-sns-identity{display:inline-flex;align-items:baseline;gap:6px;min-width:0;color:inherit;text-decoration:none}
+.sp-web-sns-identity strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-web-sns-handle,.sp-web-sns-time{font-size:11px;opacity:.55;white-space:nowrap}
+.sp-web-sns-time{margin-left:auto}
+.sp-web-sns-text{margin-top:5px;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.sp-web-sns-metrics{display:flex;gap:18px;margin-top:9px;font-size:11px;opacity:.58}
+.sp-web-sns-avatar[href],.sp-web-sns-identity[href]{cursor:pointer}
+/* SNS profile links are authored foreground controls. .sp-scenes disables pointer
+   input for ordinary Scene taps, so opt only the profile affordances back in. */
+.sp-scenes .sp-web-sns-avatar[href],.sp-scenes .sp-web-sns-identity[href]{pointer-events:auto!important;position:relative;z-index:14;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.sp-web-sns-avatar[href]:hover,.sp-web-sns-identity[href]:hover{text-decoration:underline}
+.sp-history-web-sns .sp-web-sns-row{padding:10px 8px}
+@media(max-width:640px){.sp-web-sns-row{padding:13px 10px;gap:9px}.sp-web-sns-avatar{width:36px;height:36px;flex-basis:36px}.sp-web-sns-head{gap:5px}.sp-web-sns-time{font-size:10px}.sp-web-sns-metrics{gap:14px}}
+
+/* Web Q&A v0.1 */
+.sp-web-qa-scene{width:100%;max-width:760px;margin-inline:auto}.sp-web-qa-wrap{width:100%;box-sizing:border-box;text-align:left}.sp-web-qa-question,.sp-web-qa-answer{padding:16px 14px;border-bottom:1px solid rgba(127,127,127,.22)}.sp-web-qa-question{background:rgba(127,127,127,.055)}.sp-web-qa-status,.sp-web-qa-answer-label{display:inline-block;font-size:10px;font-weight:700;padding:3px 7px;border-radius:999px;background:rgba(127,127,127,.14);margin-bottom:7px}.sp-web-qa-title{font-size:18px;font-weight:800;line-height:1.45;margin-bottom:8px}.sp-web-qa-question-body,.sp-web-qa-answer-text{font-size:14px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}.sp-web-qa-meta{font-size:11px;opacity:.58;margin-top:8px}.sp-web-qa-answer.is-best{box-shadow:inset 3px 0 0 #d6a62f}.sp-web-qa-answer-head{display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:13px}.sp-web-qa-answer-head .sp-web-qa-answer-label{margin:0 0 0 auto}.sp-web-qa-icon{width:34px;height:34px;flex:0 0 34px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.16);font-weight:700}.sp-web-qa-icon img{width:100%;height:100%;object-fit:cover;display:block}.sp-web-qa-question-meta{display:flex;align-items:center;gap:8px;font-size:11px;opacity:.72;margin-top:10px}.sp-web-qa-question-icon{width:28px;height:28px;flex-basis:28px;font-size:11px}.sp-history-web-qa .sp-web-qa-question{padding:10px 8px}.sp-history-web-qa .sp-web-qa-answer{padding:10px 8px}@media(max-width:640px){.sp-web-qa-question,.sp-web-qa-answer{padding:14px 10px}.sp-web-qa-title{font-size:16px}}
+
+/* Web Expression Live Preview edit targets. The Scene canvas normally ignores
+   pointer input so reader taps advance; Studio live-edit mode opts only these
+   canonical Scene.text bodies back in. */
+.live-edit-enabled .sp-scene.is-active .sp-web-comment-text.sp-message-original,
+.live-edit-enabled .sp-scene.is-active .sp-web-review-text,
+.live-edit-enabled .sp-scene.is-active .sp-web-qa-answer-text,
+.live-edit-enabled .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text{
+  pointer-events:auto!important;
+  user-select:text;
+  -webkit-user-select:text;
+  cursor:text;
+  touch-action:manipulation;
+  position:relative;
+  z-index:13;
+}
+
+
+/* Web Email v0.1 */
+.sp-web-mail-scene{width:100%;max-width:760px;margin-inline:auto}
+.sp-web-mail-card{width:100%;box-sizing:border-box;padding:15px 14px;text-align:left;border-top:1px solid rgba(127,127,127,.16);border-bottom:1px solid rgba(127,127,127,.2);background:rgba(127,127,127,.025)}
+.sp-web-mail-card.is-unread .sp-web-mail-subject,.sp-web-mail-card.is-unread .sp-web-mail-who strong{font-weight:800}
+.sp-web-mail-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:10px;opacity:.68}
+.sp-web-mail-folder{padding:3px 7px;border-radius:999px;background:rgba(127,127,127,.14);font-weight:700}
+.sp-web-mail-star{font-size:15px;line-height:1;margin-left:auto}.sp-web-mail-time{white-space:nowrap}
+.sp-web-mail-subject{font-size:18px;font-weight:700;line-height:1.45;margin-bottom:12px;overflow-wrap:anywhere}
+.sp-web-mail-identity{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.sp-web-mail-avatar{width:38px;height:38px;flex:0 0 38px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.15);font-size:13px;font-weight:700}
+.sp-web-mail-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-web-mail-who{min-width:0;display:flex;flex-direction:column;line-height:1.25}.sp-web-mail-who strong{font-size:13px}.sp-web-mail-who span{font-size:10px;opacity:.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-web-mail-routes{font-size:10px;line-height:1.55;opacity:.58;margin:0 0 12px 48px;overflow-wrap:anywhere}
+.sp-web-mail-text{font-size:14px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;padding-top:12px;border-top:1px solid rgba(127,127,127,.14)}
+.sp-history-web-mail .sp-web-mail-card{padding:10px 8px}.sp-history-web-mail .sp-web-mail-subject{font-size:15px;margin-bottom:8px}.sp-history-web-mail .sp-web-mail-text{font-size:13px}
+@media(max-width:640px){.sp-web-mail-card{padding:14px 10px}.sp-web-mail-subject{font-size:16px}.sp-web-mail-avatar{width:34px;height:34px;flex-basis:34px}.sp-web-mail-routes{margin-left:44px}}
+
+
+/* Web Mail v0.2: mailbox row -> tap to expand. Drafts start open. */
+.sp-web-mail-card{padding:0;overflow:hidden}
+.sp-web-mail-summary{appearance:none;-webkit-appearance:none;width:100%;border:0;margin:0;padding:12px 10px;background:transparent;color:inherit;font:inherit;text-align:left;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;cursor:pointer}
+.sp-web-mail-summary:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+.sp-web-mail-summary-avatar{width:34px;height:34px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.15);font-size:12px;font-weight:700}
+.sp-web-mail-summary-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-web-mail-summary-main{min-width:0;display:flex;flex-direction:column;gap:2px}.sp-web-mail-summary-main strong,.sp-web-mail-summary-main span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sp-web-mail-summary-main strong{font-size:12px}.sp-web-mail-summary-main span{font-size:13px}
+.sp-web-mail-summary-meta{font-size:9px;opacity:.6;white-space:nowrap;align-self:start;padding-top:2px}
+.sp-web-mail-card.is-unread .sp-web-mail-summary-main strong,.sp-web-mail-card.is-unread .sp-web-mail-summary-main span{font-weight:800}
+.sp-web-mail-detail{display:none;padding:4px 14px 15px;border-top:1px solid rgba(127,127,127,.12)}
+.sp-web-mail-card.is-open .sp-web-mail-detail{display:block}
+.sp-web-mail-card.is-open .sp-web-mail-summary{display:none}
+.sp-web-mail-attachment{display:inline-flex;align-items:center;max-width:100%;box-sizing:border-box;margin-top:12px;padding:7px 10px;border:1px solid rgba(127,127,127,.22);border-radius:10px;background:rgba(127,127,127,.06);font-size:11px;line-height:1.3;overflow-wrap:anywhere}
+.sp-history-web-mail .sp-web-mail-summary{padding:9px 8px;grid-template-columns:28px minmax(0,1fr) auto;gap:8px}.sp-history-web-mail .sp-web-mail-summary-avatar{width:28px;height:28px}.sp-history-web-mail .sp-web-mail-detail{padding:4px 8px 10px}
+@media(max-width:640px){.sp-web-mail-summary{padding:11px 8px}.sp-web-mail-detail{padding:4px 10px 14px}}
+
+
+/* Web Notification v0.1 */
+.sp-web-notification-scene{width:100%;max-width:760px;margin-inline:auto}
+.sp-web-notification-card{width:100%;box-sizing:border-box;display:flex;gap:11px;align-items:flex-start;padding:12px 13px;border:1px solid rgba(127,127,127,.18);border-radius:16px;background:rgba(127,127,127,.08);text-align:left;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.sp-web-notification-icon{width:38px;height:38px;flex:0 0 38px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.16);font-size:19px;line-height:1;overflow:hidden}.sp-web-notification-icon img{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit}
+.sp-web-notification-content{min-width:0;flex:1}
+.sp-web-notification-head{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:11px;line-height:1.3}.sp-web-notification-head strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sp-web-notification-time{margin-left:auto;opacity:.55;white-space:nowrap;font-size:10px}
+.sp-web-notification-title{margin-top:3px;font-size:14px;font-weight:750;line-height:1.4;overflow-wrap:anywhere}
+.sp-web-notification-text{margin-top:3px;font-size:13px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;opacity:.9}
+.sp-history-web-notification .sp-web-notification-card{padding:9px 10px;border-radius:13px;gap:9px}.sp-history-web-notification .sp-web-notification-icon{width:30px;height:30px;flex-basis:30px;border-radius:8px;font-size:15px}.sp-history-web-notification .sp-web-notification-title{font-size:13px}.sp-history-web-notification .sp-web-notification-text{font-size:12px}
+@media(max-width:640px){.sp-web-notification-card{padding:11px 10px;border-radius:14px}.sp-web-notification-icon{width:36px;height:36px;flex-basis:36px}.sp-web-notification-title{font-size:13px}.sp-web-notification-text{font-size:12px}}
+
 /* Consecutive messages keep the avatar column so bubbles stay aligned. */
 .sp-scene[data-view="chat"][data-chat-continuation="true"] .sp-chat-icon,
 .sp-history-chat[data-chat-continuation="true"] .sp-history-chat-icon{visibility:hidden}
@@ -2357,6 +2511,7 @@ html.sp-scene-image-open body{
 
 /* V169 — layered page-bundle affordance and fullscreen manga navigation. */
 .sp-scene-image.has-page-stack::before{content:"＋" attr(data-page-count) " ページ";position:absolute;z-index:5;left:8px;top:8px;right:auto;bottom:auto;padding:4px 8px;border:1px solid rgba(255,255,255,.35);border-radius:999px;background:rgba(0,0,0,.7);color:#fff;font:600 12px/1.2 system-ui,sans-serif;pointer-events:none}
+.sp-scene-image.has-page-stack[data-show-page-count="false"]::before{display:none}
 .sp-scene-image-viewer-pages{position:fixed;z-index:3;left:50%;bottom:max(18px,calc(env(safe-area-inset-bottom) + 16px));transform:translateX(-50%);display:flex;align-items:center;gap:18px;padding:7px 12px;border:1px solid rgba(255,255,255,.24);border-radius:999px;background:rgba(18,18,22,.78);color:#fff;font:600 14px/1 system-ui,sans-serif;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 .sp-scene-image-viewer-pages[hidden]{display:none!important}
 .sp-scene-image-viewer-pages button{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:#fff;font:400 30px/1 system-ui,sans-serif;cursor:pointer;touch-action:manipulation}
@@ -2372,6 +2527,255 @@ html.sp-scene-image-open body{
 .sp-scene-image.has-page-stack .sp-scene-image-media img{position:relative;z-index:1}
 .sp-scene-image[data-image-rounded="true"] .sp-scene-image-media img,.sp-scene-image[data-image-rounded="true"] .scene-image-stack-sheet{border-radius:12px}
 .sp-scene-image[data-image-rounded="false"] .sp-scene-image-media img,.sp-scene-image[data-image-rounded="false"] .scene-image-stack-sheet{border-radius:0}
+
+/* V197 — compact cover action, anchored clear of the central artwork. */
+.sp-cover-start{
+ position:absolute!important;left:50%!important;right:auto!important;top:auto!important;
+ bottom:calc(16px + env(safe-area-inset-bottom,0px))!important;
+ transform:translateX(-50%)!important;margin:0!important;
+ width:min(180px,60%)!important;min-height:48px!important;padding:10px 24px!important;
+ border:1px solid rgba(255,255,255,.65)!important;border-radius:999px!important;
+ background:rgba(255,255,255,.88)!important;color:#111!important;
+ box-shadow:0 3px 14px rgba(0,0,0,.16)!important;font-size:16px!important;
+ backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+ touch-action:manipulation;
+}
+
+/* V198 — author-selected entry control. */
+.sp-cover[data-start-trigger="center"] .sp-cover-start{
+ top:50%!important;bottom:auto!important;transform:translate(-50%,-50%)!important;
+ width:min(420px,84%)!important;min-height:58px!important;border-radius:14px!important;
+}
+.sp-cover[data-start-trigger="tap"] .sp-cover-start{
+ width:max-content!important;min-width:168px!important;max-width:calc(100vw - 32px)!important;white-space:nowrap!important;flex-shrink:0!important;padding-left:22px!important;padding-right:22px!important;background:rgba(0,0,0,.55)!important;
+ color:#fff!important;font-size:0!important;border:0!important;
+}
+.sp-cover[data-start-trigger="tap"] .sp-cover-start::after{content:"タップしてはじめる";display:block;white-space:nowrap;font-size:14px;line-height:1.3;}
+.sp-cover[data-start-trigger="tap"]{cursor:pointer;}
+
+/* Ruby stays attached to its base in horizontal and vertical writing. */
+.sp-rich-ruby{ruby-position:over;ruby-align:center;white-space:normal;overflow-wrap:normal;word-break:normal}
+.sp-rich-ruby rt{font-size:.5em;line-height:1;letter-spacing:0;font-weight:400;text-align:center;user-select:none;-webkit-user-select:none}
+.sp-rich-ruby .sp-ruby-base,.sp-rich-ruby rt{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+
+/* Reader typography uses the logical Player width, never the Studio window. */
+.sp-core{container-type:inline-size;container-name:scene-viewport studio-preview!important}
+.sp-scenes,.sp-core[data-display="solo"] .sp-scenes{inset:0 clamp(24px,7cqw,72px)}
+.sp-text{font-size:var(--sp-scene-size,clamp(21px,4.8cqw,34px));line-height:1.85}
+.sp-handdrawn-frame{padding:clamp(27px,5.8cqw,46px) clamp(32px,7cqw,60px)}
+.sp-handdrawn-frame[data-writing-mode="vertical-rl"]{padding:clamp(34px,6.8cqw,54px) clamp(29px,6.2cqw,50px)}
+.sp-subtext{font-size:clamp(12px,2.7cqw,15px)}
+.sp-scene[data-fit="soft"] .sp-text{font-size:clamp(19px,4.7cqw,30px)}
+.sp-scene[data-fit="medium"] .sp-text{font-size:clamp(17px,4.2cqw,27px)}
+.sp-scene[data-fit="compact"] .sp-text{font-size:clamp(15px,3.7cqw,23px)}
+.sp-scene[data-fit="tight"] .sp-text{font-size:clamp(13px,3.25cqw,20px)}
+.sp-scene[data-fit="medium"] .sp-subtext,.sp-scene[data-fit="compact"] .sp-subtext,.sp-scene[data-fit="tight"] .sp-subtext{font-size:clamp(11px,2.45cqw,14px)}
+@container scene-viewport (max-width:600px){
+ .sp-handdrawn-frame{padding:clamp(25px,7cqw,34px) clamp(28px,8cqw,40px)}
+ .sp-handdrawn-frame[data-writing-mode="vertical-rl"]{padding:clamp(30px,8cqw,42px) clamp(25px,7cqw,36px)}
+}
+@container scene-viewport (max-width:520px){
+ .sp-text{font-size:clamp(20px,5.4cqw,27px);line-height:1.9}
+ .sp-scene[data-fit="medium"] .sp-text{font-size:clamp(16px,4.35cqw,21px)}
+ .sp-scene[data-fit="compact"] .sp-text{font-size:clamp(14px,3.85cqw,19px)}
+ .sp-scene[data-fit="tight"] .sp-text{font-size:clamp(12.5px,3.35cqw,17px)}
+}
+
+/* Ruby prose: use normal Japanese line breaking across annotation boundaries.
+   Keep author newlines and nowrap choices; only disable discretionary balancing
+   and emergency character breaks that fragment native ruby on WebKit. */
+.sp-text.sp-has-ruby,.sp-subtext.sp-has-ruby{
+  text-wrap:wrap;overflow-wrap:normal;word-break:normal;
+}
+.sp-scene:lang(ja) .sp-text.sp-has-ruby,.sp-scene:lang(ja) .sp-subtext.sp-has-ruby{
+  line-break:strict;overflow-wrap:normal;
+}
+
+
+/* Credits inherit the work's mood and keep one animation timeline while paused. */
+.sp-scene[data-credits="on"] {width:100%;max-width:100%;}
+.sp-credits {color:var(--sp-text);text-align:var(--credits-align,center);font-size:var(--credits-size,22px);line-height:1.55;width:min(92%,680px);margin:0 auto;pointer-events:auto;writing-mode:horizontal-tb;--credits-panel-rgb:255 255 255;}
+.sp-core[data-theme="dark"] .sp-credits,.sp-core[data-theme="cinema"] .sp-credits{--credits-panel-rgb:12 15 20;}
+.sp-credits-viewport {border:1px solid var(--sp-line);border-radius:24px;background:rgb(var(--credits-panel-rgb) / var(--credits-opacity,.72));padding:24px;max-height:55vh;max-height:55cqh;overflow:auto;overscroll-behavior:contain;touch-action:pan-y;}
+.sp-credits-list {display:flex;flex-direction:column;gap:var(--credits-gap,28px);}
+.sp-credits-title {font-size:.7em;font-weight:700;letter-spacing:.2em;white-space:pre-wrap;}
+.sp-credits-heading {font-size:.62em;letter-spacing:.14em;opacity:.72;white-space:pre-wrap;}
+.sp-credits-name {display:block;font-size:1em;font-weight:700;white-space:pre-wrap;overflow-wrap:anywhere;color:inherit;}
+.sp-credits-name[href] {text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
+.sp-credits-link-mark {font-size:.65em;opacity:.7;}
+.sp-credits-note {font-size:.75em;white-space:pre-wrap;overflow-wrap:anywhere;}
+.sp-credits-logo {display:block;max-width:180px;max-height:90px;object-fit:contain;margin:0 auto 12px;}
+.sp-credits-body.sp-text {display:block;min-height:1.5em;margin:0;max-width:100%;white-space:pre-wrap;font-size:inherit;line-height:1.7;letter-spacing:normal;text-wrap:wrap;color:inherit;}
+.sp-credits-subtext.sp-subtext {margin:0;color:inherit;font-size:.7em;}
+.sp-credits.is-roll .sp-credits-list {padding-top:50vh;padding-top:50cqh;animation:sp-credits-roll var(--credits-duration,30s) linear forwards;}
+.sp-credits.is-roll .sp-credits-viewport {height:50vh;height:50cqh;overflow:hidden;padding:0;border:0;border-radius:0;background:none;}
+.sp-credits.is-paused .sp-credits-list,.sp-credits.is-editing .sp-credits-list {animation-play-state:paused!important;}
+.sp-credits.is-static .sp-credits-list,.sp-credits.is-editing .sp-credits-list {transform:none!important;padding-top:0;}
+.sp-credits.is-static .sp-credits-viewport,.sp-credits.is-editing .sp-credits-viewport {padding:24px;overflow:auto;border:1px solid var(--sp-line);border-radius:24px;background:rgb(var(--credits-panel-rgb) / var(--credits-opacity,.72));}
+@keyframes sp-credits-roll {from{transform:translateY(0)}to{transform:translateY(-100%)}}
+.sp-history-body .sp-credits {width:100%;font-size:18px;}
+.sp-history-body .sp-credits-viewport {max-height:none;}
+.live-edit-enabled .sp-credits [data-credit-field] {pointer-events:auto;cursor:text;min-height:1.3em;}
+.live-edit-enabled .sp-credits [data-credit-field][contenteditable="true"] {outline:1px dashed var(--sp-accent);outline-offset:4px;}
+@media(prefers-reduced-motion:reduce){.sp-credits.is-roll .sp-credits-viewport{overflow:auto}.sp-credits.is-roll .sp-credits-list{animation:none;padding-top:0}}
+
+.sp-credits.is-body-editing.is-roll .sp-credits-list{animation-play-state:paused!important;transform:none!important;padding-top:0;}
+.sp-credits.is-body-editing.is-roll .sp-credits-viewport{padding:24px;overflow:auto;border:1px solid var(--sp-line);border-radius:24px;background:rgb(var(--credits-panel-rgb) / var(--credits-opacity,.72));}
+
+.sp-credits.is-roll.is-complete:not(.is-static):not(.is-editing):not(.is-body-editing){visibility:hidden;pointer-events:none;}
+.sp-credits.is-body-editing .sp-credits-list{animation-play-state:paused!important;}
+.sp-credits-name-text{white-space:pre-wrap;}
+
+/* Authors can reopen a finished roll and select its text without changing playback. */
+.live-edit-enabled .sp-credits.is-roll.is-complete{visibility:visible;pointer-events:auto;}
+.live-edit-enabled .sp-credits.is-roll.is-complete:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list{visibility:hidden;}
+.live-edit-enabled .sp-credits.is-roll.is-complete:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-viewport::after{content:"タップしてクレジットを編集";display:block;position:absolute;inset:0;align-content:center;text-align:center;color:var(--sp-sub);font:14px var(--sp-font-sans);}
+.sp-credits-viewport{position:relative;}
+.live-edit-enabled .sp-credits [data-credit-field]{-webkit-user-select:text!important;user-select:text!important;}
+.live-edit-enabled .sp-credits-name-text{display:inline-block;min-width:1em;min-height:1.3em;}
+
+/* Borderless cards / static lists and responsive paired entries. */
+.sp-credits[data-surface="none"] .sp-credits-viewport{border:0!important;background:transparent!important;border-radius:0!important;box-shadow:none!important;}
+.sp-credits[data-columns="2"] .sp-credits-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));column-gap:24px;row-gap:var(--credits-gap,28px);align-items:start;}
+.sp-credits[data-columns="2"] .sp-credits-list>.sp-credits-title,.sp-credits[data-columns="2"] .sp-credits-list>.sp-credits-body,.sp-credits[data-columns="2"] .sp-credits-list>.sp-credits-subtext{grid-column:1/-1;}
+.sp-credits-entry{min-width:0;overflow-wrap:anywhere;}
+
+/* Section headings and deliberate space span both credit columns. */
+.sp-credits-section,.sp-credits-spacer{grid-column:1 / -1;min-width:0;}
+.sp-credits-section{text-align:center;font-weight:700;letter-spacing:.12em;overflow-wrap:anywhere;}
+.sp-credits-spacer{pointer-events:none;}
+
+/* Optional delayed entrance and a measured final position; pause keeps the same timeline. */
+.sp-credits.is-roll .sp-credits-list{position:relative;animation-delay:var(--credits-delay,0s);}
+.sp-credits.is-roll[data-end-mode="hold"] .sp-credits-list{animation-name:sp-credits-roll-hold;}
+@keyframes sp-credits-roll-hold{
+  0%{transform:translateY(0);animation-timing-function:linear;}
+  85%{transform:translateY(calc(var(--credits-stop,0px) * .94));animation-timing-function:ease-out;}
+  100%{transform:translateY(var(--credits-stop,0px));}
+}
+
+@media(prefers-reduced-motion:reduce){.sp-credits.is-roll[data-end-mode="hold"] .sp-credits-list{animation:none;transform:none;padding-top:0;}}
+
+.sp-credits.is-preparing .sp-credits-list{animation-play-state:paused!important;}
+
+/* Mobile landscape immersion: controls overlay the stage without moving the story. */
+.sp-immersive-toggle{display:none;}
+.sp-core.sp-immersive:not(.sp-cover-open):not(:has(.sp-ending:not([hidden]))) .sp-immersive-toggle{
+  display:flex;align-items:center;justify-content:center;position:absolute;z-index:45;
+  top:max(6px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));
+  width:44px;height:44px;padding:0;border:1px solid var(--sp-line);border-radius:50%;
+  background:var(--sp-panel);color:var(--sp-sub);font-size:24px;line-height:1;cursor:pointer;opacity:.55;
+}
+.sp-core.sp-immersive.sp-immersive-controls .sp-immersive-toggle{opacity:1;}
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-stage{inset:0!important;}
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scenes{left:max(24px,env(safe-area-inset-left));right:max(24px,env(safe-area-inset-right));}
+.sp-core.sp-immersive:not(.sp-cover-open):not(.sp-immersive-controls)>.sp-header,
+.sp-core.sp-immersive:not(.sp-cover-open):not(.sp-immersive-controls)>.sp-footer,
+.sp-core.sp-immersive:not(.sp-cover-open):not(.sp-immersive-controls) .sp-tap-hint{visibility:hidden!important;pointer-events:none!important;}
+.sp-core.sp-immersive.sp-immersive-controls>.sp-header{padding-right:calc(60px + env(safe-area-inset-right));padding-left:max(16px,env(safe-area-inset-left));background:var(--sp-panel);}
+.sp-core.sp-immersive.sp-immersive-controls>.sp-footer{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));background:var(--sp-panel);}
+
+/* V14: a compact landscape prose scale, including stored numeric sizes.
+   Native text autosizing must not enlarge the explicit reading layout. */
+.sp-core.sp-immersive{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+.sp-core.sp-immersive .sp-scene[data-fit="soft"]{--sp-landscape-font-limit:19px;}
+.sp-core.sp-immersive .sp-scene[data-fit="medium"]{--sp-landscape-font-limit:18px;}
+.sp-core.sp-immersive .sp-scene[data-fit="compact"]{--sp-landscape-font-limit:16px;}
+.sp-core.sp-immersive .sp-scene[data-fit="tight"]{--sp-landscape-font-limit:14px;}
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-text,
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-handdrawn-frame>.sp-text{
+  font-size:min(var(--sp-landscape-font,19px),var(--sp-landscape-font-limit,1000px))!important;
+}
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-text{
+  max-width:min(100%,570px);margin-inline:auto;
+}
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-subtext{
+  font-size:var(--sp-landscape-font,11px)!important;
+}
+
+/* Landscape vertical prose gains two glyph advances (including .08em spacing). */
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-text[data-writing-mode="vertical-rl"],
+.sp-core.sp-immersive:not(.sp-cover-open) .sp-scene:not([data-credits="on"])>.sp-handdrawn-frame>.sp-text[data-writing-mode="vertical-rl"]{
+  height:min(calc(var(--sp-vertical-screen-height) + 2.16em),calc(var(--sp-vertical-content-height) + 2.16em),calc(100dvh - 48px))!important;
+}
+/* Compact PAST for phones held sideways: reserve more height for the scenes,
+   keep vertical Japanese readable, and avoid a tall instruction bar. */
+@media (orientation:landscape) and (max-height:600px){
+  .sp-history.is-horizontal .sp-history-top{height:24px;padding:0 8px}
+  .sp-history.is-horizontal .sp-history-scroll{top:24px}
+  .sp-history.is-horizontal .sp-history-kicker{font-size:7px;letter-spacing:.12em}
+  .sp-history.is-horizontal .sp-history-help{font-size:7px;letter-spacing:0}
+  .sp-history.is-horizontal .sp-history-close{width:22px;height:22px;font-size:16px}
+  .sp-history.is-horizontal .sp-history-text{font-size:clamp(14px,2.25vh,17px)!important;line-height:1.4;letter-spacing:0}
+  .sp-history.is-horizontal .sp-history-subtext{font-size:clamp(10px,1.65vh,12px)!important;line-height:1.35}
+}
+
+
+/* V42: one translucent fill per pixel at the tail/body junction. */
+.sp-scene[data-view="chat"] .sp-chat-bubble,
+.sp-history-chat-bubble{
+  --sp-chat-tail-edge:left;
+  border-color:transparent;
+  background-clip:border-box;
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-bubble,
+.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-bubble{
+  --sp-chat-tail-edge:right;
+}
+.sp-scene[data-view="chat"] .sp-chat-bubble::before,
+.sp-history-chat-bubble::before{
+  content:"";
+  position:absolute;
+  inset:-1px;
+  border:1px solid var(--sp-line);
+  border-radius:inherit;
+  pointer-events:none;
+  /* A 10px diamond has a half diagonal of sqrt(50)px. Its centre
+     is 13px above the padding edge, or 14px above this outer outline. */
+  -webkit-mask:linear-gradient(#fff 0 0),linear-gradient(#fff 0 0) var(--sp-chat-tail-edge) 0 bottom 6.929px / 1px 14.142px no-repeat;
+  mask:linear-gradient(#fff 0 0),linear-gradient(#fff 0 0) var(--sp-chat-tail-edge) 0 bottom 6.929px / 1px 14.142px no-repeat;
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+}
+.sp-scene[data-view="chat"] .sp-chat-bubble::after,
+.sp-history-chat-bubble::after{
+  box-sizing:border-box;
+  left:-6px;
+  right:auto;
+  bottom:8px;
+  width:10px;
+  height:10px;
+  background:inherit;
+  border:0;
+  border-left:1px solid var(--sp-line);
+  border-bottom:1px solid var(--sp-line);
+  transform:rotate(45deg);
+  /* Remove the inward half, so its alpha never overlays the body. */
+  clip-path:polygon(0 0,100% 100%,0 100%);
+  pointer-events:none;
+}
+.sp-scene[data-view="chat"][data-chat-side="right"] .sp-chat-bubble::after,
+.sp-history-item.sp-history-chat[data-chat-side="right"] .sp-history-chat-bubble::after{
+  left:auto;
+  right:-6px;
+  transform:rotate(225deg);
+}
+.sp-scene[data-view="chat"][data-chat-continuation="true"] .sp-chat-bubble::before,
+.sp-history-chat[data-chat-continuation="true"] .sp-history-chat-bubble::before{
+  -webkit-mask:none;
+  mask:none;
+}
+
+/* V43: scroll fully out before revealing the original final item in place. */
+.sp-credits.is-roll.is-revealed:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list{transform:translateY(var(--credits-final-y,0px))!important;}
+.sp-credits.is-roll.is-revealed:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list>*{visibility:hidden;}
+.sp-credits.is-roll.is-revealed:not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list>.sp-credits-final-target{visibility:visible;animation:sp-credits-final-reveal 1.2s ease-out both;animation-delay:var(--credits-reveal-delay,0s);}
+@keyframes sp-credits-final-reveal{from{opacity:0;filter:blur(14px);visibility:hidden}0.01%{visibility:visible}to{filter:blur(0);visibility:visible}}
+@media(prefers-reduced-motion:reduce){.sp-credits.is-revealed .sp-credits-final-target{animation:none!important;filter:none;}}
+
+/* V44: reserve the last item for its reveal instead of showing it twice. */
+.sp-credits.is-roll[data-end-mode="reveal"]:not(.is-revealed):not(.is-static):not(.is-editing):not(.is-body-editing) .sp-credits-list>.sp-credits-final-target{visibility:hidden;pointer-events:none;}
+@media(prefers-reduced-motion:reduce){.sp-credits.is-roll[data-end-mode="reveal"] .sp-credits-list>.sp-credits-final-target{visibility:visible!important;pointer-events:auto;}}
 
 /* V53: explicit vertical text orientation with legacy WebKit fallback. */
 .sp-text [data-sp-text-orientation="tcy"]{
@@ -2398,10 +2802,143 @@ html.sp-scene-image-open body{
 .sp-rich-link-card-image{display:block;width:100%;height:100%;min-height:104px;max-height:160px;object-fit:cover;background:#ecece8}
 @media(max-width:520px){.sp-rich-link-card{width:min(88vw,560px);min-height:90px;grid-template-columns:minmax(0,1fr) minmax(82px,34%);font-size:13px}.sp-rich-link-card-copy{gap:4px;padding:10px 11px}.sp-rich-link-card-copy>strong{font-size:13px}.sp-rich-link-card-description{font-size:11px}.sp-rich-link-card-image{min-height:90px;max-height:120px}}
 
+
+/* ==========================================================
+   Expressive entrance extensions — integrated with normal text effects
+   Text geometry (font/size/italic/angle) remains independent.
+   ========================================================== */
+@keyframes spFxImpactAhako{0%{opacity:0;transform:scale(2.2) translateY(-.08em);filter:blur(3px)}58%{opacity:1;transform:scale(.9) translateY(.025em);filter:blur(0)}78%{transform:scale(1.06)}100%{opacity:1;transform:scale(1)}}
+@keyframes spFxScreamAhako{0%{opacity:0;transform:scale(.45,.2)}42%{opacity:1;transform:scale(1.22,1.45)}62%{transform:scale(.94,1.08)}78%{transform:scale(1.05,.97)}100%{transform:scale(1)}}
+@keyframes spFxStretchAhako{0%{opacity:0;transform:scaleX(.12);letter-spacing:-.08em}55%{opacity:1;transform:scaleX(1.18);letter-spacing:.16em}100%{transform:scaleX(1);letter-spacing:inherit}}
+@keyframes spFxMurmurAhako{0%{opacity:0;transform:translate(-2px,1px)}20%{opacity:.45;transform:translate(2px,-1px)}40%{opacity:.7;transform:translate(-1px,-1px)}60%{opacity:.82;transform:translate(1px,2px)}80%{opacity:.92;transform:translate(-1px,0)}100%{opacity:1;transform:none}}
+@keyframes spFxFlashAhako{0%{opacity:0;filter:brightness(4) blur(5px);transform:scale(1.22)}22%{opacity:1;filter:brightness(2.5) blur(0)}45%{opacity:.35;filter:brightness(1.2)}68%{opacity:1}100%{opacity:1;filter:none;transform:scale(1)}}
+@keyframes spFxBreakAhako{0%{opacity:0;transform:scale(1.8) skewX(-10deg);filter:blur(2px)}36%{opacity:1;transform:scale(.88) skewX(7deg)}52%{transform:translate(-5px,2px) skewX(-4deg)}65%{transform:translate(5px,-2px) skewX(3deg)}78%{transform:translate(-2px,1px)}100%{transform:translate3d(0,0,0) scale(1)}}
+@keyframes spFxBounceAhako{0%{opacity:0;transform:translateY(-1.3em) scale(.75)}45%{opacity:1;transform:translateY(.16em) scale(1.08,.88)}62%{transform:translateY(-.3em) scale(.96,1.04)}78%{transform:translateY(.05em) scale(1.02,.98)}100%{transform:translate3d(0,0,0) scale(1)}}
+.sp-scene.sp-fx-play[data-effect="impact"] .sp-text{animation:spFxImpactAhako var(--sp-effect-duration,.58s) cubic-bezier(.08,.82,.16,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%}
+.sp-scene.sp-fx-play[data-effect="scream"] .sp-text{animation:spFxScreamAhako var(--sp-effect-duration,.72s) cubic-bezier(.1,.78,.18,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%}
+.sp-scene.sp-fx-play[data-effect="stretch"] .sp-text{animation:spFxStretchAhako var(--sp-effect-duration,.78s) cubic-bezier(.12,.72,.16,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%}
+.sp-scene.sp-fx-play[data-effect="murmur"] .sp-text{animation:spFxMurmurAhako var(--sp-effect-duration,1.05s) ease-out 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
+.sp-scene.sp-fx-play[data-effect="flash"] .sp-text{animation:spFxFlashAhako var(--sp-effect-duration,.7s) ease-out 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
+.sp-scene.sp-fx-play[data-effect="break"] .sp-text{animation:spFxBreakAhako var(--sp-effect-duration,.7s) cubic-bezier(.1,.75,.2,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
+.sp-scene.sp-fx-play[data-effect="bounce"] .sp-text{animation:spFxBounceAhako var(--sp-effect-duration,.82s) cubic-bezier(.16,.8,.18,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
+@media (prefers-reduced-motion:reduce){
+ .sp-scene.sp-fx-play[data-effect="impact"] .sp-text,.sp-scene.sp-fx-play[data-effect="scream"] .sp-text,.sp-scene.sp-fx-play[data-effect="stretch"] .sp-text,.sp-scene.sp-fx-play[data-effect="murmur"] .sp-text,.sp-scene.sp-fx-play[data-effect="flash"] .sp-text,.sp-scene.sp-fx-play[data-effect="break"] .sp-text,.sp-scene.sp-fx-play[data-effect="bounce"] .sp-text{animation:none!important;opacity:1!important;transform:none!important;filter:none!important}
+}
+
+/* V3 landing stabilization: entrance effects must finish on the exact static text geometry. */
+.sp-scene.sp-fx-play[data-effect="impact"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="scream"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="stretch"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="murmur"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="flash"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="break"] .sp-text,
+.sp-scene.sp-fx-play[data-effect="bounce"] .sp-text{
+  animation-fill-mode:both!important;
+}
+
+/* AHAKO V17 — one presentation rule everywhere.
+   Preserve source Unicode presentation. Only orientation is corrected.
+   Text-default airplane remains the inherited text glyph and is physically
+   corrected for vertical writing without forcing an emoji font. */
+.sp-airplane-text-native{
+  font-family:inherit!important;
+  display:inline-block!important;
+  text-combine-upright:none!important;
+  -webkit-text-combine:none!important;
+  transform:rotate(-90deg)!important;
+  transform-origin:50% 50%!important;
+}
+
+/* AHAKO V18 — iOS Safari vertical presentation guard.
+   V17 stays the common rule. On iOS only, VS-none characters whose Unicode
+   default is text are explicitly kept as text instead of being promoted to
+   Apple Color Emoji by vertical layout. */
+.sp-ios-text-default{
+  font-family:inherit!important;
+  font-variant-emoji:text!important;
+  text-combine-upright:none!important;
+  -webkit-text-combine:none!important;
+}
+.sp-ios-text-default-airplane{
+  display:inline-block!important;
+  transform:rotate(-90deg)!important;
+  transform-origin:50% 50%!important;
+}
+
 /* AHAKO 360 Background prototype */
 .sp-core.sp-bg-360-active .sp-background{pointer-events:none}
 .sp-core.sp-bg-360-active .sp-bg-layer{inset:-2%;background-size:auto 108%;background-repeat:repeat-x;will-change:background-position,opacity,filter}
 .sp-core.sp-bg-360-active .sp-bg-layer.is-current{animation:none!important;transform:none!important}
+.sp-core.sp-bg-panorama-active .sp-background{pointer-events:none}
+.sp-core.sp-bg-panorama-active .sp-bg-layer{inset:-2%;background-size:auto 108%;background-repeat:no-repeat;will-change:background-position,opacity,filter}
+.sp-core.sp-bg-panorama-active .sp-bg-layer.is-current{animation:none!important;transform:none!important}
+
+
+/* 360 Background V1.5.1 — PAST must fully cover the player.
+   The 360 background remains mounted behind it so closing PAST restores the same view. */
+.sp-history:not([hidden]){
+  inset:0 !important;
+  z-index:60 !important;
+  background:var(--sp-bg) !important;
+}
+.sp-history:not([hidden]) .sp-history-top{
+  padding-top:env(safe-area-inset-top) !important;
+  height:calc(58px + env(safe-area-inset-top)) !important;
+  box-sizing:border-box;
+}
+.sp-history:not([hidden]) .sp-history-scroll{
+  top:calc(58px + env(safe-area-inset-top)) !important;
+  bottom:0 !important;
+}
+
+
+/* 360 Background V1.6.3 — transient reader view-lock brake.
+   Hidden by default; appears briefly after panorama movement and stays visible while locked. */
+.sp-pano-view-lock{
+  position:absolute;
+  z-index:13;
+  /* V1.6.3.1: keep clear of the TAP safety zone on the lower-right. */
+  left:max(12px,env(safe-area-inset-left));
+  right:auto;
+  bottom:calc(var(--sp-footer-h) + env(safe-area-inset-bottom) + 4px);
+  width:34px;height:34px;
+  padding:0;border:1px solid color-mix(in srgb,currentColor 22%,transparent);
+  border-radius:999px;
+  display:grid;place-items:center;
+  background:color-mix(in srgb,var(--sp-bg) 72%,transparent);
+  color:var(--sp-sub);
+  -webkit-backdrop-filter:blur(10px);
+  backdrop-filter:blur(10px);
+  font:600 17px/1 system-ui,-apple-system,sans-serif;
+  opacity:.78;
+  touch-action:manipulation;
+}
+.sp-pano-view-lock[hidden]{display:none!important}
+.sp-pano-view-lock.is-locked{
+  opacity:.96;
+  color:var(--sp-fg);
+  border-color:color-mix(in srgb,currentColor 42%,transparent);
+}
+.sp-history:not([hidden]) ~ .sp-pano-view-lock,
+.sp-ending:not([hidden]) ~ .sp-pano-view-lock{display:none!important}
+
+@media (orientation:landscape){
+  .sp-pano-view-lock{
+    left:max(12px,env(safe-area-inset-left))!important;
+    bottom:max(12px,calc(env(safe-area-inset-bottom) + 8px))!important;
+  }
+}
+
+/* Finite panorama: landscape is a full-screen window. Horizontal image range is
+   centered; any cover crop is explored vertically through the existing pitch. */
+@media (orientation:landscape){
+  .sp-core.sp-bg-panorama-active .sp-bg-layer{
+    inset:0!important;
+    background-size:cover!important;
+    background-repeat:no-repeat!important;
+    background-position:50% 50%;
+  }
+}
 
 
 /* Scene image custom width (CSS px), bounded by the preview/device viewport. */
@@ -2450,8 +2987,8 @@ html.sp-scene-image-open body{
 
 
 /* Per-Scene ink frame padding controls. */
-.sp-handdrawn-frame:not(.sp-focus-screen-frame){padding:calc(clamp(27px,5.8vw,46px) + var(--sp-frame-extra-y,0px)) calc(clamp(32px,7vw,60px) + var(--sp-frame-extra-x,0px))!important;}
-.sp-handdrawn-frame[data-writing-mode="vertical-rl"]:not(.sp-focus-screen-frame){padding:calc(clamp(34px,6.8vw,54px) + var(--sp-frame-extra-y,0px)) calc(clamp(29px,6.2vw,50px) + var(--sp-frame-extra-x,0px))!important;}
+.sp-handdrawn-frame:not(.sp-focus-screen-frame){padding:max(0px,calc(clamp(27px,5.8vw,46px) + var(--sp-frame-extra-y,0px))) max(0px,calc(clamp(32px,7vw,60px) + var(--sp-frame-extra-x,0px)))!important;}
+.sp-handdrawn-frame[data-writing-mode="vertical-rl"]:not(.sp-focus-screen-frame){padding:max(0px,calc(clamp(34px,6.8vw,54px) + var(--sp-frame-extra-y,0px))) max(0px,calc(clamp(29px,6.2vw,50px) + var(--sp-frame-extra-x,0px)))!important;}
 .sp-handdrawn-frame.sp-focus-screen-frame{--sp-focus-extra-x:var(--sp-frame-extra-x,0px);--sp-focus-extra-y:var(--sp-frame-extra-y,0px);}
 
 /* Frame color controls use the saved Scene colors for legacy hand-ink styles too. */
@@ -2465,3 +3002,6 @@ html.sp-scene-image-open body{
 
 /* Frame artwork follows the active Player theme unless a Scene stores custom colors. */
 .sp-core[data-theme="dark"] .sp-handdrawn-frame,.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-handdrawn-frame{--sp-frame-fill:#101116;--sp-frame-stroke:#F5F2FF}
+
+/* Optional bag-letter outline. */
+.sp-text-outline{paint-order:stroke fill;-webkit-text-fill-color:currentColor;}
