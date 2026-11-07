@@ -965,9 +965,66 @@
 /* Disappear motion parity with the current Studio preview.
    UP intentionally uses the same Scene-level transform as Studio.
    STAY remains separate so it never resets the landed Scene position. */
-.sp-scene.is-disappearing.is-disappear-up{
+.sp-scene.is-disappearing.is-disappear-up:not(.is-disappear-shatter):not(.is-disappear-explode){
   opacity:0!important;
   transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(0,-110vh,0)!important;
+  filter:blur(2px)!important;
+  transition:opacity var(--sp-disappear-fade,700ms) ease,
+             transform var(--sp-disappear-fade,700ms) cubic-bezier(.35,0,.8,.4),
+             filter var(--sp-disappear-fade,700ms) ease!important;
+}
+/* Directional exits travel away from the landed position while fading. */
+.sp-scene.is-disappearing.is-disappear-down:not(.is-disappear-shatter):not(.is-disappear-explode){
+  opacity:0!important;
+  transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(0,110vh,0)!important;
+  filter:blur(2px)!important;
+  transition:opacity var(--sp-disappear-fade,700ms) ease,
+             transform var(--sp-disappear-fade,700ms) cubic-bezier(.35,0,.8,.4),
+             filter var(--sp-disappear-fade,700ms) ease!important;
+}
+.sp-scene.is-disappearing.is-disappear-left:not(.is-disappear-shatter):not(.is-disappear-explode){
+  opacity:0!important;
+  transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(-110vw,0,0)!important;
+  filter:blur(2px)!important;
+  transition:opacity var(--sp-disappear-fade,700ms) ease,
+             transform var(--sp-disappear-fade,700ms) cubic-bezier(.35,0,.8,.4),
+             filter var(--sp-disappear-fade,700ms) ease!important;
+}
+.sp-scene.is-disappearing.is-disappear-right:not(.is-disappear-shatter):not(.is-disappear-explode){
+  opacity:0!important;
+  transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(110vw,0,0)!important;
+  filter:blur(2px)!important;
+  transition:opacity var(--sp-disappear-fade,700ms) ease,
+             transform var(--sp-disappear-fade,700ms) cubic-bezier(.35,0,.8,.4),
+             filter var(--sp-disappear-fade,700ms) ease!important;
+}
+.sp-scene.is-disappearing.is-disappear-up-left:not(.is-disappear-shatter):not(.is-disappear-explode){
+  opacity:0!important;
+  transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(-110vw,-110vh,0)!important;
+  filter:blur(2px)!important;
+  transition:opacity var(--sp-disappear-fade,700ms) ease,
+             transform var(--sp-disappear-fade,700ms) cubic-bezier(.35,0,.8,.4),
+             filter var(--sp-disappear-fade,700ms) ease!important;
+}
+.sp-scene.is-disappearing.is-disappear-up-right:not(.is-disappear-shatter):not(.is-disappear-explode){
+  opacity:0!important;
+  transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(110vw,-110vh,0)!important;
+  filter:blur(2px)!important;
+  transition:opacity var(--sp-disappear-fade,700ms) ease,
+             transform var(--sp-disappear-fade,700ms) cubic-bezier(.35,0,.8,.4),
+             filter var(--sp-disappear-fade,700ms) ease!important;
+}
+.sp-scene.is-disappearing.is-disappear-down-left:not(.is-disappear-shatter):not(.is-disappear-explode){
+  opacity:0!important;
+  transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(-110vw,110vh,0)!important;
+  filter:blur(2px)!important;
+  transition:opacity var(--sp-disappear-fade,700ms) ease,
+             transform var(--sp-disappear-fade,700ms) cubic-bezier(.35,0,.8,.4),
+             filter var(--sp-disappear-fade,700ms) ease!important;
+}
+.sp-scene.is-disappearing.is-disappear-down-right:not(.is-disappear-shatter):not(.is-disappear-explode){
+  opacity:0!important;
+  transform:var(--sp-disappear-anchor-transform,translate3d(0,0,0)) translate3d(110vw,110vh,0)!important;
   filter:blur(2px)!important;
   transition:opacity var(--sp-disappear-fade,700ms) ease,
              transform var(--sp-disappear-fade,700ms) cubic-bezier(.35,0,.8,.4),

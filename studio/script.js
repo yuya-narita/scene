@@ -7853,6 +7853,14 @@ return flowCommentCard;}
     ['top-left',u('左上から','From top left')],['top-right',u('右上から','From top right')],
     ['bottom-left',u('左下から','From bottom left')],['bottom-right',u('右下から','From bottom right')]
   ];
+  const EXIT_MOTION_OPTIONS=[
+    ['stay',u('その場で消える','Fade in place')],
+    ['up',u('上に抜ける','Exit upward')],['down',u('下に抜ける','Exit downward')],
+    ['left',u('左に抜ける','Exit left')],['right',u('右に抜ける','Exit right')],
+    ['up-left',u('左上に抜ける','Exit upper left')],['up-right',u('右上に抜ける','Exit upper right')],
+    ['down-left',u('左下に抜ける','Exit lower left')],['down-right',u('右下に抜ける','Exit lower right')],
+    ['shatter',u('ガラスのように砕ける','Shatter like glass')],['explode',u('爆発して消える','Explode away')]
+  ];
   const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')],['handdrawn-rounded',u('手書き角丸枠','Hand-drawn rounded box')],['handdrawn-double',u('手書き二重枠','Hand-drawn double box')],['handdrawn-dashed',u('手書き点線枠','Hand-drawn dashed box')],['handdrawn-dark',u('黒ベタ手書き枠','Dark hand-drawn box')],['handdrawn-panel',u('半透明パネル','Translucent panel')]];
   const isFrameType=value=>String(value||'').startsWith('handdrawn-');
   function framePositionPreset(scene){return scene?.presentation?.text?.position?.preset||scene?.presentation?.frame?.position?.preset||'auto';}
@@ -12899,7 +12907,7 @@ function openDesktopEffectDetail(){
         p.disappear={...(p.disappear||{}),after:Number(p.disappear?.after)||2500,fade:Math.round(v*1000),motion:p.disappear?.motion||'stay'};
         apply();
       }}),
-      desktopDetailSelect(u('消え方','Exit motion'),[['stay',u('その場で消える','Fade in place')],['up',u('上に抜ける','Exit upward')],['shatter',u('ガラスのように砕ける','Shatter like glass')],['explode',u('爆発して消える','Explode away')]],p.disappear?.motion||'stay',v=>{
+      desktopDetailSelect(u('消え方','Exit motion'),EXIT_MOTION_OPTIONS,p.disappear?.motion||'stay',v=>{
         p.disappear={...(p.disappear||{}),motion:v};
         // Choosing an exit motion with Time until exit still at 0 previously
         // produced no exit at all. Give the motion a visible default delay.
@@ -16622,6 +16630,7 @@ function openDesktopTextDetail(){
           makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           makeSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('文字の出現方向','Text entrance direction'),TEXT_ENTRY_DIRECTION_OPTIONS,p.text?.entryDirection||'auto',v=>{p.text||={};if(v==='auto')delete p.text.entryDirection;else p.text.entryDirection=v;scheduleDraftSave(80);refreshLivePlayer();}),
+          makeSelect(u('消え方','Exit motion'),EXIT_MOTION_OPTIONS,p.disappear?.motion||'stay',v=>{p.disappear={...(p.disappear||{}),motion:v};if(!(Number(p.disappear.after)>0))p.disappear.after=2500;if(!(Number(p.disappear.fade)>0))p.disappear.fade=700;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();}),
           textFlipField
         );

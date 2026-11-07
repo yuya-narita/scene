@@ -6960,7 +6960,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const after = asNumber(disappear?.after, 0);
       if (after > 0) {
         const fade = Math.max(100, asNumber(disappear?.fade, 700));
-        const motion = ['up','shatter','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
+        const motion = ['up','down','left','right','up-left','up-right','down-left','down-right','shatter','explode'].includes(disappear?.motion) ? disappear.motion : 'stay';
         const scope=disappear?.scope==='visible'?'visible':'scene';
         const targets=scope==='visible'
           ? [...this.els.scenes.querySelectorAll('.sp-scene')].filter(node=>node.isConnected&&!node.classList.contains('is-disappeared'))
@@ -6971,7 +6971,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // UP previously replaced a stacked Scene transform with a tiny translateY,
         // which looked like a teleport before fading. The CSS now adds its travel
         // distance on top of this captured anchor.
-        if (motion === 'up' || motion === 'shatter' || motion === 'explode') {
+        if (motion !== 'stay') {
           const currentTransform=target.style.transform;
           const anchorTransform=currentTransform&&currentTransform!=='none'?currentTransform:'translate3d(0,0,0)';
           target.style.setProperty('--sp-disappear-anchor-transform',anchorTransform);
@@ -6979,6 +6979,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           target.style.removeProperty('--sp-disappear-anchor-transform');
         }
         target.classList.toggle('is-disappear-up', motion === 'up');
+        target.classList.toggle('is-disappear-down', motion === 'down');
+        target.classList.toggle('is-disappear-left', motion === 'left');
+        target.classList.toggle('is-disappear-right', motion === 'right');
+        target.classList.toggle('is-disappear-up-left', motion === 'up-left');
+        target.classList.toggle('is-disappear-up-right', motion === 'up-right');
+        target.classList.toggle('is-disappear-down-left', motion === 'down-left');
+        target.classList.toggle('is-disappear-down-right', motion === 'down-right');
         target.classList.toggle('is-disappear-shatter', motion === 'shatter');
         target.classList.toggle('is-disappear-explode', motion === 'explode');
         target.classList.toggle('is-disappear-stay', motion === 'stay');
