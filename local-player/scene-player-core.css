@@ -2966,3 +2966,14 @@ html.sp-scene-image-open body{
   height:auto!important;
   object-fit:contain;
 }
+
+
+/* Bookstore ring entrance: orbit through depth, then settle at the authored position. */
+@keyframes spFxBookstoreRingEnter{
+  0%{opacity:0;transform:perspective(900px) translate3d(76vw,-8vh,-220px) rotateY(65deg) rotateZ(16deg) scale(.35)}
+  28%{opacity:.45;transform:perspective(900px) translate3d(35vw,40vh,-120px) rotateY(35deg) rotateZ(10deg) scale(.55)}
+  58%{opacity:.82;transform:perspective(900px) translate3d(-48vw,24vh,40px) rotateY(-40deg) rotateZ(-12deg) scale(.82)}
+  82%{opacity:1;transform:perspective(900px) translate3d(-28vw,-26vh,110px) rotateY(-20deg) rotateZ(-8deg) scale(.96)}
+  100%{opacity:1;transform:perspective(900px) translate3d(0,0,0) rotateY(0) rotateZ(0) scale(1)}
+}
+.sp-scene.sp-fx-play[data-effect="ring"] .sp-text{animation:spFxBookstoreRingEnter var(--sp-effect-duration,1.4s) cubic-bezier(.18,.72,.24,1) 1 both!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%;backface-visibility:hidden}

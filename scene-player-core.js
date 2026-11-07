@@ -6953,6 +6953,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(!effect||effect==='none'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
       const motion={
         auto:[{opacity:0,filter:'blur(3px)',transform:'translateY(14px) scale(.985)'},{opacity:1,filter:'blur(0)',transform:'translateY(0) scale(1)'}],
+        ring:[{opacity:0,transform:'perspective(900px) translate3d(76vw,-8vh,-220px) rotateY(65deg) rotateZ(16deg) scale(.35)',offset:0},{opacity:.45,transform:'perspective(900px) translate3d(35vw,40vh,-120px) rotateY(35deg) rotateZ(10deg) scale(.55)',offset:.28},{opacity:.82,transform:'perspective(900px) translate3d(-48vw,24vh,40px) rotateY(-40deg) rotateZ(-12deg) scale(.82)',offset:.58},{opacity:1,transform:'perspective(900px) translate3d(-28vw,-26vh,110px) rotateY(-20deg) rotateZ(-8deg) scale(.96)',offset:.82},{opacity:1,transform:'perspective(900px) translate3d(0,0,0) rotateY(0) rotateZ(0) scale(1)',offset:1}],
         fade:[{opacity:0},{opacity:1}],rise:[{opacity:0,transform:'translateY(34px)'},{opacity:1,transform:'translateY(0)'}],
         left:[{opacity:0,transform:'translateX(-48px)'},{opacity:1,transform:'translateX(0)'}],right:[{opacity:0,transform:'translateX(48px)'},{opacity:1,transform:'translateX(0)'}],
         up:[{opacity:0,transform:'translateY(-40px)'},{opacity:1,transform:'translateY(0)'}],down:[{opacity:0,transform:'translateY(40px)'},{opacity:1,transform:'translateY(0)'}],
